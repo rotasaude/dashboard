@@ -1,0 +1,10 @@
+node_modules
+dist
+.env
+.env.local
+*.tsbuildinfo
+.DS_Store
+
+# tsc emit alongside sources (Vite does the bundling)
+src/**/*.js
+vite.config.js
