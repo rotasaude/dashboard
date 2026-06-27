@@ -12,7 +12,7 @@ export const PERIOD_OPTIONS: { key: PeriodKey; label: string }[] = [
 
 export interface Scope {
   period: PeriodKey;
-  municipalityId: string;
+  municipalityId: string | null;
   setPeriod: (p: PeriodKey) => void;
 }
 
@@ -25,5 +25,7 @@ export function useScope(): Scope {
 }
 
 export function scopeParams(scope: Scope): Record<string, string> {
-  return { period: scope.period, municipality_id: scope.municipalityId };
+  const params: Record<string, string> = { period: scope.period };
+  if (scope.municipalityId) params.municipality_id = scope.municipalityId;
+  return params;
 }
