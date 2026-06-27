@@ -1,7 +1,7 @@
-// Cliente HTTP do dashboard (read-only, tenant-scoped). Consome /admin/api/*
-// (namespace Admin::). Envelope universal: { data, as_of }. credentials:
-// "include" para quando o módulo 06 (auth por cookie) entrar.
+// Cliente HTTP do dashboard. Read API /admin/api/* (envelope { data, as_of })
+// + sessão /session. credentials: "include" (cookie HttpOnly, ADR-0022).
 const BASE = import.meta.env.VITE_ADMIN_API_BASE || "/admin/api";
+const SESSION_BASE = import.meta.env.VITE_SESSION_BASE || "/session";
 
 export interface ScopeBlock {
   municipality: { id: string | null; name: string; cross_tenant: boolean };
@@ -24,10 +24,29 @@ export class ApiError extends Error {
   }
 }
 
-async function jsonFetch<T>(input: string): Promise<T> {
+export interface Membership {
+  municipality_id: string;
+  municipality_name: string;
+  municipality_uf: string | null;
+  role: string;
+}
+
+export interface SessionUser {
+  id: string;
+  email_address: string;
+  operator: boolean;
+  memberships: Membership[];
+}
+
+async function jsonFetch<T>(input: string, init?: RequestInit): Promise<T> {
   const res = await fetch(input, {
+    ...init,
     credentials: "include",
-    headers: { Accept: "application/json" }
+    headers: {
+      Accept: "application/json",
+      ...(init?.body ? { "Content-Type": "application/json" } : {}),
+      ...(init?.headers || {})
+    }
   });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
@@ -50,4 +69,24 @@ export async function adminFetch<T>(
     });
   }
   return jsonFetch<Envelope<T>>(url.toString());
+}
+
+export async function login(email_address: string, password: string): Promise<SessionUser> {
+  return jsonFetch<SessionUser>(SESSION_BASE, {
+    method: "POST",
+    body: JSON.stringify({ email_address, password })
+  });
+}
+
+export async function fetchCurrentSession(): Promise<SessionUser | null> {
+  try {
+    return await jsonFetch<SessionUser>(SESSION_BASE);
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 401) return null;
+    throw err;
+  }
+}
+
+export async function logout(): Promise<void> {
+  await jsonFetch<void>(SESSION_BASE, { method: "DELETE" });
 }

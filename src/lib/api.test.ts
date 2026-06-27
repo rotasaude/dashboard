@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { adminFetch, ApiError } from "./api";
+import { login, fetchCurrentSession } from "./api";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -20,5 +21,17 @@ describe("adminFetch", () => {
   it("lança ApiError em status != 2xx", async () => {
     mockFetch(422, { error: "bad" });
     await expect(adminFetch("/overview")).rejects.toBeInstanceOf(ApiError);
+  });
+});
+
+describe("sessão", () => {
+  it("login faz POST e devolve SessionUser", async () => {
+    mockFetch(200, { id: "u1", email_address: "a@curitiba.demo", operator: false, memberships: [] });
+    const u = await login("a@curitiba.demo", "pw");
+    expect(u.email_address).toBe("a@curitiba.demo");
+  });
+  it("fetchCurrentSession devolve null em 401", async () => {
+    mockFetch(401, { error: "unauth" });
+    expect(await fetchCurrentSession()).toBe(null);
   });
 });
