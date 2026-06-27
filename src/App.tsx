@@ -5,6 +5,13 @@ import { AppHeader } from "./shell/AppHeader";
 import { labelFor, type ModuleId } from "./shell/modules";
 import { Overview } from "./modules/Overview";
 import { Ingestion } from "./modules/Ingestion";
+import { Conversations } from "./modules/Conversations";
+import { Consent } from "./modules/Consent";
+import { Triages } from "./modules/Triages";
+import { Classification } from "./modules/Classification";
+import { Protocols } from "./modules/Protocols";
+import { Queues } from "./modules/Queues";
+import { Events } from "./modules/Events";
 import { Placeholder } from "./modules/Placeholder";
 
 export function App() {
@@ -26,8 +33,15 @@ export function App() {
 
 function renderModule(active: ModuleId, setActive: (id: ModuleId) => void) {
   switch (active) {
-    case "overview":  return <Overview onNavigate={setActive} />;
-    case "ingestion": return <Ingestion />;
-    default:          return <Placeholder title={labelFor(active)} />;
+    case "overview":       return <Overview onNavigate={setActive} />;
+    case "ingestion":      return <Ingestion />;
+    case "conversations":  return <Conversations />;
+    case "consent":        return <Consent />;
+    case "triages":        return <Triages />;
+    case "classification": return <Classification />;
+    case "protocols":      return <Protocols />;
+    case "queues":         return <Queues />;
+    case "events":         return <Events />;
+    default:               return <Placeholder title={labelFor(active)} />;
   }
 }
