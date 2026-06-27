@@ -3,6 +3,7 @@ import { ScopeContext, type PeriodKey } from "./lib/scope";
 import { useAuth } from "./lib/auth";
 import { AppHeader } from "./shell/AppHeader";
 import { labelFor, type ModuleId } from "./shell/modules";
+import { useAlerts } from "./hooks/useAlerts";
 import { Overview } from "./modules/Overview";
 import { Ingestion } from "./modules/Ingestion";
 import { Conversations } from "./modules/Conversations";
@@ -22,13 +23,28 @@ export function App() {
 
   return (
     <ScopeContext.Provider value={{ period, municipalityId, setPeriod }}>
-      <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
-        <AppHeader active={active} onSelect={setActive} />
-        <main style={{ padding: "22px 24px 48px", flex: 1, width: "100%" }}>
-          {renderModule(active, setActive)}
-        </main>
-      </div>
+      <ShellInner active={active} setActive={setActive} />
     </ScopeContext.Provider>
+  );
+}
+
+// ShellInner é renderizado DENTRO do ScopeContext.Provider para que useAlerts
+// (via useHealth → useScope) possa consumir o contexto.
+function ShellInner({
+  active,
+  setActive
+}: {
+  active: ModuleId;
+  setActive: (id: ModuleId) => void;
+}) {
+  const alerts = useAlerts();
+  return (
+    <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
+      <AppHeader active={active} onSelect={setActive} alerts={alerts} />
+      <main style={{ padding: "22px 24px 48px", flex: 1, width: "100%" }}>
+        {renderModule(active, setActive)}
+      </main>
+    </div>
   );
 }
 
