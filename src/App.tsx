@@ -1,30 +1,26 @@
-import { useEffect, useState } from "react";
-
-type Health =
-  | { kind: "loading" }
-  | { kind: "ok"; status: number }
-  | { kind: "error"; detail: string };
+import { useState } from "react";
+import { ScopeContext, type PeriodKey } from "./lib/scope";
+import { municipalityId } from "./lib/tenant";
+import { AppHeader } from "./shell/AppHeader";
+import { labelFor, type ModuleId } from "./shell/modules";
+import { Overview } from "./modules/Overview";
+import { Placeholder } from "./modules/Placeholder";
 
 export function App() {
-  const [health, setHealth] = useState<Health>({ kind: "loading" });
-
-  useEffect(() => {
-    fetch("/up")
-      .then((res) => setHealth({ kind: "ok", status: res.status }))
-      .catch((err) => setHealth({ kind: "error", detail: String(err) }));
-  }, []);
+  const [ period, setPeriod ] = useState<PeriodKey>("7d");
+  const [ active, setActive ] = useState<ModuleId>("overview");
+  const muni = municipalityId();
 
   return (
-    <main style={{ fontFamily: "var(--font-mono, monospace)", padding: 24 }}>
-      <h1>Rota Saúde · Dashboard</h1>
-      <p>Painel operacional da cidade (tenant-scoped). Fundação — sem painéis ainda.</p>
-      <HealthLine health={health} />
-    </main>
+    <ScopeContext.Provider value={{ period, municipalityId: muni, setPeriod }}>
+      <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
+        <AppHeader active={active} onSelect={setActive} />
+        <main style={{ padding: "22px 24px 48px", flex: 1, width: "100%" }}>
+          {active === "overview"
+            ? <Overview onNavigate={setActive} />
+            : <Placeholder title={labelFor(active)} />}
+        </main>
+      </div>
+    </ScopeContext.Provider>
   );
-}
-
-function HealthLine({ health }: { health: Health }) {
-  if (health.kind === "loading") return <p>API: verificando…</p>;
-  if (health.kind === "ok") return <p>API /up: {health.status} ✓ (proxy dev→Rails ok)</p>;
-  return <p>API /up: falhou — {health.detail}</p>;
 }
