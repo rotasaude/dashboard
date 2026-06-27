@@ -12,6 +12,7 @@ import { Classification } from "./modules/Classification";
 import { Protocols } from "./modules/Protocols";
 import { Queues } from "./modules/Queues";
 import { Events } from "./modules/Events";
+import { Health } from "./modules/Health";
 import { Placeholder } from "./modules/Placeholder";
 
 export function App() {
@@ -42,6 +43,7 @@ function renderModule(active: ModuleId, setActive: (id: ModuleId) => void) {
     case "protocols":      return <Protocols />;
     case "queues":         return <Queues />;
     case "events":         return <Events />;
+    case "health":         return <Health />;
     default:               return <Placeholder title={labelFor(active)} />;
   }
 }
