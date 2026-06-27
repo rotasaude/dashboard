@@ -1,5 +1,5 @@
-// Escopo do painel: período + município (fixo). Propagado aos hooks via
-// React Query key. Sem ScopePicker — município vem de lib/tenant.
+// Escopo do painel: período + município. Propagado aos hooks via React Query
+// key. Sem ScopePicker — o município vem da sessão (lib/auth, via App).
 import { createContext, useContext } from "react";
 
 export type PeriodKey = "today" | "7d" | "30d";
