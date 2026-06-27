@@ -1,12 +1,14 @@
-// Header enxuto do dashboard: nav por módulo + seletor de período. SEM
-// ScopePicker (single-tenant) e SEM NotificationCenter (fora da Fatia 1).
+// Header do dashboard: nav por módulo + seletor de período + usuário/logout.
+// Sem ScopePicker (single-tenant).
 import { NAV_GROUPS, type ModuleId } from "./modules";
 import { PERIOD_OPTIONS, useScope } from "../lib/scope";
+import { useAuth } from "../lib/auth";
 
 interface Props { active: ModuleId; onSelect: (id: ModuleId) => void; }
 
 export function AppHeader({ active, onSelect }: Props) {
   const scope = useScope();
+  const auth = useAuth();
   const items = NAV_GROUPS.flatMap(g => g.items);
   return (
     <header style={{ borderBottom: "1px solid var(--line, #e6e6e6)", padding: "10px 24px",
@@ -25,7 +27,7 @@ export function AppHeader({ active, onSelect }: Props) {
           </button>
         ))}
       </nav>
-      <div style={{ marginLeft: "auto", display: "flex", gap: 4 }}>
+      <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
         {PERIOD_OPTIONS.map(p => (
           <button key={p.key} onClick={() => scope.setPeriod(p.key)}
             aria-pressed={scope.period === p.key}
@@ -36,6 +38,16 @@ export function AppHeader({ active, onSelect }: Props) {
             {p.label}
           </button>
         ))}
+        {auth.user && (
+          <>
+            <span style={{ fontSize: 11, color: "var(--ink3, #888)" }}>{auth.user.email_address}</span>
+            <button onClick={() => void auth.logout()}
+              style={{ border: "1px solid var(--line, #e6e6e6)", cursor: "pointer", padding: "4px 10px",
+                borderRadius: 6, fontSize: 12, background: "transparent", color: "var(--ink2, #444)" }}>
+              Sair
+            </button>
+          </>
+        )}
       </div>
     </header>
   );
