@@ -8,3 +8,8 @@ dist
 # tsc emit alongside sources (Vite does the bundling)
 src/**/*.js
 vite.config.js
+node_modules/
+dist/
+tsconfig.tsbuildinfo
+!.env.example
+/.claude/
