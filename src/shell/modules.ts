@@ -4,7 +4,7 @@
 export type ModuleId =
   | "overview" | "ingestion" | "conversations" | "consent"
   | "triages" | "classification" | "protocols" | "events"
-  | "queues" | "health";
+  | "queues" | "health" | "protocol-editor";
 
 export interface NavItem { id: ModuleId; label: string; icon: string; }
 export interface NavGroupDef { label: string; items: NavItem[]; }
@@ -22,6 +22,7 @@ export const NAV_GROUPS: NavGroupDef[] = [
   ]},
   { label: "Governança", items: [
     { id: "protocols", label: "Protocolos", icon: "❏" },
+    { id: "protocol-editor", label: "Editor de protocolo", icon: "✎" },
     { id: "events", label: "Eventos & auditoria", icon: "❖" }
   ]},
   { label: "Operação", items: [

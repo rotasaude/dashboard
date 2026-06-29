@@ -15,6 +15,7 @@ import { Queues } from "./modules/Queues";
 import { Events } from "./modules/Events";
 import { Health } from "./modules/Health";
 import { Placeholder } from "./modules/Placeholder";
+import { ProtocolEditor } from "./modules/ProtocolEditor";
 
 export function App() {
   const [ period, setPeriod ] = useState<PeriodKey>("7d");
@@ -57,6 +58,7 @@ function renderModule(active: ModuleId, setActive: (id: ModuleId) => void) {
     case "triages":        return <Triages />;
     case "classification": return <Classification />;
     case "protocols":      return <Protocols />;
+    case "protocol-editor": return <ProtocolEditor />;
     case "queues":         return <Queues />;
     case "events":         return <Events />;
     case "health":         return <Health />;
