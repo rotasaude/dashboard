@@ -90,3 +90,55 @@ export async function fetchCurrentSession(): Promise<SessionUser | null> {
 export async function logout(): Promise<void> {
   await jsonFetch<void>(SESSION_BASE, { method: "DELETE" });
 }
+
+const AUTHORING_BASE = import.meta.env.VITE_AUTHORING_BASE || "/authoring/protocols";
+
+export interface GateResult { valid: boolean; errors?: string[]; }
+export interface PreviewResult { outcome?: Record<string, unknown>; valid?: boolean; errors?: string[]; }
+export interface DraftResult {
+  id?: string; name?: string; version?: number; status?: string;
+  error?: string; message?: string;
+}
+
+export async function gateProtocol(definition: unknown): Promise<GateResult> {
+  try {
+    await jsonFetch<unknown>(`${AUTHORING_BASE}/gate`, {
+      method: "POST", body: JSON.stringify({ definition })
+    });
+    return { valid: true };
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 422) {
+      const body = (err.body ?? {}) as GateResult;
+      return { valid: false, errors: body.errors ?? [] };
+    }
+    throw err;
+  }
+}
+
+export async function previewProtocol(
+  definition: unknown,
+  answers: Record<string, string>
+): Promise<PreviewResult> {
+  try {
+    return await jsonFetch<PreviewResult>(`${AUTHORING_BASE}/preview`, {
+      method: "POST", body: JSON.stringify({ definition, answers })
+    });
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 422) return (err.body ?? {}) as PreviewResult;
+    throw err;
+  }
+}
+
+export async function saveProtocolDraft(definition: unknown): Promise<DraftResult> {
+  try {
+    return await jsonFetch<DraftResult>(`${AUTHORING_BASE}/draft`, {
+      method: "POST", body: JSON.stringify({ definition })
+    });
+  } catch (err) {
+    if (err instanceof ApiError && (err.status === 422 || err.status === 403)) {
+      const body = (typeof err.body === "object" && err.body) ? (err.body as DraftResult) : {};
+      return { error: "forbidden", ...body };
+    }
+    throw err;
+  }
+}
