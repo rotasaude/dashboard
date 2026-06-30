@@ -142,3 +142,21 @@ export async function saveProtocolDraft(definition: unknown): Promise<DraftResul
     throw err;
   }
 }
+
+export interface AuthorProtocolRow { name: string; version: string; status: string; }
+
+export async function listAuthorProtocols(): Promise<AuthorProtocolRow[]> {
+  const env = await adminFetch<{ list: Array<{ name: string; version: string; status: string }> }>("/protocols");
+  return env.data.list.map(r => ({ name: r.name, version: r.version, status: r.status }));
+}
+
+export async function loadProtocolDefinition(name: string, version: string): Promise<unknown | null> {
+  const url = `${AUTHORING_BASE}/definition?name=${encodeURIComponent(name)}&version=${encodeURIComponent(version)}`;
+  try {
+    const body = await jsonFetch<{ definition: unknown }>(url, { method: "GET" });
+    return body.definition;
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) return null;
+    throw err;
+  }
+}
