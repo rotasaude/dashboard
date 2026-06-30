@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { gateProtocol, previewProtocol, saveProtocolDraft,
-  type GateResult, type PreviewResult, type DraftResult } from "../lib/api";
+  listAuthorProtocols, loadProtocolDefinition,
+  type GateResult, type PreviewResult, type DraftResult, type AuthorProtocolRow } from "../lib/api";
 import { parseDefinition, TEMPLATE } from "../lib/editor";
 
 export function ProtocolEditor() {
@@ -11,6 +12,23 @@ export function ProtocolEditor() {
   const [ preview, setPreview ] = useState<PreviewResult | null>(null);
   const [ saved, setSaved ] = useState<DraftResult | null>(null);
   const timer = useRef<number | undefined>(undefined);
+
+  const [ opts, setOpts ] = useState<AuthorProtocolRow[]>([]);
+  const [ loadErr, setLoadErr ] = useState<string | null>(null);
+
+  useEffect(() => {
+    listAuthorProtocols().then(setOpts).catch(() => setOpts([]));
+  }, []);
+
+  function onPick(value: string) {
+    setLoadErr(null);
+    if (value === "__new__") { setText(TEMPLATE); return; }
+    const [ name, version ] = value.split("@@");
+    loadProtocolDefinition(name, version).then(def => {
+      if (def) setText(JSON.stringify(def, null, 2));
+      else setLoadErr("definição não encontrada");
+    }).catch(() => setLoadErr("não foi possível carregar"));
+  }
 
   // Live gate: debounced 400ms. Parse errors short-circuit (no network call).
   useEffect(() => {
@@ -43,6 +61,19 @@ export function ProtocolEditor() {
     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
       <section>
         <h2 style={{ fontSize: 16, margin: "0 0 8px" }}>Definição (JSON)</h2>
+        <select
+          onChange={e => onPick(e.target.value)}
+          defaultValue="__new__"
+          style={{ display: "block", marginBottom: 8, fontSize: 13 }}
+        >
+          <option value="__new__">Nova (template)</option>
+          {opts.map(o => (
+            <option key={`${o.name}@@${o.version}`} value={`${o.name}@@${o.version}`}>
+              {o.name}@{o.version} ({o.status})
+            </option>
+          ))}
+        </select>
+        {loadErr && <p style={{ color: "var(--danger, #c00)", fontSize: 13 }}>{loadErr}</p>}
         <textarea
           value={text}
           onChange={e => setText(e.target.value)}
