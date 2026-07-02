@@ -91,6 +91,18 @@ export async function logout(): Promise<void> {
   await jsonFetch<void>(SESSION_BASE, { method: "DELETE" });
 }
 
+const PASSWORDS_BASE = import.meta.env.VITE_PASSWORDS_BASE || "/passwords";
+
+export async function requestPasswordReset(email_address: string): Promise<void> {
+  await jsonFetch<void>(PASSWORDS_BASE, { method: "POST", body: JSON.stringify({ email_address }) });
+}
+
+export async function resetPassword(token: string, password: string, password_confirmation: string): Promise<void> {
+  await jsonFetch<void>(`${PASSWORDS_BASE}/${encodeURIComponent(token)}`, {
+    method: "PUT", body: JSON.stringify({ password, password_confirmation })
+  });
+}
+
 const AUTHORING_BASE = import.meta.env.VITE_AUTHORING_BASE || "/authoring/protocols";
 
 export interface GateResult { valid: boolean; errors?: string[]; }

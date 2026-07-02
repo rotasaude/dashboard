@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { adminFetch, ApiError } from "./api";
 import { login, fetchCurrentSession } from "./api";
+import { requestPasswordReset, resetPassword } from "./api";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -33,5 +34,32 @@ describe("sessão", () => {
   it("fetchCurrentSession devolve null em 401", async () => {
     mockFetch(401, { error: "unauth" });
     expect(await fetchCurrentSession()).toBe(null);
+  });
+});
+
+describe("password reset", () => {
+  it("requestPasswordReset POSTs to /passwords and resolves on 204", async () => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(requestPasswordReset("a@x.com")).resolves.toBeUndefined();
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(String(url)).toContain("/passwords");
+    expect(init?.method).toBe("POST");
+    expect(JSON.parse(init?.body as string)).toEqual({ email_address: "a@x.com" });
+  });
+
+  it("resetPassword PUTs to /passwords/:token and resolves on 204", async () => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(resetPassword("tok-1", "newpw", "newpw")).resolves.toBeUndefined();
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(String(url)).toContain("/passwords/tok-1");
+    expect(init?.method).toBe("PUT");
+    expect(JSON.parse(init?.body as string)).toEqual({ password: "newpw", password_confirmation: "newpw" });
+  });
+
+  it("resetPassword rejects with ApiError on 422", async () => {
+    mockFetch(422, { error: "invalid_token" });
+    await expect(resetPassword("bad", "a", "a")).rejects.toBeInstanceOf(ApiError);
   });
 });

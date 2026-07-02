@@ -18,7 +18,8 @@ export default defineConfig({
     proxy: {
       "/up":        proxy(TARGET),
       "/admin/api": proxy(TARGET),
-      "/session":   proxy(TARGET)
+      "/session":   proxy(TARGET),
+      "/passwords": proxy(TARGET)
     }
   }
 });
