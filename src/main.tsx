@@ -5,6 +5,7 @@ import "@fontsource-variable/geist/index.css";
 import "@fontsource-variable/geist-mono/index.css";
 import { App } from "./App";
 import { Login } from "./modules/Login";
+import { ResetPassword } from "./modules/ResetPassword";
 import { AuthProvider, useAuth } from "./lib/auth";
 import { ApiError } from "./lib/api";
 import "./theme/global.css";
@@ -28,6 +29,9 @@ function AppRoot() {
       }
     }
   }));
+
+  const resetToken = new URLSearchParams(window.location.search).get("reset");
+  if (resetToken) return <ResetPassword token={resetToken} />;
 
   if (auth.state.kind === "loading") return <Splash />;
   if (auth.state.kind === "anonymous") return <Login />;
