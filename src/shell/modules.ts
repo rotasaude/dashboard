@@ -3,7 +3,7 @@
 // porque o Overview navega para queues/health.
 export type ModuleId =
   | "overview" | "ingestion" | "conversations" | "consent"
-  | "triages" | "classification" | "protocols" | "events"
+  | "triages" | "classification" | "reports" | "protocols" | "events"
   | "queues" | "health" | "protocol-editor";
 
 export interface NavItem { id: ModuleId; label: string; icon: string; }
@@ -18,7 +18,8 @@ export const NAV_GROUPS: NavGroupDef[] = [
   ]},
   { label: "Triagem", items: [
     { id: "triages", label: "Triagens", icon: "≣" },
-    { id: "classification", label: "Classificação", icon: "◔" }
+    { id: "classification", label: "Classificação", icon: "◔" },
+    { id: "reports", label: "Relatórios", icon: "▤" }
   ]},
   { label: "Governança", items: [
     { id: "protocols", label: "Protocolos", icon: "❏" },

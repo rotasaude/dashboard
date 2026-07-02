@@ -10,6 +10,7 @@ import { Conversations } from "./modules/Conversations";
 import { Consent } from "./modules/Consent";
 import { Triages } from "./modules/Triages";
 import { Classification } from "./modules/Classification";
+import { Reports } from "./modules/Reports";
 import { Protocols } from "./modules/Protocols";
 import { Queues } from "./modules/Queues";
 import { Events } from "./modules/Events";
@@ -57,6 +58,7 @@ function renderModule(active: ModuleId, setActive: (id: ModuleId) => void) {
     case "consent":        return <Consent />;
     case "triages":        return <Triages />;
     case "classification": return <Classification />;
+    case "reports":         return <Reports />;
     case "protocols":      return <Protocols />;
     case "protocol-editor": return <ProtocolEditor />;
     case "queues":         return <Queues />;

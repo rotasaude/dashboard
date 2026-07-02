@@ -227,3 +227,17 @@ export interface CityDetailData {
   kpis: CityKpi[];
   timeline: TimelineEntry[];
 }
+
+// ─── Relatórios (Admin::Api::Reports) — metadados apenas (LGPD) ─────────────
+export interface ReportRow {
+  id: string;
+  createdAt: string;
+  tier: string | null;
+  protocol: string;
+  expiresAt: string | null;
+  live: boolean;
+}
+export interface ReportsData {
+  reports: ReportRow[];
+  total: number;
+}
