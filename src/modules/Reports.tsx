@@ -9,7 +9,7 @@ import { Skeleton } from "../components/Skeleton";
 import { ErrorState } from "../components/ErrorState";
 import { EmptyState } from "../components/EmptyState";
 import { fmtDateTime } from "../lib/format";
-import type { Tone } from "../theme/tokens";
+import { tierTone } from "../lib/tier";
 import type { ReportRow } from "../lib/types";
 
 export function Reports() {
@@ -37,13 +37,6 @@ export function Reports() {
       </Panel>
     </Wrap>
   );
-}
-
-function tierTone(t: string | null): Tone {
-  if (t === "alta") return "down";
-  if (t === "media") return "warn";
-  if (t === "baixa") return "ok";
-  return "neutral";
 }
 
 function Wrap({ children }: { children: React.ReactNode }) {
