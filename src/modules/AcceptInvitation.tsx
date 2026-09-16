@@ -1,8 +1,7 @@
 // Primeiro municipal_admin da cidade define a senha e entra (Plano 6). O token
 // é a credencial: chega por e-mail, em ?invite= no host da cidade.
 import { useState, type FormEvent } from "react";
-import { acceptInvitation } from "../lib/api";
-import { ApiError } from "../lib/api";
+import { acceptInvitation, ApiError } from "../lib/api";
 import { useAuth } from "../lib/auth";
 
 export function AcceptInvitation({ token, onDone }: { token: string; onDone: () => void }) {

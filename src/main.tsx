@@ -1,4 +1,4 @@
-import { StrictMode, useEffect, useState } from "react";
+import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { QueryCache, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "@fontsource-variable/geist/index.css";
@@ -8,14 +8,14 @@ import { Login } from "./modules/Login";
 import { ResetPassword } from "./modules/ResetPassword";
 import { AcceptInvitation } from "./modules/AcceptInvitation";
 import { AuthProvider, useAuth } from "./lib/auth";
-import { ApiError, redeemGrant } from "./lib/api";
+import { ApiError } from "./lib/api";
 import { clearEntryFromUrl, readEntryFromUrl, type Entry } from "./lib/entry";
+import { useGrantEntry } from "./lib/use_grant_entry";
 import "./theme/global.css";
 
 function AppRoot() {
   const auth = useAuth();
   const [ entry, setEntry ] = useState<Entry | null>(() => readEntryFromUrl());
-  const [ grantError, setGrantError ] = useState(false);
   const [ queryClient ] = useState(() => new QueryClient({
     queryCache: new QueryCache({
       onError(err) {
@@ -35,22 +35,13 @@ function AppRoot() {
   }));
 
   // Grant vale 60 s e uso único: consome na montagem, antes de qualquer tela.
-  useEffect(() => {
-    if (entry?.kind !== "grant") return;
-    let cancelled = false;
+  const grantError = useGrantEntry(entry, (ok) => {
     void (async () => {
-      try {
-        await redeemGrant(entry.token);
-        await auth.reload();
-      } catch {
-        if (!cancelled) setGrantError(true);
-      } finally {
-        if (!cancelled) { clearEntryFromUrl(); setEntry(null); }
-      }
+      if (ok) await auth.reload();
+      clearEntryFromUrl();
+      setEntry(null);
     })();
-    return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ entry?.kind, entry?.token ]);
+  });
 
   if (entry?.kind === "reset") return <ResetPassword token={entry.token} />;
   if (entry?.kind === "grant") return <Splash />;
