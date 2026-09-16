@@ -24,8 +24,7 @@ export function useScope(): Scope {
   return ctx;
 }
 
+// O escopo é o banco da cidade do host (Plano 6): não há município a mandar.
 export function scopeParams(scope: Scope): Record<string, string> {
-  const params: Record<string, string> = { period: scope.period };
-  if (scope.municipalityId) params.municipality_id = scope.municipalityId;
-  return params;
+  return { period: scope.period };
 }

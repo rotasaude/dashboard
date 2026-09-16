@@ -172,3 +172,27 @@ export async function loadProtocolDefinition(name: string, version: string): Pro
     throw err;
   }
 }
+
+// ─── Entradas na cidade (Plano 6) ────────────────────────────────────────────
+
+export async function redeemGrant(token: string): Promise<SessionUser> {
+  return jsonFetch<SessionUser>(`${SESSION_BASE}/grant`, {
+    method: "POST",
+    body: JSON.stringify({ token })
+  });
+}
+
+export async function acceptInvitation(token: string, password: string): Promise<void> {
+  await jsonFetch<{ id: string; email_address: string }>("/setup/accept_invitation", {
+    method: "POST",
+    body: JSON.stringify({ token, password })
+  });
+}
+
+export async function startGovBr(): Promise<string> {
+  const res = await jsonFetch<{ authorize_url: string }>("/auth/govbr/start", {
+    method: "POST",
+    body: JSON.stringify({})
+  });
+  return res.authorize_url;
+}

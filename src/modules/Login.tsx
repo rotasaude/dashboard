@@ -1,8 +1,8 @@
 import { useState, type FormEvent } from "react";
 import { useAuth } from "../lib/auth";
-import { ApiError, requestPasswordReset } from "../lib/api";
+import { ApiError, requestPasswordReset, startGovBr } from "../lib/api";
 
-export function Login() {
+export function Login({ expiredGrant = false }: { expiredGrant?: boolean }) {
   const auth = useAuth();
   const [ mode, setMode ] = useState<"login" | "forgot">("login");
   const [ sent, setSent ] = useState(false);
@@ -98,6 +98,11 @@ export function Login() {
           Senha
           <input type="password" value={password} onChange={e => setPassword(e.target.value)} required style={inputStyle} />
         </label>
+        {expiredGrant && (
+          <p role="alert" style={{ color: "var(--danger, #c0341d)", fontSize: 12, margin: 0 }}>
+            O link de entrada expirou (vale 60 segundos). Entre com e-mail e senha, ou peça um novo acesso.
+          </p>
+        )}
         {error && <p role="alert" style={{ color: "var(--danger, #c0341d)", fontSize: 12, margin: 0 }}>{error}</p>}
         <button type="submit" disabled={busy}
           style={{ padding: "8px 12px", borderRadius: 6, border: "none", cursor: busy ? "default" : "pointer",
@@ -108,7 +113,23 @@ export function Login() {
           style={{ background: "none", border: "none", color: "var(--accent, #2b59ff)", cursor: "pointer", fontSize: 12, padding: 0 }}>
           Esqueci minha senha
         </button>
+        <button type="button" onClick={() => { void goToGovBr(setError); }}
+          style={{ padding: "8px 12px", borderRadius: 6, border: "1px solid var(--line, #ccc)",
+            background: "transparent", color: "var(--ink, #222)", cursor: "pointer", fontSize: 13 }}>
+          Entrar com gov.br
+        </button>
       </form>
     </div>
   );
+}
+
+// O gov.br é da CIDADE: o backend monta authorize_url com o state assinado
+// (cidade + nonce) e o callback único em auth.* devolve o navegador para cá
+// com ?grant= (Planos 3B e 6).
+async function goToGovBr(setError: (m: string | null) => void) {
+  try {
+    window.location.href = await startGovBr();
+  } catch {
+    setError("gov.br indisponível no momento. Entre com e-mail e senha.");
+  }
 }
