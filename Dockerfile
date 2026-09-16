@@ -8,5 +8,8 @@ COPY . .
 RUN npm run build
 
 FROM nginx:alpine
+# Remove o site padrão do nginx (inclui o "Welcome to nginx!" em index.html):
+# sem isso, GET / responde 200 com uma página que não é a aplicação.
+RUN rm -rf /usr/share/nginx/html/*
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/dist /usr/share/nginx/html/dashboard
