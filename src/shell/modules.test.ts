@@ -17,11 +17,24 @@ describe("modules", () => {
     it("operador não vê o grupo Conta (segurança da conta é de usuário de cidade)", () => {
       const groups = navGroupsFor({ operator: true });
       expect(groups.some((g) => g.label === "Conta")).toBe(false);
+      expect(groups.some((g) => g.label === "Equipe")).toBe(false);
+      expect(groups.length).toBe(NAV_GROUPS.length - 2);
+    });
+
+    it("sem sessão, esconde só a Equipe", () => {
+      const groups = navGroupsFor(null);
+      expect(groups.some((g) => g.label === "Conta")).toBe(true);
+      expect(groups.some((g) => g.label === "Equipe")).toBe(false);
       expect(groups.length).toBe(NAV_GROUPS.length - 1);
     });
 
-    it("sem sessão, mostra tudo (a tela de login não tem grupos sensíveis)", () => {
-      expect(navGroupsFor(null).length).toBe(NAV_GROUPS.length);
+    it("Equipe só aparece para municipal_admin", () => {
+      const admin = { operator: false, memberships: [ { role: "municipal_admin" } ] };
+      const publisher = { operator: false, memberships: [ { role: "protocol_publisher" } ] };
+
+      expect(navGroupsFor(admin).some((g) => g.label === "Equipe")).toBe(true);
+      expect(navGroupsFor(publisher).some((g) => g.label === "Equipe")).toBe(false);
+      expect(navGroupsFor(null).some((g) => g.label === "Equipe")).toBe(false);
     });
   });
 });

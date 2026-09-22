@@ -48,34 +48,41 @@ export function DataTable<T>({ cols, rows, rowKey, onRowClick, empty }: Props<T>
           </span>
         ))}
       </div>
-      {rows.map((r, i) => (
-        <button
-          key={rowKey(r, i)}
-          role="row"
-          onClick={onRowClick ? () => onRowClick(r) : undefined}
-          disabled={!onRowClick}
-          style={{
-            display: "grid",
-            gridTemplateColumns: gridCols,
-            gap: 12,
-            width: "100%",
-            padding: "10px 10px",
-            background: "transparent",
-            borderBottom: "1px solid var(--rule)",
-            fontSize: 12,
-            color: "var(--ink)",
-            cursor: onRowClick ? "pointer" : "default",
-            textAlign: "left",
-            alignItems: "center"
-          }}
-        >
-          {cols.map((c, ci) => (
-            <span key={ci} role="cell" style={{ textAlign: c.align || "left", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {c.render(r)}
-            </span>
-          ))}
-        </button>
-      ))}
+      {rows.map((r, i) => {
+        const rowStyle = {
+          display: "grid",
+          gridTemplateColumns: gridCols,
+          gap: 12,
+          width: "100%",
+          padding: "10px 10px",
+          background: "transparent",
+          borderBottom: "1px solid var(--rule)",
+          fontSize: 12,
+          color: "var(--ink)",
+          cursor: onRowClick ? "pointer" : "default",
+          textAlign: "left" as const,
+          alignItems: "center"
+        };
+        const cells = cols.map((c, ci) => (
+          <span key={ci} role="cell" style={{ textAlign: c.align || "left", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {c.render(r)}
+          </span>
+        ));
+        // Só vira <button> quando a linha inteira é clicável (onRowClick). Sem
+        // isso, uma <div> — um <button disabled> por linha bloquearia cliques
+        // reais em qualquer botão de ação dentro da célula (aninhar <button>
+        // dentro de <button> é inválido e navegadores reais não despacham o
+        // clique para o filho quando o pai é um form control desabilitado).
+        return onRowClick ? (
+          <button key={rowKey(r, i)} role="row" onClick={() => onRowClick(r)} style={rowStyle}>
+            {cells}
+          </button>
+        ) : (
+          <div key={rowKey(r, i)} role="row" style={rowStyle}>
+            {cells}
+          </div>
+        );
+      })}
     </div>
   );
 }
