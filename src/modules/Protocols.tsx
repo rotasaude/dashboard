@@ -52,7 +52,9 @@ export function Protocols({ onNavigate }: { onNavigate?: (id: ModuleId) => void 
   if (!data) return <Wrap><EmptyState title="sem dados" /></Wrap>;
 
   const list = data.data.list;
-  const published = list.filter((p) => p.status === "published").length;
+  // D1 — a leitura da API agora distingue "active" (em uso) de "published"
+  // (apenas publicada, ainda não ativada); as duas contam para este KPI.
+  const published = list.filter((p) => p.status === "published" || p.status === "active").length;
   const awaiting = list.filter((r) => awaitingMySignature(r, viewer)).length;
   const shown = onlyMine ? list.filter((r) => awaitingMySignature(r, viewer)) : list;
 

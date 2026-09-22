@@ -397,4 +397,24 @@ describe("Protocols", () => {
 
     expect(onNavigate).toHaveBeenCalledWith("security");
   });
+
+  // D1 — a leitura agora distingue "active" (em uso) de "published" (apenas
+  // publicada); para o KPI "Publicados" as duas contam, então uma versão
+  // active não pode sumir da contagem.
+  it("o KPI 'Publicados' conta a versão active junto com published", async () => {
+    stubReads([
+      row({ id: "dengue", name: "dengue", status: "active", revertible: true }),
+      row({ id: "zika", name: "zika", status: "published" }),
+      row({ id: "sarampo", name: "sarampo", status: "draft" })
+    ]);
+    renderProtocols("viewer");
+
+    await screen.findByText("dengue");
+    // A StatTile "Publicados" não fica num <button> (diferente de "Aguardando
+    // sua assinatura"); o valor mora num <div> irmão do <div> que tem o
+    // rótulo, então subimos até o <div>-cartão (avô do rótulo) para ler o
+    // valor só dentro do próprio cartão.
+    const kpi = (await screen.findByText("Publicados")).closest("div")!.parentElement!;
+    expect(within(kpi).getByText("2")).not.toBeNull();
+  });
 });
