@@ -111,16 +111,6 @@ export async function stepUpMfa(code: string): Promise<void> {
   await jsonFetch<unknown>(`${MFA_BASE}/step_up`, { method: "POST", body: JSON.stringify({ code }) });
 }
 
-// O `error` do corpo de uma recusa (`mfa_required`, `invalid_code`...), ou null.
-export function errorCode(err: unknown): string | null {
-  if (!(err instanceof ApiError)) return null;
-  const body = err.body;
-  if (body && typeof body === "object" && typeof (body as Record<string, unknown>).error === "string") {
-    return (body as Record<string, string>).error;
-  }
-  return null;
-}
-
 const PASSWORDS_BASE = import.meta.env.VITE_PASSWORDS_BASE || "/passwords";
 
 export async function requestPasswordReset(email_address: string): Promise<void> {

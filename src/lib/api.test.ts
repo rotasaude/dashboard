@@ -2,7 +2,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { adminFetch, ApiError } from "./api";
 import { login, fetchCurrentSession } from "./api";
 import { requestPasswordReset, resetPassword } from "./api";
-import { enrollMfa, confirmMfa, stepUpMfa, errorCode } from "./api";
+import { enrollMfa, confirmMfa, stepUpMfa } from "./api";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -92,11 +92,5 @@ describe("mfa", () => {
     await stepUpMfa("654321");
     expect(lastCall().url).toBe("/mfa/step_up");
     expect(JSON.parse(lastCall().init.body as string)).toEqual({ code: "654321" });
-  });
-
-  it("errorCode lê body.error de um ApiError", () => {
-    expect(errorCode(new ApiError(401, { error: "mfa_required" }, "x"))).toBe("mfa_required");
-    expect(errorCode(new ApiError(403, "", "x"))).toBeNull();
-    expect(errorCode(new Error("x"))).toBeNull();
   });
 });
