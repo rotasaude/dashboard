@@ -1,8 +1,22 @@
-// ProtocolsView (§4.6) + drill-down de detalhe.
-// Sinaliza "quatro olhos colapsado" (created_by == published_by).
+// ProtocolsView (§4.6/§5.2) + drill-down de detalhe + ciclo de vida por
+// assinaturas (ADR 0016). Cada versão oferece as ações que `actionsFor`
+// deriva do estado lido e do papel de quem está olhando; quem decide de
+// fato é o command na API, que trava a linha e reconfere.
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useProtocols, useProtocolDetail } from "../hooks/useProtocols";
+import { useAuth } from "../lib/auth";
+import {
+  submitProtocol, signProtocol, publishProtocolVersion,
+  activateProtocol, retireProtocol, revertProtocol
+} from "../lib/api";
+import {
+  actionsFor, awaitingMySignature,
+  type LifecycleAction, type LifecycleTarget, type Viewer
+} from "../lib/protocolLifecycle";
+import { SensitiveAction } from "../components/SensitiveAction";
+import { buttonStyle, disabledButtonStyle } from "../components/formStyles";
 import { Panel } from "../components/Panel";
 import { PageHeader } from "../components/PageHeader";
 import { KpiGrid } from "../components/KpiGrid";
@@ -15,25 +29,49 @@ import { EmptyState } from "../components/EmptyState";
 import { KpiSkeleton } from "./Overview";
 import { fmtDateTime } from "../lib/format";
 import type { ProtocolRow } from "../lib/types";
+import type { ModuleId } from "../shell/modules";
 
-export function Protocols() {
+// D5 — regra do §6 do spec de assinaturas: reverter não encadeia, e a
+// versão-alvo (a ativada imediatamente antes) precisa continuar publicada.
+const REVERT_DESCRIPTION =
+  "A cidade volta para a versão ativada imediatamente antes desta, que precisa continuar publicada. " +
+  "Não encadeia: reverter de novo exige uma nova ativação assinada, não outra reversão.";
+
+export function Protocols({ onNavigate }: { onNavigate?: (id: ModuleId) => void } = {}) {
   const [ openId, setOpenId ] = useState<string | null>(null);
   const { data, isLoading, isError, error, refetch } = useProtocols();
+  const auth = useAuth();
+  const viewer: Viewer = useMemo(
+    () => ({ id: auth.user?.id ?? "", roles: (auth.user?.memberships ?? []).map((m) => m.role) }),
+    [ auth.user ]
+  );
+  const [ onlyMine, setOnlyMine ] = useState(false);
 
   if (isLoading) return <Wrap><KpiGrid><KpiSkeleton /><KpiSkeleton /><KpiSkeleton /></KpiGrid><Panel title="Lista"><Skeleton rows={5} /></Panel></Wrap>;
   if (isError) return <Wrap><ErrorState message={(error as Error)?.message || "Erro"} onRetry={() => refetch()} /></Wrap>;
   if (!data) return <Wrap><EmptyState title="sem dados" /></Wrap>;
 
   const list = data.data.list;
-  const published = list.filter((p) => p.status === "published").length;
-  const fourEyesCollapsed = list.filter((p) => p.fourEyes === false).length;
+  // D1 — a leitura da API agora distingue "active" (em uso) de "published"
+  // (apenas publicada, ainda não ativada); as duas contam para este KPI.
+  const published = list.filter((p) => p.status === "published" || p.status === "active").length;
+  const awaiting = list.filter((r) => awaitingMySignature(r, viewer)).length;
+  const shown = onlyMine ? list.filter((r) => awaitingMySignature(r, viewer)) : list;
 
   return (
     <Wrap>
       <KpiGrid>
         <StatTile label="Protocolos & versões" value={list.length} source="live" />
         <StatTile label="Publicados" value={published} tone="ok" source="live" />
-        <StatTile label="4-olhos colapsado" value={fourEyesCollapsed} tone={fourEyesCollapsed > 0 ? "warn" : "ok"} source="live" />
+        <button
+          type="button"
+          aria-pressed={onlyMine}
+          onClick={() => setOnlyMine((v) => !v)}
+          style={{ all: "unset", cursor: "pointer", borderRadius: 10, outline: onlyMine ? "2px solid var(--accent)" : "2px solid transparent", outlineOffset: 2 }}
+        >
+          <StatTile label="Aguardando sua assinatura" value={awaiting}
+                    tone={awaiting > 0 ? "warn" : "ok"} source="live" />
+        </button>
       </KpiGrid>
 
       <Panel title="Protocolos & versões" sub="autoria · publicação · validação" asOf={data.as_of}>
@@ -41,32 +79,34 @@ export function Protocols() {
           cols={[
             { label: "ID", w: "2fr", render: (r) => <span className="mono">{r.id}</span> },
             { label: "Versão", w: "1fr", render: (r) => <span className="mono">{r.version}</span> },
-            { label: "Status", w: "1fr", render: (r) => <Tag tone={statusTone(r.status)}>{r.status}</Tag> },
-            { label: "4-olhos", w: "1fr", render: (r) => (
-              r.fourEyes === false
-                ? <Tag tone="warn">colapsado</Tag>
-                : r.fourEyes === true
-                  ? <Tag tone="ok">ok</Tag>
-                  : <span className="mono" style={{ color: "var(--ink3)" }}>—</span>
-            ) },
-            { label: "Schema", w: "1fr", render: (r) => <Tag tone={gateTone(r.schema)}>{r.schema}</Tag> },
-            { label: "Linter", w: "1fr", render: (r) => <Tag tone={gateTone(r.linter)}>{r.linter}</Tag> },
+            { label: "Status", w: "1fr", render: (r) => <Tag tone={statusTone(r.status)}>{statusLabel(r.status)}</Tag> },
+            { label: "Publicação", w: "1fr", render: (r) => <span className="mono">{r.signatures.publication.signers.length}/2</span> },
+            { label: "Ativação", w: "1fr", render: (r) => <span className="mono">{r.signatures.activation.signers.length}/2</span> },
+            { label: "Revisores", w: "1fr", render: (r) => <span className="mono">{r.eligibleReviewers}</span> },
             { label: "Detalhe", w: "auto", align: "right", render: () => <span className="mono" style={{ color: "var(--accent)" }}>ver →</span> }
           ]}
-          rows={list}
+          rows={shown}
           rowKey={(r) => `${r.id}-${r.version}`}
           onRowClick={(r) => setOpenId(r.id)}
-          empty="nenhum protocolo cadastrado"
+          empty={onlyMine ? "nenhuma versão aguardando sua assinatura" : "nenhum protocolo cadastrado"}
         />
       </Panel>
 
-      {openId && <DetailDrawer id={openId} onClose={() => setOpenId(null)} />}
+      {openId && <DetailDrawer id={openId} viewer={viewer} onNavigate={onNavigate} onClose={() => setOpenId(null)} />}
     </Wrap>
   );
 }
 
-function DetailDrawer({ id, onClose }: { id: string; onClose: () => void }) {
+function DetailDrawer({
+  id, viewer, onNavigate, onClose
+}: { id: string; viewer: Viewer; onNavigate?: (id: ModuleId) => void; onClose: () => void }) {
   const { data, isLoading, isError, error } = useProtocolDetail(id);
+  const auth = useAuth();
+  const queryClient = useQueryClient();
+  const [ pending, setPending ] = useState<{ version: string; action: LifecycleAction } | null>(null);
+  const [ done, setDone ] = useState<string | null>(null);
+  const name = data?.data.name ?? id;
+
   return (
     <div
       role="dialog"
@@ -109,20 +149,21 @@ function DetailDrawer({ id, onClose }: { id: string; onClose: () => void }) {
         {isError && <ErrorState message={(error as Error)?.message || "Erro"} />}
         {data && (
           <>
+            {done && <p role="status" style={{ margin: 0, fontSize: 12.5 }}>{done}</p>}
+
             <Panel title="Versões" sub="histórico" asOf={data.as_of}>
-              <DataTable
-                cols={[
-                  { label: "Versão", w: "1fr", render: (v) => <span className="mono">{v.version}</span> },
-                  { label: "Status", w: "1fr", render: (v) => <Tag tone={statusTone(v.status)}>{v.status}</Tag> },
-                  { label: "Por", w: "1fr", render: (v) => <span className="mono">{v.publishedBy || v.createdBy || "—"}</span> },
-                  { label: "4-olhos", w: "1fr", render: (v) => v.fourEyes === false ? <Tag tone="warn">colap.</Tag> : v.fourEyes === true ? <Tag tone="ok">ok</Tag> : <span className="mono">—</span> },
-                  { label: "Em", w: "1fr", render: (v) => <span className="mono">{fmtDateTime(v.at)}</span> }
-                ]}
-                rows={data.data.versions}
-                rowKey={(v) => v.version}
-                empty="sem versões"
-              />
+              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                {data.data.versions.map((v) => (
+                  <VersionDetail
+                    key={v.version}
+                    version={v}
+                    viewer={viewer}
+                    onPick={(action) => { setPending({ version: v.version, action }); setDone(null); }}
+                  />
+                ))}
+              </div>
             </Panel>
+
             <Panel title="Eventos" sub="protocol.* · auditoria" asOf={data.as_of}>
               <DataTable
                 cols={[
@@ -138,23 +179,142 @@ function DetailDrawer({ id, onClose }: { id: string; onClose: () => void }) {
             </Panel>
           </>
         )}
+
+        {pending && (
+          <SensitiveAction
+            title={`${pending.action.label} ${name} v${pending.version}`}
+            description={pending.action.kind === "revert" ? REVERT_DESCRIPTION : undefined}
+            requiresStepUp={pending.action.stepUp}
+            fields={pending.action.needsReason ? [ { name: "reason", label: "Motivo", required: true } ] : []}
+            run={(values) => runAction(name, pending.version, pending.action, values)}
+            onDone={() => {
+              setDone(`${pending.action.label} concluído: ${name} v${pending.version}`);
+              setPending(null);
+              void queryClient.invalidateQueries({ queryKey: [ "protocols" ] });
+              void queryClient.invalidateQueries({ queryKey: [ "protocol-detail", id ] });
+              void auth.reload();
+            }}
+            onCancel={() => setPending(null)}
+            onGoToSecurity={() => onNavigate?.("security")}
+          />
+        )}
       </div>
     </div>
   );
 }
 
+function VersionDetail({
+  version, viewer, onPick
+}: {
+  version: LifecycleTarget & {
+    createdBy: string | null; publishedBy: string | null; fourEyes: boolean | null;
+    at: string; schema: string; linter: string; gates: string;
+  };
+  viewer: Viewer;
+  onPick(action: LifecycleAction): void;
+}) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8, paddingBottom: 12, borderBottom: "1px solid var(--rule)" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <span className="mono" style={{ fontWeight: 600 }}>v{version.version}</span>
+        <Tag tone={statusTone(version.status)}>{statusLabel(version.status)}</Tag>
+        <span className="mono" style={{ fontSize: 10.5, color: "var(--ink3)" }}>{fmtDateTime(version.at)}</span>
+      </div>
+
+      <SignaturesSummary label="Publicação" block={version.signatures.publication} />
+      <SignaturesSummary label="Ativação" block={version.signatures.activation} />
+
+      <div style={{ fontSize: 12, color: "var(--ink2)" }}>
+        <strong>Editores:</strong>{" "}
+        {version.editors.length === 0
+          ? "—"
+          : version.editors.map((e, i) => (
+              <span key={`${e.kind}-${e.id}`}>
+                {i > 0 && ", "}
+                <span className="mono">{e.kind === "maintainer" ? "mantenedor" : (e.email ?? "—")}</span>
+              </span>
+            ))}
+      </div>
+
+      <div style={{ fontSize: 12, color: "var(--ink2)" }}>
+        <strong>Revisores elegíveis:</strong> <span className="mono">{version.eligibleReviewers}</span>
+      </div>
+
+      <VersionActions version={version} viewer={viewer} onPick={onPick} />
+    </div>
+  );
+}
+
+function SignaturesSummary({ label, block }: { label: string; block: LifecycleTarget["signatures"]["publication"] }) {
+  return (
+    <div style={{ fontSize: 12, color: "var(--ink2)" }}>
+      <strong>{label}:</strong>{" "}
+      {block.signers.length === 0 ? "ninguém assinou ainda" : (
+        <span className="mono">{block.signers.map((s) => s.email ?? "—").join(", ")}</span>
+      )}
+      {block.missing > 0 && <span style={{ color: "var(--ink3)" }}> · falta {block.missing}</span>}
+    </div>
+  );
+}
+
+function VersionActions({
+  version, viewer, onPick
+}: { version: LifecycleTarget; viewer: Viewer; onPick(action: LifecycleAction): void }) {
+  const actions = actionsFor(version, viewer);
+  if (actions.length === 0) return null;
+
+  return (
+    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+      {actions.map((action) => (
+        <div key={`${action.kind}-${action.purpose ?? ""}`} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+          <button
+            type="button"
+            style={action.disabledReason !== null ? disabledButtonStyle : buttonStyle}
+            disabled={action.disabledReason !== null}
+            onClick={() => onPick(action)}
+          >
+            {action.label}
+          </button>
+          {action.disabledReason && (
+            <small style={{ fontSize: 11, color: "var(--ink3)" }}>{action.disabledReason}</small>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+async function runAction(name: string, version: string, action: LifecycleAction, values: Record<string, string>) {
+  switch (action.kind) {
+    case "submit":   return submitProtocol(name, version);
+    case "sign":     return signProtocol(name, version, action.purpose!);
+    case "publish":  return publishProtocolVersion(name, version);
+    case "activate": return activateProtocol(name, version);
+    case "retire":   return retireProtocol(name, version);
+    case "revert":   return revertProtocol(name, values.reason ?? "");
+  }
+}
+
+// A versão active é a que está em uso agora (só ela reverte, R4 nunca
+// aposenta) — tom de destaque próprio, distinto do "ok" de published.
 function statusTone(s: string): string {
-  if (s === "published" || s === "active") return "ok";
+  if (s === "active") return "accent";
+  if (s === "published") return "ok";
   if (s === "draft") return "info";
   if (s === "retired") return "neutral";
   return "neutral";
 }
 
-function gateTone(g: string): string {
-  if (g === "ok") return "ok";
-  if (g === "warn") return "warn";
-  if (g === "fail") return "down";
-  return "neutral";
+const STATUS_LABEL: Record<string, string> = {
+  draft: "rascunho",
+  in_review: "em revisão",
+  published: "publicada",
+  active: "em uso",
+  retired: "aposentada"
+};
+
+function statusLabel(s: string): string {
+  return STATUS_LABEL[s] ?? s;
 }
 
 function Wrap({ children }: { children: React.ReactNode }) {

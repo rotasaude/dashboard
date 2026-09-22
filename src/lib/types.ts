@@ -82,7 +82,22 @@ export interface TriageTrailData {
   steps: TrailStep[];
 }
 
-export interface ProtocolRow {
+// Estado de assinatura de uma versão (spec de assinaturas §5/§6). Vem das três
+// tabelas append-only, nunca de domain_events — o mesmo bloco aparece na lista
+// e em cada versão do detalhe.
+export interface SignatureBlock {
+  signers: Array<{ id: string; email: string | null }>;
+  missing: number;
+}
+export interface ProtocolEditor { kind: string; id: string; email: string | null }
+export interface SignatureState {
+  signatures: { publication: SignatureBlock; activation: SignatureBlock };
+  eligibleReviewers: number;
+  editors: ProtocolEditor[];
+  revertible: boolean;
+}
+
+export interface ProtocolRow extends SignatureState {
   id: string;
   name: string;
   version: string;
@@ -101,7 +116,7 @@ export interface ProtocolsListData { list: ProtocolRow[] }
 export interface ProtocolDetailData {
   id: string;
   name: string;
-  versions: Array<{
+  versions: Array<SignatureState & {
     version: string;
     status: string;
     createdBy: string | null;

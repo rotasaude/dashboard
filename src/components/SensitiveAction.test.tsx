@@ -195,6 +195,24 @@ describe("SensitiveAction", () => {
     expect(run).not.toHaveBeenCalled();
   });
 
+  // D3 — enquanto a ação está em voo (busy), o botão Confirmar fica
+  // desabilitado E precisa parecer desabilitado.
+  it("Confirmar parece desabilitado enquanto a ação está em voo", async () => {
+    fetchSession.mockResolvedValue(session({ mfa_verified_at: minutesAgo(1) }));
+    let resolveRun!: () => void;
+    const run = vi.fn().mockReturnValue(new Promise<void>((resolve) => { resolveRun = resolve; }));
+    renderAction({ run });
+    await screen.findByText("verificação válida por mais 4 min");
+
+    fireEvent.click(confirm());
+
+    await waitFor(() => expect((confirm() as HTMLButtonElement).disabled).toBe(true));
+    expect((confirm() as HTMLButtonElement).style.opacity).toBe("0.55");
+    expect((confirm() as HTMLButtonElement).style.cursor).toBe("not-allowed");
+
+    resolveRun();
+  });
+
   it("passa os campos para a ação", async () => {
     fetchSession.mockResolvedValue(session({ mfa_verified_at: minutesAgo(1) }));
     const { run } = renderAction({ fields: [ { name: "reason", label: "Motivo", required: true } ] });

@@ -245,3 +245,45 @@ export async function startGovBr(): Promise<string> {
   });
   return res.authorize_url;
 }
+
+// ─── Protocolo: ciclo de vida (Plano 3) ──────────────────────────────────────
+
+const PROTOCOLS_BASE = import.meta.env.VITE_PROTOCOLS_BASE || "/protocols";
+
+export type SignaturePurpose = "publication" | "activation";
+
+// Escritas do ciclo de vida na API da cidade (ProtocolLifecycleController e
+// PublicationsController). Tudo menos `submit` exige step-up — quem cuida
+// disso é o SensitiveAction, não estas funções.
+function versionPath(version: string, action: string): string {
+  return `${PROTOCOLS_BASE}/${encodeURIComponent(version)}/${action}`;
+}
+
+export async function submitProtocol(name: string, version: string): Promise<void> {
+  await jsonFetch<unknown>(versionPath(version, "submit"), { method: "POST", body: JSON.stringify({ name }) });
+}
+
+export async function signProtocol(name: string, version: string, purpose: SignaturePurpose): Promise<void> {
+  await jsonFetch<unknown>(versionPath(version, "signatures"), {
+    method: "POST", body: JSON.stringify({ name, purpose })
+  });
+}
+
+export async function publishProtocolVersion(name: string, version: string): Promise<void> {
+  await jsonFetch<unknown>(versionPath(version, "publish"), { method: "POST", body: JSON.stringify({ name }) });
+}
+
+export async function activateProtocol(name: string, version: string): Promise<void> {
+  await jsonFetch<unknown>(versionPath(version, "activate"), { method: "POST", body: JSON.stringify({ name }) });
+}
+
+export async function retireProtocol(name: string, version: string): Promise<void> {
+  await jsonFetch<unknown>(versionPath(version, "retire"), { method: "POST", body: JSON.stringify({ name }) });
+}
+
+// Reversão de emergência: a rota não leva versão — a API acha a ativa pelo nome.
+export async function revertProtocol(name: string, reason: string): Promise<void> {
+  await jsonFetch<unknown>(`${PROTOCOLS_BASE}/revert`, {
+    method: "POST", body: JSON.stringify({ name, reason })
+  });
+}

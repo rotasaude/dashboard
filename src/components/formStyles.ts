@@ -13,3 +13,9 @@ export const buttonStyle: CSSProperties = {
 export const secondaryButtonStyle: CSSProperties = {
   ...buttonStyle, background: "var(--panel)", color: "var(--ink)", border: "1px solid var(--rule2)"
 };
+// Um botão `disabled` some visualmente se só o atributo HTML fizer o
+// trabalho — aplique junto de `disabled` sempre que um botão puder estar
+// desabilitado (ação bloqueada, ou ação em voo).
+export const disabledButtonStyle: CSSProperties = {
+  ...buttonStyle, opacity: 0.55, cursor: "not-allowed"
+};

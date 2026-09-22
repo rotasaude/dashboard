@@ -61,7 +61,7 @@ function renderModule(active: ModuleId, setActive: (id: ModuleId) => void) {
     case "triages":        return <Triages />;
     case "classification": return <Classification />;
     case "reports":         return <Reports />;
-    case "protocols":      return <Protocols />;
+    case "protocols":      return <Protocols onNavigate={setActive} />;
     case "protocol-editor": return <ProtocolEditor />;
     case "queues":         return <Queues />;
     case "events":         return <Events />;
