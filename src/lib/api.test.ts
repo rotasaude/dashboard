@@ -2,6 +2,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { adminFetch, ApiError } from "./api";
 import { login, fetchCurrentSession } from "./api";
 import { requestPasswordReset, resetPassword } from "./api";
+import { enrollMfa, confirmMfa, stepUpMfa } from "./api";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -61,5 +62,35 @@ describe("password reset", () => {
   it("resetPassword rejects with ApiError on 422", async () => {
     mockFetch(422, { error: "invalid_token" });
     await expect(resetPassword("bad", "a", "a")).rejects.toBeInstanceOf(ApiError);
+  });
+});
+
+describe("mfa", () => {
+  function lastCall() {
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+    const [ url, init ] = fetchMock.mock.calls.at(-1) as [ string, RequestInit ];
+    return { url, init, headers: init.headers as Record<string, string> };
+  }
+
+  it("enrollMfa: POST /mfa/enroll com JSON (a API recusa escrita por cookie sem JSON)", async () => {
+    mockFetch(200, { otpauth_uri: "otpauth://totp/x?secret=ABC", recovery_codes: [ "a1" ] });
+    const out = await enrollMfa();
+    const { url, init, headers } = lastCall();
+    expect(url).toBe("/mfa/enroll");
+    expect(init.method).toBe("POST");
+    expect(headers["Content-Type"]).toBe("application/json");
+    expect(out.recovery_codes).toEqual([ "a1" ]);
+  });
+
+  it("confirmMfa e stepUpMfa mandam { code }", async () => {
+    mockFetch(200, { ok: true });
+    await confirmMfa("123456");
+    expect(lastCall().url).toBe("/mfa/confirm");
+    expect(JSON.parse(lastCall().init.body as string)).toEqual({ code: "123456" });
+
+    mockFetch(200, { ok: true });
+    await stepUpMfa("654321");
+    expect(lastCall().url).toBe("/mfa/step_up");
+    expect(JSON.parse(lastCall().init.body as string)).toEqual({ code: "654321" });
   });
 });

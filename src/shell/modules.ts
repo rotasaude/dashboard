@@ -4,7 +4,7 @@
 export type ModuleId =
   | "overview" | "ingestion" | "conversations" | "consent"
   | "triages" | "classification" | "reports" | "protocols" | "events"
-  | "queues" | "health" | "protocol-editor";
+  | "queues" | "health" | "protocol-editor" | "security";
 
 export interface NavItem { id: ModuleId; label: string; icon: string; }
 export interface NavGroupDef { label: string; items: NavItem[]; }
@@ -29,9 +29,22 @@ export const NAV_GROUPS: NavGroupDef[] = [
   { label: "Operação", items: [
     { id: "queues", label: "Filas & jobs", icon: "≋" },
     { id: "health", label: "Saúde", icon: "◍" }
+  ]},
+  { label: "Conta", items: [
+    { id: "security", label: "Segurança", icon: "⚿" }
   ]}
 ];
 
 export function labelFor(id: ModuleId): string {
   return NAV_GROUPS.flatMap(g => g.items).find(i => i.id === id)?.label ?? id;
+}
+
+// D6: "Conta" (autenticador, senha) é de usuário de cidade — um operador
+// entra por grant e não tem essas telas no servidor (Mfa/PasswordsController
+// exigem Current.user). Sem sessão ainda (tela de login carregando), mostra
+// tudo: filtrar cedo demais esconderia o grupo por um instante para quem tem
+// direito a ele.
+export function navGroupsFor(user: { operator: boolean } | null): NavGroupDef[] {
+  if (!user?.operator) return NAV_GROUPS;
+  return NAV_GROUPS.filter((g) => g.label !== "Conta");
 }
