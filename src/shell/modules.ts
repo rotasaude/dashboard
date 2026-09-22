@@ -4,7 +4,7 @@
 export type ModuleId =
   | "overview" | "ingestion" | "conversations" | "consent"
   | "triages" | "classification" | "reports" | "protocols" | "events"
-  | "queues" | "health" | "protocol-editor" | "security";
+  | "queues" | "health" | "protocol-editor" | "security" | "team";
 
 export interface NavItem { id: ModuleId; label: string; icon: string; }
 export interface NavGroupDef { label: string; items: NavItem[]; }
@@ -30,6 +30,9 @@ export const NAV_GROUPS: NavGroupDef[] = [
     { id: "queues", label: "Filas & jobs", icon: "≋" },
     { id: "health", label: "Saúde", icon: "◍" }
   ]},
+  { label: "Equipe", items: [
+    { id: "team", label: "Equipe", icon: "☷" }
+  ]},
   { label: "Conta", items: [
     { id: "security", label: "Segurança", icon: "⚿" }
   ]}
@@ -40,11 +43,20 @@ export function labelFor(id: ModuleId): string {
 }
 
 // D6: "Conta" (autenticador, senha) é de usuário de cidade — um operador
-// entra por grant e não tem essas telas no servidor (Mfa/PasswordsController
-// exigem Current.user). Sem sessão ainda (tela de login carregando), mostra
-// tudo: filtrar cedo demais esconderia o grupo por um instante para quem tem
-// direito a ele.
-export function navGroupsFor(user: { operator: boolean } | null): NavGroupDef[] {
-  if (!user?.operator) return NAV_GROUPS;
-  return NAV_GROUPS.filter((g) => g.label !== "Conta");
+// entra por grant e não tem essas telas no servidor. Sem sessão ainda,
+// mostra tudo: filtrar cedo demais esconderia o grupo por um instante para
+// quem tem direito a ele.
+//
+// Fatia 2: "Equipe" é o contrário — só municipal_admin, e escondido enquanto
+// não se sabe quem é. A API recusaria (403) para qualquer outro papel, então
+// oferecer o item antes da sessão seria oferecer uma porta trancada.
+export function navGroupsFor(
+  user: { operator: boolean; memberships?: { role: string }[] } | null
+): NavGroupDef[] {
+  const isAdmin = user?.memberships?.some((m) => m.role === "municipal_admin") ?? false;
+  return NAV_GROUPS.filter((group) => {
+    if (group.label === "Conta") return !user?.operator;
+    if (group.label === "Equipe") return isAdmin;
+    return true;
+  });
 }

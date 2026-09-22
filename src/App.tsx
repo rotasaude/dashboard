@@ -18,6 +18,7 @@ import { Health } from "./modules/Health";
 import { Placeholder } from "./modules/Placeholder";
 import { ProtocolEditor } from "./modules/ProtocolEditor";
 import { Security } from "./modules/Security";
+import { Team } from "./modules/Team";
 
 export function App() {
   const [ period, setPeriod ] = useState<PeriodKey>("7d");
@@ -66,6 +67,7 @@ function renderModule(active: ModuleId, setActive: (id: ModuleId) => void) {
     case "events":         return <Events />;
     case "health":         return <Health />;
     case "security":       return <Security />;
+    case "team":           return <Team onNavigate={setActive} />;
     default:               return <Placeholder title={labelFor(active)} />;
   }
 }
