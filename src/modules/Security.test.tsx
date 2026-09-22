@@ -99,6 +99,7 @@ describe("Security", () => {
     mocked(api.fetchCurrentSession).mockResolvedValue(session({ mfa_enrolled: true }));
     mocked(api.stepUpMfa).mockResolvedValue(undefined);
     mocked(api.enrollMfa).mockResolvedValue(ENROLLMENT);
+    mocked(api.confirmMfa).mockResolvedValue(undefined);
     renderSecurity();
 
     expect(await screen.findByText("Autenticador ativo.")).not.toBeNull();
@@ -109,5 +110,32 @@ describe("Security", () => {
     expect(await screen.findByAltText("QR do autenticador")).not.toBeNull();
     expect(mocked(api.stepUpMfa).mock.invocationCallOrder[0])
       .toBeLessThan(mocked(api.enrollMfa).mock.invocationCallOrder[0]);
+
+    fireEvent.click(screen.getByLabelText("guardei os códigos"));
+    fireEvent.change(screen.getByLabelText("Código do autenticador"), { target: { value: "654321" } });
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar cadastro" }));
+
+    expect(await screen.findByRole("status")).toHaveProperty("textContent", "autenticador ativo");
+    expect(api.confirmMfa).toHaveBeenCalledWith("654321");
+  });
+
+  it("trocar autenticador: avisa que o antigo já não vale, na confirmação e no cadastro em andamento", async () => {
+    mocked(api.fetchCurrentSession).mockResolvedValue(session({ mfa_enrolled: true }));
+    mocked(api.stepUpMfa).mockResolvedValue(undefined);
+    mocked(api.enrollMfa).mockResolvedValue(ENROLLMENT);
+    renderSecurity();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Trocar autenticador" }));
+    expect(await screen.findByText(
+      "O autenticador atual deixa de valer assim que você confirmar esta etapa. Conclua o cadastro do novo sem sair da tela."
+    )).not.toBeNull();
+
+    fireEvent.change(screen.getByLabelText("Código do autenticador"), { target: { value: "123456" } });
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+
+    expect(await screen.findByText(
+      "Seu autenticador anterior já não vale — confirme o novo para voltar a aprovar ações."
+    )).not.toBeNull();
+    expect(screen.getByAltText("QR do autenticador")).not.toBeNull();
   });
 });

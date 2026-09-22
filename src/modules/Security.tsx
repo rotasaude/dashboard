@@ -31,6 +31,7 @@ export function Security() {
   const [ error, setError ] = useState<string | null>(null);
   const [ done, setDone ] = useState(false);
   const [ replacing, setReplacing ] = useState(false);
+  const [ viaReplace, setViaReplace ] = useState(false);
 
   useEffect(() => {
     if (!enrollment) { setQr(null); return; }
@@ -39,8 +40,9 @@ export function Security() {
     return () => { live = false; };
   }, [ enrollment ]);
 
-  function start(next: MfaEnrollment) {
-    setEnrollment(next); setSaved(false); setCode(""); setError(null); setDone(false); setReplacing(false);
+  function start(next: MfaEnrollment, replace = false) {
+    setEnrollment(next); setSaved(false); setCode(""); setError(null); setDone(false);
+    setReplacing(false); setViaReplace(replace);
   }
 
   async function begin() {
@@ -63,8 +65,8 @@ export function Security() {
     setBusy(true); setError(null);
     try {
       await confirmMfa(typed);
-      setEnrollment(null);
       await auth.reload();
+      setEnrollment(null);
       setDone(true);
     } catch (err) {
       const described = describeActionError(err);
@@ -88,6 +90,11 @@ export function Security() {
 
           {enrollment ? (
             <>
+              {viaReplace && (
+                <p style={{ margin: 0, fontWeight: 600 }}>
+                  Seu autenticador anterior já não vale — confirme o novo para voltar a aprovar ações.
+                </p>
+              )}
               {qr && <img src={qr} alt="QR do autenticador" width={180} height={180} />}
               {secret && <p style={{ margin: 0 }}>Chave: <span className="mono">{secret}</span></p>}
               <p style={{ margin: 0, fontWeight: 600 }}>{RECOVERY_WARNING}</p>
@@ -116,9 +123,9 @@ export function Security() {
               {replacing ? (
                 <SensitiveAction
                   title="Trocar autenticador"
-                  description="O autenticador atual deixa de valer assim que você confirmar o novo."
+                  description="O autenticador atual deixa de valer assim que você confirmar esta etapa. Conclua o cadastro do novo sem sair da tela."
                   requiresStepUp
-                  run={async () => { start(await enrollMfa()); }}
+                  run={async () => { start(await enrollMfa(), true); }}
                   onDone={() => setReplacing(false)}
                   onCancel={() => setReplacing(false)}
                 />
