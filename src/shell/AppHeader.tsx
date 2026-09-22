@@ -13,7 +13,7 @@ import { useEffect, useRef, useState } from "react";
 import { NavDropdown } from "./NavDropdown";
 import { SegmentedControl } from "./SegmentedControl";
 import { NotificationCenter } from "./NotificationCenter";
-import { NAV_GROUPS, type ModuleId } from "./modules";
+import { navGroupsFor, type ModuleId } from "./modules";
 import { PERIOD_OPTIONS, useScope } from "../lib/scope";
 import type { Alert } from "../lib/alerts";
 import { useAuth } from "../lib/auth";
@@ -81,7 +81,7 @@ export function AppHeader({ active, onSelect, alerts }: Props) {
             minWidth: 0
           }}
         >
-          {NAV_GROUPS.map((g) => {
+          {navGroupsFor(auth.user).map((g) => {
             // Dashboard's NavItem has no `visible` field — render all items.
             const items = g.items;
             if (items.length === 0) return null;

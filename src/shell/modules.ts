@@ -38,3 +38,13 @@ export const NAV_GROUPS: NavGroupDef[] = [
 export function labelFor(id: ModuleId): string {
   return NAV_GROUPS.flatMap(g => g.items).find(i => i.id === id)?.label ?? id;
 }
+
+// D6: "Conta" (autenticador, senha) é de usuário de cidade — um operador
+// entra por grant e não tem essas telas no servidor (Mfa/PasswordsController
+// exigem Current.user). Sem sessão ainda (tela de login carregando), mostra
+// tudo: filtrar cedo demais esconderia o grupo por um instante para quem tem
+// direito a ele.
+export function navGroupsFor(user: { operator: boolean } | null): NavGroupDef[] {
+  if (!user?.operator) return NAV_GROUPS;
+  return NAV_GROUPS.filter((g) => g.label !== "Conta");
+}
