@@ -125,7 +125,14 @@ export function Security() {
                   title="Trocar autenticador"
                   description="O autenticador atual deixa de valer assim que você confirmar esta etapa. Conclua o cadastro do novo sem sair da tela."
                   requiresStepUp
-                  run={async () => { start(await enrollMfa(), true); }}
+                  run={async () => {
+                    start(await enrollMfa(), true);
+                    // O enroll já desliga otp_enabled no servidor (só a
+                    // confirmação liga de novo) — recarrega a sessão para que
+                    // sair desta tela sem confirmar mostre "não cadastrado",
+                    // e não o autenticador antigo que já não vale mais.
+                    void auth.reload();
+                  }}
                   onDone={() => setReplacing(false)}
                   onCancel={() => setReplacing(false)}
                 />

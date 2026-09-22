@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { StrictMode, type ReactNode } from "react";
 
 vi.mock("qrcode", () => ({ toDataURL: vi.fn().mockResolvedValue("data:image/png;base64,QR") }));
@@ -117,6 +117,25 @@ describe("Security", () => {
 
     expect(await screen.findByRole("status")).toHaveProperty("textContent", "autenticador ativo");
     expect(api.confirmMfa).toHaveBeenCalledWith("654321");
+  });
+
+  it("trocar autenticador: recarrega a sessão logo depois do enroll, além do reload do próprio step-up", async () => {
+    mocked(api.fetchCurrentSession).mockResolvedValue(session({ mfa_enrolled: true }));
+    mocked(api.stepUpMfa).mockResolvedValue(undefined);
+    mocked(api.enrollMfa).mockResolvedValue(ENROLLMENT);
+    renderSecurity();
+
+    expect(await screen.findByText("Autenticador ativo.")).not.toBeNull();
+    const callsBefore = mocked(api.fetchCurrentSession).mock.calls.length;
+
+    fireEvent.click(screen.getByRole("button", { name: "Trocar autenticador" }));
+    fireEvent.change(await screen.findByLabelText("Código do autenticador"), { target: { value: "123456" } });
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+
+    await screen.findByAltText("QR do autenticador");
+    // useStepUp().stepUp já recarrega a sessão (mfa_verified_at) sozinho — 1
+    // chamada. O reload do enroll (D4) é uma SEGUNDA, por cima dessa.
+    await waitFor(() => expect(mocked(api.fetchCurrentSession).mock.calls.length).toBe(callsBefore + 2));
   });
 
   it("trocar autenticador: avisa que o antigo já não vale, na confirmação e no cadastro em andamento", async () => {
