@@ -220,4 +220,87 @@ describe("Protocols", () => {
     expect(screen.queryByRole("button", { name: "Assinar publicação" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Publicar" })).toBeNull();
   });
+
+  // D1 — a leitura da API agora devolve "active" sem colapsar em "published"
+  // (A1). A tela precisa distinguir as duas na tag e nas ações oferecidas.
+  it("rótulos em português para os cinco status, sem texto cru em inglês", async () => {
+    stubReads([
+      row({ id: "a", name: "a", status: "draft" }),
+      row({ id: "b", name: "b", status: "in_review" }),
+      row({ id: "c", name: "c", status: "published" }),
+      row({ id: "d", name: "d", status: "active" }),
+      row({ id: "e", name: "e", status: "retired" })
+    ]);
+    renderProtocols("viewer");
+
+    const table = within(await screen.findByRole("table"));
+    expect(table.getByText("rascunho")).not.toBeNull();
+    expect(table.getByText("em revisão")).not.toBeNull();
+    expect(table.getByText("publicada")).not.toBeNull();
+    expect(table.getByText("em uso")).not.toBeNull();
+    expect(table.getByText("aposentada")).not.toBeNull();
+    for (const raw of [ "draft", "in_review", "published", "active", "retired" ]) {
+      expect(table.queryByText(raw)).toBeNull();
+    }
+  });
+
+  it("versão active oferece só Reverter — nunca Aposentar, Ativar ou Assinar ativação", async () => {
+    stubReads(
+      [ row({ status: "active", revertible: true }) ],
+      [ versionRow({ status: "active", revertible: true }) ]
+    );
+    renderProtocols("protocol_publisher");
+
+    fireEvent.click(await screen.findByText("dengue"));
+
+    expect(await screen.findByRole("button", { name: "Reverter" })).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Aposentar" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Ativar" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Assinar ativação" })).toBeNull();
+  });
+
+  it("versão published continua oferecendo Ativar e Aposentar", async () => {
+    stubReads(
+      [ row({ status: "published" }) ],
+      [ versionRow({ status: "published", signatures: { publication: EMPTY_SIGNATURES.publication, activation: { signers: [], missing: 0 } } }) ]
+    );
+    renderProtocols("protocol_publisher");
+
+    fireEvent.click(await screen.findByText("dengue"));
+
+    expect(await screen.findByRole("button", { name: "Ativar" })).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Aposentar" })).not.toBeNull();
+  });
+
+  it("o KPI 'Aguardando sua assinatura' não conta a versão active", async () => {
+    stubReads([ row({ id: "dengue", name: "dengue", status: "active", revertible: true }) ]);
+    renderProtocols("protocol_reviewer");
+
+    const kpi = (await screen.findByText("Aguardando sua assinatura")).closest("button")!;
+    expect(within(kpi).getByText("0")).not.toBeNull();
+  });
+
+  // D2 — revisor sem autenticador cadastrado precisa de uma saída até a
+  // Segurança, como Team.tsx já oferece.
+  it("sem autenticador cadastrado, o botão de cadastro navega para Segurança", async () => {
+    stubReads([ row() ]);
+    mocked(api.fetchCurrentSession).mockResolvedValue({ ...session("protocol_reviewer"), mfa_enrolled: false });
+    const onNavigate = vi.fn();
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <AuthProvider>
+          <ScopeContext.Provider value={{ period: "7d", municipalityId: "m1", setPeriod: vi.fn() }}>
+            <Protocols onNavigate={onNavigate} />
+          </ScopeContext.Provider>
+        </AuthProvider>
+      </QueryClientProvider>
+    );
+
+    fireEvent.click(await screen.findByText("dengue"));
+    fireEvent.click(await screen.findByRole("button", { name: "Assinar publicação" }));
+    fireEvent.click(await screen.findByRole("button", { name: "cadastre seu autenticador" }));
+
+    expect(onNavigate).toHaveBeenCalledWith("security");
+  });
 });

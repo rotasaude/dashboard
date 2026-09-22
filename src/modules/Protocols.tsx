@@ -29,8 +29,9 @@ import { EmptyState } from "../components/EmptyState";
 import { KpiSkeleton } from "./Overview";
 import { fmtDateTime } from "../lib/format";
 import type { ProtocolRow } from "../lib/types";
+import type { ModuleId } from "../shell/modules";
 
-export function Protocols() {
+export function Protocols({ onNavigate }: { onNavigate?: (id: ModuleId) => void } = {}) {
   const [ openId, setOpenId ] = useState<string | null>(null);
   const { data, isLoading, isError, error, refetch } = useProtocols();
   const auth = useAuth();
@@ -65,7 +66,7 @@ export function Protocols() {
           cols={[
             { label: "ID", w: "2fr", render: (r) => <span className="mono">{r.id}</span> },
             { label: "Versão", w: "1fr", render: (r) => <span className="mono">{r.version}</span> },
-            { label: "Status", w: "1fr", render: (r) => <Tag tone={statusTone(r.status)}>{r.status}</Tag> },
+            { label: "Status", w: "1fr", render: (r) => <Tag tone={statusTone(r.status)}>{statusLabel(r.status)}</Tag> },
             { label: "Publicação", w: "1fr", render: (r) => <span className="mono">{r.signatures.publication.signers.length}/2</span> },
             { label: "Ativação", w: "1fr", render: (r) => <span className="mono">{r.signatures.activation.signers.length}/2</span> },
             { label: "Revisores", w: "1fr", render: (r) => <span className="mono">{r.eligibleReviewers}</span> },
@@ -80,12 +81,14 @@ export function Protocols() {
         />
       </Panel>
 
-      {openId && <DetailDrawer id={openId} viewer={viewer} onClose={() => setOpenId(null)} />}
+      {openId && <DetailDrawer id={openId} viewer={viewer} onNavigate={onNavigate} onClose={() => setOpenId(null)} />}
     </Wrap>
   );
 }
 
-function DetailDrawer({ id, viewer, onClose }: { id: string; viewer: Viewer; onClose: () => void }) {
+function DetailDrawer({
+  id, viewer, onNavigate, onClose
+}: { id: string; viewer: Viewer; onNavigate?: (id: ModuleId) => void; onClose: () => void }) {
   const { data, isLoading, isError, error } = useProtocolDetail(id);
   const queryClient = useQueryClient();
   const [ pending, setPending ] = useState<{ version: string; action: LifecycleAction } | null>(null);
@@ -178,6 +181,7 @@ function DetailDrawer({ id, viewer, onClose }: { id: string; viewer: Viewer; onC
               void queryClient.invalidateQueries({ queryKey: [ "protocol-detail", id ] });
             }}
             onCancel={() => setPending(null)}
+            onGoToSecurity={() => onNavigate?.("security")}
           />
         )}
       </div>
@@ -199,7 +203,7 @@ function VersionDetail({
     <div style={{ display: "flex", flexDirection: "column", gap: 8, paddingBottom: 12, borderBottom: "1px solid var(--rule)" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <span className="mono" style={{ fontWeight: 600 }}>v{version.version}</span>
-        <Tag tone={statusTone(version.status)}>{version.status}</Tag>
+        <Tag tone={statusTone(version.status)}>{statusLabel(version.status)}</Tag>
         <span className="mono" style={{ fontSize: 10.5, color: "var(--ink3)" }}>{fmtDateTime(version.at)}</span>
       </div>
 
@@ -272,11 +276,26 @@ async function runAction(name: string, version: string, action: LifecycleAction,
   }
 }
 
+// A versão active é a que está em uso agora (só ela reverte, R4 nunca
+// aposenta) — tom de destaque próprio, distinto do "ok" de published.
 function statusTone(s: string): string {
-  if (s === "published" || s === "active") return "ok";
+  if (s === "active") return "accent";
+  if (s === "published") return "ok";
   if (s === "draft") return "info";
   if (s === "retired") return "neutral";
   return "neutral";
+}
+
+const STATUS_LABEL: Record<string, string> = {
+  draft: "rascunho",
+  in_review: "em revisão",
+  published: "publicada",
+  active: "em uso",
+  retired: "aposentada"
+};
+
+function statusLabel(s: string): string {
+  return STATUS_LABEL[s] ?? s;
 }
 
 function gateTone(g: string): string {
