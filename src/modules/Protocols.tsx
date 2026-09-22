@@ -31,6 +31,12 @@ import { fmtDateTime } from "../lib/format";
 import type { ProtocolRow } from "../lib/types";
 import type { ModuleId } from "../shell/modules";
 
+// D5 — regra do §6 do spec de assinaturas: reverter não encadeia, e a
+// versão-alvo (a ativada imediatamente antes) precisa continuar publicada.
+const REVERT_DESCRIPTION =
+  "A cidade volta para a versão ativada imediatamente antes desta, que precisa continuar publicada. " +
+  "Não encadeia: reverter de novo exige uma nova ativação assinada, não outra reversão.";
+
 export function Protocols({ onNavigate }: { onNavigate?: (id: ModuleId) => void } = {}) {
   const [ openId, setOpenId ] = useState<string | null>(null);
   const { data, isLoading, isError, error, refetch } = useProtocols();
@@ -75,8 +81,6 @@ export function Protocols({ onNavigate }: { onNavigate?: (id: ModuleId) => void 
             { label: "Publicação", w: "1fr", render: (r) => <span className="mono">{r.signatures.publication.signers.length}/2</span> },
             { label: "Ativação", w: "1fr", render: (r) => <span className="mono">{r.signatures.activation.signers.length}/2</span> },
             { label: "Revisores", w: "1fr", render: (r) => <span className="mono">{r.eligibleReviewers}</span> },
-            { label: "Schema", w: "1fr", render: (r) => <Tag tone={gateTone(r.schema)}>{r.schema}</Tag> },
-            { label: "Linter", w: "1fr", render: (r) => <Tag tone={gateTone(r.linter)}>{r.linter}</Tag> },
             { label: "Detalhe", w: "auto", align: "right", render: () => <span className="mono" style={{ color: "var(--accent)" }}>ver →</span> }
           ]}
           rows={shown}
@@ -95,6 +99,7 @@ function DetailDrawer({
   id, viewer, onNavigate, onClose
 }: { id: string; viewer: Viewer; onNavigate?: (id: ModuleId) => void; onClose: () => void }) {
   const { data, isLoading, isError, error } = useProtocolDetail(id);
+  const auth = useAuth();
   const queryClient = useQueryClient();
   const [ pending, setPending ] = useState<{ version: string; action: LifecycleAction } | null>(null);
   const [ done, setDone ] = useState<string | null>(null);
@@ -176,6 +181,7 @@ function DetailDrawer({
         {pending && (
           <SensitiveAction
             title={`${pending.action.label} ${name} v${pending.version}`}
+            description={pending.action.kind === "revert" ? REVERT_DESCRIPTION : undefined}
             requiresStepUp={pending.action.stepUp}
             fields={pending.action.needsReason ? [ { name: "reason", label: "Motivo", required: true } ] : []}
             run={(values) => runAction(name, pending.version, pending.action, values)}
@@ -184,6 +190,7 @@ function DetailDrawer({
               setPending(null);
               void queryClient.invalidateQueries({ queryKey: [ "protocols" ] });
               void queryClient.invalidateQueries({ queryKey: [ "protocol-detail", id ] });
+              void auth.reload();
             }}
             onCancel={() => setPending(null)}
             onGoToSecurity={() => onNavigate?.("security")}
@@ -222,7 +229,7 @@ function VersionDetail({
           : version.editors.map((e, i) => (
               <span key={`${e.kind}-${e.id}`}>
                 {i > 0 && ", "}
-                <span className="mono">{e.kind === "maintainer" ? "mantenedor" : e.email}</span>
+                <span className="mono">{e.kind === "maintainer" ? "mantenedor" : (e.email ?? "—")}</span>
               </span>
             ))}
       </div>
@@ -241,7 +248,7 @@ function SignaturesSummary({ label, block }: { label: string; block: LifecycleTa
     <div style={{ fontSize: 12, color: "var(--ink2)" }}>
       <strong>{label}:</strong>{" "}
       {block.signers.length === 0 ? "ninguém assinou ainda" : (
-        <span className="mono">{block.signers.map((s) => s.email ?? s.id).join(", ")}</span>
+        <span className="mono">{block.signers.map((s) => s.email ?? "—").join(", ")}</span>
       )}
       {block.missing > 0 && <span style={{ color: "var(--ink3)" }}> · falta {block.missing}</span>}
     </div>
@@ -306,13 +313,6 @@ const STATUS_LABEL: Record<string, string> = {
 
 function statusLabel(s: string): string {
   return STATUS_LABEL[s] ?? s;
-}
-
-function gateTone(g: string): string {
-  if (g === "ok") return "ok";
-  if (g === "warn") return "warn";
-  if (g === "fail") return "down";
-  return "neutral";
 }
 
 function Wrap({ children }: { children: React.ReactNode }) {

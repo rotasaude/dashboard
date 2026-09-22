@@ -214,6 +214,62 @@ describe("Protocols", () => {
     await waitFor(() => expect(mocked(api.adminFetch).mock.calls.length).toBeGreaterThan(before + 1));
   });
 
+  // D7 — depois de cada ação bem-sucedida (§5.2), recarrega também a sessão.
+  it("sucesso também recarrega a sessão", async () => {
+    stubReads([ row() ]);
+    mocked(api.signProtocol).mockResolvedValue(undefined);
+    renderProtocols("protocol_reviewer");
+
+    fireEvent.click(await screen.findByText("dengue"));
+    const before = mocked(api.fetchCurrentSession).mock.calls.length;
+    fireEvent.click(await screen.findByRole("button", { name: "Assinar publicação" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+
+    await waitFor(() => expect(mocked(api.fetchCurrentSession).mock.calls.length).toBeGreaterThan(before));
+  });
+
+  // D7 — e-mail ausente em signatário ou editor mostra "—", nunca o UUID.
+  it("signatário e editor sem e-mail mostram travessão, não o UUID", async () => {
+    stubReads([ row() ], [ versionRow({
+      signatures: { publication: { signers: [ { id: "u-no-email", email: null } ], missing: 1 }, activation: { signers: [], missing: 2 } },
+      editors: [ { kind: "user", id: "u-editor-no-email", email: null } ]
+    }) ]);
+    renderProtocols();
+
+    fireEvent.click(await screen.findByText("dengue"));
+
+    expect((await screen.findAllByText("—")).length).toBe(2); // signatário + editor
+    expect(screen.queryByText("u-no-email")).toBeNull();
+    expect(screen.queryByText("u-editor-no-email")).toBeNull();
+  });
+
+  // D5 — a reversão precisa declarar o efeito (spec de assinaturas §6): não
+  // encadeia, e a versão-alvo tem de continuar publicada.
+  it("reverter mostra a regra do §6 antes de confirmar", async () => {
+    stubReads(
+      [ row({ status: "active", revertible: true }) ],
+      [ versionRow({ status: "active", revertible: true }) ]
+    );
+    renderProtocols("protocol_publisher");
+
+    fireEvent.click(await screen.findByText("dengue"));
+    fireEvent.click(await screen.findByRole("button", { name: "Reverter" }));
+
+    expect(await screen.findByText(/versão ativada imediatamente antes desta/)).not.toBeNull();
+    expect(screen.getByText(/não encadeia/i)).not.toBeNull();
+  });
+
+  // D6 — Schema e Linter são strings fixas na API ("ok"); a tela não pode
+  // afirmar que passaram por um portão que nunca rodou.
+  it("a lista não mostra as colunas Schema e Linter", async () => {
+    stubReads([ row() ]);
+    renderProtocols();
+
+    await screen.findByText("dengue");
+    expect(screen.queryByText("Schema")).toBeNull();
+    expect(screen.queryByText("Linter")).toBeNull();
+  });
+
   it("quem só tem viewer não vê ação nenhuma", async () => {
     stubReads([ row() ]);
     renderProtocols("viewer");
