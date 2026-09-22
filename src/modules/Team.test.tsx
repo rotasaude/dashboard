@@ -137,6 +137,17 @@ describe("Team", () => {
     expect(await screen.findByText("seu papel não permite esta ação")).not.toBeNull();
   });
 
+  it("marca a linha da própria pessoa logada com (você)", async () => {
+    mocked(api.listMemberships).mockResolvedValue([
+      { id: "m-self", user: { id: "u-admin", email_address: "admin@cidade.gov.br" }, role: "municipal_admin", granted_at: "2026-09-01T00:00:00Z" },
+      membership("ana@cidade.gov.br", "protocol_publisher")
+    ]);
+    renderTeam();
+
+    expect(await screen.findByText("admin@cidade.gov.br (você)")).not.toBeNull();
+    expect(screen.getByText("ana@cidade.gov.br")).not.toBeNull();
+  });
+
   it("lista vazia mostra estado vazio", async () => {
     mocked(api.listMemberships).mockResolvedValue([]);
     renderTeam();

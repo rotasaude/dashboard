@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { grantRole, listMemberships, revokeMembership } from "../lib/api";
 import { describeActionError } from "../lib/actionErrors";
 import { REQUIRED_REVIEWERS, REVIEWER_ROLE, reviewerCount, teamMembers, type TeamMember } from "../lib/team";
+import { useAuth } from "../lib/auth";
 import { SensitiveAction } from "../components/SensitiveAction";
 import { PageHeader } from "../components/PageHeader";
 import { Panel } from "../components/Panel";
@@ -33,6 +34,7 @@ function loadErrorMessage(err: unknown): string {
 }
 
 export function Team({ onNavigate }: { onNavigate(id: ModuleId): void }) {
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const query = useQuery({ queryKey: [ "memberships" ], queryFn: listMemberships });
   const [ pending, setPending ] = useState<Pending | null>(null);
@@ -70,7 +72,9 @@ export function Team({ onNavigate }: { onNavigate(id: ModuleId): void }) {
             {members.length === 0 ? <EmptyState title="nenhuma pessoa com papel ativo" /> : (
               <DataTable<TeamMember>
                 cols={[
-                  { label: "E-mail", w: "2fr", render: (m) => <span className="mono">{m.email}</span> },
+                  { label: "E-mail", w: "2fr", render: (m) => (
+                    <span className="mono">{m.email}{m.userId === user?.id ? " (você)" : ""}</span>
+                  ) },
                   { label: "Papéis", w: "2fr", render: (m) => (
                     <span style={{ display: "inline-flex", gap: 4, flexWrap: "wrap" }}>
                       {m.roles.map((role) => <Tag key={role}>{role}</Tag>)}
@@ -84,7 +88,6 @@ export function Team({ onNavigate }: { onNavigate(id: ModuleId): void }) {
                 ]}
                 rows={members}
                 rowKey={(m) => m.userId}
-                empty="nenhuma pessoa com papel ativo"
               />
             )}
           </div>
