@@ -4,6 +4,7 @@ import { login, fetchCurrentSession } from "./api";
 import { requestPasswordReset, resetPassword } from "./api";
 import { enrollMfa, confirmMfa, stepUpMfa } from "./api";
 import { listMemberships, grantRole, revokeMembership } from "./api";
+import { submitProtocol, signProtocol, publishProtocolVersion, activateProtocol, retireProtocol, revertProtocol } from "./api";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -132,5 +133,58 @@ describe("memberships", () => {
     const { url, init } = lastCall();
     expect(url).toBe("/setup/memberships/m2/revoke");
     expect(init.method).toBe("POST");
+  });
+});
+
+describe("ciclo de vida de protocolo", () => {
+  function lastCall() {
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+    const [ url, init ] = fetchMock.mock.calls.at(-1) as [ string, RequestInit ];
+    return { url, init, body: init.body ? JSON.parse(init.body as string) : undefined };
+  }
+
+  it("submitProtocol manda o nome na rota da versão", async () => {
+    mockFetch(200, { ok: true });
+    await submitProtocol("dengue", "2");
+    const { url, init, body } = lastCall();
+    expect(url).toBe("/protocols/2/submit");
+    expect(init.method).toBe("POST");
+    expect(body).toEqual({ name: "dengue" });
+  });
+
+  it("signProtocol manda a finalidade", async () => {
+    mockFetch(200, { ok: true });
+    await signProtocol("dengue", "2", "activation");
+    expect(lastCall().url).toBe("/protocols/2/signatures");
+    expect(lastCall().body).toEqual({ name: "dengue", purpose: "activation" });
+  });
+
+  it("publicar, ativar e aposentar usam a rota da versão", async () => {
+    for (const [ fn, path ] of [
+      [ publishProtocolVersion, "publish" ], [ activateProtocol, "activate" ], [ retireProtocol, "retire" ]
+    ] as const) {
+      mockFetch(200, { ok: true });
+      await fn("dengue", "3");
+      expect(lastCall().url).toBe(`/protocols/3/${path}`);
+      expect(lastCall().body).toEqual({ name: "dengue" });
+    }
+  });
+
+  it("revertProtocol manda nome e motivo, sem versão na rota", async () => {
+    mockFetch(200, { ok: true });
+    await revertProtocol("dengue", "regra errada em produção");
+    expect(lastCall().url).toBe("/protocols/revert");
+    expect(lastCall().body).toEqual({ name: "dengue", reason: "regra errada em produção" });
+  });
+
+  it("o nome e a versão vão codificados na URL", async () => {
+    mockFetch(200, { ok: true });
+    await submitProtocol("a/b", "1 2");
+    expect(lastCall().url).toBe("/protocols/1%202/submit");
+  });
+
+  it("recusa da API vira ApiError", async () => {
+    mockFetch(422, { error: "invalid_state", message: "só in_review pode ser publicado" });
+    await expect(publishProtocolVersion("dengue", "1")).rejects.toBeInstanceOf(ApiError);
   });
 });
