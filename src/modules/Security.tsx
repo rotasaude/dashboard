@@ -19,6 +19,12 @@ import { buttonStyle, inputStyle } from "../components/formStyles";
 // roda num clique: num efeito, o StrictMode chamaria duas vezes e o segundo
 // cadastro trocaria o segredo do primeiro.
 const RECOVERY_WARNING = "Cada código vale como o autenticador, uma única vez. Guarde-os fora do computador.";
+// D1: só na TROCA (window.enrolled continua true enquanto os códigos novos
+// aparecem — só o confirm/auth.reload muda isso). Os 10 códigos novos só
+// passam a valer na confirmação; até lá quem já tem autenticador continua
+// protegido pelos antigos, e este aviso evita achar que a troca já valeu.
+const REPLACE_RECOVERY_NOTICE =
+  "Estes códigos só passam a valer quando você confirmar o novo autenticador; até lá continuam valendo os anteriores.";
 
 export function Security() {
   const auth = useAuth();
@@ -31,7 +37,6 @@ export function Security() {
   const [ error, setError ] = useState<string | null>(null);
   const [ done, setDone ] = useState(false);
   const [ replacing, setReplacing ] = useState(false);
-  const [ viaReplace, setViaReplace ] = useState(false);
 
   useEffect(() => {
     if (!enrollment) { setQr(null); return; }
@@ -40,9 +45,9 @@ export function Security() {
     return () => { live = false; };
   }, [ enrollment ]);
 
-  function start(next: MfaEnrollment, replace = false) {
+  function start(next: MfaEnrollment) {
     setEnrollment(next); setSaved(false); setCode(""); setError(null); setDone(false);
-    setReplacing(false); setViaReplace(replace);
+    setReplacing(false);
   }
 
   async function begin() {
@@ -70,7 +75,7 @@ export function Security() {
       setDone(true);
     } catch (err) {
       const described = describeActionError(err);
-      setError(described.kind === "invalid_code"
+      setError(described.kind === "invalid_code" && described.code === "invalid_code"
         ? "código inválido — confira se o relógio do celular está certo"
         : "message" in described ? described.message : "não foi possível concluir — tente de novo");
     } finally {
@@ -90,14 +95,10 @@ export function Security() {
 
           {enrollment ? (
             <>
-              {viaReplace && (
-                <p style={{ margin: 0, fontWeight: 600 }}>
-                  Seu autenticador anterior já não vale — confirme o novo para voltar a aprovar ações.
-                </p>
-              )}
               {qr && <img src={qr} alt="QR do autenticador" width={180} height={180} />}
               {secret && <p style={{ margin: 0 }}>Chave: <span className="mono">{secret}</span></p>}
               <p style={{ margin: 0, fontWeight: 600 }}>{RECOVERY_WARNING}</p>
+              {window.enrolled && <p style={{ margin: 0 }}>{REPLACE_RECOVERY_NOTICE}</p>}
               <ul className="mono" style={{ margin: 0 }}>
                 {enrollment.recovery_codes.map((c) => <li key={c}>{c}</li>)}
               </ul>
@@ -123,16 +124,9 @@ export function Security() {
               {replacing ? (
                 <SensitiveAction
                   title="Trocar autenticador"
-                  description="O autenticador atual deixa de valer assim que você confirmar esta etapa. Conclua o cadastro do novo sem sair da tela."
+                  description="O autenticador atual continua valendo até você confirmar o novo."
                   requiresStepUp
-                  run={async () => {
-                    start(await enrollMfa(), true);
-                    // O enroll já desliga otp_enabled no servidor (só a
-                    // confirmação liga de novo) — recarrega a sessão para que
-                    // sair desta tela sem confirmar mostre "não cadastrado",
-                    // e não o autenticador antigo que já não vale mais.
-                    void auth.reload();
-                  }}
+                  run={async () => { start(await enrollMfa()); }}
                   onDone={() => setReplacing(false)}
                   onCancel={() => setReplacing(false)}
                 />
