@@ -155,6 +155,38 @@ describe("Security", () => {
     expect(screen.getByAltText("QR do autenticador")).not.toBeNull();
   });
 
+  // D1: durante uma TROCA (window.enrolled true quando a tela mostra os
+  // códigos), os códigos novos só passam a valer na confirmação — até lá os
+  // antigos continuam valendo. Sem aviso, quem troca pode achar que os 10
+  // códigos novos já substituíram os antigos assim que aparecem na tela.
+  it("trocar autenticador: aviso de que os códigos novos só valem após confirmar", async () => {
+    mocked(api.fetchCurrentSession).mockResolvedValue(session({ mfa_enrolled: true }));
+    mocked(api.stepUpMfa).mockResolvedValue(undefined);
+    mocked(api.enrollMfa).mockResolvedValue(ENROLLMENT);
+    renderSecurity();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Trocar autenticador" }));
+    fireEvent.change(await screen.findByLabelText("Código do autenticador"), { target: { value: "123456" } });
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+
+    expect(await screen.findByText(
+      "Estes códigos só passam a valer quando você confirmar o novo autenticador; até lá continuam valendo os anteriores."
+    )).not.toBeNull();
+  });
+
+  it("primeiro cadastro: sem autenticador anterior, o aviso de troca não aparece", async () => {
+    mocked(api.fetchCurrentSession).mockResolvedValue(session());
+    mocked(api.enrollMfa).mockResolvedValue(ENROLLMENT);
+    renderSecurity();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Cadastrar autenticador" }));
+    await screen.findByAltText("QR do autenticador");
+
+    expect(screen.queryByText(
+      "Estes códigos só passam a valer quando você confirmar o novo autenticador; até lá continuam valendo os anteriores."
+    )).toBeNull();
+  });
+
   it("código já usado: mensagem própria, campo limpo", async () => {
     mocked(api.fetchCurrentSession).mockResolvedValue(session());
     mocked(api.enrollMfa).mockResolvedValue(ENROLLMENT);

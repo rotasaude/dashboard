@@ -19,6 +19,12 @@ import { buttonStyle, inputStyle } from "../components/formStyles";
 // roda num clique: num efeito, o StrictMode chamaria duas vezes e o segundo
 // cadastro trocaria o segredo do primeiro.
 const RECOVERY_WARNING = "Cada código vale como o autenticador, uma única vez. Guarde-os fora do computador.";
+// D1: só na TROCA (window.enrolled continua true enquanto os códigos novos
+// aparecem — só o confirm/auth.reload muda isso). Os 10 códigos novos só
+// passam a valer na confirmação; até lá quem já tem autenticador continua
+// protegido pelos antigos, e este aviso evita achar que a troca já valeu.
+const REPLACE_RECOVERY_NOTICE =
+  "Estes códigos só passam a valer quando você confirmar o novo autenticador; até lá continuam valendo os anteriores.";
 
 export function Security() {
   const auth = useAuth();
@@ -92,6 +98,7 @@ export function Security() {
               {qr && <img src={qr} alt="QR do autenticador" width={180} height={180} />}
               {secret && <p style={{ margin: 0 }}>Chave: <span className="mono">{secret}</span></p>}
               <p style={{ margin: 0, fontWeight: 600 }}>{RECOVERY_WARNING}</p>
+              {window.enrolled && <p style={{ margin: 0 }}>{REPLACE_RECOVERY_NOTICE}</p>}
               <ul className="mono" style={{ margin: 0 }}>
                 {enrollment.recovery_codes.map((c) => <li key={c}>{c}</li>)}
               </ul>

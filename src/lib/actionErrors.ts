@@ -40,6 +40,12 @@ export function describeActionError(err: unknown): ActionError {
   if (err.status === 422 && code === "enrollment_expired") {
     return { kind: "rejected", code, message: "cadastro expirado — comece de novo" };
   }
+  // D2: no retry de uma resposta perdida, a confirmação anterior na verdade
+  // deu certo (o pendente já foi promovido e limpo) — o 422 genérico não diz
+  // isso, e sugere tentar de novo algo que já terminou.
+  if (err.status === 422 && code === "no_pending_enrollment") {
+    return { kind: "rejected", code, message: "este cadastro já foi concluído — recarregue a página" };
+  }
   if (err.status === 403) return { kind: "forbidden", message: "seu papel não permite esta ação" };
   if (err.status === 429) return { kind: "rate_limited", message: "muitas tentativas — aguarde alguns minutos" };
   if (err.status === 422 || err.status === 409) {
