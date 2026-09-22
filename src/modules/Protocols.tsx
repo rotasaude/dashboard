@@ -16,7 +16,7 @@ import {
   type LifecycleAction, type LifecycleTarget, type Viewer
 } from "../lib/protocolLifecycle";
 import { SensitiveAction } from "../components/SensitiveAction";
-import { buttonStyle } from "../components/formStyles";
+import { buttonStyle, disabledButtonStyle } from "../components/formStyles";
 import { Panel } from "../components/Panel";
 import { PageHeader } from "../components/PageHeader";
 import { KpiGrid } from "../components/KpiGrid";
@@ -55,7 +55,12 @@ export function Protocols({ onNavigate }: { onNavigate?: (id: ModuleId) => void 
       <KpiGrid>
         <StatTile label="Protocolos & versões" value={list.length} source="live" />
         <StatTile label="Publicados" value={published} tone="ok" source="live" />
-        <button type="button" onClick={() => setOnlyMine((v) => !v)} style={{ all: "unset", cursor: "pointer" }}>
+        <button
+          type="button"
+          aria-pressed={onlyMine}
+          onClick={() => setOnlyMine((v) => !v)}
+          style={{ all: "unset", cursor: "pointer", borderRadius: 10, outline: onlyMine ? "2px solid var(--accent)" : "2px solid transparent", outlineOffset: 2 }}
+        >
           <StatTile label="Aguardando sua assinatura" value={awaiting}
                     tone={awaiting > 0 ? "warn" : "ok"} source="live" />
         </button>
@@ -77,7 +82,7 @@ export function Protocols({ onNavigate }: { onNavigate?: (id: ModuleId) => void 
           rows={shown}
           rowKey={(r) => `${r.id}-${r.version}`}
           onRowClick={(r) => setOpenId(r.id)}
-          empty="nenhum protocolo cadastrado"
+          empty={onlyMine ? "nenhuma versão aguardando sua assinatura" : "nenhum protocolo cadastrado"}
         />
       </Panel>
 
@@ -253,7 +258,12 @@ function VersionActions({
     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
       {actions.map((action) => (
         <div key={`${action.kind}-${action.purpose ?? ""}`} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-          <button type="button" style={buttonStyle} disabled={action.disabledReason !== null} onClick={() => onPick(action)}>
+          <button
+            type="button"
+            style={action.disabledReason !== null ? disabledButtonStyle : buttonStyle}
+            disabled={action.disabledReason !== null}
+            onClick={() => onPick(action)}
+          >
             {action.label}
           </button>
           {action.disabledReason && (

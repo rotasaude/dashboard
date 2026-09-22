@@ -167,8 +167,12 @@ describe("Protocols", () => {
 
     fireEvent.click(await screen.findByText("dengue"));
 
-    expect((await screen.findByRole("button", { name: "Publicar" }) as HTMLButtonElement).disabled).toBe(true);
+    const button = await screen.findByRole("button", { name: "Publicar" }) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
     expect(screen.getByText("falta 1 assinatura")).not.toBeNull();
+    // D3 — um botão desabilitado precisa PARECER desabilitado.
+    expect(button.style.opacity).toBe("0.55");
+    expect(button.style.cursor).toBe("not-allowed");
   });
 
   it("reverter pede motivo e manda nome e motivo", async () => {
@@ -278,6 +282,40 @@ describe("Protocols", () => {
 
     const kpi = (await screen.findByText("Aguardando sua assinatura")).closest("button")!;
     expect(within(kpi).getByText("0")).not.toBeNull();
+  });
+
+  // D4 — o filtro "aguardando sua assinatura" precisa de um estado visível
+  // (aria-pressed + contorno) e de um vazio próprio quando ligado.
+  it("o cartão-filtro expõe aria-pressed e ganha contorno quando ligado", async () => {
+    stubReads([ row({ id: "dengue", name: "dengue", status: "in_review" }) ]);
+    renderProtocols("protocol_reviewer");
+
+    const toggle = (await screen.findByText("Aguardando sua assinatura")).closest("button")!;
+    expect(toggle.getAttribute("aria-pressed")).toBe("false");
+    expect(toggle.style.outline === "" || toggle.style.outline === "2px solid transparent").toBe(true);
+
+    fireEvent.click(toggle);
+
+    expect(toggle.getAttribute("aria-pressed")).toBe("true");
+    expect(toggle.style.outline).not.toBe("");
+    expect(toggle.style.outline).not.toBe("2px solid transparent");
+  });
+
+  it("com o filtro ligado e nada pendente, mostra o vazio próprio do filtro", async () => {
+    stubReads([ row({ id: "zika", name: "zika", status: "draft" }) ]);
+    renderProtocols("protocol_reviewer");
+
+    fireEvent.click(await screen.findByText("Aguardando sua assinatura"));
+
+    expect(await screen.findByText("nenhuma versão aguardando sua assinatura")).not.toBeNull();
+    expect(screen.queryByText("nenhum protocolo cadastrado")).toBeNull();
+  });
+
+  it("sem filtro, a lista vazia mostra o texto genérico", async () => {
+    stubReads([]);
+    renderProtocols("protocol_reviewer");
+
+    expect(await screen.findByText("nenhum protocolo cadastrado")).not.toBeNull();
   });
 
   // D2 — revisor sem autenticador cadastrado precisa de uma saída até a

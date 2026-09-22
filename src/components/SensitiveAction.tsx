@@ -2,7 +2,7 @@ import { useState, type FormEvent, type ReactNode } from "react";
 import { useAuth } from "../lib/auth";
 import { useStepUp } from "../lib/useStepUp";
 import { describeActionError } from "../lib/actionErrors";
-import { buttonStyle, inputStyle, secondaryButtonStyle } from "./formStyles";
+import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "./formStyles";
 
 // Confirmação de ação sensível (spec do dashboard §5.1/§6, abordagem 1): o
 // único lugar que conhece step-up, repetição e tradução de erro. As telas só
@@ -133,7 +133,7 @@ export function SensitiveAction({
           </>
         )}
         <div style={row}>
-          <button type="submit" disabled={busy} style={buttonStyle}>{confirmLabel}</button>
+          <button type="submit" disabled={busy} style={busy ? disabledButtonStyle : buttonStyle}>{confirmLabel}</button>
           <button type="button" disabled={busy} onClick={onCancel} style={secondaryButtonStyle}>Cancelar</button>
         </div>
       </form>
