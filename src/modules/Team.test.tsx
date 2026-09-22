@@ -109,13 +109,13 @@ describe("Team", () => {
 
   it("a recusa da API aparece no painel, que continua aberto", async () => {
     mocked(api.listMemberships).mockResolvedValue([ membership("ana@cidade.gov.br", "protocol_publisher") ]);
-    mocked(api.grantRole).mockRejectedValue(new ApiError(422, { error: "already_granted", message: "papel já concedido" }, "422"));
+    mocked(api.grantRole).mockRejectedValue(new ApiError(422, { error: "already_granted", message: "esta pessoa já tem o papel" }, "422"));
     renderTeam();
 
     fireEvent.click(await screen.findByRole("button", { name: "Tornar revisor" }));
     fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
 
-    expect(await screen.findByText("papel já concedido")).not.toBeNull();
+    expect(await screen.findByText("esta pessoa já tem o papel")).not.toBeNull();
     expect(screen.getByRole("button", { name: "Confirmar" })).not.toBeNull();
   });
 
