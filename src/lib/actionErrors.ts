@@ -1,0 +1,36 @@
+// Tradução, num lugar só, das respostas da API da cidade a uma ação sensível
+// (spec do dashboard §6). Nenhuma tela lê status HTTP: todas perguntam isto.
+// A mensagem de domínio (`message` dos commands) sai verbatim; um código cru
+// (`invalid_state`, `http_500`) nunca chega ao usuário.
+import { ApiError } from "./api";
+
+export type ActionError =
+  | { kind: "mfa_required" }
+  | { kind: "invalid_code"; message: string }
+  | { kind: "forbidden"; message: string }
+  | { kind: "rejected"; message: string }
+  | { kind: "session_expired"; message: string }
+  | { kind: "failed"; message: string };
+
+const GENERIC = "não foi possível concluir — tente de novo";
+
+function bodyField(body: unknown, key: string): string | null {
+  if (body && typeof body === "object" && typeof (body as Record<string, unknown>)[key] === "string") {
+    return (body as Record<string, string>)[key];
+  }
+  return null;
+}
+
+export function describeActionError(err: unknown): ActionError {
+  if (!(err instanceof ApiError)) return { kind: "failed", message: GENERIC };
+  const code = bodyField(err.body, "error");
+
+  if (err.status === 401 && code === "mfa_required") return { kind: "mfa_required" };
+  if (err.status === 401) return { kind: "session_expired", message: "sessão expirada — entre de novo" };
+  if (err.status === 422 && code === "invalid_code") return { kind: "invalid_code", message: "código inválido" };
+  if (err.status === 403) return { kind: "forbidden", message: "seu papel não permite esta ação" };
+  if (err.status === 422 || err.status === 409) {
+    return { kind: "rejected", message: bodyField(err.body, "message") ?? "a API recusou a ação" };
+  }
+  return { kind: "failed", message: GENERIC };
+}

@@ -36,6 +36,8 @@ export interface SessionUser {
   email_address: string;
   operator: boolean;
   memberships: Membership[];
+  mfa_enrolled: boolean;
+  mfa_verified_at: string | null;
 }
 
 async function jsonFetch<T>(input: string, init?: RequestInit): Promise<T> {
@@ -89,6 +91,34 @@ export async function fetchCurrentSession(): Promise<SessionUser | null> {
 
 export async function logout(): Promise<void> {
   await jsonFetch<void>(SESSION_BASE, { method: "DELETE" });
+}
+
+const MFA_BASE = import.meta.env.VITE_MFA_BASE || "/mfa";
+
+export interface MfaEnrollment { otpauth_uri: string; recovery_codes: string[]; }
+
+// `body: "{}"` de propósito: jsonFetch só põe Content-Type quando há body, e a
+// API recusa (415) escrita por cookie sem application/json.
+export async function enrollMfa(): Promise<MfaEnrollment> {
+  return jsonFetch<MfaEnrollment>(`${MFA_BASE}/enroll`, { method: "POST", body: "{}" });
+}
+
+export async function confirmMfa(code: string): Promise<void> {
+  await jsonFetch<unknown>(`${MFA_BASE}/confirm`, { method: "POST", body: JSON.stringify({ code }) });
+}
+
+export async function stepUpMfa(code: string): Promise<void> {
+  await jsonFetch<unknown>(`${MFA_BASE}/step_up`, { method: "POST", body: JSON.stringify({ code }) });
+}
+
+// O `error` do corpo de uma recusa (`mfa_required`, `invalid_code`...), ou null.
+export function errorCode(err: unknown): string | null {
+  if (!(err instanceof ApiError)) return null;
+  const body = err.body;
+  if (body && typeof body === "object" && typeof (body as Record<string, unknown>).error === "string") {
+    return (body as Record<string, string>).error;
+  }
+  return null;
 }
 
 const PASSWORDS_BASE = import.meta.env.VITE_PASSWORDS_BASE || "/passwords";
