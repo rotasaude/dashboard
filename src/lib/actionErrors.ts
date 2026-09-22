@@ -6,9 +6,9 @@ import { ApiError } from "./api";
 
 export type ActionError =
   | { kind: "mfa_required" }
-  | { kind: "invalid_code"; message: string }
+  | { kind: "invalid_code"; code: string; message: string }
   | { kind: "forbidden"; message: string }
-  | { kind: "rejected"; message: string }
+  | { kind: "rejected"; code?: string; message: string }
   | { kind: "session_expired"; message: string }
   | { kind: "rate_limited"; message: string }
   | { kind: "failed"; message: string };
@@ -28,7 +28,18 @@ export function describeActionError(err: unknown): ActionError {
 
   if (err.status === 401 && code === "mfa_required") return { kind: "mfa_required" };
   if (err.status === 401) return { kind: "session_expired", message: "sessão expirada — entre de novo" };
-  if (err.status === 422 && code === "invalid_code") return { kind: "invalid_code", message: "código inválido" };
+  // Erros do campo do código (a matrícula em duas etapas da API: spec do
+  // autenticador pendente §4). `code` viaja junto para a tela escolher a
+  // frase sem reler status HTTP.
+  if (err.status === 422 && code === "invalid_code") {
+    return { kind: "invalid_code", code, message: "código inválido" };
+  }
+  if (err.status === 422 && code === "code_reused") {
+    return { kind: "invalid_code", code, message: "código já usado — espere o próximo" };
+  }
+  if (err.status === 422 && code === "enrollment_expired") {
+    return { kind: "rejected", code, message: "cadastro expirado — comece de novo" };
+  }
   if (err.status === 403) return { kind: "forbidden", message: "seu papel não permite esta ação" };
   if (err.status === 429) return { kind: "rate_limited", message: "muitas tentativas — aguarde alguns minutos" };
   if (err.status === 422 || err.status === 409) {

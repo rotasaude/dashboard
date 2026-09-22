@@ -11,7 +11,17 @@ describe("describeActionError", () => {
 
   it("422 invalid_code", () => {
     expect(describeActionError(apiError(422, { error: "invalid_code" })))
-      .toEqual({ kind: "invalid_code", message: "código inválido" });
+      .toEqual({ kind: "invalid_code", code: "invalid_code", message: "código inválido" });
+  });
+
+  it("422 code_reused é erro do campo do código", () => {
+    expect(describeActionError(apiError(422, { error: "code_reused" })))
+      .toEqual({ kind: "invalid_code", code: "code_reused", message: "código já usado — espere o próximo" });
+  });
+
+  it("422 enrollment_expired pede recomeçar", () => {
+    expect(describeActionError(apiError(422, { error: "enrollment_expired" })))
+      .toEqual({ kind: "rejected", code: "enrollment_expired", message: "cadastro expirado — comece de novo" });
   });
 
   it("403 sem corpo", () => {
