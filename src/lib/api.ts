@@ -111,6 +111,35 @@ export async function stepUpMfa(code: string): Promise<void> {
   await jsonFetch<unknown>(`${MFA_BASE}/step_up`, { method: "POST", body: JSON.stringify({ code }) });
 }
 
+const SETUP_BASE = import.meta.env.VITE_SETUP_BASE || "/setup";
+
+export interface MembershipRow {
+  id: string;
+  user: { id: string; email_address: string };
+  role: string;
+  granted_at: string;
+}
+
+// Só memberships ATIVAS (SetupController#list_memberships): uma linha por
+// papel, então a mesma pessoa aparece mais de uma vez — quem agrupa é
+// src/lib/team.ts.
+export async function listMemberships(): Promise<MembershipRow[]> {
+  const payload = await jsonFetch<{ data: MembershipRow[] }>(`${SETUP_BASE}/memberships`);
+  return payload.data;
+}
+
+export async function grantRole(userId: string, role: string): Promise<void> {
+  await jsonFetch<unknown>(`${SETUP_BASE}/memberships`, {
+    method: "POST", body: JSON.stringify({ user_id: userId, role })
+  });
+}
+
+export async function revokeMembership(id: string): Promise<void> {
+  await jsonFetch<unknown>(`${SETUP_BASE}/memberships/${encodeURIComponent(id)}/revoke`, {
+    method: "POST", body: "{}"
+  });
+}
+
 const PASSWORDS_BASE = import.meta.env.VITE_PASSWORDS_BASE || "/passwords";
 
 export async function requestPasswordReset(email_address: string): Promise<void> {

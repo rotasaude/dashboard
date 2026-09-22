@@ -3,6 +3,7 @@ import { adminFetch, ApiError } from "./api";
 import { login, fetchCurrentSession } from "./api";
 import { requestPasswordReset, resetPassword } from "./api";
 import { enrollMfa, confirmMfa, stepUpMfa } from "./api";
+import { listMemberships, grantRole, revokeMembership } from "./api";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -92,5 +93,44 @@ describe("mfa", () => {
     await stepUpMfa("654321");
     expect(lastCall().url).toBe("/mfa/step_up");
     expect(JSON.parse(lastCall().init.body as string)).toEqual({ code: "654321" });
+  });
+});
+
+describe("memberships", () => {
+  function lastCall() {
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+    const [ url, init ] = fetchMock.mock.calls.at(-1) as [ string, RequestInit ];
+    return { url, init };
+  }
+
+  it("listMemberships devolve data", async () => {
+    mockFetch(200, { data: [ { id: "m1", user: { id: "u1", email_address: "a@b" }, role: "viewer", granted_at: "2026-09-01T00:00:00Z" } ] });
+
+    const rows = await listMemberships();
+
+    expect(lastCall().url).toBe("/setup/memberships");
+    expect(rows).toHaveLength(1);
+    expect(rows[0].user.email_address).toBe("a@b");
+  });
+
+  it("grantRole manda user_id e role em JSON", async () => {
+    mockFetch(201, { id: "m2" });
+
+    await grantRole("u1", "protocol_reviewer");
+
+    const { url, init } = lastCall();
+    expect(url).toBe("/setup/memberships");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ user_id: "u1", role: "protocol_reviewer" });
+  });
+
+  it("revokeMembership chama a rota de revogação", async () => {
+    mockFetch(200, { id: "m2", revoked_at: "2026-09-22T00:00:00Z" });
+
+    await revokeMembership("m2");
+
+    const { url, init } = lastCall();
+    expect(url).toBe("/setup/memberships/m2/revoke");
+    expect(init.method).toBe("POST");
   });
 });

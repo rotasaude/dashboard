@@ -1,0 +1,42 @@
+// A equipe da cidade, vista por PESSOA (spec do dashboard §5.2). A API
+// devolve uma linha por membership ativa; aqui elas viram uma linha por
+// usuário, com os papéis juntos.
+//
+// Limite conhecido: quem não tem nenhum papel ativo não aparece — a API não
+// lista usuários, lista memberships. Na prática todo usuário da cidade nasce
+// de um convite com papel.
+import type { MembershipRow } from "./api";
+
+export const REVIEWER_ROLE = "protocol_reviewer";
+export const REQUIRED_REVIEWERS = 2;
+
+export interface TeamMember {
+  userId: string;
+  email: string;
+  roles: string[];
+  isReviewer: boolean;
+  reviewerMembershipId: string | null;
+}
+
+export function teamMembers(rows: MembershipRow[]): TeamMember[] {
+  const byUser = new Map<string, TeamMember>();
+
+  for (const row of rows) {
+    const current = byUser.get(row.user.id) ?? {
+      userId: row.user.id, email: row.user.email_address, roles: [],
+      isReviewer: false, reviewerMembershipId: null
+    };
+    current.roles = [ ...current.roles, row.role ].sort();
+    if (row.role === REVIEWER_ROLE) {
+      current.isReviewer = true;
+      current.reviewerMembershipId = row.id;
+    }
+    byUser.set(row.user.id, current);
+  }
+
+  return [ ...byUser.values() ].sort((a, b) => a.email.localeCompare(b.email));
+}
+
+export function reviewerCount(members: TeamMember[]): number {
+  return members.filter((m) => m.isReviewer).length;
+}
