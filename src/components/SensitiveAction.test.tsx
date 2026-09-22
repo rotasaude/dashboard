@@ -132,6 +132,31 @@ describe("SensitiveAction", () => {
     expect(run).toHaveBeenCalledTimes(2);
   });
 
+  it("campo de código do step-up aceita recovery code (sem inputMode numeric)", async () => {
+    fetchSession.mockResolvedValue(session());
+    renderAction();
+    await waitFor(() => expect(codeField()).not.toBeNull());
+
+    expect(codeField()!.getAttribute("inputMode")).toBeNull();
+  });
+
+  it("aviso de verificação expirada some quando a tentativa seguinte falha com invalid_code", async () => {
+    fetchSession.mockResolvedValue(session({ mfa_verified_at: minutesAgo(1) }));
+    const run = vi.fn().mockRejectedValueOnce(apiError(401, { error: "mfa_required" }));
+    renderAction({ run });
+    await screen.findByText("verificação válida por mais 4 min");
+
+    fireEvent.click(confirm());
+    expect(await screen.findByText("sua verificação expirou — informe um novo código")).not.toBeNull();
+
+    stepUpMfa.mockRejectedValue(apiError(422, { error: "invalid_code" }));
+    fireEvent.change(codeField()!, { target: { value: "000000" } });
+    fireEvent.click(confirm());
+
+    expect(await screen.findByText("código inválido")).not.toBeNull();
+    expect(screen.queryByText("sua verificação expirou — informe um novo código")).toBeNull();
+  });
+
   it("recusa do domínio: mensagem da API no painel, que continua aberto", async () => {
     fetchSession.mockResolvedValue(session({ mfa_verified_at: minutesAgo(1) }));
     const run = vi.fn().mockRejectedValue(apiError(422, { error: "insufficient_signatures", message: "falta 1 assinatura" }));

@@ -36,6 +36,11 @@ describe("describeActionError", () => {
       .toEqual({ kind: "session_expired", message: "sessão expirada — entre de novo" });
   });
 
+  it("429: muitas tentativas", () => {
+    expect(describeActionError(apiError(429, { error: "too_many_requests" })))
+      .toEqual({ kind: "rate_limited", message: "muitas tentativas — aguarde alguns minutos" });
+  });
+
   it("5xx, rede e qualquer outra coisa: genérico", () => {
     const generic = { kind: "failed", message: "não foi possível concluir — tente de novo" };
     expect(describeActionError(apiError(500, ""))).toEqual(generic);

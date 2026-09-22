@@ -50,7 +50,7 @@ export function SensitiveAction({
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (busy) return;
-    setError(null); setCodeError(null); setFieldError(null);
+    setError(null); setCodeError(null); setFieldError(null); setNotice(null);
 
     const missing = fields.find((f) => f.required && !values[f.name]?.trim());
     if (missing) { setFieldError(`preencha: ${missing.label}`); return; }
@@ -126,7 +126,6 @@ export function SensitiveAction({
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
                 autoComplete="one-time-code"
-                inputMode="numeric"
                 style={inputStyle}
               />
             </label>
