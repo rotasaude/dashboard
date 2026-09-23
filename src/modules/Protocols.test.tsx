@@ -244,8 +244,9 @@ describe("Protocols", () => {
   });
 
   // D5 — a reversão precisa declarar o efeito (spec de assinaturas §6): não
-  // encadeia, e a versão-alvo tem de continuar publicada.
-  it("reverter mostra a regra do §6 antes de confirmar", async () => {
+  // encadeia, nomeia a versão-alvo, e a versão-alvo tem de continuar
+  // publicada.
+  it("reverter nomeia a versão-alvo e a regra do §6 antes de confirmar", async () => {
     stubReads(
       [ row({ status: "active", revertible: true, version: "3", revertTargetVersion: "2" }) ],
       [ versionRow({ status: "active", revertible: true, version: "3", revertTargetVersion: "2" }) ]
@@ -255,22 +256,8 @@ describe("Protocols", () => {
     fireEvent.click(await screen.findByText("dengue"));
     fireEvent.click(await screen.findByRole("button", { name: "Reverter" }));
 
-    expect(await screen.findByText(/versão 2, que estava em uso antes desta/)).not.toBeNull();
+    expect(await screen.findByText(/deve voltar para a versão 2, que estava em uso antes desta/)).not.toBeNull();
     expect(screen.getByText(/não encadeia/i)).not.toBeNull();
-  });
-
-  it("o painel de reverter nomeia a versão que deve voltar", async () => {
-    stubReads(
-      [ row({ status: "active", revertible: true, version: "3", revertTargetVersion: "2" }) ],
-      [ versionRow({ status: "active", revertible: true, version: "3", revertTargetVersion: "2" }) ]
-    );
-    renderProtocols("protocol_publisher");
-
-    fireEvent.click(await screen.findByText("dengue"));
-    fireEvent.click(await screen.findByRole("button", { name: "Reverter" }));
-
-    expect(await screen.findByText(/deve voltar para a versão 2/)).not.toBeNull();
-    expect(screen.getByText(/Não encadeia/)).not.toBeNull();
   });
 
   it("sem alvo na leitura, o painel cai na frase sem número", async () => {
