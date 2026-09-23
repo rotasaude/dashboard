@@ -31,11 +31,16 @@ import { fmtDateTime } from "../lib/format";
 import type { ProtocolRow } from "../lib/types";
 import type { ModuleId } from "../shell/modules";
 
-// D5 — regra do §6 do spec de assinaturas: reverter não encadeia, e a
-// versão-alvo (a ativada imediatamente antes) precisa continuar publicada.
-const REVERT_DESCRIPTION =
-  "A cidade volta para a versão ativada imediatamente antes desta, que precisa continuar publicada. " +
-  "Não encadeia: reverter de novo exige uma nova ativação assinada, não outra reversão.";
+// A frase nomeia a versão-alvo (spec 2026-09-23-revert-target §5). "deve
+// voltar", não "vai voltar": a leitura é sem lock, e a API decide no clique.
+// Sem alvo na leitura, cai na frase sem número em vez de imprimir "null".
+function revertDescription(targetVersion: string | null): string {
+  const destino = targetVersion
+    ? `a versão ${targetVersion}, que estava em uso antes desta`
+    : "a versão ativada antes desta";
+  return `A cidade deve voltar para ${destino}. A versão atual sai de uso. ` +
+    "Não encadeia: reverter de novo exige uma nova ativação assinada, não outra reversão.";
+}
 
 export function Protocols({ onNavigate }: { onNavigate?: (id: ModuleId) => void } = {}) {
   const [ openId, setOpenId ] = useState<string | null>(null);
@@ -103,7 +108,7 @@ function DetailDrawer({
   const { data, isLoading, isError, error } = useProtocolDetail(id);
   const auth = useAuth();
   const queryClient = useQueryClient();
-  const [ pending, setPending ] = useState<{ version: string; action: LifecycleAction } | null>(null);
+  const [ pending, setPending ] = useState<{ version: string; revertTargetVersion: string | null; action: LifecycleAction } | null>(null);
   const [ done, setDone ] = useState<string | null>(null);
   const name = data?.data.name ?? id;
 
@@ -158,7 +163,7 @@ function DetailDrawer({
                     key={v.version}
                     version={v}
                     viewer={viewer}
-                    onPick={(action) => { setPending({ version: v.version, action }); setDone(null); }}
+                    onPick={(action) => { setPending({ version: v.version, revertTargetVersion: v.revertTargetVersion, action }); setDone(null); }}
                   />
                 ))}
               </div>
@@ -183,7 +188,7 @@ function DetailDrawer({
         {pending && (
           <SensitiveAction
             title={`${pending.action.label} ${name} v${pending.version}`}
-            description={pending.action.kind === "revert" ? REVERT_DESCRIPTION : undefined}
+            description={pending.action.kind === "revert" ? revertDescription(pending.revertTargetVersion) : undefined}
             requiresStepUp={pending.action.stepUp}
             fields={pending.action.needsReason ? [ { name: "reason", label: "Motivo", required: true } ] : []}
             run={(values) => runAction(name, pending.version, pending.action, values)}
