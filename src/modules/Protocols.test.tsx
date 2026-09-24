@@ -488,6 +488,9 @@ describe("Protocols", () => {
     const status = await screen.findByRole("status");
     expect(status.textContent).toContain("Reverter concluído");
     expect(status.textContent).not.toContain("undefined");
+    // Sem isto, a mensagem ANTIGA e errada ("Reverter concluído: dengue v3")
+    // satisfaria as duas asserções acima e o ramo nulo ficaria descoberto.
+    expect(status.textContent).not.toContain("v3");
   });
 
   it("publicar continua nomeando a versão sobre a qual se agiu", async () => {
