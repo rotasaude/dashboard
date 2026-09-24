@@ -1,9 +1,10 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
-  lookupCitizen, revokeVerification, verifyCitizen, listVerifications,
+  listActiveUnits, lookupCitizen, revokeVerification, verifyCitizen, listVerifications,
   type AttendanceCitizen, type AttendanceTriage, type HealthUnit, type VerificationRow
 } from "../lib/api";
-import { attendanceError, isValidCpf, maskCpf, onlyDigits } from "../lib/attendance";
+import { attendanceError, currentUnitKey, isValidCpf, maskCpf, onlyDigits } from "../lib/attendance";
 import { fmtDateTime } from "../lib/format";
 import { useAuth } from "../lib/auth";
 import { PageHeader } from "../components/PageHeader";
@@ -14,6 +15,8 @@ import { KeyValue } from "../components/KeyValue";
 import { EmptyState } from "../components/EmptyState";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../components/formStyles";
 import { UnitPicker } from "./attendance/UnitPicker";
+import { CheckIn } from "./attendance/CheckIn";
+import { OpenAttendances } from "./attendance/OpenAttendances";
 import { Units } from "./attendance/Units";
 
 // Atendimento (spec 2026-09-24-citizen-presencial-verification, Task 6):
@@ -31,9 +34,13 @@ function nivelLabel(level: AttendanceCitizen["verification_level"]): string {
 
 export function Attendance() {
   const { user } = useAuth();
-  // Task 7 consome a unidade escolhida (CheckIn/OpenAttendances); por ora só
-  // guardamos o estado para o UnitPicker gravar a escolha.
-  const [ , setUnit ] = useState<HealthUnit | null>(null);
+  const [ unit, setUnit ] = useState<HealthUnit | null>(null);
+  // Remonta o UnitPicker (limpando a escolha guardada) quando o check-in
+  // devolve invalid_unit — a unidade foi desativada entre a escolha e o
+  // check-in (ou como destino de encaminhamento).
+  const [ pickerKey, setPickerKey ] = useState(0);
+  const unitsQuery = useQuery({ queryKey: [ "activeUnits" ], queryFn: listActiveUnits, enabled: !!unit });
+
   if (!user) return null;
   const roles = user.memberships.map((m) => m.role);
   const canVerify = roles.includes("citizen_verifier");
@@ -48,10 +55,18 @@ export function Attendance() {
     );
   }
 
+  function onUnitInvalid() {
+    try { localStorage.removeItem(currentUnitKey(user!.id)); } catch { /* sem storage disponível */ }
+    setUnit(null);
+    setPickerKey((k) => k + 1);
+  }
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <PageHeader title="Atendimento" sub="balcão · verificação presencial" />
-      {canVerify && <UnitPicker userId={user.id} onChange={setUnit} />}
+      {canVerify && <UnitPicker key={pickerKey} userId={user.id} onChange={setUnit} />}
+      {canVerify && unit && <CheckIn unit={unit} onUnitInvalid={onUnitInvalid} />}
+      {canVerify && unit && <OpenAttendances unit={unit} units={unitsQuery.data ?? []} />}
       {canVerify && <Counter />}
       {isAdmin && <History />}
       {isAdmin && <Units />}
