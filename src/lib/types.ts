@@ -95,7 +95,11 @@ export interface SignatureState {
   eligibleReviewers: number;
   editors: ProtocolEditor[];
   revertible: boolean;
-  revertTargetVersion: string | null;
+  // Opcional porque uma API anterior ao deploy deste campo simplesmente OMITE
+  // a chave — declarar obrigatório aqui afirmava mais do que o fio garante, e
+  // convidava o consumidor a comparar com `=== null`, que não pega `undefined`.
+  // A normalização acontece num lugar só, ao abrir o painel de confirmação.
+  revertTargetVersion?: string | null;
 }
 
 export interface ProtocolRow extends SignatureState {

@@ -31,9 +31,6 @@ import { fmtDateTime } from "../lib/format";
 import type { ProtocolRow } from "../lib/types";
 import type { ModuleId } from "../shell/modules";
 
-// A frase nomeia a versão-alvo (spec 2026-09-23-revert-target §5). "deve
-// voltar", não "vai voltar": a leitura é sem lock, e a API decide no clique.
-// Sem alvo na leitura, cai na frase sem número em vez de imprimir "null".
 // A reversão é a única ação cuja versão de sucesso NÃO é a versão sobre a qual
 // se agiu: ela sai da ativa e volta para a anterior. Nomear `pending.version`
 // ali, como as outras ações fazem com razão, anuncia a versão que acabou de
@@ -58,6 +55,10 @@ function doneMessage(
   return `${pending.action.label} concluído: a cidade está com ${name} v${revertedTo}.`;
 }
 
+// A frase nomeia a versão-alvo (spec 2026-09-23-revert-target §5). "deve
+// voltar", não "vai voltar": a leitura é sem lock, e a API decide no clique.
+// Sem alvo na leitura — nulo, ou a chave ausente numa API antiga —, cai na
+// frase sem número em vez de imprimir "null" ou "undefined".
 function revertDescription(targetVersion: string | null): string {
   const destino = targetVersion
     ? `a versão ${targetVersion}, que estava em uso antes desta`
@@ -193,7 +194,7 @@ function DetailDrawer({
                     viewer={viewer}
                     onPick={(action) => {
                       revertedToRef.current = null;
-                      setPending({ version: v.version, revertTargetVersion: v.revertTargetVersion, action });
+                      setPending({ version: v.version, revertTargetVersion: v.revertTargetVersion ?? null, action });
                       setDone(null);
                     }}
                   />
