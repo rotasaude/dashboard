@@ -65,6 +65,7 @@ function Counter() {
     if (busy) return;
     setError(null);
     if (!isValidCpf(cpf)) { setError("CPF inválido"); return; }
+    if (!/^\d{6}$/.test(code)) { setError("informe o código de 6 dígitos"); return; }
     setBusy(true);
     try {
       const result = await lookupCitizen(cpf, code);
@@ -79,7 +80,9 @@ function Counter() {
 
   async function validate() {
     if (busy || !checked) return;
-    setBusy(true); setError(null);
+    setError(null);
+    if (!/^\d{6}$/.test(code)) { setError("informe o código de 6 dígitos"); return; }
+    setBusy(true);
     try {
       await verifyCitizen(cpf, code);
       setState("done");

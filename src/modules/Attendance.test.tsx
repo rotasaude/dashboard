@@ -78,6 +78,19 @@ describe("Attendance", () => {
     expect(api.lookupCitizen).not.toHaveBeenCalled();
   });
 
+  it("código em branco ou parcial não chega à API", async () => {
+    renderAttendance();
+    fireEvent.change(await screen.findByLabelText("CPF"), { target: { value: "52998224725" } });
+    fireEvent.click(screen.getByRole("button", { name: "Buscar" }));
+    expect(await screen.findByText("informe o código de 6 dígitos")).not.toBeNull();
+    expect(api.lookupCitizen).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByLabelText("Código do cidadão"), { target: { value: "123" } });
+    fireEvent.click(screen.getByRole("button", { name: "Buscar" }));
+    expect(await screen.findByText("informe o código de 6 dígitos")).not.toBeNull();
+    expect(api.lookupCitizen).not.toHaveBeenCalled();
+  });
+
   it("mostra a frase do erro do balcão", async () => {
     mocked(api.lookupCitizen).mockRejectedValue(new ApiError(422, { error: "code_exhausted" }, "x"));
     renderAttendance();
