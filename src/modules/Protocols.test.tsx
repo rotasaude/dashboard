@@ -511,4 +511,50 @@ describe("Protocols", () => {
     const status = await screen.findByRole("status");
     expect(status.textContent).toContain("v4");
   });
+
+  // Uma API anterior ao deploy simplesmente OMITE a chave. O tipo passou a
+  // dizer isso (`revertTargetVersion?`), e estes exemplos prendem o
+  // comportamento: sem previsão, a tela não inventa número nem anuncia
+  // divergência. Sem eles, trocar `!= null` por `=== null` — o defeito que a
+  // revisão da semana passada pegou na manutenção — passaria despercebido.
+  //
+  // Os helpers preenchem a chave com null, então omitir é APAGAR; o primeiro
+  // exemplo confere que ela sumiu mesmo, senão os dois provariam outra coisa.
+  function semChave(o: Record<string, unknown>) {
+    const copia = { ...o };
+    delete copia.revertTargetVersion;
+    return copia;
+  }
+
+  const ativaSemChave = { status: "active", revertible: true, version: "3" };
+
+  it("o arranjo realmente omite a chave — senão os exemplos abaixo provam outra coisa", () => {
+    expect("revertTargetVersion" in semChave(row(ativaSemChave))).toBe(false);
+  });
+
+  it("resposta sem a chave de previsão: o painel cai na frase sem número", async () => {
+    stubReads([ semChave(row(ativaSemChave)) ], [ semChave(versionRow(ativaSemChave)) ]);
+    renderProtocols("protocol_publisher");
+
+    fireEvent.click(await screen.findByText("dengue"));
+    fireEvent.click(await screen.findByRole("button", { name: "Reverter" }));
+
+    const painel = await screen.findByText(/A cidade deve voltar para/);
+    expect(painel.textContent).toContain("a versão ativada antes desta");
+    expect(painel.textContent).not.toContain("undefined");
+  });
+
+  it("resposta sem a chave de previsão: o sucesso nomeia a efetivada sem alegar divergência", async () => {
+    stubReads([ semChave(row(ativaSemChave)) ], [ semChave(versionRow(ativaSemChave)) ]);
+    mocked(api.revertProtocol).mockResolvedValue({ version: "2" });
+    renderProtocols("protocol_publisher");
+
+    fireEvent.click(await screen.findByText("dengue"));
+    fireEvent.click(await screen.findByRole("button", { name: "Reverter" }));
+    fireEvent.change(screen.getByLabelText("Motivo"), { target: { value: "regra errada" } });
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+
+    const status = await screen.findByRole("status");
+    expect(status.textContent).toBe("Reverter concluído: a cidade está com dengue v2.");
+  });
 });
