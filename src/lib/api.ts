@@ -314,7 +314,7 @@ export async function verifyCitizen(cpf: string, code: string): Promise<void> {
 
 export async function listVerifications(cpf: string): Promise<VerificationRow[]> {
   const payload = await jsonFetch<{ verifications: VerificationRow[] }>(
-    `${ATTENDANCE_BASE}/verifications?cpf=${encodeURIComponent(cpf)}`);
+    `${ATTENDANCE_BASE}/verifications/search`, { method: "POST", body: JSON.stringify({ cpf }) });
   return payload.verifications;
 }
 
