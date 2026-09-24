@@ -3,7 +3,7 @@
 // deriva do estado lido e do papel de quem está olhando; quem decide de
 // fato é o command na API, que trava a linha e reconfere.
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useProtocols, useProtocolDetail } from "../hooks/useProtocols";
 import { useAuth } from "../lib/auth";
@@ -34,6 +34,30 @@ import type { ModuleId } from "../shell/modules";
 // A frase nomeia a versão-alvo (spec 2026-09-23-revert-target §5). "deve
 // voltar", não "vai voltar": a leitura é sem lock, e a API decide no clique.
 // Sem alvo na leitura, cai na frase sem número em vez de imprimir "null".
+// A reversão é a única ação cuja versão de sucesso NÃO é a versão sobre a qual
+// se agiu: ela sai da ativa e volta para a anterior. Nomear `pending.version`
+// ali, como as outras ações fazem com razão, anuncia a versão que acabou de
+// sair de uso.
+//
+// Divergir do previsto é fato, não alarme: significa que outra ativação comitou
+// entre a leitura e o clique e o servidor reresolveu sob lock, como deve. A
+// frase conta, com o mesmo peso do sucesso comum.
+function doneMessage(
+  pending: { version: string; revertTargetVersion: string | null; action: LifecycleAction },
+  name: string,
+  revertedTo: string | null
+): string {
+  if (pending.action.kind !== "revert") {
+    return `${pending.action.label} concluído: ${name} v${pending.version}`;
+  }
+  if (revertedTo == null) return `${pending.action.label} concluído.`;
+  if (pending.revertTargetVersion != null && pending.revertTargetVersion !== revertedTo) {
+    return `${pending.action.label} concluído: estava previsto v${pending.revertTargetVersion}; ` +
+      `a cidade está com ${name} v${revertedTo}.`;
+  }
+  return `${pending.action.label} concluído: a cidade está com ${name} v${revertedTo}.`;
+}
+
 function revertDescription(targetVersion: string | null): string {
   const destino = targetVersion
     ? `a versão ${targetVersion}, que estava em uso antes desta`
@@ -110,6 +134,10 @@ function DetailDrawer({
   const queryClient = useQueryClient();
   const [ pending, setPending ] = useState<{ version: string; revertTargetVersion: string | null; action: LifecycleAction } | null>(null);
   const [ done, setDone ] = useState<string | null>(null);
+  // O `run` do SensitiveAction resolve para void: o número que a reversão
+  // efetivou viaja por aqui até o onDone. Limpo ao abrir cada painel, para
+  // que uma ação nunca leia o resultado da anterior.
+  const revertedToRef = useRef<string | null>(null);
   const name = data?.data.name ?? id;
 
   return (
@@ -163,7 +191,11 @@ function DetailDrawer({
                     key={v.version}
                     version={v}
                     viewer={viewer}
-                    onPick={(action) => { setPending({ version: v.version, revertTargetVersion: v.revertTargetVersion, action }); setDone(null); }}
+                    onPick={(action) => {
+                      revertedToRef.current = null;
+                      setPending({ version: v.version, revertTargetVersion: v.revertTargetVersion, action });
+                      setDone(null);
+                    }}
                   />
                 ))}
               </div>
@@ -191,9 +223,11 @@ function DetailDrawer({
             description={pending.action.kind === "revert" ? revertDescription(pending.revertTargetVersion) : undefined}
             requiresStepUp={pending.action.stepUp}
             fields={pending.action.needsReason ? [ { name: "reason", label: "Motivo", required: true } ] : []}
-            run={(values) => runAction(name, pending.version, pending.action, values)}
+            run={async (values) => {
+              revertedToRef.current = await runAction(name, pending.version, pending.action, values);
+            }}
             onDone={() => {
-              setDone(`${pending.action.label} concluído: ${name} v${pending.version}`);
+              setDone(doneMessage(pending, name, revertedToRef.current));
               setPending(null);
               void queryClient.invalidateQueries({ queryKey: [ "protocols" ] });
               void queryClient.invalidateQueries({ queryKey: [ "protocol-detail", id ] });
@@ -289,14 +323,20 @@ function VersionActions({
   );
 }
 
-async function runAction(name: string, version: string, action: LifecycleAction, values: Record<string, string>) {
+// Devolve a versão que a reversão efetivou, e null para todas as outras ações
+// — só a reversão troca a versão em uso por OUTRA que não a versão sobre a
+// qual se agiu. Quem guarda o número é o chamador, porque o `run` do
+// SensitiveAction resolve para void.
+async function runAction(
+  name: string, version: string, action: LifecycleAction, values: Record<string, string>
+): Promise<string | null> {
   switch (action.kind) {
-    case "submit":   return submitProtocol(name, version);
-    case "sign":     return signProtocol(name, version, action.purpose!);
-    case "publish":  return publishProtocolVersion(name, version);
-    case "activate": return activateProtocol(name, version);
-    case "retire":   return retireProtocol(name, version);
-    case "revert":   return revertProtocol(name, values.reason ?? "");
+    case "submit":   await submitProtocol(name, version); return null;
+    case "sign":     await signProtocol(name, version, action.purpose!); return null;
+    case "publish":  await publishProtocolVersion(name, version); return null;
+    case "activate": await activateProtocol(name, version); return null;
+    case "retire":   await retireProtocol(name, version); return null;
+    case "revert":   return (await revertProtocol(name, values.reason ?? ""))?.version ?? null;
   }
 }
 
