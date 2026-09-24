@@ -177,7 +177,7 @@ describe("Protocols", () => {
 
   it("reverter pede motivo e manda nome e motivo", async () => {
     stubReads([ row({ status: "active", revertible: true }) ], [ versionRow({ status: "active", revertible: true }) ]);
-    mocked(api.revertProtocol).mockResolvedValue(undefined);
+    mocked(api.revertProtocol).mockResolvedValue(null);
     renderProtocols("protocol_publisher");
 
     fireEvent.click(await screen.findByText("dengue"));
@@ -431,5 +431,81 @@ describe("Protocols", () => {
     // valor só dentro do próprio cartão.
     const kpi = (await screen.findByText("Publicados")).closest("div")!.parentElement!;
     expect(within(kpi).getByText("2")).not.toBeNull();
+  });
+
+  it("a frase de sucesso nomeia a versão que passou a valer, não a que saiu de uso", async () => {
+    stubReads(
+      [ row({ status: "active", revertible: true, version: "3", revertTargetVersion: "2" }) ],
+      [ versionRow({ status: "active", revertible: true, version: "3", revertTargetVersion: "2" }) ]
+    );
+    mocked(api.revertProtocol).mockResolvedValue({ version: "2" });
+    renderProtocols("protocol_publisher");
+
+    fireEvent.click(await screen.findByText("dengue"));
+    fireEvent.click(await screen.findByRole("button", { name: "Reverter" }));
+    fireEvent.change(screen.getByLabelText("Motivo"), { target: { value: "regra errada" } });
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+
+    const status = await screen.findByRole("status");
+    expect(status.textContent).toContain("a cidade está com dengue v2");
+    expect(status.textContent).not.toContain("v3");
+  });
+
+  // Previsão e resultado vêm de fontes DIFERENTES do arranjo — a previsão do
+  // revertTargetVersion da linha, o resultado do retorno da API. Com o mesmo
+  // número nos dois, o exemplo passaria sem provar nada.
+  it("quando a versão efetivada difere da prevista, a frase diz as duas", async () => {
+    stubReads(
+      [ row({ status: "active", revertible: true, version: "3", revertTargetVersion: "2" }) ],
+      [ versionRow({ status: "active", revertible: true, version: "3", revertTargetVersion: "2" }) ]
+    );
+    mocked(api.revertProtocol).mockResolvedValue({ version: "5" });
+    renderProtocols("protocol_publisher");
+
+    fireEvent.click(await screen.findByText("dengue"));
+    fireEvent.click(await screen.findByRole("button", { name: "Reverter" }));
+    fireEvent.change(screen.getByLabelText("Motivo"), { target: { value: "regra errada" } });
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+
+    const status = await screen.findByRole("status");
+    expect(status.textContent).toContain("estava previsto v2");
+    expect(status.textContent).toContain("a cidade está com dengue v5");
+  });
+
+  it("sem número na resposta, a frase sai sem número e nunca com undefined", async () => {
+    stubReads(
+      [ row({ status: "active", revertible: true, version: "3", revertTargetVersion: "2" }) ],
+      [ versionRow({ status: "active", revertible: true, version: "3", revertTargetVersion: "2" }) ]
+    );
+    mocked(api.revertProtocol).mockResolvedValue(null);
+    renderProtocols("protocol_publisher");
+
+    fireEvent.click(await screen.findByText("dengue"));
+    fireEvent.click(await screen.findByRole("button", { name: "Reverter" }));
+    fireEvent.change(screen.getByLabelText("Motivo"), { target: { value: "regra errada" } });
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+
+    const status = await screen.findByRole("status");
+    expect(status.textContent).toContain("Reverter concluído");
+    expect(status.textContent).not.toContain("undefined");
+  });
+
+  it("publicar continua nomeando a versão sobre a qual se agiu", async () => {
+    // Publicar só abre com as duas assinaturas de publicação: sem elas o
+    // botão existe mas fica desabilitado, e o painel nunca aparece.
+    const signed = { publication: { signers: [ "a", "b" ], missing: 0 }, activation: { signers: [], missing: 2 } };
+    stubReads(
+      [ row({ status: "in_review", version: "4", signatures: signed }) ],
+      [ versionRow({ status: "in_review", version: "4", signatures: signed }) ]
+    );
+    mocked(api.publishProtocolVersion).mockResolvedValue(undefined);
+    renderProtocols("protocol_publisher");
+
+    fireEvent.click(await screen.findByText("dengue"));
+    fireEvent.click(await screen.findByRole("button", { name: "Publicar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+
+    const status = await screen.findByRole("status");
+    expect(status.textContent).toContain("v4");
   });
 });

@@ -178,6 +178,22 @@ describe("ciclo de vida de protocolo", () => {
     expect(lastCall().body).toEqual({ name: "dengue", reason: "regra errada em produção" });
   });
 
+  // A emenda entre o corpo REAL da API e a frase da tela. A rota devolve
+  // `version` como NÚMERO (protocol_result_rendering.rb), e a previsão com que
+  // a tela compara é STRING (admin/protocols_query.rb, `version.to_s`) — sem a
+  // coerção, a comparação de divergência acusaria diferença onde não há, e a
+  // tela diria "estava previsto v1; a cidade está com dengue v1" na hora em que
+  // ninguém tem tempo de desconfiar.
+  it("revertProtocol devolve a versão efetivada do corpo real, como string", async () => {
+    mockFetch(200, { ok: true, protocol: { name: "dengue", version: 1, status: "active" } });
+    await expect(revertProtocol("dengue", "x")).resolves.toEqual({ version: "1" });
+  });
+
+  it("revertProtocol devolve null quando a resposta não traz protocolo", async () => {
+    mockFetch(200, { ok: true });
+    await expect(revertProtocol("dengue", "x")).resolves.toBeNull();
+  });
+
   it("o nome e a versão vão codificados na URL", async () => {
     mockFetch(200, { ok: true });
     await submitProtocol("a/b", "1 2");

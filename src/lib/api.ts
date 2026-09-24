@@ -282,10 +282,19 @@ export async function retireProtocol(name: string, version: string): Promise<voi
 }
 
 // Reversão de emergência: a rota não leva versão — a API acha a ativa pelo nome.
-export async function revertProtocol(name: string, reason: string): Promise<void> {
-  await jsonFetch<unknown>(`${PROTOCOLS_BASE}/revert`, {
+//
+// Devolve a versão que PASSOU A VALER, que a resposta já trazia e esta função
+// descartava. Não é a versão sobre a qual se agiu: a reversão sai da ativa e
+// volta para a anterior. `protocol` é opcional de propósito — uma resposta sem
+// ele faz a tela dizer a frase sem número, nunca "undefined".
+export async function revertProtocol(
+  name: string, reason: string
+): Promise<{ version: string } | null> {
+  const body = await jsonFetch<{ protocol?: { version?: string } }>(`${PROTOCOLS_BASE}/revert`, {
     method: "POST", body: JSON.stringify({ name, reason })
   });
+  const version = body?.protocol?.version;
+  return version == null ? null : { version: String(version) };
 }
 
 // ─── Atendimento: verificação presencial no balcão (Task 4) ─────────────────
