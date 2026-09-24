@@ -58,7 +58,8 @@ const MESSAGES: Record<string, string> = {
   already_closed: "este atendimento já foi encerrado",
   unit_name_taken: "já existe uma unidade com este nome",
   invalid_kind: "tipo de unidade inválido",
-  invalid_outcome: "desfecho inválido"
+  invalid_outcome: "desfecho inválido",
+  unit_has_open_attendances: "há atendimentos abertos nesta unidade — encerre-os antes de desativar"
 };
 
 export function attendanceError(err: unknown): string {
