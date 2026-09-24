@@ -5,6 +5,7 @@ import { requestPasswordReset, resetPassword } from "./api";
 import { enrollMfa, confirmMfa, stepUpMfa } from "./api";
 import { listMemberships, grantRole, revokeMembership } from "./api";
 import { submitProtocol, signProtocol, publishProtocolVersion, activateProtocol, retireProtocol, revertProtocol } from "./api";
+import { listVerifications } from "./api";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -186,5 +187,22 @@ describe("ciclo de vida de protocolo", () => {
   it("recusa da API vira ApiError", async () => {
     mockFetch(422, { error: "invalid_state", message: "só in_review pode ser publicado" });
     await expect(publishProtocolVersion("dengue", "1")).rejects.toBeInstanceOf(ApiError);
+  });
+});
+
+describe("histórico de validações", () => {
+  it("listVerifications manda o CPF por POST, nunca na URL", async () => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(
+      JSON.stringify({ verifications: [] }), { status: 200, headers: { "Content-Type": "application/json" } }
+    ));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await listVerifications("529.982.247-25");
+
+    const [ url, init ] = fetchMock.mock.calls[0] as [ string, RequestInit ];
+    expect(url).toBe("/attendance/verifications/search");
+    expect(String(url)).not.toContain("529");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ cpf: "529.982.247-25" });
   });
 });

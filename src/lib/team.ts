@@ -8,6 +8,7 @@
 import type { MembershipRow } from "./api";
 
 export const REVIEWER_ROLE = "protocol_reviewer";
+export const VERIFIER_ROLE = "citizen_verifier";
 export const REQUIRED_REVIEWERS = 2;
 
 export interface TeamMember {
@@ -16,6 +17,8 @@ export interface TeamMember {
   roles: string[];
   isReviewer: boolean;
   reviewerMembershipId: string | null;
+  isVerifier: boolean;
+  verifierMembershipId: string | null;
 }
 
 export function teamMembers(rows: MembershipRow[]): TeamMember[] {
@@ -24,12 +27,17 @@ export function teamMembers(rows: MembershipRow[]): TeamMember[] {
   for (const row of rows) {
     const current = byUser.get(row.user.id) ?? {
       userId: row.user.id, email: row.user.email_address, roles: [],
-      isReviewer: false, reviewerMembershipId: null
+      isReviewer: false, reviewerMembershipId: null,
+      isVerifier: false, verifierMembershipId: null
     };
     current.roles = [ ...current.roles, row.role ].sort();
     if (row.role === REVIEWER_ROLE) {
       current.isReviewer = true;
       current.reviewerMembershipId = row.id;
+    }
+    if (row.role === VERIFIER_ROLE) {
+      current.isVerifier = true;
+      current.verifierMembershipId = row.id;
     }
     byUser.set(row.user.id, current);
   }

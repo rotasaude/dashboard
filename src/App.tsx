@@ -19,6 +19,7 @@ import { Placeholder } from "./modules/Placeholder";
 import { ProtocolEditor } from "./modules/ProtocolEditor";
 import { Security } from "./modules/Security";
 import { Team } from "./modules/Team";
+import { Attendance } from "./modules/Attendance";
 
 export function App() {
   const [ period, setPeriod ] = useState<PeriodKey>("7d");
@@ -68,6 +69,7 @@ function renderModule(active: ModuleId, setActive: (id: ModuleId) => void) {
     case "health":         return <Health />;
     case "security":       return <Security />;
     case "team":           return <Team onNavigate={setActive} />;
+    case "attendance":     return <Attendance />;
     default:               return <Placeholder title={labelFor(active)} />;
   }
 }

@@ -154,4 +154,22 @@ describe("Team", () => {
 
     expect(await screen.findByText("nenhuma pessoa com papel ativo")).not.toBeNull();
   });
+
+  it("torna atendente com step-up e remove atendente", async () => {
+    mocked(api.listMemberships).mockResolvedValue([
+      membership("ana@cidade.gov.br", "viewer"),
+      membership("bia@cidade.gov.br", "citizen_verifier", "m-bia")
+    ]);
+    mocked(api.grantRole).mockResolvedValue(undefined);
+    mocked(api.revokeMembership).mockResolvedValue(undefined);
+    renderTeam();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Tornar atendente" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Confirmar" }));
+    await waitFor(() => expect(api.grantRole).toHaveBeenCalledWith("u-ana@cidade.gov.br", "citizen_verifier"));
+
+    fireEvent.click(await screen.findByRole("button", { name: "Remover atendente" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Confirmar" }));
+    await waitFor(() => expect(api.revokeMembership).toHaveBeenCalledWith("m-bia"));
+  });
 });

@@ -18,14 +18,16 @@ describe("modules", () => {
       const groups = navGroupsFor({ operator: true });
       expect(groups.some((g) => g.label === "Conta")).toBe(false);
       expect(groups.some((g) => g.label === "Equipe")).toBe(false);
-      expect(groups.length).toBe(NAV_GROUPS.length - 2);
+      expect(groups.some((g) => g.label === "Atendimento")).toBe(false);
+      expect(groups.length).toBe(NAV_GROUPS.length - 3);
     });
 
-    it("sem sessão, esconde só a Equipe", () => {
+    it("sem sessão, esconde Equipe e Atendimento", () => {
       const groups = navGroupsFor(null);
       expect(groups.some((g) => g.label === "Conta")).toBe(true);
       expect(groups.some((g) => g.label === "Equipe")).toBe(false);
-      expect(groups.length).toBe(NAV_GROUPS.length - 1);
+      expect(groups.some((g) => g.label === "Atendimento")).toBe(false);
+      expect(groups.length).toBe(NAV_GROUPS.length - 2);
     });
 
     it("Equipe só aparece para municipal_admin", () => {
@@ -35,6 +37,16 @@ describe("modules", () => {
       expect(navGroupsFor(admin).some((g) => g.label === "Equipe")).toBe(true);
       expect(navGroupsFor(publisher).some((g) => g.label === "Equipe")).toBe(false);
       expect(navGroupsFor(null).some((g) => g.label === "Equipe")).toBe(false);
+    });
+
+    it("Atendimento aparece para citizen_verifier e municipal_admin, some para viewer", () => {
+      const verifier = { operator: false, memberships: [ { role: "citizen_verifier" } ] };
+      const admin = { operator: false, memberships: [ { role: "municipal_admin" } ] };
+      const viewer = { operator: false, memberships: [ { role: "viewer" } ] };
+
+      expect(navGroupsFor(verifier).some((g) => g.label === "Atendimento")).toBe(true);
+      expect(navGroupsFor(admin).some((g) => g.label === "Atendimento")).toBe(true);
+      expect(navGroupsFor(viewer).some((g) => g.label === "Atendimento")).toBe(false);
     });
   });
 });
