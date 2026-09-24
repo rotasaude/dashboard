@@ -7,16 +7,20 @@ vi.mock("../lib/api", async (importOriginal) => {
   const real = await importOriginal<typeof import("../lib/api")>();
   return {
     ...real, fetchCurrentSession: vi.fn(), lookupCitizen: vi.fn(), verifyCitizen: vi.fn(),
-    listVerifications: vi.fn(), revokeVerification: vi.fn()
+    listVerifications: vi.fn(), revokeVerification: vi.fn(),
+    listActiveUnits: vi.fn(), listAllUnits: vi.fn(), createUnit: vi.fn(), updateUnit: vi.fn(), setUnitActive: vi.fn(),
+    listOpenAttendances: vi.fn(), closeAttendance: vi.fn(),
+    lookupCheckIn: vi.fn(), checkIn: vi.fn(), searchCheckInTriages: vi.fn(), checkInByException: vi.fn()
   };
 });
 
 import * as api from "../lib/api";
 import { ApiError } from "../lib/api";
 import { AuthProvider } from "../lib/auth";
+import { currentUnitKey } from "../lib/attendance";
 import { Attendance } from "./Attendance";
 
-afterEach(cleanup);
+afterEach(() => { cleanup(); localStorage.clear(); });
 const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
 
 function session(role: string): api.SessionUser {
@@ -44,19 +48,25 @@ const found = {
 
 describe("Attendance", () => {
   beforeEach(() => {
-    for (const fn of [ api.fetchCurrentSession, api.lookupCitizen, api.verifyCitizen, api.listVerifications, api.revokeVerification ]) {
+    for (const fn of [
+      api.fetchCurrentSession, api.lookupCitizen, api.verifyCitizen, api.listVerifications, api.revokeVerification,
+      api.listActiveUnits, api.listAllUnits, api.createUnit, api.updateUnit, api.setUnitActive,
+      api.listOpenAttendances, api.closeAttendance, api.lookupCheckIn, api.checkIn, api.searchCheckInTriages, api.checkInByException
+    ]) {
       mocked(fn).mockReset();
     }
     mocked(api.fetchCurrentSession).mockResolvedValue(session("citizen_verifier"));
+    mocked(api.listActiveUnits).mockResolvedValue([]);
+    mocked(api.listAllUnits).mockResolvedValue([]);
   });
 
   it("busca, exige a caixa do documento e valida", async () => {
     mocked(api.lookupCitizen).mockResolvedValue(found);
     mocked(api.verifyCitizen).mockResolvedValue(undefined);
     renderAttendance();
-    fireEvent.change(await screen.findByLabelText("CPF"), { target: { value: "52998224725" } });
-    fireEvent.change(screen.getByLabelText("Código do cidadão"), { target: { value: "123456" } });
-    fireEvent.click(screen.getByRole("button", { name: "Buscar" }));
+    fireEvent.change(await screen.findByLabelText("CPF do cidadão (validação)"), { target: { value: "52998224725" } });
+    fireEvent.change(screen.getByLabelText("Código de validação"), { target: { value: "123456" } });
+    fireEvent.click(screen.getByRole("button", { name: "Buscar validação" }));
     expect(await screen.findByText("(**) *****-5432")).not.toBeNull();
     expect(screen.getByText("triage-respiratoria")).not.toBeNull();
     const validate = screen.getByRole("button", { name: "Validar cadastro" }) as HTMLButtonElement;
@@ -66,27 +76,27 @@ describe("Attendance", () => {
     await waitFor(() => expect(api.verifyCitizen).toHaveBeenCalledWith("529.982.247-25", "123456"));
     expect(await screen.findByText("Cadastro validado")).not.toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Próximo atendimento" }));
-    expect((screen.getByLabelText("CPF") as HTMLInputElement).value).toBe("");
+    expect((screen.getByLabelText("CPF do cidadão (validação)") as HTMLInputElement).value).toBe("");
   });
 
   it("CPF inválido não chega à API", async () => {
     renderAttendance();
-    fireEvent.change(await screen.findByLabelText("CPF"), { target: { value: "11111111111" } });
-    fireEvent.change(screen.getByLabelText("Código do cidadão"), { target: { value: "123456" } });
-    fireEvent.click(screen.getByRole("button", { name: "Buscar" }));
+    fireEvent.change(await screen.findByLabelText("CPF do cidadão (validação)"), { target: { value: "11111111111" } });
+    fireEvent.change(screen.getByLabelText("Código de validação"), { target: { value: "123456" } });
+    fireEvent.click(screen.getByRole("button", { name: "Buscar validação" }));
     expect(await screen.findByText("CPF inválido")).not.toBeNull();
     expect(api.lookupCitizen).not.toHaveBeenCalled();
   });
 
   it("código em branco ou parcial não chega à API", async () => {
     renderAttendance();
-    fireEvent.change(await screen.findByLabelText("CPF"), { target: { value: "52998224725" } });
-    fireEvent.click(screen.getByRole("button", { name: "Buscar" }));
+    fireEvent.change(await screen.findByLabelText("CPF do cidadão (validação)"), { target: { value: "52998224725" } });
+    fireEvent.click(screen.getByRole("button", { name: "Buscar validação" }));
     expect(await screen.findByText("informe o código de 6 dígitos")).not.toBeNull();
     expect(api.lookupCitizen).not.toHaveBeenCalled();
 
-    fireEvent.change(screen.getByLabelText("Código do cidadão"), { target: { value: "123" } });
-    fireEvent.click(screen.getByRole("button", { name: "Buscar" }));
+    fireEvent.change(screen.getByLabelText("Código de validação"), { target: { value: "123" } });
+    fireEvent.click(screen.getByRole("button", { name: "Buscar validação" }));
     expect(await screen.findByText("informe o código de 6 dígitos")).not.toBeNull();
     expect(api.lookupCitizen).not.toHaveBeenCalled();
   });
@@ -94,9 +104,9 @@ describe("Attendance", () => {
   it("mostra a frase do erro do balcão", async () => {
     mocked(api.lookupCitizen).mockRejectedValue(new ApiError(422, { error: "code_exhausted" }, "x"));
     renderAttendance();
-    fireEvent.change(await screen.findByLabelText("CPF"), { target: { value: "52998224725" } });
-    fireEvent.change(screen.getByLabelText("Código do cidadão"), { target: { value: "123456" } });
-    fireEvent.click(screen.getByRole("button", { name: "Buscar" }));
+    fireEvent.change(await screen.findByLabelText("CPF do cidadão (validação)"), { target: { value: "52998224725" } });
+    fireEvent.change(screen.getByLabelText("Código de validação"), { target: { value: "123456" } });
+    fireEvent.click(screen.getByRole("button", { name: "Buscar validação" }));
     expect(await screen.findByText("tentativas esgotadas — peça ao cidadão para gerar outro código")).not.toBeNull();
   });
 
@@ -123,9 +133,9 @@ describe("Attendance", () => {
   it("mostra o Nível em português", async () => {
     mocked(api.lookupCitizen).mockResolvedValue(found);
     renderAttendance();
-    fireEvent.change(await screen.findByLabelText("CPF"), { target: { value: "52998224725" } });
-    fireEvent.change(screen.getByLabelText("Código do cidadão"), { target: { value: "123456" } });
-    fireEvent.click(screen.getByRole("button", { name: "Buscar" }));
+    fireEvent.change(await screen.findByLabelText("CPF do cidadão (validação)"), { target: { value: "52998224725" } });
+    fireEvent.change(screen.getByLabelText("Código de validação"), { target: { value: "123456" } });
+    fireEvent.click(screen.getByRole("button", { name: "Buscar validação" }));
     expect(await screen.findByText("declarado")).not.toBeNull();
     expect(screen.queryByText("declared")).toBeNull();
   });
@@ -176,7 +186,23 @@ describe("Attendance", () => {
 
   it("atendente não vê o histórico", async () => {
     renderAttendance();
-    await screen.findByLabelText("CPF");
+    await screen.findByLabelText("CPF do cidadão (validação)");
     expect(screen.queryByLabelText("CPF do histórico")).toBeNull();
+  });
+
+  it("com unidade escolhida, o check-in e o balcão de validação têm rótulos e botões distintos", async () => {
+    const unit = { id: "un1", name: "UBS Centro", kind: "ubs" };
+    localStorage.setItem(currentUnitKey("u1"), unit.id);
+    mocked(api.listActiveUnits).mockResolvedValue([ unit ]);
+    mocked(api.listOpenAttendances).mockResolvedValue([]);
+    renderAttendance();
+
+    expect(await screen.findByLabelText("CPF do cidadão (check-in)")).not.toBeNull();
+    expect(screen.getByLabelText("Código de check-in")).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Buscar check-in" })).not.toBeNull();
+
+    expect(screen.getByLabelText("CPF do cidadão (validação)")).not.toBeNull();
+    expect(screen.getByLabelText("Código de validação")).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Buscar validação" })).not.toBeNull();
   });
 });

@@ -22,4 +22,9 @@ describe("attendance helpers", () => {
       .toBe("quem validou não pode desfazer a própria validação");
     expect(attendanceError(new Error("rede"))).toBe("não foi possível concluir — tente de novo");
   });
+
+  it("traduz unit_has_open_attendances", () => {
+    expect(attendanceError(new ApiError(409, { error: "unit_has_open_attendances" }, "x")))
+      .toBe("há atendimentos abertos nesta unidade — encerre-os antes de desativar");
+  });
 });

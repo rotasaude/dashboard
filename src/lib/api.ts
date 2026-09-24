@@ -336,3 +336,106 @@ export async function revokeVerification(id: string, reason: string): Promise<vo
     method: "POST", body: JSON.stringify({ reason })
   });
 }
+
+// ─── Atendimento: unidades de saúde (Task 6) ─────────────────────────────────
+
+export interface HealthUnit { id: string; name: string; kind: string }
+export interface HealthUnitRow extends HealthUnit { active: boolean }
+
+export async function listActiveUnits(): Promise<HealthUnit[]> {
+  const payload = await jsonFetch<{ units: HealthUnit[] }>(`${ATTENDANCE_BASE}/units`);
+  return payload.units;
+}
+
+export async function listAllUnits(): Promise<HealthUnitRow[]> {
+  const payload = await jsonFetch<{ units: HealthUnitRow[] }>(`${ATTENDANCE_BASE}/units/all`);
+  return payload.units;
+}
+
+export async function createUnit(name: string, kind: string): Promise<HealthUnitRow> {
+  const payload = await jsonFetch<{ unit: HealthUnitRow }>(`${ATTENDANCE_BASE}/units`, {
+    method: "POST", body: JSON.stringify({ name, kind })
+  });
+  return payload.unit;
+}
+
+export async function updateUnit(id: string, name: string, kind: string): Promise<HealthUnitRow> {
+  const payload = await jsonFetch<{ unit: HealthUnitRow }>(`${ATTENDANCE_BASE}/units/${encodeURIComponent(id)}`, {
+    method: "POST", body: JSON.stringify({ name, kind })
+  });
+  return payload.unit;
+}
+
+export async function setUnitActive(id: string, active: boolean): Promise<HealthUnitRow> {
+  const action = active ? "activate" : "deactivate";
+  const payload = await jsonFetch<{ unit: HealthUnitRow }>(`${ATTENDANCE_BASE}/units/${encodeURIComponent(id)}/${action}`, {
+    method: "POST", body: "{}"
+  });
+  return payload.unit;
+}
+
+// ─── Atendimento: check-in, exceção e desfecho (Task 7) ─────────────────────
+
+export interface CheckInCitizen {
+  id: string; cpf_masked: string; phone_masked: string;
+  verification_level: "declared" | "verified";
+}
+export interface CheckInTriage { id: string; date: string; protocol_name: string; priority: number }
+
+export interface Attendance {
+  id: string; triage_id: string; health_unit_id: string; unit_name: string; status: string;
+  checked_in_at: string; check_in_method: string; outcome: string | null;
+  referral_unit_name: string | null; referral_note: string | null; closed_at: string | null;
+}
+
+export interface OpenAttendanceRow { id: string; cpf_masked: string; checked_in_at: string; protocol_name: string; priority: number }
+
+export type AttendanceOutcome = "discharged" | "referred" | "left";
+
+export async function lookupCheckIn(cpf: string, code: string): Promise<{ citizen: CheckInCitizen; triage: CheckInTriage }> {
+  return jsonFetch(`${ATTENDANCE_BASE}/check_ins/lookup`, { method: "POST", body: JSON.stringify({ cpf, code }) });
+}
+
+export async function checkIn(
+  cpf: string, code: string, healthUnitId: string, documentChecked: boolean
+): Promise<{ attendance: Attendance; verified: boolean }> {
+  return jsonFetch(`${ATTENDANCE_BASE}/check_ins`, {
+    method: "POST",
+    body: JSON.stringify({ cpf, code, health_unit_id: healthUnitId, document_checked: documentChecked })
+  });
+}
+
+export async function searchCheckInTriages(cpf: string): Promise<CheckInTriage[]> {
+  const payload = await jsonFetch<{ triages: CheckInTriage[] }>(`${ATTENDANCE_BASE}/check_ins/search`, {
+    method: "POST", body: JSON.stringify({ cpf })
+  });
+  return payload.triages;
+}
+
+export async function checkInByException(
+  cpf: string, triageId: string, healthUnitId: string, reason: string
+): Promise<{ attendance: Attendance }> {
+  return jsonFetch(`${ATTENDANCE_BASE}/check_ins/exception`, {
+    method: "POST",
+    body: JSON.stringify({ cpf, triage_id: triageId, health_unit_id: healthUnitId, reason })
+  });
+}
+
+export async function listOpenAttendances(unitId: string): Promise<OpenAttendanceRow[]> {
+  const payload = await jsonFetch<{ attendances: OpenAttendanceRow[] }>(
+    `${ATTENDANCE_BASE}/units/${encodeURIComponent(unitId)}/open`
+  );
+  return payload.attendances;
+}
+
+export async function closeAttendance(
+  id: string, outcome: AttendanceOutcome, referralUnitId?: string, referralNote?: string
+): Promise<Attendance> {
+  const body: Record<string, unknown> = { outcome };
+  if (referralUnitId) body.referral_unit_id = referralUnitId;
+  if (referralNote) body.referral_note = referralNote;
+  const payload = await jsonFetch<{ attendance: Attendance }>(
+    `${ATTENDANCE_BASE}/attendances/${encodeURIComponent(id)}/close`, { method: "POST", body: JSON.stringify(body) }
+  );
+  return payload.attendance;
+}

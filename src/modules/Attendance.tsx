@@ -1,9 +1,10 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
-  lookupCitizen, revokeVerification, verifyCitizen, listVerifications,
-  type AttendanceCitizen, type AttendanceTriage, type VerificationRow
+  listActiveUnits, lookupCitizen, revokeVerification, verifyCitizen, listVerifications,
+  type AttendanceCitizen, type AttendanceTriage, type HealthUnit, type VerificationRow
 } from "../lib/api";
-import { attendanceError, isValidCpf, maskCpf, onlyDigits } from "../lib/attendance";
+import { attendanceError, currentUnitKey, isValidCpf, maskCpf, nivelLabel, onlyDigits } from "../lib/attendance";
 import { fmtDateTime } from "../lib/format";
 import { useAuth } from "../lib/auth";
 import { PageHeader } from "../components/PageHeader";
@@ -13,6 +14,10 @@ import { Tag } from "../components/Tag";
 import { KeyValue } from "../components/KeyValue";
 import { EmptyState } from "../components/EmptyState";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../components/formStyles";
+import { UnitPicker } from "./attendance/UnitPicker";
+import { CheckIn } from "./attendance/CheckIn";
+import { OpenAttendances } from "./attendance/OpenAttendances";
+import { Units } from "./attendance/Units";
 
 // Atendimento (spec 2026-09-24-citizen-presencial-verification, Task 6):
 // balcão de verificação presencial (citizen_verifier) + histórico de
@@ -23,12 +28,15 @@ type CounterState = "form" | "found" | "done";
 
 interface Found { citizen: AttendanceCitizen; triages: AttendanceTriage[] }
 
-function nivelLabel(level: AttendanceCitizen["verification_level"]): string {
-  return level === "verified" ? "verificado" : "declarado";
-}
-
 export function Attendance() {
   const { user } = useAuth();
+  const [ unit, setUnit ] = useState<HealthUnit | null>(null);
+  // Remonta o UnitPicker (limpando a escolha guardada) quando o check-in
+  // devolve invalid_unit — a unidade foi desativada entre a escolha e o
+  // check-in (ou como destino de encaminhamento).
+  const [ pickerKey, setPickerKey ] = useState(0);
+  const unitsQuery = useQuery({ queryKey: [ "activeUnits" ], queryFn: listActiveUnits, enabled: !!unit });
+
   if (!user) return null;
   const roles = user.memberships.map((m) => m.role);
   const canVerify = roles.includes("citizen_verifier");
@@ -43,11 +51,21 @@ export function Attendance() {
     );
   }
 
+  function onUnitInvalid() {
+    try { localStorage.removeItem(currentUnitKey(user!.id)); } catch { /* sem storage disponível */ }
+    setUnit(null);
+    setPickerKey((k) => k + 1);
+  }
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <PageHeader title="Atendimento" sub="balcão · verificação presencial" />
+      {canVerify && <UnitPicker key={pickerKey} userId={user.id} onChange={setUnit} />}
+      {canVerify && unit && <CheckIn unit={unit} onUnitInvalid={onUnitInvalid} />}
+      {canVerify && unit && <OpenAttendances unit={unit} units={unitsQuery.data ?? []} />}
       {canVerify && <Counter />}
       {isAdmin && <History />}
+      {isAdmin && <Units />}
     </div>
   );
 }
@@ -98,14 +116,14 @@ function Counter() {
   }
 
   return (
-    <Panel title="Balcão">
+    <Panel title="Balcão" sub="código gerado em 'Validar no posto'">
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         {error && <p role="alert" style={{ margin: 0, fontSize: 12.5, color: "var(--down)" }}>{error}</p>}
 
         {state === "form" && (
           <div style={{ display: "flex", flexDirection: "column", gap: 10, maxWidth: 320 }}>
             <label style={labelStyle}>
-              CPF
+              CPF do cidadão (validação)
               <input
                 value={cpf}
                 onChange={(e) => setCpf(maskCpf(e.target.value))}
@@ -114,7 +132,7 @@ function Counter() {
               />
             </label>
             <label style={labelStyle}>
-              Código do cidadão
+              Código de validação
               <input
                 value={code}
                 onChange={(e) => setCode(onlyDigits(e.target.value).slice(0, 6))}
@@ -125,7 +143,7 @@ function Counter() {
             </label>
             <div>
               <button type="button" disabled={busy} onClick={() => void search()} style={busy ? disabledButtonStyle : buttonStyle}>
-                Buscar
+                Buscar validação
               </button>
             </div>
           </div>
