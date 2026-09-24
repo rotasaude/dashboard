@@ -336,3 +336,40 @@ export async function revokeVerification(id: string, reason: string): Promise<vo
     method: "POST", body: JSON.stringify({ reason })
   });
 }
+
+// ─── Atendimento: unidades de saúde (Task 6) ─────────────────────────────────
+
+export interface HealthUnit { id: string; name: string; kind: string }
+export interface HealthUnitRow extends HealthUnit { active: boolean }
+
+export async function listActiveUnits(): Promise<HealthUnit[]> {
+  const payload = await jsonFetch<{ units: HealthUnit[] }>(`${ATTENDANCE_BASE}/units`);
+  return payload.units;
+}
+
+export async function listAllUnits(): Promise<HealthUnitRow[]> {
+  const payload = await jsonFetch<{ units: HealthUnitRow[] }>(`${ATTENDANCE_BASE}/units/all`);
+  return payload.units;
+}
+
+export async function createUnit(name: string, kind: string): Promise<HealthUnitRow> {
+  const payload = await jsonFetch<{ unit: HealthUnitRow }>(`${ATTENDANCE_BASE}/units`, {
+    method: "POST", body: JSON.stringify({ name, kind })
+  });
+  return payload.unit;
+}
+
+export async function updateUnit(id: string, name: string, kind: string): Promise<HealthUnitRow> {
+  const payload = await jsonFetch<{ unit: HealthUnitRow }>(`${ATTENDANCE_BASE}/units/${encodeURIComponent(id)}`, {
+    method: "POST", body: JSON.stringify({ name, kind })
+  });
+  return payload.unit;
+}
+
+export async function setUnitActive(id: string, active: boolean): Promise<HealthUnitRow> {
+  const action = active ? "activate" : "deactivate";
+  const payload = await jsonFetch<{ unit: HealthUnitRow }>(`${ATTENDANCE_BASE}/units/${encodeURIComponent(id)}/${action}`, {
+    method: "POST", body: "{}"
+  });
+  return payload.unit;
+}

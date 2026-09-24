@@ -1,7 +1,7 @@
 import { useState } from "react";
 import {
   lookupCitizen, revokeVerification, verifyCitizen, listVerifications,
-  type AttendanceCitizen, type AttendanceTriage, type VerificationRow
+  type AttendanceCitizen, type AttendanceTriage, type HealthUnit, type VerificationRow
 } from "../lib/api";
 import { attendanceError, isValidCpf, maskCpf, onlyDigits } from "../lib/attendance";
 import { fmtDateTime } from "../lib/format";
@@ -13,6 +13,8 @@ import { Tag } from "../components/Tag";
 import { KeyValue } from "../components/KeyValue";
 import { EmptyState } from "../components/EmptyState";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../components/formStyles";
+import { UnitPicker } from "./attendance/UnitPicker";
+import { Units } from "./attendance/Units";
 
 // Atendimento (spec 2026-09-24-citizen-presencial-verification, Task 6):
 // balcão de verificação presencial (citizen_verifier) + histórico de
@@ -29,6 +31,9 @@ function nivelLabel(level: AttendanceCitizen["verification_level"]): string {
 
 export function Attendance() {
   const { user } = useAuth();
+  // Task 7 consome a unidade escolhida (CheckIn/OpenAttendances); por ora só
+  // guardamos o estado para o UnitPicker gravar a escolha.
+  const [ , setUnit ] = useState<HealthUnit | null>(null);
   if (!user) return null;
   const roles = user.memberships.map((m) => m.role);
   const canVerify = roles.includes("citizen_verifier");
@@ -46,8 +51,10 @@ export function Attendance() {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <PageHeader title="Atendimento" sub="balcão · verificação presencial" />
+      {canVerify && <UnitPicker userId={user.id} onChange={setUnit} />}
       {canVerify && <Counter />}
       {isAdmin && <History />}
+      {isAdmin && <Units />}
     </div>
   );
 }

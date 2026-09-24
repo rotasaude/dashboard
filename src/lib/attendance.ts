@@ -24,6 +24,17 @@ export function isValidCpf(input: string): boolean {
   return check(9) === n[9] && check(10) === n[10];
 }
 
+export const UNIT_KINDS = [
+  { value: "ubs", label: "UBS" },
+  { value: "upa", label: "UPA" },
+  { value: "hospital", label: "Hospital" },
+  { value: "other", label: "Outra" }
+];
+
+export function currentUnitKey(userId: string): string {
+  return `attendance.unit.${userId}`;
+}
+
 const GENERIC = "não foi possível concluir — tente de novo";
 const MESSAGES: Record<string, string> = {
   invalid_cpf: "CPF inválido",
@@ -35,14 +46,28 @@ const MESSAGES: Record<string, string> = {
   own_verification: "quem validou não pode desfazer a própria validação",
   reason_too_short: "o motivo precisa de pelo menos 10 caracteres",
   forbidden: "seu papel não permite esta ação",
-  too_many_requests: "muitas tentativas — aguarde alguns minutos"
+  too_many_requests: "muitas tentativas — aguarde alguns minutos",
+  triage_too_old: "triagem com mais de 3 dias — peça ao cidadão para gerar outro código",
+  triage_not_eligible: "essa triagem não é elegível para atendimento",
+  invalid_unit: "unidade inválida ou desativada — escolha outra",
+  referral_required: "informe a unidade de destino ou a descrição do encaminhamento",
+  already_closed: "este atendimento já foi encerrado",
+  unit_name_taken: "já existe uma unidade com este nome",
+  invalid_kind: "tipo de unidade inválido",
+  invalid_outcome: "desfecho inválido"
 };
 
 export function attendanceError(err: unknown): string {
   if (!(err instanceof ApiError)) return GENERIC;
-  const body = (err.body ?? {}) as { error?: string; verified_at?: string };
+  const body = (err.body ?? {}) as { error?: string; verified_at?: string; unit_name?: string; checked_in_at?: string };
   if (body.error === "already_verified") {
     return body.verified_at ? `cadastro já verificado em ${fmtDateTime(body.verified_at)}` : "cadastro já verificado";
+  }
+  if (body.error === "already_checked_in") {
+    if (body.unit_name && body.checked_in_at) {
+      return `já está em atendimento em ${body.unit_name} desde ${fmtDateTime(body.checked_in_at)}`;
+    }
+    return "esta triagem já está em atendimento";
   }
   if (err.status === 401) return "sessão expirada — entre de novo";
   return (body.error && MESSAGES[body.error]) || GENERIC;

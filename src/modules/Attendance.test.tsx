@@ -7,7 +7,8 @@ vi.mock("../lib/api", async (importOriginal) => {
   const real = await importOriginal<typeof import("../lib/api")>();
   return {
     ...real, fetchCurrentSession: vi.fn(), lookupCitizen: vi.fn(), verifyCitizen: vi.fn(),
-    listVerifications: vi.fn(), revokeVerification: vi.fn()
+    listVerifications: vi.fn(), revokeVerification: vi.fn(),
+    listActiveUnits: vi.fn(), listAllUnits: vi.fn(), createUnit: vi.fn(), updateUnit: vi.fn(), setUnitActive: vi.fn()
   };
 });
 
@@ -44,10 +45,15 @@ const found = {
 
 describe("Attendance", () => {
   beforeEach(() => {
-    for (const fn of [ api.fetchCurrentSession, api.lookupCitizen, api.verifyCitizen, api.listVerifications, api.revokeVerification ]) {
+    for (const fn of [
+      api.fetchCurrentSession, api.lookupCitizen, api.verifyCitizen, api.listVerifications, api.revokeVerification,
+      api.listActiveUnits, api.listAllUnits, api.createUnit, api.updateUnit, api.setUnitActive
+    ]) {
       mocked(fn).mockReset();
     }
     mocked(api.fetchCurrentSession).mockResolvedValue(session("citizen_verifier"));
+    mocked(api.listActiveUnits).mockResolvedValue([]);
+    mocked(api.listAllUnits).mockResolvedValue([]);
   });
 
   it("busca, exige a caixa do documento e valida", async () => {
