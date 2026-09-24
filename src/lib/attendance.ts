@@ -35,6 +35,10 @@ export function currentUnitKey(userId: string): string {
   return `attendance.unit.${userId}`;
 }
 
+export function nivelLabel(level: "declared" | "verified"): string {
+  return level === "verified" ? "verificado" : "declarado";
+}
+
 const GENERIC = "não foi possível concluir — tente de novo";
 const MESSAGES: Record<string, string> = {
   invalid_cpf: "CPF inválido",

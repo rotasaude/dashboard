@@ -4,11 +4,12 @@ import {
   ApiError, checkIn, checkInByException, lookupCheckIn, searchCheckInTriages,
   type CheckInCitizen, type CheckInTriage, type HealthUnit
 } from "../../lib/api";
-import { attendanceError, isValidCpf, maskCpf, onlyDigits } from "../../lib/attendance";
+import { attendanceError, isValidCpf, maskCpf, nivelLabel, onlyDigits } from "../../lib/attendance";
 import { fmtDateTime } from "../../lib/format";
 import { Panel } from "../../components/Panel";
 import { DataTable } from "../../components/DataTable";
 import { KeyValue } from "../../components/KeyValue";
+import { Tag } from "../../components/Tag";
 import { EmptyState } from "../../components/EmptyState";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 
@@ -35,6 +36,7 @@ export function CheckIn({ unit, onUnitInvalid }: Props) {
   return (
     <Panel
       title="Check-in"
+      sub={mode === "code" ? "código gerado em 'Cheguei na unidade'" : undefined}
       right={
         <button type="button" style={secondaryButtonStyle} onClick={() => setMode(mode === "code" ? "exception" : "code")}>
           {mode === "code" ? "Cidadão sem o código" : "Cidadão com código"}
@@ -104,11 +106,11 @@ function CodeFlow({ unit, onUnitInvalid }: Props) {
       {state === "form" && (
         <div style={{ display: "flex", flexDirection: "column", gap: 10, maxWidth: 320 }}>
           <label style={labelStyle}>
-            CPF
+            CPF do cidadão (check-in)
             <input value={cpf} onChange={(e) => setCpf(maskCpf(e.target.value))} style={inputStyle} inputMode="numeric" />
           </label>
           <label style={labelStyle}>
-            Código do cidadão
+            Código de check-in
             <input
               value={code}
               onChange={(e) => setCode(onlyDigits(e.target.value).slice(0, 6))}
@@ -119,7 +121,7 @@ function CodeFlow({ unit, onUnitInvalid }: Props) {
           </label>
           <div>
             <button type="button" disabled={busy} onClick={() => void search()} style={busy ? disabledButtonStyle : buttonStyle}>
-              Buscar
+              Buscar check-in
             </button>
           </div>
         </div>
@@ -130,6 +132,7 @@ function CodeFlow({ unit, onUnitInvalid }: Props) {
           <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
             <KeyValue k="CPF" v={found.citizen.cpf_masked} />
             <KeyValue k="Celular" v={found.citizen.phone_masked} />
+            <KeyValue k="Nível" v={<Tag>{nivelLabel(found.citizen.verification_level)}</Tag>} />
             <KeyValue k="Data" v={fmtDateTime(found.triage.date)} />
             <KeyValue k="Protocolo" v={found.triage.protocol_name} />
             <KeyValue k="Prioridade" v={String(found.triage.priority)} />
@@ -230,7 +233,7 @@ function ExceptionFlow({ unit, onUnitInvalid }: Props) {
 
       <div style={{ display: "flex", gap: 8, alignItems: "flex-end", maxWidth: 400 }}>
         <label style={{ ...labelStyle, flex: 1 }}>
-          CPF
+          CPF do cidadão (exceção)
           <input value={cpf} onChange={(e) => setCpf(maskCpf(e.target.value))} style={inputStyle} inputMode="numeric" />
         </label>
         <button type="button" disabled={busy} onClick={() => void search()} style={busy ? disabledButtonStyle : buttonStyle}>

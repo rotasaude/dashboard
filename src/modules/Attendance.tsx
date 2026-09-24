@@ -4,7 +4,7 @@ import {
   listActiveUnits, lookupCitizen, revokeVerification, verifyCitizen, listVerifications,
   type AttendanceCitizen, type AttendanceTriage, type HealthUnit, type VerificationRow
 } from "../lib/api";
-import { attendanceError, currentUnitKey, isValidCpf, maskCpf, onlyDigits } from "../lib/attendance";
+import { attendanceError, currentUnitKey, isValidCpf, maskCpf, nivelLabel, onlyDigits } from "../lib/attendance";
 import { fmtDateTime } from "../lib/format";
 import { useAuth } from "../lib/auth";
 import { PageHeader } from "../components/PageHeader";
@@ -27,10 +27,6 @@ import { Units } from "./attendance/Units";
 type CounterState = "form" | "found" | "done";
 
 interface Found { citizen: AttendanceCitizen; triages: AttendanceTriage[] }
-
-function nivelLabel(level: AttendanceCitizen["verification_level"]): string {
-  return level === "verified" ? "verificado" : "declarado";
-}
 
 export function Attendance() {
   const { user } = useAuth();
@@ -120,14 +116,14 @@ function Counter() {
   }
 
   return (
-    <Panel title="Balcão">
+    <Panel title="Balcão" sub="código gerado em 'Validar no posto'">
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         {error && <p role="alert" style={{ margin: 0, fontSize: 12.5, color: "var(--down)" }}>{error}</p>}
 
         {state === "form" && (
           <div style={{ display: "flex", flexDirection: "column", gap: 10, maxWidth: 320 }}>
             <label style={labelStyle}>
-              CPF
+              CPF do cidadão (validação)
               <input
                 value={cpf}
                 onChange={(e) => setCpf(maskCpf(e.target.value))}
@@ -136,7 +132,7 @@ function Counter() {
               />
             </label>
             <label style={labelStyle}>
-              Código do cidadão
+              Código de validação
               <input
                 value={code}
                 onChange={(e) => setCode(onlyDigits(e.target.value).slice(0, 6))}
@@ -147,7 +143,7 @@ function Counter() {
             </label>
             <div>
               <button type="button" disabled={busy} onClick={() => void search()} style={busy ? disabledButtonStyle : buttonStyle}>
-                Buscar
+                Buscar validação
               </button>
             </div>
           </div>

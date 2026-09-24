@@ -47,7 +47,11 @@ export function OpenAttendances({ unit, units }: Props) {
   return (
     <Panel title="Atendimentos abertos">
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-        {rows.length === 0 ? (
+        {query.isError ? (
+          <p role="alert" style={{ margin: 0, fontSize: 12.5, color: "var(--down)" }}>{attendanceError(query.error)}</p>
+        ) : query.isPending ? (
+          <p className="mono" style={{ margin: 0, fontSize: 10.5, color: "var(--ink3)" }}>carregando…</p>
+        ) : rows.length === 0 ? (
           <EmptyState title="nenhum atendimento aberto" />
         ) : (
           <DataTable<OpenAttendanceRow>
@@ -69,6 +73,7 @@ export function OpenAttendances({ unit, units }: Props) {
 
         {closing && (
           <ClosePanel
+            key={closing.id}
             row={closing}
             units={units}
             onCancel={() => setClosing(null)}
@@ -109,6 +114,9 @@ function ClosePanel(
   return (
     <section style={{ display: "flex", flexDirection: "column", gap: 10, padding: 16, border: "1px solid var(--rule)", borderRadius: 8 }}>
       <strong>Encerrar atendimento</strong>
+      <p className="mono" style={{ margin: 0, fontSize: 11, color: "var(--ink3)" }}>
+        {row.cpf_masked} · {row.protocol_name} · chegou às {fmtDateTime(row.checked_in_at)}
+      </p>
       {error && <p role="alert" style={{ margin: 0, fontSize: 12.5, color: "var(--down)" }}>{error}</p>}
 
       <label style={labelStyle}>

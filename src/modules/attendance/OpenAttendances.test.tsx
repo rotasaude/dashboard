@@ -89,4 +89,26 @@ describe("OpenAttendances", () => {
     await waitFor(() => expect(screen.queryByText("triage-respiratoria")).toBeNull());
     expect(await screen.findByText("triage-dor")).not.toBeNull();
   });
+
+  it("erro ao carregar a lista mostra a frase do erro, não 'nenhum atendimento aberto'", async () => {
+    mocked(api.listOpenAttendances).mockReset();
+    mocked(api.listOpenAttendances).mockRejectedValue(new ApiError(403, { error: "forbidden" }, "x"));
+    renderOpen();
+    expect(await screen.findByText("seu papel não permite esta ação")).not.toBeNull();
+    expect(screen.queryByText("nenhum atendimento aberto")).toBeNull();
+  });
+
+  it("trocar de linha sem confirmar reseta as escolhas e troca o cabeçalho do painel", async () => {
+    renderOpen();
+    const encerrarButtons = await screen.findAllByRole("button", { name: "Encerrar" });
+    fireEvent.click(encerrarButtons[0]);
+    expect(screen.getByText(/\*\*\*\.982\.247-\*\*.*triage-respiratoria/)).not.toBeNull();
+    fireEvent.change(screen.getByLabelText("Desfecho"), { target: { value: "referred" } });
+    expect(screen.getByLabelText("Unidade de destino")).not.toBeNull();
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Encerrar" })[1]);
+    expect(screen.getByText(/\*\*\*\.111\.222-\*\*.*triage-dor/)).not.toBeNull();
+    expect((screen.getByLabelText("Desfecho") as HTMLSelectElement).value).toBe("discharged");
+    expect(screen.queryByLabelText("Unidade de destino")).toBeNull();
+  });
 });
