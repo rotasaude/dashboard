@@ -290,7 +290,11 @@ export async function retireProtocol(name: string, version: string): Promise<voi
 export async function revertProtocol(
   name: string, reason: string
 ): Promise<{ version: string } | null> {
-  const body = await jsonFetch<{ protocol?: { version?: string } }>(`${PROTOCOLS_BASE}/revert`, {
+  // `string | number` porque o fio manda NÚMERO (protocol_result_rendering.rb)
+  // e a previsão com que a tela compara é string. Tipar só como string aqui
+  // convidaria a remover o String() abaixo, e aí a comparação de divergência
+  // passaria a comparar "2" com 2 e acusaria diferença onde não há.
+  const body = await jsonFetch<{ protocol?: { version?: string | number } }>(`${PROTOCOLS_BASE}/revert`, {
     method: "POST", body: JSON.stringify({ name, reason })
   });
   const version = body?.protocol?.version;
