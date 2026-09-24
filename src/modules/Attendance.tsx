@@ -23,6 +23,10 @@ type CounterState = "form" | "found" | "done";
 
 interface Found { citizen: AttendanceCitizen; triages: AttendanceTriage[] }
 
+function nivelLabel(level: AttendanceCitizen["verification_level"]): string {
+  return level === "verified" ? "verificado" : "declarado";
+}
+
 export function Attendance() {
   const { user } = useAuth();
   if (!user) return null;
@@ -133,7 +137,7 @@ function Counter() {
               <KeyValue k="CPF" v={found.citizen.cpf_masked} />
               <KeyValue k="Celular" v={found.citizen.phone_masked} />
               <KeyValue k="Cadastrado em" v={fmtDateTime(found.citizen.created_at)} />
-              <KeyValue k="Nível" v={<Tag>{found.citizen.verification_level}</Tag>} />
+              <KeyValue k="Nível" v={<Tag>{nivelLabel(found.citizen.verification_level)}</Tag>} />
             </div>
 
             <DataTable<AttendanceTriage>
@@ -182,16 +186,18 @@ function Counter() {
 
 function History() {
   const [ cpf, setCpf ] = useState("");
+  const [ queriedCpf, setQueriedCpf ] = useState<string | null>(null);
   const [ rows, setRows ] = useState<VerificationRow[] | null>(null);
   const [ busy, setBusy ] = useState(false);
   const [ error, setError ] = useState<string | null>(null);
   const [ revoking, setRevoking ] = useState<VerificationRow | null>(null);
 
-  async function load() {
+  async function load(forCpf: string = cpf) {
     if (busy) return;
-    setBusy(true); setError(null);
+    setBusy(true); setError(null); setRows(null);
     try {
-      setRows(await listVerifications(cpf));
+      setRows(await listVerifications(forCpf));
+      setQueriedCpf(forCpf);
     } catch (err) {
       setError(attendanceError(err));
     } finally {
@@ -244,7 +250,7 @@ function History() {
           <RevokePanel
             row={revoking}
             onCancel={() => setRevoking(null)}
-            onDone={() => { setRevoking(null); void load(); }}
+            onDone={() => { setRevoking(null); void load(queriedCpf ?? cpf); }}
           />
         )}
       </div>

@@ -120,6 +120,60 @@ describe("Attendance", () => {
     await waitFor(() => expect(api.revokeVerification).toHaveBeenCalledWith("v1", "documento de outra pessoa"));
   });
 
+  it("mostra o Nível em português", async () => {
+    mocked(api.lookupCitizen).mockResolvedValue(found);
+    renderAttendance();
+    fireEvent.change(await screen.findByLabelText("CPF"), { target: { value: "52998224725" } });
+    fireEvent.change(screen.getByLabelText("Código do cidadão"), { target: { value: "123456" } });
+    fireEvent.click(screen.getByRole("button", { name: "Buscar" }));
+    expect(await screen.findByText("declarado")).not.toBeNull();
+    expect(screen.queryByText("declared")).toBeNull();
+  });
+
+  it("uma nova busca limpa as linhas antigas antes de trazer as novas", async () => {
+    mocked(api.fetchCurrentSession).mockResolvedValue(session("municipal_admin"));
+    mocked(api.listVerifications).mockResolvedValueOnce([
+      {
+        id: "v1", verified_at: "2026-09-24T10:00:00Z", verified_by: "atendente@cidade.gov.br",
+        phone_masked: "(**) *****-5432", active: true, revoked_at: null, revoked_by: null, revoke_reason: null
+      }
+    ]);
+    renderAttendance();
+    fireEvent.change(await screen.findByLabelText("CPF do histórico"), { target: { value: "52998224725" } });
+    fireEvent.click(screen.getByRole("button", { name: "Ver histórico" }));
+    expect(await screen.findByText("atendente@cidade.gov.br")).not.toBeNull();
+
+    let resolveSecond: (rows: api.VerificationRow[]) => void = () => {};
+    mocked(api.listVerifications).mockReturnValueOnce(new Promise((resolve) => { resolveSecond = resolve; }));
+    fireEvent.change(screen.getByLabelText("CPF do histórico"), { target: { value: "11144477735" } });
+    fireEvent.click(screen.getByRole("button", { name: "Ver histórico" }));
+    expect(screen.queryByText("atendente@cidade.gov.br")).toBeNull();
+    resolveSecond([]);
+    expect(await screen.findByText("nenhuma validação para este CPF")).not.toBeNull();
+  });
+
+  it("depois de desfazer, recarrega com o CPF que trouxe as linhas atuais, não o do campo" , async () => {
+    mocked(api.fetchCurrentSession).mockResolvedValue(session("municipal_admin"));
+    mocked(api.listVerifications).mockResolvedValue([
+      {
+        id: "v1", verified_at: "2026-09-24T10:00:00Z", verified_by: "atendente@cidade.gov.br",
+        phone_masked: "(**) *****-5432", active: true, revoked_at: null, revoked_by: null, revoke_reason: null
+      }
+    ]);
+    mocked(api.revokeVerification).mockResolvedValue(undefined);
+    renderAttendance();
+    fireEvent.change(await screen.findByLabelText("CPF do histórico"), { target: { value: "52998224725" } });
+    fireEvent.click(screen.getByRole("button", { name: "Ver histórico" }));
+    await screen.findByRole("button", { name: "Desfazer" });
+
+    fireEvent.change(screen.getByLabelText("CPF do histórico"), { target: { value: "11144477735" } });
+    fireEvent.click(screen.getByRole("button", { name: "Desfazer" }));
+    fireEvent.change(screen.getByLabelText("Motivo"), { target: { value: "documento de outra pessoa" } });
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar desfazer" }));
+    await waitFor(() => expect(api.revokeVerification).toHaveBeenCalledWith("v1", "documento de outra pessoa"));
+    await waitFor(() => expect(mocked(api.listVerifications).mock.calls.at(-1)?.[0]).toBe("529.982.247-25"));
+  });
+
   it("atendente não vê o histórico", async () => {
     renderAttendance();
     await screen.findByLabelText("CPF");
