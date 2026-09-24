@@ -1,0 +1,49 @@
+// Balcão da UBS (spec 2026-09-24-citizen-presencial-verification §5, §6). Os
+// erros daqui têm tradução própria: `invalid_code` no balcão é o código do
+// CIDADÃO, não o TOTP do servidor que describeActionError traduz.
+import { ApiError } from "./api";
+import { fmtDateTime } from "./format";
+
+export const onlyDigits = (s: string) => s.replace(/\D/g, "");
+
+export function maskCpf(input: string): string {
+  const d = onlyDigits(input).slice(0, 11);
+  const head = [ d.slice(0, 3), d.slice(3, 6), d.slice(6, 9) ].filter(Boolean).join(".");
+  return d.length > 9 ? `${head}-${d.slice(9)}` : head;
+}
+
+export function isValidCpf(input: string): boolean {
+  const d = onlyDigits(input);
+  if (d.length !== 11 || /^(\d)\1{10}$/.test(d)) return false;
+  const n = d.split("").map(Number);
+  const check = (len: number) => {
+    const sum = n.slice(0, len).reduce((acc, x, i) => acc + x * (len + 1 - i), 0);
+    const rest = (sum * 10) % 11;
+    return rest === 10 ? 0 : rest;
+  };
+  return check(9) === n[9] && check(10) === n[10];
+}
+
+const GENERIC = "não foi possível concluir — tente de novo";
+const MESSAGES: Record<string, string> = {
+  invalid_cpf: "CPF inválido",
+  invalid_code: "código não confere — confira com o cidadão",
+  code_expired: "código vencido ou já usado — peça ao cidadão para gerar outro código",
+  code_exhausted: "tentativas esgotadas — peça ao cidadão para gerar outro código",
+  document_check_required: "marque que conferiu o documento com foto",
+  already_revoked: "esta validação já foi desfeita",
+  own_verification: "quem validou não pode desfazer a própria validação",
+  reason_too_short: "o motivo precisa de pelo menos 10 caracteres",
+  forbidden: "seu papel não permite esta ação",
+  too_many_requests: "muitas tentativas — aguarde alguns minutos"
+};
+
+export function attendanceError(err: unknown): string {
+  if (!(err instanceof ApiError)) return GENERIC;
+  const body = (err.body ?? {}) as { error?: string; verified_at?: string };
+  if (body.error === "already_verified") {
+    return body.verified_at ? `cadastro já verificado em ${fmtDateTime(body.verified_at)}` : "cadastro já verificado";
+  }
+  if (err.status === 401) return "sessão expirada — entre de novo";
+  return (body.error && MESSAGES[body.error]) || GENERIC;
+}

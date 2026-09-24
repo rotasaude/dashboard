@@ -287,3 +287,39 @@ export async function revertProtocol(name: string, reason: string): Promise<void
     method: "POST", body: JSON.stringify({ name, reason })
   });
 }
+
+// ─── Atendimento: verificação presencial no balcão (Task 4) ─────────────────
+
+const ATTENDANCE_BASE = import.meta.env.VITE_ATTENDANCE_BASE || "/attendance";
+
+export interface AttendanceCitizen {
+  id: string; cpf_masked: string; phone_masked: string; created_at: string;
+  verification_level: "declared" | "verified";
+}
+export interface AttendanceTriage { date: string; protocol_name: string }
+export interface VerificationRow {
+  id: string; verified_at: string; verified_by: string; phone_masked: string; active: boolean;
+  revoked_at: string | null; revoked_by: string | null; revoke_reason: string | null;
+}
+
+export async function lookupCitizen(cpf: string, code: string): Promise<{ citizen: AttendanceCitizen; triages: AttendanceTriage[] }> {
+  return jsonFetch(`${ATTENDANCE_BASE}/lookup`, { method: "POST", body: JSON.stringify({ cpf, code }) });
+}
+
+export async function verifyCitizen(cpf: string, code: string): Promise<void> {
+  await jsonFetch<unknown>(`${ATTENDANCE_BASE}/verifications`, {
+    method: "POST", body: JSON.stringify({ cpf, code, document_checked: true })
+  });
+}
+
+export async function listVerifications(cpf: string): Promise<VerificationRow[]> {
+  const payload = await jsonFetch<{ verifications: VerificationRow[] }>(
+    `${ATTENDANCE_BASE}/verifications?cpf=${encodeURIComponent(cpf)}`);
+  return payload.verifications;
+}
+
+export async function revokeVerification(id: string, reason: string): Promise<void> {
+  await jsonFetch<unknown>(`${ATTENDANCE_BASE}/verifications/${encodeURIComponent(id)}/revoke`, {
+    method: "POST", body: JSON.stringify({ reason })
+  });
+}

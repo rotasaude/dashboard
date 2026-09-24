@@ -4,7 +4,7 @@
 export type ModuleId =
   | "overview" | "ingestion" | "conversations" | "consent"
   | "triages" | "classification" | "reports" | "protocols" | "events"
-  | "queues" | "health" | "protocol-editor" | "security" | "team";
+  | "queues" | "health" | "protocol-editor" | "security" | "team" | "attendance";
 
 export interface NavItem { id: ModuleId; label: string; icon: string; }
 export interface NavGroupDef { label: string; items: NavItem[]; }
@@ -30,6 +30,9 @@ export const NAV_GROUPS: NavGroupDef[] = [
     { id: "queues", label: "Filas & jobs", icon: "≋" },
     { id: "health", label: "Saúde", icon: "◍" }
   ]},
+  { label: "Atendimento", items: [
+    { id: "attendance", label: "Atendimento", icon: "☑" }
+  ]},
   { label: "Equipe", items: [
     { id: "team", label: "Equipe", icon: "☷" }
   ]},
@@ -53,10 +56,13 @@ export function labelFor(id: ModuleId): string {
 export function navGroupsFor(
   user: { operator: boolean; memberships?: { role: string }[] } | null
 ): NavGroupDef[] {
-  const isAdmin = user?.memberships?.some((m) => m.role === "municipal_admin") ?? false;
+  const roles = user?.memberships?.map((m) => m.role) ?? [];
+  const isAdmin = roles.includes("municipal_admin");
+  const canAttend = isAdmin || roles.includes("citizen_verifier");
   return NAV_GROUPS.filter((group) => {
     if (group.label === "Conta") return !user?.operator;
     if (group.label === "Equipe") return isAdmin;
+    if (group.label === "Atendimento") return canAttend;
     return true;
   });
 }

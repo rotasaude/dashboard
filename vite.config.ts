@@ -11,6 +11,7 @@ import react from "@vitejs/plugin-react";
 //   /setup      → SetupController (aceite de convite).
 //   /protocols  → ciclo de vida com assinaturas (ProtocolLifecycleController, PublicationsController).
 //   /mfa        → cadastro de TOTP e step-up (MfaController).
+//   /attendance → balcão de verificação presencial (Attendance::*Controller).
 //
 // Plano 6: changeOrigin FICA FALSE. O Rails resolve a cidade pelo Host da
 // requisição (CityCatalog); com changeOrigin: true o proxy reescrevia o Host
@@ -35,7 +36,8 @@ export default defineConfig({
       "/auth":      proxy(TARGET),
       "/setup":     proxy(TARGET),
       "/protocols": proxy(TARGET),
-      "/mfa":       proxy(TARGET)
+      "/mfa":       proxy(TARGET),
+      "/attendance": proxy(TARGET)
     }
   }
 });
