@@ -77,4 +77,19 @@ describe("Units", () => {
     fireEvent.click(screen.getByRole("button", { name: "Salvar" }));
     expect(await screen.findByText("já existe uma unidade com este nome")).not.toBeNull();
   });
+
+  it("mostra a frase de unit_has_open_attendances ao tentar desativar", async () => {
+    mocked(api.setUnitActive).mockRejectedValue(new ApiError(409, { error: "unit_has_open_attendances" }, "x"));
+    render(<Units />);
+    const btn = await screen.findByRole("button", { name: "Desativar" });
+    fireEvent.click(btn);
+    expect(await screen.findByText("há atendimentos abertos nesta unidade — encerre-os antes de desativar")).not.toBeNull();
+  });
+
+  it("mostra alerta quando listAllUnits falha, em vez de painel em branco" , async () => {
+    mocked(api.listAllUnits).mockReset().mockRejectedValue(new ApiError(500, { error: "server_error" }, "x"));
+    render(<Units />);
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toBe("não foi possível concluir — tente de novo");
+  });
 });

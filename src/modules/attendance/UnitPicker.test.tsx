@@ -7,6 +7,7 @@ vi.mock("../../lib/api", async (importOriginal) => {
 });
 
 import * as api from "../../lib/api";
+import { ApiError } from "../../lib/api";
 import { currentUnitKey } from "../../lib/attendance";
 import { UnitPicker } from "./UnitPicker";
 
@@ -59,5 +60,12 @@ describe("UnitPicker", () => {
     expect(await screen.findByText("Unidade: UBS Centro")).not.toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "trocar" }));
     expect(await screen.findByText("UPA Norte")).not.toBeNull();
+  });
+
+  it("mostra alerta quando listActiveUnits falha, em vez de painel em branco", async () => {
+    mocked(api.listActiveUnits).mockRejectedValue(new ApiError(500, { error: "server_error" }, "x"));
+    render(<UnitPicker userId="u1" onChange={vi.fn()} />);
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toBe("não foi possível concluir — tente de novo");
   });
 });

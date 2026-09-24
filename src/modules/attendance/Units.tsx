@@ -19,7 +19,11 @@ export function Units() {
   const [ form, setForm ] = useState<FormState | null>(null);
 
   async function load() {
-    setRows(await listAllUnits());
+    try {
+      setRows(await listAllUnits());
+    } catch (err) {
+      setError(attendanceError(err));
+    }
   }
 
   useEffect(() => { void load(); }, []);

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { listActiveUnits, type HealthUnit } from "../../lib/api";
-import { currentUnitKey } from "../../lib/attendance";
+import { attendanceError, currentUnitKey } from "../../lib/attendance";
 import { Panel } from "../../components/Panel";
 import { EmptyState } from "../../components/EmptyState";
 import { secondaryButtonStyle } from "../../components/formStyles";
@@ -36,6 +36,7 @@ export function UnitPicker({ userId, onChange }: Props) {
   const [ units, setUnits ] = useState<HealthUnit[] | null>(null);
   const [ selected, setSelected ] = useState<HealthUnit | null>(null);
   const [ choosing, setChoosing ] = useState(false);
+  const [ error, setError ] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -55,10 +56,21 @@ export function UnitPicker({ userId, onChange }: Props) {
       setSelected(null);
       setChoosing(true);
       onChange(null);
+    }).catch((err) => {
+      if (cancelled) return;
+      setError(attendanceError(err));
     });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ userId ]);
+
+  if (error) {
+    return (
+      <Panel title="Atendente">
+        <p role="alert" style={{ margin: 0, fontSize: 12.5, color: "var(--down)" }}>{error}</p>
+      </Panel>
+    );
+  }
 
   function choose(unit: HealthUnit) {
     writeStored(userId, unit.id);
