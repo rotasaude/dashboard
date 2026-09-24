@@ -95,6 +95,7 @@ export interface SignatureState {
   eligibleReviewers: number;
   editors: ProtocolEditor[];
   revertible: boolean;
+  revertTargetVersion: string | null;
 }
 
 export interface ProtocolRow extends SignatureState {

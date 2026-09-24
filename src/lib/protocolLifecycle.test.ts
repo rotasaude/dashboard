@@ -7,7 +7,7 @@ function target(overrides: Partial<LifecycleTarget> = {}): LifecycleTarget {
   return {
     version: "1", status: "in_review",
     signatures: { publication: { signers: [], missing: 2 }, activation: { signers: [], missing: 2 } },
-    eligibleReviewers: 3, editors: [], revertible: false, ...overrides
+    eligibleReviewers: 3, editors: [], revertible: false, revertTargetVersion: null, ...overrides
   };
 }
 const viewer = (...roles: string[]): Viewer => ({ id: ME, roles });

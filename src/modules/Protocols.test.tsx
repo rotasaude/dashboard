@@ -42,7 +42,7 @@ function row(overrides: Record<string, unknown> = {}) {
     id: "dengue", name: "dengue", version: "1", status: "in_review",
     createdBy: null, publishedBy: null, fourEyes: null, publishedAt: null, retiredAt: null,
     schema: "ok", linter: "ok", gates: "ok",
-    signatures: EMPTY_SIGNATURES, eligibleReviewers: 3, editors: [], revertible: false,
+    signatures: EMPTY_SIGNATURES, eligibleReviewers: 3, editors: [], revertible: false, revertTargetVersion: null,
     ...overrides
   };
 }
@@ -51,7 +51,7 @@ function versionRow(overrides: Record<string, unknown> = {}) {
   return {
     version: "1", status: "in_review", createdBy: null, publishedBy: null, fourEyes: null,
     at: "2026-09-01T00:00:00Z", schema: "ok", linter: "ok", gates: "ok",
-    signatures: EMPTY_SIGNATURES, eligibleReviewers: 3, editors: [], revertible: false,
+    signatures: EMPTY_SIGNATURES, eligibleReviewers: 3, editors: [], revertible: false, revertTargetVersion: null,
     ...overrides
   };
 }
@@ -244,19 +244,34 @@ describe("Protocols", () => {
   });
 
   // D5 — a reversão precisa declarar o efeito (spec de assinaturas §6): não
-  // encadeia, e a versão-alvo tem de continuar publicada.
-  it("reverter mostra a regra do §6 antes de confirmar", async () => {
+  // encadeia, nomeia a versão-alvo, e a versão-alvo tem de continuar
+  // publicada.
+  it("reverter nomeia a versão-alvo e a regra do §6 antes de confirmar", async () => {
     stubReads(
-      [ row({ status: "active", revertible: true }) ],
-      [ versionRow({ status: "active", revertible: true }) ]
+      [ row({ status: "active", revertible: true, version: "3", revertTargetVersion: "2" }) ],
+      [ versionRow({ status: "active", revertible: true, version: "3", revertTargetVersion: "2" }) ]
     );
     renderProtocols("protocol_publisher");
 
     fireEvent.click(await screen.findByText("dengue"));
     fireEvent.click(await screen.findByRole("button", { name: "Reverter" }));
 
-    expect(await screen.findByText(/versão ativada imediatamente antes desta/)).not.toBeNull();
+    expect(await screen.findByText(/deve voltar para a versão 2, que estava em uso antes desta/)).not.toBeNull();
     expect(screen.getByText(/não encadeia/i)).not.toBeNull();
+  });
+
+  it("sem alvo na leitura, o painel cai na frase sem número", async () => {
+    stubReads(
+      [ row({ status: "active", revertible: true, version: "3", revertTargetVersion: null }) ],
+      [ versionRow({ status: "active", revertible: true, version: "3", revertTargetVersion: null }) ]
+    );
+    renderProtocols("protocol_publisher");
+
+    fireEvent.click(await screen.findByText("dengue"));
+    fireEvent.click(await screen.findByRole("button", { name: "Reverter" }));
+
+    expect(await screen.findByText(/versão ativada antes desta/)).not.toBeNull();
+    expect(screen.queryByText(/versão null/)).toBeNull();
   });
 
   // D6 — Schema e Linter são strings fixas na API ("ok"); a tela não pode
