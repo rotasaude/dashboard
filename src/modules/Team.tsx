@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { grantRole, listMemberships, revokeMembership } from "../lib/api";
 import { describeActionError } from "../lib/actionErrors";
-import { REQUIRED_REVIEWERS, REVIEWER_ROLE, reviewerCount, teamMembers, type TeamMember } from "../lib/team";
+import { REQUIRED_REVIEWERS, REVIEWER_ROLE, VERIFIER_ROLE, reviewerCount, teamMembers, type TeamMember } from "../lib/team";
 import { useAuth } from "../lib/auth";
 import { SensitiveAction } from "../components/SensitiveAction";
 import { PageHeader } from "../components/PageHeader";
@@ -18,15 +18,16 @@ import type { ModuleId } from "../shell/modules";
 // Equipe (spec do dashboard §5.2). Só municipal_admin chega aqui — a API
 // recusa o resto com 403, e o item de menu já não aparece (navGroupsFor).
 //
-// Escopo: conceder e revogar APENAS protocol_reviewer. Convidar membro,
-// outros papéis e desativar usuário são de outro spec (§10).
+// Escopo: conceder e revogar protocol_reviewer e citizen_verifier
+// (atendente). Convidar membro, outros papéis e desativar usuário são de
+// outro spec (§10).
 //
 // Quem traduz recusa da API e cuida do código TOTP é o SensitiveAction; esta
 // tela não tenta interpretar erro de ação por conta própria.
 const NO_REVIEWERS_WARNING = "sem 2 revisores, nenhum protocolo é publicado ou ativado nesta cidade";
 const GENERIC_ERROR = "não foi possível carregar — tente de novo";
 
-type Pending = { member: TeamMember; kind: "grant" | "revoke" };
+type Pending = { member: TeamMember; kind: "grant" | "revoke"; role: "reviewer" | "verifier" };
 
 function loadErrorMessage(err: unknown): string {
   const described = describeActionError(err);
@@ -43,8 +44,8 @@ export function Team({ onNavigate }: { onNavigate(id: ModuleId): void }) {
   const members = teamMembers(query.data ?? []);
   const reviewers = reviewerCount(members);
 
-  function open(member: TeamMember, kind: Pending["kind"]) {
-    setPending({ member, kind });
+  function open(member: TeamMember, kind: Pending["kind"], role: Pending["role"]) {
+    setPending({ member, kind, role });
     setDone(null);
   }
 
@@ -56,7 +57,7 @@ export function Team({ onNavigate }: { onNavigate(id: ModuleId): void }) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <PageHeader title="Equipe" sub="papéis · revisores de protocolo" />
+      <PageHeader title="Equipe" sub="papéis · revisores de protocolo · atendentes" />
 
       {query.isLoading && <Panel title="Pessoas"><Skeleton rows={4} /></Panel>}
       {query.isError && <ErrorState message={loadErrorMessage(query.error)} />}
@@ -82,8 +83,13 @@ export function Team({ onNavigate }: { onNavigate(id: ModuleId): void }) {
                   ) },
                   { label: "Revisor", w: "auto", align: "right", render: (m) => (
                     m.isReviewer
-                      ? <button type="button" style={buttonStyle} onClick={() => open(m, "revoke")}>Remover revisor</button>
-                      : <button type="button" style={buttonStyle} onClick={() => open(m, "grant")}>Tornar revisor</button>
+                      ? <button type="button" style={buttonStyle} onClick={() => open(m, "revoke", "reviewer")}>Remover revisor</button>
+                      : <button type="button" style={buttonStyle} onClick={() => open(m, "grant", "reviewer")}>Tornar revisor</button>
+                  ) },
+                  { label: "Atendente", w: "auto", align: "right", render: (m) => (
+                    m.isVerifier
+                      ? <button type="button" style={buttonStyle} onClick={() => open(m, "revoke", "verifier")}>Remover atendente</button>
+                      : <button type="button" style={buttonStyle} onClick={() => open(m, "grant", "verifier")}>Tornar atendente</button>
                   ) }
                 ]}
                 rows={members}
@@ -94,7 +100,7 @@ export function Team({ onNavigate }: { onNavigate(id: ModuleId): void }) {
         </Panel>
       )}
 
-      {pending && (
+      {pending && pending.role === "reviewer" && (
         pending.kind === "grant" ? (
           <SensitiveAction
             title="Tornar revisor"
@@ -115,6 +121,33 @@ export function Team({ onNavigate }: { onNavigate(id: ModuleId): void }) {
             requiresStepUp
             run={async () => { await revokeMembership(pending.member.reviewerMembershipId!); }}
             onDone={() => finish(`${pending.member.email} não é mais revisor`)}
+            onCancel={() => setPending(null)}
+            onGoToSecurity={() => onNavigate("security")}
+          />
+        )
+      )}
+
+      {pending && pending.role === "verifier" && (
+        pending.kind === "grant" ? (
+          <SensitiveAction
+            title="Tornar atendente"
+            description={`${pending.member.email} poderá validar cadastros de cidadãos no balcão da UBS.`}
+            requiresStepUp
+            run={async () => { await grantRole(pending.member.userId, VERIFIER_ROLE); }}
+            onDone={() => finish(`${pending.member.email} agora é atendente`)}
+            onCancel={() => setPending(null)}
+            onGoToSecurity={() => onNavigate("security")}
+          />
+        ) : (
+          // O `!` é seguro: "Remover atendente" só existe quando isVerifier é
+          // true, e teamMembers preenche isVerifier e verifierMembershipId
+          // juntos (src/lib/team.ts).
+          <SensitiveAction
+            title="Remover atendente"
+            description={`${pending.member.email} deixa de validar cadastros. As validações que já fez continuam valendo.`}
+            requiresStepUp
+            run={async () => { await revokeMembership(pending.member.verifierMembershipId!); }}
+            onDone={() => finish(`${pending.member.email} não é mais atendente`)}
             onCancel={() => setPending(null)}
             onGoToSecurity={() => onNavigate("security")}
           />
