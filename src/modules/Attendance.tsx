@@ -17,6 +17,8 @@ import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } fr
 import { UnitPicker } from "./attendance/UnitPicker";
 import { CheckIn } from "./attendance/CheckIn";
 import { UnitQueue } from "./attendance/UnitQueue";
+import { Requests } from "./attendance/Requests";
+import { Agenda } from "./attendance/Agenda";
 import { Units } from "./attendance/Units";
 
 // Atendimento (spec 2026-09-24-citizen-presencial-verification, Task 6, e
@@ -65,6 +67,8 @@ export function Attendance() {
       {(canVerify || canCare) && <UnitPicker key={pickerKey} userId={user.id} onChange={setUnit} />}
       {canVerify && unit && <CheckIn unit={unit} onUnitInvalid={onUnitInvalid} />}
       {(canVerify || canCare) && unit && <UnitQueue unit={unit} units={unitsQuery.data ?? []} canCare={canCare} />}
+      {canVerify && unit && <Requests unit={unit} />}
+      {canVerify && unit && <Agenda unit={unit} />}
       {canVerify && <Counter />}
       {isAdmin && <History />}
       {isAdmin && <Units />}

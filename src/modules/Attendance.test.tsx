@@ -10,7 +10,8 @@ vi.mock("../lib/api", async (importOriginal) => {
     listVerifications: vi.fn(), revokeVerification: vi.fn(),
     listActiveUnits: vi.fn(), listAllUnits: vi.fn(), createUnit: vi.fn(), updateUnit: vi.fn(), setUnitActive: vi.fn(),
     listUnitQueue: vi.fn(), callAttendance: vi.fn(), callNext: vi.fn(), closeAttendance: vi.fn(),
-    lookupCheckIn: vi.fn(), checkIn: vi.fn(), searchCheckInTriages: vi.fn(), checkInByException: vi.fn()
+    lookupCheckIn: vi.fn(), checkIn: vi.fn(), searchCheckIn: vi.fn(), checkInByException: vi.fn(),
+    listUnitRequests: vi.fn(), scheduleRequest: vi.fn(), dismissRequest: vi.fn(), listUnitAgenda: vi.fn()
   };
 });
 
@@ -52,7 +53,8 @@ describe("Attendance", () => {
       api.fetchCurrentSession, api.lookupCitizen, api.verifyCitizen, api.listVerifications, api.revokeVerification,
       api.listActiveUnits, api.listAllUnits, api.createUnit, api.updateUnit, api.setUnitActive,
       api.listUnitQueue, api.callAttendance, api.callNext, api.closeAttendance,
-      api.lookupCheckIn, api.checkIn, api.searchCheckInTriages, api.checkInByException
+      api.lookupCheckIn, api.checkIn, api.searchCheckIn, api.checkInByException,
+      api.listUnitRequests, api.scheduleRequest, api.dismissRequest, api.listUnitAgenda
     ]) {
       mocked(fn).mockReset();
     }
@@ -60,6 +62,8 @@ describe("Attendance", () => {
     mocked(api.listActiveUnits).mockResolvedValue([]);
     mocked(api.listAllUnits).mockResolvedValue([]);
     mocked(api.listUnitQueue).mockResolvedValue({ waiting: [], in_care: [] });
+    mocked(api.listUnitRequests).mockResolvedValue([]);
+    mocked(api.listUnitAgenda).mockResolvedValue([]);
   });
 
   it("busca, exige a caixa do documento e valida", async () => {
@@ -218,6 +222,17 @@ describe("Attendance", () => {
     expect(await screen.findByRole("button", { name: "Chamar próximo" })).not.toBeNull();
     expect(screen.queryByLabelText("CPF do cidadão (check-in)")).toBeNull();
     expect(screen.queryByLabelText("CPF do cidadão (validação)")).toBeNull();
+    expect(screen.queryByText("Pedidos de agendamento")).toBeNull();
+    expect(screen.queryByText("Agenda do dia")).toBeNull();
+  });
+
+  it("recepção (canVerify) vê Pedidos e Agenda do dia; profissional sem esse papel não vê", async () => {
+    const unit = { id: "un1", name: "UBS Centro", kind: "ubs" };
+    localStorage.setItem(currentUnitKey("u1"), unit.id);
+    mocked(api.listActiveUnits).mockResolvedValue([ unit ]);
+    renderAttendance();
+    expect(await screen.findByText("Pedidos de agendamento")).not.toBeNull();
+    expect(screen.getByText("Agenda do dia")).not.toBeNull();
   });
 
   it("recepção continua vendo check-in e balcão, além da fila", async () => {
