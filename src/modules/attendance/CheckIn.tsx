@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import {
   ApiError, checkIn, checkInByException, lookupCheckIn, searchCheckIn,
   type CheckInAppointment, type CheckInCitizen, type CheckInTriage, type HealthUnit
@@ -53,6 +53,20 @@ function lookupErrorMessage(err: unknown): string | null {
   if (body.error === "wrong_unit" && body.unit_name) return `Este agendamento é na ${body.unit_name}`;
   if (body.error === "not_today") return "Este agendamento não é para hoje";
   return null;
+}
+
+// Depois do check-in, a fila (UnitQueue) precisa recarregar sempre — a chave
+// certa é "unitQueue" (Task 7), não "openAttendances" (nome de antes do
+// Task 7 que ficou esquecido aqui e nunca invalidava nada). Quando o
+// check-in foi de um horário (appointment, achado no lookup ou escolhido na
+// exceção), a Agenda (status vira checked_in) e os Pedidos também precisam
+// recarregar.
+function invalidateAfterCheckIn(queryClient: QueryClient, unitId: string, isAppointment: boolean) {
+  void queryClient.invalidateQueries({ queryKey: [ "unitQueue", unitId ] });
+  if (isAppointment) {
+    void queryClient.invalidateQueries({ queryKey: [ "unitAgenda", unitId ] });
+    void queryClient.invalidateQueries({ queryKey: [ "unitRequests", unitId ] });
+  }
 }
 
 export function CheckIn({ unit, onUnitInvalid }: Props) {
@@ -117,7 +131,7 @@ function CodeFlow({ unit, onUnitInvalid }: Props) {
       const result = await checkIn(cpf, code, unit.id, checked);
       setVerified(result.verified);
       setState("done");
-      void queryClient.invalidateQueries({ queryKey: [ "openAttendances", unit.id ] });
+      invalidateAfterCheckIn(queryClient, unit.id, !!found.appointment);
     } catch (err) {
       if (isInvalidUnit(err)) { onUnitInvalid(); return; }
       setError(attendanceError(err));
@@ -257,7 +271,7 @@ function ExceptionFlow({ unit, onUnitInvalid }: Props) {
       const target = selected.kind === "appointment" ? { appointmentId: selected.row.id } : { triageId: selected.row.id };
       await checkInByException(cpf, target, unit.id, reason);
       setDone(true);
-      void queryClient.invalidateQueries({ queryKey: [ "openAttendances", unit.id ] });
+      invalidateAfterCheckIn(queryClient, unit.id, selected.kind === "appointment");
     } catch (err) {
       if (isInvalidUnit(err)) { onUnitInvalid(); return; }
       setError(attendanceError(err));
