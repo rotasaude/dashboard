@@ -114,6 +114,39 @@ describe("UnitQueue", () => {
       expect(screen.getByLabelText("Descrição")).not.toBeNull();
     });
 
+    it("'Encaminhado' sem destino e sem descrição fica desabilitado", async () => {
+      renderQueue(true);
+      fireEvent.click(await screen.findByRole("button", { name: "Encerrar" }));
+      fireEvent.change(screen.getByLabelText("Desfecho"), { target: { value: "referred" } });
+      const confirm = screen.getByRole("button", { name: "Confirmar encerramento" }) as HTMLButtonElement;
+      expect(confirm.disabled).toBe(true);
+      fireEvent.change(screen.getByLabelText("Descrição"), { target: { value: "encaminhado para avaliação" } });
+      expect((screen.getByRole("button", { name: "Confirmar encerramento" }) as HTMLButtonElement).disabled).toBe(false);
+    });
+
+    it("trocar de linha sem confirmar reseta as escolhas e troca o cabeçalho do painel", async () => {
+      const secondInCare = {
+        id: "a4", cpf_masked: "***.555.666-**", checked_in_at: "2026-09-25T08:30:00Z",
+        protocol_name: "triage-febre", priority: 2, source: "triage" as const,
+        appointment_time: null, called_at: "2026-09-25T12:15:00Z", called_by_name: "dr2@cidade.gov.br"
+      };
+      mocked(api.listUnitQueue).mockResolvedValue({ waiting, in_care: [ inCare[0], secondInCare ] });
+      renderQueue(true);
+
+      const encerrarButtons = await screen.findAllByRole("button", { name: "Encerrar" });
+      fireEvent.click(encerrarButtons[0]);
+      expect(screen.getByText(/\*\*\*\.333\.444-\*\*.*triage-dor/)).not.toBeNull();
+      fireEvent.change(screen.getByLabelText("Desfecho"), { target: { value: "referred" } });
+      fireEvent.change(screen.getByLabelText("Unidade de destino"), { target: { value: "u2" } });
+      expect(screen.getByLabelText("Unidade de destino")).not.toBeNull();
+
+      fireEvent.click(screen.getAllByRole("button", { name: "Encerrar" })[1]);
+      expect(screen.getByText(/\*\*\*\.555\.666-\*\*.*triage-febre/)).not.toBeNull();
+      expect((screen.getByLabelText("Desfecho") as HTMLSelectElement).value).toBe("discharged");
+      expect(screen.queryByLabelText("Unidade de destino")).toBeNull();
+      expect(screen.queryByText("Gera pedido de agendamento na UPA Norte")).toBeNull();
+    });
+
     it("com unidade no encaminhamento, mostra 'Gera pedido de agendamento na unidade'", async () => {
       renderQueue(true);
       fireEvent.click(await screen.findByRole("button", { name: "Encerrar" }));
