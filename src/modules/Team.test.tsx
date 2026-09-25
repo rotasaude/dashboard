@@ -172,4 +172,24 @@ describe("Team", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Confirmar" }));
     await waitFor(() => expect(api.revokeMembership).toHaveBeenCalledWith("m-bia"));
   });
+
+  it("torna profissional de saúde com step-up e remove profissional de saúde", async () => {
+    mocked(api.listMemberships).mockResolvedValue([
+      membership("ana@cidade.gov.br", "viewer"),
+      membership("bia@cidade.gov.br", "health_professional", "m-bia-prof")
+    ]);
+    mocked(api.grantRole).mockResolvedValue(undefined);
+    mocked(api.revokeMembership).mockResolvedValue(undefined);
+    renderTeam();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Tornar profissional de saúde" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Confirmar" }));
+    await waitFor(() => expect(api.grantRole).toHaveBeenCalledWith("u-ana@cidade.gov.br", "health_professional"));
+    expect((await screen.findByRole("status")).textContent).toBe("ana@cidade.gov.br agora é profissional de saúde");
+
+    fireEvent.click(await screen.findByRole("button", { name: "Remover profissional de saúde" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Confirmar" }));
+    await waitFor(() => expect(api.revokeMembership).toHaveBeenCalledWith("m-bia-prof"));
+    expect((await screen.findByRole("status")).textContent).toBe("bia@cidade.gov.br não é mais profissional de saúde");
+  });
 });

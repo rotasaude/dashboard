@@ -58,7 +58,7 @@ export function navGroupsFor(
 ): NavGroupDef[] {
   const roles = user?.memberships?.map((m) => m.role) ?? [];
   const isAdmin = roles.includes("municipal_admin");
-  const canAttend = isAdmin || roles.includes("citizen_verifier");
+  const canAttend = isAdmin || roles.includes("citizen_verifier") || roles.includes("health_professional");
   return NAV_GROUPS.filter((group) => {
     if (group.label === "Conta") return !user?.operator;
     if (group.label === "Equipe") return isAdmin;

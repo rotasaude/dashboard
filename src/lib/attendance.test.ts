@@ -27,4 +27,23 @@ describe("attendance helpers", () => {
     expect(attendanceError(new ApiError(409, { error: "unit_has_open_attendances" }, "x")))
       .toBe("há atendimentos abertos nesta unidade — encerre-os antes de desativar");
   });
+
+  it("traduz os erros da fila e do desfecho (Task 7)", () => {
+    expect(attendanceError(new ApiError(409, { error: "already_called" }, "x")))
+      .toBe("este atendimento já foi chamado por outro profissional");
+    expect(attendanceError(new ApiError(404, { error: "queue_empty" }, "x")))
+      .toBe("ninguém aguardando");
+    expect(attendanceError(new ApiError(422, { error: "wrong_unit" }, "x")))
+      .toBe("atendimento de outra unidade");
+    expect(attendanceError(new ApiError(422, { error: "invalid_transition" }, "x")))
+      .toBe("esse atendimento não pode receber este desfecho agora");
+    expect(attendanceError(new ApiError(409, { error: "request_not_open" }, "x")))
+      .toBe("este pedido já foi encerrado");
+    expect(attendanceError(new ApiError(422, { error: "invalid_time" }, "x")))
+      .toBe("escolha um horário entre agora e 180 dias");
+    expect(attendanceError(new ApiError(422, { error: "not_today" }, "x")))
+      .toBe("o código só vale no dia do horário");
+    expect(attendanceError(new ApiError(409, { error: "unit_has_open_requests" }, "x")))
+      .toBe("há pedidos de agendamento abertos nesta unidade — encerre-os antes de desativar");
+  });
 });

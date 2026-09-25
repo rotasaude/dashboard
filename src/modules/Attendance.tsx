@@ -16,14 +16,15 @@ import { EmptyState } from "../components/EmptyState";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../components/formStyles";
 import { UnitPicker } from "./attendance/UnitPicker";
 import { CheckIn } from "./attendance/CheckIn";
-import { OpenAttendances } from "./attendance/OpenAttendances";
+import { UnitQueue } from "./attendance/UnitQueue";
 import { Units } from "./attendance/Units";
 
-// Atendimento (spec 2026-09-24-citizen-presencial-verification, Task 6):
-// balcão de verificação presencial (citizen_verifier) + histórico de
-// validações (municipal_admin). Os erros usam attendanceError, nunca
-// describeActionError — 422 invalid_code aqui é o código do CIDADÃO, não o
-// TOTP do servidor.
+// Atendimento (spec 2026-09-24-citizen-presencial-verification, Task 6, e
+// 2026-09-25-citizen-appointments, Task 7): balcão de verificação presencial
+// e check-in (citizen_verifier), fila de atendimento e desfecho clínico
+// (health_professional) + histórico de validações (municipal_admin). Os
+// erros usam attendanceError, nunca describeActionError — 422 invalid_code
+// aqui é o código do CIDADÃO, não o TOTP do servidor.
 type CounterState = "form" | "found" | "done";
 
 interface Found { citizen: AttendanceCitizen; triages: AttendanceTriage[] }
@@ -40,9 +41,10 @@ export function Attendance() {
   if (!user) return null;
   const roles = user.memberships.map((m) => m.role);
   const canVerify = roles.includes("citizen_verifier");
+  const canCare = roles.includes("health_professional");
   const isAdmin = roles.includes("municipal_admin");
 
-  if (!canVerify && !isAdmin) {
+  if (!canVerify && !canCare && !isAdmin) {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         <PageHeader title="Atendimento" sub="balcão · verificação presencial" />
@@ -60,9 +62,9 @@ export function Attendance() {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <PageHeader title="Atendimento" sub="balcão · verificação presencial" />
-      {canVerify && <UnitPicker key={pickerKey} userId={user.id} onChange={setUnit} />}
+      {(canVerify || canCare) && <UnitPicker key={pickerKey} userId={user.id} onChange={setUnit} />}
       {canVerify && unit && <CheckIn unit={unit} onUnitInvalid={onUnitInvalid} />}
-      {canVerify && unit && <OpenAttendances unit={unit} units={unitsQuery.data ?? []} />}
+      {(canVerify || canCare) && unit && <UnitQueue unit={unit} units={unitsQuery.data ?? []} canCare={canCare} />}
       {canVerify && <Counter />}
       {isAdmin && <History />}
       {isAdmin && <Units />}

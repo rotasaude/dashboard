@@ -9,7 +9,7 @@ vi.mock("../lib/api", async (importOriginal) => {
     ...real, fetchCurrentSession: vi.fn(), lookupCitizen: vi.fn(), verifyCitizen: vi.fn(),
     listVerifications: vi.fn(), revokeVerification: vi.fn(),
     listActiveUnits: vi.fn(), listAllUnits: vi.fn(), createUnit: vi.fn(), updateUnit: vi.fn(), setUnitActive: vi.fn(),
-    listOpenAttendances: vi.fn(), closeAttendance: vi.fn(),
+    listUnitQueue: vi.fn(), callAttendance: vi.fn(), callNext: vi.fn(), closeAttendance: vi.fn(),
     lookupCheckIn: vi.fn(), checkIn: vi.fn(), searchCheckInTriages: vi.fn(), checkInByException: vi.fn()
   };
 });
@@ -51,13 +51,15 @@ describe("Attendance", () => {
     for (const fn of [
       api.fetchCurrentSession, api.lookupCitizen, api.verifyCitizen, api.listVerifications, api.revokeVerification,
       api.listActiveUnits, api.listAllUnits, api.createUnit, api.updateUnit, api.setUnitActive,
-      api.listOpenAttendances, api.closeAttendance, api.lookupCheckIn, api.checkIn, api.searchCheckInTriages, api.checkInByException
+      api.listUnitQueue, api.callAttendance, api.callNext, api.closeAttendance,
+      api.lookupCheckIn, api.checkIn, api.searchCheckInTriages, api.checkInByException
     ]) {
       mocked(fn).mockReset();
     }
     mocked(api.fetchCurrentSession).mockResolvedValue(session("citizen_verifier"));
     mocked(api.listActiveUnits).mockResolvedValue([]);
     mocked(api.listAllUnits).mockResolvedValue([]);
+    mocked(api.listUnitQueue).mockResolvedValue({ waiting: [], in_care: [] });
   });
 
   it("busca, exige a caixa do documento e valida", async () => {
@@ -194,7 +196,7 @@ describe("Attendance", () => {
     const unit = { id: "un1", name: "UBS Centro", kind: "ubs" };
     localStorage.setItem(currentUnitKey("u1"), unit.id);
     mocked(api.listActiveUnits).mockResolvedValue([ unit ]);
-    mocked(api.listOpenAttendances).mockResolvedValue([]);
+    mocked(api.listUnitQueue).mockResolvedValue({ waiting: [], in_care: [] });
     renderAttendance();
 
     expect(await screen.findByLabelText("CPF do cidadão (check-in)")).not.toBeNull();
@@ -204,5 +206,28 @@ describe("Attendance", () => {
     expect(screen.getByLabelText("CPF do cidadão (validação)")).not.toBeNull();
     expect(screen.getByLabelText("Código de validação")).not.toBeNull();
     expect(screen.getByRole("button", { name: "Buscar validação" })).not.toBeNull();
+  });
+
+  it("profissional de saúde vê a unidade e a fila, mas não check-in nem balcão", async () => {
+    const unit = { id: "un1", name: "UBS Centro", kind: "ubs" };
+    mocked(api.fetchCurrentSession).mockResolvedValue(session("health_professional"));
+    localStorage.setItem(currentUnitKey("u1"), unit.id);
+    mocked(api.listActiveUnits).mockResolvedValue([ unit ]);
+    renderAttendance();
+
+    expect(await screen.findByRole("button", { name: "Chamar próximo" })).not.toBeNull();
+    expect(screen.queryByLabelText("CPF do cidadão (check-in)")).toBeNull();
+    expect(screen.queryByLabelText("CPF do cidadão (validação)")).toBeNull();
+  });
+
+  it("recepção continua vendo check-in e balcão, além da fila", async () => {
+    const unit = { id: "un1", name: "UBS Centro", kind: "ubs" };
+    localStorage.setItem(currentUnitKey("u1"), unit.id);
+    mocked(api.listActiveUnits).mockResolvedValue([ unit ]);
+    renderAttendance();
+
+    expect(await screen.findByLabelText("CPF do cidadão (check-in)")).not.toBeNull();
+    expect(screen.getByLabelText("CPF do cidadão (validação)")).not.toBeNull();
+    expect(await screen.findByText("Ninguém aguardando")).not.toBeNull();
   });
 });

@@ -388,9 +388,15 @@ export interface Attendance {
   referral_unit_name: string | null; referral_note: string | null; closed_at: string | null;
 }
 
-export interface OpenAttendanceRow { id: string; cpf_masked: string; checked_in_at: string; protocol_name: string; priority: number }
+export interface QueueRow {
+  id: string; cpf_masked: string; checked_in_at: string; protocol_name: string | null; priority: number | null;
+  source: "triage" | "appointment"; appointment_time: string | null;
+  called_at: string | null; called_by_name: string | null;
+}
 
-export type AttendanceOutcome = "discharged" | "referred" | "left";
+export interface AppointmentRequestSummary { id: string; kind: string; target_unit_name: string; status: string }
+
+export type AttendanceOutcome = "discharged" | "referred" | "return" | "left";
 
 export async function lookupCheckIn(cpf: string, code: string): Promise<{ citizen: CheckInCitizen; triage: CheckInTriage }> {
   return jsonFetch(`${ATTENDANCE_BASE}/check_ins/lookup`, { method: "POST", body: JSON.stringify({ cpf, code }) });
@@ -421,21 +427,28 @@ export async function checkInByException(
   });
 }
 
-export async function listOpenAttendances(unitId: string): Promise<OpenAttendanceRow[]> {
-  const payload = await jsonFetch<{ attendances: OpenAttendanceRow[] }>(
-    `${ATTENDANCE_BASE}/units/${encodeURIComponent(unitId)}/open`
-  );
-  return payload.attendances;
+export async function listUnitQueue(unitId: string): Promise<{ waiting: QueueRow[]; in_care: QueueRow[] }> {
+  return jsonFetch(`${ATTENDANCE_BASE}/units/${encodeURIComponent(unitId)}/queue`);
+}
+
+export async function callAttendance(id: string, healthUnitId: string): Promise<{ attendance: Attendance }> {
+  return jsonFetch(`${ATTENDANCE_BASE}/attendances/${encodeURIComponent(id)}/call`, {
+    method: "POST", body: JSON.stringify({ health_unit_id: healthUnitId })
+  });
+}
+
+export async function callNext(unitId: string): Promise<{ attendance: Attendance }> {
+  return jsonFetch(`${ATTENDANCE_BASE}/units/${encodeURIComponent(unitId)}/call_next`, { method: "POST", body: "{}" });
 }
 
 export async function closeAttendance(
   id: string, outcome: AttendanceOutcome, referralUnitId?: string, referralNote?: string
-): Promise<Attendance> {
+): Promise<{ attendance: Attendance; appointmentRequest: AppointmentRequestSummary | null }> {
   const body: Record<string, unknown> = { outcome };
   if (referralUnitId) body.referral_unit_id = referralUnitId;
   if (referralNote) body.referral_note = referralNote;
-  const payload = await jsonFetch<{ attendance: Attendance }>(
+  const payload = await jsonFetch<{ attendance: Attendance; appointment_request: AppointmentRequestSummary | null }>(
     `${ATTENDANCE_BASE}/attendances/${encodeURIComponent(id)}/close`, { method: "POST", body: JSON.stringify(body) }
   );
-  return payload.attendance;
+  return { attendance: payload.attendance, appointmentRequest: payload.appointment_request };
 }

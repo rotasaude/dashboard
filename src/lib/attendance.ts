@@ -59,7 +59,15 @@ const MESSAGES: Record<string, string> = {
   unit_name_taken: "já existe uma unidade com este nome",
   invalid_kind: "tipo de unidade inválido",
   invalid_outcome: "desfecho inválido",
-  unit_has_open_attendances: "há atendimentos abertos nesta unidade — encerre-os antes de desativar"
+  unit_has_open_attendances: "há atendimentos abertos nesta unidade — encerre-os antes de desativar",
+  already_called: "este atendimento já foi chamado por outro profissional",
+  queue_empty: "ninguém aguardando",
+  wrong_unit: "atendimento de outra unidade",
+  invalid_transition: "esse atendimento não pode receber este desfecho agora",
+  request_not_open: "este pedido já foi encerrado",
+  invalid_time: "escolha um horário entre agora e 180 dias",
+  not_today: "o código só vale no dia do horário",
+  unit_has_open_requests: "há pedidos de agendamento abertos nesta unidade — encerre-os antes de desativar"
 };
 
 export function attendanceError(err: unknown): string {

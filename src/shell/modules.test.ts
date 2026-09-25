@@ -48,5 +48,10 @@ describe("modules", () => {
       expect(navGroupsFor(admin).some((g) => g.label === "Atendimento")).toBe(true);
       expect(navGroupsFor(viewer).some((g) => g.label === "Atendimento")).toBe(false);
     });
+
+    it("Atendimento também aparece para health_professional", () => {
+      const professional = { operator: false, memberships: [ { role: "health_professional" } ] };
+      expect(navGroupsFor(professional).some((g) => g.label === "Atendimento")).toBe(true);
+    });
   });
 });

@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import type { ReactNode } from "react";
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const real = await importOriginal<typeof import("../../lib/api")>();
@@ -20,6 +22,13 @@ const rows = [
   { id: "u2", name: "UPA Norte", kind: "upa", active: false }
 ];
 
+function renderUnits(client = new QueryClient({ defaultOptions: { queries: { retry: false } } })) {
+  const wrapper = ({ children }: { children: ReactNode }) =>
+    <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+  render(<Units />, { wrapper });
+  return client;
+}
+
 describe("Units", () => {
   beforeEach(() => {
     for (const fn of [ api.listAllUnits, api.createUnit, api.updateUnit, api.setUnitActive ]) mocked(fn).mockReset();
@@ -31,7 +40,7 @@ describe("Units", () => {
     mocked(api.listAllUnits).mockResolvedValueOnce(rows).mockResolvedValueOnce([
       ...rows, { id: "u3", name: "Hospital Sul", kind: "hospital", active: true }
     ]);
-    render(<Units />);
+    renderUnits();
     fireEvent.click(await screen.findByRole("button", { name: "Nova unidade" }));
     fireEvent.change(screen.getByLabelText("Nome"), { target: { value: "Hospital Sul" } });
     fireEvent.change(screen.getByLabelText("Tipo"), { target: { value: "hospital" } });
@@ -45,7 +54,7 @@ describe("Units", () => {
     mocked(api.listAllUnits).mockResolvedValueOnce(rows).mockResolvedValueOnce([
       { id: "u1", name: "UBS Centro Novo", kind: "ubs", active: true }, rows[1]
     ]);
-    render(<Units />);
+    renderUnits();
     fireEvent.click(await screen.findAllByRole("button", { name: "Editar" }).then((btns) => btns[0]));
     fireEvent.change(screen.getByLabelText("Nome"), { target: { value: "UBS Centro Novo" } });
     fireEvent.click(screen.getByRole("button", { name: "Salvar" }));
@@ -55,7 +64,7 @@ describe("Units", () => {
 
   it("desativa uma unidade ativa", async () => {
     mocked(api.setUnitActive).mockResolvedValue({ id: "u1", name: "UBS Centro", kind: "ubs", active: false });
-    render(<Units />);
+    renderUnits();
     const btn = await screen.findByRole("button", { name: "Desativar" });
     fireEvent.click(btn);
     await waitFor(() => expect(api.setUnitActive).toHaveBeenCalledWith("u1", false));
@@ -63,7 +72,7 @@ describe("Units", () => {
 
   it("reativa uma unidade inativa", async () => {
     mocked(api.setUnitActive).mockResolvedValue({ id: "u2", name: "UPA Norte", kind: "upa", active: true });
-    render(<Units />);
+    renderUnits();
     const btn = await screen.findByRole("button", { name: "Reativar" });
     fireEvent.click(btn);
     await waitFor(() => expect(api.setUnitActive).toHaveBeenCalledWith("u2", true));
@@ -71,7 +80,7 @@ describe("Units", () => {
 
   it("mostra a frase de unit_name_taken", async () => {
     mocked(api.createUnit).mockRejectedValue(new ApiError(422, { error: "unit_name_taken" }, "x"));
-    render(<Units />);
+    renderUnits();
     fireEvent.click(await screen.findByRole("button", { name: "Nova unidade" }));
     fireEvent.change(screen.getByLabelText("Nome"), { target: { value: "UBS Centro" } });
     fireEvent.click(screen.getByRole("button", { name: "Salvar" }));
@@ -80,7 +89,7 @@ describe("Units", () => {
 
   it("mostra a frase de unit_has_open_attendances ao tentar desativar", async () => {
     mocked(api.setUnitActive).mockRejectedValue(new ApiError(409, { error: "unit_has_open_attendances" }, "x"));
-    render(<Units />);
+    renderUnits();
     const btn = await screen.findByRole("button", { name: "Desativar" });
     fireEvent.click(btn);
     expect(await screen.findByText("há atendimentos abertos nesta unidade — encerre-os antes de desativar")).not.toBeNull();
@@ -88,8 +97,33 @@ describe("Units", () => {
 
   it("mostra alerta quando listAllUnits falha, em vez de painel em branco" , async () => {
     mocked(api.listAllUnits).mockReset().mockRejectedValue(new ApiError(500, { error: "server_error" }, "x"));
-    render(<Units />);
+    renderUnits();
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toBe("não foi possível concluir — tente de novo");
+  });
+
+  it("criar uma unidade invalida activeUnits (card dashboard#4)", async () => {
+    mocked(api.createUnit).mockResolvedValue({ id: "u3", name: "Hospital Sul", kind: "hospital", active: true });
+    const client = renderUnits();
+    const spy = vi.spyOn(client, "invalidateQueries");
+    fireEvent.click(await screen.findByRole("button", { name: "Nova unidade" }));
+    fireEvent.change(screen.getByLabelText("Nome"), { target: { value: "Hospital Sul" } });
+    fireEvent.click(screen.getByRole("button", { name: "Salvar" }));
+    await waitFor(() => expect(api.createUnit).toHaveBeenCalled());
+    await waitFor(() => expect(spy).toHaveBeenCalledWith({ queryKey: [ "activeUnits" ] }));
+  });
+
+  it("reativar uma unidade invalida activeUnits, mas desativar não", async () => {
+    mocked(api.setUnitActive).mockResolvedValue({ id: "u2", name: "UPA Norte", kind: "upa", active: true });
+    const client = renderUnits();
+    const spy = vi.spyOn(client, "invalidateQueries");
+    fireEvent.click(await screen.findByRole("button", { name: "Reativar" }));
+    await waitFor(() => expect(spy).toHaveBeenCalledWith({ queryKey: [ "activeUnits" ] }));
+
+    spy.mockClear();
+    mocked(api.setUnitActive).mockResolvedValue({ id: "u1", name: "UBS Centro", kind: "ubs", active: false });
+    fireEvent.click(await screen.findByRole("button", { name: "Desativar" }));
+    await waitFor(() => expect(api.setUnitActive).toHaveBeenCalledWith("u1", false));
+    expect(spy).not.toHaveBeenCalled();
   });
 });
