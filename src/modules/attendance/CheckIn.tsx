@@ -1,11 +1,11 @@
 import { useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import {
-  ApiError, checkIn, checkInByException, lookupCheckIn, searchCheckInTriages,
-  type CheckInCitizen, type CheckInTriage, type HealthUnit
+  ApiError, checkIn, checkInByException, lookupCheckIn, searchCheckIn,
+  type CheckInAppointment, type CheckInCitizen, type CheckInTriage, type HealthUnit
 } from "../../lib/api";
 import { attendanceError, isValidCpf, maskCpf, nivelLabel, onlyDigits } from "../../lib/attendance";
-import { fmtDateTime } from "../../lib/format";
+import { fmtDateTime, fmtHourMinute } from "../../lib/format";
 import { Panel } from "../../components/Panel";
 import { DataTable } from "../../components/DataTable";
 import { KeyValue } from "../../components/KeyValue";
@@ -28,6 +28,36 @@ type Mode = "code" | "exception";
 
 function isInvalidUnit(err: unknown): boolean {
   return err instanceof ApiError && (err.body as { error?: string } | undefined)?.error === "invalid_unit";
+}
+
+function appointmentKindLabel(kind: "return" | "referral"): string {
+  return kind === "return" ? "Retorno" : "Encaminhamento";
+}
+
+// wrong_unit e not_today no lookup de check-in (agendamento) têm mensagens
+// próprias (spec §7), diferentes do wrong_unit genérico da fila/desfecho e
+// do not_today do código de triagem — attendanceError não distingue o
+// contexto, então tratamos aqui antes de cair no genérico.
+function lookupErrorMessage(err: unknown): string | null {
+  if (!(err instanceof ApiError)) return null;
+  const body = (err.body ?? {}) as { error?: string; unit_name?: string };
+  if (body.error === "wrong_unit" && body.unit_name) return `Este agendamento é na ${body.unit_name}`;
+  if (body.error === "not_today") return "Este agendamento não é para hoje";
+  return null;
+}
+
+// Depois do check-in, a fila (UnitQueue) precisa recarregar sempre — a chave
+// certa é "unitQueue" (Task 7), não "openAttendances" (nome de antes do
+// Task 7 que ficou esquecido aqui e nunca invalidava nada). Quando o
+// check-in foi de um horário (appointment, achado no lookup ou escolhido na
+// exceção), a Agenda (status vira checked_in) e os Pedidos também precisam
+// recarregar.
+function invalidateAfterCheckIn(queryClient: QueryClient, unitId: string, isAppointment: boolean) {
+  void queryClient.invalidateQueries({ queryKey: [ "unitQueue", unitId ] });
+  if (isAppointment) {
+    void queryClient.invalidateQueries({ queryKey: [ "unitAgenda", unitId ] });
+    void queryClient.invalidateQueries({ queryKey: [ "unitRequests", unitId ] });
+  }
 }
 
 export function CheckIn({ unit, onUnitInvalid }: Props) {
@@ -56,7 +86,9 @@ function CodeFlow({ unit, onUnitInvalid }: Props) {
   const [ cpf, setCpf ] = useState("");
   const [ code, setCode ] = useState("");
   const [ checked, setChecked ] = useState(false);
-  const [ found, setFound ] = useState<{ citizen: CheckInCitizen; triage: CheckInTriage } | null>(null);
+  const [ found, setFound ] = useState<
+    { citizen: CheckInCitizen; triage: CheckInTriage | null; appointment: CheckInAppointment | null } | null
+  >(null);
   const [ verified, setVerified ] = useState(false);
   const [ busy, setBusy ] = useState(false);
   const [ error, setError ] = useState<string | null>(null);
@@ -72,11 +104,11 @@ function CodeFlow({ unit, onUnitInvalid }: Props) {
     if (!/^\d{6}$/.test(code)) { setError("informe o código de 6 dígitos"); return; }
     setBusy(true);
     try {
-      const result = await lookupCheckIn(cpf, code);
+      const result = await lookupCheckIn(cpf, code, unit.id);
       setFound(result);
       setState("found");
     } catch (err) {
-      setError(attendanceError(err));
+      setError(lookupErrorMessage(err) ?? attendanceError(err));
     } finally {
       setBusy(false);
     }
@@ -90,7 +122,7 @@ function CodeFlow({ unit, onUnitInvalid }: Props) {
       const result = await checkIn(cpf, code, unit.id, checked);
       setVerified(result.verified);
       setState("done");
-      void queryClient.invalidateQueries({ queryKey: [ "openAttendances", unit.id ] });
+      invalidateAfterCheckIn(queryClient, unit.id, !!found.appointment);
     } catch (err) {
       if (isInvalidUnit(err)) { onUnitInvalid(); return; }
       setError(attendanceError(err));
@@ -133,9 +165,22 @@ function CodeFlow({ unit, onUnitInvalid }: Props) {
             <KeyValue k="CPF" v={found.citizen.cpf_masked} />
             <KeyValue k="Celular" v={found.citizen.phone_masked} />
             <KeyValue k="Nível" v={<Tag>{nivelLabel(found.citizen.verification_level)}</Tag>} />
-            <KeyValue k="Data" v={fmtDateTime(found.triage.date)} />
-            <KeyValue k="Protocolo" v={found.triage.protocol_name} />
-            <KeyValue k="Prioridade" v={String(found.triage.priority)} />
+            {found.triage && (
+              <>
+                <KeyValue k="Data" v={fmtDateTime(found.triage.date)} />
+                <KeyValue k="Protocolo" v={found.triage.protocol_name} />
+                <KeyValue k="Prioridade" v={String(found.triage.priority)} />
+              </>
+            )}
+            {found.appointment && (
+              <>
+                <KeyValue
+                  k="Agendamento"
+                  v={`Agendamento ${fmtHourMinute(found.appointment.scheduled_at)} · ${appointmentKindLabel(found.appointment.kind)}`}
+                />
+                <KeyValue k="Prioridade" v={String(found.appointment.priority)} />
+              </>
+            )}
           </div>
 
           {found.citizen.verification_level === "declared" && (
@@ -169,18 +214,22 @@ function CodeFlow({ unit, onUnitInvalid }: Props) {
   );
 }
 
+type ExceptionRow =
+  | { kind: "appointment"; row: CheckInAppointment }
+  | { kind: "triage"; row: CheckInTriage };
+
 function ExceptionFlow({ unit, onUnitInvalid }: Props) {
   const queryClient = useQueryClient();
   const [ cpf, setCpf ] = useState("");
-  const [ triages, setTriages ] = useState<CheckInTriage[] | null>(null);
-  const [ selected, setSelected ] = useState<CheckInTriage | null>(null);
+  const [ rows, setRows ] = useState<ExceptionRow[] | null>(null);
+  const [ selected, setSelected ] = useState<ExceptionRow | null>(null);
   const [ reason, setReason ] = useState("");
   const [ done, setDone ] = useState(false);
   const [ busy, setBusy ] = useState(false);
   const [ error, setError ] = useState<string | null>(null);
 
   function reset() {
-    setCpf(""); setTriages(null); setSelected(null); setReason(""); setDone(false); setError(null);
+    setCpf(""); setRows(null); setSelected(null); setReason(""); setDone(false); setError(null);
   }
 
   async function search() {
@@ -189,7 +238,12 @@ function ExceptionFlow({ unit, onUnitInvalid }: Props) {
     if (!isValidCpf(cpf)) { setError("CPF inválido"); return; }
     setBusy(true);
     try {
-      setTriages(await searchCheckInTriages(cpf));
+      const result = await searchCheckIn(cpf, unit.id);
+      // Agendamentos de hoje primeiro, depois as triagens (spec §6).
+      setRows([
+        ...result.appointments.map((row): ExceptionRow => ({ kind: "appointment", row })),
+        ...result.triages.map((row): ExceptionRow => ({ kind: "triage", row }))
+      ]);
       setSelected(null);
     } catch (err) {
       setError(attendanceError(err));
@@ -205,9 +259,10 @@ function ExceptionFlow({ unit, onUnitInvalid }: Props) {
     setError(null);
     setBusy(true);
     try {
-      await checkInByException(cpf, selected.id, unit.id, reason);
+      const target = selected.kind === "appointment" ? { appointmentId: selected.row.id } : { triageId: selected.row.id };
+      await checkInByException(cpf, target, unit.id, reason);
       setDone(true);
-      void queryClient.invalidateQueries({ queryKey: [ "openAttendances", unit.id ] });
+      invalidateAfterCheckIn(queryClient, unit.id, selected.kind === "appointment");
     } catch (err) {
       if (isInvalidUnit(err)) { onUnitInvalid(); return; }
       setError(attendanceError(err));
@@ -241,17 +296,21 @@ function ExceptionFlow({ unit, onUnitInvalid }: Props) {
         </button>
       </div>
 
-      {triages && (
-        triages.length === 0 ? <EmptyState title="nenhuma triagem elegível para este CPF" /> : (
-          <DataTable<CheckInTriage>
+      {rows && (
+        rows.length === 0 ? <EmptyState title="nenhum agendamento ou triagem elegível para este CPF" /> : (
+          <DataTable<ExceptionRow>
             cols={[
-              { label: "Data", w: "1fr", render: (t) => fmtDateTime(t.date) },
-              { label: "Protocolo", w: "2fr", render: (t) => t.protocol_name },
-              { label: "Prioridade", w: "1fr", render: (t) => String(t.priority) }
+              {
+                label: "Data", w: "1.5fr", render: (r) => r.kind === "appointment"
+                  ? `Agendamento ${fmtHourMinute(r.row.scheduled_at)}`
+                  : fmtDateTime(r.row.date)
+              },
+              { label: "Protocolo", w: "2fr", render: (r) => r.row.protocol_name },
+              { label: "Prioridade", w: "1fr", render: (r) => String(r.row.priority) }
             ]}
-            rows={triages}
-            rowKey={(t) => t.id}
-            onRowClick={(t) => setSelected(t)}
+            rows={rows}
+            rowKey={(r) => `${r.kind}-${r.row.id}`}
+            onRowClick={(r) => setSelected(r)}
           />
         )
       )}

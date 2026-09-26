@@ -2,7 +2,9 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { grantRole, listMemberships, revokeMembership } from "../lib/api";
 import { describeActionError } from "../lib/actionErrors";
-import { REQUIRED_REVIEWERS, REVIEWER_ROLE, VERIFIER_ROLE, reviewerCount, teamMembers, type TeamMember } from "../lib/team";
+import {
+  PROFESSIONAL_ROLE, REQUIRED_REVIEWERS, REVIEWER_ROLE, VERIFIER_ROLE, reviewerCount, teamMembers, type TeamMember
+} from "../lib/team";
 import { useAuth } from "../lib/auth";
 import { SensitiveAction } from "../components/SensitiveAction";
 import { PageHeader } from "../components/PageHeader";
@@ -27,7 +29,7 @@ import type { ModuleId } from "../shell/modules";
 const NO_REVIEWERS_WARNING = "sem 2 revisores, nenhum protocolo é publicado ou ativado nesta cidade";
 const GENERIC_ERROR = "não foi possível carregar — tente de novo";
 
-type Pending = { member: TeamMember; kind: "grant" | "revoke"; role: "reviewer" | "verifier" };
+type Pending = { member: TeamMember; kind: "grant" | "revoke"; role: "reviewer" | "verifier" | "professional" };
 
 function loadErrorMessage(err: unknown): string {
   const described = describeActionError(err);
@@ -90,6 +92,11 @@ export function Team({ onNavigate }: { onNavigate(id: ModuleId): void }) {
                     m.isVerifier
                       ? <button type="button" style={buttonStyle} onClick={() => open(m, "revoke", "verifier")}>Remover atendente</button>
                       : <button type="button" style={buttonStyle} onClick={() => open(m, "grant", "verifier")}>Tornar atendente</button>
+                  ) },
+                  { label: "Profissional de saúde", w: "auto", align: "right", render: (m) => (
+                    m.isProfessional
+                      ? <button type="button" style={buttonStyle} onClick={() => open(m, "revoke", "professional")}>Remover profissional de saúde</button>
+                      : <button type="button" style={buttonStyle} onClick={() => open(m, "grant", "professional")}>Tornar profissional de saúde</button>
                   ) }
                 ]}
                 rows={members}
@@ -148,6 +155,33 @@ export function Team({ onNavigate }: { onNavigate(id: ModuleId): void }) {
             requiresStepUp
             run={async () => { await revokeMembership(pending.member.verifierMembershipId!); }}
             onDone={() => finish(`${pending.member.email} não é mais atendente`)}
+            onCancel={() => setPending(null)}
+            onGoToSecurity={() => onNavigate("security")}
+          />
+        )
+      )}
+
+      {pending && pending.role === "professional" && (
+        pending.kind === "grant" ? (
+          <SensitiveAction
+            title="Tornar profissional de saúde"
+            description={`${pending.member.email} poderá chamar e registrar o desfecho de atendimentos na fila.`}
+            requiresStepUp
+            run={async () => { await grantRole(pending.member.userId, PROFESSIONAL_ROLE); }}
+            onDone={() => finish(`${pending.member.email} agora é profissional de saúde`)}
+            onCancel={() => setPending(null)}
+            onGoToSecurity={() => onNavigate("security")}
+          />
+        ) : (
+          // O `!` é seguro: "Remover profissional de saúde" só existe quando
+          // isProfessional é true, e teamMembers preenche isProfessional e
+          // professionalMembershipId juntos (src/lib/team.ts).
+          <SensitiveAction
+            title="Remover profissional de saúde"
+            description={`${pending.member.email} deixa de atender na fila. Os atendimentos que já fez continuam valendo.`}
+            requiresStepUp
+            run={async () => { await revokeMembership(pending.member.professionalMembershipId!); }}
+            onDone={() => finish(`${pending.member.email} não é mais profissional de saúde`)}
             onCancel={() => setPending(null)}
             onGoToSecurity={() => onNavigate("security")}
           />

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { createUnit, listAllUnits, setUnitActive, updateUnit, type HealthUnitRow } from "../../lib/api";
 import { UNIT_KINDS, attendanceError } from "../../lib/attendance";
 import { Panel } from "../../components/Panel";
@@ -8,11 +9,15 @@ import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } fr
 
 // Units (Task 6) — cadastro de unidades de saúde, só para municipal_admin.
 // Lista + criar/editar (mesmo formulário, com/sem id) + desativar/reativar.
+// Criar ou reativar muda quem entra em "unidades ativas" (UnitPicker,
+// destino de encaminhamento em UnitQueue): invalida a query `activeUnits`
+// para essas telas recarregarem (card dashboard#4, item 1 — Task 7).
 const KIND_LABEL: Record<string, string> = Object.fromEntries(UNIT_KINDS.map((k) => [ k.value, k.label ]));
 
 interface FormState { id: string | null; name: string; kind: string }
 
 export function Units() {
+  const queryClient = useQueryClient();
   const [ rows, setRows ] = useState<HealthUnitRow[] | null>(null);
   const [ busy, setBusy ] = useState(false);
   const [ error, setError ] = useState<string | null>(null);
@@ -33,6 +38,7 @@ export function Units() {
     setBusy(true); setError(null);
     try {
       await setUnitActive(row.id, !row.active);
+      if (!row.active) void queryClient.invalidateQueries({ queryKey: [ "activeUnits" ] });
       await load();
     } catch (err) {
       setError(attendanceError(err));
@@ -45,8 +51,12 @@ export function Units() {
     if (busy || !form || !form.name.trim()) return;
     setBusy(true); setError(null);
     try {
-      if (form.id) await updateUnit(form.id, form.name, form.kind);
-      else await createUnit(form.name, form.kind);
+      if (form.id) {
+        await updateUnit(form.id, form.name, form.kind);
+      } else {
+        await createUnit(form.name, form.kind);
+        void queryClient.invalidateQueries({ queryKey: [ "activeUnits" ] });
+      }
       setForm(null);
       await load();
     } catch (err) {

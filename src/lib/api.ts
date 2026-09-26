@@ -381,19 +381,33 @@ export interface CheckInCitizen {
   verification_level: "declared" | "verified";
 }
 export interface CheckInTriage { id: string; date: string; protocol_name: string; priority: number }
+export interface CheckInAppointment {
+  id: string; scheduled_at: string; kind: "return" | "referral"; unit_name: string;
+  protocol_name: string; priority: number;
+}
 
 export interface Attendance {
-  id: string; triage_id: string; health_unit_id: string; unit_name: string; status: string;
+  id: string; triage_id: string | null; health_unit_id: string; unit_name: string; status: string;
   checked_in_at: string; check_in_method: string; outcome: string | null;
   referral_unit_name: string | null; referral_note: string | null; closed_at: string | null;
 }
 
-export interface OpenAttendanceRow { id: string; cpf_masked: string; checked_in_at: string; protocol_name: string; priority: number }
+export interface QueueRow {
+  id: string; cpf_masked: string; checked_in_at: string; protocol_name: string | null; priority: number | null;
+  source: "triage" | "appointment"; appointment_time: string | null;
+  called_at: string | null; called_by_name: string | null;
+}
 
-export type AttendanceOutcome = "discharged" | "referred" | "left";
+export interface AppointmentRequestSummary { id: string; kind: string; target_unit_name: string; status: string }
 
-export async function lookupCheckIn(cpf: string, code: string): Promise<{ citizen: CheckInCitizen; triage: CheckInTriage }> {
-  return jsonFetch(`${ATTENDANCE_BASE}/check_ins/lookup`, { method: "POST", body: JSON.stringify({ cpf, code }) });
+export type AttendanceOutcome = "discharged" | "referred" | "return" | "left";
+
+export async function lookupCheckIn(
+  cpf: string, code: string, healthUnitId: string
+): Promise<{ citizen: CheckInCitizen; triage: CheckInTriage | null; appointment: CheckInAppointment | null }> {
+  return jsonFetch(`${ATTENDANCE_BASE}/check_ins/lookup`, {
+    method: "POST", body: JSON.stringify({ cpf, code, health_unit_id: healthUnitId })
+  });
 }
 
 export async function checkIn(
@@ -405,37 +419,91 @@ export async function checkIn(
   });
 }
 
-export async function searchCheckInTriages(cpf: string): Promise<CheckInTriage[]> {
-  const payload = await jsonFetch<{ triages: CheckInTriage[] }>(`${ATTENDANCE_BASE}/check_ins/search`, {
-    method: "POST", body: JSON.stringify({ cpf })
+export async function searchCheckIn(
+  cpf: string, healthUnitId: string
+): Promise<{ triages: CheckInTriage[]; appointments: CheckInAppointment[] }> {
+  return jsonFetch(`${ATTENDANCE_BASE}/check_ins/search`, {
+    method: "POST", body: JSON.stringify({ cpf, health_unit_id: healthUnitId })
   });
-  return payload.triages;
 }
 
 export async function checkInByException(
-  cpf: string, triageId: string, healthUnitId: string, reason: string
+  cpf: string, target: { triageId: string } | { appointmentId: string }, healthUnitId: string, reason: string
 ): Promise<{ attendance: Attendance }> {
-  return jsonFetch(`${ATTENDANCE_BASE}/check_ins/exception`, {
-    method: "POST",
-    body: JSON.stringify({ cpf, triage_id: triageId, health_unit_id: healthUnitId, reason })
+  const body: Record<string, unknown> = { cpf, health_unit_id: healthUnitId, reason };
+  if ("triageId" in target) body.triage_id = target.triageId;
+  else body.appointment_id = target.appointmentId;
+  return jsonFetch(`${ATTENDANCE_BASE}/check_ins/exception`, { method: "POST", body: JSON.stringify(body) });
+}
+
+export async function listUnitQueue(unitId: string): Promise<{ waiting: QueueRow[]; in_care: QueueRow[] }> {
+  return jsonFetch(`${ATTENDANCE_BASE}/units/${encodeURIComponent(unitId)}/queue`);
+}
+
+export async function callAttendance(id: string, healthUnitId: string): Promise<{ attendance: Attendance }> {
+  return jsonFetch(`${ATTENDANCE_BASE}/attendances/${encodeURIComponent(id)}/call`, {
+    method: "POST", body: JSON.stringify({ health_unit_id: healthUnitId })
   });
 }
 
-export async function listOpenAttendances(unitId: string): Promise<OpenAttendanceRow[]> {
-  const payload = await jsonFetch<{ attendances: OpenAttendanceRow[] }>(
-    `${ATTENDANCE_BASE}/units/${encodeURIComponent(unitId)}/open`
-  );
-  return payload.attendances;
+export async function callNext(unitId: string): Promise<{ attendance: Attendance }> {
+  return jsonFetch(`${ATTENDANCE_BASE}/units/${encodeURIComponent(unitId)}/call_next`, { method: "POST", body: "{}" });
 }
 
 export async function closeAttendance(
   id: string, outcome: AttendanceOutcome, referralUnitId?: string, referralNote?: string
-): Promise<Attendance> {
+): Promise<{ attendance: Attendance; appointmentRequest: AppointmentRequestSummary | null }> {
   const body: Record<string, unknown> = { outcome };
   if (referralUnitId) body.referral_unit_id = referralUnitId;
   if (referralNote) body.referral_note = referralNote;
-  const payload = await jsonFetch<{ attendance: Attendance }>(
+  const payload = await jsonFetch<{ attendance: Attendance; appointment_request: AppointmentRequestSummary | null }>(
     `${ATTENDANCE_BASE}/attendances/${encodeURIComponent(id)}/close`, { method: "POST", body: JSON.stringify(body) }
   );
-  return payload.attendance;
+  return { attendance: payload.attendance, appointmentRequest: payload.appointment_request };
+}
+
+// ─── Atendimento: pedidos de agendamento, agenda e check-in por horário (Task 8) ─
+
+export interface RequestRow {
+  id: string; kind: "return" | "referral"; origin_unit_name: string; created_at: string;
+  cpf_masked: string; priority: number | null; note: string | null;
+  reopened_reason: "expired" | "no_show" | null;
+}
+
+export async function listUnitRequests(unitId: string): Promise<RequestRow[]> {
+  const payload = await jsonFetch<{ requests: RequestRow[] }>(`${ATTENDANCE_BASE}/units/${encodeURIComponent(unitId)}/requests`);
+  return payload.requests;
+}
+
+export interface ScheduledAppointment { id: string; scheduled_at: string; status: string; confirmation_deadline_at: string | null }
+
+export async function scheduleRequest(
+  id: string, scheduledAtIso: string, healthUnitId: string
+): Promise<ScheduledAppointment> {
+  const payload = await jsonFetch<{ appointment: ScheduledAppointment }>(
+    `${ATTENDANCE_BASE}/requests/${encodeURIComponent(id)}/appointments`,
+    { method: "POST", body: JSON.stringify({ scheduled_at: scheduledAtIso, health_unit_id: healthUnitId }) }
+  );
+  return payload.appointment;
+}
+
+export async function dismissRequest(
+  id: string, reason: string, healthUnitId: string
+): Promise<{ id: string; status: string }> {
+  const payload = await jsonFetch<{ request: { id: string; status: string } }>(
+    `${ATTENDANCE_BASE}/requests/${encodeURIComponent(id)}/dismiss`,
+    { method: "POST", body: JSON.stringify({ reason, health_unit_id: healthUnitId }) }
+  );
+  return payload.request;
+}
+
+export interface AgendaAppointment {
+  id: string; scheduled_at: string; cpf_masked: string; kind: "return" | "referral"; status: string;
+}
+
+export async function listUnitAgenda(unitId: string, dateIso: string): Promise<AgendaAppointment[]> {
+  const payload = await jsonFetch<{ appointments: AgendaAppointment[] }>(
+    `${ATTENDANCE_BASE}/units/${encodeURIComponent(unitId)}/agenda?date=${encodeURIComponent(dateIso)}`
+  );
+  return payload.appointments;
 }
