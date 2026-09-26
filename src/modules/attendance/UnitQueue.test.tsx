@@ -12,7 +12,6 @@ vi.mock("../../lib/api", async (importOriginal) => {
 
 import * as api from "../../lib/api";
 import { ApiError } from "../../lib/api";
-import { fmtTime } from "../../lib/format";
 import { UnitQueue } from "./UnitQueue";
 
 afterEach(cleanup);
@@ -47,6 +46,7 @@ function renderQueue(canCare: boolean) {
   const wrapper = ({ children }: { children: ReactNode }) =>
     <QueryClientProvider client={client}>{children}</QueryClientProvider>;
   render(<UnitQueue unit={unit} units={[ unit, otherUnit ]} canCare={canCare} />, { wrapper });
+  return { client };
 }
 
 describe("UnitQueue", () => {
@@ -70,9 +70,9 @@ describe("UnitQueue", () => {
     expect(screen.getByText("2")).not.toBeNull();
     expect(screen.getByText("3")).not.toBeNull();
 
-    expect(screen.getByText(`Agendamento ${fmtTime(waiting[1].appointment_time)}`)).not.toBeNull();
-    expect(screen.getByText(new RegExp(`chamado por dr@cidade\\.gov\\.br às ${fmtTime(inCare[0].called_at)}`)))
-      .not.toBeNull();
+    // hh:mm no fuso da cidade (13:00Z e 12:00Z → 10:00 e 09:00), sem segundos.
+    expect(screen.getByText("Agendamento 10:00")).not.toBeNull();
+    expect(screen.getByText("chamado por dr@cidade.gov.br às 09:00")).not.toBeNull();
   });
 
   describe("profissional (canCare)", () => {
@@ -175,6 +175,34 @@ describe("UnitQueue", () => {
       fireEvent.click(screen.getByRole("button", { name: "Confirmar encerramento" }));
       await waitFor(() => expect(api.closeAttendance).toHaveBeenCalledWith("a3", "return", undefined, undefined));
       expect(await screen.findByText("Pedido de agendamento criado na UBS Centro")).not.toBeNull();
+    });
+
+    it("encerrar com pedido invalida os Pedidos de qualquer unidade (prefixo unitRequests)", async () => {
+      mocked(api.closeAttendance).mockResolvedValue({
+        attendance: { id: "a3" },
+        appointmentRequest: { id: "r1", kind: "return", target_unit_name: "UBS Centro", status: "open" }
+      });
+      const { client } = renderQueue(true);
+      // Semeia como se o painel Pedidos (desta unidade e de outra) já tivesse carregado.
+      client.setQueryData([ "unitRequests", "u1" ], []);
+      client.setQueryData([ "unitRequests", "u2" ], []);
+      fireEvent.click(await screen.findByRole("button", { name: "Encerrar" }));
+      fireEvent.change(screen.getByLabelText("Desfecho"), { target: { value: "return" } });
+      fireEvent.click(screen.getByRole("button", { name: "Confirmar encerramento" }));
+      await waitFor(() => expect(client.getQueryState([ "unitRequests", "u1" ])?.isInvalidated).toBe(true));
+      expect(client.getQueryState([ "unitRequests", "u2" ])?.isInvalidated).toBe(true);
+    });
+
+    it("encerrar sem pedido não invalida os Pedidos", async () => {
+      mocked(api.closeAttendance).mockResolvedValue({ attendance: { id: "a3" }, appointmentRequest: null });
+      const { client } = renderQueue(true);
+      client.setQueryData([ "unitRequests", "u1" ], []);
+      fireEvent.click(await screen.findByRole("button", { name: "Encerrar" }));
+      fireEvent.click(screen.getByRole("button", { name: "Confirmar encerramento" }));
+      await waitFor(() => expect(api.closeAttendance).toHaveBeenCalled());
+      // o painel fecha no onDone — depois disso, nada mais invalida.
+      await waitFor(() => expect(screen.queryByText("Encerrar atendimento")).toBeNull());
+      expect(client.getQueryState([ "unitRequests", "u1" ])?.isInvalidated).toBe(false);
     });
 
     it("encerrar com 'Atendido e liberado' (sem pedido) não mostra confirmação de pedido", async () => {

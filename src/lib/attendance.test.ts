@@ -43,6 +43,8 @@ describe("attendance helpers", () => {
       .toBe("escolha um horário entre agora e 180 dias");
     expect(attendanceError(new ApiError(422, { error: "not_today" }, "x")))
       .toBe("o código só vale no dia do horário");
+    expect(attendanceError(new ApiError(422, { error: "appointment_not_eligible" }, "x")))
+      .toBe("este agendamento não está confirmado para check-in");
     expect(attendanceError(new ApiError(409, { error: "unit_has_open_requests" }, "x")))
       .toBe("há pedidos de agendamento abertos nesta unidade — encerre-os antes de desativar");
   });

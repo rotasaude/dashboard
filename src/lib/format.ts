@@ -49,6 +49,21 @@ export function fmtTime(iso: string | null | undefined): string {
   return timeFmt.format(d);
 }
 
+// hh:mm, sem segundos — para horários de agendamento e chamada na fila.
+const hourMinuteFmt = new Intl.DateTimeFormat(LOCALE, {
+  timeZone: TZ,
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false
+});
+
+export function fmtHourMinute(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return hourMinuteFmt.format(d);
+}
+
 export function fmtRelative(iso: string | null | undefined, now: Date = new Date()): string {
   if (!iso) return "—";
   const d = new Date(iso);

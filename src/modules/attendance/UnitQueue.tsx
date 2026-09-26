@@ -4,8 +4,8 @@ import {
   ApiError, callAttendance, callNext, closeAttendance, listUnitQueue,
   type AppointmentRequestSummary, type AttendanceOutcome, type HealthUnit, type QueueRow
 } from "../../lib/api";
-import { attendanceError } from "../../lib/attendance";
-import { fmtDateTime, fmtTime } from "../../lib/format";
+import { ATTENDANCE_REFETCH_MS, attendanceError } from "../../lib/attendance";
+import { fmtDateTime, fmtHourMinute } from "../../lib/format";
 import { Panel } from "../../components/Panel";
 import { DataTable } from "../../components/DataTable";
 import { EmptyState } from "../../components/EmptyState";
@@ -38,7 +38,9 @@ function errorCode(err: unknown): string | undefined {
 
 export function UnitQueue({ unit, units, canCare }: Props) {
   const queryClient = useQueryClient();
-  const query = useQuery({ queryKey: [ "unitQueue", unit.id ], queryFn: () => listUnitQueue(unit.id) });
+  const query = useQuery({ queryKey: [ "unitQueue", unit.id ], queryFn: () => listUnitQueue(unit.id),
+    refetchInterval: ATTENDANCE_REFETCH_MS
+  });
   const [ closing, setClosing ] = useState<QueueRow | null>(null);
   const [ done, setDone ] = useState<string | null>(null);
   const [ actionError, setActionError ] = useState<string | null>(null);
@@ -137,7 +139,7 @@ export function UnitQueue({ unit, units, canCare }: Props) {
                     { label: "Prioridade", w: "1fr", render: (r) => String(r.priority ?? "—") },
                     {
                       label: "Origem", w: "1.5fr", render: (r) =>
-                        r.source === "appointment" ? `Agendamento ${fmtTime(r.appointment_time)}` : "—"
+                        r.source === "appointment" ? `Agendamento ${fmtHourMinute(r.appointment_time)}` : "—"
                     },
                     {
                       label: "", w: "auto", align: "right", render: (r) => (
@@ -182,7 +184,7 @@ export function UnitQueue({ unit, units, canCare }: Props) {
                     { label: "CPF", w: "1.5fr", render: (r) => r.cpf_masked },
                     { label: "Protocolo", w: "1.5fr", render: (r) => r.protocol_name ?? "—" },
                     { label: "Prioridade", w: "1fr", render: (r) => String(r.priority ?? "—") },
-                    { label: "Chamada", w: "2fr", render: (r) => `chamado por ${r.called_by_name} às ${fmtTime(r.called_at)}` },
+                    { label: "Chamada", w: "2fr", render: (r) => `chamado por ${r.called_by_name} às ${fmtHourMinute(r.called_at)}` },
                     ...(canCare ? [ {
                       label: "", w: "auto" as const, align: "right" as const, render: (r: QueueRow) => (
                         <button type="button" style={secondaryButtonStyle} onClick={() => setClosing(r)}>Encerrar</button>
@@ -207,7 +209,12 @@ export function UnitQueue({ unit, units, canCare }: Props) {
             onDone={(appointmentRequest) => {
               setClosing(null);
               invalidate();
-              if (appointmentRequest) setDone(`Pedido de agendamento criado na ${appointmentRequest.target_unit_name}`);
+              // o pedido nasce na tela Pedidos (desta unidade ou de outra, se
+              // encaminhado) — invalida pelo prefixo para cobrir as duas.
+              if (appointmentRequest) {
+                void queryClient.invalidateQueries({ queryKey: [ "unitRequests" ] });
+                setDone(`Pedido de agendamento criado na ${appointmentRequest.target_unit_name}`);
+              }
             }}
           />
         )}

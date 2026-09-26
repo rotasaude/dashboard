@@ -5,7 +5,7 @@ import {
   type CheckInAppointment, type CheckInCitizen, type CheckInTriage, type HealthUnit
 } from "../../lib/api";
 import { attendanceError, isValidCpf, maskCpf, nivelLabel, onlyDigits } from "../../lib/attendance";
-import { fmtDateTime } from "../../lib/format";
+import { fmtDateTime, fmtHourMinute } from "../../lib/format";
 import { Panel } from "../../components/Panel";
 import { DataTable } from "../../components/DataTable";
 import { KeyValue } from "../../components/KeyValue";
@@ -32,15 +32,6 @@ function isInvalidUnit(err: unknown): boolean {
 
 function appointmentKindLabel(kind: "return" | "referral"): string {
   return kind === "return" ? "Retorno" : "Encaminhamento";
-}
-
-// hh:mm, sem segundos — fmtTime (lib/format) inclui segundos, verboso demais
-// para "Agendamento hh:mm" (spec §6).
-const hourMinuteFmt = new Intl.DateTimeFormat("pt-BR", {
-  timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit", hour12: false
-});
-function fmtHourMinute(iso: string): string {
-  return hourMinuteFmt.format(new Date(iso));
 }
 
 // wrong_unit e not_today no lookup de check-in (agendamento) têm mensagens

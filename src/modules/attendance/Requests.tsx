@@ -4,8 +4,8 @@ import {
   ApiError, dismissRequest, listUnitRequests, scheduleRequest,
   type HealthUnit, type RequestRow
 } from "../../lib/api";
-import { attendanceError } from "../../lib/attendance";
-import { fmtDateTime } from "../../lib/format";
+import { ATTENDANCE_REFETCH_MS, attendanceError } from "../../lib/attendance";
+import { fmtDateTime, fmtHourMinute } from "../../lib/format";
 import { Panel } from "../../components/Panel";
 import { DataTable } from "../../components/DataTable";
 import { EmptyState } from "../../components/EmptyState";
@@ -22,14 +22,12 @@ interface Props {
   unit: HealthUnit;
 }
 
-// hh:mm/dd, sem hora com segundos e sem ano — "dd/mm hh:mm" (spec §6).
-const shortDateTimeFmt = new Intl.DateTimeFormat("pt-BR", {
-  timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false
+// "dd/mm hh:mm", sem segundos e sem ano (spec §6); a hora vem de fmtHourMinute.
+const dayMonthFmt = new Intl.DateTimeFormat("pt-BR", {
+  timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit"
 });
 function fmtShort(d: Date): string {
-  const parts = shortDateTimeFmt.formatToParts(d);
-  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
-  return `${get("day")}/${get("month")} ${get("hour")}:${get("minute")}`;
+  return `${dayMonthFmt.format(d)} ${fmtHourMinute(d.toISOString())}`;
 }
 
 function kindLabel(row: RequestRow): string {
@@ -48,7 +46,9 @@ function errorCode(err: unknown): string | undefined {
 
 export function Requests({ unit }: Props) {
   const queryClient = useQueryClient();
-  const query = useQuery({ queryKey: [ "unitRequests", unit.id ], queryFn: () => listUnitRequests(unit.id) });
+  const query = useQuery({ queryKey: [ "unitRequests", unit.id ], queryFn: () => listUnitRequests(unit.id),
+    refetchInterval: ATTENDANCE_REFETCH_MS
+  });
   const [ scheduling, setScheduling ] = useState<RequestRow | null>(null);
   const [ dismissing, setDismissing ] = useState<RequestRow | null>(null);
 

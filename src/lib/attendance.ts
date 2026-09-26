@@ -4,6 +4,10 @@
 import { ApiError } from "./api";
 import { fmtDateTime } from "./format";
 
+// Fila, pedidos e agenda são vistos por papéis diferentes em máquinas
+// diferentes e o foco da janela não recarrega (main.tsx) — relê a cada 20s.
+export const ATTENDANCE_REFETCH_MS = 20_000;
+
 export const onlyDigits = (s: string) => s.replace(/\D/g, "");
 
 export function maskCpf(input: string): string {
@@ -67,6 +71,7 @@ const MESSAGES: Record<string, string> = {
   request_not_open: "este pedido já foi encerrado",
   invalid_time: "escolha um horário entre agora e 180 dias",
   not_today: "o código só vale no dia do horário",
+  appointment_not_eligible: "este agendamento não está confirmado para check-in",
   unit_has_open_requests: "há pedidos de agendamento abertos nesta unidade — encerre-os antes de desativar"
 };
 

@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { listUnitAgenda, type AgendaAppointment, type HealthUnit } from "../../lib/api";
-import { attendanceError } from "../../lib/attendance";
+import { ATTENDANCE_REFETCH_MS, attendanceError } from "../../lib/attendance";
+import { fmtHourMinute } from "../../lib/format";
 import { Panel } from "../../components/Panel";
 import { DataTable } from "../../components/DataTable";
 import { EmptyState } from "../../components/EmptyState";
@@ -12,13 +13,6 @@ import { inputStyle } from "../../components/formStyles";
 // olhar outro dia.
 interface Props {
   unit: HealthUnit;
-}
-
-const hourMinuteFmt = new Intl.DateTimeFormat("pt-BR", {
-  timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit", hour12: false
-});
-function fmtHourMinute(iso: string): string {
-  return hourMinuteFmt.format(new Date(iso));
 }
 
 // en-CA formata como YYYY-MM-DD — o mesmo formato do <input type="date">.
@@ -48,7 +42,9 @@ function statusLabel(status: string): string {
 
 export function Agenda({ unit }: Props) {
   const [ date, setDate ] = useState(() => todayIso());
-  const query = useQuery({ queryKey: [ "unitAgenda", unit.id, date ], queryFn: () => listUnitAgenda(unit.id, date) });
+  const query = useQuery({ queryKey: [ "unitAgenda", unit.id, date ], queryFn: () => listUnitAgenda(unit.id, date),
+    refetchInterval: ATTENDANCE_REFETCH_MS
+  });
   const rows = query.data ?? [];
 
   return (

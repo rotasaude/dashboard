@@ -387,7 +387,7 @@ export interface CheckInAppointment {
 }
 
 export interface Attendance {
-  id: string; triage_id: string; health_unit_id: string; unit_name: string; status: string;
+  id: string; triage_id: string | null; health_unit_id: string; unit_name: string; status: string;
   checked_in_at: string; check_in_method: string; outcome: string | null;
   referral_unit_name: string | null; referral_note: string | null; closed_at: string | null;
 }
@@ -475,7 +475,7 @@ export async function listUnitRequests(unitId: string): Promise<RequestRow[]> {
   return payload.requests;
 }
 
-export interface ScheduledAppointment { id: string; scheduled_at: string; status: string; confirmation_deadline_at: string }
+export interface ScheduledAppointment { id: string; scheduled_at: string; status: string; confirmation_deadline_at: string | null }
 
 export async function scheduleRequest(
   id: string, scheduledAtIso: string, healthUnitId: string
