@@ -287,15 +287,20 @@ export async function retireProtocol(name: string, version: string): Promise<voi
 // descartava. Não é a versão sobre a qual se agiu: a reversão sai da ativa e
 // volta para a anterior. `protocol` é opcional de propósito — uma resposta sem
 // ele faz a tela dizer a frase sem número, nunca "undefined".
+// `expectedVersion` é a versão que a TELA via como vigente. O servidor recusa
+// com 409 se ela não for mais a vigente — outra ativação comitou entre a
+// leitura e o clique. Opcional porque o rollout tem três passos: enquanto a
+// ausência for aceita, o corpo sem a chave é o de hoje.
 export async function revertProtocol(
-  name: string, reason: string
+  name: string, reason: string, expectedVersion?: string
 ): Promise<{ version: string } | null> {
   // `string | number` porque o fio manda NÚMERO (protocol_result_rendering.rb)
   // e a previsão com que a tela compara é string. Tipar só como string aqui
   // convidaria a remover o String() abaixo, e aí a comparação de divergência
   // passaria a comparar "2" com 2 e acusaria diferença onde não há.
   const body = await jsonFetch<{ protocol?: { version?: string | number } }>(`${PROTOCOLS_BASE}/revert`, {
-    method: "POST", body: JSON.stringify({ name, reason })
+    method: "POST",
+    body: JSON.stringify({ name, reason, ...(expectedVersion == null ? {} : { expected_version: expectedVersion }) })
   });
   const version = body?.protocol?.version;
   return version == null ? null : { version: String(version) };

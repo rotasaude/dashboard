@@ -27,6 +27,7 @@ import { Skeleton } from "../components/Skeleton";
 import { ErrorState } from "../components/ErrorState";
 import { EmptyState } from "../components/EmptyState";
 import { KpiSkeleton } from "./Overview";
+import { describeActionError } from "../lib/actionErrors";
 import { fmtDateTime } from "../lib/format";
 import type { ProtocolRow } from "../lib/types";
 import type { ModuleId } from "../shell/modules";
@@ -135,6 +136,11 @@ function DetailDrawer({
   const queryClient = useQueryClient();
   const [ pending, setPending ] = useState<{ version: string; revertTargetVersion: string | null; action: LifecycleAction } | null>(null);
   const [ done, setDone ] = useState<string | null>(null);
+  // Recusa que sobrevive ao fechamento do painel: a frase que nomeia a versão
+  // vigente agora precisa continuar na tela DEPOIS de o painel sumir, porque é
+  // ela que explica por que a lista mudou embaixo. A mensagem do
+  // SensitiveAction vive dentro do painel e iria junto.
+  const [ staleNotice, setStaleNotice ] = useState<string | null>(null);
   // O `run` do SensitiveAction resolve para void: o número que a reversão
   // efetivou viaja por aqui até o onDone. Limpo ao abrir cada painel, para
   // que uma ação nunca leia o resultado da anterior.
@@ -184,6 +190,7 @@ function DetailDrawer({
         {data && (
           <>
             {done && <p role="status" style={{ margin: 0, fontSize: 12.5 }}>{done}</p>}
+            {staleNotice && <p role="alert" style={{ margin: 0, fontSize: 12.5 }}>{staleNotice}</p>}
 
             <Panel title="Versões" sub="histórico" asOf={data.as_of}>
               <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -196,6 +203,7 @@ function DetailDrawer({
                       revertedToRef.current = null;
                       setPending({ version: v.version, revertTargetVersion: v.revertTargetVersion ?? null, action });
                       setDone(null);
+                      setStaleNotice(null);
                     }}
                   />
                 ))}
@@ -225,7 +233,26 @@ function DetailDrawer({
             requiresStepUp={pending.action.stepUp}
             fields={pending.action.needsReason ? [ { name: "reason", label: "Motivo", required: true } ] : []}
             run={async (values) => {
-              revertedToRef.current = await runAction(name, pending.version, pending.action, values);
+              try {
+                revertedToRef.current = await runAction(name, pending.version, pending.action, values);
+              } catch (err) {
+                // Recusa por divergência: o SensitiveAction mostra a mensagem
+                // (que nomeia a versão em uso agora), e aqui relemos a lista —
+                // senão a tela segue exibindo o estado que a recusa acabou de
+                // desmentir. Relança para o painel continuar tratando o erro.
+                const described = describeActionError(err);
+                if (described.kind === "rejected" && described.code === "current_version_changed") {
+                  // Relê a lista E fecha o painel: `pending` guarda a versão
+                  // antiga, então clicar Confirmar de novo mandaria o mesmo
+                  // token e levaria a mesma recusa, indefinidamente. O
+                  // próximo clique tem de partir da linha relida.
+                  void queryClient.invalidateQueries({ queryKey: [ "protocols" ] });
+                  void queryClient.invalidateQueries({ queryKey: [ "protocol-detail", id ] });
+                  setStaleNotice(described.message);
+                  setPending(null);
+                }
+                throw err;
+              }
             }}
             onDone={() => {
               setDone(doneMessage(pending, name, revertedToRef.current));
@@ -337,7 +364,7 @@ async function runAction(
     case "publish":  await publishProtocolVersion(name, version); return null;
     case "activate": await activateProtocol(name, version); return null;
     case "retire":   await retireProtocol(name, version); return null;
-    case "revert":   return (await revertProtocol(name, values.reason ?? ""))?.version ?? null;
+    case "revert":   return (await revertProtocol(name, values.reason ?? "", version))?.version ?? null;
   }
 }
 
