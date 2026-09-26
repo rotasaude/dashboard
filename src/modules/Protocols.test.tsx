@@ -185,7 +185,9 @@ describe("Protocols", () => {
     fireEvent.change(screen.getByLabelText("Motivo"), { target: { value: "regra errada" } });
     fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
 
-    await waitFor(() => expect(api.revertProtocol).toHaveBeenCalledWith("dengue", "regra errada"));
+    // O terceiro argumento é a versão vigente que a tela via — o token que o
+    // servidor compara com a vigente real (spec 2026-09-25).
+    await waitFor(() => expect(api.revertProtocol).toHaveBeenCalledWith("dengue", "regra errada", "1"));
   });
 
   it("a recusa da API aparece e o painel continua aberto", async () => {
@@ -556,5 +558,45 @@ describe("Protocols", () => {
 
     const status = await screen.findByRole("status");
     expect(status.textContent).toBe("Reverter concluído: a cidade está com dengue v2.");
+  });
+
+  it("reverter manda a versão vigente da tela como versão esperada", async () => {
+    stubReads(
+      [ row({ status: "active", revertible: true, version: "3", revertTargetVersion: "2" }) ],
+      [ versionRow({ status: "active", revertible: true, version: "3", revertTargetVersion: "2" }) ]
+    );
+    mocked(api.revertProtocol).mockResolvedValue({ version: "2" });
+    renderProtocols("protocol_publisher");
+
+    fireEvent.click(await screen.findByText("dengue"));
+    fireEvent.click(await screen.findByRole("button", { name: "Reverter" }));
+    fireEvent.change(screen.getByLabelText("Motivo"), { target: { value: "regra errada" } });
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+
+    await waitFor(() => expect(api.revertProtocol).toHaveBeenCalledWith("dengue", "regra errada", "3"));
+  });
+
+  // Recusa por divergência: a frase nomeia o estado novo (é o que deixa a
+  // pessoa decidir com o dado certo) e a lista é relida, para a tela não
+  // continuar mostrando o que já não vale.
+  it("recusa por versão mudada: mostra o estado novo e relê a lista", async () => {
+    stubReads(
+      [ row({ status: "active", revertible: true, version: "3", revertTargetVersion: "2" }) ],
+      [ versionRow({ status: "active", revertible: true, version: "3", revertTargetVersion: "2" }) ]
+    );
+    mocked(api.revertProtocol).mockRejectedValue(
+      new ApiError(409, { error: "current_version_changed", message: "a versão em uso agora é a 5" }, "409")
+    );
+    renderProtocols("protocol_publisher");
+
+    fireEvent.click(await screen.findByText("dengue"));
+    fireEvent.click(await screen.findByRole("button", { name: "Reverter" }));
+    fireEvent.change(screen.getByLabelText("Motivo"), { target: { value: "regra errada" } });
+    const antes = mocked(api.adminFetch).mock.calls.length;
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+
+    const aviso = await screen.findByText(/a versão em uso agora é a 5/);
+    expect(aviso.textContent).not.toContain("undefined");
+    await waitFor(() => expect(mocked(api.adminFetch).mock.calls.length).toBeGreaterThan(antes));
   });
 });

@@ -27,6 +27,7 @@ import { Skeleton } from "../components/Skeleton";
 import { ErrorState } from "../components/ErrorState";
 import { EmptyState } from "../components/EmptyState";
 import { KpiSkeleton } from "./Overview";
+import { describeActionError } from "../lib/actionErrors";
 import { fmtDateTime } from "../lib/format";
 import type { ProtocolRow } from "../lib/types";
 import type { ModuleId } from "../shell/modules";
@@ -225,7 +226,20 @@ function DetailDrawer({
             requiresStepUp={pending.action.stepUp}
             fields={pending.action.needsReason ? [ { name: "reason", label: "Motivo", required: true } ] : []}
             run={async (values) => {
-              revertedToRef.current = await runAction(name, pending.version, pending.action, values);
+              try {
+                revertedToRef.current = await runAction(name, pending.version, pending.action, values);
+              } catch (err) {
+                // Recusa por divergência: o SensitiveAction mostra a mensagem
+                // (que nomeia a versão em uso agora), e aqui relemos a lista —
+                // senão a tela segue exibindo o estado que a recusa acabou de
+                // desmentir. Relança para o painel continuar tratando o erro.
+                const described = describeActionError(err);
+                if (described.kind === "rejected" && described.code === "current_version_changed") {
+                  void queryClient.invalidateQueries({ queryKey: [ "protocols" ] });
+                  void queryClient.invalidateQueries({ queryKey: [ "protocol-detail", id ] });
+                }
+                throw err;
+              }
             }}
             onDone={() => {
               setDone(doneMessage(pending, name, revertedToRef.current));
@@ -337,7 +351,7 @@ async function runAction(
     case "publish":  await publishProtocolVersion(name, version); return null;
     case "activate": await activateProtocol(name, version); return null;
     case "retire":   await retireProtocol(name, version); return null;
-    case "revert":   return (await revertProtocol(name, values.reason ?? ""))?.version ?? null;
+    case "revert":   return (await revertProtocol(name, values.reason ?? "", version))?.version ?? null;
   }
 }
 

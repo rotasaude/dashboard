@@ -64,4 +64,25 @@ describe("describeActionError", () => {
     expect(describeActionError(new TypeError("Failed to fetch"))).toEqual(generic);
     expect(describeActionError("x")).toEqual(generic);
   });
+
+  // 409 da reversão: não é "tente de novo", é "o mundo mudou entre a leitura e
+  // o clique". A mensagem do servidor nomeia a versão em uso agora e sai
+  // verbatim; o código viaja para a tela saber que deve reler a lista.
+  it("409 current_version_changed devolve a mensagem do servidor e o código", () => {
+    const err = new ApiError(409, { error: "current_version_changed", message: "a versão em uso agora é a 5" }, "409");
+
+    expect(describeActionError(err)).toEqual({
+      kind: "rejected", code: "current_version_changed", message: "a versão em uso agora é a 5"
+    });
+  });
+
+  it("409 sem mensagem cai numa frase própria, nunca em undefined", () => {
+    const err = new ApiError(409, { error: "current_version_changed" }, "409");
+
+    const described = describeActionError(err);
+    expect(described.kind).toBe("rejected");
+    const message = "message" in described ? described.message : "";
+    expect(message).toContain("mudou");
+    expect(message).not.toContain("undefined");
+  });
 });

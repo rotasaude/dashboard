@@ -14,6 +14,7 @@ export type ActionError =
   | { kind: "failed"; message: string };
 
 const GENERIC = "não foi possível concluir — tente de novo";
+const GENERIC_STALE = "a versão em uso mudou enquanto você lia. Confira e decida de novo.";
 
 function bodyField(body: unknown, key: string): string | null {
   if (body && typeof body === "object" && typeof (body as Record<string, unknown>)[key] === "string") {
@@ -45,6 +46,14 @@ export function describeActionError(err: unknown): ActionError {
   // isso, e sugere tentar de novo algo que já terminou.
   if (err.status === 422 && code === "no_pending_enrollment") {
     return { kind: "rejected", code, message: "este cadastro já foi concluído — recarregue a página" };
+  }
+  // 409 da reversão: não é "tente de novo", é "o mundo mudou entre a leitura e
+  // o clique". A mensagem do servidor nomeia a versão em uso agora e sai
+  // verbatim — é ela que deixa a pessoa decidir com o dado certo. O `code`
+  // viaja junto porque a tela precisa saber que deve RELER a lista, coisa que
+  // o 409 genérico logo abaixo não diz.
+  if (err.status === 409 && code === "current_version_changed") {
+    return { kind: "rejected", code, message: bodyField(err.body, "message") ?? GENERIC_STALE };
   }
   if (err.status === 403) return { kind: "forbidden", message: "seu papel não permite esta ação" };
   if (err.status === 429) return { kind: "rate_limited", message: "muitas tentativas — aguarde alguns minutos" };

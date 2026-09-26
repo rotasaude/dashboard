@@ -189,6 +189,19 @@ describe("ciclo de vida de protocolo", () => {
     await expect(revertProtocol("dengue", "x")).resolves.toEqual({ version: "1" });
   });
 
+  it("revertProtocol manda a versão esperada no corpo", async () => {
+    mockFetch(200, { ok: true, protocol: { name: "dengue", version: 1, status: "active" } });
+    await revertProtocol("dengue", "x", "3");
+    expect(lastCall().body).toEqual({ name: "dengue", reason: "x", expected_version: "3" });
+  });
+
+  // Sem token, o corpo é o de hoje — é o que sustenta o passo 1 do rollout.
+  it("revertProtocol omite a chave quando não há versão esperada", async () => {
+    mockFetch(200, { ok: true, protocol: { name: "dengue", version: 1, status: "active" } });
+    await revertProtocol("dengue", "x");
+    expect(lastCall().body).toEqual({ name: "dengue", reason: "x" });
+  });
+
   it("revertProtocol devolve null quando a resposta não traz protocolo", async () => {
     mockFetch(200, { ok: true });
     await expect(revertProtocol("dengue", "x")).resolves.toBeNull();
