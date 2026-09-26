@@ -598,5 +598,9 @@ describe("Protocols", () => {
     const aviso = await screen.findByText(/a versão em uso agora é a 5/);
     expect(aviso.textContent).not.toContain("undefined");
     await waitFor(() => expect(mocked(api.adminFetch).mock.calls.length).toBeGreaterThan(antes));
+    // O painel fecha: o `pending` foi capturado com a versão antiga, então
+    // clicar Confirmar de novo mandaria o mesmo token e levaria a mesma
+    // recusa. O próximo clique tem de partir da linha relida.
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Confirmar" })).toBeNull());
   });
 });
