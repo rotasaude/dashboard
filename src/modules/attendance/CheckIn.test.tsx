@@ -303,4 +303,26 @@ describe("CheckIn", () => {
     expect(client.getQueryState([ "unitAgenda", "u1" ])?.isInvalidated).toBe(true);
     expect(client.getQueryState([ "unitRequests", "u1" ])?.isInvalidated).toBe(true);
   });
+
+  it("exceção de agendamento recusada: wrong_unit e not_today usam as mensagens do agendamento", async () => {
+    mocked(api.searchCheckIn).mockResolvedValue({
+      triages: [],
+      appointments: [
+        { id: "ap1", scheduled_at: "2026-09-25T13:00:00Z", kind: "return", unit_name: "UBS Centro", protocol_name: "protocolo-agendamento", priority: 1 }
+      ]
+    });
+    mocked(api.checkInByException)
+      .mockRejectedValueOnce(new ApiError(422, { error: "wrong_unit", unit_name: "UPA Norte" }, "x"))
+      .mockRejectedValueOnce(new ApiError(422, { error: "not_today" }, "x"));
+    renderCheckIn();
+    fireEvent.click(screen.getByRole("button", { name: "Cidadão sem o código" }));
+    fireEvent.change(screen.getByLabelText("CPF do cidadão (exceção)"), { target: { value: "52998224725" } });
+    fireEvent.click(screen.getByRole("button", { name: "Buscar triagens" }));
+    fireEvent.click(await screen.findByText(/Agendamento \d{2}:\d{2}/));
+    fireEvent.change(screen.getByLabelText("Motivo"), { target: { value: "documento perdido" } });
+    fireEvent.click(screen.getByRole("button", { name: "Iniciar atendimento" }));
+    expect(await screen.findByText("Este agendamento é na UPA Norte")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Iniciar atendimento" }));
+    expect(await screen.findByText("Este agendamento não é para hoje")).not.toBeNull();
+  });
 });

@@ -74,7 +74,7 @@ const offsetFmt = new Intl.DateTimeFormat("en-US", {
 
 function cityOffsetMs(utcMs: number): number {
   const p = Object.fromEntries(offsetFmt.formatToParts(new Date(utcMs)).map((x) => [ x.type, x.value ]));
-  const asUtc = Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute, +p.second);
+  const asUtc = Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour % 24, +p.minute, +p.second);
   return asUtc - utcMs;
 }
 

@@ -265,7 +265,7 @@ function ExceptionFlow({ unit, onUnitInvalid }: Props) {
       invalidateAfterCheckIn(queryClient, unit.id, selected.kind === "appointment");
     } catch (err) {
       if (isInvalidUnit(err)) { onUnitInvalid(); return; }
-      setError(attendanceError(err));
+      setError(lookupErrorMessage(err) ?? attendanceError(err));
     } finally {
       setBusy(false);
     }
