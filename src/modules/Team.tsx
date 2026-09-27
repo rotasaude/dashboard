@@ -1,10 +1,12 @@
-import { useState } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { grantRole, listMemberships, revokeMembership } from "../lib/api";
+import { deactivateUser, grantRole, inviteMember, listMemberships, revokeMembership, type Invitation } from "../lib/api";
 import { describeActionError } from "../lib/actionErrors";
 import {
-  PROFESSIONAL_ROLE, REQUIRED_REVIEWERS, REVIEWER_ROLE, VERIFIER_ROLE, reviewerCount, teamMembers, type TeamMember
+  INVITE_ROLES, PROFESSIONAL_ROLE, REQUIRED_REVIEWERS, REVIEWER_ROLE, VERIFIER_ROLE, deactivateErrorMessage,
+  inviteErrorMessage, isPrivilegedRole, isValidEmail, reviewerCount, teamMembers, type TeamMember
 } from "../lib/team";
+import { fmtDateTime } from "../lib/format";
 import { useAuth } from "../lib/auth";
 import { SensitiveAction } from "../components/SensitiveAction";
 import { PageHeader } from "../components/PageHeader";
@@ -14,22 +16,27 @@ import { Tag } from "../components/Tag";
 import { EmptyState } from "../components/EmptyState";
 import { ErrorState } from "../components/ErrorState";
 import { Skeleton } from "../components/Skeleton";
-import { buttonStyle } from "../components/formStyles";
+import { buttonStyle, inputStyle } from "../components/formStyles";
 import type { ModuleId } from "../shell/modules";
 
 // Equipe (spec do dashboard §5.2). Só municipal_admin chega aqui — a API
 // recusa o resto com 403, e o item de menu já não aparece (navGroupsFor).
 //
-// Escopo: conceder e revogar protocol_reviewer e citizen_verifier
-// (atendente). Convidar membro, outros papéis e desativar usuário são de
-// outro spec (§10).
+// Escopo: conceder e revogar revisor, atendente e profissional de saúde;
+// convidar pessoa com qualquer um dos 7 papéis (step-up só nos privilegiados,
+// como na API); desativar usuário (sempre com step-up, nunca a si mesmo).
+// Convite e Desativar só aparecem para municipal_admin — a API também recusa.
+// A pessoa desativada some da lista: a API só lista usuários ativos.
 //
-// Quem traduz recusa da API e cuida do código TOTP é o SensitiveAction; esta
-// tela não tenta interpretar erro de ação por conta própria.
+// Quem cuida do código TOTP e da repetição após mfa_required é o
+// SensitiveAction; as frases das recusas próprias de convite e desativação
+// vêm de src/lib/team.ts (translateError).
 const NO_REVIEWERS_WARNING = "sem 2 revisores, nenhum protocolo é publicado ou ativado nesta cidade";
 const GENERIC_ERROR = "não foi possível carregar — tente de novo";
 
 type Pending = { member: TeamMember; kind: "grant" | "revoke"; role: "reviewer" | "verifier" | "professional" };
+type Invite = { email: string; role: string };
+const INVALID_EMAIL = "informe um e-mail válido";
 
 function loadErrorMessage(err: unknown): string {
   const described = describeActionError(err);
@@ -42,17 +49,48 @@ export function Team({ onNavigate }: { onNavigate(id: ModuleId): void }) {
   const query = useQuery({ queryKey: [ "memberships" ], queryFn: listMemberships });
   const [ pending, setPending ] = useState<Pending | null>(null);
   const [ done, setDone ] = useState<string | null>(null);
+  const [ deactivating, setDeactivating ] = useState<TeamMember | null>(null);
+  const [ inviteEmail, setInviteEmail ] = useState("");
+  const [ inviteRole, setInviteRole ] = useState(INVITE_ROLES[0].role);
+  const [ inviteError, setInviteError ] = useState<string | null>(null);
+  const [ inviting, setInviting ] = useState<Invite | null>(null);
+  const sentInvitation = useRef<Invitation | null>(null);
+
+  const isAdmin = user?.memberships?.some((m) => m.role === "municipal_admin") ?? false;
 
   const members = teamMembers(query.data ?? []);
   const reviewers = reviewerCount(members);
 
+  function closeAll() {
+    setPending(null);
+    setDeactivating(null);
+    setInviting(null);
+  }
+
   function open(member: TeamMember, kind: Pending["kind"], role: Pending["role"]) {
+    closeAll();
     setPending({ member, kind, role });
     setDone(null);
   }
 
+  function openDeactivate(member: TeamMember) {
+    closeAll();
+    setDeactivating(member);
+    setDone(null);
+  }
+
+  function submitInvite(event: FormEvent) {
+    event.preventDefault();
+    const email = inviteEmail.trim();
+    if (!isValidEmail(email)) { setInviteError(INVALID_EMAIL); return; }
+    setInviteError(null);
+    closeAll();
+    setDone(null);
+    setInviting({ email, role: inviteRole });
+  }
+
   function finish(message: string) {
-    setPending(null);
+    closeAll();
     setDone(message);
     void queryClient.invalidateQueries({ queryKey: [ "memberships" ] });
   }
@@ -97,7 +135,12 @@ export function Team({ onNavigate }: { onNavigate(id: ModuleId): void }) {
                     m.isProfessional
                       ? <button type="button" style={buttonStyle} onClick={() => open(m, "revoke", "professional")}>Remover profissional de saúde</button>
                       : <button type="button" style={buttonStyle} onClick={() => open(m, "grant", "professional")}>Tornar profissional de saúde</button>
-                  ) }
+                  ) },
+                  ...(isAdmin ? [ { label: "Acesso", w: "auto", align: "right" as const, render: (m: TeamMember) => (
+                    m.userId === user?.id
+                      ? null
+                      : <button type="button" style={buttonStyle} onClick={() => openDeactivate(m)}>Desativar</button>
+                  ) } ] : [])
                 ]}
                 rows={members}
                 rowKey={(m) => m.userId}
@@ -105,6 +148,60 @@ export function Team({ onNavigate }: { onNavigate(id: ModuleId): void }) {
             )}
           </div>
         </Panel>
+      )}
+
+      {isAdmin && (
+        <Panel title="Convidar pessoa" sub="o convite chega por e-mail">
+          <form onSubmit={submitInvite} noValidate
+            style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap" }}>
+            <label style={inviteLabel}>
+              E-mail da pessoa
+              <input type="email" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} style={inputStyle} />
+            </label>
+            <label style={inviteLabel}>
+              Papel
+              <select value={inviteRole} onChange={(e) => setInviteRole(e.target.value)} style={inputStyle}>
+                {INVITE_ROLES.map((r) => <option key={r.role} value={r.role}>{r.label}</option>)}
+              </select>
+            </label>
+            <button type="submit" style={buttonStyle}>Convidar</button>
+          </form>
+          {inviteError && <p role="alert" style={{ margin: "8px 0 0", fontSize: 12, color: "var(--down)" }}>{inviteError}</p>}
+        </Panel>
+      )}
+
+      {inviting && (
+        <SensitiveAction
+          key={`${inviting.email}:${inviting.role}`}
+          title="Convidar pessoa"
+          description={`Convidar ${inviting.email} como ${roleLabel(inviting.role)}.`}
+          requiresStepUp={isPrivilegedRole(inviting.role)}
+          confirmLabel="Enviar convite"
+          run={async () => { sentInvitation.current = await inviteMember(inviting.email, inviting.role); }}
+          onDone={() => {
+            const inv = sentInvitation.current;
+            setInviteEmail("");
+            finish(`Convite enviado para ${inv?.email ?? inviting.email} — válido até ${fmtDateTime(inv?.expires_at)}`);
+          }}
+          onCancel={() => setInviting(null)}
+          onGoToSecurity={() => onNavigate("security")}
+          translateError={inviteErrorMessage}
+        />
+      )}
+
+      {deactivating && (
+        <SensitiveAction
+          key={deactivating.userId}
+          title="Desativar acesso"
+          description={`Desativar ${deactivating.email}? A pessoa perde o acesso e as sessões abertas são encerradas.`}
+          requiresStepUp
+          confirmLabel="Confirmar desativação"
+          run={async () => { await deactivateUser(deactivating.userId); }}
+          onDone={() => finish(`${deactivating.email} foi desativado(a)`)}
+          onCancel={() => setDeactivating(null)}
+          onGoToSecurity={() => onNavigate("security")}
+          translateError={deactivateErrorMessage}
+        />
       )}
 
       {pending && pending.role === "reviewer" && (
@@ -190,3 +287,9 @@ export function Team({ onNavigate }: { onNavigate(id: ModuleId): void }) {
     </div>
   );
 }
+
+function roleLabel(role: string): string {
+  return INVITE_ROLES.find((r) => r.role === role)?.label ?? role;
+}
+
+const inviteLabel = { display: "flex", flexDirection: "column" as const, gap: 4, fontSize: 12, color: "var(--ink2)", minWidth: 220 };
