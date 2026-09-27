@@ -3,7 +3,7 @@ import { adminFetch, ApiError } from "./api";
 import { login, fetchCurrentSession } from "./api";
 import { requestPasswordReset, resetPassword } from "./api";
 import { enrollMfa, confirmMfa, stepUpMfa } from "./api";
-import { listMemberships, grantRole, revokeMembership } from "./api";
+import { listMemberships, grantRole, revokeMembership, inviteMember, deactivateUser } from "./api";
 import { submitProtocol, signProtocol, publishProtocolVersion, activateProtocol, retireProtocol, revertProtocol } from "./api";
 import { listVerifications } from "./api";
 
@@ -134,6 +134,29 @@ describe("memberships", () => {
     const { url, init } = lastCall();
     expect(url).toBe("/setup/memberships/m2/revoke");
     expect(init.method).toBe("POST");
+  });
+
+  it("inviteMember manda email e role e devolve o convite", async () => {
+    mockFetch(201, { id: "i1", email: "novo@cidade.gov.br", role: "viewer", expires_at: "2026-10-04T12:00:00Z" });
+
+    const inv = await inviteMember("novo@cidade.gov.br", "viewer");
+
+    const { url, init } = lastCall();
+    expect(url).toBe("/setup/invitations");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ email: "novo@cidade.gov.br", role: "viewer" });
+    expect(inv.expires_at).toBe("2026-10-04T12:00:00Z");
+  });
+
+  it("deactivateUser chama a rota de desativação do usuário", async () => {
+    mockFetch(200, { id: "u 9", deactivated_at: "2026-09-27T12:00:00Z" });
+
+    const res = await deactivateUser("u 9");
+
+    const { url, init } = lastCall();
+    expect(url).toBe("/setup/users/u%209/deactivate");
+    expect(init.method).toBe("POST");
+    expect(res.deactivated_at).toBe("2026-09-27T12:00:00Z");
   });
 });
 

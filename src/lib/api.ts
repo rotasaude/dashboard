@@ -140,6 +140,25 @@ export async function revokeMembership(id: string): Promise<void> {
   });
 }
 
+export interface Invitation { id: string; email: string; role: string; expires_at: string; }
+
+// Convite de membro pela própria cidade (municipal_admin). Papel privilegiado
+// exige step-up: a API responde 401 mfa_required, e quem trata é o
+// SensitiveAction.
+export async function inviteMember(email: string, role: string): Promise<Invitation> {
+  return jsonFetch<Invitation>(`${SETUP_BASE}/invitations`, {
+    method: "POST", body: JSON.stringify({ email, role })
+  });
+}
+
+// Sempre exige step-up. A pessoa perde o acesso e as sessões abertas caem; a
+// listagem de memberships deixa de mostrá-la (a API filtra desativados).
+export async function deactivateUser(userId: string): Promise<{ id: string; deactivated_at: string }> {
+  return jsonFetch<{ id: string; deactivated_at: string }>(
+    `${SETUP_BASE}/users/${encodeURIComponent(userId)}/deactivate`, { method: "POST", body: "{}" }
+  );
+}
+
 const PASSWORDS_BASE = import.meta.env.VITE_PASSWORDS_BASE || "/passwords";
 
 export async function requestPasswordReset(email_address: string): Promise<void> {
