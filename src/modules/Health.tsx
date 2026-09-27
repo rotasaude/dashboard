@@ -24,7 +24,7 @@ export function Health() {
   const drift = d.driftOverall ?? 0;
   return (
     <Wrap>
-      <KpiGrid>
+      <KpiGrid asOf={data.as_of}>
         <StatTile label="Drift máximo (proj)" value={d.driftOverall ?? "—"} unit={d.driftOverall !== null ? "min" : ""} tone={drift > 30 ? "warn" : "ok"} source="live" />
         <StatTile label="Projeções monitoradas" value={d.projections.length} source="live" />
       </KpiGrid>

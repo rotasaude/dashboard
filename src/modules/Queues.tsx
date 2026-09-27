@@ -26,7 +26,7 @@ export function Queues() {
 
   return (
     <Wrap>
-      <KpiGrid>
+      <KpiGrid asOf={data.as_of}>
         <StatTile label="Profundidade total" value={totalDepth} source="live" />
         <StatTile label="Mais antigo pendente" value={fmtDuration(d.oldestPendingS)} source="live" />
         <StatTile label="Falhas (recentes)" value={totalFailed} tone={totalFailed > 0 ? "down" : "ok"} source="live" />

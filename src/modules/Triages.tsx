@@ -24,7 +24,7 @@ export function Triages() {
   const d = data.data;
   return (
     <Wrap>
-      <KpiGrid>
+      <KpiGrid asOf={data.as_of}>
         <StatTile label="Iniciadas" value={d.started} source="live" />
         <StatTile label="Concluídas" value={d.completed} tone="ok" source="live" />
         <StatTile label="Taxa de conclusão" value={d.completionRate} unit="%" tone={d.completionRate >= 70 ? "ok" : d.completionRate >= 40 ? "warn" : "down"} source="live" />

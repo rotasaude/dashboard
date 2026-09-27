@@ -91,7 +91,7 @@ export function Protocols({ onNavigate }: { onNavigate?: (id: ModuleId) => void 
 
   return (
     <Wrap>
-      <KpiGrid>
+      <KpiGrid asOf={data.as_of}>
         <StatTile label="Protocolos & versões" value={list.length} source="live" />
         <StatTile label="Publicados" value={published} tone="ok" source="live" />
         <button

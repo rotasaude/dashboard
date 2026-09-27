@@ -38,7 +38,7 @@ export function Ingestion() {
   const d = data.data;
   return (
     <Wrap>
-      <KpiGrid>
+      <KpiGrid asOf={data.as_of}>
         <StatTile label="Mensagens recebidas (WhatsApp)" value={d.inboundTotal} source="live" spark={d.inboundSeries} />
         <StatTile label="Backlog de purga" value={d.purge.pending} tone={d.purge.overTtl ? "down" : "warn"} source="live" />
       </KpiGrid>

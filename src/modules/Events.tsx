@@ -28,7 +28,7 @@ export function Events() {
   const series = d.byType.slice(0, 24).map((b) => b.count);
   return (
     <Wrap>
-      <KpiGrid>
+      <KpiGrid asOf={data.as_of}>
         <StatTile label="Eventos no período" value={d.total} source="live" />
         <StatTile label="Retenção" value={d.retentionMonths} unit="meses" source="live" />
       </KpiGrid>

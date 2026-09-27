@@ -16,6 +16,7 @@ interface Props {
 export function Panel({ title, sub, right, source, asOf, children }: Props) {
   return (
     <section
+      aria-label={title}
       style={{
         background: "var(--panel)",
         border: "1px solid var(--rule)",

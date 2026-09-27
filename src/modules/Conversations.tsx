@@ -30,7 +30,7 @@ export function Conversations() {
   const d = data.data;
   return (
     <Wrap>
-      <KpiGrid>
+      <KpiGrid asOf={data.as_of}>
         <StatTile label="Conversas ativas agora" value={d.live} tone="info" source="live" />
         <StatTile label="Taxa de abandono" value={d.abandonRate ?? "—"} unit={d.abandonRate !== null ? "%" : ""} source="live" />
         <StatTile label="Tempo médio até conclusão" value={d.avgToCompleteMin ?? "—"} unit={d.avgToCompleteMin !== null ? "min" : ""} source="live" />

@@ -12,6 +12,7 @@ import { useQueues } from "../hooks/useQueues";
 import { useHealth } from "../hooks/useHealth";
 import { useEvents } from "../hooks/useEvents";
 import { StatTile } from "../components/StatTile";
+import { KpiGrid } from "../components/KpiGrid";
 import { Skeleton } from "../components/Skeleton";
 import { EmptyState } from "../components/EmptyState";
 import { ErrorState } from "../components/ErrorState";
@@ -61,7 +62,7 @@ function KpisRow() {
     );
   }
   return (
-    <KpiGrid5>
+    <KpiGrid5 asOf={data.as_of}>
       {data.data.kpis.map((kpi) => (
         <StatTile
           key={kpi.id}
@@ -78,12 +79,8 @@ function KpisRow() {
   );
 }
 
-function KpiGrid5({ children }: { children: React.ReactNode }) {
-  return (
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12 }}>
-      {children}
-    </div>
-  );
+function KpiGrid5({ children, asOf }: { children: React.ReactNode; asOf?: string }) {
+  return <KpiGrid columns={5} asOf={asOf}>{children}</KpiGrid>;
 }
 
 export function KpiSkeleton() {
@@ -263,6 +260,7 @@ function HealthSummaryPanel({ onNavigate }: { onNavigate?: (id: ModuleId) => voi
       title="Saúde das projeções"
       sub="frescor & drift · §4.9"
       right={<OpenLink onClick={() => onNavigate?.("health")} />}
+      asOf={data?.as_of}
     >
       {isLoading && <Skeleton rows={3} />}
       {isError && <ErrorState message={(error as Error)?.message || "Erro"} onRetry={() => refetch()} />}
