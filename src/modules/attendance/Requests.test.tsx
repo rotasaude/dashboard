@@ -70,7 +70,7 @@ describe("Requests", () => {
     expect(await screen.findByText("O horário nasce confirmado")).not.toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Confirmar horário" }));
     await waitFor(() => expect(api.scheduleRequest).toHaveBeenCalledWith(
-      "r1", new Date("2026-09-26T09:00").toISOString(), "u1"
+      "r1", "2026-09-26T12:00:00.000Z", "u1"
     ));
     await waitFor(() => expect(api.listUnitRequests).toHaveBeenCalledTimes(2));
   });
