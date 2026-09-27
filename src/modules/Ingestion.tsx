@@ -1,4 +1,6 @@
-// IngestionView (§4.1) — webhook WhatsApp. Backlog de purga LGPD em destaque.
+// IngestionView (§4.1, F-01.10) — só o webhook WhatsApp: volume inbound, ack
+// aproximado e backlog de purga do raw (LGPD). O canal web do cidadão (ADR 0017)
+// não entra aqui.
 
 import { useIngestion } from "../hooks/useIngestion";
 import { Panel } from "../components/Panel";
@@ -19,7 +21,7 @@ export function Ingestion() {
   if (isLoading) {
     return (
       <Wrap>
-        <KpiGrid><KpiSkeleton /><KpiSkeleton /><KpiSkeleton /></KpiGrid>
+        <KpiGrid><KpiSkeleton /><KpiSkeleton /></KpiGrid>
         <Panel title="Volume inbound"><Skeleton rows={4} /></Panel>
       </Wrap>
     );
@@ -37,12 +39,11 @@ export function Ingestion() {
   return (
     <Wrap>
       <KpiGrid>
-        <StatTile label="Mensagens recebidas" value={d.inboundTotal} source="live" spark={d.inboundSeries} />
+        <StatTile label="Mensagens recebidas (WhatsApp)" value={d.inboundTotal} source="live" spark={d.inboundSeries} />
         <StatTile label="Backlog de purga" value={d.purge.pending} tone={d.purge.overTtl ? "down" : "warn"} source="live" />
-        <StatTile label="Dedup (reentregas)" value={d.dedup ?? "—"} source="live" />
       </KpiGrid>
 
-      <Panel title="Volume inbound" sub="por bucket do período" asOf={data.as_of}>
+      <Panel title="Volume inbound" sub="por bucket do período · só o webhook do WhatsApp (sem o canal web)" asOf={data.as_of}>
         {d.inboundSeries.length === 0 ? (
           <EmptyState title="sem mensagens no período" />
         ) : (
@@ -60,14 +61,14 @@ export function Ingestion() {
 
       <Panel
         title="Backlog de purga (LGPD)"
-        sub="idade do registro mais antigo vs TTL"
+        sub="idade do raw mais antigo ainda não purgado vs retenção"
         asOf={data.as_of}
       >
         <Meter
           label="Idade do mais antigo"
-          used={d.purge.oldestH}
-          max={d.purge.ttlH}
-          unit="h"
+          used={Math.round(d.purge.oldestH / 24)}
+          max={Math.round(d.purge.ttlH / 24)}
+          unit="d"
           tone={d.purge.overTtl ? "down" : "warn"}
           hint={
             d.purge.overTtl

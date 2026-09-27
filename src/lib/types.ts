@@ -23,7 +23,6 @@ export interface IngestionData {
   inboundSeries: number[];
   inboundTotal: number;
   ack: Array<{ code: string; label: string; count: number; tone?: string }>;
-  dedup: number | null;
   purge: { pending: number; oldestH: number; ttlH: number; overTtl: boolean };
 }
 
