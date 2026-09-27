@@ -1,6 +1,6 @@
 import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { QueryCache, QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
 import "@fontsource-variable/geist/index.css";
 import "@fontsource-variable/geist-mono/index.css";
 import { App } from "./App";
@@ -8,7 +8,7 @@ import { Login } from "./modules/Login";
 import { ResetPassword } from "./modules/ResetPassword";
 import { AcceptInvitation } from "./modules/AcceptInvitation";
 import { AuthProvider, useAuth } from "./lib/auth";
-import { ApiError } from "./lib/api";
+import { createAppQueryClient } from "./lib/queryClient";
 import { clearEntryFromUrl, readEntryFromUrl, type Entry } from "./lib/entry";
 import { useGrantEntry } from "./lib/use_grant_entry";
 import "./theme/global.css";
@@ -16,23 +16,7 @@ import "./theme/global.css";
 function AppRoot() {
   const auth = useAuth();
   const [ entry, setEntry ] = useState<Entry | null>(() => readEntryFromUrl());
-  const [ queryClient ] = useState(() => new QueryClient({
-    queryCache: new QueryCache({
-      onError(err) {
-        if (err instanceof ApiError && err.status === 401) void auth.reload();
-      }
-    }),
-    defaultOptions: {
-      queries: {
-        refetchOnWindowFocus: false,
-        retry: (count, err) => {
-          if (err instanceof ApiError && (err.status === 401 || err.status === 404)) return false;
-          return count < 1;
-        },
-        staleTime: 30_000
-      }
-    }
-  }));
+  const [ queryClient ] = useState(() => createAppQueryClient(() => { void auth.reload(); }));
 
   // Grant vale 60 s e uso único: consome na montagem, antes de qualquer tela.
   const grantError = useGrantEntry(entry, (ok) => {
