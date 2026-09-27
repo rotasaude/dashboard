@@ -223,4 +223,35 @@ describe("SensitiveAction", () => {
 
     await waitFor(() => expect(run).toHaveBeenCalledWith({ reason: "  regra errada " }));
   });
+  it("translateError dá a frase da tela para a recusa, sem engolir o mfa_required", async () => {
+    fetchSession.mockResolvedValue(session({ mfa_verified_at: minutesAgo(1) }));
+    const run = vi.fn()
+      .mockRejectedValueOnce(apiError(401, { error: "mfa_required" }))
+      .mockRejectedValueOnce(apiError(422, { error: "already_member" }));
+    const translateError = vi.fn((err: unknown) =>
+      err instanceof ApiError && (err.body as { error?: string }).error === "already_member" ? "já é da equipe" : null);
+    renderAction({ run, translateError });
+    await screen.findByText("verificação válida por mais 4 min");
+
+    fireEvent.click(confirm());
+    await waitFor(() => expect(codeField()).not.toBeNull());
+    expect(screen.queryByRole("alert")).toBeNull();
+
+    stepUpMfa.mockResolvedValue(undefined);
+    fireEvent.change(codeField()!, { target: { value: "123456" } });
+    fireEvent.click(confirm());
+
+    expect((await screen.findByRole("alert")).textContent).toBe("já é da equipe");
+  });
+
+  it("translateError que devolve null mantém a mensagem padrão", async () => {
+    fetchSession.mockResolvedValue(session({ mfa_verified_at: minutesAgo(1) }));
+    const run = vi.fn().mockRejectedValue(apiError(422, { error: "x", message: "recusado pela API" }));
+    renderAction({ run, translateError: () => null });
+    await screen.findByText("verificação válida por mais 4 min");
+
+    fireEvent.click(confirm());
+
+    expect((await screen.findByRole("alert")).textContent).toBe("recusado pela API");
+  });
 });

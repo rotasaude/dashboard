@@ -23,6 +23,10 @@ export interface SensitiveActionProps {
   onDone(): void;
   onCancel(): void;
   onGoToSecurity?(): void;
+  // Frase da tela para uma recusa que só ela entende (ex.: `already_member`
+  // do convite). Só é consultada DEPOIS de step-up e código: `mfa_required`
+  // e código inválido continuam sendo daqui. `null` = mensagem padrão.
+  translateError?(err: unknown): string | null;
 }
 
 const EXPIRED = "sua verificação expirou — informe um novo código";
@@ -30,7 +34,7 @@ const GAVE_UP = "a verificação não foi aceita — recarregue a página e tent
 
 export function SensitiveAction({
   title, description, requiresStepUp, fields = [], confirmLabel = "Confirmar",
-  run, onDone, onCancel, onGoToSecurity
+  run, onDone, onCancel, onGoToSecurity, translateError
 }: SensitiveActionProps) {
   const auth = useAuth();
   const { window, stepUp } = useStepUp();
@@ -76,7 +80,7 @@ export function SensitiveAction({
       } else if (described.kind === "invalid_code") {
         setCodeError(described.message);
       } else {
-        setError(described.message);
+        setError(translateError?.(err) ?? described.message);
         if (described.kind === "session_expired") void auth.reload();
       }
     } finally {
