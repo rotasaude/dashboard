@@ -44,7 +44,7 @@ export function Conversations() {
         )}
       </Panel>
 
-      <Panel title="Saídas" sub="estados terminais (revoked como proxy)" asOf={data.as_of}>
+      <Panel title="Saídas" sub="desfecho das conversas iniciadas no período" asOf={data.as_of}>
         {d.exits.every((e) => e.count === 0) ? (
           <EmptyState title="nenhuma saída registrada" />
         ) : (
