@@ -85,6 +85,27 @@ describe("Classification — tiers reais e urgência (F-05.9)", () => {
   });
 });
 
+describe("Classification — tolerância ao contrato antigo (ADR 0015)", () => {
+  it("renderiza com um api que ainda manda priorityTrue e o pivô low/medium/high", async () => {
+    vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
+    const legacy = {
+      tiers: [ { key: "high", label: "high", count: 1, tone: "down" } ],
+      byProtocol: [ { protocol: "resp · 1", low: 0, medium: 0, high: 1 } ],
+      priorityTrue: 4, priorityTrend: [], byMode: [],
+      sampleTriages: [ { id: "t1-0000000000000", tier: "high", priority: true, mode: null, protocol: "resp · 1", at: "09:10" } ]
+    };
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      JSON.stringify({ data: legacy, as_of: "2026-09-27T12:00:00Z" }),
+      { status: 200, headers: { "Content-Type": "application/json" } }
+    )));
+    renderClassification();
+
+    const row = await kpiRow();
+    expect(row.getByText("4")).toBeTruthy();
+    expect(within(await screen.findByRole("region", { name: "Tier por protocolo" })).getByText("resp · 1")).toBeTruthy();
+  });
+});
+
 describe("Classification — trail drawer (F-03.16)", () => {
   it("abre o trail da triagem e mostra só regra, referência e saída", async () => {
     const fetchMock = stubApi([

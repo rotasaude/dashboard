@@ -18,6 +18,7 @@ import { EmptyState } from "../components/EmptyState";
 import { KpiSkeleton } from "./Overview";
 import { fmtNumber, fmtTime } from "../lib/format";
 import type { ClassificationData } from "../lib/types";
+import { normalizeClassification } from "../lib/classification";
 
 export function Classification() {
   const [ trailOf, setTrailOf ] = useState<string | null>(null);
@@ -27,7 +28,7 @@ export function Classification() {
   if (isError) return <Wrap><ErrorState message={(error as Error)?.message || "Erro"} onRetry={() => refetch()} /></Wrap>;
   if (!data) return <Wrap><EmptyState title="sem dados" /></Wrap>;
 
-  const d = data.data;
+  const d = normalizeClassification(data.data);
   return (
     <Wrap>
       <KpiGrid asOf={data.as_of}>
