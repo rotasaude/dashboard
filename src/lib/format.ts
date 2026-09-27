@@ -64,6 +64,28 @@ export function fmtHourMinute(iso: string | null | undefined): string {
   return hourMinuteFmt.format(d);
 }
 
+// Valor de <input type="datetime-local"> ("2026-09-26T09:00") lido como hora
+// de parede da cidade (TZ), não do navegador: `new Date(value)` usaria o fuso
+// da máquina e uma recepção em outro fuso marcaria a hora errada.
+const offsetFmt = new Intl.DateTimeFormat("en-US", {
+  timeZone: TZ, hourCycle: "h23",
+  year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit"
+});
+
+function cityOffsetMs(utcMs: number): number {
+  const p = Object.fromEntries(offsetFmt.formatToParts(new Date(utcMs)).map((x) => [ x.type, x.value ]));
+  const asUtc = Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour % 24, +p.minute, +p.second);
+  return asUtc - utcMs;
+}
+
+export function parseCityLocal(value: string): Date | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(value);
+  if (!m) return null;
+  const wall = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]);
+  const guess = wall - cityOffsetMs(wall);
+  return new Date(wall - cityOffsetMs(guess));
+}
+
 export function fmtRelative(iso: string | null | undefined, now: Date = new Date()): string {
   if (!iso) return "—";
   const d = new Date(iso);

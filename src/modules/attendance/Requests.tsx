@@ -5,7 +5,7 @@ import {
   type HealthUnit, type RequestRow
 } from "../../lib/api";
 import { ATTENDANCE_REFETCH_MS, attendanceError } from "../../lib/attendance";
-import { fmtDateTime, fmtHourMinute } from "../../lib/format";
+import { fmtDateTime, fmtHourMinute, parseCityLocal } from "../../lib/format";
 import { Panel } from "../../components/Panel";
 import { DataTable } from "../../components/DataTable";
 import { EmptyState } from "../../components/EmptyState";
@@ -14,7 +14,8 @@ import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } fr
 
 // Requests (Task 8) — pedidos de agendamento abertos da unidade (spec §6
 // "Pedidos de agendamento"). "Marcar horário" avisa, calculado no navegador
-// a partir do valor do <input type="datetime-local">, se o horário nasce
+// a partir do valor do <input type="datetime-local"> (lido no fuso da cidade,
+// parseCityLocal), se o horário nasce
 // confirmado (< 48h) ou o prazo de confirmação (horário - 24h, com >= 48h).
 // `request_not_open` em qualquer uma das duas ações (outro atendente já
 // marcou/encerrou o pedido) recarrega a lista em vez de mostrar erro parado.
@@ -133,8 +134,8 @@ function SchedulePanel(
   const [ busy, setBusy ] = useState(false);
   const [ error, setError ] = useState<string | null>(null);
 
-  const parsed = value ? new Date(value) : null;
-  const valid = !!parsed && !Number.isNaN(parsed.getTime());
+  const parsed = parseCityLocal(value);
+  const valid = !!parsed;
 
   let warning: string | null = null;
   if (valid && parsed) {
