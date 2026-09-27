@@ -1,8 +1,23 @@
-// Primeiro municipal_admin da cidade define a senha e entra (Plano 6). O token
-// é a credencial: chega por e-mail, em ?invite= no host da cidade.
+// Quem recebeu convite (do operador ou de um municipal_admin da cidade) define
+// a senha e entra (Plano 6). O token é a credencial: chega por e-mail, em
+// ?invite= no host da cidade. A senha mínima (12) é a mesma da API, que
+// responde `weak_password` se alguém escapar desta checagem.
 import { useState, type FormEvent } from "react";
 import { acceptInvitation, ApiError } from "../lib/api";
 import { useAuth } from "../lib/auth";
+
+const MIN_PASSWORD_LENGTH = 12;
+const WEAK_PASSWORD = `A senha precisa ter pelo menos ${MIN_PASSWORD_LENGTH} caracteres.`;
+
+function rejectionMessage(body: unknown): string {
+  const code = body && typeof body === "object" ? (body as Record<string, unknown>).error : null;
+  switch (code) {
+    case "expired": return "Este convite expirou. Peça um novo convite a quem convidou você.";
+    case "already_member": return "Você já faz parte da equipe desta cidade. Entre com seu e-mail e senha.";
+    case "weak_password": return WEAK_PASSWORD;
+    default: return "Convite inválido ou expirado. Peça um novo convite a quem convidou você.";
+  }
+}
 
 export function AcceptInvitation({ token, onDone }: { token: string; onDone: () => void }) {
   const auth = useAuth();
@@ -18,6 +33,10 @@ export function AcceptInvitation({ token, onDone }: { token: string; onDone: () 
       setError("As senhas não conferem.");
       return;
     }
+    if (password.length < MIN_PASSWORD_LENGTH) {
+      setError(WEAK_PASSWORD);
+      return;
+    }
     setBusy(true);
     try {
       await acceptInvitation(token, password);
@@ -25,7 +44,7 @@ export function AcceptInvitation({ token, onDone }: { token: string; onDone: () 
       onDone();
     } catch (err) {
       if (err instanceof ApiError && err.status === 422) {
-        setError("Convite inválido ou expirado. Peça um novo convite ao operador.");
+        setError(rejectionMessage(err.body));
       } else if (err instanceof ApiError && err.status === 429) {
         setError("Muitas tentativas. Tente novamente em alguns minutos.");
       } else {
@@ -47,6 +66,7 @@ export function AcceptInvitation({ token, onDone }: { token: string; onDone: () 
         <label style={{ fontSize: 12, color: "var(--ink2, #444)" }}>
           Senha
           <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required autoFocus
+            minLength={MIN_PASSWORD_LENGTH}
             style={{ width: "100%", padding: 8, marginTop: 4, borderRadius: 6, border: "1px solid var(--line, #ccc)" }} />
         </label>
         <label style={{ fontSize: 12, color: "var(--ink2, #444)" }}>
