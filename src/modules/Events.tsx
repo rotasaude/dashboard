@@ -1,8 +1,11 @@
-// EventsView (§4.8) — domain_events. Stream + filtro por tipo (chips).
+// EventsView (§4.8) — domain_events. Stream + filtro por tipo (chips ou busca
+// livre, nome exato ou prefixo "x.*") + janela própria de datas (F-07.13).
 // Payload SEMPRE referência (ADR 0003/0009).
 
-import { useState } from "react";
-import { useEvents } from "../hooks/useEvents";
+import { useState, type FormEvent } from "react";
+import { useEvents, type EventsWindow } from "../hooks/useEvents";
+import { ApiError } from "../lib/api";
+import { inputStyle, secondaryButtonStyle } from "../components/formStyles";
 import { Panel } from "../components/Panel";
 import { PageHeader } from "../components/PageHeader";
 import { KpiGrid } from "../components/KpiGrid";
@@ -16,18 +19,89 @@ import { EmptyState } from "../components/EmptyState";
 import { KpiSkeleton } from "./Overview";
 import { fmtDateTime } from "../lib/format";
 
+// A API devolve no máximo os 50 mais recentes, sem paginação.
+const STREAM_CAP = 50;
+
 export function Events() {
   const [ filter, setFilter ] = useState("todos");
-  const { data, isLoading, isError, error, refetch } = useEvents(filter);
+  const [ search, setSearch ] = useState("");
+  const [ from, setFrom ] = useState("");
+  const [ to, setTo ] = useState("");
 
-  if (isLoading) return <Wrap><KpiGrid><KpiSkeleton /><KpiSkeleton /></KpiGrid><Panel title="Stream"><Skeleton rows={5} /></Panel></Wrap>;
-  if (isError) return <Wrap><ErrorState message={(error as Error)?.message || "Erro"} onRetry={() => refetch()} /></Wrap>;
-  if (!data) return <Wrap><EmptyState title="sem dados" /></Wrap>;
+  // Compara como data (texto quebra com ano de 5 dígitos). Janela incompleta
+  // ou invertida não vai para a API: o painel segue o período global.
+  const fromDay = dayNumber(from);
+  const toDay = dayNumber(to);
+  const inverted = fromDay !== null && toDay !== null && fromDay > toDay;
+  const span: EventsWindow | null = fromDay !== null && toDay !== null && !inverted ? { from, to } : null;
+
+  const chooseChip = (name: string) => { setSearch(""); setFilter(name); };
+  const submitSearch = (e: FormEvent) => {
+    e.preventDefault();
+    setFilter(search.trim() || "todos");
+  };
+
+  return (
+    <Wrap>
+      <Panel
+        title="Filtros"
+        sub={filtersSummary(span, filter)}
+        right={filter !== "todos" && (
+          <button type="button" onClick={() => setFilter("todos")} style={secondaryButtonStyle}>
+            Limpar nome
+          </button>
+        )}
+      >
+        <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "flex-end" }}>
+          <label style={labelStyle}>
+            De
+            <input type="date" value={from} max={to || undefined} onChange={(e) => setFrom(e.target.value)} style={fieldStyle} />
+          </label>
+          <label style={labelStyle}>
+            Até
+            <input type="date" value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} style={fieldStyle} />
+          </label>
+          {(from || to) && (
+            <button type="button" onClick={() => { setFrom(""); setTo(""); }} style={secondaryButtonStyle}>
+              Usar período global
+            </button>
+          )}
+          <form role="search" onSubmit={submitSearch} style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
+            <label style={labelStyle}>
+              Nome do evento
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="triage.completed ou triage.*"
+                className="mono"
+                style={{ ...fieldStyle, minWidth: 220 }}
+              />
+            </label>
+            <button type="submit" style={secondaryButtonStyle}>Buscar</button>
+          </form>
+        </div>
+        {inverted && (
+          <p role="alert" style={{ margin: "10px 0 0", fontSize: 12.5, color: "var(--down)" }}>
+            A data inicial deve ser anterior ou igual à final; seguindo o período global.
+          </p>
+        )}
+      </Panel>
+      <EventsBody filter={filter} span={span} onChip={chooseChip} />
+    </Wrap>
+  );
+}
+
+function EventsBody({ filter, span, onChip }: { filter: string; span: EventsWindow | null; onChip: (v: string) => void }) {
+  const { data, isLoading, isError, error, refetch } = useEvents({ name: filter, window: span });
+
+  if (isLoading) return <><KpiGrid><KpiSkeleton /><KpiSkeleton /></KpiGrid><Panel title="Stream"><Skeleton rows={5} /></Panel></>;
+  if (isError) return <ErrorState message={errorMessage(error)} onRetry={() => refetch()} />;
+  if (!data) return <EmptyState title="sem dados" />;
 
   const d = data.data;
   const series = d.byType.slice(0, 24).map((b) => b.count);
   return (
-    <Wrap>
+    <>
       <KpiGrid asOf={data.as_of}>
         <StatTile label="Eventos no período" value={d.total} source="live" />
         <StatTile label="Retenção" value={d.retentionMonths} unit="meses" source="live" />
@@ -40,9 +114,14 @@ export function Events() {
       <Panel
         title="Stream"
         sub="referências apenas (ADR 0009)"
-        right={<FilterChips current={filter} options={d.filters} onChange={setFilter} />}
+        right={<FilterChips current={filter} options={d.filters} onChange={onChip} />}
         asOf={data.as_of}
       >
+        {d.total > STREAM_CAP && (
+          <p className="mono" style={{ margin: "0 0 8px", fontSize: 11, color: "var(--ink3)" }}>
+            mostrando os {STREAM_CAP} mais recentes de {d.total}
+          </p>
+        )}
         <DataTable
           cols={[
             { label: "Em", w: "1fr", render: (e) => <span className="mono">{fmtDateTime(e.at)}</span> },
@@ -66,9 +145,37 @@ export function Events() {
           <EmptyState title="sem eventos persistidos" />
         )}
       </Panel>
-    </Wrap>
+    </>
   );
 }
+
+// O subtítulo mostra o filtro APLICADO (o campo de busca é só rascunho).
+function filtersSummary(span: EventsWindow | null, name: string): string {
+  const when = span ? `janela própria · ${span.from} → ${span.to}` : "período global";
+  return name !== "todos" ? `${when} · nome: ${name}` : when;
+}
+
+// "YYYY-MM-DD" (ano com 4+ dígitos) → dias desde a época; null se inválida.
+function dayNumber(value: string): number | null {
+  const m = /^(\d{4,})-(\d{2})-(\d{2})$/.exec(value);
+  if (!m) return null;
+  const [ y, mo, d ] = [ Number(m[1]), Number(m[2]), Number(m[3]) ];
+  const date = new Date(Date.UTC(y, mo - 1, d));
+  if (date.getUTCFullYear() !== y || date.getUTCMonth() !== mo - 1 || date.getUTCDate() !== d) return null;
+  return date.getTime() / 86_400_000;
+}
+
+// 422 = filtro recusado pela API (datas ou período inválidos): mostra o motivo.
+function errorMessage(error: unknown): string {
+  if (error instanceof ApiError && error.status === 422) {
+    const body = error.body as { message?: string } | null;
+    return `Filtro recusado: ${body?.message || "parâmetros inválidos"}`;
+  }
+  return (error as Error)?.message || "Erro";
+}
+
+const labelStyle = { display: "flex", flexDirection: "column" as const, gap: 4, fontSize: 12, color: "var(--ink2)" };
+const fieldStyle = { ...inputStyle, width: "auto" };
 
 function FilterChips({ current, options, onChange }: { current: string; options: string[]; onChange: (v: string) => void }) {
   return (
