@@ -13,9 +13,10 @@ interface Props {
   tone?: Tone | string;
   spark?: number[];
   source?: "live" | "proj";
+  hint?: string;
 }
 
-export function StatTile({ label, value, unit, delta, tone, spark, source }: Props) {
+export function StatTile({ label, value, unit, delta, tone, spark, source, hint }: Props) {
   const { fg } = toneColor(tone);
   const formatted =
     typeof value === "number"
@@ -82,6 +83,10 @@ export function StatTile({ label, value, unit, delta, tone, spark, source }: Pro
           </span>
         )}
       </div>
+
+      {hint && (
+        <span style={{ fontSize: 11, color: "var(--ink3)" }}>{hint}</span>
+      )}
 
       {spark && spark.length > 0 && (
         <Sparkline data={spark} color={tone ? fg : "var(--accent)"} h={26} />

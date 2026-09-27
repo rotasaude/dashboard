@@ -23,10 +23,15 @@ export function Consent() {
   const d = data.data;
   return (
     <Wrap>
-      <KpiGrid>
+      <KpiGrid asOf={data.as_of}>
         <StatTile label="Concedidos" value={d.given} tone="ok" source="live" />
         <StatTile label="Revogados" value={d.revoked} tone="warn" source="live" />
-        <StatTile label="Recusados" value={d.declined ?? "—"} source="live" />
+        <StatTile
+          label="Recusados"
+          value={d.declined ?? "—"}
+          hint={d.declined === null ? "sem registro na web" : undefined}
+          source="live"
+        />
       </KpiGrid>
 
       <Panel title="Por versão" sub="consent_version" asOf={data.as_of}>
