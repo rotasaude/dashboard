@@ -4,17 +4,23 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ScopeContext } from "../lib/scope";
 import type { ClassificationData, TrailStep } from "../lib/types";
 import { Classification } from "./Classification";
+import { kpiRow } from "../test/panelHarness";
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 const classification: ClassificationData = {
-  tiers: [ { key: "high", label: "high", count: 1, tone: "down" } ],
-  byProtocol: [],
-  priorityTrue: 0,
-  priorityTrend: [],
-  byMode: [],
+  tiers: [
+    { key: "alta", label: "alta", count: 2, tone: "down" },
+    { key: "baixa", label: "baixa", count: 5, tone: "info" }
+  ],
+  tierKeys: [ "alta", "baixa" ],
+  urgent: 2,
+  urgentMaxPriority: 1,
+  urgentTrend: [],
+  byProtocol: [ { protocol: "triage-respiratoria · 1", counts: { alta: 2, baixa: 5 } } ],
+  byMode: [ { mode: "weighted", label: "weighted", count: 7, share: 100 } ],
   sampleTriages: [
-    { id: "t1-0000000000000", tier: "alta", priority: true, mode: "weighted", protocol: "triage-respiratoria · 1", at: "09:10" }
+    { id: "t1-0000000000000", tier: "alta", priority: 1, urgent: true, mode: "weighted", protocol: "triage-respiratoria · 1", at: "09:10" }
   ]
 };
 
@@ -42,6 +48,42 @@ function renderClassification() {
 }
 
 const at = "2026-09-27T09:10:00Z";
+
+describe("Classification — tiers reais e urgência (F-05.9)", () => {
+  it("usa os tiers dos protocolos, a urgência pela régua do alerta e o carimbo nos KPIs", async () => {
+    vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
+    stubApi([]);
+    renderClassification();
+
+    const row = await kpiRow();
+    expect(row.getByText("Tier alta")).toBeTruthy();
+    expect(row.getByText("Tier baixa")).toBeTruthy();
+    expect(row.getByText("Casos urgentes (priority ≤ 1)")).toBeTruthy();
+    expect(row.getByText("dados de 09:00:00")).toBeTruthy();
+  });
+
+  it("monta o pivô por protocolo com as colunas dos tiers reais", async () => {
+    vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
+    stubApi([]);
+    renderClassification();
+
+    const pivot = within(await screen.findByRole("region", { name: "Tier por protocolo" }));
+    expect(pivot.getByText("alta")).toBeTruthy();
+    expect(pivot.getByText("baixa")).toBeTruthy();
+    expect(pivot.getByText("5")).toBeTruthy();
+    expect(pivot.queryByText("Low")).toBeNull();
+  });
+
+  it("mostra a prioridade como número e marca a urgente", async () => {
+    vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
+    stubApi([]);
+    renderClassification();
+
+    const sample = within(await screen.findByRole("region", { name: "Amostra de inspeção" }));
+    expect(sample.getByText("1 · urgente")).toBeTruthy();
+    expect(sample.queryByText("sim")).toBeNull();
+  });
+});
 
 describe("Classification — trail drawer (F-03.16)", () => {
   it("abre o trail da triagem e mostra só regra, referência e saída", async () => {

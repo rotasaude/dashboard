@@ -53,14 +53,17 @@ export interface TriagesData {
 
 export interface ClassificationData {
   tiers: ToneSegment[];
-  byProtocol: Array<{ protocol: string; low: number; medium: number; high: number }>;
-  priorityTrue: number;
-  priorityTrend: number[];
+  tierKeys: string[];
+  urgent: number;
+  urgentMaxPriority: number;
+  urgentTrend: number[];
+  byProtocol: Array<{ protocol: string; counts: Record<string, number> }>;
   byMode: Array<{ mode: string; label: string; count: number; share: number }>;
   sampleTriages: Array<{
     id: string;
     tier: string | null;
-    priority: boolean;
+    priority: number | null;
+    urgent: boolean;
     mode: string | null;
     protocol: string;
     at: string | null;
