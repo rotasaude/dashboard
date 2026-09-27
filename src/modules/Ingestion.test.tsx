@@ -93,7 +93,7 @@ describe("Ingestion", () => {
 
     expect(screen.getByText("idade do raw mais antigo ainda não purgado vs retenção")).not.toBeNull();
     expect(screen.getByText("30d / 90d")).not.toBeNull();
-    expect(screen.getByText("Dentro do TTL configurado")).not.toBeNull();
+    expect(screen.getByText("Dentro da retenção do raw")).not.toBeNull();
     expect(screen.queryByText(/purga atrasada/)).toBeNull();
   });
 

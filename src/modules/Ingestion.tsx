@@ -73,7 +73,7 @@ export function Ingestion() {
           hint={
             d.purge.overTtl
               ? "Algum registro está acima do TTL — purga atrasada (worker parado?)"
-              : "Dentro do TTL configurado"
+              : "Dentro da retenção do raw"
           }
         />
       </Panel>
