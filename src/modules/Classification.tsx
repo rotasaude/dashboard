@@ -1,5 +1,6 @@
 // ClassificationView (§4.5) + drill-down de Trail.
-// IMPORTANTE LGPD (ADR 0015): trail só carrega regra/referência/saída.
+// IMPORTANTE LGPD (ADR 0009): trail só carrega regra/referência/saída — é a
+// explicação que o motor congelou no Outcome da triagem (F-03.7).
 
 import { useState } from "react";
 import { useClassification } from "../hooks/useClassification";
@@ -136,7 +137,7 @@ function TrailDrawer({ triageId, onClose }: { triageId: string; onClose: () => v
           </button>
         </div>
 
-        <Tag tone="info">sem dado clínico — só regras e referências (ADR 0015)</Tag>
+        <Tag tone="info">sem dado clínico — só regras e referências (ADR 0009)</Tag>
 
         {isLoading && <Skeleton rows={6} />}
         {isError && <ErrorState message={(error as Error)?.message || "Erro"} />}
@@ -148,7 +149,7 @@ function TrailDrawer({ triageId, onClose }: { triageId: string; onClose: () => v
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {data.data.steps.length === 0 ? (
-                <EmptyState title="sem eventos de classificação para esta triagem" />
+                <EmptyState title="sem trilha registrada para esta triagem" />
               ) : (
                 data.data.steps.map((s, i) => (
                   <div
@@ -171,7 +172,7 @@ function TrailDrawer({ triageId, onClose }: { triageId: string; onClose: () => v
                       <br />
                       ref: <span style={{ color: "var(--ink)" }}>{s.ref || "—"}</span>
                       <br />
-                      out: <span style={{ color: "var(--ink)" }}>{s.out || "—"}</span>
+                      out: <span style={{ color: "var(--ink)" }}>{s.out ?? "—"}</span>
                     </div>
                   </div>
                 ))
