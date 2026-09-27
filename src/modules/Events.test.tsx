@@ -90,7 +90,72 @@ describe("Events — filtros viram parâmetros da consulta (F-07.13)", () => {
   });
 });
 
+describe("Events — nome aplicado visível", () => {
+  it("mostra no subtítulo o nome que a consulta usou, não o rascunho do campo", async () => {
+    const fn = stubEvents(base);
+    renderPanel(<Events />);
+    await kpiRow();
+
+    fireEvent.change(screen.getByLabelText("Nome do evento"), { target: { value: "consent.granted" } });
+    fireEvent.click(screen.getByRole("button", { name: "Buscar" }));
+    await waitFor(() => expect(lastParams(fn).get("name")).toBe("consent.granted"));
+    fireEvent.change(screen.getByLabelText("Nome do evento"), { target: { value: "rascunho.x" } });
+
+    const filtros = screen.getByRole("region", { name: "Filtros" });
+    expect(filtros.textContent).toContain("período global · nome: consent.granted");
+    expect(filtros.textContent).not.toContain("nome: rascunho.x");
+  });
+
+  it("limpar o nome aplicado volta a todos", async () => {
+    const fn = stubEvents(base);
+    renderPanel(<Events />);
+    await kpiRow();
+
+    fireEvent.change(screen.getByLabelText("Nome do evento"), { target: { value: "consent.granted" } });
+    fireEvent.click(screen.getByRole("button", { name: "Buscar" }));
+    await waitFor(() => expect(lastParams(fn).get("name")).toBe("consent.granted"));
+
+    const calls = fn.mock.calls.length;
+    fireEvent.click(screen.getByRole("button", { name: "Limpar nome" }));
+    await kpiRow();
+    const filtros = screen.getByRole("region", { name: "Filtros" });
+    expect(filtros.textContent).not.toContain("nome:");
+    expect(screen.queryByRole("button", { name: "Limpar nome" })).toBeNull();
+    expect(fn.mock.calls.slice(calls).every((c) => !new URL(String((c as unknown[])[0])).searchParams.has("name"))).toBe(true);
+  });
+
+  it("o chip aplicado também aparece no subtítulo", async () => {
+    stubEvents(base);
+    renderPanel(<Events />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "triage.*" }));
+    await waitFor(() => expect(screen.getByRole("region", { name: "Filtros" }).textContent).toContain("nome: triage.*"));
+  });
+});
+
 describe("Events — janela própria de tempo", () => {
+  it("compara as datas como datas, não como texto (ano com 5 dígitos)", async () => {
+    const fn = stubEvents(base);
+    renderPanel(<Events />);
+    await kpiRow();
+
+    fireEvent.change(screen.getByLabelText("De"), { target: { value: "9999-12-31" } });
+    fireEvent.change(screen.getByLabelText("Até"), { target: { value: "10000-01-01" } });
+    await waitFor(() => expect(paramsObject(fn)).toEqual({ period: "custom", from: "9999-12-31", to: "10000-01-01" }));
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("recusa de > até também com ano de 5 dígitos", async () => {
+    const fn = stubEvents(base);
+    renderPanel(<Events />);
+    await kpiRow();
+
+    fireEvent.change(screen.getByLabelText("De"), { target: { value: "10000-01-01" } });
+    fireEvent.change(screen.getByLabelText("Até"), { target: { value: "9999-12-31" } });
+    expect((await screen.findByRole("alert")).textContent).toMatch(/data inicial/i);
+    expect(paramsObject(fn)).toEqual({ period: "7d" });
+  });
+
   it("com de/até preenchidos, manda period=custom com from e to", async () => {
     const fn = stubEvents(base);
     renderPanel(<Events />);

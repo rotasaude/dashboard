@@ -28,10 +28,12 @@ export function Events() {
   const [ from, setFrom ] = useState("");
   const [ to, setTo ] = useState("");
 
-  // Datas YYYY-MM-DD comparam como texto. Janela incompleta ou invertida não
-  // vai para a API: o painel segue o período global.
-  const inverted = from !== "" && to !== "" && from > to;
-  const span: EventsWindow | null = from && to && !inverted ? { from, to } : null;
+  // Compara como data (texto quebra com ano de 5 dígitos). Janela incompleta
+  // ou invertida não vai para a API: o painel segue o período global.
+  const fromDay = dayNumber(from);
+  const toDay = dayNumber(to);
+  const inverted = fromDay !== null && toDay !== null && fromDay > toDay;
+  const span: EventsWindow | null = fromDay !== null && toDay !== null && !inverted ? { from, to } : null;
 
   const chooseChip = (name: string) => { setSearch(""); setFilter(name); };
   const submitSearch = (e: FormEvent) => {
@@ -41,7 +43,15 @@ export function Events() {
 
   return (
     <Wrap>
-      <Panel title="Filtros" sub={span ? `janela própria · ${span.from} → ${span.to}` : "período global"}>
+      <Panel
+        title="Filtros"
+        sub={filtersSummary(span, filter)}
+        right={filter !== "todos" && (
+          <button type="button" onClick={() => setFilter("todos")} style={secondaryButtonStyle}>
+            Limpar nome
+          </button>
+        )}
+      >
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "flex-end" }}>
           <label style={labelStyle}>
             De
@@ -137,6 +147,22 @@ function EventsBody({ filter, span, onChip }: { filter: string; span: EventsWind
       </Panel>
     </>
   );
+}
+
+// O subtítulo mostra o filtro APLICADO (o campo de busca é só rascunho).
+function filtersSummary(span: EventsWindow | null, name: string): string {
+  const when = span ? `janela própria · ${span.from} → ${span.to}` : "período global";
+  return name !== "todos" ? `${when} · nome: ${name}` : when;
+}
+
+// "YYYY-MM-DD" (ano com 4+ dígitos) → dias desde a época; null se inválida.
+function dayNumber(value: string): number | null {
+  const m = /^(\d{4,})-(\d{2})-(\d{2})$/.exec(value);
+  if (!m) return null;
+  const [ y, mo, d ] = [ Number(m[1]), Number(m[2]), Number(m[3]) ];
+  const date = new Date(Date.UTC(y, mo - 1, d));
+  if (date.getUTCFullYear() !== y || date.getUTCMonth() !== mo - 1 || date.getUTCDate() !== d) return null;
+  return date.getTime() / 86_400_000;
 }
 
 // 422 = filtro recusado pela API (datas ou período inválidos): mostra o motivo.
