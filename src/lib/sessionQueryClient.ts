@@ -3,11 +3,17 @@
 // AppRoot criava um único client para o tempo de vida da aba (useState), e
 // dados em cache do usuário anterior podiam aparecer por até staleTime (30 s)
 // quando outro usuário logava na sequência. Aqui, trocar o userId (login →
-// logout → outro login) cria um client novo e limpa (`clear()`) o anterior
-// de imediato, na própria renderização — nunca serve dado de A para B, nem
-// por um frame. Enquanto o userId não muda (reload() após step-up, refresh
-// de sessão), o mesmo client é devolvido, preservando o cache do usuário.
-import { useRef } from "react";
+// logout → outro login) cria um client novo já durante a renderização
+// (barato, sem efeito colateral observável fora do componente), mas a
+// limpeza destrutiva do client anterior (`clear()`/`unmount()`) só acontece
+// depois do commit, num useEffect — uma renderização pode ser descartada
+// (StrictMode, render concorrente interrompido, transição que nunca comita),
+// e limpar o cache nesse momento apagaria dados de uma troca que nunca
+// chegou a valer. O efeito compara o client devolvido com o último client
+// efetivamente commitado: só limpa quando eles diferem, então uma
+// renderização repetida com o mesmo userId (inclusive o duplo-invoke de
+// efeitos do StrictMode) nunca limpa o client vigente.
+import { useEffect, useRef } from "react";
 import { QueryClient } from "@tanstack/react-query";
 import { createAppQueryClient } from "./queryClient";
 
@@ -24,11 +30,21 @@ export function useSessionQueryClient(
   const sessionRef = useRef<{ userId: string | null; client: QueryClient } | null>(null);
 
   if (sessionRef.current === null || sessionRef.current.userId !== userId) {
-    const previous = sessionRef.current;
-    const client = createAppQueryClient(() => onUnauthorizedRef.current());
-    sessionRef.current = { userId, client };
-    if (previous) previous.client.clear();
+    sessionRef.current = { userId, client: createAppQueryClient(() => onUnauthorizedRef.current()) };
   }
 
-  return sessionRef.current.client;
+  const client = sessionRef.current.client;
+
+  // Só roda (e só limpa) depois que `client` é o que de fato comitou.
+  const committedRef = useRef<QueryClient | null>(null);
+  useEffect(() => {
+    const previouslyCommitted = committedRef.current;
+    if (previouslyCommitted && previouslyCommitted !== client) {
+      previouslyCommitted.clear();
+      previouslyCommitted.unmount();
+    }
+    committedRef.current = client;
+  }, [ client ]);
+
+  return client;
 }

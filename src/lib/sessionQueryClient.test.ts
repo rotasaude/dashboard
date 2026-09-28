@@ -56,4 +56,54 @@ describe("useSessionQueryClient", () => {
     expect(result.current).not.toBe(clientA);
     expect(clientA.getQueryData([ "team" ])).toBeUndefined();
   });
+
+  it("nunca limpa nem desmonta o client vigente ao rerenderizar com o mesmo userId", () => {
+    const { result, rerender } = renderHook(
+      ({ userId }: { userId: string | null }) => useSessionQueryClient(userId, vi.fn()),
+      { initialProps: { userId: "user-a" as string | null } }
+    );
+
+    const clientA = result.current;
+    const clearSpy = vi.spyOn(clientA, "clear");
+    const unmountSpy = vi.spyOn(clientA, "unmount");
+    clientA.setQueryData([ "team" ], { name: "Equipe da cidade A" });
+
+    // Mesmo userId, várias vezes: o client vigente nunca é limpo/desmontado
+    // (inclui o duplo-invoke de efeitos que o StrictMode simula em dev).
+    rerender({ userId: "user-a" });
+    rerender({ userId: "user-a" });
+
+    expect(result.current).toBe(clientA);
+    expect(clearSpy).not.toHaveBeenCalled();
+    expect(unmountSpy).not.toHaveBeenCalled();
+    expect(clientA.getQueryData([ "team" ])).toEqual({ name: "Equipe da cidade A" });
+  });
+
+  it("depois da troca A→B comitada, o client de B nunca é limpo e o de A é limpo e desmontado uma vez", () => {
+    const { result, rerender } = renderHook(
+      ({ userId }: { userId: string | null }) => useSessionQueryClient(userId, vi.fn()),
+      { initialProps: { userId: "user-a" as string | null } }
+    );
+
+    const clientA = result.current;
+    const clearSpyA = vi.spyOn(clientA, "clear");
+    const unmountSpyA = vi.spyOn(clientA, "unmount");
+
+    rerender({ userId: "user-b" });
+
+    const clientB = result.current;
+    expect(clientB).not.toBe(clientA);
+    expect(clearSpyA).toHaveBeenCalledTimes(1);
+    expect(unmountSpyA).toHaveBeenCalledTimes(1);
+
+    const clearSpyB = vi.spyOn(clientB, "clear");
+    clientB.setQueryData([ "team" ], { name: "Equipe da cidade B" });
+
+    // Rerenderizar de novo com B (mesmo id) não deve tocar no client vigente.
+    rerender({ userId: "user-b" });
+
+    expect(result.current).toBe(clientB);
+    expect(clearSpyB).not.toHaveBeenCalled();
+    expect(clientB.getQueryData([ "team" ])).toEqual({ name: "Equipe da cidade B" });
+  });
 });
