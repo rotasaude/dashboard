@@ -19,7 +19,7 @@ vi.mock("../lib/api", async (importOriginal) => {
 import * as api from "../lib/api";
 import { ApiError } from "../lib/api";
 import { AuthProvider } from "../lib/auth";
-import { currentUnitKey } from "../lib/attendance";
+import { ATTENDANCE_REFETCH_MS, currentUnitKey } from "../lib/attendance";
 import { Attendance } from "./Attendance";
 
 afterEach(() => { cleanup(); localStorage.clear(); });
@@ -315,27 +315,37 @@ describe("Attendance", () => {
   });
 
   it("profissional recém-vinculado por outra sessão passa a ver 'Chamar próximo' sem recarregar a página", async () => {
-    const unit = { id: "un1", name: "UBS Centro", kind: "ubs" };
-    mocked(api.fetchCurrentSession).mockResolvedValue(session("health_professional"));
-    localStorage.setItem(currentUnitKey("u1"), unit.id);
-    mocked(api.listActiveUnits).mockResolvedValue([ unit ]);
-    mocked(api.getMyProfessional)
-      .mockResolvedValueOnce(null)
-      .mockResolvedValue({
-        professional: {} as api.Professional, shifts: [],
-        links: [ { id: "l1", health_unit_id: "un1", unit_name: "UBS Centro", cbo_code: "225125", cbo_title: null,
-          started_at: "x", started_by: "a", ended_at: null, ended_by: null } ]
-      });
-    const { client } = renderAttendance();
+    // shouldAdvanceTime: true deixa os timers falsos também avançarem com o
+    // relógio de parede — sem isto, o polling interno do `waitFor` (via
+    // setTimeout) trava para sempre assim que os timers viram falsos, e o
+    // teste nunca resolve nada sozinho. Com isto, `findBy*` continua
+    // funcionando normalmente, e só avançamos explicitamente o tempo que
+    // interessa (ATTENDANCE_REFETCH_MS) via advanceTimersByTimeAsync — sem
+    // chamar refetchQueries à mão, o teste depende de verdade do
+    // refetchInterval da query, não de um empurrão manual do teste.
+    vi.useFakeTimers({ toFake: [ "setTimeout", "clearTimeout", "setInterval", "clearInterval" ], shouldAdvanceTime: true });
+    try {
+      const unit = { id: "un1", name: "UBS Centro", kind: "ubs" };
+      mocked(api.fetchCurrentSession).mockResolvedValue(session("health_professional"));
+      localStorage.setItem(currentUnitKey("u1"), unit.id);
+      mocked(api.listActiveUnits).mockResolvedValue([ unit ]);
+      mocked(api.getMyProfessional)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValue({
+          professional: {} as api.Professional, shifts: [],
+          links: [ { id: "l1", health_unit_id: "un1", unit_name: "UBS Centro", cbo_code: "225125", cbo_title: null,
+            started_at: "x", started_by: "a", ended_at: null, ended_by: null } ]
+        });
+      renderAttendance();
 
-    expect(await screen.findByText("Seu cadastro profissional ainda não foi feito. Fale com a administração da cidade.")).not.toBeNull();
-    expect(screen.queryByRole("button", { name: "Chamar próximo" })).toBeNull();
+      expect(await screen.findByText("Seu cadastro profissional ainda não foi feito. Fale com a administração da cidade.")).not.toBeNull();
+      expect(screen.queryByRole("button", { name: "Chamar próximo" })).toBeNull();
 
-    // Simula o refetchInterval (ATTENDANCE_REFETCH_MS) chegando sem depender
-    // de detalhes internos de agendamento do react-query: outra sessão
-    // acabou de abrir o vínculo, e o próximo poll deve trazer isso.
-    await client.refetchQueries({ queryKey: [ "myProfessional", "u1" ] });
-    expect(await screen.findByRole("button", { name: "Chamar próximo" })).not.toBeNull();
+      await vi.advanceTimersByTimeAsync(ATTENDANCE_REFETCH_MS);
+      expect(await screen.findByRole("button", { name: "Chamar próximo" })).not.toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("sem perfil profissional (getMyProfessional null): mensagem específica, não a de vínculo", async () => {

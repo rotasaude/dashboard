@@ -39,11 +39,22 @@ export function ProfessionalDetail({ professionalId, onBack }: Props) {
   const [ opening, setOpening ] = useState(false);
   const [ ending, setEnding ] = useState<ProfessionalLink | null>(null);
   const [ scheduling, setScheduling ] = useState<ProfessionalLink | null>(null);
+  // Incrementado a cada "Lançar turno" clicado (mesmo no mesmo vínculo) para
+  // forçar o remount de ScheduleShift via `key` — sem isto, clicar de novo
+  // no mesmo vínculo depois de salvar reabriria o painel ainda preso no
+  // estado "turno lançado" (`saved`), sem formulário nenhum para digitar o
+  // próximo turno.
+  const [ scheduleOpenSeq, setScheduleOpenSeq ] = useState(0);
   const [ cancelling, setCancelling ] = useState<ProfessionalShift | null>(null);
 
   function refresh() {
     void queryClient.invalidateQueries({ queryKey: [ "professional", professionalId ] });
     void queryClient.invalidateQueries({ queryKey: [ "professionalShifts", professionalId ] });
+  }
+
+  function openSchedule(link: ProfessionalLink) {
+    setScheduling(link);
+    setScheduleOpenSeq((n) => n + 1);
   }
 
   if (!detail.data) return detail.error ? <p role="alert">{professionalError(detail.error)}</p> : null;
@@ -73,7 +84,7 @@ export function ProfessionalDetail({ professionalId, onBack }: Props) {
             { label: "Fim", w: "1.5fr", render: (l) => l.ended_at ? `${fmtDateTime(l.ended_at)} · ${l.ended_by}` : "ativo" },
             { label: "", w: "auto", align: "right", render: (l) => !l.ended_at && (
               <span style={{ display: "flex", gap: 6 }}>
-                <button type="button" style={secondaryButtonStyle} onClick={() => setScheduling(l)}>Lançar turno</button>
+                <button type="button" style={secondaryButtonStyle} onClick={() => openSchedule(l)}>Lançar turno</button>
                 <button type="button" style={secondaryButtonStyle} onClick={() => setEnding(l)}>Encerrar</button>
               </span>
             ) }
@@ -111,7 +122,12 @@ export function ProfessionalDetail({ professionalId, onBack }: Props) {
         </span>
       }>
         {scheduling && (
-          <ScheduleShift link={scheduling} onSaved={refresh} onClose={() => setScheduling(null)} />
+          <ScheduleShift
+            key={`${scheduling.id}-${scheduleOpenSeq}`}
+            link={scheduling}
+            onSaved={refresh}
+            onClose={() => setScheduling(null)}
+          />
         )}
         {shifts.isError ? (
           <p role="alert" style={alertStyle}>{professionalError(shifts.error)}</p>

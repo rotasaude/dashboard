@@ -20,6 +20,8 @@ const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
 
 const link = { id: "l1", health_unit_id: "h1", unit_name: "UBS Jardim", cbo_code: "225125", cbo_title: "Médico clínico",
   started_at: "2026-09-01T12:00:00Z", started_by: "admin@c.gov.br", ended_at: null, ended_by: null };
+const link2 = { id: "l2", health_unit_id: "h2", unit_name: "UPA Centro", cbo_code: "225124", cbo_title: "Médico pediatra",
+  started_at: "2026-09-01T12:00:00Z", started_by: "admin@c.gov.br", ended_at: null, ended_by: null };
 
 function session(stepped: boolean) {
   return { id: "u-admin", email_address: "admin@c.gov.br", operator: false, mfa_enrolled: true,
@@ -174,12 +176,57 @@ describe("ProfessionalDetail", () => {
     expect(screen.getByRole("button", { name: "Fechar" })).toBeTruthy();
   });
 
+  it("'Lançar turno' noutro vínculo depois de salvar mostra o formulário novo, não a confirmação antiga", async () => {
+    mocked(api.getProfessional).mockResolvedValue({
+      professional: { id: "p1", user_id: "u1", email_address: "medica@c.gov.br", professional_name: "Helena Duarte",
+        council: "CRM", council_state: "PR", registration_number: "12345", cns_masked: "*** **** **** 0005",
+        cns: "700000000000005", phone: null, contact_email: null },
+      links: [ link, link2 ]
+    });
+    mocked(api.scheduleShift).mockResolvedValue({} as api.ProfessionalShift);
+    renderIt();
+    const openButtons = await screen.findAllByRole("button", { name: "Lançar turno" });
+    fireEvent.click(openButtons[0]);
+    fireEvent.change(screen.getByLabelText("Data"), { target: { value: "2026-10-06" } });
+    fireEvent.change(screen.getByLabelText("Início"), { target: { value: "19:00" } });
+    fireEvent.change(screen.getByLabelText("Fim"), { target: { value: "07:00" } });
+    fireEvent.click(screen.getByRole("button", { name: "Salvar turno" }));
+    expect(await screen.findByText("turno lançado: 06/10 19:00–07:00")).toBeTruthy();
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Lançar turno" })[1]);
+    expect(await screen.findByText("Turno em UPA Centro")).toBeTruthy();
+    expect(screen.queryByText("turno lançado: 06/10 19:00–07:00")).toBeNull();
+    expect(screen.getByLabelText("Data")).toBeTruthy();
+  });
+
+  it("'Lançar turno' de novo no mesmo vínculo depois de salvar reabre um formulário limpo", async () => {
+    mocked(api.scheduleShift).mockResolvedValue({} as api.ProfessionalShift);
+    renderIt();
+    fireEvent.click(await screen.findByRole("button", { name: "Lançar turno" }));
+    fireEvent.change(screen.getByLabelText("Data"), { target: { value: "2026-10-06" } });
+    fireEvent.change(screen.getByLabelText("Início"), { target: { value: "19:00" } });
+    fireEvent.change(screen.getByLabelText("Fim"), { target: { value: "07:00" } });
+    fireEvent.click(screen.getByRole("button", { name: "Salvar turno" }));
+    expect(await screen.findByText("turno lançado: 06/10 19:00–07:00")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Lançar turno" }));
+    expect(screen.queryByText("turno lançado: 06/10 19:00–07:00")).toBeNull();
+    expect(await screen.findByLabelText("Data")).toBeTruthy();
+    expect((screen.getByLabelText("Data") as HTMLInputElement).value).toBe("");
+  });
+
   describe("prévia de turnos futuros ao encerrar (EndLink)", () => {
     it("mostra 'contando turnos futuros…' enquanto a consulta carrega, nunca 'nenhum turno'", async () => {
+      renderIt();
+      // O one-shot precisa mirar a consulta do EndLink (disparada só ao
+      // clicar em "Encerrar"), não a da tabela de Turnos (disparada no mount
+      // do componente, antes daqui) — senão o teste passaria mesmo que a
+      // prévia mostrasse "Nenhum turno futuro" direto, já que o mock base
+      // (`mockResolvedValue([])` do beforeEach) resolveria essa consulta.
+      const endButton = await screen.findByRole("button", { name: "Encerrar" });
       let resolveShifts: (rows: api.ProfessionalShift[]) => void = () => {};
       mocked(api.listProfessionalShifts).mockReturnValueOnce(new Promise((resolve) => { resolveShifts = resolve; }));
-      renderIt();
-      fireEvent.click(await screen.findByRole("button", { name: "Encerrar" }));
+      fireEvent.click(endButton);
       expect(await screen.findByText("contando turnos futuros…")).toBeTruthy();
       expect(screen.queryByText(/Nenhum turno futuro/)).toBeNull();
       resolveShifts([]);
@@ -187,9 +234,12 @@ describe("ProfessionalDetail", () => {
     });
 
     it("mostra o erro traduzido quando a contagem falha, nunca 'nenhum turno'", async () => {
-      mocked(api.listProfessionalShifts).mockRejectedValueOnce(new ApiError(500, "", "x"));
       renderIt();
-      fireEvent.click(await screen.findByRole("button", { name: "Encerrar" }));
+      // Mesmo cuidado: mira a consulta do EndLink, disparada só depois do
+      // clique — não a da tabela de Turnos, já disparada no mount.
+      const endButton = await screen.findByRole("button", { name: "Encerrar" });
+      mocked(api.listProfessionalShifts).mockRejectedValueOnce(new ApiError(500, "", "x"));
+      fireEvent.click(endButton);
       expect(await screen.findByText("não foi possível concluir — tente de novo")).toBeTruthy();
       expect(screen.queryByText(/Nenhum turno futuro/)).toBeNull();
     });
