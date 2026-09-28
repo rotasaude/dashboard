@@ -6,12 +6,14 @@ import type { ReactNode } from "react";
 vi.mock("../../lib/api", async (importOriginal) => {
   const real = await importOriginal<typeof import("../../lib/api")>();
   return {
-    ...real, listUnitQueue: vi.fn(), callAttendance: vi.fn(), callNext: vi.fn(), closeAttendance: vi.fn()
+    ...real, fetchCurrentSession: vi.fn(), listUnitQueue: vi.fn(), callAttendance: vi.fn(), callNext: vi.fn(),
+    closeAttendance: vi.fn()
   };
 });
 
 import * as api from "../../lib/api";
 import { ApiError } from "../../lib/api";
+import { AuthProvider } from "../../lib/auth";
 import { UnitQueue } from "./UnitQueue";
 
 afterEach(cleanup);
@@ -44,14 +46,22 @@ const inCare = [
 function renderQueue(props: { canCare: boolean; careBlocked?: string | null; onClinicalRefused?(): void }) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const wrapper = ({ children }: { children: ReactNode }) =>
-    <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+    <QueryClientProvider client={client}><AuthProvider>{children}</AuthProvider></QueryClientProvider>;
   render(<UnitQueue unit={unit} units={[ unit, otherUnit ]} {...props} />, { wrapper });
   return { client };
 }
 
+function session() {
+  return { id: "u1", email_address: "dr@cidade.gov.br", operator: false, mfa_enrolled: true, mfa_verified_at: null,
+    memberships: [ { municipality_id: "m1", municipality_name: "Curitiba", municipality_uf: "PR", role: "health_professional" } ] };
+}
+
 describe("UnitQueue", () => {
   beforeEach(() => {
-    for (const fn of [ api.listUnitQueue, api.callAttendance, api.callNext, api.closeAttendance ]) mocked(fn).mockReset();
+    for (const fn of [ api.fetchCurrentSession, api.listUnitQueue, api.callAttendance, api.callNext, api.closeAttendance ]) {
+      mocked(fn).mockReset();
+    }
+    mocked(api.fetchCurrentSession).mockResolvedValue(session());
     mocked(api.listUnitQueue).mockResolvedValue({ waiting, in_care: inCare });
   });
 
@@ -289,6 +299,16 @@ describe("UnitQueue", () => {
     await waitFor(() => expect(onClinicalRefused).toHaveBeenCalled());
     expect(await screen.findAllByText(message)).toHaveLength(1);
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("403 missing_role ao chamar: além de onClinicalRefused, recarrega a sessão (o papel foi revogado)", async () => {
+    const onClinicalRefused = vi.fn();
+    mocked(api.callNext).mockRejectedValue(new ApiError(403, { error: "missing_role" }, "x"));
+    renderQueue({ canCare: true, onClinicalRefused });
+    await waitFor(() => expect(api.fetchCurrentSession).toHaveBeenCalledTimes(1));
+    fireEvent.click(await screen.findByRole("button", { name: "Chamar próximo" }));
+    await waitFor(() => expect(onClinicalRefused).toHaveBeenCalled());
+    await waitFor(() => expect(api.fetchCurrentSession).toHaveBeenCalledTimes(2));
   });
 
   it("already_called recarrega a fila sem erro parado, como already_closed hoje", async () => {
