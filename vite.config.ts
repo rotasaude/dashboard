@@ -37,7 +37,8 @@ export default defineConfig({
       "/setup":     proxy(TARGET),
       "/protocols": proxy(TARGET),
       "/mfa":       proxy(TARGET),
-      "/attendance": proxy(TARGET)
+      "/attendance": proxy(TARGET),
+      "/professionals": proxy(TARGET)
     }
   }
 });
