@@ -1,0 +1,86 @@
+import { describe, expect, it } from "vitest";
+import { ApiError } from "./api";
+import { isValidCns, maskCns, professionalError, professionalErrorOrNull, shiftWindow } from "./professionals";
+
+describe("isValidCns", () => {
+  it.each([ "700000000000005", "100000000000007", "200123456789019", "898000000000002", "712345678901236", "123456789012348" ])(
+    "aceita %s", (cns) => expect(isValidCns(cns)).toBe(true)
+  );
+  it("aceita com espaços e pontos", () => expect(isValidCns("7123 4567 8901 236")).toBe(true));
+  it.each([ "712345678901237", "312345678901236", "70000000000000", "" ])("recusa %s", (cns) =>
+    expect(isValidCns(cns)).toBe(false));
+});
+
+describe("maskCns", () => {
+  it("mostra só os 4 últimos", () => expect(maskCns("712345678901236")).toBe("*** **** **** 1236"));
+});
+
+describe("shiftWindow", () => {
+  it("turno no mesmo dia", () => {
+    expect(shiftWindow("2026-10-05", "07:00", "13:00")).toEqual({
+      startsAt: "2026-10-05T07:00:00-03:00", endsAt: "2026-10-05T13:00:00-03:00", nextDay: false, tooLong: false
+    });
+  });
+  it("fim antes do início: termina no dia seguinte", () => {
+    expect(shiftWindow("2026-10-05", "19:00", "07:00")).toMatchObject({
+      endsAt: "2026-10-06T07:00:00-03:00", nextDay: true, tooLong: false
+    });
+  });
+  it("fim igual ao início: 24h, no dia seguinte", () => {
+    expect(shiftWindow("2026-10-31", "07:00", "07:00")).toMatchObject({
+      endsAt: "2026-11-01T07:00:00-03:00", nextDay: true, tooLong: false
+    });
+  });
+  it("vira o ano", () => {
+    expect(shiftWindow("2026-12-31", "19:00", "07:00")?.endsAt).toBe("2027-01-01T07:00:00-03:00");
+  });
+  it("entrada ilegível: null", () => {
+    expect(shiftWindow("", "07:00", "13:00")).toBeNull();
+    expect(shiftWindow("2026-10-05", "7h", "13:00")).toBeNull();
+  });
+});
+
+describe("professionalError", () => {
+  const err = (status: number, body: unknown) => new ApiError(status, body, "x");
+  it("traduz as recusas nomeadas", () => {
+    expect(professionalError(err(422, { error: "council_mismatch" }))).toMatch(/conselho/);
+    expect(professionalError(err(409, { error: "shift_overlap", conflict: { unit_name: "UBS Jardim", starts_at: "2026-10-05T10:00:00Z", ends_at: "2026-10-05T16:00:00Z" } })))
+      .toBe("conflita com o turno em UBS Jardim, 05/10 07:00–13:00");
+    expect(professionalError(err(422, { error: "invalid", fields: [ "cns", "phone" ] }))).toBe("confira: CNS, telefone");
+    expect(professionalError(err(403, { error: "missing_link" }))).toBe("Você não tem vínculo com esta unidade");
+  });
+  it("recusa council_in_use: conselho travado por vínculo ativo", () => {
+    expect(professionalError(err(422, { error: "council_in_use", cbo_codes: [ "225125" ] }))).toMatch(/conselho/);
+  });
+  it("desconhecido: genérico", () => {
+    expect(professionalError(new Error("rede"))).toBe("não foi possível concluir — tente de novo");
+  });
+  it("shift_overlap sem conflito nomeado: mensagem genérica de sobreposição", () => {
+    expect(professionalError(err(409, { error: "shift_overlap" }))).toBe("conflita com outro turno do profissional");
+    expect(professionalError(err(409, { error: "shift_overlap", conflict: {} }))).toBe("conflita com outro turno do profissional");
+  });
+  it("invalid sem campos: mensagem genérica de dados inválidos", () => {
+    expect(professionalError(err(422, { error: "invalid" }))).toBe("dados inválidos — confira os campos");
+    expect(professionalError(err(422, { error: "invalid", fields: [] }))).toBe("dados inválidos — confira os campos");
+  });
+  it("not_found: pede para recarregar", () => {
+    expect(professionalError(err(404, { error: "not_found" }))).toBe("registro não encontrado — recarregue a página");
+  });
+});
+
+describe("professionalErrorOrNull", () => {
+  const err = (status: number, body: unknown) => new ApiError(status, body, "x");
+  it("traduz recusas conhecidas, igual a professionalError", () => {
+    expect(professionalErrorOrNull(err(422, { error: "council_mismatch" }))).toMatch(/conselho/);
+    expect(professionalErrorOrNull(err(403, { error: "missing_link" }))).toBe("Você não tem vínculo com esta unidade");
+  });
+  it("código desconhecido: null, para o SensitiveAction cair na sua própria mensagem", () => {
+    expect(professionalErrorOrNull(err(422, { error: "algo_novo_nao_mapeado" }))).toBeNull();
+  });
+  it("erro que não é da API (rede): null, para o SensitiveAction usar sua tradução de rede", () => {
+    expect(professionalErrorOrNull(new Error("rede"))).toBeNull();
+  });
+  it("sessão expirada (401): null, para o SensitiveAction usar a mensagem de sessão expirada", () => {
+    expect(professionalErrorOrNull(err(401, {}))).toBeNull();
+  });
+});

@@ -6,6 +6,7 @@ import {
 } from "../../lib/api";
 import { ATTENDANCE_REFETCH_MS, attendanceError } from "../../lib/attendance";
 import { fmtDateTime, fmtHourMinute } from "../../lib/format";
+import { useAuth } from "../../lib/auth";
 import { Panel } from "../../components/Panel";
 import { DataTable } from "../../components/DataTable";
 import { EmptyState } from "../../components/EmptyState";
@@ -24,6 +25,8 @@ interface Props {
   unit: HealthUnit;
   units: HealthUnit[];
   canCare: boolean;
+  careBlocked?: string | null;
+  onClinicalRefused?(): void;
 }
 
 const OUTCOME_LABEL: Record<Exclude<AttendanceOutcome, "left">, string> = {
@@ -36,8 +39,19 @@ function errorCode(err: unknown): string | undefined {
   return err instanceof ApiError ? (err.body as { error?: string } | undefined)?.error : undefined;
 }
 
-export function UnitQueue({ unit, units, canCare }: Props) {
+// missing_role (o papel health_professional foi revogado) precisa recarregar
+// a sessão além de invalidar o vínculo: canCareRole vem de user.memberships
+// (AuthContext), não da query de vínculo — só onClinicalRefused não bastaria
+// para esconder os botões clínicos sem um F5.
+function handleClinicalRefusal(code: string | undefined, reload: () => void, onClinicalRefused?: () => void) {
+  if (code !== "missing_link" && code !== "missing_role") return;
+  onClinicalRefused?.();
+  if (code === "missing_role") void reload();
+}
+
+export function UnitQueue({ unit, units, canCare, careBlocked, onClinicalRefused }: Props) {
   const queryClient = useQueryClient();
+  const auth = useAuth();
   const query = useQuery({ queryKey: [ "unitQueue", unit.id ], queryFn: () => listUnitQueue(unit.id),
     refetchInterval: ATTENDANCE_REFETCH_MS
   });
@@ -58,11 +72,13 @@ export function UnitQueue({ unit, units, canCare }: Props) {
       await callNext(unit.id);
       invalidate();
     } catch (err) {
+      const code = errorCode(err);
       // queue_empty: outro profissional esvaziou a fila entre o clique e a
       // resposta — a lista de Aguardando já mostra "Ninguém aguardando" ao
       // recarregar, sem precisar de um alerta parado (mesmo padrão do
       // already_closed de OpenAttendances).
-      if (errorCode(err) === "queue_empty") { invalidate(); return; }
+      if (code === "queue_empty") { invalidate(); return; }
+      handleClinicalRefusal(code, () => void auth.reload(), onClinicalRefused);
       setActionError(attendanceError(err));
     } finally {
       setCallingNext(false);
@@ -76,9 +92,11 @@ export function UnitQueue({ unit, units, canCare }: Props) {
       await callAttendance(row.id, unit.id);
       invalidate();
     } catch (err) {
+      const code = errorCode(err);
       // already_called: outro profissional chamou primeiro — recarrega em
       // vez de mostrar erro parado.
-      if (errorCode(err) === "already_called") { invalidate(); return; }
+      if (code === "already_called") { invalidate(); return; }
+      handleClinicalRefusal(code, () => void auth.reload(), onClinicalRefused);
       setActionError(attendanceError(err));
     } finally {
       setRowBusy(null);
@@ -115,12 +133,13 @@ export function UnitQueue({ unit, units, canCare }: Props) {
     )}>
       <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
         {done && <p role="status" style={{ margin: 0, fontSize: 12.5, fontWeight: 600 }}>{done}</p>}
-        {actionError && (
+        {actionError && actionError !== careBlocked && (
           <p role="alert" style={{ margin: 0, fontSize: 12.5, color: "var(--down)" }}>{actionError}</p>
         )}
         {query.isError && (
           <p role="alert" style={{ margin: 0, fontSize: 12.5, color: "var(--down)" }}>{attendanceError(query.error)}</p>
         )}
+        {careBlocked && <p role="status" style={{ margin: 0, fontSize: 12.5 }}>{careBlocked}</p>}
 
         {!query.isError && (
           <>
@@ -205,6 +224,7 @@ export function UnitQueue({ unit, units, canCare }: Props) {
             row={closing}
             unit={unit}
             units={units}
+            onClinicalRefused={onClinicalRefused}
             onCancel={() => setClosing(null)}
             onDone={(appointmentRequest) => {
               setClosing(null);
@@ -224,11 +244,13 @@ export function UnitQueue({ unit, units, canCare }: Props) {
 }
 
 function ClosePanel(
-  { row, unit, units, onCancel, onDone }: {
+  { row, unit, units, onClinicalRefused, onCancel, onDone }: {
     row: QueueRow; unit: HealthUnit; units: HealthUnit[];
+    onClinicalRefused?(): void;
     onCancel(): void; onDone(appointmentRequest: AppointmentRequestSummary | null): void;
   }
 ) {
+  const auth = useAuth();
   const [ outcome, setOutcome ] = useState<Exclude<AttendanceOutcome, "left">>("discharged");
   const [ referralUnitId, setReferralUnitId ] = useState("");
   const [ note, setNote ] = useState("");
@@ -249,7 +271,9 @@ function ClosePanel(
       const result = await closeAttendance(row.id, outcome, referralUnitId || undefined, note || undefined);
       onDone(result.appointmentRequest);
     } catch (err) {
-      if (errorCode(err) === "already_closed") { onDone(null); return; }
+      const code = errorCode(err);
+      if (code === "already_closed") { onDone(null); return; }
+      handleClinicalRefusal(code, () => void auth.reload(), onClinicalRefused);
       setError(attendanceError(err));
     } finally {
       setBusy(false);

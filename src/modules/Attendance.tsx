@@ -1,10 +1,10 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  listActiveUnits, lookupCitizen, revokeVerification, verifyCitizen, listVerifications,
+  getMyProfessional, listActiveUnits, lookupCitizen, revokeVerification, verifyCitizen, listVerifications,
   type AttendanceCitizen, type AttendanceTriage, type HealthUnit, type VerificationRow
 } from "../lib/api";
-import { attendanceError, currentUnitKey, isValidCpf, maskCpf, nivelLabel, onlyDigits } from "../lib/attendance";
+import { ATTENDANCE_REFETCH_MS, attendanceError, currentUnitKey, isValidCpf, maskCpf, nivelLabel, onlyDigits } from "../lib/attendance";
 import { fmtDateTime } from "../lib/format";
 import { useAuth } from "../lib/auth";
 import { PageHeader } from "../components/PageHeader";
@@ -33,20 +33,43 @@ interface Found { citizen: AttendanceCitizen; triages: AttendanceTriage[] }
 
 export function Attendance() {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const [ unit, setUnit ] = useState<HealthUnit | null>(null);
   // Remonta o UnitPicker (limpando a escolha guardada) quando o check-in
   // devolve invalid_unit — a unidade foi desativada entre a escolha e o
   // check-in (ou como destino de encaminhamento).
   const [ pickerKey, setPickerKey ] = useState(0);
   const unitsQuery = useQuery({ queryKey: [ "activeUnits" ], queryFn: listActiveUnits, enabled: !!unit });
+  const canCareRole = (user?.memberships.map((m) => m.role) ?? []).includes("health_professional");
+  // Chave por usuário (F-10.5): o QueryClient é criado uma vez em main.tsx e
+  // sobrevive a troca de sessão (login/logout não chama queryClient.clear());
+  // sem o user.id, o vínculo de um profissional vazaria no cache para o
+  // próximo usuário que logar na mesma aba.
+  const myProfessional = useQuery({
+    queryKey: [ "myProfessional", user?.id ?? null ], queryFn: getMyProfessional, enabled: canCareRole,
+    // Sem isto, um profissional recém-vinculado por outra sessão (dashboard
+    // do admin) continua vendo "sem vínculo" até recarregar a página inteira
+    // — os botões clínicos ficam escondidos sem 403 nenhum acontecer.
+    refetchInterval: ATTENDANCE_REFETCH_MS
+  });
 
   if (!user) return null;
   const roles = user.memberships.map((m) => m.role);
   const canVerify = roles.includes("citizen_verifier");
-  const canCare = roles.includes("health_professional");
   const isAdmin = roles.includes("municipal_admin");
 
-  if (!canVerify && !canCare && !isAdmin) {
+  // F-10.5: chamar e registrar desfecho exigem vínculo ativo com a unidade
+  // escolhida. A API é quem garante; aqui só não se oferece o que ela recusaria.
+  const linkedUnitIds = new Set((myProfessional.data?.links ?? []).filter((l) => !l.ended_at).map((l) => l.health_unit_id));
+  const canCare = canCareRole && !!unit && linkedUnitIds.has(unit.id);
+  const careBlocked = canCareRole && unit
+    ? (myProfessional.isError ? attendanceError(myProfessional.error)
+      : (myProfessional.isSuccess && myProfessional.data === null
+        ? "Seu cadastro profissional ainda não foi feito. Fale com a administração da cidade."
+        : (myProfessional.isSuccess && !canCare ? "Você não tem vínculo com esta unidade" : null)))
+    : null;
+
+  if (!canVerify && !canCareRole && !isAdmin) {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         <PageHeader title="Atendimento" sub="balcão · verificação presencial" />
@@ -64,9 +87,17 @@ export function Attendance() {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <PageHeader title="Atendimento" sub="balcão · verificação presencial" />
-      {(canVerify || canCare) && <UnitPicker key={pickerKey} userId={user.id} onChange={setUnit} />}
+      {(canVerify || canCareRole) && <UnitPicker key={pickerKey} userId={user.id} onChange={setUnit} />}
       {canVerify && unit && <CheckIn unit={unit} onUnitInvalid={onUnitInvalid} />}
-      {(canVerify || canCare) && unit && <UnitQueue unit={unit} units={unitsQuery.data ?? []} canCare={canCare} />}
+      {(canVerify || canCareRole) && unit && (
+        <UnitQueue
+          unit={unit}
+          units={unitsQuery.data ?? []}
+          canCare={canCare}
+          careBlocked={careBlocked}
+          onClinicalRefused={() => void queryClient.invalidateQueries({ queryKey: [ "myProfessional", user.id ] })}
+        />
+      )}
       {canVerify && unit && <Requests unit={unit} />}
       {canVerify && unit && <Agenda unit={unit} />}
       {canVerify && <Counter />}

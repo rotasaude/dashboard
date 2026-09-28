@@ -6,12 +6,14 @@ import type { ReactNode } from "react";
 vi.mock("../../lib/api", async (importOriginal) => {
   const real = await importOriginal<typeof import("../../lib/api")>();
   return {
-    ...real, listUnitQueue: vi.fn(), callAttendance: vi.fn(), callNext: vi.fn(), closeAttendance: vi.fn()
+    ...real, fetchCurrentSession: vi.fn(), listUnitQueue: vi.fn(), callAttendance: vi.fn(), callNext: vi.fn(),
+    closeAttendance: vi.fn()
   };
 });
 
 import * as api from "../../lib/api";
 import { ApiError } from "../../lib/api";
+import { AuthProvider } from "../../lib/auth";
 import { UnitQueue } from "./UnitQueue";
 
 afterEach(cleanup);
@@ -41,22 +43,30 @@ const inCare = [
   }
 ];
 
-function renderQueue(canCare: boolean) {
+function renderQueue(props: { canCare: boolean; careBlocked?: string | null; onClinicalRefused?(): void }) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const wrapper = ({ children }: { children: ReactNode }) =>
-    <QueryClientProvider client={client}>{children}</QueryClientProvider>;
-  render(<UnitQueue unit={unit} units={[ unit, otherUnit ]} canCare={canCare} />, { wrapper });
+    <QueryClientProvider client={client}><AuthProvider>{children}</AuthProvider></QueryClientProvider>;
+  render(<UnitQueue unit={unit} units={[ unit, otherUnit ]} {...props} />, { wrapper });
   return { client };
+}
+
+function session() {
+  return { id: "u1", email_address: "dr@cidade.gov.br", operator: false, mfa_enrolled: true, mfa_verified_at: null,
+    memberships: [ { municipality_id: "m1", municipality_name: "Curitiba", municipality_uf: "PR", role: "health_professional" } ] };
 }
 
 describe("UnitQueue", () => {
   beforeEach(() => {
-    for (const fn of [ api.listUnitQueue, api.callAttendance, api.callNext, api.closeAttendance ]) mocked(fn).mockReset();
+    for (const fn of [ api.fetchCurrentSession, api.listUnitQueue, api.callAttendance, api.callNext, api.closeAttendance ]) {
+      mocked(fn).mockReset();
+    }
+    mocked(api.fetchCurrentSession).mockResolvedValue(session());
     mocked(api.listUnitQueue).mockResolvedValue({ waiting, in_care: inCare });
   });
 
   it("mostra Aguardando e Em atendimento na ordem da API, com prioridade, origem e chamada", async () => {
-    renderQueue(true);
+    renderQueue({ canCare: true });
 
     expect(await screen.findByText("Aguardando")).not.toBeNull();
     expect(screen.getByText("Em atendimento")).not.toBeNull();
@@ -77,27 +87,27 @@ describe("UnitQueue", () => {
 
   describe("profissional (canCare)", () => {
     it("tem 'Chamar próximo' no topo e 'Chamar' em cada linha de Aguardando", async () => {
-      renderQueue(true);
+      renderQueue({ canCare: true });
       expect(await screen.findByRole("button", { name: "Chamar próximo" })).not.toBeNull();
       expect(await screen.findAllByRole("button", { name: "Chamar" })).toHaveLength(2);
     });
 
     it("'Chamar próximo' chama callNext e recarrega a fila", async () => {
       mocked(api.callNext).mockResolvedValue({ attendance: { id: "a1" } });
-      renderQueue(true);
+      renderQueue({ canCare: true });
       fireEvent.click(await screen.findByRole("button", { name: "Chamar próximo" }));
       await waitFor(() => expect(api.callNext).toHaveBeenCalledWith("u1"));
     });
 
     it("'Chamar' numa linha chama callAttendance com o id da linha e a unidade", async () => {
       mocked(api.callAttendance).mockResolvedValue({ attendance: { id: "a1" } });
-      renderQueue(true);
+      renderQueue({ canCare: true });
       fireEvent.click((await screen.findAllByRole("button", { name: "Chamar" }))[0]);
       await waitFor(() => expect(api.callAttendance).toHaveBeenCalledWith("a1", "u1"));
     });
 
     it("'Encerrar' em Em atendimento abre o painel com o desfecho, nomeando o atendimento", async () => {
-      renderQueue(true);
+      renderQueue({ canCare: true });
       fireEvent.click(await screen.findByRole("button", { name: "Encerrar" }));
       expect(screen.getByText(/\*\*\*\.333\.444-\*\*.*triage-dor/)).not.toBeNull();
       const outcome = screen.getByLabelText("Desfecho") as HTMLSelectElement;
@@ -106,7 +116,7 @@ describe("UnitQueue", () => {
     });
 
     it("'Encaminhado' oferece as unidades ativas, incluindo a própria, e uma descrição", async () => {
-      renderQueue(true);
+      renderQueue({ canCare: true });
       fireEvent.click(await screen.findByRole("button", { name: "Encerrar" }));
       fireEvent.change(screen.getByLabelText("Desfecho"), { target: { value: "referred" } });
       const select = screen.getByLabelText("Unidade de destino") as HTMLSelectElement;
@@ -115,7 +125,7 @@ describe("UnitQueue", () => {
     });
 
     it("'Encaminhado' sem destino e sem descrição fica desabilitado", async () => {
-      renderQueue(true);
+      renderQueue({ canCare: true });
       fireEvent.click(await screen.findByRole("button", { name: "Encerrar" }));
       fireEvent.change(screen.getByLabelText("Desfecho"), { target: { value: "referred" } });
       const confirm = screen.getByRole("button", { name: "Confirmar encerramento" }) as HTMLButtonElement;
@@ -131,7 +141,7 @@ describe("UnitQueue", () => {
         appointment_time: null, called_at: "2026-09-25T12:15:00Z", called_by_name: "dr2@cidade.gov.br"
       };
       mocked(api.listUnitQueue).mockResolvedValue({ waiting, in_care: [ inCare[0], secondInCare ] });
-      renderQueue(true);
+      renderQueue({ canCare: true });
 
       const encerrarButtons = await screen.findAllByRole("button", { name: "Encerrar" });
       fireEvent.click(encerrarButtons[0]);
@@ -148,7 +158,7 @@ describe("UnitQueue", () => {
     });
 
     it("com unidade no encaminhamento, mostra 'Gera pedido de agendamento na unidade'", async () => {
-      renderQueue(true);
+      renderQueue({ canCare: true });
       fireEvent.click(await screen.findByRole("button", { name: "Encerrar" }));
       fireEvent.change(screen.getByLabelText("Desfecho"), { target: { value: "referred" } });
       expect(screen.queryByText(/Gera pedido de agendamento/)).toBeNull();
@@ -157,7 +167,7 @@ describe("UnitQueue", () => {
     });
 
     it("'Retorno' oferece uma nota opcional e mostra 'Gera pedido de agendamento na própria unidade'", async () => {
-      renderQueue(true);
+      renderQueue({ canCare: true });
       fireEvent.click(await screen.findByRole("button", { name: "Encerrar" }));
       fireEvent.change(screen.getByLabelText("Desfecho"), { target: { value: "return" } });
       expect(screen.getByLabelText("Nota (opcional)")).not.toBeNull();
@@ -169,7 +179,7 @@ describe("UnitQueue", () => {
         attendance: { id: "a3" },
         appointmentRequest: { id: "r1", kind: "return", target_unit_name: "UBS Centro", status: "open" }
       });
-      renderQueue(true);
+      renderQueue({ canCare: true });
       fireEvent.click(await screen.findByRole("button", { name: "Encerrar" }));
       fireEvent.change(screen.getByLabelText("Desfecho"), { target: { value: "return" } });
       fireEvent.click(screen.getByRole("button", { name: "Confirmar encerramento" }));
@@ -182,7 +192,7 @@ describe("UnitQueue", () => {
         attendance: { id: "a3" },
         appointmentRequest: { id: "r1", kind: "return", target_unit_name: "UBS Centro", status: "open" }
       });
-      const { client } = renderQueue(true);
+      const { client } = renderQueue({ canCare: true });
       // Semeia como se o painel Pedidos (desta unidade e de outra) já tivesse carregado.
       client.setQueryData([ "unitRequests", "u1" ], []);
       client.setQueryData([ "unitRequests", "u2" ], []);
@@ -195,7 +205,7 @@ describe("UnitQueue", () => {
 
     it("encerrar sem pedido não invalida os Pedidos", async () => {
       mocked(api.closeAttendance).mockResolvedValue({ attendance: { id: "a3" }, appointmentRequest: null });
-      const { client } = renderQueue(true);
+      const { client } = renderQueue({ canCare: true });
       client.setQueryData([ "unitRequests", "u1" ], []);
       fireEvent.click(await screen.findByRole("button", { name: "Encerrar" }));
       fireEvent.click(screen.getByRole("button", { name: "Confirmar encerramento" }));
@@ -207,7 +217,7 @@ describe("UnitQueue", () => {
 
     it("encerrar com 'Atendido e liberado' (sem pedido) não mostra confirmação de pedido", async () => {
       mocked(api.closeAttendance).mockResolvedValue({ attendance: { id: "a3" }, appointmentRequest: null });
-      renderQueue(true);
+      renderQueue({ canCare: true });
       fireEvent.click(await screen.findByRole("button", { name: "Encerrar" }));
       fireEvent.click(screen.getByRole("button", { name: "Confirmar encerramento" }));
       await waitFor(() => expect(api.closeAttendance).toHaveBeenCalledWith("a3", "discharged", undefined, undefined));
@@ -217,7 +227,7 @@ describe("UnitQueue", () => {
 
   describe("recepção (sem canCare)", () => {
     it("não mostra 'Chamar', 'Chamar próximo' nem 'Encerrar'", async () => {
-      renderQueue(false);
+      renderQueue({ canCare: false });
       await screen.findByText("Aguardando");
       expect(screen.queryByRole("button", { name: "Chamar próximo" })).toBeNull();
       expect(screen.queryByRole("button", { name: "Chamar" })).toBeNull();
@@ -225,14 +235,14 @@ describe("UnitQueue", () => {
     });
 
     it("em Aguardando, vê apenas 'Saiu sem atendimento'", async () => {
-      renderQueue(false);
+      renderQueue({ canCare: false });
       expect(await screen.findAllByRole("button", { name: "Saiu sem atendimento" })).toHaveLength(2);
     });
   });
 
   it("'Saiu sem atendimento' aparece para os dois papéis e encerra com 'left'", async () => {
     mocked(api.closeAttendance).mockResolvedValue({ attendance: { id: "a1" }, appointmentRequest: null });
-    renderQueue(true);
+    renderQueue({ canCare: true });
     fireEvent.click((await screen.findAllByRole("button", { name: "Saiu sem atendimento" }))[0]);
     await waitFor(() => expect(api.closeAttendance).toHaveBeenCalledWith("a1", "left", undefined, undefined));
   });
@@ -242,7 +252,7 @@ describe("UnitQueue", () => {
     mocked(api.listUnitQueue)
       .mockResolvedValueOnce({ waiting, in_care: inCare })
       .mockResolvedValueOnce({ waiting: [], in_care: inCare });
-    renderQueue(true);
+    renderQueue({ canCare: true });
     fireEvent.click(await screen.findByRole("button", { name: "Chamar próximo" }));
     expect(await screen.findByText("Ninguém aguardando")).not.toBeNull();
     expect(screen.queryByRole("alert")).toBeNull();
@@ -250,16 +260,55 @@ describe("UnitQueue", () => {
 
   it("erro inesperado em 'Chamar próximo' mostra alerta (não fica em silêncio)", async () => {
     mocked(api.callNext).mockRejectedValue(new ApiError(403, { error: "forbidden" }, "x"));
-    renderQueue(true);
+    renderQueue({ canCare: true });
     fireEvent.click(await screen.findByRole("button", { name: "Chamar próximo" }));
     expect(await screen.findByText("seu papel não permite esta ação")).not.toBeNull();
   });
 
   it("erro inesperado em 'Chamar' mostra alerta (não fica em silêncio)", async () => {
     mocked(api.callAttendance).mockRejectedValue(new ApiError(422, { error: "wrong_unit" }, "x"));
-    renderQueue(true);
+    renderQueue({ canCare: true });
     fireEvent.click((await screen.findAllByRole("button", { name: "Chamar" }))[0]);
     expect(await screen.findByText("atendimento de outra unidade")).not.toBeNull();
+  });
+
+  it("careBlocked: esconde chamar e desfecho, mostra a mensagem, mantém 'Saiu sem atendimento'", async () => {
+    renderQueue({ canCare: false, careBlocked: "Você não tem vínculo com esta unidade" });
+    expect(await screen.findByText("Você não tem vínculo com esta unidade")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Chamar próximo" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Chamar" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Encerrar" })).toBeNull();
+    expect(await screen.findAllByRole("button", { name: "Saiu sem atendimento" })).toHaveLength(2);
+  });
+
+  it("403 missing_link ao chamar: mensagem nomeada e avisa a tela para reler o vínculo", async () => {
+    const onClinicalRefused = vi.fn();
+    mocked(api.callNext).mockRejectedValue(new ApiError(403, { error: "missing_link" }, "x"));
+    renderQueue({ canCare: true, onClinicalRefused });
+    fireEvent.click(await screen.findByRole("button", { name: "Chamar próximo" }));
+    expect(await screen.findByText("Você não tem vínculo com esta unidade")).toBeTruthy();
+    expect(onClinicalRefused).toHaveBeenCalled();
+  });
+
+  it("403 missing_link com careBlocked já ativo: a mensagem não repete no alerta", async () => {
+    const message = "Você não tem vínculo com esta unidade";
+    const onClinicalRefused = vi.fn();
+    mocked(api.callNext).mockRejectedValue(new ApiError(403, { error: "missing_link" }, "x"));
+    renderQueue({ canCare: true, careBlocked: message, onClinicalRefused });
+    fireEvent.click(await screen.findByRole("button", { name: "Chamar próximo" }));
+    await waitFor(() => expect(onClinicalRefused).toHaveBeenCalled());
+    expect(await screen.findAllByText(message)).toHaveLength(1);
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("403 missing_role ao chamar: além de onClinicalRefused, recarrega a sessão (o papel foi revogado)", async () => {
+    const onClinicalRefused = vi.fn();
+    mocked(api.callNext).mockRejectedValue(new ApiError(403, { error: "missing_role" }, "x"));
+    renderQueue({ canCare: true, onClinicalRefused });
+    await waitFor(() => expect(api.fetchCurrentSession).toHaveBeenCalledTimes(1));
+    fireEvent.click(await screen.findByRole("button", { name: "Chamar próximo" }));
+    await waitFor(() => expect(onClinicalRefused).toHaveBeenCalled());
+    await waitFor(() => expect(api.fetchCurrentSession).toHaveBeenCalledTimes(2));
   });
 
   it("already_called recarrega a fila sem erro parado, como already_closed hoje", async () => {
@@ -267,7 +316,7 @@ describe("UnitQueue", () => {
     mocked(api.listUnitQueue)
       .mockResolvedValueOnce({ waiting, in_care: inCare })
       .mockResolvedValueOnce({ waiting: [ waiting[1] ], in_care: inCare });
-    renderQueue(true);
+    renderQueue({ canCare: true });
     fireEvent.click((await screen.findAllByRole("button", { name: "Chamar" }))[0]);
     await waitFor(() => expect(screen.queryByText("***.982.247-**")).toBeNull());
     expect(screen.queryByRole("alert")).toBeNull();

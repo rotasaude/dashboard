@@ -22,6 +22,7 @@ export interface TeamMember {
   verifierMembershipId: string | null;
   isProfessional: boolean;
   professionalMembershipId: string | null;
+  professionalStatus: "missing_profile" | "missing_link" | "ok" | null;
 }
 
 export function teamMembers(rows: MembershipRow[]): TeamMember[] {
@@ -32,7 +33,7 @@ export function teamMembers(rows: MembershipRow[]): TeamMember[] {
       userId: row.user.id, email: row.user.email_address, roles: [],
       isReviewer: false, reviewerMembershipId: null,
       isVerifier: false, verifierMembershipId: null,
-      isProfessional: false, professionalMembershipId: null
+      isProfessional: false, professionalMembershipId: null, professionalStatus: null
     };
     current.roles = [ ...current.roles, row.role ].sort();
     if (row.role === REVIEWER_ROLE) {
@@ -46,6 +47,7 @@ export function teamMembers(rows: MembershipRow[]): TeamMember[] {
     if (row.role === PROFESSIONAL_ROLE) {
       current.isProfessional = true;
       current.professionalMembershipId = row.id;
+      current.professionalStatus = row.professional_status ?? null;
     }
     byUser.set(row.user.id, current);
   }

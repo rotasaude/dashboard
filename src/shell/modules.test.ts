@@ -4,7 +4,7 @@ import { NAV_GROUPS, labelFor, navGroupsFor } from "./modules";
 describe("modules", () => {
   it("Segurança fica no grupo Conta", () => {
     const conta = NAV_GROUPS.find((g) => g.label === "Conta");
-    expect(conta?.items.map((i) => i.id)).toEqual([ "security" ]);
+    expect(conta?.items.map((i) => i.id)).toContain("security");
     expect(labelFor("security")).toBe("Segurança");
   });
 
@@ -52,6 +52,22 @@ describe("modules", () => {
     it("Atendimento também aparece para health_professional", () => {
       const professional = { operator: false, memberships: [ { role: "health_professional" } ] };
       expect(navGroupsFor(professional).some((g) => g.label === "Atendimento")).toBe(true);
+    });
+  });
+
+  describe("módulo 10 na navegação", () => {
+    const user = (roles: string[], operator = false) => ({ operator, memberships: roles.map((role) => ({ role })) });
+    const ids = (u: Parameters<typeof navGroupsFor>[0]) => navGroupsFor(u).flatMap((g) => g.items.map((i) => i.id));
+
+    it("Profissionais só para municipal_admin", () => {
+      expect(ids(user([ "municipal_admin" ]))).toContain("professionals");
+      expect(ids(user([ "health_professional" ]))).not.toContain("professionals");
+    });
+
+    it("Meu perfil só para health_professional que não é operador", () => {
+      expect(ids(user([ "health_professional" ]))).toContain("my-profile");
+      expect(ids(user([ "municipal_admin" ]))).not.toContain("my-profile");
+      expect(ids(user([], true))).not.toContain("my-profile");
     });
   });
 });

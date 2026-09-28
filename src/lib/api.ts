@@ -118,6 +118,7 @@ export interface MembershipRow {
   user: { id: string; email_address: string };
   role: string;
   granted_at: string;
+  professional_status?: "missing_profile" | "missing_link" | "ok";
 }
 
 // Só memberships ATIVAS (SetupController#list_memberships): uma linha por
@@ -530,4 +531,117 @@ export async function listUnitAgenda(unitId: string, dateIso: string): Promise<A
     `${ATTENDANCE_BASE}/units/${encodeURIComponent(unitId)}/agenda?date=${encodeURIComponent(dateIso)}`
   );
   return payload.appointments;
+}
+
+// ─── Profissionais (módulo 10) ───────────────────────────────────────────────
+
+// Profissionais (módulo 10, ADR 0021; spec 2026-09-27 §4.1). Tudo sob
+// /professionals — uma entrada só no proxy de dev.
+const PROFESSIONALS_BASE = import.meta.env.VITE_PROFESSIONALS_BASE || "/professionals";
+
+export interface Professional {
+  id: string;
+  user_id: string;
+  email_address: string;
+  professional_name: string;
+  council: string;
+  council_state: string;
+  registration_number: string;
+  cns_masked: string;
+  cns?: string;
+  phone?: string | null;
+  contact_email?: string | null;
+}
+
+export interface ProfessionalLink {
+  id: string;
+  health_unit_id: string;
+  unit_name: string;
+  cbo_code: string;
+  cbo_title: string | null;
+  started_at: string;
+  started_by: string;
+  ended_at: string | null;
+  ended_by: string | null;
+}
+
+export interface ProfessionalShift {
+  id: string;
+  professional_link_id: string;
+  unit_name: string;
+  starts_at: string;
+  ends_at: string;
+  cancelled_at: string | null;
+  cancel_reason: string | null;
+}
+
+export interface CboEntry { code: string; title: string; council: string | null }
+export interface PendingProfessional { user_id: string; email_address: string; status: "missing_profile" | "missing_link" }
+export interface MyProfessional { professional: Professional; links: ProfessionalLink[]; shifts: ProfessionalShift[] }
+
+export type ProfessionalFields = Partial<Pick<Professional,
+  "professional_name" | "council" | "council_state" | "registration_number" | "cns" | "phone" | "contact_email">>;
+
+const postProfessional = (body: unknown): RequestInit => ({ method: "POST", body: JSON.stringify(body) });
+const professionalId = encodeURIComponent;
+
+export async function listProfessionals(): Promise<(Professional & { links: ProfessionalLink[] })[]> {
+  return (await jsonFetch<{ professionals: (Professional & { links: ProfessionalLink[] })[] }>(PROFESSIONALS_BASE)).professionals;
+}
+
+export async function listPendingProfessionals(): Promise<PendingProfessional[]> {
+  return (await jsonFetch<{ users: PendingProfessional[] }>(`${PROFESSIONALS_BASE}/pending`)).users;
+}
+
+export async function getProfessional(professional: string): Promise<{ professional: Professional; links: ProfessionalLink[] }> {
+  return jsonFetch(`${PROFESSIONALS_BASE}/${professionalId(professional)}`);
+}
+
+export async function createProfessional(userId: string, fields: ProfessionalFields): Promise<Professional> {
+  return (await jsonFetch<{ professional: Professional }>(PROFESSIONALS_BASE, postProfessional({ user_id: userId, ...fields }))).professional;
+}
+
+export async function updateProfessional(professional: string, fields: ProfessionalFields): Promise<Professional> {
+  return (await jsonFetch<{ professional: Professional }>(`${PROFESSIONALS_BASE}/${professionalId(professional)}`, postProfessional(fields))).professional;
+}
+
+// 404 no_profile vira null: "seu cadastro ainda não foi feito" é estado, não erro.
+export async function getMyProfessional(): Promise<MyProfessional | null> {
+  try {
+    return await jsonFetch<MyProfessional>(`${PROFESSIONALS_BASE}/me`);
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) return null;
+    throw err;
+  }
+}
+
+export async function updateMyProfessional(fields: Pick<ProfessionalFields, "professional_name" | "phone" | "contact_email">): Promise<Professional> {
+  return (await jsonFetch<{ professional: Professional }>(`${PROFESSIONALS_BASE}/me`, postProfessional(fields))).professional;
+}
+
+export async function listCbo(): Promise<CboEntry[]> {
+  return (await jsonFetch<{ cbo: CboEntry[] }>(`${PROFESSIONALS_BASE}/cbo`)).cbo;
+}
+
+export async function openProfessionalLink(professional: string, healthUnitId: string, cboCode: string): Promise<ProfessionalLink> {
+  return (await jsonFetch<{ link: ProfessionalLink }>(`${PROFESSIONALS_BASE}/${professionalId(professional)}/links`,
+    postProfessional({ health_unit_id: healthUnitId, cbo_code: cboCode }))).link;
+}
+
+export async function endProfessionalLink(linkId: string): Promise<{ link: ProfessionalLink; cancelled_shift_ids: string[] }> {
+  return jsonFetch(`${PROFESSIONALS_BASE}/links/${professionalId(linkId)}/end`, postProfessional({}));
+}
+
+export async function listProfessionalShifts(professional: string, from: string, to: string): Promise<ProfessionalShift[]> {
+  const qs = new URLSearchParams({ from, to }).toString();
+  return (await jsonFetch<{ shifts: ProfessionalShift[] }>(`${PROFESSIONALS_BASE}/${professionalId(professional)}/shifts?${qs}`)).shifts;
+}
+
+export async function scheduleShift(linkId: string, startsAt: string, endsAt: string): Promise<ProfessionalShift> {
+  return (await jsonFetch<{ shift: ProfessionalShift }>(`${PROFESSIONALS_BASE}/links/${professionalId(linkId)}/shifts`,
+    postProfessional({ starts_at: startsAt, ends_at: endsAt }))).shift;
+}
+
+export async function cancelShift(shiftId: string, reason: string): Promise<ProfessionalShift> {
+  return (await jsonFetch<{ shift: ProfessionalShift }>(`${PROFESSIONALS_BASE}/shifts/${professionalId(shiftId)}/cancel`, postProfessional({ reason }))).shift;
 }

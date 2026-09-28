@@ -11,14 +11,15 @@ vi.mock("../lib/api", async (importOriginal) => {
     listActiveUnits: vi.fn(), listAllUnits: vi.fn(), createUnit: vi.fn(), updateUnit: vi.fn(), setUnitActive: vi.fn(),
     listUnitQueue: vi.fn(), callAttendance: vi.fn(), callNext: vi.fn(), closeAttendance: vi.fn(),
     lookupCheckIn: vi.fn(), checkIn: vi.fn(), searchCheckIn: vi.fn(), checkInByException: vi.fn(),
-    listUnitRequests: vi.fn(), scheduleRequest: vi.fn(), dismissRequest: vi.fn(), listUnitAgenda: vi.fn()
+    listUnitRequests: vi.fn(), scheduleRequest: vi.fn(), dismissRequest: vi.fn(), listUnitAgenda: vi.fn(),
+    getMyProfessional: vi.fn()
   };
 });
 
 import * as api from "../lib/api";
 import { ApiError } from "../lib/api";
 import { AuthProvider } from "../lib/auth";
-import { currentUnitKey } from "../lib/attendance";
+import { ATTENDANCE_REFETCH_MS, currentUnitKey } from "../lib/attendance";
 import { Attendance } from "./Attendance";
 
 afterEach(() => { cleanup(); localStorage.clear(); });
@@ -37,6 +38,7 @@ function renderAttendance() {
   const wrapper = ({ children }: { children: ReactNode }) =>
     <QueryClientProvider client={client}><AuthProvider>{children}</AuthProvider></QueryClientProvider>;
   render(<Attendance />, { wrapper });
+  return { client };
 }
 
 const found = {
@@ -54,7 +56,7 @@ describe("Attendance", () => {
       api.listActiveUnits, api.listAllUnits, api.createUnit, api.updateUnit, api.setUnitActive,
       api.listUnitQueue, api.callAttendance, api.callNext, api.closeAttendance,
       api.lookupCheckIn, api.checkIn, api.searchCheckIn, api.checkInByException,
-      api.listUnitRequests, api.scheduleRequest, api.dismissRequest, api.listUnitAgenda
+      api.listUnitRequests, api.scheduleRequest, api.dismissRequest, api.listUnitAgenda, api.getMyProfessional
     ]) {
       mocked(fn).mockReset();
     }
@@ -64,6 +66,7 @@ describe("Attendance", () => {
     mocked(api.listUnitQueue).mockResolvedValue({ waiting: [], in_care: [] });
     mocked(api.listUnitRequests).mockResolvedValue([]);
     mocked(api.listUnitAgenda).mockResolvedValue([]);
+    mocked(api.getMyProfessional).mockResolvedValue(null);
   });
 
   it("busca, exige a caixa do documento e valida", async () => {
@@ -217,6 +220,11 @@ describe("Attendance", () => {
     mocked(api.fetchCurrentSession).mockResolvedValue(session("health_professional"));
     localStorage.setItem(currentUnitKey("u1"), unit.id);
     mocked(api.listActiveUnits).mockResolvedValue([ unit ]);
+    mocked(api.getMyProfessional).mockResolvedValue({
+      professional: {} as api.Professional, shifts: [],
+      links: [ { id: "l1", health_unit_id: "un1", unit_name: "UBS Centro", cbo_code: "225125", cbo_title: null,
+        started_at: "x", started_by: "a", ended_at: null, ended_by: null } ]
+    });
     renderAttendance();
 
     expect(await screen.findByRole("button", { name: "Chamar próximo" })).not.toBeNull();
@@ -224,6 +232,66 @@ describe("Attendance", () => {
     expect(screen.queryByLabelText("CPF do cidadão (validação)")).toBeNull();
     expect(screen.queryByText("Pedidos de agendamento")).toBeNull();
     expect(screen.queryByText("Agenda do dia")).toBeNull();
+  });
+
+  it("profissional sem vínculo com a unidade escolhida: sem ações clínicas", async () => {
+    const unit = { id: "h1", name: "UBS Centro", kind: "ubs" };
+    mocked(api.fetchCurrentSession).mockResolvedValue(session("health_professional"));
+    localStorage.setItem(currentUnitKey("u1"), unit.id);
+    mocked(api.listActiveUnits).mockResolvedValue([ unit ]);
+    mocked(api.getMyProfessional).mockResolvedValue({
+      professional: {} as api.Professional, shifts: [],
+      links: [ { id: "l1", health_unit_id: "outra", unit_name: "UPA", cbo_code: "225125", cbo_title: null,
+        started_at: "x", started_by: "a", ended_at: null, ended_by: null } ]
+    });
+    renderAttendance();
+
+    expect(await screen.findByText("Você não tem vínculo com esta unidade")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Chamar próximo" })).toBeNull();
+  });
+
+  it("erro ao ler o vínculo (não 404): mostra mensagem, não esconde tudo em silêncio", async () => {
+    const unit = { id: "h1", name: "UBS Centro", kind: "ubs" };
+    mocked(api.fetchCurrentSession).mockResolvedValue(session("health_professional"));
+    localStorage.setItem(currentUnitKey("u1"), unit.id);
+    mocked(api.listActiveUnits).mockResolvedValue([ unit ]);
+    mocked(api.getMyProfessional).mockRejectedValue(new ApiError(500, "", "x"));
+    renderAttendance();
+
+    expect(await screen.findByText("não foi possível concluir — tente de novo")).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Chamar próximo" })).toBeNull();
+  });
+
+  it("papel duplo (recepção + profissional) sem vínculo na unidade: mantém check-in e 'Saiu sem atendimento'", async () => {
+    const unit = { id: "h1", name: "UBS Centro", kind: "ubs" };
+    mocked(api.fetchCurrentSession).mockResolvedValue({
+      ...session("citizen_verifier"),
+      memberships: [
+        ...session("citizen_verifier").memberships,
+        { municipality_id: "m1", municipality_name: "Curitiba", municipality_uf: "PR", role: "health_professional" }
+      ]
+    });
+    localStorage.setItem(currentUnitKey("u1"), unit.id);
+    mocked(api.listActiveUnits).mockResolvedValue([ unit ]);
+    mocked(api.listUnitQueue).mockResolvedValue({
+      waiting: [ {
+        id: "a1", cpf_masked: "***.982.247-**", checked_in_at: "2026-09-25T09:00:00Z",
+        protocol_name: null, priority: 1, source: "triage" as const,
+        appointment_time: null, called_at: null, called_by_name: null
+      } ],
+      in_care: []
+    });
+    mocked(api.getMyProfessional).mockResolvedValue({
+      professional: {} as api.Professional, shifts: [],
+      links: [ { id: "l1", health_unit_id: "outra", unit_name: "UPA", cbo_code: "225125", cbo_title: null,
+        started_at: "x", started_by: "a", ended_at: null, ended_by: null } ]
+    });
+    renderAttendance();
+
+    expect(await screen.findByText("Você não tem vínculo com esta unidade")).toBeTruthy();
+    expect(await screen.findByLabelText("CPF do cidadão (check-in)")).not.toBeNull();
+    expect(await screen.findAllByRole("button", { name: "Saiu sem atendimento" })).not.toHaveLength(0);
+    expect(screen.queryByRole("button", { name: "Chamar próximo" })).toBeNull();
   });
 
   it("recepção (canVerify) vê Pedidos e Agenda do dia; profissional sem esse papel não vê", async () => {
@@ -244,5 +312,52 @@ describe("Attendance", () => {
     expect(await screen.findByLabelText("CPF do cidadão (check-in)")).not.toBeNull();
     expect(screen.getByLabelText("CPF do cidadão (validação)")).not.toBeNull();
     expect(await screen.findByText("Ninguém aguardando")).not.toBeNull();
+  });
+
+  it("profissional recém-vinculado por outra sessão passa a ver 'Chamar próximo' sem recarregar a página", async () => {
+    // shouldAdvanceTime: true deixa os timers falsos também avançarem com o
+    // relógio de parede — sem isto, o polling interno do `waitFor` (via
+    // setTimeout) trava para sempre assim que os timers viram falsos, e o
+    // teste nunca resolve nada sozinho. Com isto, `findBy*` continua
+    // funcionando normalmente, e só avançamos explicitamente o tempo que
+    // interessa (ATTENDANCE_REFETCH_MS) via advanceTimersByTimeAsync — sem
+    // chamar refetchQueries à mão, o teste depende de verdade do
+    // refetchInterval da query, não de um empurrão manual do teste.
+    vi.useFakeTimers({ toFake: [ "setTimeout", "clearTimeout", "setInterval", "clearInterval" ], shouldAdvanceTime: true });
+    try {
+      const unit = { id: "un1", name: "UBS Centro", kind: "ubs" };
+      mocked(api.fetchCurrentSession).mockResolvedValue(session("health_professional"));
+      localStorage.setItem(currentUnitKey("u1"), unit.id);
+      mocked(api.listActiveUnits).mockResolvedValue([ unit ]);
+      mocked(api.getMyProfessional)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValue({
+          professional: {} as api.Professional, shifts: [],
+          links: [ { id: "l1", health_unit_id: "un1", unit_name: "UBS Centro", cbo_code: "225125", cbo_title: null,
+            started_at: "x", started_by: "a", ended_at: null, ended_by: null } ]
+        });
+      renderAttendance();
+
+      expect(await screen.findByText("Seu cadastro profissional ainda não foi feito. Fale com a administração da cidade.")).not.toBeNull();
+      expect(screen.queryByRole("button", { name: "Chamar próximo" })).toBeNull();
+
+      await vi.advanceTimersByTimeAsync(ATTENDANCE_REFETCH_MS);
+      expect(await screen.findByRole("button", { name: "Chamar próximo" })).not.toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("sem perfil profissional (getMyProfessional null): mensagem específica, não a de vínculo", async () => {
+    const unit = { id: "h1", name: "UBS Centro", kind: "ubs" };
+    mocked(api.fetchCurrentSession).mockResolvedValue(session("health_professional"));
+    localStorage.setItem(currentUnitKey("u1"), unit.id);
+    mocked(api.listActiveUnits).mockResolvedValue([ unit ]);
+    mocked(api.getMyProfessional).mockResolvedValue(null);
+    renderAttendance();
+
+    expect(await screen.findByText("Seu cadastro profissional ainda não foi feito. Fale com a administração da cidade.")).not.toBeNull();
+    expect(screen.queryByText("Você não tem vínculo com esta unidade")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Chamar próximo" })).toBeNull();
   });
 });
