@@ -19,6 +19,7 @@ export function Professionals() {
   const pending = useQuery({ queryKey: [ "professionalsPending" ], queryFn: listPendingProfessionals });
   const [ creatingFor, setCreatingFor ] = useState<PendingProfessional | null>(null);
   const [ openId, setOpenId ] = useState<string | null>(null);
+  const [ linkNotFound, setLinkNotFound ] = useState(false);
 
   function refresh() {
     void queryClient.invalidateQueries({ queryKey: [ "professionals" ] });
@@ -31,19 +32,35 @@ export function Professionals() {
 
   const byUser = new Map((list.data ?? []).map((p) => [ p.user_id, p.id ]));
 
+  // "Vincular" espera que o profissional já esteja em `listProfessionals`
+  // (perfil cadastrado, só falta o vínculo). Se as consultas estiverem fora
+  // de sincronia — a lista ainda não trouxe o perfil recém-criado noutra
+  // aba, por exemplo — não faça nada em silêncio: avise e recarregue ambas.
+  function handleVincular(userId: string) {
+    const id = byUser.get(userId);
+    if (id) { setLinkNotFound(false); setOpenId(id); return; }
+    setLinkNotFound(true);
+    refresh();
+  }
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <PageHeader title="Profissionais" sub="perfil · vínculos · turnos" />
 
       {(pending.data?.length ?? 0) > 0 && (
         <Panel title="Com papel, sem cadastro completo" sub="não chamam pacientes até ter perfil e vínculo">
+          {linkNotFound && (
+            <p role="alert" style={{ margin: "0 0 10px", fontSize: 12.5, color: "var(--down)" }}>
+              perfil não encontrado na lista — recarregando
+            </p>
+          )}
           <DataTable<PendingProfessional>
             cols={[
               { label: "Usuário", w: "2fr", render: (u) => <span className="mono">{u.email_address}</span> },
               { label: "Situação", w: "1fr", render: (u) => <Tag tone="warn">{STATUS_LABEL[u.status]}</Tag> },
               { label: "", w: "auto", align: "right", render: (u) => u.status === "missing_profile"
                 ? <button type="button" style={buttonStyle} onClick={() => setCreatingFor(u)}>Cadastrar perfil</button>
-                : <button type="button" style={secondaryButtonStyle} onClick={() => setOpenId(byUser.get(u.user_id) ?? null)}>Vincular</button> }
+                : <button type="button" style={secondaryButtonStyle} onClick={() => handleVincular(u.user_id)}>Vincular</button> }
             ]}
             rows={pending.data ?? []}
             rowKey={(u) => u.user_id}
@@ -76,11 +93,15 @@ export function Professionals() {
                   </button>
                 ) },
                 { label: "Conselho", w: "1fr", render: (p) => `${p.council}-${p.council_state} ${p.registration_number}` },
-                { label: "Vínculos ativos", w: "3fr", render: (p) => (
-                  <span style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                    {p.links.filter((l) => !l.ended_at).map((l) => <Tag key={l.id} mono={false}>{`${l.unit_name} · ${l.cbo_title ?? l.cbo_code}`}</Tag>)}
-                  </span>
-                ) }
+                { label: "Vínculos ativos", w: "3fr", render: (p) => {
+                  const active = p.links.filter((l) => !l.ended_at);
+                  if (active.length === 0) return <Tag tone="warn">{STATUS_LABEL.missing_link}</Tag>;
+                  return (
+                    <span style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                      {active.map((l) => <Tag key={l.id} mono={false}>{`${l.unit_name} · ${l.cbo_title ?? l.cbo_code}`}</Tag>)}
+                    </span>
+                  );
+                } }
               ]}
               rows={list.data ?? []}
               rowKey={(p) => p.id}

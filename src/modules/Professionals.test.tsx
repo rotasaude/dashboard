@@ -10,6 +10,13 @@ vi.mock("../lib/api", async (importOriginal) => {
     listActiveUnits: vi.fn() };
 });
 
+// ProfessionalDetail (Task 4) ainda é um stub que renderiza `null`; para
+// verificar "Vincular abre a ficha" sem depender da Task 4, trocamos por um
+// dublê que expõe o `professionalId` recebido.
+vi.mock("./professionals/ProfessionalDetail", () => ({
+  ProfessionalDetail: ({ professionalId }: { professionalId: string }) => <div>ficha aberta: {professionalId}</div>
+}));
+
 import * as api from "../lib/api";
 import { ApiError } from "../lib/api";
 import { AuthProvider } from "../lib/auth";
@@ -90,5 +97,45 @@ describe("Professionals", () => {
     fireEvent.change(screen.getByLabelText("CNS"), { target: { value: "700000000000005" } });
     fireEvent.click(screen.getByRole("button", { name: "Salvar perfil" }));
     expect(await screen.findByText("este CNS já está em outro perfil")).toBeTruthy();
+  });
+
+  it("Vincular com o perfil já na lista abre a ficha", async () => {
+    mocked(api.listPendingProfessionals).mockResolvedValue([
+      { user_id: "u1", email_address: "medica@c.gov.br", status: "missing_link" }
+    ]);
+    renderIt();
+    fireEvent.click(await screen.findByRole("button", { name: "Vincular" }));
+    expect(await screen.findByText("ficha aberta: p1")).toBeTruthy();
+  });
+
+  it("Vincular sem o perfil na lista mostra alerta e recarrega as consultas", async () => {
+    mocked(api.listPendingProfessionals).mockResolvedValue([
+      { user_id: "u3", email_address: "fora-da-lista@c.gov.br", status: "missing_link" }
+    ]);
+    renderIt();
+    fireEvent.click(await screen.findByRole("button", { name: "Vincular" }));
+    expect(await screen.findByRole("alert")).toHaveProperty("textContent", expect.stringContaining("não encontrado"));
+    await waitFor(() => expect(mocked(api.listProfessionals).mock.calls.length).toBeGreaterThan(1));
+    await waitFor(() => expect(mocked(api.listPendingProfessionals).mock.calls.length).toBeGreaterThan(1));
+  });
+
+  it("perfil sem vínculo ativo mostra a tag de pendência; o com vínculo ativo não mostra", async () => {
+    mocked(api.listProfessionals).mockResolvedValue([
+      {
+        id: "p1", user_id: "u1", email_address: "medica@c.gov.br", professional_name: "Helena Duarte", council: "CRM",
+        council_state: "PR", registration_number: "12345", cns_masked: "*** **** **** 0005",
+        links: [ { id: "l1", health_unit_id: "h1", unit_name: "UBS Jardim", cbo_code: "225125", cbo_title: "Médico clínico",
+          started_at: "2026-09-01T12:00:00Z", started_by: "admin@c.gov.br", ended_at: null, ended_by: null } ]
+      },
+      {
+        id: "p3", user_id: "u3", email_address: "marcos@c.gov.br", professional_name: "Marcos Silva", council: "CRM",
+        council_state: "PR", registration_number: "99999", cns_masked: "*** **** **** 0009",
+        links: [ { id: "l2", health_unit_id: "h1", unit_name: "UBS Jardim", cbo_code: "225125", cbo_title: "Médico clínico",
+          started_at: "2026-01-01T12:00:00Z", started_by: "admin@c.gov.br", ended_at: "2026-02-01T12:00:00Z", ended_by: "admin@c.gov.br" } ]
+      }
+    ]);
+    renderIt();
+    expect(await screen.findByText("Marcos Silva")).toBeTruthy();
+    expect(screen.getByText("sem vínculo")).toBeTruthy();
   });
 });
