@@ -61,9 +61,14 @@ describe("ProfessionalDetail", () => {
     mocked(api.openProfessionalLink).mockResolvedValue({ ...link, id: "l2", health_unit_id: "h2", unit_name: "UPA Centro" });
     renderIt();
     fireEvent.click(await screen.findByRole("button", { name: "Abrir vínculo" }));
-    fireEvent.change(await screen.findByLabelText("Unidade"), { target: { value: "h2" } });
+    // As opções vêm de queries assíncronas — espera-as existirem antes de
+    // escolher um valor (setar .value para algo sem <option> correspondente
+    // não muda o select, spec HTML).
+    await screen.findByRole("option", { name: "UPA Centro" });
+    await screen.findByRole("option", { name: "225124 · Médico pediatra" });
+    fireEvent.change(screen.getByLabelText("Unidade"), { target: { value: "h2" } });
     fireEvent.change(screen.getByLabelText("Ocupação (CBO)"), { target: { value: "225124" } });
-    fireEvent.click(screen.getByRole("button", { name: "Confirmar vínculo" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Confirmar vínculo" }));
     await waitFor(() => expect(api.openProfessionalLink).toHaveBeenCalledWith("p1", "h2", "225124"));
   });
 
@@ -71,17 +76,64 @@ describe("ProfessionalDetail", () => {
     mocked(api.fetchCurrentSession).mockResolvedValue(session(false));
     renderIt();
     fireEvent.click(await screen.findByRole("button", { name: "Abrir vínculo" }));
+    await screen.findByRole("option", { name: "UPA Centro" });
+    await screen.findByRole("option", { name: "225124 · Médico pediatra" });
+    fireEvent.change(screen.getByLabelText("Unidade"), { target: { value: "h2" } });
+    fireEvent.change(screen.getByLabelText("Ocupação (CBO)"), { target: { value: "225124" } });
     expect(await screen.findByLabelText(/código/i)).toBeTruthy();
   });
 
-  it("encerrar avisa quantos turnos futuros serão cancelados", async () => {
+  it("mostra erro ao carregar as unidades ativas em vez de deixar o select silenciosamente vazio", async () => {
+    mocked(api.listActiveUnits).mockRejectedValue(new Error("falha de rede"));
+    renderIt();
+    fireEvent.click(await screen.findByRole("button", { name: "Abrir vínculo" }));
+    expect(await screen.findByText("não foi possível concluir — tente de novo")).toBeTruthy();
+  });
+
+  it("encerrar avisa quantos turnos futuros nos próximos 62 dias serão cancelados", async () => {
     mocked(api.listProfessionalShifts).mockResolvedValue([
       { id: "s1", professional_link_id: "l1", unit_name: "UBS Jardim", starts_at: "2026-10-06T10:00:00Z",
         ends_at: "2026-10-06T16:00:00Z", cancelled_at: null, cancel_reason: null }
     ]);
     renderIt();
     fireEvent.click(await screen.findByRole("button", { name: "Encerrar" }));
-    expect(await screen.findByText(/1 turno futuro será cancelado/)).toBeTruthy();
+    // 62 dias a partir de "hoje" (2026-10-05, fuso da cidade) — não a janela
+    // de 14 dias mostrada na tabela de turnos.
+    await waitFor(() => expect(api.listProfessionalShifts).toHaveBeenCalledWith("p1", "2026-10-05", "2026-12-06"));
+    expect(await screen.findByText(/1 turno futuro nos próximos 62 dias será cancelado/)).toBeTruthy();
+  });
+
+  it("mostra quantos turnos foram cancelados depois de confirmar o encerramento", async () => {
+    mocked(api.endProfessionalLink).mockResolvedValue({
+      link: { ...link, ended_at: "2026-10-05T15:00:00Z", ended_by: "admin@c.gov.br" },
+      cancelled_shift_ids: [ "s1", "s2" ]
+    });
+    renderIt();
+    fireEvent.click(await screen.findByRole("button", { name: "Encerrar" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Confirmar encerramento" }));
+    expect(await screen.findByText(/Vínculo encerrado; 2 turnos cancelados/)).toBeTruthy();
+    expect(api.endProfessionalLink).toHaveBeenCalledWith("l1");
+  });
+
+  it("pagina uma semana adiante e refaz a consulta de turnos", async () => {
+    renderIt();
+    fireEvent.click(await screen.findByRole("button", { name: "semana →" }));
+    await waitFor(() => expect(api.listProfessionalShifts).toHaveBeenCalledWith("p1", "2026-10-12", "2026-10-26"));
+  });
+
+  it("cancelar turno exige motivo e envia o motivo digitado", async () => {
+    mocked(api.listProfessionalShifts).mockResolvedValue([
+      { id: "s1", professional_link_id: "l1", unit_name: "UBS Jardim", starts_at: "2026-10-06T10:00:00Z",
+        ends_at: "2026-10-06T16:00:00Z", cancelled_at: null, cancel_reason: null }
+    ]);
+    mocked(api.cancelShift).mockResolvedValue({} as api.ProfessionalShift);
+    renderIt();
+    fireEvent.click(await screen.findByRole("button", { name: "Cancelar" }));
+    const confirmBtn = screen.getByRole("button", { name: "Confirmar cancelamento" }) as HTMLButtonElement;
+    expect(confirmBtn.disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText("Motivo"), { target: { value: "erro de lançamento" } });
+    fireEvent.click(confirmBtn);
+    await waitFor(() => expect(api.cancelShift).toHaveBeenCalledWith("s1", "erro de lançamento"));
   });
 
   it("lança plantão noturno mostrando o dia seguinte e envia os dois instantes", async () => {

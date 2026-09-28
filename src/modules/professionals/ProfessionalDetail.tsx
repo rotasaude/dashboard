@@ -49,9 +49,6 @@ export function ProfessionalDetail({ professionalId, onBack }: Props) {
   if (!detail.data) return detail.error ? <p role="alert">{professionalError(detail.error)}</p> : null;
   const { professional, links } = detail.data;
   const active = links.filter((l) => !l.ended_at);
-  const now = Date.now();
-  const futureCount = (l: ProfessionalLink) =>
-    (shifts.data ?? []).filter((s) => s.professional_link_id === l.id && !s.cancelled_at && Date.parse(s.starts_at) > now).length;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -90,21 +87,18 @@ export function ProfessionalDetail({ professionalId, onBack }: Props) {
             professionalId={professional.id}
             units={units.data ?? []}
             cboEntries={cbo.data ?? []}
+            unitsError={units.error}
+            cboError={cbo.error}
             onDone={() => { setOpening(false); refresh(); }}
             onCancel={() => setOpening(false)}
           />
         )}
         {ending && (
-          <SensitiveAction
-            title={`Encerrar vínculo em ${ending.unit_name}`}
-            description={futureCount(ending) > 0
-              ? `${futureCount(ending)} ${futureCount(ending) === 1 ? "turno futuro será cancelado" : "turnos futuros serão cancelados"}.`
-              : "Nenhum turno futuro neste vínculo."}
-            requiresStepUp
-            confirmLabel="Confirmar encerramento"
-            run={async () => { await endProfessionalLink(ending.id); }}
-            translateError={(err) => professionalError(err)}
-            onDone={() => { setEnding(null); refresh(); }}
+          <EndLink
+            professionalId={professional.id}
+            link={ending}
+            onRefresh={refresh}
+            onDone={() => setEnding(null)}
             onCancel={() => setEnding(null)}
           />
         )}
@@ -139,17 +133,21 @@ export function ProfessionalDetail({ professionalId, onBack }: Props) {
 }
 
 interface OpenLinkProps {
-  professionalId: string; units: HealthUnit[]; cboEntries: CboEntry[]; onDone(): void; onCancel(): void;
+  professionalId: string; units: HealthUnit[]; cboEntries: CboEntry[];
+  unitsError: unknown; cboError: unknown;
+  onDone(): void; onCancel(): void;
 }
 
-function OpenLink({ professionalId, units, cboEntries, onDone, onCancel }: OpenLinkProps) {
+function OpenLink({ professionalId, units, cboEntries, unitsError, cboError, onDone, onCancel }: OpenLinkProps) {
   const [ unitId, setUnitId ] = useState("");
   const [ code, setCode ] = useState("");
   const [ search, setSearch ] = useState("");
   const options = cboEntries.filter((e) => `${e.code} ${e.title}`.toLowerCase().includes(search.toLowerCase()));
+  const loadError = unitsError ?? cboError;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 12 }}>
+      {loadError != null && <p role="alert" style={alertStyle}>{professionalError(loadError)}</p>}
       <label style={labelStyle}>Unidade
         <select value={unitId} onChange={(e) => setUnitId(e.target.value)} style={inputStyle}>
           <option value="">—</option>
@@ -165,20 +163,82 @@ function OpenLink({ professionalId, units, cboEntries, onDone, onCancel }: OpenL
           {options.map((e) => <option key={e.code} value={e.code}>{`${e.code} · ${e.title}`}</option>)}
         </select>
       </label>
-      <SensitiveAction
-        title="Abrir vínculo"
-        description="Com o vínculo, o profissional passa a chamar e registrar desfecho nesta unidade."
-        requiresStepUp
-        confirmLabel="Confirmar vínculo"
-        run={async () => {
-          if (!unitId || !code) throw new Error("selecione unidade e ocupação");
-          await openProfessionalLink(professionalId, unitId, code);
-        }}
-        translateError={(err) => professionalError(err)}
-        onDone={onDone}
-        onCancel={onCancel}
-      />
+      {/* Só entra em modo sensível (SensitiveAction, com o campo de código
+          quando não há janela de step-up) depois de unidade e ocupação
+          escolhidas — do contrário, um código de uso único seria gasto num
+          formulário que ainda não tem o que confirmar. */}
+      {unitId && code ? (
+        <SensitiveAction
+          title="Abrir vínculo"
+          description="Com o vínculo, o profissional passa a chamar e registrar desfecho nesta unidade."
+          requiresStepUp
+          confirmLabel="Confirmar vínculo"
+          run={async () => { await openProfessionalLink(professionalId, unitId, code); }}
+          translateError={(err) => professionalError(err)}
+          onDone={onDone}
+          onCancel={onCancel}
+        />
+      ) : (
+        <div><button type="button" style={secondaryButtonStyle} onClick={onCancel}>Cancelar</button></div>
+      )}
     </div>
+  );
+}
+
+const END_WINDOW_DAYS = 62;
+
+function describeFutureCount(n: number): string {
+  if (n === 0) return "Nenhum turno futuro nos próximos 62 dias será cancelado.";
+  const plural = n !== 1;
+  return `${n} turno${plural ? "s" : ""} futuro${plural ? "s" : ""} nos próximos 62 dias ${plural ? "serão" : "será"} cancelado${plural ? "s" : ""}.`;
+}
+
+function EndLink({ professionalId, link, onRefresh, onDone, onCancel }: {
+  professionalId: string; link: ProfessionalLink; onRefresh(): void; onDone(): void; onCancel(): void;
+}) {
+  // Contagem dedicada (spec §5, D5): a tabela de turnos só mostra uma janela
+  // de 14 dias, mas o encerramento cancela QUALQUER turno futuro até o
+  // limite de 62 dias que a API aceita — teria que contar errado (a favor
+  // de "nada a cancelar") se reaproveitasse a consulta da tabela.
+  const from = dayIso(new Date());
+  const to = addDays(from, END_WINDOW_DAYS);
+  const endShifts = useQuery({
+    queryKey: [ "professionalEndShifts", professionalId, link.id, from ],
+    queryFn: () => listProfessionalShifts(professionalId, from, to)
+  });
+  const futureCount = (endShifts.data ?? [])
+    .filter((s) => s.professional_link_id === link.id && !s.cancelled_at && Date.parse(s.starts_at) > Date.now())
+    .length;
+  const [ cancelledCount, setCancelledCount ] = useState<number | null>(null);
+
+  if (cancelledCount !== null) {
+    const plural = cancelledCount !== 1;
+    return (
+      <section style={panelStyle}>
+        <strong>{`Encerrar vínculo em ${link.unit_name}`}</strong>
+        <p role="status" style={{ margin: 0, fontSize: 12.5 }}>
+          {`Vínculo encerrado; ${cancelledCount} turno${plural ? "s" : ""} cancelado${plural ? "s" : ""}`}
+        </p>
+        <div><button type="button" style={buttonStyle} onClick={onDone}>Fechar</button></div>
+      </section>
+    );
+  }
+
+  return (
+    <SensitiveAction
+      title={`Encerrar vínculo em ${link.unit_name}`}
+      description={describeFutureCount(futureCount)}
+      requiresStepUp
+      confirmLabel="Confirmar encerramento"
+      run={async () => {
+        const result = await endProfessionalLink(link.id);
+        onRefresh();
+        setCancelledCount(result.cancelled_shift_ids.length);
+      }}
+      translateError={(err) => professionalError(err)}
+      onDone={() => {}}
+      onCancel={onCancel}
+    />
   );
 }
 
@@ -253,3 +313,6 @@ function CancelShiftPanel({ shift, onDone, onCancel }: { shift: ProfessionalShif
 }
 
 const labelStyle = { display: "flex", flexDirection: "column" as const, gap: 4, fontSize: 12, color: "var(--ink2)" };
+const alertStyle = { margin: 0, fontSize: 12.5, color: "var(--down)" };
+const panelStyle = { display: "flex", flexDirection: "column" as const, gap: 10, padding: 16,
+  border: "1px solid var(--rule)", borderRadius: 8, background: "var(--panel)", marginTop: 12 };
