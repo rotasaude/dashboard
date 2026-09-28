@@ -47,7 +47,13 @@ export function Professionals() {
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <PageHeader title="Profissionais" sub="perfil · vínculos · turnos" />
 
-      {(pending.data?.length ?? 0) > 0 && (
+      {pending.isError && (
+        <Panel title="Com papel, sem cadastro completo">
+          <p role="alert" style={{ margin: 0, fontSize: 12.5, color: "var(--down)" }}>{professionalError(pending.error)}</p>
+        </Panel>
+      )}
+
+      {!pending.isError && (pending.data?.length ?? 0) > 0 && (
         <Panel title="Com papel, sem cadastro completo" sub="não chamam pacientes até ter perfil e vínculo">
           {linkNotFound && (
             <p role="alert" style={{ margin: "0 0 10px", fontSize: 12.5, color: "var(--down)" }}>
@@ -82,7 +88,9 @@ export function Professionals() {
       )}
 
       <Panel title="Cadastrados">
-        {list.error ? <p role="alert">{professionalError(list.error)}</p> : (list.data ?? []).length === 0
+        {list.isError ? <p role="alert">{professionalError(list.error)}</p> : list.isLoading
+          ? <p className="mono" style={{ margin: 0, fontSize: 10.5, color: "var(--ink3)" }}>carregando…</p>
+          : (list.data ?? []).length === 0
           ? <EmptyState title="nenhum profissional cadastrado" />
           : (
             <DataTable

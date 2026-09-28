@@ -119,6 +119,29 @@ describe("Professionals", () => {
     await waitFor(() => expect(mocked(api.listPendingProfessionals).mock.calls.length).toBeGreaterThan(1));
   });
 
+  it("falha ao ler pendências mostra um alerta, não silencia o painel", async () => {
+    mocked(api.listPendingProfessionals).mockRejectedValue(new ApiError(500, "", "x"));
+    renderIt();
+    expect(await screen.findByRole("alert")).toHaveProperty("textContent", "não foi possível concluir — tente de novo");
+  });
+
+  it("enquanto a lista carrega, não mostra 'nenhum profissional cadastrado'", async () => {
+    let resolveList: (rows: api.Professional[]) => void = () => {};
+    mocked(api.listProfessionals).mockReturnValue(new Promise((resolve) => { resolveList = resolve; }));
+    renderIt();
+    await screen.findByText("novato@c.gov.br");
+    expect(screen.queryByText("nenhum profissional cadastrado")).toBeNull();
+    resolveList([]);
+    expect(await screen.findByText("nenhum profissional cadastrado")).toBeTruthy();
+  });
+
+  it("falha ao ler a lista mostra a mensagem de erro, nunca a lista vazia", async () => {
+    mocked(api.listProfessionals).mockRejectedValue(new ApiError(500, "", "x"));
+    renderIt();
+    expect(await screen.findByText("não foi possível concluir — tente de novo")).toBeTruthy();
+    expect(screen.queryByText("nenhum profissional cadastrado")).toBeNull();
+  });
+
   it("perfil sem vínculo ativo mostra a tag de pendência; o com vínculo ativo não mostra", async () => {
     mocked(api.listProfessionals).mockResolvedValue([
       {
