@@ -73,16 +73,42 @@ function fmtDayMonth(iso: string): string {
   return new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit" }).format(new Date(iso));
 }
 
-export function professionalError(err: unknown): string {
-  if (!(err instanceof ApiError)) return GENERIC;
-  const body = (err.body ?? {}) as { error?: string; fields?: string[]; conflict?: { unit_name: string; starts_at: string; ends_at: string } };
-  if (body.error === "invalid" && body.fields?.length) {
-    return `confira: ${body.fields.map((f) => FIELD_LABEL[f] ?? f).join(", ")}`;
+type ProfessionalErrorBody = {
+  error?: string; fields?: string[]; conflict?: { unit_name?: string; starts_at: string; ends_at: string };
+};
+
+// Núcleo comum a professionalError e professionalErrorOrNull — a única
+// diferença entre as duas é o que fazem quando nada aqui reconhece o erro
+// (GENERIC vs. null, para o SensitiveAction usar sua própria tradução).
+function translateProfessionalErrorBody(body: ProfessionalErrorBody): string | null {
+  if (body.error === "invalid") {
+    if (body.fields?.length) return `confira: ${body.fields.map((f) => FIELD_LABEL[f] ?? f).join(", ")}`;
+    return "dados inválidos — confira os campos";
   }
   if (body.error === "field_not_editable") return "há campos que só a administração da cidade pode mudar";
-  if (body.error === "shift_overlap" && body.conflict?.unit_name) {
-    const c = body.conflict;
-    return `conflita com o turno em ${c.unit_name}, ${fmtDayMonth(c.starts_at)} ${fmtHourMinute(c.starts_at)}–${fmtHourMinute(c.ends_at)}`;
+  if (body.error === "shift_overlap") {
+    if (body.conflict?.unit_name) {
+      const c = body.conflict;
+      return `conflita com o turno em ${c.unit_name}, ${fmtDayMonth(c.starts_at)} ${fmtHourMinute(c.starts_at)}–${fmtHourMinute(c.ends_at)}`;
+    }
+    return "conflita com outro turno do profissional";
   }
-  return (body.error && MESSAGES[body.error]) || GENERIC;
+  if (body.error === "not_found") return "registro não encontrado — recarregue a página";
+  return (body.error && MESSAGES[body.error]) || null;
+}
+
+export function professionalError(err: unknown): string {
+  if (!(err instanceof ApiError)) return GENERIC;
+  const body = (err.body ?? {}) as ProfessionalErrorBody;
+  return translateProfessionalErrorBody(body) ?? GENERIC;
+}
+
+// Variante para SensitiveAction.translateError (spec §5): quando o código não
+// está mapeado aqui, `null` deixa a mensagem padrão do próprio SensitiveAction
+// aparecer (rede, sessão expirada) em vez do genérico "não foi possível
+// concluir" desta lib, que não sabe distinguir os dois casos.
+export function professionalErrorOrNull(err: unknown): string | null {
+  if (!(err instanceof ApiError) || err.status === 401) return null;
+  const body = (err.body ?? {}) as ProfessionalErrorBody;
+  return translateProfessionalErrorBody(body);
 }

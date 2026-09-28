@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ApiError } from "./api";
-import { isValidCns, maskCns, professionalError, shiftWindow } from "./professionals";
+import { isValidCns, maskCns, professionalError, professionalErrorOrNull, shiftWindow } from "./professionals";
 
 describe("isValidCns", () => {
   it.each([ "700000000000005", "100000000000007", "200123456789019", "898000000000002", "712345678901236", "123456789012348" ])(
@@ -54,5 +54,33 @@ describe("professionalError", () => {
   });
   it("desconhecido: genérico", () => {
     expect(professionalError(new Error("rede"))).toBe("não foi possível concluir — tente de novo");
+  });
+  it("shift_overlap sem conflito nomeado: mensagem genérica de sobreposição", () => {
+    expect(professionalError(err(409, { error: "shift_overlap" }))).toBe("conflita com outro turno do profissional");
+    expect(professionalError(err(409, { error: "shift_overlap", conflict: {} }))).toBe("conflita com outro turno do profissional");
+  });
+  it("invalid sem campos: mensagem genérica de dados inválidos", () => {
+    expect(professionalError(err(422, { error: "invalid" }))).toBe("dados inválidos — confira os campos");
+    expect(professionalError(err(422, { error: "invalid", fields: [] }))).toBe("dados inválidos — confira os campos");
+  });
+  it("not_found: pede para recarregar", () => {
+    expect(professionalError(err(404, { error: "not_found" }))).toBe("registro não encontrado — recarregue a página");
+  });
+});
+
+describe("professionalErrorOrNull", () => {
+  const err = (status: number, body: unknown) => new ApiError(status, body, "x");
+  it("traduz recusas conhecidas, igual a professionalError", () => {
+    expect(professionalErrorOrNull(err(422, { error: "council_mismatch" }))).toMatch(/conselho/);
+    expect(professionalErrorOrNull(err(403, { error: "missing_link" }))).toBe("Você não tem vínculo com esta unidade");
+  });
+  it("código desconhecido: null, para o SensitiveAction cair na sua própria mensagem", () => {
+    expect(professionalErrorOrNull(err(422, { error: "algo_novo_nao_mapeado" }))).toBeNull();
+  });
+  it("erro que não é da API (rede): null, para o SensitiveAction usar sua tradução de rede", () => {
+    expect(professionalErrorOrNull(new Error("rede"))).toBeNull();
+  });
+  it("sessão expirada (401): null, para o SensitiveAction usar a mensagem de sessão expirada", () => {
+    expect(professionalErrorOrNull(err(401, {}))).toBeNull();
   });
 });
