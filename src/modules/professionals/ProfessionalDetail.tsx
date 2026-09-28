@@ -1,11 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   cancelShift, endProfessionalLink, getProfessional, listActiveUnits, listCbo, listProfessionalShifts,
   openProfessionalLink, scheduleShift, updateProfessional, type CboEntry, type HealthUnit,
   type ProfessionalLink, type ProfessionalShift
 } from "../../lib/api";
-import { professionalError, shiftWindow } from "../../lib/professionals";
+import { professionalError, professionalErrorOrNull, shiftWindow } from "../../lib/professionals";
 import { fmtDateTime } from "../../lib/format";
 import { PageHeader } from "../../components/PageHeader";
 import { Panel } from "../../components/Panel";
@@ -110,21 +110,31 @@ export function ProfessionalDetail({ professionalId, onBack }: Props) {
           <button type="button" style={secondaryButtonStyle} onClick={() => setFrom(addDays(from, 7))}>semana →</button>
         </span>
       }>
-        {scheduling && <ScheduleShift link={scheduling} onDone={() => { setScheduling(null); refresh(); }} onCancel={() => setScheduling(null)} />}
-        <DataTable<ProfessionalShift>
-          cols={[
-            { label: "Unidade", w: "2fr", render: (s) => s.unit_name },
-            { label: "Início", w: "1.5fr", render: (s) => fmtDateTime(s.starts_at) },
-            { label: "Fim", w: "1.5fr", render: (s) => fmtDateTime(s.ends_at) },
-            { label: "Situação", w: "2fr", render: (s) => s.cancelled_at ? `cancelado — ${s.cancel_reason}` : "válido" },
-            { label: "", w: "auto", align: "right", render: (s) => !s.cancelled_at && (
-              <button type="button" style={secondaryButtonStyle} onClick={() => setCancelling(s)}>Cancelar</button>
-            ) }
-          ]}
-          rows={shifts.data ?? []}
-          rowKey={(s) => s.id}
-          empty="nenhum turno no período"
-        />
+        {scheduling && (
+          <ScheduleShift link={scheduling} onSaved={refresh} onClose={() => setScheduling(null)} />
+        )}
+        {shifts.isError ? (
+          <p role="alert" style={alertStyle}>{professionalError(shifts.error)}</p>
+        ) : (
+          <DataTable<ProfessionalShift>
+            cols={[
+              { label: "Unidade", w: "2fr", render: (s) => s.unit_name },
+              { label: "Ocupação", w: "2fr", render: (s) => {
+                const l = links.find((x) => x.id === s.professional_link_id);
+                return l ? `${l.cbo_code} · ${l.cbo_title ?? ""}` : "—";
+              } },
+              { label: "Início", w: "1.5fr", render: (s) => fmtDateTime(s.starts_at) },
+              { label: "Fim", w: "1.5fr", render: (s) => fmtDateTime(s.ends_at) },
+              { label: "Situação", w: "2fr", render: (s) => s.cancelled_at ? `cancelado — ${s.cancel_reason}` : "válido" },
+              { label: "", w: "auto", align: "right", render: (s) => !s.cancelled_at && (
+                <button type="button" style={secondaryButtonStyle} onClick={() => setCancelling(s)}>Cancelar</button>
+              ) }
+            ]}
+            rows={shifts.data ?? []}
+            rowKey={(s) => s.id}
+            empty="nenhum turno no período"
+          />
+        )}
         {cancelling && <CancelShiftPanel shift={cancelling} onDone={() => { setCancelling(null); refresh(); }} onCancel={() => setCancelling(null)} />}
       </Panel>
       {active.length === 0 && <p style={{ fontSize: 12.5 }}>Sem vínculo ativo: este profissional não chama pacientes.</p>}
@@ -144,6 +154,17 @@ function OpenLink({ professionalId, units, cboEntries, unitsError, cboError, onD
   const [ search, setSearch ] = useState("");
   const options = cboEntries.filter((e) => `${e.code} ${e.title}`.toLowerCase().includes(search.toLowerCase()));
   const loadError = unitsError ?? cboError;
+
+  // Digitar em "Buscar ocupação" pode tirar a ocupação já escolhida da lista
+  // filtrada — sem isto, `code` continuaria setado e o SensitiveAction
+  // ficaria visível confirmando uma ocupação que não aparece mais no select.
+  useEffect(() => {
+    if (code && !options.some((e) => e.code === code)) setCode("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ search ]);
+
+  const selectedUnit = units.find((u) => u.id === unitId);
+  const selectedCbo = options.find((e) => e.code === code);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 12 }}>
@@ -170,11 +191,11 @@ function OpenLink({ professionalId, units, cboEntries, unitsError, cboError, onD
       {unitId && code ? (
         <SensitiveAction
           title="Abrir vínculo"
-          description="Com o vínculo, o profissional passa a chamar e registrar desfecho nesta unidade."
+          description={`${selectedUnit?.name ?? ""} · ${code} · ${selectedCbo?.title ?? ""} — com o vínculo, o profissional passa a chamar e registrar desfecho nesta unidade.`}
           requiresStepUp
           confirmLabel="Confirmar vínculo"
           run={async () => { await openProfessionalLink(professionalId, unitId, code); }}
-          translateError={(err) => professionalError(err)}
+          translateError={(err) => professionalErrorOrNull(err)}
           onDone={onDone}
           onCancel={onCancel}
         />
@@ -202,14 +223,25 @@ function EndLink({ professionalId, link, onRefresh, onDone, onCancel }: {
   // de "nada a cancelar") se reaproveitasse a consulta da tabela.
   const from = dayIso(new Date());
   const to = addDays(from, END_WINDOW_DAYS);
+  // Chave aninhada sob o prefixo "professionalShifts" (mesmo prefixo que
+  // refresh() invalida) para que lançar/cancelar um turno também atualize
+  // esta prévia — sem isto, ela ficava presa na contagem de quando o painel
+  // de encerrar abriu.
   const endShifts = useQuery({
-    queryKey: [ "professionalEndShifts", professionalId, link.id, from ],
+    queryKey: [ "professionalShifts", professionalId, "end", link.id, from ],
     queryFn: () => listProfessionalShifts(professionalId, from, to)
   });
   const futureCount = (endShifts.data ?? [])
     .filter((s) => s.professional_link_id === link.id && !s.cancelled_at && Date.parse(s.starts_at) > Date.now())
     .length;
   const [ cancelledCount, setCancelledCount ] = useState<number | null>(null);
+  // Nunca deixar "Nenhum turno futuro…" aparecer por a consulta ainda estar
+  // carregando ou ter falhado — pareceria "confirmado que não há nada".
+  const description = endShifts.isLoading
+    ? "contando turnos futuros…"
+    : endShifts.isError
+      ? professionalError(endShifts.error)
+      : describeFutureCount(futureCount);
 
   if (cancelledCount !== null) {
     const plural = cancelledCount !== 1;
@@ -227,7 +259,7 @@ function EndLink({ professionalId, link, onRefresh, onDone, onCancel }: {
   return (
     <SensitiveAction
       title={`Encerrar vínculo em ${link.unit_name}`}
-      description={describeFutureCount(futureCount)}
+      description={description}
       requiresStepUp
       confirmLabel="Confirmar encerramento"
       run={async () => {
@@ -235,19 +267,27 @@ function EndLink({ professionalId, link, onRefresh, onDone, onCancel }: {
         onRefresh();
         setCancelledCount(result.cancelled_shift_ids.length);
       }}
-      translateError={(err) => professionalError(err)}
+      translateError={(err) => professionalErrorOrNull(err)}
       onDone={() => {}}
       onCancel={onCancel}
     />
   );
 }
 
-function ScheduleShift({ link, onDone, onCancel }: { link: ProfessionalLink; onDone(): void; onCancel(): void }) {
+function fmtShiftLine(span: { startsAt: string; endsAt: string }): string {
+  return `${ddmm(span.startsAt.slice(0, 10))} ${span.startsAt.slice(11, 16)}–${span.endsAt.slice(11, 16)}`;
+}
+
+function ScheduleShift({ link, onSaved, onClose }: { link: ProfessionalLink; onSaved(): void; onClose(): void }) {
   const [ date, setDate ] = useState("");
   const [ start, setStart ] = useState("");
   const [ end, setEnd ] = useState("");
   const [ busy, setBusy ] = useState(false);
   const [ error, setError ] = useState<string | null>(null);
+  // Depois de salvar, o painel mostra a linha "turno lançado" em vez de
+  // fechar direto (onClose): um turno numa semana fora da janela visível de
+  // 14 dias da tabela senão parece que sumiu.
+  const [ saved, setSaved ] = useState<{ startsAt: string; endsAt: string } | null>(null);
   const span = shiftWindow(date, start, end);
 
   async function save() {
@@ -255,12 +295,23 @@ function ScheduleShift({ link, onDone, onCancel }: { link: ProfessionalLink; onD
     setBusy(true); setError(null);
     try {
       await scheduleShift(link.id, span.startsAt, span.endsAt);
-      onDone();
+      onSaved();
+      setSaved(span);
     } catch (err) {
       setError(professionalError(err));
     } finally {
       setBusy(false);
     }
+  }
+
+  if (saved) {
+    return (
+      <section style={{ display: "flex", flexDirection: "column", gap: 10, padding: 12, border: "1px solid var(--rule)", borderRadius: 8, marginBottom: 12 }}>
+        <strong>{`Turno em ${link.unit_name}`}</strong>
+        <p role="status" style={{ margin: 0, fontSize: 12.5 }}>{`turno lançado: ${fmtShiftLine(saved)}`}</p>
+        <div><button type="button" style={buttonStyle} onClick={onClose}>Fechar</button></div>
+      </section>
+    );
   }
 
   return (
@@ -275,7 +326,7 @@ function ScheduleShift({ link, onDone, onCancel }: { link: ProfessionalLink; onD
       {span?.nextDay && <p style={{ margin: 0, fontSize: 12.5 }}>{`termina em ${ddmm(span.endsAt.slice(0, 10))} às ${end}`}</p>}
       <div style={{ display: "flex", gap: 8 }}>
         <button type="button" disabled={!span || busy} onClick={() => void save()} style={!span || busy ? disabledButtonStyle : buttonStyle}>Salvar turno</button>
-        <button type="button" disabled={busy} onClick={onCancel} style={secondaryButtonStyle}>Cancelar</button>
+        <button type="button" disabled={busy} onClick={onClose} style={secondaryButtonStyle}>Cancelar</button>
       </div>
     </section>
   );

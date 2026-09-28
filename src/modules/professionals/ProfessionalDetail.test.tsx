@@ -159,4 +159,112 @@ describe("ProfessionalDetail", () => {
     fireEvent.click(screen.getByRole("button", { name: "Salvar turno" }));
     expect(await screen.findByText("conflita com o turno em UPA Centro, 06/10 19:00–07:00")).toBeTruthy();
   });
+
+  it("depois de 'Salvar turno' mostra a linha 'turno lançado' com data e horas", async () => {
+    mocked(api.scheduleShift).mockResolvedValue({} as api.ProfessionalShift);
+    renderIt();
+    fireEvent.click(await screen.findByRole("button", { name: "Lançar turno" }));
+    fireEvent.change(screen.getByLabelText("Data"), { target: { value: "2026-10-06" } });
+    fireEvent.change(screen.getByLabelText("Início"), { target: { value: "19:00" } });
+    fireEvent.change(screen.getByLabelText("Fim"), { target: { value: "07:00" } });
+    fireEvent.click(screen.getByRole("button", { name: "Salvar turno" }));
+    expect(await screen.findByText("turno lançado: 06/10 19:00–07:00")).toBeTruthy();
+    // O painel de lançamento continua na tela (com "Fechar") até a pessoa
+    // fechar — não deveria simplesmente sumir levando a confirmação junto.
+    expect(screen.getByRole("button", { name: "Fechar" })).toBeTruthy();
+  });
+
+  describe("prévia de turnos futuros ao encerrar (EndLink)", () => {
+    it("mostra 'contando turnos futuros…' enquanto a consulta carrega, nunca 'nenhum turno'", async () => {
+      let resolveShifts: (rows: api.ProfessionalShift[]) => void = () => {};
+      mocked(api.listProfessionalShifts).mockReturnValueOnce(new Promise((resolve) => { resolveShifts = resolve; }));
+      renderIt();
+      fireEvent.click(await screen.findByRole("button", { name: "Encerrar" }));
+      expect(await screen.findByText("contando turnos futuros…")).toBeTruthy();
+      expect(screen.queryByText(/Nenhum turno futuro/)).toBeNull();
+      resolveShifts([]);
+      expect(await screen.findByText(/Nenhum turno futuro nos próximos 62 dias será cancelado/)).toBeTruthy();
+    });
+
+    it("mostra o erro traduzido quando a contagem falha, nunca 'nenhum turno'", async () => {
+      mocked(api.listProfessionalShifts).mockRejectedValueOnce(new ApiError(500, "", "x"));
+      renderIt();
+      fireEvent.click(await screen.findByRole("button", { name: "Encerrar" }));
+      expect(await screen.findByText("não foi possível concluir — tente de novo")).toBeTruthy();
+      expect(screen.queryByText(/Nenhum turno futuro/)).toBeNull();
+    });
+
+    it("lançar um turno (refresh) atualiza a prévia, porque ela vive sob o mesmo prefixo que refresh() invalida", async () => {
+      mocked(api.listProfessionalShifts).mockResolvedValue([]);
+      renderIt();
+      fireEvent.click(await screen.findByRole("button", { name: "Encerrar" }));
+      expect(await screen.findByText(/Nenhum turno futuro nos próximos 62 dias será cancelado/)).toBeTruthy();
+
+      // Com o painel de Encerrar ainda aberto, lança um turno futuro nesse
+      // vínculo — refresh() (chamado por onSaved) invalida o prefixo
+      // "professionalShifts" inteiro, o que deve refazer também a consulta
+      // desta prévia (mesma chave aninhada nesse prefixo).
+      mocked(api.listProfessionalShifts).mockResolvedValue([
+        { id: "s2", professional_link_id: "l1", unit_name: "UBS Jardim", starts_at: "2026-10-06T10:00:00Z",
+          ends_at: "2026-10-06T16:00:00Z", cancelled_at: null, cancel_reason: null }
+      ]);
+      mocked(api.scheduleShift).mockResolvedValue({} as api.ProfessionalShift);
+      fireEvent.click(await screen.findByRole("button", { name: "Lançar turno" }));
+      fireEvent.change(screen.getByLabelText("Data"), { target: { value: "2026-10-06" } });
+      fireEvent.change(screen.getByLabelText("Início"), { target: { value: "10:00" } });
+      fireEvent.change(screen.getByLabelText("Fim"), { target: { value: "16:00" } });
+      fireEvent.click(screen.getByRole("button", { name: "Salvar turno" }));
+      await screen.findByText("turno lançado: 06/10 10:00–16:00");
+
+      expect(await screen.findByText(/1 turno futuro nos próximos 62 dias será cancelado/)).toBeTruthy();
+    });
+  });
+
+  describe("OpenLink: buscar ocupação pode tirar a escolhida da lista", () => {
+    it("filtrar e tirar a ocupação escolhida limpa 'code' e esconde a confirmação", async () => {
+      renderIt();
+      fireEvent.click(await screen.findByRole("button", { name: "Abrir vínculo" }));
+      await screen.findByRole("option", { name: "UPA Centro" });
+      await screen.findByRole("option", { name: "225124 · Médico pediatra" });
+      fireEvent.change(screen.getByLabelText("Unidade"), { target: { value: "h2" } });
+      fireEvent.change(screen.getByLabelText("Ocupação (CBO)"), { target: { value: "225124" } });
+      expect(await screen.findByRole("button", { name: "Confirmar vínculo" })).toBeTruthy();
+
+      fireEvent.change(screen.getByLabelText("Buscar ocupação"), { target: { value: "nada-bate-com-isto" } });
+      expect(screen.queryByRole("button", { name: "Confirmar vínculo" })).toBeNull();
+      expect((screen.getByLabelText("Ocupação (CBO)") as HTMLSelectElement).value).toBe("");
+    });
+
+    it("a descrição da confirmação nomeia unidade, código e ocupação escolhidos", async () => {
+      renderIt();
+      fireEvent.click(await screen.findByRole("button", { name: "Abrir vínculo" }));
+      await screen.findByRole("option", { name: "UPA Centro" });
+      await screen.findByRole("option", { name: "225124 · Médico pediatra" });
+      fireEvent.change(screen.getByLabelText("Unidade"), { target: { value: "h2" } });
+      fireEvent.change(screen.getByLabelText("Ocupação (CBO)"), { target: { value: "225124" } });
+      expect(await screen.findByText(
+        "UPA Centro · 225124 · Médico pediatra — com o vínculo, o profissional passa a chamar e registrar desfecho nesta unidade."
+      )).toBeTruthy();
+    });
+  });
+
+  it("falha ao ler os turnos mostra a mensagem de erro, não 'nenhum turno no período'", async () => {
+    mocked(api.listProfessionalShifts).mockRejectedValue(new ApiError(500, "", "x"));
+    renderIt();
+    expect(await screen.findByText("não foi possível concluir — tente de novo")).toBeTruthy();
+    expect(screen.queryByText("nenhum turno no período")).toBeNull();
+  });
+
+  it("a tabela de turnos mostra a Ocupação do vínculo do turno", async () => {
+    mocked(api.listProfessionalShifts).mockResolvedValue([
+      { id: "s1", professional_link_id: "l1", unit_name: "UBS Jardim", starts_at: "2026-10-06T10:00:00Z",
+        ends_at: "2026-10-06T16:00:00Z", cancelled_at: null, cancel_reason: null }
+    ]);
+    renderIt();
+    // "Ocupação" e "225125 · Médico clínico" já aparecem uma vez na tabela de
+    // Vínculos (mesmo profissional, mesmo vínculo) — a tabela de Turnos soma
+    // uma segunda ocorrência de cada.
+    expect(await screen.findAllByText("Ocupação")).toHaveLength(2);
+    expect(await screen.findAllByText("225125 · Médico clínico")).toHaveLength(2);
+  });
 });
