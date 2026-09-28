@@ -38,6 +38,7 @@ function renderAttendance() {
   const wrapper = ({ children }: { children: ReactNode }) =>
     <QueryClientProvider client={client}><AuthProvider>{children}</AuthProvider></QueryClientProvider>;
   render(<Attendance />, { wrapper });
+  return { client };
 }
 
 const found = {
@@ -311,5 +312,42 @@ describe("Attendance", () => {
     expect(await screen.findByLabelText("CPF do cidadão (check-in)")).not.toBeNull();
     expect(screen.getByLabelText("CPF do cidadão (validação)")).not.toBeNull();
     expect(await screen.findByText("Ninguém aguardando")).not.toBeNull();
+  });
+
+  it("profissional recém-vinculado por outra sessão passa a ver 'Chamar próximo' sem recarregar a página", async () => {
+    const unit = { id: "un1", name: "UBS Centro", kind: "ubs" };
+    mocked(api.fetchCurrentSession).mockResolvedValue(session("health_professional"));
+    localStorage.setItem(currentUnitKey("u1"), unit.id);
+    mocked(api.listActiveUnits).mockResolvedValue([ unit ]);
+    mocked(api.getMyProfessional)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValue({
+        professional: {} as api.Professional, shifts: [],
+        links: [ { id: "l1", health_unit_id: "un1", unit_name: "UBS Centro", cbo_code: "225125", cbo_title: null,
+          started_at: "x", started_by: "a", ended_at: null, ended_by: null } ]
+      });
+    const { client } = renderAttendance();
+
+    expect(await screen.findByText("Seu cadastro profissional ainda não foi feito. Fale com a administração da cidade.")).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Chamar próximo" })).toBeNull();
+
+    // Simula o refetchInterval (ATTENDANCE_REFETCH_MS) chegando sem depender
+    // de detalhes internos de agendamento do react-query: outra sessão
+    // acabou de abrir o vínculo, e o próximo poll deve trazer isso.
+    await client.refetchQueries({ queryKey: [ "myProfessional", "u1" ] });
+    expect(await screen.findByRole("button", { name: "Chamar próximo" })).not.toBeNull();
+  });
+
+  it("sem perfil profissional (getMyProfessional null): mensagem específica, não a de vínculo", async () => {
+    const unit = { id: "h1", name: "UBS Centro", kind: "ubs" };
+    mocked(api.fetchCurrentSession).mockResolvedValue(session("health_professional"));
+    localStorage.setItem(currentUnitKey("u1"), unit.id);
+    mocked(api.listActiveUnits).mockResolvedValue([ unit ]);
+    mocked(api.getMyProfessional).mockResolvedValue(null);
+    renderAttendance();
+
+    expect(await screen.findByText("Seu cadastro profissional ainda não foi feito. Fale com a administração da cidade.")).not.toBeNull();
+    expect(screen.queryByText("Você não tem vínculo com esta unidade")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Chamar próximo" })).toBeNull();
   });
 });

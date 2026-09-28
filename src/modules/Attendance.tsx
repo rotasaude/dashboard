@@ -4,7 +4,7 @@ import {
   getMyProfessional, listActiveUnits, lookupCitizen, revokeVerification, verifyCitizen, listVerifications,
   type AttendanceCitizen, type AttendanceTriage, type HealthUnit, type VerificationRow
 } from "../lib/api";
-import { attendanceError, currentUnitKey, isValidCpf, maskCpf, nivelLabel, onlyDigits } from "../lib/attendance";
+import { ATTENDANCE_REFETCH_MS, attendanceError, currentUnitKey, isValidCpf, maskCpf, nivelLabel, onlyDigits } from "../lib/attendance";
 import { fmtDateTime } from "../lib/format";
 import { useAuth } from "../lib/auth";
 import { PageHeader } from "../components/PageHeader";
@@ -46,7 +46,11 @@ export function Attendance() {
   // sem o user.id, o vínculo de um profissional vazaria no cache para o
   // próximo usuário que logar na mesma aba.
   const myProfessional = useQuery({
-    queryKey: [ "myProfessional", user?.id ?? null ], queryFn: getMyProfessional, enabled: canCareRole
+    queryKey: [ "myProfessional", user?.id ?? null ], queryFn: getMyProfessional, enabled: canCareRole,
+    // Sem isto, um profissional recém-vinculado por outra sessão (dashboard
+    // do admin) continua vendo "sem vínculo" até recarregar a página inteira
+    // — os botões clínicos ficam escondidos sem 403 nenhum acontecer.
+    refetchInterval: ATTENDANCE_REFETCH_MS
   });
 
   if (!user) return null;
@@ -60,7 +64,9 @@ export function Attendance() {
   const canCare = canCareRole && !!unit && linkedUnitIds.has(unit.id);
   const careBlocked = canCareRole && unit
     ? (myProfessional.isError ? attendanceError(myProfessional.error)
-      : (myProfessional.isSuccess && !canCare ? "Você não tem vínculo com esta unidade" : null))
+      : (myProfessional.isSuccess && myProfessional.data === null
+        ? "Seu cadastro profissional ainda não foi feito. Fale com a administração da cidade."
+        : (myProfessional.isSuccess && !canCare ? "Você não tem vínculo com esta unidade" : null)))
     : null;
 
   if (!canVerify && !canCareRole && !isAdmin) {
