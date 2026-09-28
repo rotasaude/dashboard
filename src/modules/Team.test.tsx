@@ -194,6 +194,14 @@ describe("Team", () => {
     await waitFor(() => expect(api.revokeMembership).toHaveBeenCalledWith("m-bia-prof"));
     expect((await screen.findByRole("status")).textContent).toBe("bia@cidade.gov.br não é mais profissional de saúde");
   });
+  it("marca 'sem vínculo' em quem tem o papel e não pode chamar", async () => {
+    mocked(api.listMemberships).mockResolvedValue([
+      { ...membership("medica@c.gov.br", "health_professional"), professional_status: "missing_link" }
+    ]);
+    renderTeam();
+    expect(await screen.findByText("sem vínculo")).toBeTruthy();
+  });
+
   describe("convidar e desativar", () => {
     const recent = () => new Date(Date.now() - 60_000).toISOString();
     const apiError = (status: number, body: unknown) => new ApiError(status, body, String(status));

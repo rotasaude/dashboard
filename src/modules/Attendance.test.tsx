@@ -11,7 +11,8 @@ vi.mock("../lib/api", async (importOriginal) => {
     listActiveUnits: vi.fn(), listAllUnits: vi.fn(), createUnit: vi.fn(), updateUnit: vi.fn(), setUnitActive: vi.fn(),
     listUnitQueue: vi.fn(), callAttendance: vi.fn(), callNext: vi.fn(), closeAttendance: vi.fn(),
     lookupCheckIn: vi.fn(), checkIn: vi.fn(), searchCheckIn: vi.fn(), checkInByException: vi.fn(),
-    listUnitRequests: vi.fn(), scheduleRequest: vi.fn(), dismissRequest: vi.fn(), listUnitAgenda: vi.fn()
+    listUnitRequests: vi.fn(), scheduleRequest: vi.fn(), dismissRequest: vi.fn(), listUnitAgenda: vi.fn(),
+    getMyProfessional: vi.fn()
   };
 });
 
@@ -54,7 +55,7 @@ describe("Attendance", () => {
       api.listActiveUnits, api.listAllUnits, api.createUnit, api.updateUnit, api.setUnitActive,
       api.listUnitQueue, api.callAttendance, api.callNext, api.closeAttendance,
       api.lookupCheckIn, api.checkIn, api.searchCheckIn, api.checkInByException,
-      api.listUnitRequests, api.scheduleRequest, api.dismissRequest, api.listUnitAgenda
+      api.listUnitRequests, api.scheduleRequest, api.dismissRequest, api.listUnitAgenda, api.getMyProfessional
     ]) {
       mocked(fn).mockReset();
     }
@@ -64,6 +65,7 @@ describe("Attendance", () => {
     mocked(api.listUnitQueue).mockResolvedValue({ waiting: [], in_care: [] });
     mocked(api.listUnitRequests).mockResolvedValue([]);
     mocked(api.listUnitAgenda).mockResolvedValue([]);
+    mocked(api.getMyProfessional).mockResolvedValue(null);
   });
 
   it("busca, exige a caixa do documento e valida", async () => {
@@ -217,6 +219,11 @@ describe("Attendance", () => {
     mocked(api.fetchCurrentSession).mockResolvedValue(session("health_professional"));
     localStorage.setItem(currentUnitKey("u1"), unit.id);
     mocked(api.listActiveUnits).mockResolvedValue([ unit ]);
+    mocked(api.getMyProfessional).mockResolvedValue({
+      professional: {} as api.Professional, shifts: [],
+      links: [ { id: "l1", health_unit_id: "un1", unit_name: "UBS Centro", cbo_code: "225125", cbo_title: null,
+        started_at: "x", started_by: "a", ended_at: null, ended_by: null } ]
+    });
     renderAttendance();
 
     expect(await screen.findByRole("button", { name: "Chamar próximo" })).not.toBeNull();
@@ -224,6 +231,22 @@ describe("Attendance", () => {
     expect(screen.queryByLabelText("CPF do cidadão (validação)")).toBeNull();
     expect(screen.queryByText("Pedidos de agendamento")).toBeNull();
     expect(screen.queryByText("Agenda do dia")).toBeNull();
+  });
+
+  it("profissional sem vínculo com a unidade escolhida: sem ações clínicas", async () => {
+    const unit = { id: "h1", name: "UBS Centro", kind: "ubs" };
+    mocked(api.fetchCurrentSession).mockResolvedValue(session("health_professional"));
+    localStorage.setItem(currentUnitKey("u1"), unit.id);
+    mocked(api.listActiveUnits).mockResolvedValue([ unit ]);
+    mocked(api.getMyProfessional).mockResolvedValue({
+      professional: {} as api.Professional, shifts: [],
+      links: [ { id: "l1", health_unit_id: "outra", unit_name: "UPA", cbo_code: "225125", cbo_title: null,
+        started_at: "x", started_by: "a", ended_at: null, ended_by: null } ]
+    });
+    renderAttendance();
+
+    expect(await screen.findByText("Você não tem vínculo com esta unidade")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Chamar próximo" })).toBeNull();
   });
 
   it("recepção (canVerify) vê Pedidos e Agenda do dia; profissional sem esse papel não vê", async () => {

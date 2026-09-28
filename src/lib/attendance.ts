@@ -72,7 +72,9 @@ const MESSAGES: Record<string, string> = {
   invalid_time: "escolha um horário entre agora e 180 dias",
   not_today: "o código só vale no dia do horário",
   appointment_not_eligible: "este agendamento não está confirmado para check-in",
-  unit_has_open_requests: "há pedidos de agendamento abertos nesta unidade — encerre-os antes de desativar"
+  unit_has_open_requests: "há pedidos de agendamento abertos nesta unidade — encerre-os antes de desativar",
+  missing_link: "Você não tem vínculo com esta unidade",
+  missing_role: "seu papel não permite esta ação"
 };
 
 export function attendanceError(err: unknown): string {

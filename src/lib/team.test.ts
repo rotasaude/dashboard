@@ -90,6 +90,18 @@ describe("convite", () => {
   });
 });
 
+describe("professionalStatus", () => {
+  it("professionalStatus vem da linha de health_professional", () => {
+    const rows = [
+      { id: "1", user: { id: "u1", email_address: "a@c" }, role: "health_professional", granted_at: "x", professional_status: "missing_link" as const },
+      { id: "2", user: { id: "u2", email_address: "b@c" }, role: "viewer", granted_at: "x" }
+    ];
+    const [ a, b ] = teamMembers(rows);
+    expect(a.professionalStatus).toBe("missing_link");
+    expect(b.professionalStatus).toBeNull();
+  });
+});
+
 describe("desativação", () => {
   it("traduz as recusas da desativação", () => {
     expect(deactivateErrorMessage(apiError(422, { error: "cannot_deactivate_self" }))).toBe("Você não pode desativar o próprio acesso");

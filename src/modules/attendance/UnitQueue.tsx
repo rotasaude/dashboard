@@ -24,6 +24,8 @@ interface Props {
   unit: HealthUnit;
   units: HealthUnit[];
   canCare: boolean;
+  careBlocked?: string | null;
+  onClinicalRefused?(): void;
 }
 
 const OUTCOME_LABEL: Record<Exclude<AttendanceOutcome, "left">, string> = {
@@ -36,7 +38,7 @@ function errorCode(err: unknown): string | undefined {
   return err instanceof ApiError ? (err.body as { error?: string } | undefined)?.error : undefined;
 }
 
-export function UnitQueue({ unit, units, canCare }: Props) {
+export function UnitQueue({ unit, units, canCare, careBlocked, onClinicalRefused }: Props) {
   const queryClient = useQueryClient();
   const query = useQuery({ queryKey: [ "unitQueue", unit.id ], queryFn: () => listUnitQueue(unit.id),
     refetchInterval: ATTENDANCE_REFETCH_MS
@@ -63,6 +65,8 @@ export function UnitQueue({ unit, units, canCare }: Props) {
       // recarregar, sem precisar de um alerta parado (mesmo padrão do
       // already_closed de OpenAttendances).
       if (errorCode(err) === "queue_empty") { invalidate(); return; }
+      const code = errorCode(err);
+      if (code === "missing_link" || code === "missing_role") onClinicalRefused?.();
       setActionError(attendanceError(err));
     } finally {
       setCallingNext(false);
@@ -79,6 +83,8 @@ export function UnitQueue({ unit, units, canCare }: Props) {
       // already_called: outro profissional chamou primeiro — recarrega em
       // vez de mostrar erro parado.
       if (errorCode(err) === "already_called") { invalidate(); return; }
+      const code = errorCode(err);
+      if (code === "missing_link" || code === "missing_role") onClinicalRefused?.();
       setActionError(attendanceError(err));
     } finally {
       setRowBusy(null);
@@ -121,6 +127,7 @@ export function UnitQueue({ unit, units, canCare }: Props) {
         {query.isError && (
           <p role="alert" style={{ margin: 0, fontSize: 12.5, color: "var(--down)" }}>{attendanceError(query.error)}</p>
         )}
+        {careBlocked && <p role="status" style={{ margin: 0, fontSize: 12.5 }}>{careBlocked}</p>}
 
         {!query.isError && (
           <>
@@ -205,6 +212,7 @@ export function UnitQueue({ unit, units, canCare }: Props) {
             row={closing}
             unit={unit}
             units={units}
+            onClinicalRefused={onClinicalRefused}
             onCancel={() => setClosing(null)}
             onDone={(appointmentRequest) => {
               setClosing(null);
@@ -224,8 +232,9 @@ export function UnitQueue({ unit, units, canCare }: Props) {
 }
 
 function ClosePanel(
-  { row, unit, units, onCancel, onDone }: {
+  { row, unit, units, onClinicalRefused, onCancel, onDone }: {
     row: QueueRow; unit: HealthUnit; units: HealthUnit[];
+    onClinicalRefused?(): void;
     onCancel(): void; onDone(appointmentRequest: AppointmentRequestSummary | null): void;
   }
 ) {
@@ -250,6 +259,8 @@ function ClosePanel(
       onDone(result.appointmentRequest);
     } catch (err) {
       if (errorCode(err) === "already_closed") { onDone(null); return; }
+      const code = errorCode(err);
+      if (code === "missing_link" || code === "missing_role") onClinicalRefused?.();
       setError(attendanceError(err));
     } finally {
       setBusy(false);
