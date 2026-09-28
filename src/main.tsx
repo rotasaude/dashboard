@@ -8,7 +8,7 @@ import { Login } from "./modules/Login";
 import { ResetPassword } from "./modules/ResetPassword";
 import { AcceptInvitation } from "./modules/AcceptInvitation";
 import { AuthProvider, useAuth } from "./lib/auth";
-import { createAppQueryClient } from "./lib/queryClient";
+import { useSessionQueryClient } from "./lib/sessionQueryClient";
 import { clearEntryFromUrl, readEntryFromUrl, type Entry } from "./lib/entry";
 import { useGrantEntry } from "./lib/use_grant_entry";
 import "./theme/global.css";
@@ -16,7 +16,10 @@ import "./theme/global.css";
 function AppRoot() {
   const auth = useAuth();
   const [ entry, setEntry ] = useState<Entry | null>(() => readEntryFromUrl());
-  const [ queryClient ] = useState(() => createAppQueryClient(() => { void auth.reload(); }));
+  const queryClient = useSessionQueryClient(
+    auth.state.kind === "authenticated" ? auth.state.user.id : null,
+    () => { void auth.reload(); }
+  );
 
   // Grant vale 60 s e uso único: consome na montagem, antes de qualquer tela.
   const grantError = useGrantEntry(entry, (ok) => {
