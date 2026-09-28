@@ -4,7 +4,8 @@
 export type ModuleId =
   | "overview" | "ingestion" | "conversations" | "consent"
   | "triages" | "classification" | "reports" | "protocols" | "events"
-  | "queues" | "health" | "protocol-editor" | "security" | "team" | "attendance";
+  | "queues" | "health" | "protocol-editor" | "security" | "team" | "attendance"
+  | "professionals" | "my-profile";
 
 export interface NavItem { id: ModuleId; label: string; icon: string; }
 export interface NavGroupDef { label: string; items: NavItem[]; }
@@ -34,10 +35,12 @@ export const NAV_GROUPS: NavGroupDef[] = [
     { id: "attendance", label: "Atendimento", icon: "☑" }
   ]},
   { label: "Equipe", items: [
-    { id: "team", label: "Equipe", icon: "☷" }
+    { id: "team", label: "Equipe", icon: "☷" },
+    { id: "professionals", label: "Profissionais", icon: "✚" }
   ]},
   { label: "Conta", items: [
-    { id: "security", label: "Segurança", icon: "⚿" }
+    { id: "security", label: "Segurança", icon: "⚿" },
+    { id: "my-profile", label: "Meu perfil", icon: "☺" }
   ]}
 ];
 
@@ -59,10 +62,16 @@ export function navGroupsFor(
   const roles = user?.memberships?.map((m) => m.role) ?? [];
   const isAdmin = roles.includes("municipal_admin");
   const canAttend = isAdmin || roles.includes("citizen_verifier") || roles.includes("health_professional");
+  const isProfessional = roles.includes("health_professional");
   return NAV_GROUPS.filter((group) => {
     if (group.label === "Conta") return !user?.operator;
     if (group.label === "Equipe") return isAdmin;
     if (group.label === "Atendimento") return canAttend;
     return true;
-  });
+  }).map((group) => ({
+    ...group,
+    // Módulo 10: "Meu perfil" é do profissional; sem sessão ainda, some
+    // (a API responderia 404 no_profile para quem não é profissional).
+    items: group.items.filter((item) => item.id !== "my-profile" || isProfessional)
+  }));
 }

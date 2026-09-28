@@ -20,6 +20,8 @@ import { ProtocolEditor } from "./modules/ProtocolEditor";
 import { Security } from "./modules/Security";
 import { Team } from "./modules/Team";
 import { Attendance } from "./modules/Attendance";
+import { Professionals } from "./modules/Professionals";
+import { MyProfile } from "./modules/MyProfile";
 
 export function App() {
   const [ period, setPeriod ] = useState<PeriodKey>("7d");
@@ -70,6 +72,8 @@ function renderModule(active: ModuleId, setActive: (id: ModuleId) => void) {
     case "security":       return <Security />;
     case "team":           return <Team onNavigate={setActive} />;
     case "attendance":     return <Attendance />;
+    case "professionals":  return <Professionals />;
+    case "my-profile":     return <MyProfile />;
     default:               return <Placeholder title={labelFor(active)} />;
   }
 }
