@@ -249,6 +249,50 @@ describe("Attendance", () => {
     expect(screen.queryByRole("button", { name: "Chamar próximo" })).toBeNull();
   });
 
+  it("erro ao ler o vínculo (não 404): mostra mensagem, não esconde tudo em silêncio", async () => {
+    const unit = { id: "h1", name: "UBS Centro", kind: "ubs" };
+    mocked(api.fetchCurrentSession).mockResolvedValue(session("health_professional"));
+    localStorage.setItem(currentUnitKey("u1"), unit.id);
+    mocked(api.listActiveUnits).mockResolvedValue([ unit ]);
+    mocked(api.getMyProfessional).mockRejectedValue(new ApiError(500, "", "x"));
+    renderAttendance();
+
+    expect(await screen.findByText("não foi possível concluir — tente de novo")).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Chamar próximo" })).toBeNull();
+  });
+
+  it("papel duplo (recepção + profissional) sem vínculo na unidade: mantém check-in e 'Saiu sem atendimento'", async () => {
+    const unit = { id: "h1", name: "UBS Centro", kind: "ubs" };
+    mocked(api.fetchCurrentSession).mockResolvedValue({
+      ...session("citizen_verifier"),
+      memberships: [
+        ...session("citizen_verifier").memberships,
+        { municipality_id: "m1", municipality_name: "Curitiba", municipality_uf: "PR", role: "health_professional" }
+      ]
+    });
+    localStorage.setItem(currentUnitKey("u1"), unit.id);
+    mocked(api.listActiveUnits).mockResolvedValue([ unit ]);
+    mocked(api.listUnitQueue).mockResolvedValue({
+      waiting: [ {
+        id: "a1", cpf_masked: "***.982.247-**", checked_in_at: "2026-09-25T09:00:00Z",
+        protocol_name: null, priority: 1, source: "triage" as const,
+        appointment_time: null, called_at: null, called_by_name: null
+      } ],
+      in_care: []
+    });
+    mocked(api.getMyProfessional).mockResolvedValue({
+      professional: {} as api.Professional, shifts: [],
+      links: [ { id: "l1", health_unit_id: "outra", unit_name: "UPA", cbo_code: "225125", cbo_title: null,
+        started_at: "x", started_by: "a", ended_at: null, ended_by: null } ]
+    });
+    renderAttendance();
+
+    expect(await screen.findByText("Você não tem vínculo com esta unidade")).toBeTruthy();
+    expect(await screen.findByLabelText("CPF do cidadão (check-in)")).not.toBeNull();
+    expect(await screen.findAllByRole("button", { name: "Saiu sem atendimento" })).not.toHaveLength(0);
+    expect(screen.queryByRole("button", { name: "Chamar próximo" })).toBeNull();
+  });
+
   it("recepção (canVerify) vê Pedidos e Agenda do dia; profissional sem esse papel não vê", async () => {
     const unit = { id: "un1", name: "UBS Centro", kind: "ubs" };
     localStorage.setItem(currentUnitKey("u1"), unit.id);

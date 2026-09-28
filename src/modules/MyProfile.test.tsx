@@ -5,10 +5,11 @@ import type { ReactNode } from "react";
 
 vi.mock("../lib/api", async (importOriginal) => {
   const real = await importOriginal<typeof import("../lib/api")>();
-  return { ...real, getMyProfessional: vi.fn(), updateMyProfessional: vi.fn() };
+  return { ...real, fetchCurrentSession: vi.fn(), getMyProfessional: vi.fn(), updateMyProfessional: vi.fn() };
 });
 
 import * as api from "../lib/api";
+import { AuthProvider } from "../lib/auth";
 import { MyProfile } from "./MyProfile";
 
 afterEach(cleanup);
@@ -16,12 +17,20 @@ const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
 
 function renderIt() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  render(<MyProfile />, { wrapper: ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider> });
+  render(<MyProfile />, {
+    wrapper: ({ children }: { children: ReactNode }) =>
+      <QueryClientProvider client={client}><AuthProvider>{children}</AuthProvider></QueryClientProvider>
+  });
 }
 
 describe("MyProfile", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocked(api.fetchCurrentSession).mockResolvedValue({
+      id: "u1", email_address: "medica@c.gov.br", operator: false, mfa_enrolled: true,
+      mfa_verified_at: new Date().toISOString(),
+      memberships: [ { municipality_id: "m1", municipality_name: "Curitiba", municipality_uf: "PR", role: "health_professional" } ]
+    });
     mocked(api.getMyProfessional).mockResolvedValue({
       professional: { id: "p1", user_id: "u1", email_address: "medica@c.gov.br", professional_name: "Helena Duarte",
         council: "CRM", council_state: "PR", registration_number: "12345", cns_masked: "*** **** **** 0005",

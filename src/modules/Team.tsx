@@ -120,8 +120,15 @@ export function Team({ onNavigate }: { onNavigate(id: ModuleId): void }) {
                   { label: "Papéis", w: "2fr", render: (m) => (
                     <span style={{ display: "inline-flex", gap: 4, flexWrap: "wrap" }}>
                       {m.roles.map((role) => <Tag key={role}>{role}</Tag>)}
-                      {m.professionalStatus && m.professionalStatus !== "ok" &&
-                        <Tag tone="warn">{STATUS_LABEL[m.professionalStatus]}</Tag>}
+                      {m.professionalStatus && m.professionalStatus !== "ok" && (
+                        <button
+                          type="button"
+                          onClick={() => onNavigate("professionals")}
+                          style={{ background: "none", border: "none", padding: 0, cursor: "pointer" }}
+                        >
+                          <Tag tone="warn">{STATUS_LABEL[m.professionalStatus]}</Tag>
+                        </button>
+                      )}
                     </span>
                   ) },
                   { label: "Revisor", w: "auto", align: "right", render: (m) => (

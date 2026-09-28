@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getMyProfessional, updateMyProfessional, type ProfessionalLink, type ProfessionalShift } from "../lib/api";
 import { professionalError } from "../lib/professionals";
 import { fmtDateTime } from "../lib/format";
+import { useAuth } from "../lib/auth";
 import { PageHeader } from "../components/PageHeader";
 import { Panel } from "../components/Panel";
 import { DataTable } from "../components/DataTable";
@@ -12,8 +13,11 @@ import { ProfileForm } from "./professionals/ProfileForm";
 // Meu perfil (módulo 10; emenda ao ADR 0021): o profissional lê conselho,
 // registro, CNS, vínculos e turnos e edita só nome e contato.
 export function MyProfile() {
+  const { user } = useAuth();
   const queryClient = useQueryClient();
-  const query = useQuery({ queryKey: [ "myProfessional" ], queryFn: getMyProfessional });
+  // Chave por usuário (F-10.5) — ver o comentário em Attendance.tsx: o
+  // QueryClient sobrevive a troca de sessão na mesma aba.
+  const query = useQuery({ queryKey: [ "myProfessional", user?.id ?? null ], queryFn: getMyProfessional });
 
   if (query.error) return <p role="alert">{professionalError(query.error)}</p>;
   if (query.isLoading) return null;
@@ -40,7 +44,7 @@ export function MyProfile() {
         <ProfileForm initial={professional} selfService submitLabel="Salvar" onSubmit={async (fields) => {
           await updateMyProfessional({ professional_name: fields.professional_name, phone: fields.phone ?? null,
             contact_email: fields.contact_email ?? null });
-          void queryClient.invalidateQueries({ queryKey: [ "myProfessional" ] });
+          void queryClient.invalidateQueries({ queryKey: [ "myProfessional", user?.id ?? null ] });
         }} />
       </Panel>
       <Panel title="Vínculos ativos">

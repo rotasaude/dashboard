@@ -41,7 +41,13 @@ export function Attendance() {
   const [ pickerKey, setPickerKey ] = useState(0);
   const unitsQuery = useQuery({ queryKey: [ "activeUnits" ], queryFn: listActiveUnits, enabled: !!unit });
   const canCareRole = (user?.memberships.map((m) => m.role) ?? []).includes("health_professional");
-  const myProfessional = useQuery({ queryKey: [ "myProfessional" ], queryFn: getMyProfessional, enabled: canCareRole });
+  // Chave por usuário (F-10.5): o QueryClient é criado uma vez em main.tsx e
+  // sobrevive a troca de sessão (login/logout não chama queryClient.clear());
+  // sem o user.id, o vínculo de um profissional vazaria no cache para o
+  // próximo usuário que logar na mesma aba.
+  const myProfessional = useQuery({
+    queryKey: [ "myProfessional", user?.id ?? null ], queryFn: getMyProfessional, enabled: canCareRole
+  });
 
   if (!user) return null;
   const roles = user.memberships.map((m) => m.role);
@@ -52,8 +58,10 @@ export function Attendance() {
   // escolhida. A API é quem garante; aqui só não se oferece o que ela recusaria.
   const linkedUnitIds = new Set((myProfessional.data?.links ?? []).filter((l) => !l.ended_at).map((l) => l.health_unit_id));
   const canCare = canCareRole && !!unit && linkedUnitIds.has(unit.id);
-  const careBlocked = canCareRole && unit && myProfessional.isSuccess && !canCare
-    ? "Você não tem vínculo com esta unidade" : null;
+  const careBlocked = canCareRole && unit
+    ? (myProfessional.isError ? attendanceError(myProfessional.error)
+      : (myProfessional.isSuccess && !canCare ? "Você não tem vínculo com esta unidade" : null))
+    : null;
 
   if (!canVerify && !canCareRole && !isAdmin) {
     return (
@@ -81,7 +89,7 @@ export function Attendance() {
           units={unitsQuery.data ?? []}
           canCare={canCare}
           careBlocked={careBlocked}
-          onClinicalRefused={() => void queryClient.invalidateQueries({ queryKey: [ "myProfessional" ] })}
+          onClinicalRefused={() => void queryClient.invalidateQueries({ queryKey: [ "myProfessional", user.id ] })}
         />
       )}
       {canVerify && unit && <Requests unit={unit} />}

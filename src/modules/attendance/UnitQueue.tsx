@@ -60,12 +60,12 @@ export function UnitQueue({ unit, units, canCare, careBlocked, onClinicalRefused
       await callNext(unit.id);
       invalidate();
     } catch (err) {
+      const code = errorCode(err);
       // queue_empty: outro profissional esvaziou a fila entre o clique e a
       // resposta — a lista de Aguardando já mostra "Ninguém aguardando" ao
       // recarregar, sem precisar de um alerta parado (mesmo padrão do
       // already_closed de OpenAttendances).
-      if (errorCode(err) === "queue_empty") { invalidate(); return; }
-      const code = errorCode(err);
+      if (code === "queue_empty") { invalidate(); return; }
       if (code === "missing_link" || code === "missing_role") onClinicalRefused?.();
       setActionError(attendanceError(err));
     } finally {
@@ -80,10 +80,10 @@ export function UnitQueue({ unit, units, canCare, careBlocked, onClinicalRefused
       await callAttendance(row.id, unit.id);
       invalidate();
     } catch (err) {
+      const code = errorCode(err);
       // already_called: outro profissional chamou primeiro — recarrega em
       // vez de mostrar erro parado.
-      if (errorCode(err) === "already_called") { invalidate(); return; }
-      const code = errorCode(err);
+      if (code === "already_called") { invalidate(); return; }
       if (code === "missing_link" || code === "missing_role") onClinicalRefused?.();
       setActionError(attendanceError(err));
     } finally {
@@ -121,7 +121,7 @@ export function UnitQueue({ unit, units, canCare, careBlocked, onClinicalRefused
     )}>
       <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
         {done && <p role="status" style={{ margin: 0, fontSize: 12.5, fontWeight: 600 }}>{done}</p>}
-        {actionError && (
+        {actionError && actionError !== careBlocked && (
           <p role="alert" style={{ margin: 0, fontSize: 12.5, color: "var(--down)" }}>{actionError}</p>
         )}
         {query.isError && (
@@ -258,8 +258,8 @@ function ClosePanel(
       const result = await closeAttendance(row.id, outcome, referralUnitId || undefined, note || undefined);
       onDone(result.appointmentRequest);
     } catch (err) {
-      if (errorCode(err) === "already_closed") { onDone(null); return; }
       const code = errorCode(err);
+      if (code === "already_closed") { onDone(null); return; }
       if (code === "missing_link" || code === "missing_role") onClinicalRefused?.();
       setError(attendanceError(err));
     } finally {

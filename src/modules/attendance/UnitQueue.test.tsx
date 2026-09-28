@@ -266,6 +266,9 @@ describe("UnitQueue", () => {
     renderQueue({ canCare: false, careBlocked: "Você não tem vínculo com esta unidade" });
     expect(await screen.findByText("Você não tem vínculo com esta unidade")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Chamar próximo" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Chamar" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Encerrar" })).toBeNull();
+    expect(await screen.findAllByRole("button", { name: "Saiu sem atendimento" })).toHaveLength(2);
   });
 
   it("403 missing_link ao chamar: mensagem nomeada e avisa a tela para reler o vínculo", async () => {
@@ -275,6 +278,17 @@ describe("UnitQueue", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Chamar próximo" }));
     expect(await screen.findByText("Você não tem vínculo com esta unidade")).toBeTruthy();
     expect(onClinicalRefused).toHaveBeenCalled();
+  });
+
+  it("403 missing_link com careBlocked já ativo: a mensagem não repete no alerta", async () => {
+    const message = "Você não tem vínculo com esta unidade";
+    const onClinicalRefused = vi.fn();
+    mocked(api.callNext).mockRejectedValue(new ApiError(403, { error: "missing_link" }, "x"));
+    renderQueue({ canCare: true, careBlocked: message, onClinicalRefused });
+    fireEvent.click(await screen.findByRole("button", { name: "Chamar próximo" }));
+    await waitFor(() => expect(onClinicalRefused).toHaveBeenCalled());
+    expect(await screen.findAllByText(message)).toHaveLength(1);
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 
   it("already_called recarrega a fila sem erro parado, como already_closed hoje", async () => {

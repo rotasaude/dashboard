@@ -202,6 +202,15 @@ describe("Team", () => {
     expect(await screen.findByText("sem vínculo")).toBeTruthy();
   });
 
+  it("'sem vínculo'/'sem perfil' leva à ficha do profissional", async () => {
+    mocked(api.listMemberships).mockResolvedValue([
+      { ...membership("medica@c.gov.br", "health_professional"), professional_status: "missing_link" }
+    ]);
+    const { onNavigate } = renderTeam();
+    fireEvent.click(await screen.findByRole("button", { name: "sem vínculo" }));
+    expect(onNavigate).toHaveBeenCalledWith("professionals");
+  });
+
   describe("convidar e desativar", () => {
     const recent = () => new Date(Date.now() - 60_000).toISOString();
     const apiError = (status: number, body: unknown) => new ApiError(status, body, String(status));
