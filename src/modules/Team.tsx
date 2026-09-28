@@ -124,6 +124,7 @@ export function Team({ onNavigate }: { onNavigate(id: ModuleId): void }) {
                         <button
                           type="button"
                           onClick={() => onNavigate("professionals")}
+                          aria-label={`${STATUS_LABEL[m.professionalStatus]} — abrir Profissionais`}
                           style={{ background: "none", border: "none", padding: 0, cursor: "pointer" }}
                         >
                           <Tag tone="warn">{STATUS_LABEL[m.professionalStatus]}</Tag>

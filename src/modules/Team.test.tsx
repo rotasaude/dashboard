@@ -202,12 +202,12 @@ describe("Team", () => {
     expect(await screen.findByText("sem vínculo")).toBeTruthy();
   });
 
-  it("'sem vínculo'/'sem perfil' leva à ficha do profissional", async () => {
+  it("'sem vínculo'/'sem perfil' leva à ficha do profissional, com aria-label nomeando o destino", async () => {
     mocked(api.listMemberships).mockResolvedValue([
       { ...membership("medica@c.gov.br", "health_professional"), professional_status: "missing_link" }
     ]);
     const { onNavigate } = renderTeam();
-    fireEvent.click(await screen.findByRole("button", { name: "sem vínculo" }));
+    fireEvent.click(await screen.findByRole("button", { name: "sem vínculo — abrir Profissionais" }));
     expect(onNavigate).toHaveBeenCalledWith("professionals");
   });
 
