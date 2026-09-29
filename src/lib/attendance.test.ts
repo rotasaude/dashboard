@@ -48,4 +48,9 @@ describe("attendance helpers", () => {
     expect(attendanceError(new ApiError(409, { error: "unit_has_open_requests" }, "x")))
       .toBe("há pedidos de agendamento abertos nesta unidade — encerre-os antes de desativar");
   });
+
+  it("traduz os erros do endereço da unidade (módulo 11)", () => {
+    expect(attendanceError(new ApiError(422, { error: "invalid_zip" }, "x"))).toBe("CEP precisa ter 8 dígitos");
+    expect(attendanceError(new ApiError(422, { error: "invalid_neighborhood" }, "x"))).toBe("bairro inválido — escolha outro da lista");
+  });
 });

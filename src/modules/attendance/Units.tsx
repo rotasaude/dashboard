@@ -1,30 +1,32 @@
 import { useEffect, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
-import { createUnit, listAllUnits, setUnitActive, updateUnit, type HealthUnitRow, type UnitAddress } from "../../lib/api";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { createUnit, listAllUnits, listNeighborhoods, setUnitActive, updateUnit, type HealthUnitRow } from "../../lib/api";
 import { UNIT_KINDS, attendanceError } from "../../lib/attendance";
+import { NEIGHBORHOODS_KEY } from "../../lib/territory";
+import { EMPTY_ADDRESS_FIELDS, addressFieldsFrom, addressPayload, formatAddress } from "../../lib/unitAddress";
 import { Panel } from "../../components/Panel";
 import { DataTable } from "../../components/DataTable";
 import { Tag } from "../../components/Tag";
-import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
-
-// Temporário (Task 1): a Task 5 troca pelo endereço do formulário.
-const EMPTY_ADDRESS: UnitAddress = { address_street: null, address_number: null, address_complement: null, address_zip: null, neighborhood_id: null };
+import { buttonStyle, secondaryButtonStyle } from "../../components/formStyles";
+import { UnitForm, type UnitFormValue } from "./UnitForm";
 
 // Units (Task 6) — cadastro de unidades de saúde, só para municipal_admin.
-// Lista + criar/editar (mesmo formulário, com/sem id) + desativar/reativar.
+// Lista + criar/editar (UnitForm, com/sem id) + desativar/reativar. Desde o
+// módulo 11 a unidade tem endereço (CEP pelo ViaCEP) e o bairro onde fica.
 // Criar ou reativar muda quem entra em "unidades ativas" (UnitPicker,
 // destino de encaminhamento em UnitQueue): invalida a query `activeUnits`
 // para essas telas recarregarem (card dashboard#4, item 1 — Task 7).
 const KIND_LABEL: Record<string, string> = Object.fromEntries(UNIT_KINDS.map((k) => [ k.value, k.label ]));
 
-interface FormState { id: string | null; name: string; kind: string }
+interface Editing { id: string | null; initial: UnitFormValue }
 
 export function Units() {
   const queryClient = useQueryClient();
+  const neighborhoods = useQuery({ queryKey: NEIGHBORHOODS_KEY, queryFn: listNeighborhoods });
   const [ rows, setRows ] = useState<HealthUnitRow[] | null>(null);
   const [ busy, setBusy ] = useState(false);
   const [ error, setError ] = useState<string | null>(null);
-  const [ form, setForm ] = useState<FormState | null>(null);
+  const [ editing, setEditing ] = useState<Editing | null>(null);
 
   async function load() {
     try {
@@ -50,17 +52,18 @@ export function Units() {
     }
   }
 
-  async function save() {
-    if (busy || !form || !form.name.trim()) return;
+  async function save(value: UnitFormValue) {
+    if (busy || !editing) return;
     setBusy(true); setError(null);
     try {
-      if (form.id) {
-        await updateUnit(form.id, form.name, form.kind, EMPTY_ADDRESS);
+      const address = addressPayload(value);
+      if (editing.id) {
+        await updateUnit(editing.id, value.name, value.kind, address);
       } else {
-        await createUnit(form.name, form.kind, EMPTY_ADDRESS);
+        await createUnit(value.name, value.kind, address);
         void queryClient.invalidateQueries({ queryKey: [ "activeUnits" ] });
       }
-      setForm(null);
+      setEditing(null);
       await load();
     } catch (err) {
       setError(attendanceError(err));
@@ -69,48 +72,30 @@ export function Units() {
     }
   }
 
+  const nameOf = new Map((neighborhoods.data ?? []).map((n) => [ n.id, n.name ]));
+
   return (
     <Panel
       title="Unidades"
-      right={!form && <button type="button" style={buttonStyle} onClick={() => setForm({ id: null, name: "", kind: "ubs" })}>Nova unidade</button>}
+      right={!editing && (
+        <button type="button" style={buttonStyle}
+          onClick={() => setEditing({ id: null, initial: { name: "", kind: "ubs", ...EMPTY_ADDRESS_FIELDS } })}>
+          Nova unidade
+        </button>
+      )}
     >
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         {error && <p role="alert" style={{ margin: 0, fontSize: 12.5, color: "var(--down)" }}>{error}</p>}
 
-        {form && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 10, maxWidth: 320 }}>
-            <label style={labelStyle}>
-              Nome
-              <input
-                value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
-                style={inputStyle}
-              />
-            </label>
-            <label style={labelStyle}>
-              Tipo
-              <select
-                value={form.kind}
-                onChange={(e) => setForm({ ...form, kind: e.target.value })}
-                style={inputStyle}
-              >
-                {UNIT_KINDS.map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}
-              </select>
-            </label>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button
-                type="button"
-                disabled={busy || !form.name.trim()}
-                onClick={() => void save()}
-                style={(busy || !form.name.trim()) ? disabledButtonStyle : buttonStyle}
-              >
-                Salvar
-              </button>
-              <button type="button" disabled={busy} onClick={() => setForm(null)} style={secondaryButtonStyle}>
-                Cancelar
-              </button>
-            </div>
-          </div>
+        {editing && (
+          <UnitForm
+            key={editing.id ?? "new"}
+            initial={editing.initial}
+            neighborhoods={neighborhoods.data ?? []}
+            busy={busy}
+            onSave={(value) => void save(value)}
+            onCancel={() => setEditing(null)}
+          />
         )}
 
         {rows && (
@@ -118,11 +103,14 @@ export function Units() {
             cols={[
               { label: "Nome", w: "2fr", render: (r) => r.name },
               { label: "Tipo", w: "1fr", render: (r) => KIND_LABEL[r.kind] ?? r.kind },
+              { label: "Endereço", w: "3fr", render: (r) =>
+                formatAddress(r, r.neighborhood_id ? nameOf.get(r.neighborhood_id) : null) },
               { label: "Situação", w: "1fr", render: (r) => <Tag tone={r.active ? "ok" : undefined}>{r.active ? "ativa" : "inativa"}</Tag> },
               {
                 label: "", w: "auto", align: "right", render: (r) => (
                   <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-                    <button type="button" style={secondaryButtonStyle} onClick={() => setForm({ id: r.id, name: r.name, kind: r.kind })}>
+                    <button type="button" style={secondaryButtonStyle}
+                      onClick={() => setEditing({ id: r.id, initial: { name: r.name, kind: r.kind, ...addressFieldsFrom(r) } })}>
                       Editar
                     </button>
                     <button type="button" style={secondaryButtonStyle} disabled={busy} onClick={() => void toggleActive(r)}>
@@ -141,5 +129,3 @@ export function Units() {
     </Panel>
   );
 }
-
-const labelStyle = { display: "flex", flexDirection: "column" as const, gap: 4, fontSize: 12, color: "var(--ink2)" };

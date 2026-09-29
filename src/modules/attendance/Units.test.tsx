@@ -6,21 +6,24 @@ import type { ReactNode } from "react";
 vi.mock("../../lib/api", async (importOriginal) => {
   const real = await importOriginal<typeof import("../../lib/api")>();
   return {
-    ...real, listAllUnits: vi.fn(), createUnit: vi.fn(), updateUnit: vi.fn(), setUnitActive: vi.fn()
+    ...real, listAllUnits: vi.fn(), createUnit: vi.fn(), updateUnit: vi.fn(), setUnitActive: vi.fn(), listNeighborhoods: vi.fn()
   };
 });
 
 import * as api from "../../lib/api";
 import { ApiError } from "../../lib/api";
 import { Units } from "./Units";
+import { EMPTY_ADDRESS } from "../../lib/unitAddress";
 
-afterEach(cleanup);
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
 
 const rows = [
-  { id: "u1", name: "UBS Centro", kind: "ubs", active: true },
+  { id: "u1", name: "UBS Centro", kind: "ubs", active: true, address_street: "Rua A", address_number: "1",
+    address_complement: null, address_zip: null, neighborhood_id: "n1" },
   { id: "u2", name: "UPA Norte", kind: "upa", active: false }
 ];
+const centro = { id: "n1", name: "Centro", active: true, source: "seed" as const, units: [] };
 
 function renderUnits(client = new QueryClient({ defaultOptions: { queries: { retry: false } } })) {
   const wrapper = ({ children }: { children: ReactNode }) =>
@@ -31,8 +34,9 @@ function renderUnits(client = new QueryClient({ defaultOptions: { queries: { ret
 
 describe("Units", () => {
   beforeEach(() => {
-    for (const fn of [ api.listAllUnits, api.createUnit, api.updateUnit, api.setUnitActive ]) mocked(fn).mockReset();
+    for (const fn of [ api.listAllUnits, api.createUnit, api.updateUnit, api.setUnitActive, api.listNeighborhoods ]) mocked(fn).mockReset();
     mocked(api.listAllUnits).mockResolvedValue(rows);
+    mocked(api.listNeighborhoods).mockResolvedValue([ centro ]);
   });
 
   it("cria uma unidade com nome e tipo", async () => {
@@ -45,7 +49,7 @@ describe("Units", () => {
     fireEvent.change(screen.getByLabelText("Nome"), { target: { value: "Hospital Sul" } });
     fireEvent.change(screen.getByLabelText("Tipo"), { target: { value: "hospital" } });
     fireEvent.click(screen.getByRole("button", { name: "Salvar" }));
-    await waitFor(() => expect(api.createUnit).toHaveBeenCalledWith("Hospital Sul", "hospital", expect.objectContaining({ address_zip: null })));
+    await waitFor(() => expect(api.createUnit).toHaveBeenCalledWith("Hospital Sul", "hospital", EMPTY_ADDRESS));
     expect(await screen.findByText("Hospital Sul")).not.toBeNull();
   });
 
@@ -58,7 +62,9 @@ describe("Units", () => {
     fireEvent.click(await screen.findAllByRole("button", { name: "Editar" }).then((btns) => btns[0]));
     fireEvent.change(screen.getByLabelText("Nome"), { target: { value: "UBS Centro Novo" } });
     fireEvent.click(screen.getByRole("button", { name: "Salvar" }));
-    await waitFor(() => expect(api.updateUnit).toHaveBeenCalledWith("u1", "UBS Centro Novo", "ubs", expect.objectContaining({ address_zip: null })));
+    await waitFor(() => expect(api.updateUnit).toHaveBeenCalledWith("u1", "UBS Centro Novo", "ubs", {
+      address_street: "Rua A", address_number: "1", address_complement: null, address_zip: null, neighborhood_id: "n1"
+    }));
     expect(await screen.findByText("UBS Centro Novo")).not.toBeNull();
   });
 
@@ -125,5 +131,28 @@ describe("Units", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Desativar" }));
     await waitFor(() => expect(api.setUnitActive).toHaveBeenCalledWith("u1", false));
     expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("mostra o endereço com o nome do bairro", async () => {
+    renderUnits();
+    expect(await screen.findByText("Rua A, 1 · Centro")).not.toBeNull();
+  });
+
+  it("cria uma unidade com endereço e o bairro sugerido pelo CEP", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () =>
+      new Response(JSON.stringify({ logradouro: "Rua XV de Novembro", bairro: "Centro" }), { status: 200 })));
+    mocked(api.createUnit).mockResolvedValue({ id: "u3", name: "UBS XV", kind: "ubs", active: true });
+    renderUnits();
+    await screen.findByText("Rua A, 1 · Centro");
+    fireEvent.click(screen.getByRole("button", { name: "Nova unidade" }));
+    fireEvent.change(screen.getByLabelText("Nome"), { target: { value: "UBS XV" } });
+    fireEvent.change(screen.getByLabelText("CEP"), { target: { value: "80010000" } });
+    await screen.findByText("bairro segundo o CEP: Centro");
+    fireEvent.change(screen.getByLabelText("Número"), { target: { value: "100" } });
+    fireEvent.click(screen.getByRole("button", { name: "Salvar" }));
+    await waitFor(() => expect(api.createUnit).toHaveBeenCalledWith("UBS XV", "ubs", {
+      address_street: "Rua XV de Novembro", address_number: "100", address_complement: null,
+      address_zip: "80010000", neighborhood_id: "n1"
+    }));
   });
 });

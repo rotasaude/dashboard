@@ -74,7 +74,9 @@ const MESSAGES: Record<string, string> = {
   appointment_not_eligible: "este agendamento não está confirmado para check-in",
   unit_has_open_requests: "há pedidos de agendamento abertos nesta unidade — encerre-os antes de desativar",
   missing_link: "Você não tem vínculo com esta unidade",
-  missing_role: "seu papel não permite esta ação"
+  missing_role: "seu papel não permite esta ação",
+  invalid_zip: "CEP precisa ter 8 dígitos",
+  invalid_neighborhood: "bairro inválido — escolha outro da lista"
 };
 
 export function attendanceError(err: unknown): string {
