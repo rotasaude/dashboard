@@ -20,10 +20,12 @@ afterEach(() => { cleanup(); vi.useRealTimers(); });
 const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
 const BOQUEIRAO: Audience = { version: 1, geo: { scope: "neighborhoods", neighborhood_ids: [ "n1" ] }, clinical: { all: [] } };
 
-function renderEditor(campaignId: string | null = null) {
+function renderEditor(campaignId: string | null = null, previewDelayMs = 0) {
   const onBack = vi.fn();
-  renderWithProviders(<CampaignEditor campaignId={campaignId} onBack={onBack} previewDelayMs={0} />);
-  return { onBack };
+  const onLeftDraft = vi.fn();
+  renderWithProviders(<CampaignEditor campaignId={campaignId} onBack={onBack} onLeftDraft={onLeftDraft}
+    onGoToSecurity={vi.fn()} previewDelayMs={previewDelayMs} />);
+  return { onBack, onLeftDraft };
 }
 
 async function fillContent(title = " Vacina da gripe ", body = "Vacinação no sábado, das 8h às 17h.") {
@@ -136,6 +138,85 @@ describe("CampaignEditor", () => {
     renderEditor("c1");
     expect(await screen.findByText("esta campanha não é mais rascunho — volte à lista")).toBeTruthy();
     expect(screen.queryByLabelText("Título")).toBeNull();
+  });
+
+  describe("enviar", () => {
+    const sendButton = () => screen.getByRole("button", { name: "Revisar e enviar…" }) as HTMLButtonElement;
+
+    it("envio travado com menos de 5 telefones", async () => {
+      mocked(api.previewAudience).mockResolvedValue({ below_minimum: true });
+      renderEditor();
+      await screen.findByText("menos de 5 — ajuste o público");
+      expect(sendButton().disabled).toBe(true);
+    });
+
+    it("envio travado enquanto a contagem não alcançou o público atual", async () => {
+      mocked(api.getCampaign).mockResolvedValue(campaign({ audience: BOQUEIRAO }));
+      renderEditor("c1", 200);
+      await screen.findByText("≈ 12 pessoas (9 telefones)");
+      expect(sendButton().disabled).toBe(false);
+
+      fireEvent.click(screen.getByRole("checkbox", { name: "Xaxim" }));
+      expect(sendButton().disabled).toBe(true);
+      expect(screen.getByRole("status", { name: "Contagem do público" }).textContent).toBe("calculando…");
+      await waitFor(() => expect(sendButton().disabled).toBe(false));
+    });
+
+    it("revisar e enviar: salva antes, abre o diálogo com a frase e sai do rascunho", async () => {
+      mocked(api.getCampaign).mockResolvedValue(campaign({ audience: BOQUEIRAO }));
+      mocked(api.updateCampaign).mockResolvedValue(campaign({ audience: BOQUEIRAO }));
+      const sent = campaign({ audience: BOQUEIRAO, status: "sending" });
+      mocked(api.sendCampaign).mockResolvedValue(sent);
+      const { onLeftDraft } = renderEditor("c1");
+      await screen.findByText("≈ 12 pessoas (9 telefones)");
+
+      fireEvent.click(sendButton());
+      await waitFor(() => expect(api.updateCampaign).toHaveBeenCalled());
+      const dialog = await screen.findByRole("dialog", { name: "Como enviar" });
+      expect(dialog.textContent).toContain("moradores de Boqueirão");
+      fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Enviar agora" }));
+
+      await waitFor(() => expect(onLeftDraft).toHaveBeenCalledWith(sent));
+    });
+
+    it("below_minimum no envio: volta ao editor com a mensagem e recalcula", async () => {
+      mocked(api.getCampaign).mockResolvedValue(campaign({ audience: BOQUEIRAO }));
+      mocked(api.updateCampaign).mockResolvedValue(campaign({ audience: BOQUEIRAO }));
+      mocked(api.previewAudience).mockResolvedValueOnce({ citizens: 12, phones: 9 }).mockResolvedValue({ below_minimum: true });
+      mocked(api.sendCampaign).mockRejectedValue(new ApiError(422, { error: "below_minimum" }, "422"));
+      const { onLeftDraft } = renderEditor("c1");
+      await screen.findByText("≈ 12 pessoas (9 telefones)");
+
+      fireEvent.click(sendButton());
+      fireEvent.click(await screen.findByRole("button", { name: "Continuar" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Enviar agora" }));
+
+      expect(await screen.findByText("o público ficou com menos de 5 telefones desde a contagem — ajuste o público")).toBeTruthy();
+      expect(screen.queryByRole("region", { name: "Enviar campanha" })).toBeNull();
+      expect(await screen.findByText("menos de 5 — ajuste o público")).toBeTruthy();
+      expect(onLeftDraft).not.toHaveBeenCalled();
+    });
+
+    it("invalid_audience no envio (bairro desativado): volta ao editor com a mensagem traduzida", async () => {
+      mocked(api.getCampaign).mockResolvedValue(campaign({ audience: BOQUEIRAO }));
+      mocked(api.updateCampaign).mockResolvedValue(campaign({ audience: BOQUEIRAO }));
+      mocked(api.sendCampaign).mockRejectedValue(new ApiError(422, {
+        error: "invalid_audience", details: [ { path: "/geo/neighborhood_ids/0", message: "inactive_or_unknown" } ]
+      }, "422"));
+      const { onLeftDraft } = renderEditor("c1");
+      await screen.findByText("≈ 12 pessoas (9 telefones)");
+
+      fireEvent.click(sendButton());
+      fireEvent.click(await screen.findByRole("button", { name: "Continuar" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Enviar agora" }));
+
+      const message = await screen.findByText("há bairro ou unidade inativa no recorte — desmarque ou troque");
+      expect(message.getAttribute("role")).toBe("alert");
+      expect(screen.queryByRole("region", { name: "Enviar campanha" })).toBeNull();
+      expect(screen.queryByRole("dialog", { name: "Como enviar" })).toBeNull();
+      expect(onLeftDraft).not.toHaveBeenCalled();
+    });
   });
 
   it("voltar à lista", async () => {

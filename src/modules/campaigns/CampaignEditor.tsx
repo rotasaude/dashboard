@@ -5,14 +5,16 @@ import {
   createCampaign, getCampaign, getCampaignOptions, getSmsSetting, updateCampaign, type Campaign, type CampaignOptions
 } from "../../lib/api";
 import {
-  BODY_MAX, CAMPAIGNS_KEY, CAMPAIGN_OPTIONS_KEY, PREVIEW_DEBOUNCE_MS, SMS_SETTING_KEY, TITLE_MAX, audienceProblem,
+  BODY_MAX, CAMPAIGNS_KEY, CAMPAIGN_OPTIONS_KEY, PREVIEW_DEBOUNCE_MS, PREVIEW_KEY, SMS_SETTING_KEY, TITLE_MAX, audienceProblem,
   buildAudience, campaignError, campaignKey, draftFromAudience, emptyAudienceDraft, isEditable, todayInCity,
   validateCampaignFields, type AudienceDraft
 } from "../../lib/campaigns";
 import { Panel } from "../../components/Panel";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { AudienceBuilder } from "./AudienceBuilder";
-import { AudienceCounter } from "./AudienceCounter";
+import { AudienceCounter, previewAllowsSend } from "./AudienceCounter";
+import { describeAudience } from "../../lib/audiencePhrase";
+import { SendDialog } from "./SendDialog";
 import { useAudiencePreview } from "./useAudiencePreview";
 import { alertStyle, columnStyle, labelStyle, noteStyle, rowStyle } from "./styles";
 
@@ -22,6 +24,8 @@ import { alertStyle, columnStyle, labelStyle, noteStyle, rowStyle } from "./styl
 export interface CampaignEditorProps {
   campaignId: string | null;
   onBack(): void;
+  onLeftDraft(campaign: Campaign): void;
+  onGoToSecurity(): void;
   previewDelayMs?: number;
 }
 
@@ -47,7 +51,7 @@ export function CampaignEditor(props: CampaignEditorProps) {
   return <EditorForm {...props} initial={initial} options={options.data} />;
 }
 
-function EditorForm({ initial, options, onBack, previewDelayMs = PREVIEW_DEBOUNCE_MS }: CampaignEditorProps & {
+function EditorForm({ initial, options, onBack, onLeftDraft, onGoToSecurity, previewDelayMs = PREVIEW_DEBOUNCE_MS }: CampaignEditorProps & {
   initial: Campaign | null; options: CampaignOptions;
 }) {
   const queryClient = useQueryClient();
@@ -59,6 +63,9 @@ function EditorForm({ initial, options, onBack, previewDelayMs = PREVIEW_DEBOUNC
   const [ busy, setBusy ] = useState(false);
   const [ error, setError ] = useState<string | null>(null);
   const [ notice, setNotice ] = useState<string | null>(null);
+  // A contagem é congelada ao abrir o diálogo: o que a pessoa confirma é o
+  // número que ela viu, mesmo que o público mude atrás do modal.
+  const [ reviewing, setReviewing ] = useState<{ campaign: Campaign; counts: { citizens: number; phones: number } } | null>(null);
 
   const today = todayInCity();
   const problem = audienceProblem(draft, today);
@@ -91,6 +98,36 @@ function EditorForm({ initial, options, onBack, previewDelayMs = PREVIEW_DEBOUNC
       setBusy(false);
     }
   }
+
+  async function review() {
+    if (!previewAllowsSend(preview)) return;
+    const counts = { citizens: preview.citizens, phones: preview.phones };
+    const saved = await save();
+    if (saved) setReviewing({ campaign: saved, counts });
+  }
+
+  function leftDraft(c: Campaign) {
+    setReviewing(null);
+    queryClient.setQueryData(campaignKey(c.id), c);
+    void queryClient.invalidateQueries({ queryKey: CAMPAIGNS_KEY });
+    onLeftDraft(c);
+  }
+
+  function belowMinimum() {
+    setReviewing(null);
+    fail("o público ficou com menos de 5 telefones desde a contagem — ajuste o público");
+    void queryClient.invalidateQueries({ queryKey: PREVIEW_KEY });
+  }
+
+  // invalid_audience no envio (R-P10a): ex.: bairro desativado depois do
+  // rascunho salvo. Como no below_minimum, só o editor conserta o público.
+  function invalidAudience(message: string) {
+    setReviewing(null);
+    fail(message);
+    void queryClient.invalidateQueries({ queryKey: PREVIEW_KEY });
+  }
+
+  const canSend = previewAllowsSend(preview) && !busy;
 
   const smsLine = sms.data
     ? `SMS nesta cidade: ${sms.data.enabled ? "ligado" : "desligado"}`
@@ -132,10 +169,29 @@ function EditorForm({ initial, options, onBack, previewDelayMs = PREVIEW_DEBOUNC
         </div>
       </Panel>
 
+      {reviewing && (
+        <SendDialog
+          key={reviewing.campaign.id}
+          campaign={reviewing.campaign}
+          phrase={describeAudience(reviewing.campaign.audience, options)}
+          counts={reviewing.counts}
+          smsEnabled={sms.data?.enabled ?? null}
+          onDone={leftDraft}
+          onBelowMinimum={belowMinimum}
+          onInvalidAudience={invalidAudience}
+          onCancel={() => setReviewing(null)}
+          onGoToSecurity={onGoToSecurity}
+        />
+      )}
+
       <div style={rowStyle}>
-        <button type="button" disabled={busy} onClick={() => void save()} style={busy ? disabledButtonStyle : buttonStyle}>
+        <button type="button" disabled={busy} onClick={() => void save()} style={busy ? disabledButtonStyle : secondaryButtonStyle}>
           Salvar rascunho
         </button>
+        <button type="button" disabled={!canSend} onClick={() => void review()} style={canSend ? buttonStyle : disabledButtonStyle}>
+          Revisar e enviar…
+        </button>
+        {!canSend && !busy && <span style={noteStyle}>o envio libera quando a contagem mostrar pelo menos 5 telefones</span>}
       </div>
     </div>
   );
