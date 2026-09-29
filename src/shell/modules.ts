@@ -5,7 +5,7 @@ export type ModuleId =
   | "overview" | "ingestion" | "conversations" | "consent"
   | "triages" | "classification" | "reports" | "protocols" | "events"
   | "queues" | "health" | "protocol-editor" | "security" | "team" | "attendance"
-  | "professionals" | "my-profile" | "territory";
+  | "professionals" | "my-profile" | "territory" | "campaigns";
 
 export interface NavItem { id: ModuleId; label: string; icon: string; }
 export interface NavGroupDef { label: string; items: NavItem[]; }
@@ -33,6 +33,9 @@ export const NAV_GROUPS: NavGroupDef[] = [
   ]},
   { label: "Atendimento", items: [
     { id: "attendance", label: "Atendimento", icon: "☑" }
+  ]},
+  { label: "Comunicação", items: [
+    { id: "campaigns", label: "Campanhas", icon: "✉" }
   ]},
   { label: "Equipe", items: [
     { id: "team", label: "Equipe", icon: "☷" },
@@ -66,11 +69,15 @@ export function navGroupsFor(
   const isAdmin = roles.includes("municipal_admin");
   const canAttend = isAdmin || roles.includes("citizen_verifier") || roles.includes("health_professional");
   const isProfessional = roles.includes("health_professional");
+  // Módulo 12: /campaigns é do campaign_manager; o municipal_admin sem o
+  // papel entra para a chave de SMS da cidade (spec 2026-09-29 §7).
+  const canCampaigns = isAdmin || roles.includes("campaign_manager");
   return NAV_GROUPS.filter((group) => {
     if (group.label === "Conta") return !user?.operator;
     if (group.label === "Equipe") return isAdmin;
     // Módulo 11: /territory recusa (403 missing_role) quem não é municipal_admin.
     if (group.label === "Cidade") return isAdmin;
+    if (group.label === "Comunicação") return canCampaigns;
     if (group.label === "Atendimento") return canAttend;
     return true;
   }).map((group) => ({

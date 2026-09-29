@@ -20,7 +20,8 @@ describe("modules", () => {
       expect(groups.some((g) => g.label === "Equipe")).toBe(false);
       expect(groups.some((g) => g.label === "Atendimento")).toBe(false);
       expect(groups.some((g) => g.label === "Cidade")).toBe(false);
-      expect(groups.length).toBe(NAV_GROUPS.length - 4);
+      expect(groups.some((g) => g.label === "Comunicação")).toBe(false);
+      expect(groups.length).toBe(NAV_GROUPS.length - 5);
     });
 
     it("sem sessão, esconde Equipe, Atendimento e Cidade", () => {
@@ -29,7 +30,8 @@ describe("modules", () => {
       expect(groups.some((g) => g.label === "Equipe")).toBe(false);
       expect(groups.some((g) => g.label === "Atendimento")).toBe(false);
       expect(groups.some((g) => g.label === "Cidade")).toBe(false);
-      expect(groups.length).toBe(NAV_GROUPS.length - 3);
+      expect(groups.some((g) => g.label === "Comunicação")).toBe(false);
+      expect(groups.length).toBe(NAV_GROUPS.length - 4);
     });
 
     it("Equipe só aparece para municipal_admin", () => {
@@ -83,6 +85,25 @@ describe("modules", () => {
         expect(ids(user([ role ]))).not.toContain("territory");
       }
       expect(labelFor("territory")).toBe("Território");
+    });
+  });
+  describe("módulo 12 na navegação", () => {
+    const user = (roles: string[]) => ({ operator: false, memberships: roles.map((role) => ({ role })) });
+    const ids = (u: Parameters<typeof navGroupsFor>[0]) => navGroupsFor(u).flatMap((g) => g.items.map((i) => i.id));
+
+    it("Campanhas para campaign_manager e municipal_admin, e para ninguém mais", () => {
+      expect(ids(user([ "campaign_manager" ]))).toContain("campaigns");
+      expect(ids(user([ "municipal_admin" ]))).toContain("campaigns");
+      for (const role of [ "viewer", "citizen_verifier", "health_professional", "protocol_reviewer", "protocol_publisher" ]) {
+        expect(ids(user([ role ]))).not.toContain("campaigns");
+      }
+      expect(ids(null)).not.toContain("campaigns");
+      expect(labelFor("campaigns")).toBe("Campanhas");
+    });
+
+    it("gestor de campanhas não ganha Equipe nem Território", () => {
+      expect(ids(user([ "campaign_manager" ]))).not.toContain("team");
+      expect(ids(user([ "campaign_manager" ]))).not.toContain("territory");
     });
   });
 });

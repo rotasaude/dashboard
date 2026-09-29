@@ -22,6 +22,7 @@ import { Team } from "./modules/Team";
 import { Attendance } from "./modules/Attendance";
 import { Professionals } from "./modules/Professionals";
 import { Territory } from "./modules/Territory";
+import { Campaigns } from "./modules/Campaigns";
 import { MyProfile } from "./modules/MyProfile";
 
 export function App() {
@@ -76,6 +77,7 @@ function renderModule(active: ModuleId, setActive: (id: ModuleId) => void) {
     case "professionals":  return <Professionals />;
     case "my-profile":     return <MyProfile />;
     case "territory":      return <Territory />;
+    case "campaigns":      return <Campaigns onNavigate={setActive} />;
     default:               return <Placeholder title={labelFor(active)} />;
   }
 }
