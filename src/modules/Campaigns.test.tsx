@@ -82,6 +82,18 @@ describe("Campaigns", () => {
     expect(await screen.findByRole("region", { name: "Resultado" })).toBeTruthy();
   });
 
+  it("enquanto a sessão carrega, não diz que o papel não dá acesso", async () => {
+    mocked(api.fetchCurrentSession).mockReturnValue(new Promise(() => {}));
+    renderWithProviders(<Campaigns onNavigate={vi.fn()} />);
+    expect(screen.getByText("carregando…")).toBeTruthy();
+    expect(screen.queryByText("seu papel não dá acesso a campanhas")).toBeNull();
+  });
+
+  it("sem papel de campanhas, depois de carregar: diz que o papel não dá acesso", async () => {
+    renderAs([ "viewer" ]);
+    expect(await screen.findByText("seu papel não dá acesso a campanhas")).toBeTruthy();
+  });
+
   it("sendLabel", () => {
     expect(sendLabel(draft)).toBe("—");
     expect(sendLabel(sent)).toMatch(/28\/09\/2026.*10:00/);

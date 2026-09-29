@@ -103,11 +103,15 @@ function CheckboxGroup({ legend, values, selected, label, emptyText, onToggle }:
 function UnitSelect({ label, value, units, onChange }: {
   label: string; value: string | undefined; units: NamedRef[]; onChange(id: string | undefined): void;
 }) {
+  // Unidade fora das opções (desativada): continua filtrando, então aparece
+  // marcada como inativa, como no recorte do AudienceBuilder.
+  const inactive = !!value && !units.some((u) => u.id === value);
   return (
     <label style={labelStyle}>
       {label}
       <select value={value ?? ""} onChange={(e) => onChange(e.target.value || undefined)} style={inputStyle}>
         <option value="">qualquer unidade</option>
+        {inactive && <option value={value}>(unidade inativa)</option>}
         {sortByName(units).map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
       </select>
     </label>

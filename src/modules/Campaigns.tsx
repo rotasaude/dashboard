@@ -16,7 +16,7 @@ import { SmsSettingPanel } from "./campaigns/SmsSettingPanel";
 type View = { kind: "list" } | { kind: "edit"; id: string | null } | { kind: "view"; id: string };
 
 export function Campaigns({ onNavigate }: { onNavigate(id: ModuleId): void }) {
-  const { user } = useAuth();
+  const { user, state } = useAuth();
   const roles = user?.memberships?.map((m) => m.role) ?? [];
   const isManager = roles.includes(CAMPAIGN_MANAGER_ROLE);
   const isAdmin = roles.includes("municipal_admin");
@@ -25,7 +25,10 @@ export function Campaigns({ onNavigate }: { onNavigate(id: ModuleId): void }) {
   const goToSecurity = () => onNavigate("security");
 
   let content: ReactNode;
-  if (isManager && view.kind === "edit") {
+  // Antes da sessão carregar, roles = [] — não é "sem papel" ainda.
+  if (state.kind === "loading") {
+    content = <p className="mono" style={{ margin: 0, fontSize: 12.5, color: "var(--ink2)" }}>carregando…</p>;
+  } else if (isManager && view.kind === "edit") {
     content = (
       <CampaignEditor key={view.id ?? "new"} campaignId={view.id} onBack={toList}
         onLeftDraft={(c) => setView({ kind: "view", id: c.id })} onGoToSecurity={goToSecurity} />

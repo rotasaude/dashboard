@@ -163,16 +163,41 @@ describe("CampaignEditor", () => {
     renderEditor("c1");
     await screen.findByText("≈ 12 pessoas (9 telefones)");
 
+    // Com o cancelamento aberto, o envio fica travado (o formulário trava).
     fireEvent.click(screen.getByRole("button", { name: "Cancelar campanha…" }));
     expect(await screen.findByRole("button", { name: "Cancelar campanha" })).toBeTruthy();
+    expect((screen.getByRole("button", { name: "Revisar e enviar…" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Cancelar campanha" })).toBeNull());
 
     fireEvent.click(screen.getByRole("button", { name: "Revisar e enviar…" }));
     expect(await screen.findByRole("dialog", { name: "Como enviar" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Cancelar campanha" })).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Cancelar campanha…" }));
     expect(await screen.findByRole("button", { name: "Cancelar campanha" })).toBeTruthy();
     expect(screen.queryByRole("dialog", { name: "Como enviar" })).toBeNull();
+  });
+
+  it("com o diálogo de envio aberto, o formulário trava e o rascunho não é salvo de novo", async () => {
+    mocked(api.getCampaign).mockResolvedValue(campaign({ audience: BOQUEIRAO }));
+    mocked(api.updateCampaign).mockResolvedValue(campaign({ audience: BOQUEIRAO }));
+    renderEditor("c1");
+    await screen.findByText("≈ 12 pessoas (9 telefones)");
+
+    fireEvent.click(screen.getByRole("button", { name: "Revisar e enviar…" }));
+    expect(await screen.findByRole("dialog", { name: "Como enviar" })).toBeTruthy();
+    expect(api.updateCampaign).toHaveBeenCalledTimes(1);
+
+    expect(screen.getByLabelText("Título").matches(":disabled")).toBe(true);
+    expect(screen.getByLabelText("Texto do aviso").matches(":disabled")).toBe(true);
+    expect(screen.getByRole("checkbox", { name: "Xaxim" }).matches(":disabled")).toBe(true);
+    expect((screen.getByRole("button", { name: "Revisar e enviar…" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Salvar rascunho" }));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(api.updateCampaign).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+    await waitFor(() => expect(screen.getByLabelText("Título").matches(":disabled")).toBe(false));
   });
 
   describe("enviar", () => {
@@ -251,6 +276,32 @@ describe("CampaignEditor", () => {
       expect(screen.queryByRole("region", { name: "Enviar campanha" })).toBeNull();
       expect(screen.queryByRole("dialog", { name: "Como enviar" })).toBeNull();
       expect(onLeftDraft).not.toHaveBeenCalled();
+    });
+
+    it("invalid_audience no envio: a contagem antiga some e o envio só libera com contagem nova", async () => {
+      mocked(api.getCampaign).mockResolvedValue(campaign({ audience: BOQUEIRAO }));
+      mocked(api.updateCampaign).mockResolvedValue(campaign({ audience: BOQUEIRAO }));
+      let resolveFresh: (v: { citizens: number; phones: number }) => void = () => {};
+      mocked(api.previewAudience)
+        .mockResolvedValueOnce({ citizens: 12, phones: 9 })
+        .mockReturnValueOnce(new Promise((r) => { resolveFresh = r; }));
+      mocked(api.sendCampaign).mockRejectedValue(new ApiError(422, {
+        error: "invalid_audience", details: [ { path: "/geo/neighborhood_ids/0", message: "inactive_or_unknown" } ]
+      }, "422"));
+      renderEditor("c1");
+      await screen.findByText("≈ 12 pessoas (9 telefones)");
+
+      fireEvent.click(sendButton());
+      fireEvent.click(await screen.findByRole("button", { name: "Continuar" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Enviar agora" }));
+
+      await screen.findByText("há bairro ou unidade inativa no recorte — desmarque ou troque");
+      await waitFor(() => expect(screen.getByRole("status", { name: "Contagem do público" }).textContent).toBe("calculando…"));
+      expect(sendButton().disabled).toBe(true);
+
+      resolveFresh({ citizens: 7, phones: 6 });
+      expect(await screen.findByText("≈ 7 pessoas (6 telefones)")).toBeTruthy();
+      expect(sendButton().disabled).toBe(false);
     });
   });
 

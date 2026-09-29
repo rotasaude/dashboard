@@ -40,6 +40,9 @@ export function SendDialog({
   const [ mode, setMode ] = useState<"now" | "schedule">("now");
   const [ when, setWhen ] = useState("");
   const [ whenError, setWhenError ] = useState<string | null>(null);
+  // O servidor recusou o instante congelado (invalid_send_at): a pessoa
+  // precisa de um caminho de volta à escolha do horário.
+  const [ sendAtRefused, setSendAtRefused ] = useState(false);
   const result = useRef<Campaign | null>(null);
   // Recusa que devolve ao editor: "below" (público encolheu) ou a frase do
   // invalid_audience. null = seguiu para onDone.
@@ -65,6 +68,7 @@ export function SendDialog({
   if (stage.kind !== "choose") {
     const scheduling = stage.kind === "schedule";
     return (
+      <>
       <SensitiveAction
         title={scheduling ? "Agendar campanha" : "Enviar campanha"}
         description={summary(stage.kind === "schedule" ? fmtDateTime(stage.iso) : "agora")}
@@ -80,6 +84,7 @@ export function SendDialog({
             const code = campaignErrorCode(err);
             if (code === "below_minimum") { backToEditor.current = { kind: "below" }; return; }
             if (code === "invalid_audience") { backToEditor.current = { kind: "invalid", message: campaignError(err) }; return; }
+            if (code === "invalid_send_at") setSendAtRefused(true);
             throw err;
           }
         }}
@@ -93,6 +98,15 @@ export function SendDialog({
         onGoToSecurity={onGoToSecurity}
         translateError={campaignErrorOrNull}
       />
+      {scheduling && sendAtRefused && (
+        <div style={rowStyle}>
+          <button type="button" style={secondaryButtonStyle}
+            onClick={() => { setSendAtRefused(false); setStage({ kind: "choose" }); }}>
+            Mudar horário
+          </button>
+        </div>
+      )}
+      </>
     );
   }
 

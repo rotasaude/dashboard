@@ -100,6 +100,21 @@ describe("SendDialog", () => {
     expect(onDone).not.toHaveBeenCalled();
   });
 
+  it("invalid_send_at: 'Mudar horário' volta à escolha, e o novo horário é o que vai", async () => {
+    mocked(api.scheduleCampaign).mockRejectedValueOnce(new ApiError(422, { error: "invalid_send_at" }, "422"))
+      .mockResolvedValue(campaign({ status: "scheduled" }));
+    renderDialog();
+    chooseSchedule("2026-09-29T10:06");
+    fireEvent.click(await screen.findByRole("button", { name: "Agendar" }));
+    await screen.findByText("horário fora da janela: agende de 5 minutos a 90 dias a partir de agora");
+
+    fireEvent.click(screen.getByRole("button", { name: "Mudar horário" }));
+    expect(screen.getByRole("dialog", { name: "Como enviar" })).toBeTruthy();
+    chooseSchedule("2026-09-29T14:30");
+    fireEvent.click(await screen.findByRole("button", { name: "Agendar" }));
+    await waitFor(() => expect(api.scheduleCampaign).toHaveBeenLastCalledWith("c1", "2026-09-29T17:30:00.000Z"));
+  });
+
   it("below_minimum: devolve ao editor, sem chamar onDone", async () => {
     mocked(api.sendCampaign).mockRejectedValue(new ApiError(422, { error: "below_minimum" }, "422"));
     const { onDone, onBelowMinimum } = renderDialog();

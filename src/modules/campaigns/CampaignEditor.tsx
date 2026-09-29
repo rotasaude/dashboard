@@ -107,7 +107,7 @@ function EditorForm({ initial, options, onBack, onLeftDraft, onGoToSecurity, pre
     setCancelling(false);
     const counts = { citizens: preview.citizens, phones: preview.phones };
     const saved = await save();
-    if (saved) { setCancelling(false); setReviewing({ campaign: saved, counts }); }
+    if (saved) setReviewing({ campaign: saved, counts });
   }
 
   function leftDraft(c: Campaign) {
@@ -120,7 +120,7 @@ function EditorForm({ initial, options, onBack, onLeftDraft, onGoToSecurity, pre
   function belowMinimum() {
     setReviewing(null);
     fail("o público ficou com menos de 5 telefones desde a contagem — ajuste o público");
-    void queryClient.invalidateQueries({ queryKey: PREVIEW_KEY });
+    void queryClient.resetQueries({ queryKey: PREVIEW_KEY });
   }
 
   // invalid_audience no envio (R-P10a): ex.: bairro desativado depois do
@@ -128,10 +128,12 @@ function EditorForm({ initial, options, onBack, onLeftDraft, onGoToSecurity, pre
   function invalidAudience(message: string) {
     setReviewing(null);
     fail(message);
-    void queryClient.invalidateQueries({ queryKey: PREVIEW_KEY });
+    void queryClient.resetQueries({ queryKey: PREVIEW_KEY });
   }
 
-  const canSend = previewAllowsSend(preview) && !busy;
+  // Com um diálogo aberto o formulário trava: o que foi confirmado é o que vai.
+  const locked = reviewing !== null || cancelling;
+  const canSend = previewAllowsSend(preview) && !busy && !locked;
 
   const smsLine = sms.data
     ? `SMS nesta cidade: ${sms.data.enabled ? "ligado" : "desligado"}`
@@ -141,6 +143,7 @@ function EditorForm({ initial, options, onBack, onLeftDraft, onGoToSecurity, pre
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <Panel title={id ? "Editar campanha" : "Nova campanha"} sub="rascunho"
         right={<button type="button" style={secondaryButtonStyle} onClick={onBack}>Voltar à lista</button>}>
+        <fieldset disabled={locked} style={lockStyle}>
         <div style={columnStyle}>
           {error && <p role="alert" style={alertStyle}>{error}</p>}
           {notice && <p role="status" style={{ margin: 0, fontSize: 12.5 }}>{notice}</p>}
@@ -156,6 +159,7 @@ function EditorForm({ initial, options, onBack, onLeftDraft, onGoToSecurity, pre
           </label>
           <span className="mono" style={noteStyle}>{body.trim().length}/{BODY_MAX} · texto simples; as quebras de linha ficam</span>
         </div>
+        </fieldset>
       </Panel>
 
       <Panel title="Como aparece no wpda" sub="pré-visualização">
@@ -167,7 +171,9 @@ function EditorForm({ initial, options, onBack, onLeftDraft, onGoToSecurity, pre
 
       <Panel title="Público" sub="recorte · critérios clínicos">
         <div style={columnStyle}>
-          <AudienceBuilder draft={draft} options={options} today={today} onChange={setDraft} />
+          <fieldset disabled={locked} style={lockStyle}>
+            <AudienceBuilder draft={draft} options={options} today={today} onChange={setDraft} />
+          </fieldset>
           <AudienceCounter state={preview} problem={problem} />
           <p style={noteStyle}>{smsLine}</p>
         </div>
@@ -199,7 +205,8 @@ function EditorForm({ initial, options, onBack, onLeftDraft, onGoToSecurity, pre
       )}
 
       <div style={rowStyle}>
-        <button type="button" disabled={busy} onClick={() => void save()} style={busy ? disabledButtonStyle : secondaryButtonStyle}>
+        <button type="button" disabled={busy || locked} onClick={() => void save()}
+          style={busy || locked ? disabledButtonStyle : secondaryButtonStyle}>
           Salvar rascunho
         </button>
         <button type="button" disabled={!canSend} onClick={() => void review()} style={canSend ? buttonStyle : disabledButtonStyle}>
@@ -211,11 +218,13 @@ function EditorForm({ initial, options, onBack, onLeftDraft, onGoToSecurity, pre
             Cancelar campanha…
           </button>
         )}
-        {!canSend && !busy && <span style={noteStyle}>o envio libera quando a contagem mostrar pelo menos 5 telefones</span>}
+        {!canSend && !busy && !locked && <span style={noteStyle}>o envio libera quando a contagem mostrar pelo menos 5 telefones</span>}
       </div>
     </div>
   );
 }
+
+const lockStyle: CSSProperties = { border: 0, padding: 0, margin: 0, minWidth: 0 };
 
 // Espelha as regras da casa do wpda: texto ≥ 18px.
 const wpdaPreviewStyle: CSSProperties = {

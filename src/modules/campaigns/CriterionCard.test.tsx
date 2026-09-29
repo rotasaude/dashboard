@@ -51,6 +51,13 @@ describe("CriterionCard", () => {
     expect(onChange.mock.calls[0][0].health_unit_id).toBeUndefined();
   });
 
+  it("unidade inativa (fora das opções) aparece marcada, nunca como 'qualquer unidade'", () => {
+    renderCard({ kind: "attendance_outcome", outcomes: [ "referred" ], health_unit_id: "u-gone", ...P });
+    const select = screen.getByLabelText("Unidade do atendimento (opcional)") as HTMLSelectElement;
+    expect(select.value).toBe("u-gone");
+    expect(select.selectedOptions[0].textContent).toBe("(unidade inativa)");
+  });
+
   it("pedido aberto: sem período, tipo e destino opcionais", () => {
     const { onChange } = renderCard({ kind: "appointment_request_open" });
     expect(screen.queryByLabelText("De")).toBeNull();
