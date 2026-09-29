@@ -12,7 +12,8 @@ import { Skeleton } from "../components/Skeleton";
 import { ErrorState } from "../components/ErrorState";
 import { EmptyState } from "../components/EmptyState";
 import { KpiSkeleton } from "./Overview";
-import { fmtNumber } from "../lib/format";
+import { Count } from "../components/Count";
+import { chartSeries, numberOrNull } from "../lib/smallCount";
 
 export function Triages() {
   const { data, isLoading, isError, error, refetch } = useTriages();
@@ -22,19 +23,22 @@ export function Triages() {
   if (!data) return <Wrap><EmptyState title="sem dados" /></Wrap>;
 
   const d = data.data;
+  // Taxa suprimida não tem tom: não há número para julgar.
+  const rate = numberOrNull(d.completionRate);
+  const rateTone = rate === null ? undefined : rate >= 70 ? "ok" : rate >= 40 ? "warn" : "down";
   return (
     <Wrap>
       <KpiGrid asOf={data.as_of}>
         <StatTile label="Iniciadas" value={d.started} source="live" />
         <StatTile label="Concluídas" value={d.completed} tone="ok" source="live" />
-        <StatTile label="Taxa de conclusão" value={d.completionRate} unit="%" tone={d.completionRate >= 70 ? "ok" : d.completionRate >= 40 ? "warn" : "down"} source="live" />
+        <StatTile label="Taxa de conclusão" value={d.completionRate} unit="%" tone={rateTone} source="live" />
       </KpiGrid>
 
       <Panel title="Volume" sub="iniciadas por bucket" asOf={data.as_of}>
         {d.series.every((v) => v === 0) ? (
           <EmptyState title="sem triagens no período" />
         ) : (
-          <BarMini data={d.series} h={120} />
+          <BarMini data={chartSeries(d.series)} h={120} />
         )}
       </Panel>
 
@@ -43,8 +47,8 @@ export function Triages() {
           cols={[
             { label: "Versão", w: "3fr", render: (r) => <span className="mono">{r.version}</span> },
             { label: "Status", w: "1fr", render: (r) => <Tag tone={statusTone(r.status)}>{r.status}</Tag> },
-            { label: "Contagem", w: "1fr", align: "right", render: (r) => <span className="mono">{fmtNumber(r.count)}</span> },
-            { label: "Share", w: "1fr", align: "right", render: (r) => <span className="mono">{r.share}%</span> }
+            { label: "Contagem", w: "1fr", align: "right", render: (r) => <span className="mono"><Count value={r.count} /></span> },
+            { label: "Share", w: "1fr", align: "right", render: (r) => <span className="mono"><Count value={r.share} unit="%" /></span> }
           ]}
           rows={d.byProtocol}
           rowKey={(r) => r.version}

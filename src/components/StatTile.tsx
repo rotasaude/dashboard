@@ -1,25 +1,31 @@
 // StatTile — KPI. Valor mono 27px, rótulo 11.5, source badge, sparkline opcional.
+// Módulo 11: valor suprimido aparece como "< 5" com a dica, sem unidade nem
+// delta (o delta revelaria o número).
 
 import { fmtNumber, fmtPercent } from "../lib/format";
+import { SUPPRESSED_HINT, SUPPRESSED_LABEL, chartSeries, isSuppressed } from "../lib/smallCount";
+import type { SmallCount, Suppressed } from "../lib/types";
 import { toneColor, type Tone } from "../theme/tokens";
 import { SourceBadge } from "./SourceBadge";
 import { Sparkline } from "./Sparkline";
 
 interface Props {
   label: string;
-  value: number | string | null | undefined;
+  value: number | string | Suppressed | null | undefined;
   unit?: string;
   delta?: string | null;
   tone?: Tone | string;
-  spark?: number[];
+  spark?: SmallCount[];
   source?: "live" | "proj";
   hint?: string;
 }
 
 export function StatTile({ label, value, unit, delta, tone, spark, source, hint }: Props) {
   const { fg } = toneColor(tone);
-  const formatted =
-    typeof value === "number"
+  const suppressed = isSuppressed(value);
+  const formatted = isSuppressed(value)
+    ? SUPPRESSED_LABEL
+    : typeof value === "number"
       ? (unit === "%" ? fmtPercent(value, "") : fmtNumber(value))
       : value ?? "—";
 
@@ -52,6 +58,7 @@ export function StatTile({ label, value, unit, delta, tone, spark, source, hint 
       <div style={{ display: "flex", alignItems: "baseline", gap: 6, flex: 1 }}>
         <span
           className="mono"
+          title={suppressed ? SUPPRESSED_HINT : undefined}
           style={{
             fontSize: 27,
             fontWeight: 600,
@@ -62,7 +69,7 @@ export function StatTile({ label, value, unit, delta, tone, spark, source, hint 
         >
           {formatted}
         </span>
-        {unit && (
+        {unit && !suppressed && (
           <span
             className="mono"
             style={{ fontSize: 13, color: "var(--ink3)" }}
@@ -70,7 +77,7 @@ export function StatTile({ label, value, unit, delta, tone, spark, source, hint 
             {unit}
           </span>
         )}
-        {delta && (
+        {delta && !suppressed && (
           <span
             className="mono"
             style={{
@@ -89,7 +96,7 @@ export function StatTile({ label, value, unit, delta, tone, spark, source, hint 
       )}
 
       {spark && spark.length > 0 && (
-        <Sparkline data={spark} color={tone ? fg : "var(--accent)"} h={26} />
+        <Sparkline data={chartSeries(spark)} color={tone ? fg : "var(--accent)"} h={26} />
       )}
     </div>
   );

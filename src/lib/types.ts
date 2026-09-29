@@ -1,5 +1,17 @@
 // Tipos dos payloads de /admin/api/*. Espelham API_CONTRACTS.md.
 
+// Módulo 11 (spec 2026-09-28 §4.3): com o filtro de bairro ligado, a API
+// troca todo número de 1 a 4 por { suppressed: true } — KPI, contagem por
+// categoria, ponto de série, percentual e média sobre total de 1 a 4, e taxa
+// cujo numerador é 1 a 4 (mesmo com total >= 5). 0 e >= 5 continuam números.
+// Sem filtro, nada muda.
+export interface Suppressed { suppressed: true }
+export type SmallCount = number | Suppressed;
+
+// Eco do filtro aplicado (spec §4.1): null = sem filtro; "none" = sem bairro.
+export type NeighborhoodFilterEcho = { id: string; name: string } | "none" | null;
+export interface Filtered { filter?: { neighborhood: NeighborhoodFilterEcho } }
+
 export interface ToneSegment {
   key?: string;
   label: string;
@@ -43,12 +55,12 @@ export interface ConsentData {
   revocationsSeries: number[];
 }
 
-export interface TriagesData {
-  series: number[];
-  started: number;
-  completed: number;
-  completionRate: number;
-  byProtocol: Array<{ version: string; count: number; share: number; status: string }>;
+export interface TriagesData extends Filtered {
+  series: SmallCount[];
+  started: SmallCount;
+  completed: SmallCount;
+  completionRate: SmallCount;
+  byProtocol: Array<{ version: string; count: SmallCount; share: SmallCount; status: string }>;
 }
 
 export interface ClassificationData {
@@ -259,7 +271,9 @@ export interface ReportRow {
   expiresAt: string | null;
   live: boolean;
 }
-export interface ReportsData {
-  reports: ReportRow[];
-  total: number;
+export interface ReportsData extends Filtered {
+  // null = oculta pela supressão (qualquer contagem do painel suprimida, não só
+  // o total); ausente também é tratado como oculta. [] = nenhum no período.
+  reports?: ReportRow[] | null;
+  total: SmallCount;
 }

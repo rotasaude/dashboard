@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, screen } from "@testing-library/react";
-import type { ConsentData, EventsData, HealthData, QueuesData, TriagesData } from "../lib/types";
+import { cleanup, screen, within } from "@testing-library/react";
+import type { ConsentData, EventsData, HealthData, QueuesData, Suppressed, TriagesData } from "../lib/types";
+import { SUPPRESSED_HINT } from "../lib/smallCount";
 import { kpiRow, renderPanel, STAMP, stubResizeObserver, stubRoutes } from "../test/panelHarness";
 import { Consent } from "./Consent";
 import { Triages } from "./Triages";
@@ -73,6 +74,31 @@ describe("Triages (F-05.8)", () => {
     expect(row.getByText(STAMP)).toBeTruthy();
     expect(screen.getByText("resp · 2")).toBeTruthy();
     expect(new URL(String((fetchMock.mock.calls[0] as unknown[])[0])).searchParams.get("period")).toBe("7d");
+  });
+
+  it("com bairro: contagem e taxa suprimidas aparecem como '< 5' com a dica", async () => {
+    const s: Suppressed = { suppressed: true };
+    stubRoutes({ "/triages": { ...triages, started: s, completed: 0, completionRate: s, series: [ 0, s, 7 ],
+      byProtocol: [ { version: "resp · 2", count: s, share: s, status: "active" } ] } });
+    renderPanel(<Triages />);
+
+    const row = await kpiRow();
+    expect(row.getAllByText("< 5")).toHaveLength(2);
+    expect(row.getAllByTitle(SUPPRESSED_HINT)).toHaveLength(2);
+    expect(row.getByText("0")).toBeTruthy();
+    expect(row.queryByText("%")).toBeNull();
+    expect(within(screen.getByRole("region", { name: "Por protocolo / versão" })).getAllByText("< 5")).toHaveLength(2);
+  });
+
+  it("started visível e taxa suprimida (numerador 1-4): taxa '< 5', sem NaN/undefined", async () => {
+    const s: Suppressed = { suppressed: true };
+    stubRoutes({ "/triages": { ...triages, started: 12, completed: s, completionRate: s } });
+    const { container } = renderPanel(<Triages />);
+
+    const row = await kpiRow();
+    expect(row.getByText("12")).toBeTruthy();
+    expect(row.getAllByText("< 5")).toHaveLength(2);
+    expect(container.textContent).not.toMatch(/NaN|undefined/);
   });
 
   it("mostra o erro da API sem quebrar a tela", async () => {

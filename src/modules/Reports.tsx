@@ -8,6 +8,7 @@ import { Tag } from "../components/Tag";
 import { Skeleton } from "../components/Skeleton";
 import { ErrorState } from "../components/ErrorState";
 import { EmptyState } from "../components/EmptyState";
+import { Count } from "../components/Count";
 import { fmtDateTime } from "../lib/format";
 import { tierTone } from "../lib/tier";
 import type { ReportRow } from "../lib/types";
@@ -23,17 +24,28 @@ export function Reports() {
   return (
     <Wrap>
       <Panel title="Relatórios" sub="report_snapshots (metadados)" asOf={data.as_of}>
-        <DataTable
-          cols={[
-            { label: "Data", w: "2fr", render: (r) => <span className="mono">{fmtDateTime(r.createdAt)}</span> },
-            { label: "Tier", w: "1fr", render: (r) => <Tag tone={tierTone(r.tier)}>{r.tier ?? "—"}</Tag> },
-            { label: "Protocolo", w: "2fr", render: (r) => <span className="mono">{r.protocol}</span> },
-            { label: "Expiração", w: "1fr", render: (r) => <Tag tone={r.live ? "ok" : "neutral"}>{r.live ? "ativo" : "expirado"}</Tag> }
-          ]}
-          rows={d.reports}
-          rowKey={(r: ReportRow) => r.id}
-          empty="nenhum relatório no período"
-        />
+        {d.reports == null ? (
+          // Spec 2026-09-28 §4.3: com bairro e qualquer contagem do painel
+          // suprimida, a API não manda as linhas — vale mesmo com total >= 5.
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <EmptyState title="lista oculta" sub="menos de 5 relatórios com este bairro — as linhas não aparecem para não identificar ninguém" />
+            <p className="mono" style={{ margin: 0, fontSize: 11, color: "var(--ink3)", textAlign: "center" }}>
+              relatórios no período: <span><Count value={d.total} /></span>
+            </p>
+          </div>
+        ) : (
+          <DataTable
+            cols={[
+              { label: "Data", w: "2fr", render: (r) => <span className="mono">{fmtDateTime(r.createdAt)}</span> },
+              { label: "Tier", w: "1fr", render: (r) => <Tag tone={tierTone(r.tier)}>{r.tier ?? "—"}</Tag> },
+              { label: "Protocolo", w: "2fr", render: (r) => <span className="mono">{r.protocol}</span> },
+              { label: "Expiração", w: "1fr", render: (r) => <Tag tone={r.live ? "ok" : "neutral"}>{r.live ? "ativo" : "expirado"}</Tag> }
+            ]}
+            rows={d.reports}
+            rowKey={(r: ReportRow) => r.id}
+            empty="nenhum relatório no período"
+          />
+        )}
       </Panel>
     </Wrap>
   );

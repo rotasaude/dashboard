@@ -2,7 +2,8 @@
 import { Area, AreaChart, ResponsiveContainer } from "recharts";
 
 interface Props {
-  data: number[];
+  // null = ponto suprimido (módulo 11): lacuna, nunca zero.
+  data: (number | null)[];
   color?: string;
   h?: number;
 }

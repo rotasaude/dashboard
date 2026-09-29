@@ -73,6 +73,25 @@ describe("Reports", () => {
     expect(screen.queryByRole("table")).toBeNull();
   });
 
+  it("com bairro e total suprimido: a lista some e o total aparece como '< 5'", async () => {
+    stubFetch(200, { data: { total: { suppressed: true } }, as_of: "2026-09-26T12:00:00Z" });
+    renderReports();
+
+    expect(await screen.findByText("lista oculta")).not.toBeNull();
+    expect(screen.getByText("< 5")).not.toBeNull();
+    expect(screen.queryByRole("table")).toBeNull();
+  });
+
+  it("total visível (>= 5) com linhas null (outro número suprimido): lista oculta, total numérico", async () => {
+    stubFetch(200, { data: { reports: null, total: 9 }, as_of: "2026-09-26T12:00:00Z" });
+    renderReports();
+
+    expect(await screen.findByText("lista oculta")).not.toBeNull();
+    expect(screen.getByText("9")).not.toBeNull();
+    expect(screen.queryByRole("table")).toBeNull();
+    expect(screen.queryByText("nenhum relatório no período")).toBeNull();
+  });
+
   it("401 mostra ErrorState", async () => {
     stubFetch(401, { error: "unauthorized" });
     renderReports();
