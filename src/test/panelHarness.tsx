@@ -17,7 +17,9 @@ export function stubResizeObserver() {
 }
 
 // routes: pathname → corpo `data`, ou número de status para erro.
-export function stubRoutes(routes: Record<string, unknown>) {
+export function stubRoutes(overrides: Record<string, unknown>) {
+  // O seletor de bairro busca /neighborhoods em todo painel: lista vazia por padrão.
+  const routes: Record<string, unknown> = { "/neighborhoods": { neighborhoods: [] }, ...overrides };
   const fn = vi.fn(async (input: RequestInfo | URL) => {
     const path = new URL(String(input), "http://x").pathname.replace("/admin/api", "");
     const route = routes[path];

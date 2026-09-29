@@ -73,7 +73,10 @@ describe("NeighborhoodPicker", () => {
     window.history.replaceState(null, "", `/dashboard/?bairro=${CENTRO}`);
     renderIt();
     expect(await screen.findByText("não foi possível carregar os bairros")).toBeTruthy();
-    expect(Array.from(picker().options).map((o) => o.textContent)).toEqual([ "Todos", "Sem bairro" ]);
+    expect(Array.from(picker().options).map((o) => o.textContent)).toEqual([ "Todos", "Sem bairro", "bairro selecionado" ]);
+    expect(picker().value).toBe(CENTRO);
     expect(new URLSearchParams(window.location.search).get("bairro")).toBe(CENTRO);
+    fireEvent.change(picker(), { target: { value: "" } });
+    expect(window.location.search).toBe("");
   });
 });

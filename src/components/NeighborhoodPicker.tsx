@@ -18,6 +18,11 @@ export function NeighborhoodPicker() {
   const unknown = !!value && value !== NONE && list.isSuccess && !list.data.some((n) => n.id === value);
   useEffect(() => { if (unknown) writeNeighborhoodParam(null); }, [ unknown ]);
 
+  // Lista ainda carregando ou que falhou: o filtro da URL vale mesmo assim, e o
+  // <select> precisa de uma opção com o valor dele (senão mostraria "Todos"
+  // com o painel filtrado, e escolher "Todos" não dispararia change).
+  const placeholder = !!value && value !== NONE && !list.isSuccess;
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 220, maxWidth: 320 }}>
       <label style={{ display: "flex", flexDirection: "column", gap: 2, fontSize: 12, color: "var(--ink2)" }}>
@@ -30,6 +35,7 @@ export function NeighborhoodPicker() {
         >
           <option value="">Todos</option>
           <option value={NONE}>Sem bairro</option>
+          {placeholder && <option value={value}>bairro selecionado</option>}
           {sortByName(list.data ?? []).map((n) => (
             <option key={n.id} value={n.id}>{n.active ? n.name : `${n.name} (inativo)`}</option>
           ))}
