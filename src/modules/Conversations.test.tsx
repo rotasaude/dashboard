@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ScopeContext } from "../lib/scope";
-import type { ConversationsData } from "../lib/types";
+import type { ConversationsData, Suppressed } from "../lib/types";
+import { SUPPRESSED_HINT } from "../lib/smallCount";
 import { Conversations } from "./Conversations";
 
 // F-02.9 — painel Conversas: funil dos estados ativos, saídas por desfecho
@@ -113,5 +114,35 @@ describe("Conversations", () => {
     expect(await screen.findByText("Falha ao carregar")).not.toBeNull();
     fireEvent.click(screen.getByText("tentar novamente"));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+  });
+
+  it("com bairro: suprimido vira '< 5' e o funil com categoria suprimida vira lista", async () => {
+    const s: Suppressed = { suppressed: true };
+    stubFetch(200, envelope(data({
+      live: s,
+      funnel: [
+        { key: "greeting", label: "greeting", count: 0, tone: "neutral" },
+        { key: "awaiting_consent", label: "awaiting_consent", count: s, tone: "info" }
+      ],
+      abandonRate: s,
+      liveActive: { awaiting: s, inProgress: 7 }
+    })));
+    renderConversations();
+
+    await screen.findByText("Conversas ativas agora");
+    expect(screen.getAllByText("< 5").length).toBeGreaterThanOrEqual(4);
+    expect(screen.getAllByTitle(SUPPRESSED_HINT).length).toBeGreaterThanOrEqual(4);
+    expect(within(screen.getByRole("region", { name: "Funil FSM" })).getByRole("list", { name: "contagens" })).toBeTruthy();
+    expect(screen.getByText("7")).toBeTruthy();
+  });
+
+  it("taxa de abandono suprimida com o resto visível: '< 5', sem NaN nem undefined", async () => {
+    stubFetch(200, envelope(data({ abandonRate: { suppressed: true } })));
+    renderConversations();
+
+    await screen.findByText("Conversas ativas agora");
+    expect(screen.getAllByText("< 5").length).toBeGreaterThanOrEqual(2);
+    expect(document.body.textContent).not.toMatch(/NaN|undefined/);
+    expect(within(screen.getByRole("region", { name: "Funil FSM" })).queryByRole("list", { name: "contagens" })).toBeNull();
   });
 });

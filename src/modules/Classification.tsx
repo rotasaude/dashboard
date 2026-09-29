@@ -16,7 +16,8 @@ import { Skeleton } from "../components/Skeleton";
 import { ErrorState } from "../components/ErrorState";
 import { EmptyState } from "../components/EmptyState";
 import { KpiSkeleton } from "./Overview";
-import { fmtNumber, fmtTime } from "../lib/format";
+import { fmtTime } from "../lib/format";
+import { Count, SegmentsOrList } from "../components/Count";
 import type { ClassificationData } from "../lib/types";
 import { normalizeClassification } from "../lib/classification";
 
@@ -42,7 +43,7 @@ export function Classification() {
         {d.tiers.every((t) => t.count === 0) ? (
           <EmptyState title="sem triagens classificadas" />
         ) : (
-          <StackedBar segments={d.tiers} />
+          <SegmentsOrList segments={d.tiers} render={(tiers) => <StackedBar segments={tiers} />} />
         )}
       </Panel>
 
@@ -54,7 +55,7 @@ export function Classification() {
               label: tier,
               w: "1fr",
               align: "right" as const,
-              render: (r: ClassificationData["byProtocol"][number]) => <span className="mono">{fmtNumber(r.counts[tier] ?? 0)}</span>
+              render: (r: ClassificationData["byProtocol"][number]) => <span className="mono"><Count value={r.counts[tier] ?? 0} /></span>
             }))
           ]}
           rows={d.byProtocol}
@@ -67,8 +68,9 @@ export function Classification() {
         {d.byMode.length === 0 ? (
           <EmptyState title="modo não registrado no outcome" />
         ) : (
-          <StackedBar
+          <SegmentsOrList
             segments={d.byMode.map((m) => ({ label: m.label, count: m.count, tone: m.mode === "weighted" ? "info" : "accent" }))}
+            render={(modes) => <StackedBar segments={modes} />}
           />
         )}
       </Panel>
@@ -79,20 +81,24 @@ export function Classification() {
         right={<Tag tone="info">sem dado clínico</Tag>}
         asOf={data.as_of}
       >
-        <DataTable
-          cols={[
-            { label: "Triagem", w: "2fr", render: (r) => <span className="mono">{r.id.slice(0, 12)}…</span> },
-            { label: "Tier", w: "1fr", render: (r) => <Tag tone={d.tiers.find((t) => t.key === r.tier)?.tone ?? "neutral"}>{r.tier || "—"}</Tag> },
-            { label: "Priority", w: "1fr", render: (r) => (r.urgent ? <Tag tone="warn">{`${r.priority} · urgente`}</Tag> : <span className="mono" style={{ color: "var(--ink3)" }}>{r.priority ?? "—"}</span>) },
-            { label: "Modo", w: "1fr", render: (r) => <span className="mono">{r.mode || "—"}</span> },
-            { label: "Protocolo", w: "2fr", render: (r) => <span className="mono">{r.protocol}</span> },
-            { label: "Trail", w: "auto", align: "right", render: () => <span className="mono" style={{ color: "var(--accent)" }}>ver →</span> }
-          ]}
-          rows={d.sampleTriages}
-          rowKey={(r) => r.id}
-          onRowClick={(r) => setTrailOf(r.id)}
-          empty="sem amostras"
-        />
+        {d.sampleTriages == null ? (
+          <EmptyState title="amostra oculta" sub="Com este bairro, alguma contagem é menor que 5 — a amostra não aparece para não identificar ninguém." />
+        ) : (
+          <DataTable
+            cols={[
+              { label: "Triagem", w: "2fr", render: (r) => <span className="mono">{r.id.slice(0, 12)}…</span> },
+              { label: "Tier", w: "1fr", render: (r) => <Tag tone={d.tiers.find((t) => t.key === r.tier)?.tone ?? "neutral"}>{r.tier || "—"}</Tag> },
+              { label: "Priority", w: "1fr", render: (r) => (r.urgent ? <Tag tone="warn">{`${r.priority} · urgente`}</Tag> : <span className="mono" style={{ color: "var(--ink3)" }}>{r.priority ?? "—"}</span>) },
+              { label: "Modo", w: "1fr", render: (r) => <span className="mono">{r.mode || "—"}</span> },
+              { label: "Protocolo", w: "2fr", render: (r) => <span className="mono">{r.protocol}</span> },
+              { label: "Trail", w: "auto", align: "right", render: () => <span className="mono" style={{ color: "var(--accent)" }}>ver →</span> }
+            ]}
+            rows={d.sampleTriages}
+            rowKey={(r) => r.id}
+            onRowClick={(r) => setTrailOf(r.id)}
+            empty="sem amostras"
+          />
+        )}
       </Panel>
 
       {trailOf && <TrailDrawer triageId={trailOf} onClose={() => setTrailOf(null)} />}

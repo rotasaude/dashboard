@@ -10,8 +10,8 @@ import { StackedBar } from "../components/StackedBar";
 import { Skeleton } from "../components/Skeleton";
 import { ErrorState } from "../components/ErrorState";
 import { EmptyState } from "../components/EmptyState";
+import { Count, SegmentsOrList } from "../components/Count";
 import { KpiSkeleton } from "./Overview";
-import { fmtPercent, fmtNumber } from "../lib/format";
 
 export function Conversations() {
   const { data, isLoading, isError, error, refetch } = useConversations();
@@ -40,7 +40,7 @@ export function Conversations() {
         {d.funnel.every((f) => f.count === 0) ? (
           <EmptyState title="sem conversas no período" />
         ) : (
-          <Funnel steps={d.funnel} />
+          <SegmentsOrList segments={d.funnel} render={(steps) => <Funnel steps={steps} />} />
         )}
       </Panel>
 
@@ -48,15 +48,15 @@ export function Conversations() {
         {d.exits.every((e) => e.count === 0) ? (
           <EmptyState title="nenhuma saída registrada" />
         ) : (
-          <StackedBar segments={d.exits} />
+          <SegmentsOrList segments={d.exits} render={(exits) => <StackedBar segments={exits} />} />
         )}
       </Panel>
 
       <Panel title="Vivas agora" sub="awaiting_consent · consented" asOf={data.as_of}>
         <div className="mono" style={{ display: "flex", gap: 24, fontSize: 12 }}>
-          <span>aguardando: <strong>{fmtNumber(d.liveActive.awaiting)}</strong></span>
-          <span>em curso: <strong>{fmtNumber(d.liveActive.inProgress)}</strong></span>
-          {d.abandonRate !== null && <span>abandono: <strong>{fmtPercent(d.abandonRate)}</strong></span>}
+          <span>aguardando: <strong><Count value={d.liveActive.awaiting} /></strong></span>
+          <span>em curso: <strong><Count value={d.liveActive.inProgress} /></strong></span>
+          {d.abandonRate !== null && <span>abandono: <strong><Count value={d.abandonRate} unit="%" /></strong></span>}
         </div>
       </Panel>
     </Wrap>

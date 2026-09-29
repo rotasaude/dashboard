@@ -15,21 +15,21 @@ export interface Filtered { filter?: { neighborhood: NeighborhoodFilterEcho } }
 export interface ToneSegment {
   key?: string;
   label: string;
-  count: number;
+  count: SmallCount;
   tone?: string;
 }
 
 export interface OverviewKpi {
   id: string;
   label: string;
-  value: number;
+  value: SmallCount;
   unit: string;
   delta: string | null;
   tone: string;
-  spark: number[];
+  spark: SmallCount[];
   source: "live" | "proj";
 }
-export interface OverviewData { kpis: OverviewKpi[] }
+export interface OverviewData extends Filtered { kpis: OverviewKpi[] }
 
 export interface IngestionData {
   inboundSeries: number[];
@@ -38,13 +38,13 @@ export interface IngestionData {
   purge: { pending: number; oldestH: number; ttlH: number; overTtl: boolean };
 }
 
-export interface ConversationsData {
-  live: number;
+export interface ConversationsData extends Filtered {
+  live: SmallCount;
   funnel: ToneSegment[];
   exits: ToneSegment[];
-  abandonRate: number | null;
-  avgToCompleteMin: number | null;
-  liveActive: { awaiting: number; inProgress: number };
+  abandonRate: SmallCount | null;
+  avgToCompleteMin: SmallCount | null;
+  liveActive: { awaiting: SmallCount; inProgress: SmallCount };
 }
 
 export interface ConsentData {
@@ -63,23 +63,28 @@ export interface TriagesData extends Filtered {
   byProtocol: Array<{ version: string; count: SmallCount; share: SmallCount; status: string }>;
 }
 
-export interface ClassificationData {
+export interface SampleTriage {
+  id: string;
+  tier: string | null;
+  priority: number | null;
+  urgent: boolean;
+  mode: string | null;
+  protocol: string;
+  at: string | null;
+}
+
+export interface ClassificationData extends Filtered {
   tiers: ToneSegment[];
   tierKeys: string[];
-  urgent: number;
+  urgent: SmallCount;
   urgentMaxPriority: number;
-  urgentTrend: number[];
-  byProtocol: Array<{ protocol: string; counts: Record<string, number> }>;
-  byMode: Array<{ mode: string; label: string; count: number; share: number }>;
-  sampleTriages: Array<{
-    id: string;
-    tier: string | null;
-    priority: number | null;
-    urgent: boolean;
-    mode: string | null;
-    protocol: string;
-    at: string | null;
-  }>;
+  urgentTrend: SmallCount[];
+  byProtocol: Array<{ protocol: string; counts: Record<string, SmallCount> }>;
+  byMode: Array<{ mode: string; label: string; count: SmallCount; share: SmallCount }>;
+  // null = oculta pela supressão (módulo 11) sempre que qualquer contagem ou
+  // ponto do painel está suprimido, mesmo com total visível; ausente também é
+  // tratado como oculta. [] = nenhuma no período.
+  sampleTriages?: SampleTriage[] | null;
 }
 
 export interface TrailStep {

@@ -65,4 +65,41 @@ describe("Overview", () => {
     expect(await screen.findByText("tentar novamente")).toBeTruthy();
     expect(await screen.findByRole("region", { name: "Saúde das projeções" })).toBeTruthy();
   });
+
+  it("com bairro: KPI suprimido mostra '< 5' sem o delta; jobs seguem como número", async () => {
+    routes({ "/overview": { kpis: [
+      { ...kpi("urgent", "Casos urgentes", 0), value: { suppressed: true }, delta: "+2" },
+      kpi("failed", "Jobs falhados abertos", 3)
+    ] } });
+    renderPanel(<Overview />);
+
+    const row = await kpiRow();
+    expect(row.getByText("< 5")).toBeTruthy();
+    expect(row.queryByText("+2")).toBeNull();
+    expect(row.getByText("3")).toBeTruthy();
+  });
+
+  it("taxa de conclusão suprimida (unit %) mostra '< 5' neutro, sem % nem NaN", async () => {
+    routes({ "/overview": { kpis: [
+      { ...kpi("done", "Triagens concluídas", 42), spark: [ 1, { suppressed: true }, 3 ] },
+      { ...kpi("completion", "Taxa de conclusão", 0, "%"), value: { suppressed: true }, tone: "neutral", delta: null }
+    ] } });
+    renderPanel(<Overview />);
+
+    const row = await kpiRow();
+    expect(row.getByText("42")).toBeTruthy();
+    expect(row.getByText("< 5")).toBeTruthy();
+    expect(row.queryByText("%")).toBeNull();
+    expect(document.body.textContent).not.toMatch(/NaN|undefined/);
+  });
+
+  it("funil de conversas com categoria suprimida vira lista no resumo", async () => {
+    routes({ "/conversations": { ...conversations, funnel: [
+      { key: "greeting", label: "greeting", count: 4, tone: "neutral" },
+      { key: "awaiting_consent", label: "awaiting_consent", count: { suppressed: true }, tone: "info" }
+    ] } });
+    renderPanel(<Overview />);
+
+    expect(await screen.findByRole("list", { name: "contagens" })).toBeTruthy();
+  });
 });

@@ -20,6 +20,7 @@ import { Panel } from "../components/Panel";
 import { PageHeader } from "../components/PageHeader";
 import { Sparkline } from "../components/Sparkline";
 import { Funnel } from "../components/Funnel";
+import { SegmentsOrList } from "../components/Count";
 import { KeyValue } from "../components/KeyValue";
 import { Tag } from "../components/Tag";
 import { StatusDot } from "../components/StatusDot";
@@ -139,11 +140,11 @@ function IngestionTriagePanel() {
         <Skeleton rows={3} />
       ) : conversations.isError ? (
         <ErrorState message="erro ao carregar conversas" onRetry={() => conversations.refetch()} />
-      ) : conversations.data && conversations.data.data.funnel.some((f) => f.count > 0) ? (
+      ) : conversations.data && conversations.data.data.funnel.some((f) => f.count !== 0) ? (
         <div>
           <SectionTitle>funil de conversas</SectionTitle>
           <div style={{ marginTop: 10 }}>
-            <Funnel steps={conversations.data.data.funnel} />
+            <SegmentsOrList segments={conversations.data.data.funnel} render={(steps) => <Funnel steps={steps} />} />
           </div>
         </div>
       ) : (

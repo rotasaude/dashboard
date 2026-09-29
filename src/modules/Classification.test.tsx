@@ -144,3 +144,52 @@ describe("Classification — trail drawer (F-03.16)", () => {
     expect(await screen.findByText("sem trilha registrada para esta triagem")).toBeTruthy();
   });
 });
+
+describe("Classification — filtro de bairro (módulo 11)", () => {
+  const stubData = (d: unknown) => {
+    vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      JSON.stringify({ data: d, as_of: "2026-09-27T12:00:00Z" }),
+      { status: 200, headers: { "Content-Type": "application/json" } }
+    )));
+  };
+
+  it("contagem suprimida vira '< 5', a distribuição vira lista e a amostra some", async () => {
+    const s = { suppressed: true };
+    stubData({
+      ...classification,
+      tiers: [ { key: "alta", label: "alta", count: s, tone: "down" }, { key: "baixa", label: "baixa", count: 0, tone: "info" } ],
+      urgent: s,
+      urgentTrend: [ 0, s ],
+      byProtocol: [ { protocol: "resp · 1", counts: { alta: s, baixa: 0 } } ],
+      byMode: [ { mode: "weighted", label: "weighted", count: s, share: s } ],
+      sampleTriages: undefined
+    });
+    renderClassification();
+
+    const row = await kpiRow();
+    expect(row.getAllByText("< 5")).toHaveLength(2);
+    expect(within(screen.getByRole("region", { name: "Distribuição de tier" })).getByRole("list", { name: "contagens" })).toBeTruthy();
+    expect(within(screen.getByRole("region", { name: "Tier por protocolo" })).getByText("< 5")).toBeTruthy();
+    expect(within(screen.getByRole("region", { name: "Modo de scoring" })).getByRole("list", { name: "contagens" })).toBeTruthy();
+    expect(within(screen.getByRole("region", { name: "Amostra de inspeção" })).getByText("amostra oculta")).toBeTruthy();
+  });
+
+  it("amostra null com todos os totais visíveis (ponto da série suprimido) continua oculta, sem 'menos de 5' ligado ao total", async () => {
+    stubData({ ...classification, urgentTrend: [ 3, { suppressed: true } ], sampleTriages: null });
+    renderClassification();
+
+    const sample = within(await screen.findByRole("region", { name: "Amostra de inspeção" }));
+    expect(sample.getByText("amostra oculta")).toBeTruthy();
+    expect(sample.queryByText("sem amostras")).toBeNull();
+    const row = await kpiRow();
+    expect(row.getByText("Tier alta")).toBeTruthy();
+    expect(row.queryByText("< 5")).toBeNull();
+  });
+
+  it("amostra vazia (não oculta) continua 'sem amostras'", async () => {
+    stubData({ ...classification, sampleTriages: [] });
+    renderClassification();
+    expect(await within(await screen.findByRole("region", { name: "Amostra de inspeção" })).findByText("sem amostras")).toBeTruthy();
+  });
+});
