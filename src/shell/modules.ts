@@ -5,7 +5,7 @@ export type ModuleId =
   | "overview" | "ingestion" | "conversations" | "consent"
   | "triages" | "classification" | "reports" | "protocols" | "events"
   | "queues" | "health" | "protocol-editor" | "security" | "team" | "attendance"
-  | "professionals" | "my-profile";
+  | "professionals" | "my-profile" | "territory";
 
 export interface NavItem { id: ModuleId; label: string; icon: string; }
 export interface NavGroupDef { label: string; items: NavItem[]; }
@@ -38,6 +38,9 @@ export const NAV_GROUPS: NavGroupDef[] = [
     { id: "team", label: "Equipe", icon: "☷" },
     { id: "professionals", label: "Profissionais", icon: "✚" }
   ]},
+  { label: "Cidade", items: [
+    { id: "territory", label: "Território", icon: "⌖" }
+  ]},
   { label: "Conta", items: [
     { id: "security", label: "Segurança", icon: "⚿" },
     { id: "my-profile", label: "Meu perfil", icon: "☺" }
@@ -66,6 +69,8 @@ export function navGroupsFor(
   return NAV_GROUPS.filter((group) => {
     if (group.label === "Conta") return !user?.operator;
     if (group.label === "Equipe") return isAdmin;
+    // Módulo 11: /territory recusa (403 missing_role) quem não é municipal_admin.
+    if (group.label === "Cidade") return isAdmin;
     if (group.label === "Atendimento") return canAttend;
     return true;
   }).map((group) => ({

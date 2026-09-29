@@ -19,15 +19,17 @@ describe("modules", () => {
       expect(groups.some((g) => g.label === "Conta")).toBe(false);
       expect(groups.some((g) => g.label === "Equipe")).toBe(false);
       expect(groups.some((g) => g.label === "Atendimento")).toBe(false);
-      expect(groups.length).toBe(NAV_GROUPS.length - 3);
+      expect(groups.some((g) => g.label === "Cidade")).toBe(false);
+      expect(groups.length).toBe(NAV_GROUPS.length - 4);
     });
 
-    it("sem sessão, esconde Equipe e Atendimento", () => {
+    it("sem sessão, esconde Equipe, Atendimento e Cidade", () => {
       const groups = navGroupsFor(null);
       expect(groups.some((g) => g.label === "Conta")).toBe(true);
       expect(groups.some((g) => g.label === "Equipe")).toBe(false);
       expect(groups.some((g) => g.label === "Atendimento")).toBe(false);
-      expect(groups.length).toBe(NAV_GROUPS.length - 2);
+      expect(groups.some((g) => g.label === "Cidade")).toBe(false);
+      expect(groups.length).toBe(NAV_GROUPS.length - 3);
     });
 
     it("Equipe só aparece para municipal_admin", () => {
@@ -68,6 +70,19 @@ describe("modules", () => {
       expect(ids(user([ "health_professional" ]))).toContain("my-profile");
       expect(ids(user([ "municipal_admin" ]))).not.toContain("my-profile");
       expect(ids(user([], true))).not.toContain("my-profile");
+    });
+  });
+
+  describe("módulo 11 na navegação", () => {
+    const user = (roles: string[]) => ({ operator: false, memberships: roles.map((role) => ({ role })) });
+    const ids = (u: Parameters<typeof navGroupsFor>[0]) => navGroupsFor(u).flatMap((g) => g.items.map((i) => i.id));
+
+    it("Território só para municipal_admin", () => {
+      expect(ids(user([ "municipal_admin" ]))).toContain("territory");
+      for (const role of [ "viewer", "citizen_verifier", "health_professional", "protocol_publisher" ]) {
+        expect(ids(user([ role ]))).not.toContain("territory");
+      }
+      expect(labelFor("territory")).toBe("Território");
     });
   });
 });

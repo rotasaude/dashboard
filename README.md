@@ -32,6 +32,7 @@ A navegação (`src/shell/modules.ts`) é filtrada pelos papéis da sessão
 | Operação | Filas & jobs, Saúde | todos |
 | Atendimento | Validação presencial, check-in, atendimentos abertos, unidades (ADR 0018) | `municipal_admin`, `citizen_verifier` |
 | Equipe | Convidar membros, conceder e revogar papéis | `municipal_admin` |
+| Cidade | Território: bairros, cobertura das unidades (ADR 0023) | `municipal_admin` |
 | Conta | Segurança: autenticador TOTP, recovery codes, senha | usuários da cidade (não o operador) |
 
 O que a API recusaria (403) fica fora do menu. Equipe e Atendimento só
@@ -97,7 +98,7 @@ npm run dev        # porta 5173; o compose publica em 5175
 ```
 
 O Vite proxa `/up`, `/admin/api`, `/authoring`, `/session`, `/passwords`,
-`/auth`, `/setup`, `/protocols`, `/mfa` e `/attendance` para
+`/auth`, `/setup`, `/protocols`, `/mfa`, `/attendance`, `/professionals` e `/territory` para
 `VITE_API_PROXY_TARGET` com `changeOrigin: false`. **Não troque para `true`**:
 o proxy reescreveria o Host para o alvo e nenhuma cidade chegaria ao Rails.
 
