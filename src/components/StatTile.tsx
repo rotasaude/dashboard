@@ -23,7 +23,7 @@ interface Props {
 export function StatTile({ label, value, unit, delta, tone, spark, source, hint }: Props) {
   const { fg } = toneColor(tone);
   const suppressed = isSuppressed(value);
-  const formatted = isSuppressed(value)
+  const formatted = suppressed
     ? SUPPRESSED_LABEL
     : typeof value === "number"
       ? (unit === "%" ? fmtPercent(value, "") : fmtNumber(value))
