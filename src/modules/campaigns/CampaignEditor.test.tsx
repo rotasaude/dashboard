@@ -140,6 +140,41 @@ describe("CampaignEditor", () => {
     expect(screen.queryByLabelText("Título")).toBeNull();
   });
 
+  it("rascunho salvo pode ser cancelado, com step-up", async () => {
+    mocked(api.getCampaign).mockResolvedValue(campaign({ audience: BOQUEIRAO }));
+    const cancelled = campaign({ audience: BOQUEIRAO, status: "cancelled" });
+    mocked(api.cancelCampaign).mockResolvedValue(cancelled);
+    const { onLeftDraft } = renderEditor("c1");
+    fireEvent.click(await screen.findByRole("button", { name: "Cancelar campanha…" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Cancelar campanha" }));
+    await waitFor(() => expect(api.cancelCampaign).toHaveBeenCalledWith("c1"));
+    expect(onLeftDraft).toHaveBeenCalledWith(cancelled);
+  });
+
+  it("rascunho novo, ainda não salvo, não tem 'Cancelar campanha…'", async () => {
+    renderEditor();
+    await screen.findByLabelText("Título");
+    expect(screen.queryByRole("button", { name: "Cancelar campanha…" })).toBeNull();
+  });
+
+  it("nunca mostra o diálogo de envio e o de cancelamento ao mesmo tempo", async () => {
+    mocked(api.getCampaign).mockResolvedValue(campaign({ audience: BOQUEIRAO }));
+    mocked(api.updateCampaign).mockResolvedValue(campaign({ audience: BOQUEIRAO }));
+    renderEditor("c1");
+    await screen.findByText("≈ 12 pessoas (9 telefones)");
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar campanha…" }));
+    expect(await screen.findByRole("button", { name: "Cancelar campanha" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Revisar e enviar…" }));
+    expect(await screen.findByRole("dialog", { name: "Como enviar" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Cancelar campanha" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar campanha…" }));
+    expect(await screen.findByRole("button", { name: "Cancelar campanha" })).toBeTruthy();
+    expect(screen.queryByRole("dialog", { name: "Como enviar" })).toBeNull();
+  });
+
   describe("enviar", () => {
     const sendButton = () => screen.getByRole("button", { name: "Revisar e enviar…" }) as HTMLButtonElement;
 

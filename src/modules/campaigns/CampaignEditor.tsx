@@ -14,6 +14,7 @@ import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } fr
 import { AudienceBuilder } from "./AudienceBuilder";
 import { AudienceCounter, previewAllowsSend } from "./AudienceCounter";
 import { describeAudience } from "../../lib/audiencePhrase";
+import { CampaignLifecycleDialog } from "./CampaignLifecycleDialog";
 import { SendDialog } from "./SendDialog";
 import { useAudiencePreview } from "./useAudiencePreview";
 import { alertStyle, columnStyle, labelStyle, noteStyle, rowStyle } from "./styles";
@@ -67,6 +68,8 @@ function EditorForm({ initial, options, onBack, onLeftDraft, onGoToSecurity, pre
   // número que ela viu, mesmo que o público mude atrás do modal.
   const [ reviewing, setReviewing ] = useState<{ campaign: Campaign; counts: { citizens: number; phones: number } } | null>(null);
 
+  const [ cancelling, setCancelling ] = useState(false);
+
   const today = todayInCity();
   const problem = audienceProblem(draft, today);
   const audience = problem ? null : buildAudience(draft);
@@ -101,9 +104,10 @@ function EditorForm({ initial, options, onBack, onLeftDraft, onGoToSecurity, pre
 
   async function review() {
     if (!previewAllowsSend(preview)) return;
+    setCancelling(false);
     const counts = { citizens: preview.citizens, phones: preview.phones };
     const saved = await save();
-    if (saved) setReviewing({ campaign: saved, counts });
+    if (saved) { setCancelling(false); setReviewing({ campaign: saved, counts }); }
   }
 
   function leftDraft(c: Campaign) {
@@ -184,6 +188,16 @@ function EditorForm({ initial, options, onBack, onLeftDraft, onGoToSecurity, pre
         />
       )}
 
+      {cancelling && id && (
+        <CampaignLifecycleDialog
+          campaign={{ id, title: title.trim() || initial?.title || "" }}
+          action="cancel"
+          onDone={(c) => { setCancelling(false); leftDraft(c); }}
+          onCancel={() => setCancelling(false)}
+          onGoToSecurity={onGoToSecurity}
+        />
+      )}
+
       <div style={rowStyle}>
         <button type="button" disabled={busy} onClick={() => void save()} style={busy ? disabledButtonStyle : secondaryButtonStyle}>
           Salvar rascunho
@@ -191,6 +205,12 @@ function EditorForm({ initial, options, onBack, onLeftDraft, onGoToSecurity, pre
         <button type="button" disabled={!canSend} onClick={() => void review()} style={canSend ? buttonStyle : disabledButtonStyle}>
           Revisar e enviar…
         </button>
+        {id && (
+          <button type="button" disabled={busy} style={secondaryButtonStyle}
+            onClick={() => { setReviewing(null); setCancelling(true); }}>
+            Cancelar campanha…
+          </button>
+        )}
         {!canSend && !busy && <span style={noteStyle}>o envio libera quando a contagem mostrar pelo menos 5 telefones</span>}
       </div>
     </div>
