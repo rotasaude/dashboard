@@ -714,3 +714,124 @@ export async function replaceCoverage(id: string, healthUnitIds: string[]): Prom
     method: "POST", body: JSON.stringify({ health_unit_ids: healthUnitIds })
   });
 }
+
+// ─── Campanhas (módulo 12, ADR 0024; spec 2026-09-29 §6.1) ──────────────────
+// Tudo sob /campaigns (sessão municipal, banco da cidade) — uma entrada no
+// proxy de dev. Nenhuma resposta traz lista de destinatários: só contagens.
+// Escrita sem corpo leva "{}" de propósito: a API recusa com 415
+// (json_required) escrita por cookie sem application/json.
+const CAMPAIGNS_BASE = import.meta.env.VITE_CAMPAIGNS_BASE || "/campaigns";
+
+export type CampaignStatus = "draft" | "scheduled" | "sending" | "sent" | "cancelled" | "failed";
+export type SmsStatus = "not_opted_in" | "duplicate_phone" | "pending" | "deferred" | "sent" | "failed" | "unavailable";
+export type RequestKind = "return" | "referral";
+
+export type AudienceGeo =
+  | { scope: "city" }
+  | { scope: "unit"; health_unit_id: string }
+  | { scope: "neighborhoods"; neighborhood_ids: string[] };
+
+export interface CriterionPeriod { from: string; to: string }
+
+export type Criterion =
+  | ({ kind: "protocol_period"; protocol_name: string } & CriterionPeriod)
+  | ({ kind: "triage_tier"; tiers: string[] } & CriterionPeriod)
+  | ({ kind: "triage_incomplete" } & CriterionPeriod)
+  | ({ kind: "attendance_outcome"; outcomes: AttendanceOutcome[]; health_unit_id?: string } & CriterionPeriod)
+  | ({ kind: "triaged_not_attended" } & CriterionPeriod)
+  | ({ kind: "appointment_no_show" } & CriterionPeriod)
+  | { kind: "appointment_request_open"; kinds?: RequestKind[]; target_unit_id?: string };
+
+export type CriterionKind = Criterion["kind"];
+
+export interface Audience { version: 1; geo: AudienceGeo; clinical: { all: Criterion[] } }
+
+export interface CampaignSummary {
+  id: string;
+  title: string;
+  status: CampaignStatus;
+  send_at: string | null;
+  dispatched_at: string | null;
+  recipients_count: number | null;
+}
+
+// null antes do envio; depois, as 7 chaves de SmsStatus sempre presentes.
+export interface CampaignStats { read_count: number; sms: Record<SmsStatus, number> }
+
+export interface Campaign extends CampaignSummary {
+  body: string;
+  audience: Audience;
+  failure_reason: "below_minimum" | null;
+  sms_enabled: boolean | null;
+  phones_count: number | null;
+  created_at: string;
+  stats: CampaignStats | null;
+}
+
+export interface NamedRef { id: string; name: string }
+export interface CampaignOptions {
+  protocols: string[];
+  tiers: string[];
+  outcomes: string[];
+  neighborhoods: NamedRef[];
+  units: NamedRef[];
+}
+export type AudiencePreview = { citizens: number; phones: number } | { below_minimum: true };
+export interface SmsSetting { enabled: boolean; gateway_configured: boolean }
+export interface CampaignFields { title: string; body: string; audience: Audience }
+
+const campaignPost = (body: unknown = {}): RequestInit => ({ method: "POST", body: JSON.stringify(body) });
+
+function campaignPath(id: string, action?: string): string {
+  return `${CAMPAIGNS_BASE}/${encodeURIComponent(id)}${action ? `/${action}` : ""}`;
+}
+
+export async function listCampaigns(): Promise<CampaignSummary[]> {
+  return (await jsonFetch<{ campaigns: CampaignSummary[] }>(CAMPAIGNS_BASE)).campaigns;
+}
+
+export async function getCampaignOptions(): Promise<CampaignOptions> {
+  return jsonFetch<CampaignOptions>(`${CAMPAIGNS_BASE}/options`);
+}
+
+export async function previewAudience(audience: Audience): Promise<AudiencePreview> {
+  return jsonFetch<AudiencePreview>(`${CAMPAIGNS_BASE}/preview`, campaignPost({ audience }));
+}
+
+export async function createCampaign(fields: CampaignFields): Promise<Campaign> {
+  return (await jsonFetch<{ campaign: Campaign }>(CAMPAIGNS_BASE, campaignPost(fields))).campaign;
+}
+
+export async function getCampaign(id: string): Promise<Campaign> {
+  return (await jsonFetch<{ campaign: Campaign }>(campaignPath(id))).campaign;
+}
+
+export async function updateCampaign(id: string, fields: Partial<CampaignFields>): Promise<Campaign> {
+  return (await jsonFetch<{ campaign: Campaign }>(campaignPath(id), {
+    method: "PATCH", body: JSON.stringify(fields)
+  })).campaign;
+}
+
+export async function sendCampaign(id: string): Promise<Campaign> {
+  return (await jsonFetch<{ campaign: Campaign }>(campaignPath(id, "send"), campaignPost())).campaign;
+}
+
+export async function scheduleCampaign(id: string, sendAt: string): Promise<Campaign> {
+  return (await jsonFetch<{ campaign: Campaign }>(campaignPath(id, "schedule"), campaignPost({ send_at: sendAt }))).campaign;
+}
+
+export async function unscheduleCampaign(id: string): Promise<Campaign> {
+  return (await jsonFetch<{ campaign: Campaign }>(campaignPath(id, "unschedule"), campaignPost())).campaign;
+}
+
+export async function cancelCampaign(id: string): Promise<Campaign> {
+  return (await jsonFetch<{ campaign: Campaign }>(campaignPath(id, "cancel"), campaignPost())).campaign;
+}
+
+export async function getSmsSetting(): Promise<SmsSetting> {
+  return jsonFetch<SmsSetting>(`${CAMPAIGNS_BASE}/sms_setting`);
+}
+
+export async function setSmsSetting(enabled: boolean): Promise<SmsSetting> {
+  return jsonFetch<SmsSetting>(`${CAMPAIGNS_BASE}/sms_setting`, { method: "PUT", body: JSON.stringify({ enabled }) });
+}

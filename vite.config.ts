@@ -14,6 +14,7 @@ import react from "@vitejs/plugin-react";
 //   /attendance → balcão de verificação presencial (Attendance::*Controller).
 //   /professionals → profissionais (módulo 10).
 //   /territory  → bairros e cobertura (módulo 11, só municipal_admin).
+//   /campaigns  → campanhas (módulo 12; campaign_manager, e a chave de SMS também para municipal_admin).
 //
 // Plano 6: changeOrigin FICA FALSE. O Rails resolve a cidade pelo Host da
 // requisição (CityCatalog); com changeOrigin: true o proxy reescrevia o Host
@@ -41,7 +42,8 @@ export default defineConfig({
       "/mfa":       proxy(TARGET),
       "/attendance": proxy(TARGET),
       "/professionals": proxy(TARGET),
-      "/territory": proxy(TARGET)
+      "/territory": proxy(TARGET),
+      "/campaigns": proxy(TARGET)
     }
   }
 });
