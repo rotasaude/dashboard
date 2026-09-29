@@ -5,7 +5,7 @@ import { fmtNumber, fmtPercent } from "./format";
 
 export const SUPPRESSED_LABEL = "< 5";
 export const SUPPRESSED_HINT =
-  "Com o filtro de bairro ligado, números de 1 a 4 aparecem como “< 5” para não identificar ninguém.";
+  "Com o filtro de bairro ligado, contagens de 1 a 4 aparecem como “< 5” e taxas ou médias calculadas sobre elas aparecem como “oculto”, para não identificar ninguém.";
 
 export function isSuppressed(v: unknown): v is Suppressed {
   return typeof v === "object" && v !== null && (v as { suppressed?: unknown }).suppressed === true;
