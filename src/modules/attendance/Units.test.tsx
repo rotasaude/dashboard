@@ -45,7 +45,7 @@ describe("Units", () => {
     fireEvent.change(screen.getByLabelText("Nome"), { target: { value: "Hospital Sul" } });
     fireEvent.change(screen.getByLabelText("Tipo"), { target: { value: "hospital" } });
     fireEvent.click(screen.getByRole("button", { name: "Salvar" }));
-    await waitFor(() => expect(api.createUnit).toHaveBeenCalledWith("Hospital Sul", "hospital"));
+    await waitFor(() => expect(api.createUnit).toHaveBeenCalledWith("Hospital Sul", "hospital", expect.objectContaining({ address_zip: null })));
     expect(await screen.findByText("Hospital Sul")).not.toBeNull();
   });
 
@@ -58,7 +58,7 @@ describe("Units", () => {
     fireEvent.click(await screen.findAllByRole("button", { name: "Editar" }).then((btns) => btns[0]));
     fireEvent.change(screen.getByLabelText("Nome"), { target: { value: "UBS Centro Novo" } });
     fireEvent.click(screen.getByRole("button", { name: "Salvar" }));
-    await waitFor(() => expect(api.updateUnit).toHaveBeenCalledWith("u1", "UBS Centro Novo", "ubs"));
+    await waitFor(() => expect(api.updateUnit).toHaveBeenCalledWith("u1", "UBS Centro Novo", "ubs", expect.objectContaining({ address_zip: null })));
     expect(await screen.findByText("UBS Centro Novo")).not.toBeNull();
   });
 

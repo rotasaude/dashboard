@@ -1,11 +1,14 @@
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { createUnit, listAllUnits, setUnitActive, updateUnit, type HealthUnitRow } from "../../lib/api";
+import { createUnit, listAllUnits, setUnitActive, updateUnit, type HealthUnitRow, type UnitAddress } from "../../lib/api";
 import { UNIT_KINDS, attendanceError } from "../../lib/attendance";
 import { Panel } from "../../components/Panel";
 import { DataTable } from "../../components/DataTable";
 import { Tag } from "../../components/Tag";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
+
+// Temporário (Task 1): a Task 5 troca pelo endereço do formulário.
+const EMPTY_ADDRESS: UnitAddress = { address_street: null, address_number: null, address_complement: null, address_zip: null, neighborhood_id: null };
 
 // Units (Task 6) — cadastro de unidades de saúde, só para municipal_admin.
 // Lista + criar/editar (mesmo formulário, com/sem id) + desativar/reativar.
@@ -52,9 +55,9 @@ export function Units() {
     setBusy(true); setError(null);
     try {
       if (form.id) {
-        await updateUnit(form.id, form.name, form.kind);
+        await updateUnit(form.id, form.name, form.kind, EMPTY_ADDRESS);
       } else {
-        await createUnit(form.name, form.kind);
+        await createUnit(form.name, form.kind, EMPTY_ADDRESS);
         void queryClient.invalidateQueries({ queryKey: [ "activeUnits" ] });
       }
       setForm(null);

@@ -364,7 +364,18 @@ export async function revokeVerification(id: string, reason: string): Promise<vo
 
 // ─── Atendimento: unidades de saúde (Task 6) ─────────────────────────────────
 
-export interface HealthUnit { id: string; name: string; kind: string }
+// Endereço da unidade (módulo 11, ADR 0023; spec 2026-09-28 §4.1). Opcional em
+// tudo: uma API anterior ao módulo 11 omite as chaves. Na escrita vai sempre o
+// conjunto inteiro, e null apaga o campo.
+export interface UnitAddress {
+  address_street: string | null;
+  address_number: string | null;
+  address_complement: string | null;
+  address_zip: string | null;
+  neighborhood_id: string | null;
+}
+
+export interface HealthUnit extends Partial<UnitAddress> { id: string; name: string; kind: string }
 export interface HealthUnitRow extends HealthUnit { active: boolean }
 
 export async function listActiveUnits(): Promise<HealthUnit[]> {
@@ -377,16 +388,16 @@ export async function listAllUnits(): Promise<HealthUnitRow[]> {
   return payload.units;
 }
 
-export async function createUnit(name: string, kind: string): Promise<HealthUnitRow> {
+export async function createUnit(name: string, kind: string, address: UnitAddress): Promise<HealthUnitRow> {
   const payload = await jsonFetch<{ unit: HealthUnitRow }>(`${ATTENDANCE_BASE}/units`, {
-    method: "POST", body: JSON.stringify({ name, kind })
+    method: "POST", body: JSON.stringify({ name, kind, ...address })
   });
   return payload.unit;
 }
 
-export async function updateUnit(id: string, name: string, kind: string): Promise<HealthUnitRow> {
+export async function updateUnit(id: string, name: string, kind: string, address: UnitAddress): Promise<HealthUnitRow> {
   const payload = await jsonFetch<{ unit: HealthUnitRow }>(`${ATTENDANCE_BASE}/units/${encodeURIComponent(id)}`, {
-    method: "POST", body: JSON.stringify({ name, kind })
+    method: "POST", body: JSON.stringify({ name, kind, ...address })
   });
   return payload.unit;
 }
@@ -421,6 +432,10 @@ export interface QueueRow {
   id: string; cpf_masked: string; checked_in_at: string; protocol_name: string | null; priority: number | null;
   source: "triage" | "appointment"; appointment_time: string | null;
   called_at: string | null; called_by_name: string | null;
+  // Módulo 11 (spec 2026-09-28 §4.1): unidades ativas que cobrem o bairro da
+  // triagem deste atendimento (sem triagem, o bairro atual do cidadão).
+  // Opcional: a API anterior ao módulo 11 não manda.
+  reference_unit_ids?: string[];
 }
 
 export interface AppointmentRequestSummary { id: string; kind: string; target_unit_name: string; status: string }
@@ -644,4 +659,45 @@ export async function scheduleShift(linkId: string, startsAt: string, endsAt: st
 
 export async function cancelShift(shiftId: string, reason: string): Promise<ProfessionalShift> {
   return (await jsonFetch<{ shift: ProfessionalShift }>(`${PROFESSIONALS_BASE}/shifts/${professionalId(shiftId)}/cancel`, postProfessional({ reason }))).shift;
+}
+
+// ─── Território (módulo 11, ADR 0023; spec 2026-09-28 §4.1) ─────────────────
+// Tudo sob /territory, só municipal_admin — uma entrada no proxy de dev. As
+// escritas devolvem o bairro, mas a tela relê a lista: nada aqui depende do
+// corpo da resposta.
+const TERRITORY_BASE = import.meta.env.VITE_TERRITORY_BASE || "/territory";
+
+export interface NeighborhoodUnit { id: string; name: string; active: boolean }
+export interface Neighborhood {
+  id: string;
+  name: string;
+  active: boolean;
+  source: "seed" | "manual";
+  units: NeighborhoodUnit[];
+}
+
+function neighborhoodPath(id: string, action?: string): string {
+  return `${TERRITORY_BASE}/neighborhoods/${encodeURIComponent(id)}${action ? `/${action}` : ""}`;
+}
+
+export async function listNeighborhoods(): Promise<Neighborhood[]> {
+  return (await jsonFetch<{ neighborhoods: Neighborhood[] }>(`${TERRITORY_BASE}/neighborhoods`)).neighborhoods;
+}
+
+export async function createNeighborhood(name: string): Promise<void> {
+  await jsonFetch<unknown>(`${TERRITORY_BASE}/neighborhoods`, { method: "POST", body: JSON.stringify({ name }) });
+}
+
+export async function renameNeighborhood(id: string, name: string): Promise<void> {
+  await jsonFetch<unknown>(neighborhoodPath(id), { method: "POST", body: JSON.stringify({ name }) });
+}
+
+export async function setNeighborhoodActive(id: string, active: boolean): Promise<void> {
+  await jsonFetch<unknown>(neighborhoodPath(id, active ? "activate" : "deactivate"), { method: "POST", body: "{}" });
+}
+
+export async function replaceCoverage(id: string, healthUnitIds: string[]): Promise<void> {
+  await jsonFetch<unknown>(neighborhoodPath(id, "coverage"), {
+    method: "POST", body: JSON.stringify({ health_unit_ids: healthUnitIds })
+  });
 }
