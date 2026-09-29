@@ -394,4 +394,52 @@ describe("Team", () => {
       expect((await screen.findByRole("alert")).textContent).toBe(message);
     });
   });
+
+  describe("gestor de campanhas (módulo 12)", () => {
+    it("tornar e remover gestor de campanhas, com step-up", async () => {
+      mocked(api.listMemberships).mockResolvedValue([
+        membership("ana@cidade.gov.br", "viewer"),
+        membership("bia@cidade.gov.br", "campaign_manager", "m-bia-camp")
+      ]);
+      mocked(api.grantRole).mockResolvedValue(undefined);
+      mocked(api.revokeMembership).mockResolvedValue(undefined);
+      renderTeam();
+
+      fireEvent.click(await screen.findByRole("button", { name: "Tornar gestor de campanhas" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Confirmar" }));
+      await waitFor(() => expect(api.grantRole).toHaveBeenCalledWith("u-ana@cidade.gov.br", "campaign_manager"));
+      expect((await screen.findByRole("status")).textContent).toBe("ana@cidade.gov.br agora é gestor de campanhas");
+
+      fireEvent.click(await screen.findByRole("button", { name: "Remover gestor de campanhas" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Confirmar" }));
+      await waitFor(() => expect(api.revokeMembership).toHaveBeenCalledWith("m-bia-camp"));
+      expect((await screen.findByRole("status")).textContent).toBe("bia@cidade.gov.br não é mais gestor de campanhas");
+    });
+
+    it("janela fechada: conceder pede o código do autenticador", async () => {
+      mocked(api.fetchCurrentSession).mockResolvedValue(session({ mfa_verified_at: null }));
+      mocked(api.listMemberships).mockResolvedValue([ membership("ana@cidade.gov.br", "viewer") ]);
+      mocked(api.stepUpMfa).mockResolvedValue(undefined);
+      mocked(api.grantRole).mockResolvedValue(undefined);
+      renderTeam();
+
+      fireEvent.click(await screen.findByRole("button", { name: "Tornar gestor de campanhas" }));
+      fireEvent.change(await screen.findByLabelText("Código do autenticador"), { target: { value: "112233" } });
+      fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+      await waitFor(() => expect(api.grantRole).toHaveBeenCalledWith("u-ana@cidade.gov.br", "campaign_manager"));
+      expect(api.stepUpMfa).toHaveBeenCalledWith("112233");
+    });
+
+    it("convite como gestor de campanhas é privilegiado: pede o código", async () => {
+      mocked(api.fetchCurrentSession).mockResolvedValue(session({ mfa_verified_at: null }));
+      mocked(api.listMemberships).mockResolvedValue([]);
+      renderTeam();
+
+      fireEvent.change(await screen.findByLabelText("E-mail da pessoa"), { target: { value: "com@cidade.gov.br" } });
+      fireEvent.change(screen.getByLabelText("Papel"), { target: { value: "campaign_manager" } });
+      fireEvent.click(screen.getByRole("button", { name: "Convidar" }));
+      expect(await screen.findByLabelText("Código do autenticador")).toBeTruthy();
+      expect(screen.getByText("Convidar com@cidade.gov.br como Gestor de campanhas.")).toBeTruthy();
+    });
+  });
 });

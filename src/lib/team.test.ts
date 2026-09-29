@@ -56,15 +56,16 @@ describe("reviewerCount", () => {
 const apiError = (status: number, body: unknown) => new ApiError(status, body, String(status));
 
 describe("convite", () => {
-  it("oferece os 7 papéis da cidade", () => {
+  it("oferece os 8 papéis da cidade", () => {
     expect(INVITE_ROLES.map((r) => r.role).sort()).toEqual([
-      "citizen_verifier", "health_professional", "municipal_admin", "protocol_author",
+      "campaign_manager", "citizen_verifier", "health_professional", "municipal_admin", "protocol_author",
       "protocol_publisher", "protocol_reviewer", "viewer"
     ]);
+    expect(INVITE_ROLES.find((r) => r.role === "campaign_manager")?.label).toBe("Gestor de campanhas");
   });
 
   it("papéis privilegiados são os mesmos que a API protege com step-up", () => {
-    for (const role of [ "municipal_admin", "protocol_reviewer", "citizen_verifier", "health_professional" ]) {
+    for (const role of [ "municipal_admin", "protocol_reviewer", "citizen_verifier", "health_professional", "campaign_manager" ]) {
       expect(isPrivilegedRole(role)).toBe(true);
     }
     for (const role of [ "viewer", "protocol_author", "protocol_publisher" ]) {
@@ -109,5 +110,16 @@ describe("desativação", () => {
     expect(deactivateErrorMessage(apiError(404, ""))).toBe("Usuário não encontrado");
     expect(deactivateErrorMessage(apiError(500, ""))).toBeNull();
     expect(deactivateErrorMessage(new Error("rede"))).toBeNull();
+  });
+});
+
+describe("gestor de campanhas", () => {
+  it("teamMembers marca o papel e guarda o id da membership", () => {
+    const [ ana ] = teamMembers([
+      { id: "m-1", user: { id: "u1", email_address: "ana@cidade.gov.br" }, role: "viewer", granted_at: "x" },
+      { id: "m-2", user: { id: "u1", email_address: "ana@cidade.gov.br" }, role: "campaign_manager", granted_at: "x" }
+    ]);
+    expect(ana.isCampaignManager).toBe(true);
+    expect(ana.campaignManagerMembershipId).toBe("m-2");
   });
 });

@@ -6,6 +6,7 @@
 // lista usuários, lista memberships. Na prática todo usuário da cidade nasce
 // de um convite com papel.
 import { ApiError, type MembershipRow } from "./api";
+import { CAMPAIGN_MANAGER_ROLE } from "./campaigns";
 
 export const REVIEWER_ROLE = "protocol_reviewer";
 export const VERIFIER_ROLE = "citizen_verifier";
@@ -23,6 +24,8 @@ export interface TeamMember {
   isProfessional: boolean;
   professionalMembershipId: string | null;
   professionalStatus: "missing_profile" | "missing_link" | "ok" | null;
+  isCampaignManager: boolean;
+  campaignManagerMembershipId: string | null;
 }
 
 export function teamMembers(rows: MembershipRow[]): TeamMember[] {
@@ -33,7 +36,7 @@ export function teamMembers(rows: MembershipRow[]): TeamMember[] {
       userId: row.user.id, email: row.user.email_address, roles: [],
       isReviewer: false, reviewerMembershipId: null,
       isVerifier: false, verifierMembershipId: null,
-      isProfessional: false, professionalMembershipId: null, professionalStatus: null
+      isProfessional: false, professionalMembershipId: null, professionalStatus: null, isCampaignManager: false, campaignManagerMembershipId: null
     };
     current.roles = [ ...current.roles, row.role ].sort();
     if (row.role === REVIEWER_ROLE) {
@@ -49,6 +52,10 @@ export function teamMembers(rows: MembershipRow[]): TeamMember[] {
       current.professionalMembershipId = row.id;
       current.professionalStatus = row.professional_status ?? null;
     }
+    if (row.role === CAMPAIGN_MANAGER_ROLE) {
+      current.isCampaignManager = true;
+      current.campaignManagerMembershipId = row.id;
+    }
     byUser.set(row.user.id, current);
   }
 
@@ -59,7 +66,7 @@ export function reviewerCount(members: TeamMember[]): number {
   return members.filter((m) => m.isReviewer).length;
 }
 
-// Os 7 papéis da cidade (Membership::ROLES na API), na ordem do seletor do
+// Os 8 papéis da cidade (Membership::ROLES na API), na ordem do seletor do
 // convite.
 export const INVITE_ROLES: { role: string; label: string }[] = [
   { role: "viewer", label: "Leitura (viewer)" },
@@ -68,11 +75,12 @@ export const INVITE_ROLES: { role: string; label: string }[] = [
   { role: "protocol_reviewer", label: "Revisor de protocolo" },
   { role: "citizen_verifier", label: "Atendente" },
   { role: "health_professional", label: "Profissional de saúde" },
+  { role: CAMPAIGN_MANAGER_ROLE, label: "Gestor de campanhas" },
   { role: "municipal_admin", label: "Administrador municipal" }
 ];
 
 // Membership::PRIVILEGED_ROLES: conceder OU convidar exige step-up.
-const PRIVILEGED_ROLES = new Set([ "municipal_admin", REVIEWER_ROLE, VERIFIER_ROLE, PROFESSIONAL_ROLE ]);
+const PRIVILEGED_ROLES = new Set([ "municipal_admin", REVIEWER_ROLE, VERIFIER_ROLE, PROFESSIONAL_ROLE, CAMPAIGN_MANAGER_ROLE ]);
 
 export function isPrivilegedRole(role: string): boolean {
   return PRIVILEGED_ROLES.has(role);
