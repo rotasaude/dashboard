@@ -7,6 +7,7 @@ import {
 import {
   NEIGHBORHOODS_KEY, SOURCE_LABEL, normalizeName, sortByName, territoryError, validateNeighborhoodName
 } from "../lib/territory";
+import { PANEL_NEIGHBORHOODS_KEY } from "../lib/neighborhoodFilter";
 import { PageHeader } from "../components/PageHeader";
 import { Panel } from "../components/Panel";
 import { DataTable } from "../components/DataTable";
@@ -30,6 +31,7 @@ export function Territory() {
 
   function refresh() {
     void queryClient.invalidateQueries({ queryKey: NEIGHBORHOODS_KEY });
+    void queryClient.invalidateQueries({ queryKey: PANEL_NEIGHBORHOODS_KEY });
   }
 
   async function toggleActive(n: Neighborhood) {

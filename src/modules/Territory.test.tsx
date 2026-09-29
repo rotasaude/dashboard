@@ -11,9 +11,11 @@ vi.mock("../lib/api", async (importOriginal) => {
 
 import * as api from "../lib/api";
 import { ApiError, type Neighborhood } from "../lib/api";
+import { PANEL_NEIGHBORHOODS_KEY } from "../lib/neighborhoodFilter";
 import { Territory } from "./Territory";
 
 afterEach(cleanup);
+let lastClient: QueryClient;
 const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
 
 const centro: Neighborhood = { id: "n1", name: "Centro", active: true, source: "seed",
@@ -23,6 +25,7 @@ const batel: Neighborhood = { id: "n3", name: "Batel", active: false, source: "s
 
 function renderIt() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  lastClient = client;
   render(<Territory />, {
     wrapper: ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>
   });
@@ -101,6 +104,15 @@ describe("Territory", () => {
     fireEvent.change(input, { target: { value: "Centro Histórico" } });
     fireEvent.click(screen.getByRole("button", { name: "Salvar" }));
     await waitFor(() => expect(api.renameNeighborhood).toHaveBeenCalledWith("n1", "Centro Histórico"));
+  });
+
+  it("toda escrita invalida também a lista do seletor dos painéis", async () => {
+    mocked(api.setNeighborhoodActive).mockResolvedValue(undefined);
+    renderIt();
+    await screen.findByText("Centro");
+    const spy = vi.spyOn(lastClient, "invalidateQueries");
+    fireEvent.click(rowOf("Centro").getByRole("button", { name: "Desativar" }));
+    await waitFor(() => expect(spy).toHaveBeenCalledWith({ queryKey: PANEL_NEIGHBORHOODS_KEY }));
   });
 
   it("desativa o ativo e reativa o inativo", async () => {

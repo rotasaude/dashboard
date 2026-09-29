@@ -7,6 +7,7 @@ import { useClassification } from "../hooks/useClassification";
 import { useTriageTrail } from "../hooks/useTriageTrail";
 import { Panel } from "../components/Panel";
 import { PageHeader } from "../components/PageHeader";
+import { NeighborhoodPicker } from "../components/NeighborhoodPicker";
 import { KpiGrid } from "../components/KpiGrid";
 import { StatTile } from "../components/StatTile";
 import { StackedBar } from "../components/StackedBar";
@@ -206,7 +207,7 @@ function evTone(ev: string) {
 function Wrap({ children }: { children: React.ReactNode }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <PageHeader title="Classificação" sub="classification · scoring" />
+      <PageHeader title="Classificação" sub="classification · scoring" right={<NeighborhoodPicker />} />
       {children}
     </div>
   );

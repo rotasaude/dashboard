@@ -3,6 +3,7 @@
 import { useReports } from "../hooks/useReports";
 import { Panel } from "../components/Panel";
 import { PageHeader } from "../components/PageHeader";
+import { NeighborhoodPicker } from "../components/NeighborhoodPicker";
 import { DataTable } from "../components/DataTable";
 import { Tag } from "../components/Tag";
 import { Skeleton } from "../components/Skeleton";
@@ -54,7 +55,7 @@ export function Reports() {
 function Wrap({ children }: { children: React.ReactNode }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <PageHeader title="Relatórios" sub="reports" />
+      <PageHeader title="Relatórios" sub="reports" right={<NeighborhoodPicker />} />
       {children}
     </div>
   );

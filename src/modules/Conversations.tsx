@@ -3,6 +3,7 @@
 import { useConversations } from "../hooks/useConversations";
 import { Panel } from "../components/Panel";
 import { PageHeader } from "../components/PageHeader";
+import { NeighborhoodPicker } from "../components/NeighborhoodPicker";
 import { KpiGrid } from "../components/KpiGrid";
 import { StatTile } from "../components/StatTile";
 import { Funnel } from "../components/Funnel";
@@ -66,7 +67,7 @@ export function Conversations() {
 function Wrap({ children }: { children: React.ReactNode }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <PageHeader title="Conversas" sub="conversations · fsm" />
+      <PageHeader title="Conversas" sub="conversations · fsm" right={<NeighborhoodPicker />} />
       {children}
     </div>
   );

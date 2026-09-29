@@ -38,13 +38,16 @@ function renderReports() {
   );
 }
 
+const callsTo = (fetchMock: ReturnType<typeof vi.fn>, pathname: string) =>
+  fetchMock.mock.calls.map((c) => new URL(String((c as unknown[])[0]))).filter((u) => u.pathname === pathname);
+
 describe("Reports", () => {
   it("busca GET /admin/api/reports com o período do escopo", async () => {
     const fetchMock = stubFetch(200, envelope([]));
     renderReports();
 
     await screen.findByText("nenhum relatório no período");
-    const url = new URL(String((fetchMock.mock.calls[0] as unknown[])[0]));
+    const url = callsTo(fetchMock, "/admin/api/reports")[0];
     expect(url.pathname).toBe("/admin/api/reports");
     expect(url.searchParams.get("period")).toBe("7d");
   });
@@ -111,6 +114,6 @@ describe("Reports", () => {
     expect(screen.getByText(/^500 on /)).not.toBeNull();
 
     fireEvent.click(screen.getByText("tentar novamente"));
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(callsTo(fetchMock, "/admin/api/reports")).toHaveLength(2));
   });
 });

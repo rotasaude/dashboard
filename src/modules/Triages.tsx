@@ -3,6 +3,7 @@
 import { useTriages } from "../hooks/useTriages";
 import { Panel } from "../components/Panel";
 import { PageHeader } from "../components/PageHeader";
+import { NeighborhoodPicker } from "../components/NeighborhoodPicker";
 import { KpiGrid } from "../components/KpiGrid";
 import { StatTile } from "../components/StatTile";
 import { BarMini } from "../components/BarMini";
@@ -69,7 +70,7 @@ function statusTone(s: string): string {
 function Wrap({ children }: { children: React.ReactNode }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <PageHeader title="Triagens" sub="triages" />
+      <PageHeader title="Triagens" sub="triages" right={<NeighborhoodPicker />} />
       {children}
     </div>
   );

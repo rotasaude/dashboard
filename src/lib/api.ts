@@ -73,6 +73,19 @@ export async function adminFetch<T>(
   return jsonFetch<Envelope<T>>(url.toString());
 }
 
+// Lista de bairros para o seletor dos painéis (módulo 11; decisão do usuário
+// 2026-09-28): GET /admin/api/neighborhoods, só leitura, para todo papel que
+// lê os painéis (não é /territory, que é só do municipal_admin). O contrato
+// combinado é { neighborhoods: [...] }; o envelope { data } dos outros
+// painéis também é aceito, e sem a chave a lista é vazia.
+export interface PanelNeighborhood { id: string; name: string; active: boolean }
+
+export async function listPanelNeighborhoods(): Promise<PanelNeighborhood[]> {
+  const body = await jsonFetch<{ neighborhoods?: PanelNeighborhood[]; data?: { neighborhoods?: PanelNeighborhood[] } }>(
+    new URL(`${BASE}/neighborhoods`, window.location.origin).toString());
+  return body?.data?.neighborhoods ?? body?.neighborhoods ?? [];
+}
+
 export async function login(email_address: string, password: string): Promise<SessionUser> {
   return jsonFetch<SessionUser>(SESSION_BASE, {
     method: "POST",

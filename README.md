@@ -38,6 +38,12 @@ A navegação (`src/shell/modules.ts`) é filtrada pelos papéis da sessão
 O que a API recusaria (403) fica fora do menu. Equipe e Atendimento só
 aparecem depois que a sessão diz o papel.
 
+**Filtro de bairro** (módulo 11, ADR 0023): Visão geral, Conversas, Triagens,
+Classificação e Relatórios têm o seletor "Bairro", para todo papel que lê os
+painéis (a lista vem de `/admin/api/neighborhoods`). A escolha fica na URL
+(`?bairro=<id>` ou `?bairro=none`). Com bairro escolhido, a API troca contagem
+de 1 a 4 por `{ suppressed: true }`, e a tela mostra "< 5".
+
 **Protocolos** seguem o ciclo assinado do ADR 0016: duas revisoras por
 publicação e por ativação. As ações (assinar, publicar, ativar, aposentar,
 reverter) aparecem conforme o estado da versão. A reversão mostra a versão-alvo

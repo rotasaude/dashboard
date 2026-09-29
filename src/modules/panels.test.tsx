@@ -73,7 +73,8 @@ describe("Triages (F-05.8)", () => {
     expect(row.getByText("6")).toBeTruthy();
     expect(row.getByText(STAMP)).toBeTruthy();
     expect(screen.getByText("resp · 2")).toBeTruthy();
-    expect(new URL(String((fetchMock.mock.calls[0] as unknown[])[0])).searchParams.get("period")).toBe("7d");
+    const url = fetchMock.mock.calls.map((c) => new URL(String((c as unknown[])[0]))).find((u) => u.pathname === "/admin/api/triages")!;
+    expect(url.searchParams.get("period")).toBe("7d");
   });
 
   it("com bairro: contagem e taxa suprimidas aparecem como '< 5' com a dica", async () => {

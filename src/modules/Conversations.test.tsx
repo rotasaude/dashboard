@@ -60,13 +60,16 @@ function renderConversations() {
   );
 }
 
+const callsTo = (fetchMock: ReturnType<typeof vi.fn>, pathname: string) =>
+  fetchMock.mock.calls.map((c) => new URL(String((c as unknown[])[0]))).filter((u) => u.pathname === pathname);
+
 describe("Conversations", () => {
   it("busca GET /admin/api/conversations com o período do escopo", async () => {
     const fetchMock = stubFetch(200, envelope(data()));
     renderConversations();
 
     await screen.findByText("Conversas ativas agora");
-    const url = new URL(String((fetchMock.mock.calls[0] as unknown[])[0]));
+    const url = callsTo(fetchMock, "/admin/api/conversations")[0];
     expect(url.pathname).toBe("/admin/api/conversations");
     expect(url.searchParams.get("period")).toBe("7d");
   });
@@ -113,7 +116,7 @@ describe("Conversations", () => {
 
     expect(await screen.findByText("Falha ao carregar")).not.toBeNull();
     fireEvent.click(screen.getByText("tentar novamente"));
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(callsTo(fetchMock, "/admin/api/conversations")).toHaveLength(2));
   });
 
   it("com bairro: suprimido vira '< 5' e o funil com categoria suprimida vira lista", async () => {

@@ -18,6 +18,7 @@ import { EmptyState } from "../components/EmptyState";
 import { ErrorState } from "../components/ErrorState";
 import { Panel } from "../components/Panel";
 import { PageHeader } from "../components/PageHeader";
+import { NeighborhoodPicker } from "../components/NeighborhoodPicker";
 import { Sparkline } from "../components/Sparkline";
 import { Funnel } from "../components/Funnel";
 import { SegmentsOrList } from "../components/Count";
@@ -35,7 +36,7 @@ interface Props {
 export function Overview({ onNavigate }: Props) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <PageHeader title="Visão geral" sub="overview" />
+      <PageHeader title="Visão geral" sub="overview" right={<NeighborhoodPicker />} />
       <KpisRow />
       <div style={{ display: "grid", gridTemplateColumns: "1.5fr 1fr", gap: 14 }}>
         <IngestionTriagePanel />
