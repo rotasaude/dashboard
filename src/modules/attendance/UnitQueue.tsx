@@ -4,7 +4,7 @@ import {
   ApiError, callAttendance, callNext, closeAttendance, listUnitQueue,
   type AppointmentRequestSummary, type AttendanceOutcome, type HealthUnit, type QueueRow
 } from "../../lib/api";
-import { ATTENDANCE_REFETCH_MS, attendanceError } from "../../lib/attendance";
+import { ATTENDANCE_REFETCH_MS, attendanceError, splitReferenceUnits } from "../../lib/attendance";
 import { fmtDateTime, fmtHourMinute } from "../../lib/format";
 import { useAuth } from "../../lib/auth";
 import { Panel } from "../../components/Panel";
@@ -252,7 +252,12 @@ function ClosePanel(
 ) {
   const auth = useAuth();
   const [ outcome, setOutcome ] = useState<Exclude<AttendanceOutcome, "left">>("discharged");
-  const [ referralUnitId, setReferralUnitId ] = useState("");
+  // Módulo 11 (D4): a primeira unidade de referência, por nome, já vem
+  // escolhida; o profissional troca ou volta para "—". null = ainda não
+  // mexeu, e aí vale a sugestão (que pode chegar depois, com `units`).
+  const [ referralChoice, setReferralChoice ] = useState<string | null>(null);
+  const { referenceUnits, otherUnits } = splitReferenceUnits(units, row.reference_unit_ids, unit.id);
+  const referralUnitId = referralChoice ?? referenceUnits[0]?.id ?? "";
   const [ note, setNote ] = useState("");
   const [ busy, setBusy ] = useState(false);
   const [ error, setError ] = useState<string | null>(null);
@@ -268,7 +273,8 @@ function ClosePanel(
     if (disabled) return;
     setBusy(true); setError(null);
     try {
-      const result = await closeAttendance(row.id, outcome, referralUnitId || undefined, note || undefined);
+      const result = await closeAttendance(row.id, outcome,
+        outcome === "referred" ? referralUnitId || undefined : undefined, note || undefined);
       onDone(result.appointmentRequest);
     } catch (err) {
       const code = errorCode(err);
@@ -301,9 +307,10 @@ function ClosePanel(
         <>
           <label style={labelStyle}>
             Unidade de destino
-            <select value={referralUnitId} onChange={(e) => setReferralUnitId(e.target.value)} style={inputStyle}>
+            <select value={referralUnitId} onChange={(e) => setReferralChoice(e.target.value)} style={inputStyle}>
               <option value="">—</option>
-              {units.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+              {referenceUnits.map((u) => <option key={u.id} value={u.id}>{`${u.name} · referência`}</option>)}
+              {otherUnits.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
             </select>
           </label>
           <label style={labelStyle}>

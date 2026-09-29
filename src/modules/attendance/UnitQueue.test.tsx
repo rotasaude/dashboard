@@ -43,11 +43,14 @@ const inCare = [
   }
 ];
 
-function renderQueue(props: { canCare: boolean; careBlocked?: string | null; onClinicalRefused?(): void }) {
+function renderQueue(props: {
+  canCare: boolean; careBlocked?: string | null; onClinicalRefused?(): void; units?: api.HealthUnit[]
+}) {
+  const { units = [ unit, otherUnit ], ...rest } = props;
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const wrapper = ({ children }: { children: ReactNode }) =>
     <QueryClientProvider client={client}><AuthProvider>{children}</AuthProvider></QueryClientProvider>;
-  render(<UnitQueue unit={unit} units={[ unit, otherUnit ]} {...props} />, { wrapper });
+  render(<UnitQueue unit={unit} units={units} {...rest} />, { wrapper });
   return { client };
 }
 
@@ -86,6 +89,77 @@ describe("UnitQueue", () => {
   });
 
   describe("profissional (canCare)", () => {
+    describe("unidade de referência (módulo 11)", () => {
+      const hospital = { id: "u3", name: "Hospital Sul", kind: "hospital" };
+      const withRefs = (ids: string[]) => mocked(api.listUnitQueue).mockResolvedValue({
+        waiting, in_care: [ { ...inCare[0], reference_unit_ids: ids } ]
+      });
+
+      it("pré-seleciona a primeira de referência por nome e as sobe com a etiqueta", async () => {
+        withRefs([ "u2", "u3" ]);
+        renderQueue({ canCare: true, units: [ unit, otherUnit, hospital ] });
+        fireEvent.click(await screen.findByRole("button", { name: "Encerrar" }));
+        fireEvent.change(screen.getByLabelText("Desfecho"), { target: { value: "referred" } });
+        const select = screen.getByLabelText("Unidade de destino") as HTMLSelectElement;
+        expect(Array.from(select.options).map((o) => o.textContent)).toEqual([
+          "—", "Hospital Sul · referência", "UPA Norte · referência", "UBS Centro"
+        ]);
+        expect(select.value).toBe("u3");
+        expect(screen.getByText("Gera pedido de agendamento na Hospital Sul")).not.toBeNull();
+      });
+
+      it("confirma com a pré-seleção sem o profissional mexer", async () => {
+        withRefs([ "u2" ]);
+        mocked(api.closeAttendance).mockResolvedValue({ attendance: { id: "a3" },
+          appointmentRequest: { id: "r1", kind: "referral", target_unit_name: "UPA Norte", status: "open" } });
+        renderQueue({ canCare: true });
+        fireEvent.click(await screen.findByRole("button", { name: "Encerrar" }));
+        fireEvent.change(screen.getByLabelText("Desfecho"), { target: { value: "referred" } });
+        fireEvent.click(screen.getByRole("button", { name: "Confirmar encerramento" }));
+        await waitFor(() => expect(api.closeAttendance).toHaveBeenCalledWith("a3", "referred", "u2", undefined));
+      });
+
+      it("o profissional troca para '—' e a pré-seleção não volta", async () => {
+        withRefs([ "u2" ]);
+        renderQueue({ canCare: true });
+        fireEvent.click(await screen.findByRole("button", { name: "Encerrar" }));
+        fireEvent.change(screen.getByLabelText("Desfecho"), { target: { value: "referred" } });
+        fireEvent.change(screen.getByLabelText("Unidade de destino"), { target: { value: "" } });
+        expect((screen.getByLabelText("Unidade de destino") as HTMLSelectElement).value).toBe("");
+        expect((screen.getByRole("button", { name: "Confirmar encerramento" }) as HTMLButtonElement).disabled).toBe(true);
+      });
+
+      it("pré-seleção não vaza para outro desfecho", async () => {
+        withRefs([ "u2" ]);
+        mocked(api.closeAttendance).mockResolvedValue({ attendance: { id: "a3" }, appointmentRequest: null });
+        renderQueue({ canCare: true });
+        fireEvent.click(await screen.findByRole("button", { name: "Encerrar" }));
+        fireEvent.click(screen.getByRole("button", { name: "Confirmar encerramento" }));
+        await waitFor(() => expect(api.closeAttendance).toHaveBeenCalledWith("a3", "discharged", undefined, undefined));
+      });
+
+      it("referência só = a própria unidade: nada pré-selecionado e sem etiqueta", async () => {
+        withRefs([ "u1" ]);
+        renderQueue({ canCare: true });
+        fireEvent.click(await screen.findByRole("button", { name: "Encerrar" }));
+        fireEvent.change(screen.getByLabelText("Desfecho"), { target: { value: "referred" } });
+        const select = screen.getByLabelText("Unidade de destino") as HTMLSelectElement;
+        expect(select.value).toBe("");
+        expect(Array.from(select.options).map((o) => o.textContent)).toEqual([ "—", "UBS Centro", "UPA Norte" ]);
+        expect(screen.queryByText(/Gera pedido de agendamento/)).toBeNull();
+      });
+
+      it("referência que não está entre as ativas é ignorada", async () => {
+        withRefs([ "desativada" ]);
+        renderQueue({ canCare: true });
+        fireEvent.click(await screen.findByRole("button", { name: "Encerrar" }));
+        fireEvent.change(screen.getByLabelText("Desfecho"), { target: { value: "referred" } });
+        const select = screen.getByLabelText("Unidade de destino") as HTMLSelectElement;
+        expect(select.value).toBe("");
+        expect(Array.from(select.options).map((o) => o.textContent)).toEqual([ "—", "UBS Centro", "UPA Norte" ]);
+      });
+    });
+
     it("tem 'Chamar próximo' no topo e 'Chamar' em cada linha de Aguardando", async () => {
       renderQueue({ canCare: true });
       expect(await screen.findByRole("button", { name: "Chamar próximo" })).not.toBeNull();

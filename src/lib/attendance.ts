@@ -39,6 +39,23 @@ export function currentUnitKey(userId: string): string {
   return `attendance.unit.${userId}`;
 }
 
+// Módulo 11 (ADR 0023, D4): as unidades de referência do bairro da triagem
+// sobem para o topo do destino do encaminhamento, por nome. Id que não está
+// entre as ativas (unidade desativada depois da triagem) é ignorado: nunca se
+// sugere unidade que a API recusaria (invalid_unit). A própria unidade do
+// atendimento nunca é referência (decisão do usuário, 2026-09-28): o api já a
+// exclui, e aqui ela sai de novo, por defesa.
+export function splitReferenceUnits<T extends { id: string; name: string }>(
+  units: T[], referenceIds: string[] | undefined, currentUnitId: string
+): { referenceUnits: T[]; otherUnits: T[] } {
+  const ids = new Set(referenceIds ?? []);
+  ids.delete(currentUnitId);
+  return {
+    referenceUnits: units.filter((u) => ids.has(u.id)).sort((a, b) => a.name.localeCompare(b.name, "pt-BR")),
+    otherUnits: units.filter((u) => !ids.has(u.id))
+  };
+}
+
 export function nivelLabel(level: "declared" | "verified"): string {
   return level === "verified" ? "verificado" : "declarado";
 }

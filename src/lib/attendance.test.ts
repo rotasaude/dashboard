@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ApiError } from "./api";
-import { attendanceError, isValidCpf, maskCpf } from "./attendance";
+import { attendanceError, isValidCpf, maskCpf, splitReferenceUnits } from "./attendance";
 
 describe("attendance helpers", () => {
   it("mascara e valida CPF", () => {
@@ -52,5 +52,26 @@ describe("attendance helpers", () => {
   it("traduz os erros do endereço da unidade (módulo 11)", () => {
     expect(attendanceError(new ApiError(422, { error: "invalid_zip" }, "x"))).toBe("CEP precisa ter 8 dígitos");
     expect(attendanceError(new ApiError(422, { error: "invalid_neighborhood" }, "x"))).toBe("bairro inválido — escolha outro da lista");
+  });
+});
+
+describe("splitReferenceUnits", () => {
+  const units = [ { id: "u1", name: "UBS Centro" }, { id: "u2", name: "UPA Norte" }, { id: "u3", name: "Hospital Sul" } ];
+
+  it("sobe as de referência, por nome, e mantém a ordem das outras", () => {
+    const { referenceUnits, otherUnits } = splitReferenceUnits(units, [ "u2", "u3" ], "u1");
+    expect(referenceUnits.map((u) => u.id)).toEqual([ "u3", "u2" ]);
+    expect(otherUnits.map((u) => u.id)).toEqual([ "u1" ]);
+  });
+
+  it("id de referência fora das unidades ativas é ignorado; sem ids, nada muda", () => {
+    expect(splitReferenceUnits(units, [ "sumiu" ], "u1").referenceUnits).toEqual([]);
+    expect(splitReferenceUnits(units, undefined, "u1").otherUnits).toEqual(units);
+  });
+
+  it("a própria unidade do atendimento nunca é referência, mesmo se vier na lista", () => {
+    const { referenceUnits, otherUnits } = splitReferenceUnits(units, [ "u1", "u2" ], "u1");
+    expect(referenceUnits.map((u) => u.id)).toEqual([ "u2" ]);
+    expect(otherUnits.map((u) => u.id)).toEqual([ "u1", "u3" ]);
   });
 });
