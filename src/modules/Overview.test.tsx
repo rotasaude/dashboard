@@ -79,7 +79,7 @@ describe("Overview", () => {
     expect(row.getByText("3")).toBeTruthy();
   });
 
-  it("taxa de conclusão suprimida (unit %) mostra '< 5' neutro, sem % nem NaN", async () => {
+  it("taxa de conclusão suprimida (unit %) mostra 'oculto' neutro, sem % nem '< 5' nem NaN", async () => {
     routes({ "/overview": { kpis: [
       { ...kpi("done", "Triagens concluídas", 42), spark: [ 1, { suppressed: true }, 3 ] },
       { ...kpi("completion", "Taxa de conclusão", 0, "%"), value: { suppressed: true }, tone: "neutral", delta: null }
@@ -88,7 +88,8 @@ describe("Overview", () => {
 
     const row = await kpiRow();
     expect(row.getByText("42")).toBeTruthy();
-    expect(row.getByText("< 5")).toBeTruthy();
+    expect(row.getByText("oculto")).toBeTruthy();
+    expect(row.queryByText("< 5")).toBeNull();
     expect(row.queryByText("%")).toBeNull();
     expect(document.body.textContent).not.toMatch(/NaN|undefined/);
   });

@@ -6,12 +6,21 @@ import { SUPPRESSED_HINT } from "../lib/smallCount";
 afterEach(cleanup);
 
 describe("StatTile", () => {
-  it("suprimido: '< 5' com a dica, sem unidade nem delta", () => {
+  it("taxa suprimida: 'oculto' com a dica, sem '< 5', unidade nem delta", () => {
     render(<StatTile label="Taxa" value={{ suppressed: true }} unit="%" delta="+2" tone="ok" />);
-    const value = screen.getByText("< 5");
+    const value = screen.getByText("oculto");
     expect(value.getAttribute("title")).toBe(SUPPRESSED_HINT);
+    expect(screen.queryByText("< 5")).toBeNull();
     expect(screen.queryByText("%")).toBeNull();
     expect(screen.queryByText("+2")).toBeNull();
+  });
+
+  it("média em min suprimida: 'oculto'; contagem simples suprimida segue '< 5'", () => {
+    const { unmount } = render(<StatTile label="Tempo" value={{ suppressed: true }} unit="min" />);
+    expect(screen.getByText("oculto")).toBeTruthy();
+    unmount();
+    render(<StatTile label="Iniciadas" value={{ suppressed: true }} />);
+    expect(screen.getByText("< 5")).toBeTruthy();
   });
 
   it("número segue como antes", () => {

@@ -23,6 +23,11 @@ export function NeighborhoodPicker() {
   // com o painel filtrado, e escolher "Todos" não dispararia change).
   const placeholder = !!value && value !== NONE && !list.isSuccess;
 
+  const errorId = "neighborhood-picker-error";
+  const hintId = "neighborhood-picker-hint";
+  const showHint = !!value && !unknown;
+  const describedBy = [ list.isError ? errorId : null, showHint ? hintId : null ].filter(Boolean).join(" ") || undefined;
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 220, maxWidth: 320 }}>
       <label style={{ display: "flex", flexDirection: "column", gap: 2, fontSize: 12, color: "var(--ink2)" }}>
@@ -30,6 +35,7 @@ export function NeighborhoodPicker() {
         <select
           value={unknown ? "" : value ?? ""}
           disabled={list.isPending}
+          aria-describedby={describedBy}
           onChange={(e) => writeNeighborhoodParam(e.target.value || null)}
           style={inputStyle}
         >
@@ -41,8 +47,8 @@ export function NeighborhoodPicker() {
           ))}
         </select>
       </label>
-      {list.isError && <span style={{ fontSize: 11, color: "var(--down)" }}>não foi possível carregar os bairros</span>}
-      {value && !unknown && <span style={{ fontSize: 11, color: "var(--ink3)" }}>{SUPPRESSED_HINT}</span>}
+      {list.isError && <span id={errorId} style={{ fontSize: 11, color: "var(--down)" }}>não foi possível carregar os bairros</span>}
+      {showHint && <span id={hintId} style={{ fontSize: 11, color: "var(--ink3)" }}>{SUPPRESSED_HINT}</span>}
     </div>
   );
 }

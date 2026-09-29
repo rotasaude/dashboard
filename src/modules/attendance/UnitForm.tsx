@@ -87,7 +87,7 @@ export function UnitForm({ initial, neighborhoods, busy, cepTimeoutMs = VIACEP_T
         <input value={value.zip} onChange={(e) => void onZip(e.target.value)} style={inputStyle}
           inputMode="numeric" placeholder="00000-000" />
       </label>
-      {cep.kind === "loading" && <p className="mono" style={hintStyle}>consultando o CEP…</p>}
+      {cep.kind === "loading" && <p role="status" className="mono" style={hintStyle}>consultando o CEP…</p>}
       {cep.kind === "failed" && (
         <p role="status" style={{ ...hintStyle, color: "var(--warn)" }}>não foi possível consultar o CEP — preencha o endereço à mão</p>
       )}

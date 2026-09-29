@@ -133,18 +133,19 @@ describe("Conversations", () => {
     renderConversations();
 
     await screen.findByText("Conversas ativas agora");
-    expect(screen.getAllByText("< 5").length).toBeGreaterThanOrEqual(4);
+    expect(screen.getAllByText("< 5").length).toBeGreaterThanOrEqual(3);
+    expect(screen.getAllByText("oculto").length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByTitle(SUPPRESSED_HINT).length).toBeGreaterThanOrEqual(4);
     expect(within(screen.getByRole("region", { name: "Funil FSM" })).getByRole("list", { name: "contagens" })).toBeTruthy();
     expect(screen.getByText("7")).toBeTruthy();
   });
 
-  it("taxa de abandono suprimida com o resto visível: '< 5', sem NaN nem undefined", async () => {
+  it("taxa de abandono suprimida com o resto visível: 'oculto', sem NaN nem undefined", async () => {
     stubFetch(200, envelope(data({ abandonRate: { suppressed: true } })));
     renderConversations();
 
     await screen.findByText("Conversas ativas agora");
-    expect(screen.getAllByText("< 5").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText("oculto").length).toBeGreaterThanOrEqual(2);
     expect(document.body.textContent).not.toMatch(/NaN|undefined/);
     expect(within(screen.getByRole("region", { name: "Funil FSM" })).queryByRole("list", { name: "contagens" })).toBeNull();
   });

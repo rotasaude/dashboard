@@ -30,6 +30,7 @@ export function Territory() {
   const [ error, setError ] = useState<string | null>(null);
 
   function refresh() {
+    setError(null);
     void queryClient.invalidateQueries({ queryKey: NEIGHBORHOODS_KEY });
     void queryClient.invalidateQueries({ queryKey: PANEL_NEIGHBORHOODS_KEY });
   }
@@ -39,6 +40,7 @@ export function Territory() {
     setBusyId(n.id); setError(null);
     try {
       await setNeighborhoodActive(n.id, !n.active);
+      if (n.active && covering?.id === n.id) setCovering(null);
       refresh();
     } catch (err) {
       setError(territoryError(err));
@@ -98,15 +100,18 @@ export function Territory() {
                 { label: "", w: "auto", align: "right", render: (n) => (
                   <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
                     <button type="button" style={secondaryButtonStyle}
+                      aria-label={`Renomear ${n.name}`}
                       onClick={() => { setCovering(null); setEditing({ kind: "rename", neighborhood: n }); }}>
                       Renomear
                     </button>
                     {n.active && (
-                      <button type="button" style={secondaryButtonStyle} onClick={() => { setEditing(null); setCovering(n); }}>
+                      <button type="button" style={secondaryButtonStyle} aria-label={`Cobertura de ${n.name}`}
+                        onClick={() => { setEditing(null); setCovering(n); }}>
                         Cobertura
                       </button>
                     )}
                     <button type="button" disabled={busyId === n.id}
+                      aria-label={`${n.active ? "Desativar" : "Reativar"} ${n.name}`}
                       style={busyId === n.id ? disabledButtonStyle : secondaryButtonStyle}
                       onClick={() => void toggleActive(n)}>
                       {n.active ? "Desativar" : "Reativar"}
@@ -147,12 +152,12 @@ function NameDialog({ editing, onCancel, onDone }: { editing: Editing; onCancel(
   }
 
   return (
-    <section role="dialog" aria-label={title} style={dialogStyle}>
+    <section role="dialog" aria-label={title} style={dialogStyle} onKeyDown={(e) => { if (e.key === "Escape" && !busy) onCancel(); }}>
       <strong>{title}</strong>
       {error && <p role="alert" style={alertStyle}>{error}</p>}
       <label style={labelStyle}>
         Nome do bairro
-        <input value={name} onChange={(e) => setName(e.target.value)} style={inputStyle} />
+        <input autoFocus value={name} onChange={(e) => setName(e.target.value)} style={inputStyle} />
       </label>
       <div style={{ display: "flex", gap: 8 }}>
         <button type="button" disabled={busy} onClick={() => void save()} style={busy ? disabledButtonStyle : buttonStyle}>Salvar</button>
@@ -194,7 +199,7 @@ function CoverageEditor({ neighborhood, onCancel, onDone }: { neighborhood: Neig
   }
 
   return (
-    <section role="dialog" aria-label={title} style={dialogStyle}>
+    <section role="dialog" aria-label={title} style={dialogStyle} onKeyDown={(e) => { if (e.key === "Escape" && !busy) onCancel(); }}>
       <strong>{title}</strong>
       <p className="mono" style={{ margin: 0, fontSize: 11, color: "var(--ink3)" }}>
         unidades ativas que atendem o bairro — a unidade de referência do cidadão sai daqui
@@ -207,9 +212,9 @@ function CoverageEditor({ neighborhood, onCancel, onDone }: { neighborhood: Neig
         <p style={{ margin: 0, fontSize: 12.5 }}>nenhuma unidade ativa na cidade</p>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          {sortByName(units.data ?? []).map((u) => (
+          {sortByName(units.data ?? []).map((u, i) => (
             <label key={u.id} style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 12.5 }}>
-              <input type="checkbox" checked={selected.has(u.id)} onChange={() => toggle(u.id)} />
+              <input type="checkbox" autoFocus={i === 0} checked={selected.has(u.id)} onChange={() => toggle(u.id)} />
               {u.name}
             </label>
           ))}

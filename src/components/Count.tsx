@@ -1,10 +1,10 @@
 // Número de painel que pode vir suprimido (módulo 11): "< 5" com a dica.
 import type { ReactNode } from "react";
 import type { SmallCount } from "../lib/types";
-import { SUPPRESSED_HINT, SUPPRESSED_LABEL, fmtCount, isSuppressed, whenAllCounted } from "../lib/smallCount";
+import { SUPPRESSED_HINT, fmtCount, isSuppressed, suppressedLabel, whenAllCounted } from "../lib/smallCount";
 
-export function Count({ value, unit }: { value: SmallCount | null | undefined; unit?: "%" }) {
-  if (isSuppressed(value)) return <span title={SUPPRESSED_HINT}>{SUPPRESSED_LABEL}</span>;
+export function Count({ value, unit }: { value: SmallCount | null | undefined; unit?: "%" | "min" }) {
+  if (isSuppressed(value)) return <span title={SUPPRESSED_HINT}>{suppressedLabel(unit)}</span>;
   return <>{fmtCount(value, unit)}</>;
 }
 

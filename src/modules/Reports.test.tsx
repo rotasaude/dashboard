@@ -92,7 +92,7 @@ describe("Reports", () => {
     expect(await screen.findByText("lista oculta")).not.toBeNull();
     expect(screen.getByText("9")).not.toBeNull();
     expect(screen.queryByText(/menos de 5 relatórios/)).toBeNull();
-    expect(screen.getByText(/alguma contagem é menor que 5/)).not.toBeNull();
+    expect(screen.getByText(/Com o filtro de bairro, alguma contagem é menor que 5/)).not.toBeNull();
     expect(screen.queryByRole("table")).toBeNull();
     expect(screen.queryByText("nenhum relatório no período")).toBeNull();
   });

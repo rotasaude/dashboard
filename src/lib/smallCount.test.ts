@@ -17,7 +17,8 @@ describe("smallCount", () => {
     expect(fmtCount(0)).toBe("0");
     expect(fmtCount(1234)).toBe("1.234");
     expect(fmtCount(75, "%")).toBe("75%");
-    expect(fmtCount(s, "%")).toBe("< 5");
+    expect(fmtCount(s, "%")).toBe("oculto");
+    expect(fmtCount(s, "min")).toBe("oculto");
   });
 
   it("série para gráfico: suprimido vira lacuna, nunca 0", () => {

@@ -138,6 +138,21 @@ describe("UnitQueue", () => {
         await waitFor(() => expect(api.closeAttendance).toHaveBeenCalledWith("a3", "discharged", undefined, undefined));
       });
 
+      it.each([
+        [ "Retorno", "return" ],
+        [ "Atendido e liberado", "discharged" ]
+      ])("encaminhado com referência pré-selecionada, trocado para '%s': não manda unidade", async (_label, outcome) => {
+        withRefs([ "u2" ]);
+        mocked(api.closeAttendance).mockResolvedValue({ attendance: { id: "a3" }, appointmentRequest: null });
+        renderQueue({ canCare: true });
+        fireEvent.click(await screen.findByRole("button", { name: "Encerrar" }));
+        fireEvent.change(screen.getByLabelText("Desfecho"), { target: { value: "referred" } });
+        expect((screen.getByLabelText("Unidade de destino") as HTMLSelectElement).value).toBe("u2");
+        fireEvent.change(screen.getByLabelText("Desfecho"), { target: { value: outcome } });
+        fireEvent.click(screen.getByRole("button", { name: "Confirmar encerramento" }));
+        await waitFor(() => expect(api.closeAttendance).toHaveBeenCalledWith("a3", outcome, undefined, undefined));
+      });
+
       it("referência só = a própria unidade: nada pré-selecionado e sem etiqueta", async () => {
         withRefs([ "u1" ]);
         renderQueue({ canCare: true });

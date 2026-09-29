@@ -84,21 +84,25 @@ describe("Triages (F-05.8)", () => {
     renderPanel(<Triages />);
 
     const row = await kpiRow();
-    expect(row.getAllByText("< 5")).toHaveLength(2);
+    expect(row.getAllByText("< 5")).toHaveLength(1);
+    expect(row.getAllByText("oculto")).toHaveLength(1);
     expect(row.getAllByTitle(SUPPRESSED_HINT)).toHaveLength(2);
     expect(row.getByText("0")).toBeTruthy();
     expect(row.queryByText("%")).toBeNull();
-    expect(within(screen.getByRole("region", { name: "Por protocolo / versão" })).getAllByText("< 5")).toHaveLength(2);
+    const table = within(screen.getByRole("region", { name: "Por protocolo / versão" }));
+    expect(table.getAllByText("< 5")).toHaveLength(1);
+    expect(table.getAllByText("oculto")).toHaveLength(1);
   });
 
-  it("started visível e taxa suprimida (numerador 1-4): taxa '< 5', sem NaN/undefined", async () => {
+  it("started visível e taxa suprimida (numerador 1-4): taxa 'oculto', sem NaN/undefined", async () => {
     const s: Suppressed = { suppressed: true };
     stubRoutes({ "/triages": { ...triages, started: 12, completed: s, completionRate: s } });
     const { container } = renderPanel(<Triages />);
 
     const row = await kpiRow();
     expect(row.getByText("12")).toBeTruthy();
-    expect(row.getAllByText("< 5")).toHaveLength(2);
+    expect(row.getAllByText("< 5")).toHaveLength(1);
+    expect(row.getAllByText("oculto")).toHaveLength(1);
     expect(container.textContent).not.toMatch(/NaN|undefined/);
   });
 

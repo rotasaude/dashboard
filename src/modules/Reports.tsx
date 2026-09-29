@@ -29,7 +29,7 @@ export function Reports() {
           // Spec 2026-09-28 §4.3: com bairro e qualquer contagem do painel
           // suprimida, a API não manda as linhas — vale mesmo com total >= 5.
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            <EmptyState title="lista oculta" sub="Com este bairro, alguma contagem é menor que 5 — as linhas não aparecem para não identificar ninguém." />
+            <EmptyState title="lista oculta" sub="Com o filtro de bairro, alguma contagem é menor que 5 — as linhas não aparecem para não identificar ninguém." />
             <p className="mono" style={{ margin: 0, fontSize: 11, color: "var(--ink3)", textAlign: "center" }}>
               relatórios no período: <span><Count value={d.total} /></span>
             </p>

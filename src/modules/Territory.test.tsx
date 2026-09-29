@@ -98,7 +98,7 @@ describe("Territory", () => {
     mocked(api.renameNeighborhood).mockResolvedValue(undefined);
     renderIt();
     await screen.findByText("Centro");
-    fireEvent.click(rowOf("Centro").getByRole("button", { name: "Renomear" }));
+    fireEvent.click(rowOf("Centro").getByRole("button", { name: "Renomear Centro" }));
     const input = screen.getByLabelText("Nome do bairro") as HTMLInputElement;
     expect(input.value).toBe("Centro");
     fireEvent.change(input, { target: { value: "Centro Histórico" } });
@@ -111,7 +111,7 @@ describe("Territory", () => {
     renderIt();
     await screen.findByText("Centro");
     const spy = vi.spyOn(lastClient, "invalidateQueries");
-    fireEvent.click(rowOf("Centro").getByRole("button", { name: "Desativar" }));
+    fireEvent.click(rowOf("Centro").getByRole("button", { name: "Desativar Centro" }));
     await waitFor(() => expect(spy).toHaveBeenCalledWith({ queryKey: PANEL_NEIGHBORHOODS_KEY }));
   });
 
@@ -119,26 +119,26 @@ describe("Territory", () => {
     mocked(api.setNeighborhoodActive).mockResolvedValue(undefined);
     renderIt();
     await screen.findByText("Centro");
-    fireEvent.click(rowOf("Centro").getByRole("button", { name: "Desativar" }));
+    fireEvent.click(rowOf("Centro").getByRole("button", { name: "Desativar Centro" }));
     await waitFor(() => expect(api.setNeighborhoodActive).toHaveBeenCalledWith("n1", false));
     // Uma ação por vez: espera a primeira terminar antes do segundo clique.
-    await waitFor(() => expect((rowOf("Centro").getByRole("button", { name: "Desativar" }) as HTMLButtonElement).disabled).toBe(false));
-    fireEvent.click(rowOf("Batel").getByRole("button", { name: "Reativar" }));
+    await waitFor(() => expect((rowOf("Centro").getByRole("button", { name: "Desativar Centro" }) as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(rowOf("Batel").getByRole("button", { name: "Reativar Batel" }));
     await waitFor(() => expect(api.setNeighborhoodActive).toHaveBeenCalledWith("n3", true));
   });
 
   it("bairro inativo não oferece cobertura", async () => {
     renderIt();
     await screen.findByText("Batel");
-    expect(rowOf("Batel").queryByRole("button", { name: "Cobertura" })).toBeNull();
-    expect(rowOf("Centro").getByRole("button", { name: "Cobertura" })).toBeTruthy();
+    expect(rowOf("Batel").queryByRole("button", { name: "Cobertura de Batel" })).toBeNull();
+    expect(rowOf("Centro").getByRole("button", { name: "Cobertura de Centro" })).toBeTruthy();
   });
 
   it("cobertura: caixas das unidades ativas, marcadas pelo que já cobre, e substitui o conjunto", async () => {
     mocked(api.replaceCoverage).mockResolvedValue(undefined);
     renderIt();
     await screen.findByText("Centro");
-    fireEvent.click(rowOf("Centro").getByRole("button", { name: "Cobertura" }));
+    fireEvent.click(rowOf("Centro").getByRole("button", { name: "Cobertura de Centro" }));
     const ubs = await screen.findByLabelText("UBS Centro") as HTMLInputElement;
     const upa = screen.getByLabelText("UPA Norte") as HTMLInputElement;
     expect(ubs.checked).toBe(true);
@@ -152,7 +152,7 @@ describe("Territory", () => {
     mocked(api.replaceCoverage).mockResolvedValue(undefined);
     renderIt();
     await screen.findByText("Centro");
-    fireEvent.click(rowOf("Centro").getByRole("button", { name: "Cobertura" }));
+    fireEvent.click(rowOf("Centro").getByRole("button", { name: "Cobertura de Centro" }));
     expect(await screen.findByText(/UPA Velha/)).toBeTruthy();
     expect(screen.getByText(/saem da cobertura ao salvar/)).toBeTruthy();
     // O aviso aparece de imediato; o botão só habilita quando as unidades ativas chegam.
@@ -161,11 +161,39 @@ describe("Territory", () => {
     await waitFor(() => expect(api.replaceCoverage).toHaveBeenCalledWith("n1", [ "u1" ]));
   });
 
+  it("diálogo de nome: foco no campo e Escape cancela", async () => {
+    renderIt();
+    fireEvent.click(await screen.findByRole("button", { name: "Novo bairro" }));
+    expect(document.activeElement).toBe(screen.getByLabelText("Nome do bairro"));
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(api.createNeighborhood).not.toHaveBeenCalled();
+  });
+
+  it("editor de cobertura: foco na primeira caixa e Escape cancela", async () => {
+    renderIt();
+    fireEvent.click(await screen.findByRole("button", { name: "Cobertura de Centro" }));
+    const first = await screen.findByLabelText("UBS Centro");
+    expect(document.activeElement).toBe(first);
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(api.replaceCoverage).not.toHaveBeenCalled();
+  });
+
+  it("desativar o bairro fecha o editor de cobertura dele", async () => {
+    mocked(api.setNeighborhoodActive).mockResolvedValue(undefined);
+    renderIt();
+    fireEvent.click(await screen.findByRole("button", { name: "Cobertura de Centro" }));
+    await screen.findByRole("dialog", { name: "Cobertura de Centro" });
+    fireEvent.click(rowOf("Centro").getByRole("button", { name: "Desativar Centro" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  });
+
   it("inactive_unit ao salvar a cobertura aparece traduzido", async () => {
     mocked(api.replaceCoverage).mockRejectedValue(new ApiError(422, { error: "inactive_unit" }, "x"));
     renderIt();
     await screen.findByText("Centro");
-    fireEvent.click(rowOf("Centro").getByRole("button", { name: "Cobertura" }));
+    fireEvent.click(rowOf("Centro").getByRole("button", { name: "Cobertura de Centro" }));
     await screen.findByLabelText("UBS Centro");
     fireEvent.click(screen.getByRole("button", { name: "Salvar cobertura" }));
     expect(await screen.findByText("há unidade desativada ou inexistente na cobertura — recarregue e tente de novo")).toBeTruthy();

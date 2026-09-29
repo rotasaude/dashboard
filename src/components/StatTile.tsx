@@ -3,7 +3,7 @@
 // delta (o delta revelaria o número).
 
 import { fmtNumber, fmtPercent } from "../lib/format";
-import { SUPPRESSED_HINT, SUPPRESSED_LABEL, chartSeries, isSuppressed } from "../lib/smallCount";
+import { SUPPRESSED_HINT, chartSeries, isSuppressed, suppressedLabel } from "../lib/smallCount";
 import type { SmallCount, Suppressed } from "../lib/types";
 import { toneColor, type Tone } from "../theme/tokens";
 import { SourceBadge } from "./SourceBadge";
@@ -24,7 +24,7 @@ export function StatTile({ label, value, unit, delta, tone, spark, source, hint 
   const { fg } = toneColor(tone);
   const suppressed = isSuppressed(value);
   const formatted = suppressed
-    ? SUPPRESSED_LABEL
+    ? suppressedLabel(unit)
     : typeof value === "number"
       ? (unit === "%" ? fmtPercent(value, "") : fmtNumber(value))
       : value ?? "—";

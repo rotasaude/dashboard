@@ -83,7 +83,7 @@ export function Classification() {
         asOf={data.as_of}
       >
         {d.sampleTriages == null ? (
-          <EmptyState title="amostra oculta" sub="Com este bairro, alguma contagem é menor que 5 — a amostra não aparece para não identificar ninguém." />
+          <EmptyState title="amostra oculta" sub="Com o filtro de bairro, alguma contagem é menor que 5 — a amostra não aparece para não identificar ninguém." />
         ) : (
           <DataTable
             cols={[

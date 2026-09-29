@@ -5,14 +5,23 @@ import { fmtNumber, fmtPercent } from "./format";
 
 export const SUPPRESSED_LABEL = "< 5";
 export const SUPPRESSED_HINT =
-  "Com um bairro escolhido, números de 1 a 4 aparecem como “< 5” para não identificar ninguém.";
+  "Com o filtro de bairro ligado, números de 1 a 4 aparecem como “< 5” para não identificar ninguém.";
 
 export function isSuppressed(v: unknown): v is Suppressed {
   return typeof v === "object" && v !== null && (v as { suppressed?: unknown }).suppressed === true;
 }
 
-export function fmtCount(v: SmallCount | null | undefined, unit?: "%"): string {
-  if (isSuppressed(v)) return SUPPRESSED_LABEL;
+// Taxa ou média suprimida não é "menor que 5": o valor some ("oculto").
+export const HIDDEN_LABEL = "oculto";
+export function isRateUnit(unit?: string): boolean {
+  return unit === "%" || unit === "min";
+}
+export function suppressedLabel(unit?: string): string {
+  return isRateUnit(unit) ? HIDDEN_LABEL : SUPPRESSED_LABEL;
+}
+
+export function fmtCount(v: SmallCount | null | undefined, unit?: "%" | "min"): string {
+  if (isSuppressed(v)) return suppressedLabel(unit);
   return unit === "%" ? fmtPercent(v) : fmtNumber(v);
 }
 
