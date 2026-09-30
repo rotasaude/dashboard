@@ -70,3 +70,21 @@ describe("CalibrationTab", () => {
     expect(await screen.findByText("nenhuma triagem concluída no período")).toBeTruthy();
   });
 });
+
+describe("CalibrationTab · carimbo", () => {
+  it("as_of nulo: 'ainda sem dados consolidados', sem carimbo e sem zeros", async () => {
+    stubAnalyticsApi({ "/analytics/calibration": envelope<"calibration">(calibrationData(), { as_of: null, stale: true }) });
+    const { container } = renderWithQuery(<CalibrationTab range={DEFAULT_RANGE} />);
+    expect(await screen.findByText("ainda sem dados consolidados")).toBeTruthy();
+    expect(screen.queryByText(/dados até/)).toBeNull();
+    expect(screen.queryByRole("table")).toBeNull();
+    expect(container.textContent).not.toMatch(/\d/);
+  });
+
+  it("stale com dados: 'dados desatualizados' junto do conteúdo", async () => {
+    stubAnalyticsApi({ "/analytics/calibration": envelope<"calibration">(calibrationData(), { stale: true }) });
+    renderWithQuery(<CalibrationTab range={DEFAULT_RANGE} />);
+    expect(await screen.findByText("dados até 29/09")).toBeTruthy();
+    expect(screen.getByRole("status").textContent).toBe("dados desatualizados");
+  });
+});

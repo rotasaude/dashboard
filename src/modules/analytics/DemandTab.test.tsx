@@ -155,3 +155,21 @@ describe("DemandTab", () => {
     expect(await screen.findByText("Esse bairro não existe nesta cidade — escolha outro.")).toBeTruthy();
   });
 });
+
+describe("DemandTab · carimbo", () => {
+  it("as_of nulo: 'ainda sem dados consolidados', sem carimbo e sem zeros", async () => {
+    stubAnalyticsApi({ "/analytics/demand": envelope<"demand">(demandData(), { as_of: null, stale: true }) });
+    const { container } = renderWithQuery(<DemandTab range={DEFAULT_RANGE} />);
+    expect(await screen.findByText("ainda sem dados consolidados")).toBeTruthy();
+    expect(screen.queryByText(/dados até/)).toBeNull();
+    expect(screen.queryByRole("table")).toBeNull();
+    expect(container.textContent).not.toMatch(/\d/);
+  });
+
+  it("stale com dados: 'dados desatualizados' junto do conteúdo", async () => {
+    stubAnalyticsApi({ "/analytics/demand": envelope<"demand">(demandData(), { stale: true }) });
+    renderWithQuery(<DemandTab range={DEFAULT_RANGE} />);
+    expect(await screen.findByText("dados até 29/09")).toBeTruthy();
+    expect(screen.getByRole("status").textContent).toBe("dados desatualizados");
+  });
+});
