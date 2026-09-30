@@ -3,7 +3,7 @@
 // um valor composto de partes da mesma resposta fica oculto se qualquer parte
 // estiver oculta. Checador puro, sem render.
 import { describe, expect, it } from "vitest";
-import { calibrationData, demandData, epidemiologyData, qualityData } from "./analyticsFixtures";
+import { HIDDEN, U1, calibrationData, demandData, epidemiologyData, qualityData } from "./analyticsFixtures";
 
 type V = number | null | { suppressed: true };
 const hidden = (v: unknown): boolean => typeof v === "object" && v !== null && "suppressed" in v;
@@ -54,6 +54,19 @@ export function qualityViolations(q: ReturnType<typeof qualityData>): string[] {
   rate("no_show_pct", q.no_show_pct, q.no_show_pct_total,
     appointments.filter((a) => a.status === "checked_in" || a.status === "no_show"));
   rate("left_pct", q.left_pct, q.left_pct_total, outs);
+  // by_unit (total do grupo): sob filtro de unidade, as partes da resposta são
+  // daquela unidade; se alguma célula de período está oculta, a linha dela
+  // esconde atendimentos e as três taxas.
+  const unitId = q.filter.health_unit_id;
+  const parts = [ ...wait.buckets, ...appointments, ...outs ];
+  const partHidden = parts.some((r) => anyHidden([ ...r.series, r.total ]));
+  if (unitId && partHidden) {
+    q.by_unit.filter((u) => u.health_unit_id === unitId).forEach((u) => {
+      (["attendances", "wait_within_30_pct", "no_show_pct", "left_pct"] as const).forEach((k) => {
+        if (!hidden(u[k])) e.push(`by_unit.${u.name}.${k} exibido com parte oculta`);
+      });
+    });
+  }
   return e;
 }
 
@@ -87,5 +100,18 @@ describe("fixtures do módulo 14 × total do grupo (contratos §0)", () => {
     const c = calibrationData();
     c.versions[0].rows[1].shares.discharged = 50;
     expect(calibrationViolations(c)).toEqual([ "arbovirose@2.amarelo.shares.discharged exibido com parte oculta" ]);
+  });
+
+  it("o checador pega by_unit exibido com parte oculta sob filtro de unidade", () => {
+    const q = qualityData();
+    q.filter = { ...q.filter, health_unit_id: U1 };
+    // U1 mostra atendimentos e duas taxas enquanto há partes ocultas.
+    expect(qualityViolations(q)).toEqual([
+      "by_unit.UBS Centro.attendances exibido com parte oculta",
+      "by_unit.UBS Centro.wait_within_30_pct exibido com parte oculta",
+      "by_unit.UBS Centro.no_show_pct exibido com parte oculta"
+    ]);
+    q.by_unit[0] = { ...q.by_unit[0], attendances: HIDDEN, wait_within_30_pct: HIDDEN, no_show_pct: HIDDEN };
+    expect(qualityViolations(q)).toEqual([]);
   });
 });
