@@ -347,6 +347,18 @@ describe("UnitQueue", () => {
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
+  it("already_called em 'Chamar próximo' recarrega a fila sem erro parado", async () => {
+    mocked(api.callNext).mockRejectedValue(new ApiError(409, { error: "already_called" }, "x"));
+    mocked(api.listUnitQueue)
+      .mockResolvedValueOnce({ waiting, in_care: inCare })
+      .mockResolvedValueOnce({ waiting: [ waiting[1] ], in_care: inCare });
+    renderQueue({ canCare: true });
+    fireEvent.click(await screen.findByRole("button", { name: "Chamar próximo" }));
+    await waitFor(() => expect(screen.queryByText("***.982.247-**")).toBeNull());
+    expect(api.listUnitQueue).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
   it("erro inesperado em 'Chamar próximo' mostra alerta (não fica em silêncio)", async () => {
     mocked(api.callNext).mockRejectedValue(new ApiError(403, { error: "forbidden" }, "x"));
     renderQueue({ canCare: true });

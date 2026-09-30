@@ -78,6 +78,9 @@ export function UnitQueue({ unit, units, canCare, careBlocked, onClinicalRefused
       // recarregar, sem precisar de um alerta parado (mesmo padrão do
       // already_closed de OpenAttendances).
       if (code === "queue_empty") { invalidate(); return; }
+      // already_called: outro profissional chamou o mesmo primeiro da fila —
+      // recarrega em vez de mostrar erro parado (mesmo padrão de onCall).
+      if (code === "already_called") { invalidate(); return; }
       handleClinicalRefusal(code, () => void auth.reload(), onClinicalRefused);
       setActionError(attendanceError(err));
     } finally {
