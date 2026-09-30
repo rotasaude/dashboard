@@ -12,6 +12,7 @@ import { sortByName } from "../../lib/territory";
 import { inputStyle } from "../../components/formStyles";
 
 export const filterRowStyle = { display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" as const };
+export const noteStyle = { margin: 0, fontSize: 11.5, color: "var(--ink3)" };
 const labelStyle = { display: "flex", flexDirection: "column" as const, gap: 2, fontSize: 12, color: "var(--ink2)", minWidth: 180 };
 const errorStyle = { fontSize: 11, color: "var(--down)" };
 
