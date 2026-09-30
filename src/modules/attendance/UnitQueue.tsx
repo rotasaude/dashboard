@@ -78,6 +78,9 @@ export function UnitQueue({ unit, units, canCare, careBlocked, onClinicalRefused
       // recarregar, sem precisar de um alerta parado (mesmo padrão do
       // already_closed de OpenAttendances).
       if (code === "queue_empty") { invalidate(); return; }
+      // Com SKIP LOCKED a api nova praticamente nunca devolve already_called
+      // no chamar próximo; o ramo fica para uma api antiga durante o deploy e
+      // é inofensivo.
       // already_called: outro profissional chamou o mesmo primeiro da fila —
       // recarrega em vez de mostrar erro parado (mesmo padrão de onCall).
       if (code === "already_called") { invalidate(); return; }
