@@ -3,7 +3,7 @@
 // protocolo recortam as métricas de triagem; unidade recorta atendimentos e
 // pedidos. O total do período das triagens é o `triages_total` da API; o
 // cliente nunca soma os pontos da série.
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { AnalyticsQuery, DemandData } from "../../lib/api";
 import { CLOSED_REASON_LABEL, KIND_LABEL, labelOr, rangeDates, type AnalyticsRange } from "../../lib/analytics";
 import { useAnalytics } from "../../hooks/useAnalytics";
@@ -21,8 +21,12 @@ export function DemandTab({ range }: { range: AnalyticsRange }) {
   const [ filter, setFilter ] = useState<DemandFilter>(NO_FILTER);
   const query: AnalyticsQuery = { ...rangeDates(range), granularity: range.granularity, ...filter };
   const result = useAnalytics("demand", query);
-  // data.units: todas as unidades da cidade, independentes do recorte.
-  const units = result.data?.data.units ?? [];
+  // data.units: todas as unidades da cidade, independentes do recorte. Guarda
+  // a última lista recebida para o seletor não esvaziar enquanto um novo
+  // recorte carrega (ou falha); os números nunca são reaproveitados.
+  const lastUnits = useRef<DemandData["units"]>([]);
+  if (result.data) lastUnits.current = result.data.data.units;
+  const units = lastUnits.current;
   const set = (patch: Partial<DemandFilter>) => setFilter((current) => ({ ...current, ...patch }));
 
   return (

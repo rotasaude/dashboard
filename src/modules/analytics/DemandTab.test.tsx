@@ -95,6 +95,26 @@ describe("DemandTab", () => {
     expect(screen.getByRole("option", { name: "UBS Antiga (inativa)" })).toBeTruthy();
   });
 
+  it("unidade: a lista continua inteira enquanto o novo recorte carrega", async () => {
+    const stub = stubAnalyticsApi({ "/analytics/demand": envelope<"demand">(demandData()) });
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (new URL(String(input), "http://x").searchParams.has("health_unit_id")) await gate;
+      return stub(input, init);
+    }));
+    renderWithQuery(<DemandTab range={DEFAULT_RANGE} />);
+    expect(await screen.findByRole("option", { name: "UPA Boqueirão" })).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Unidade"), { target: { value: U1 } });
+    // Resposta do recorte ainda pendente: o seletor não pode esvaziar.
+    expect(screen.getByRole("option", { name: "UPA Boqueirão" })).toBeTruthy();
+    expect(screen.getByRole("option", { name: "UBS Antiga (inativa)" })).toBeTruthy();
+    release();
+    await screen.findByText("dados até 29/09");
+    expect(screen.getByRole("option", { name: "UPA Boqueirão" })).toBeTruthy();
+    expect(screen.getByRole("option", { name: "UBS Antiga (inativa)" })).toBeTruthy();
+  });
+
   it("bairro que não existe na cidade: 422 vira frase", async () => {
     stubAnalyticsApi({
       "/analytics/demand": (url: URL) => url.searchParams.has("neighborhood_id")
