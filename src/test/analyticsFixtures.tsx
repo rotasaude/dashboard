@@ -57,14 +57,16 @@ export function demandData(overrides: Partial<DemandData> = {}): DemandData {
   return {
     ...base("demand"),
     units: UNITS,
-    triages: { started: [ 12, HIDDEN, 0 ], completed: [ 10, HIDDEN, 0 ], aborted: [ HIDDEN, 0, 0 ] },
-    // Somado e suprimido na API: 12 + (1..4) + 0 dá >= 13, nunca um número que a tela calcule.
-    triages_total: { started: 15, completed: 13, aborted: HIDDEN },
+    // Total do grupo (contratos §0): o verde oculto em 14/09 esconde o período
+    // nas triagens concluídas e, por estar entre os totais de by_tier, todo
+    // triages_total. Nada aqui é número que a tela calcule.
+    triages: { started: [ 12, HIDDEN, 0 ], completed: [ HIDDEN, 5, 0 ], aborted: [ HIDDEN, 0, 0 ] },
+    triages_total: { started: HIDDEN, completed: HIDDEN, aborted: HIDDEN },
     by_tier: [
-      { tier: "vermelho", series: [ 6, HIDDEN, 0 ], total: 8 },
+      { tier: "vermelho", series: [ 6, 5, 0 ], total: 11 },
       { tier: "verde", series: [ HIDDEN, 0, 0 ], total: HIDDEN }
     ],
-    by_protocol: [ { protocol_name: "arbovirose", series: [ 10, HIDDEN, 0 ], total: 12 } ],
+    by_protocol: [ { protocol_name: "arbovirose", series: [ HIDDEN, 5, 0 ], total: HIDDEN } ],
     by_neighborhood: [
       { neighborhood_id: NB1, name: "Boqueirão", total: 9 },
       { neighborhood_id: null, name: "Sem bairro", total: HIDDEN }
@@ -89,22 +91,23 @@ export function qualityData(overrides: Partial<QualityData> = {}): QualityData {
     wait: {
       buckets: [
         { bucket: "0-15", series: [ 8, 6, 0 ], total: 14 },
-        { bucket: "15-30", series: [ HIDDEN, 5, 0 ], total: 7 },
+        { bucket: "15-30", series: [ 7, 5, 0 ], total: 12 },
         { bucket: "30-60", series: [ 0, 0, 0 ], total: 0 },
         { bucket: "60-120", series: [ 0, 0, 0 ], total: 0 },
         { bucket: "120+", series: [ HIDDEN, 0, 0 ], total: HIDDEN }
       ],
-      within_30_pct: [ 76.9, 100, null ],
-      within_30_pct_total: 87.5
+      // 120+ oculto em 14/09 esconde a taxa desse período e a do intervalo.
+      within_30_pct: [ HIDDEN, 100, null ],
+      within_30_pct_total: HIDDEN
     },
     appointments: [
       { status: "checked_in", series: [ 10, 9, 0 ], total: 19 },
-      { status: "no_show", series: [ HIDDEN, HIDDEN, 0 ], total: 5 },
+      { status: "no_show", series: [ HIDDEN, HIDDEN, 0 ], total: HIDDEN },
       { status: "expired", series: [ 0, 0, 0 ], total: 0 },
       { status: "cancelled_by_citizen", series: [ 0, 0, 0 ], total: 0 }
     ],
     no_show_pct: [ HIDDEN, HIDDEN, null ],
-    no_show_pct_total: 20.8,
+    no_show_pct_total: HIDDEN,
     attendance_outcomes: [
       { outcome: "discharged", series: [ 9, 8, 0 ], total: 17 },
       { outcome: "referred", series: [ 0, 5, 0 ], total: 5 },
@@ -127,8 +130,13 @@ export function calibrationData(overrides: Partial<CalibrationData> = {}): Calib
     versions: [
       { protocol_name: "arbovirose", protocol_version: 2, rows: [ {
         tier: "vermelho", total: 20,
+        outcomes: { discharged: 10, referred: 5, return: 0, left: 5, none: 0 },
+        shares: { discharged: 50, referred: 25, return: 0, left: 25, none: 0 }
+      }, {
+        // Um desfecho oculto esconde o total e todas as proporções da linha.
+        tier: "amarelo", total: HIDDEN,
         outcomes: { discharged: 10, referred: 6, return: 0, left: HIDDEN, none: HIDDEN },
-        shares: { discharged: 50, referred: 30, return: 0, left: HIDDEN, none: HIDDEN }
+        shares: { discharged: HIDDEN, referred: HIDDEN, return: HIDDEN, left: HIDDEN, none: HIDDEN }
       } ] },
       { protocol_name: "arbovirose", protocol_version: 1, rows: [ {
         tier: "verde", total: HIDDEN,
@@ -145,7 +153,7 @@ export function epidemiologyData(overrides: Partial<EpidemiologyData> = {}): Epi
     ...base("epidemiology"),
     questions: [
       { protocol_name: "arbovirose", question_id: "febre", prompt: "Teve febre?", answer_type: "boolean", options: [
-        { value: "true", label: "Sim", series: [ 7, HIDDEN, 0 ], total: 9 },
+        { value: "true", label: "Sim", series: [ 7, 5, 0 ], total: 12 },
         { value: "false", label: "Não", series: [ HIDDEN, 0, 0 ], total: HIDDEN }
       ] },
       { protocol_name: "arbovirose", question_id: "sintoma", prompt: "Qual o sintoma principal?", answer_type: "enum", options: [

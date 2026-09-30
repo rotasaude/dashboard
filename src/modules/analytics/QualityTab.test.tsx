@@ -34,20 +34,58 @@ describe("QualityTab", () => {
     renderWithQuery(<QualityTab range={DEFAULT_RANGE} />);
     await screen.findByText("dados até 29/09");
     const rows = within(totals("Espera até a chamada")).getAllByRole("row").slice(1).map((r) => r.textContent);
-    expect(rows).toEqual([ "até 15 min14", "15 a 30 min7", "30 a 60 min0", "1 a 2 h0", "mais de 2 hoculto" ]);
+    expect(rows).toEqual([ "até 15 min14", "15 a 30 min12", "30 a 60 min0", "1 a 2 h0", "mais de 2 hoculto" ]);
   });
 
-  it("taxas: uma casa, oculto e sem dado", async () => {
+  it("taxas: uma casa e sem dado", async () => {
+    // Tudo visível: com parte oculta a taxa também some (teste abaixo).
+    const visible = qualityData();
+    stubAnalyticsApi({ "/analytics/quality": envelope<"quality">(qualityData({
+      wait: {
+        buckets: [
+          { bucket: "0-15", series: [ 8, 6, 0 ], total: 14 },
+          { bucket: "15-30", series: [ 7, 5, 0 ], total: 12 },
+          { bucket: "30-60", series: [ 5, 0, 0 ], total: 5 },
+          { bucket: "60-120", series: [ 0, 0, 0 ], total: 0 },
+          { bucket: "120+", series: [ 0, 0, 0 ], total: 0 }
+        ],
+        within_30_pct: [ 75, 100, null ],
+        within_30_pct_total: 83.9
+      },
+      appointments: visible.appointments.map((a) => a.status === "no_show" ? { ...a, series: [ 6, 5, 0 ], total: 11 } : a),
+      no_show_pct: [ 37.5, 35.7, null ],
+      no_show_pct_total: 36.7,
+      attendance_outcomes: visible.attendance_outcomes.map((o) => o.outcome === "left" ? { ...o, series: [ 5, 0, 0 ], total: 5 } : o),
+      left_pct: [ 35.7, 0, null ],
+      left_pct_total: 18.5
+    })) });
+    renderWithQuery(<QualityTab range={DEFAULT_RANGE} />);
+    await screen.findByText("dados até 29/09");
+    expect(rowWith(totals("Chamados em até 30 min"), "até 30 min")).toBe("até 30 min83,9%");
+    expect(rowWith(within(region("Chamados em até 30 min")).getByRole("table", { name: "Chamados em até 30 min por período" }), "28/09"))
+      .toBe("28/09sem dado");
+    expect(rowWith(totals("Faltas"), "faltas")).toBe("faltas36,7%");
+    expect(rowWith(totals("Saiu sem atendimento"), "saiu sem atendimento")).toBe("saiu sem atendimento18,5%");
+    expect(rowWith(totals("Agendamentos encerrados"), "Faltou")).toBe("Faltou11");
+    expect(rowWith(totals("Desfechos dos atendimentos"), "Encaminhado")).toBe("Encaminhado5");
+  });
+
+  it("total e taxa ocultos acompanham a parte oculta", async () => {
     stubAnalyticsApi({ "/analytics/quality": envelope<"quality">(qualityData()) });
     renderWithQuery(<QualityTab range={DEFAULT_RANGE} />);
     await screen.findByText("dados até 29/09");
-    expect(rowWith(totals("Chamados em até 30 min"), "até 30 min")).toBe("até 30 min87,5%");
-    expect(rowWith(within(region("Chamados em até 30 min")).getByRole("table", { name: "Chamados em até 30 min por período" }), "28/09"))
-      .toBe("28/09sem dado");
-    expect(rowWith(totals("Faltas"), "faltas")).toBe("faltas20,8%");
+    // 120+ oculto em 14/09: a linha do período mostra "oculto", o total da faixa e a taxa também.
+    expect(rowWith(within(region("Espera até a chamada")).getByRole("table", { name: "Espera até a chamada por período" }), "14/09"))
+      .toBe("14/09" + "8" + "7" + "0" + "0" + "oculto");
+    expect(rowWith(totals("Espera até a chamada"), "mais de 2 h")).toBe("mais de 2 hoculto");
+    const within30 = within(region("Chamados em até 30 min")).getByRole("table", { name: "Chamados em até 30 min por período" });
+    expect(rowWith(within30, "14/09")).toBe("14/09oculto");
+    expect(rowWith(within30, "21/09")).toBe("21/09100,0%");
+    expect(rowWith(totals("Chamados em até 30 min"), "até 30 min")).toBe("até 30 minoculto");
+    // no_show oculto: o total do estado e a taxa de faltas, inclusive o total da taxa.
+    expect(rowWith(totals("Agendamentos encerrados"), "Faltou")).toBe("Faltouoculto");
+    expect(rowWith(totals("Faltas"), "faltas")).toBe("faltasoculto");
     expect(rowWith(totals("Saiu sem atendimento"), "saiu sem atendimento")).toBe("saiu sem atendimentooculto");
-    expect(rowWith(totals("Agendamentos encerrados"), "Faltou")).toBe("Faltou5");
-    expect(rowWith(totals("Desfechos dos atendimentos"), "Encaminhado")).toBe("Encaminhado5");
   });
 
   it("por unidade: contagem e as três taxas, cada uma como veio", async () => {

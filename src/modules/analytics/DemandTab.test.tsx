@@ -27,15 +27,23 @@ describe("DemandTab", () => {
   });
 
   it("triagens: total do período vem de triages_total, não da soma dos pontos", async () => {
-    stubAnalyticsApi({ "/analytics/demand": envelope<"demand">(demandData()) });
+    // Tudo visível: com parte oculta o total também some (teste abaixo).
+    // Totais propositalmente diferentes da soma dos pontos, para provar que a tela não soma.
+    stubAnalyticsApi({ "/analytics/demand": envelope<"demand">(demandData({
+      triages: { started: [ 12, 9, 0 ], completed: [ 10, 6, 0 ], aborted: [ 5, 0, 0 ] },
+      triages_total: { started: 25, completed: 17, aborted: 6 },
+      by_tier: [ { tier: "vermelho", series: [ 10, 6, 0 ], total: 17 } ],
+      by_protocol: [ { protocol_name: "arbovirose", series: [ 10, 6, 0 ], total: 17 } ],
+      by_neighborhood: [ { neighborhood_id: NB1, name: "Boqueirão", total: 17 } ]
+    })) });
     renderWithQuery(<DemandTab range={DEFAULT_RANGE} />);
     await screen.findByText("dados até 29/09");
     const triages = region("Triagens");
     const totals = triages.getByRole("group", { name: "Totais do período" });
-    expect(rowWith(totals, "Iniciadas")).toBe("Iniciadas15");
-    expect(rowWith(totals, "Concluídas")).toBe("Concluídas13");
-    expect(rowWith(totals, "Interrompidas")).toBe("Interrompidasoculto");
-    expect(rowWith(triages.getByRole("table", { name: "Triagens por período" }), "21/09")).toBe("21/09ocultooculto0");
+    expect(rowWith(totals, "Iniciadas")).toBe("Iniciadas25");
+    expect(rowWith(totals, "Concluídas")).toBe("Concluídas17");
+    expect(rowWith(totals, "Interrompidas")).toBe("Interrompidas6");
+    expect(rowWith(triages.getByRole("table", { name: "Triagens por período" }), "21/09")).toBe("21/09960");
     expect(triages.getByRole("list", { name: "legenda" }).textContent).toBe("IniciadasConcluídasInterrompidas");
   });
 
@@ -44,13 +52,33 @@ describe("DemandTab", () => {
     renderWithQuery(<DemandTab range={DEFAULT_RANGE} />);
     await screen.findByText("dados até 29/09");
     const tierTotals = region("Triagens concluídas por tier").getByRole("group", { name: "Totais do período" });
-    expect(rowWith(tierTotals, "vermelho")).toBe("vermelho8");
+    expect(rowWith(tierTotals, "vermelho")).toBe("vermelho11");
     expect(rowWith(tierTotals, "verde")).toBe("verdeoculto");
     expect(rowWith(screen.getByRole("region", { name: "Triagens concluídas por bairro" }), "Sem bairro")).toBe("Sem bairrooculto");
     expect(rowWith(screen.getByRole("region", { name: "Triagens concluídas por bairro" }), "Boqueirão")).toBe("Boqueirão9");
     expect(rowWith(screen.getByRole("region", { name: "Atendimentos por unidade" }), "UPA Boqueirão")).toBe("UPA Boqueirãooculto");
     expect(rowWith(screen.getByRole("region", { name: "Pedidos abertos" }), "Encaminhamento")).toBe("Encaminhamento0");
     expect(rowWith(screen.getByRole("region", { name: "Pedidos encerrados" }), "Atendido")).toBe("Atendido6");
+  });
+
+  it("total oculto acompanha a parte oculta: período, tier, protocolo, bairro e unidade", async () => {
+    stubAnalyticsApi({ "/analytics/demand": envelope<"demand">(demandData()) });
+    renderWithQuery(<DemandTab range={DEFAULT_RANGE} />);
+    await screen.findByText("dados até 29/09");
+    const triages = region("Triagens");
+    const totals = triages.getByRole("group", { name: "Totais do período" });
+    expect(rowWith(totals, "Iniciadas")).toBe("Iniciadasoculto");
+    expect(rowWith(totals, "Concluídas")).toBe("Concluídasoculto");
+    expect(rowWith(totals, "Interrompidas")).toBe("Interrompidasoculto");
+    const byPeriod = triages.getByRole("table", { name: "Triagens por período" });
+    expect(rowWith(byPeriod, "14/09")).toBe("14/0912ocultooculto");
+    expect(rowWith(byPeriod, "21/09")).toBe("21/09oculto50");
+    const tier = region("Triagens concluídas por tier");
+    expect(rowWith(tier.getByRole("group", { name: "Totais do período" }), "verde")).toBe("verdeoculto");
+    expect(rowWith(tier.getByRole("table", { name: "Triagens concluídas por tier por período" }), "14/09")).toBe("14/096oculto");
+    expect(rowWith(region("Triagens concluídas por protocolo").getByRole("group", { name: "Totais do período" }), "arbovirose")).toBe("arboviroseoculto");
+    expect(rowWith(screen.getByRole("region", { name: "Triagens concluídas por bairro" }), "Sem bairro")).toBe("Sem bairrooculto");
+    expect(rowWith(screen.getByRole("region", { name: "Atendimentos por unidade" }), "UPA Boqueirão")).toBe("UPA Boqueirãooculto");
   });
 
   it("bairro recorta com neighborhood_id; 'Sem bairro' manda none", async () => {

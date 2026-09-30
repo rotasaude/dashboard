@@ -22,10 +22,19 @@ describe("EpidemiologyTab", () => {
     const fever = within(await screen.findByRole("region", { name: "Teve febre?" }));
     expect(fever.getByRole("list", { name: "legenda" }).textContent).toBe("SimNão");
     const totals = fever.getByRole("group", { name: "Totais do período" });
-    expect(rowWith(totals, "Sim")).toBe("Sim9");
+    expect(rowWith(totals, "Sim")).toBe("Sim12");
     expect(rowWith(totals, "Não")).toBe("Nãooculto");
     expect(within(screen.getByRole("region", { name: "Qual o sintoma principal?" })).getByText("arbovirose · lista")).toBeTruthy();
     expect(fever.getByText("arbovirose · sim/não")).toBeTruthy();
+  });
+
+  it("total oculto acompanha a célula oculta da série", async () => {
+    stubAnalyticsApi({ "/analytics/epidemiology": envelope<"epidemiology">(epidemiologyData()) });
+    renderWithQuery(<EpidemiologyTab range={DEFAULT_RANGE} />);
+    const fever = within(await screen.findByRole("region", { name: "Teve febre?" }));
+    expect(rowWith(fever.getByRole("table", { name: "Teve febre? por período" }), "14/09")).toBe("14/097oculto");
+    expect(rowWith(fever.getByRole("table", { name: "Teve febre? por período" }), "21/09")).toBe("21/0950");
+    expect(rowWith(fever.getByRole("group", { name: "Totais do período" }), "Não")).toBe("Nãooculto");
   });
 
   it("sem pergunta marcada: explica como marcar no editor", async () => {

@@ -27,9 +27,17 @@ describe("CalibrationTab", () => {
     stubAnalyticsApi({ "/analytics/calibration": envelope<"calibration">(calibrationData()) });
     renderWithQuery(<CalibrationTab range={DEFAULT_RANGE} />);
     const v2 = await screen.findByRole("region", { name: "arbovirose · versão 2" });
-    expect(rowWith(v2, "vermelho")).toBe("vermelho2010 (50,0%)6 (30,0%)0 (0,0%)oculto (oculto)oculto (oculto)");
+    expect(rowWith(v2, "vermelho")).toBe("vermelho2010 (50,0%)5 (25,0%)0 (0,0%)5 (25,0%)0 (0,0%)");
     const v1 = screen.getByRole("region", { name: "arbovirose · versão 1" });
     expect(rowWith(v1, "verde")).toBe("verdeocultooculto (oculto)0 (oculto)0 (oculto)0 (oculto)0 (oculto)");
+  });
+
+  it("desfecho oculto esconde o total e todas as proporções da linha", async () => {
+    stubAnalyticsApi({ "/analytics/calibration": envelope<"calibration">(calibrationData()) });
+    renderWithQuery(<CalibrationTab range={DEFAULT_RANGE} />);
+    const v2 = await screen.findByRole("region", { name: "arbovirose · versão 2" });
+    // 10 e 6 são visíveis, mas as proporções deles (e o total) somem com o "left" e "none" ocultos.
+    expect(rowWith(v2, "amarelo")).toBe("amarelooculto10 (oculto)6 (oculto)0 (oculto)oculto (oculto)oculto (oculto)");
   });
 
   it("cabeçalho com os cinco desfechos, incluindo 'sem atendimento encerrado'", async () => {
