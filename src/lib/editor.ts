@@ -31,3 +31,62 @@ export const TEMPLATE = JSON.stringify(
   null,
   2
 );
+
+// ─── Perguntas analíticas (módulo 14; ADR 0025; spec §7) ────────────────────
+// `analytic: true` só vale em pergunta boolean/enum; a API recusa em
+// integer/text. A marca é parte da versão e passa pelo ciclo assinado.
+export const ANALYTIC_HINT = "respostas desta pergunta aparecerão agregadas por bairro, nunca por pessoa";
+const ANALYTIC_TYPES = new Set([ "boolean", "enum" ]);
+
+type Step = Record<string, unknown>;
+
+export interface AnalyticStep { id: string; prompt: string; answerType: string; analytic: boolean; eligible: boolean }
+
+function stepsOf(definition: unknown): Step[] | null {
+  if (!definition || typeof definition !== "object") return null;
+  const steps = (definition as { steps?: unknown }).steps;
+  if (!Array.isArray(steps)) return null;
+  return steps.filter((s): s is Step => !!s && typeof s === "object");
+}
+
+export function analyticSteps(definition: unknown): AnalyticStep[] {
+  return (stepsOf(definition) ?? []).map((s) => {
+    const answerType = typeof s.answer_type === "string" ? s.answer_type : "";
+    const id = String(s.id ?? "");
+    return {
+      id, prompt: typeof s.prompt === "string" && s.prompt ? s.prompt : id, answerType,
+      analytic: s.analytic === true, eligible: ANALYTIC_TYPES.has(answerType)
+    };
+  });
+}
+
+// Cópia rasa com a pergunta trocada; o resto da definição fica como está.
+function mapSteps(definition: unknown, fn: (step: Step) => Step): unknown {
+  const d = definition as Record<string, unknown>;
+  return { ...d, steps: (d.steps as unknown[]).map((s) => (s && typeof s === "object" ? fn(s as Step) : s)) };
+}
+
+function withoutAnalytic(step: Step): Step {
+  const next = { ...step };
+  delete next.analytic;
+  return next;
+}
+
+export function setAnalytic(definition: unknown, stepId: string, on: boolean): unknown {
+  if (!stepsOf(definition)) return definition;
+  return mapSteps(definition, (s) => {
+    if (s.id !== stepId) return s;
+    const next = withoutAnalytic(s);
+    if (on && ANALYTIC_TYPES.has(String(s.answer_type))) next.analytic = true;
+    return next;
+  });
+}
+
+export function stripIneligibleAnalytic(definition: unknown): { definition: unknown; removed: string[] } {
+  const removed = analyticSteps(definition).filter((s) => s.analytic && !s.eligible).map((s) => s.id);
+  if (removed.length === 0) return { definition, removed };
+  return {
+    definition: mapSteps(definition, (s) => (removed.includes(String(s.id ?? "")) ? withoutAnalytic(s) : s)),
+    removed
+  };
+}

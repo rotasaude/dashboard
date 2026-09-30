@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { gateProtocol, previewProtocol, saveProtocolDraft,
   listAuthorProtocols, loadProtocolDefinition,
   type GateResult, type PreviewResult, type DraftResult, type AuthorProtocolRow } from "../lib/api";
-import { parseDefinition, TEMPLATE } from "../lib/editor";
+import { parseDefinition, stripIneligibleAnalytic, TEMPLATE } from "../lib/editor";
+import { AnalyticQuestions } from "./protocolEditor/AnalyticQuestions";
 
 export function ProtocolEditor() {
   const [ text, setText ] = useState<string>(TEMPLATE);
@@ -54,8 +55,15 @@ export function ProtocolEditor() {
   function save() {
     const parsed = parseDefinition(text);
     if (!parsed.ok) return;
-    saveProtocolDraft(parsed.value).then(setSaved);
+    // Módulo 14 (spec §7): `analytic` só vale em boolean/enum. Pergunta que
+    // virou integer/text perde a marca aqui, e o texto passa a mostrar o que
+    // foi salvo (Desvio 1 do plano: o editor é JSON, sem seletor de tipo).
+    const { definition, removed } = stripIneligibleAnalytic(parsed.value);
+    if (removed.length > 0) setText(JSON.stringify(definition, null, 2));
+    saveProtocolDraft(definition).then(setSaved);
   }
+
+  const current = parseDefinition(text);
 
   return (
     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
@@ -89,6 +97,10 @@ export function ProtocolEditor() {
             </ul>
           )}
         </div>
+        <AnalyticQuestions
+          definition={current.ok ? current.value : null}
+          onChange={(next) => setText(JSON.stringify(next, null, 2))}
+        />
         <button onClick={save} style={{ marginTop: 12 }}>Salvar rascunho</button>
         {saved && (
           <p style={{ marginTop: 8 }}>
