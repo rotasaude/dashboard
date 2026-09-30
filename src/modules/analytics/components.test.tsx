@@ -105,8 +105,8 @@ describe("gráfico e bloco de série", () => {
   it("com total: tabela de totais e tabela por período, 'oculto' nas duas", () => {
     renderWithQuery(
       <SeriesBlock title="Por tier" kind="count" periods={PERIODS} granularity="week" lines={[
-        { key: "vermelho", label: "vermelho", series: [ 6, HIDDEN, 0 ], total: 8 },
-        { key: "verde", label: "verde", series: [ HIDDEN, 0, 0 ], total: HIDDEN }
+        { key: "vermelho", label: "vermelho", series: [ 6, 2, 0 ], total: 8 },
+        { key: "verde", label: "verde", series: [ 0, HIDDEN, 0 ], total: HIDDEN }
       ]} />
     );
     const block = within(screen.getByRole("region", { name: "Por tier" }));
@@ -130,10 +130,10 @@ describe("gráfico e bloco de série", () => {
   it("taxa: 'sem dado' no período sem denominador", () => {
     renderWithQuery(
       <SeriesBlock title="Faltas" kind="rate" periods={PERIODS} granularity="week"
-        lines={[ { key: "no_show", label: "faltas", series: [ HIDDEN, 25, null ], total: 20.8 } ]} />
+        lines={[ { key: "no_show", label: "faltas", series: [ HIDDEN, 25, null ], total: HIDDEN } ]} />
     );
     const block = within(screen.getByRole("region", { name: "Faltas" }));
-    expect(rowWith(block.getByRole("group", { name: "Totais do período" }), "faltas")).toContain("20,8%");
+    expect(rowWith(block.getByRole("group", { name: "Totais do período" }), "faltas")).toContain("oculto");
     expect(rowWith(block.getByRole("table", { name: "Faltas por período" }), "28/09")).toContain("sem dado");
   });
 
