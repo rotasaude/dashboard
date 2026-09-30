@@ -325,4 +325,22 @@ describe("CheckIn", () => {
     fireEvent.click(screen.getByRole("button", { name: "Iniciar atendimento" }));
     expect(await screen.findByText("Este agendamento não é para hoje")).not.toBeNull();
   });
+
+  it("exceção: already_checked_in (corrida) mostra a unidade e a hora, como no fluxo do código", async () => {
+    mocked(api.searchCheckIn).mockResolvedValue({
+      triages: [ { id: "t1", date: "2026-09-24T12:00:00Z", protocol_name: "triage-respiratoria", priority: 2 } ],
+      appointments: []
+    });
+    mocked(api.checkInByException).mockRejectedValue(
+      new ApiError(409, { error: "already_checked_in", unit_name: "UBS Norte", checked_in_at: "2026-09-24T09:00:00Z" }, "x")
+    );
+    renderCheckIn();
+    fireEvent.click(screen.getByRole("button", { name: "Cidadão sem o código" }));
+    fireEvent.change(screen.getByLabelText("CPF do cidadão (exceção)"), { target: { value: "52998224725" } });
+    fireEvent.click(screen.getByRole("button", { name: "Buscar triagens" }));
+    fireEvent.click(await screen.findByText("triage-respiratoria"));
+    fireEvent.change(screen.getByLabelText("Motivo"), { target: { value: "documento perdido" } });
+    fireEvent.click(screen.getByRole("button", { name: "Iniciar atendimento" }));
+    expect(await screen.findByText(/já está em atendimento em UBS Norte desde/)).not.toBeNull();
+  });
 });

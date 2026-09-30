@@ -23,6 +23,13 @@ describe("attendance helpers", () => {
     expect(attendanceError(new Error("rede"))).toBe("não foi possível concluir — tente de novo");
   });
 
+  it("traduz triage_too_old e triage_not_eligible", () => {
+    expect(attendanceError(new ApiError(422, { error: "triage_too_old" }, "x")))
+      .toBe("triagem com mais de 3 dias — peça ao cidadão para gerar outro código");
+    expect(attendanceError(new ApiError(422, { error: "triage_not_eligible" }, "x")))
+      .toBe("essa triagem não é elegível para atendimento");
+  });
+
   it("traduz unit_has_open_attendances", () => {
     expect(attendanceError(new ApiError(409, { error: "unit_has_open_attendances" }, "x")))
       .toBe("há atendimentos abertos nesta unidade — encerre-os antes de desativar");
