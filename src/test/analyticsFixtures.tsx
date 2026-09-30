@@ -196,11 +196,22 @@ export function paramsOf(fn: ReturnType<typeof stubAnalyticsApi>, path: string):
     .map((url) => url.searchParams);
 }
 
-class NoopResizeObserver { observe() {} unobserve() {} disconnect() {} }
+// Recharts (ResponsiveContainer) mede o pai por ResizeObserver; o jsdom não
+// tem layout e o gráfico avisa "width(0) and height(0)". O stub informa um
+// tamanho fixo ao observar.
+class SizedResizeObserver {
+  constructor(private callback: ResizeObserverCallback) {}
+  observe(target: Element) {
+    const rect = { width: 600, height: 180, x: 0, y: 0, top: 0, left: 0, right: 600, bottom: 180, toJSON() {} };
+    this.callback([ { target, contentRect: rect } as unknown as ResizeObserverEntry ], this as unknown as ResizeObserver);
+  }
+  unobserve() {}
+  disconnect() {}
+}
 
 // O provider vai como `wrapper` para o `rerender` também tê-lo.
 export function renderWithQuery(ui: ReactElement) {
-  vi.stubGlobal("ResizeObserver", NoopResizeObserver);
+  vi.stubGlobal("ResizeObserver", SizedResizeObserver);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const wrapper = ({ children }: { children: ReactNode }) =>
     <QueryClientProvider client={client}>{children}</QueryClientProvider>;
