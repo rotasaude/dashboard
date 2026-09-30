@@ -14,14 +14,14 @@ import { addDays, todayInCity } from "./campaigns";
 export { HIDDEN_LABEL };
 export const NO_DATA_LABEL = "sem dado";
 export const HIDDEN_HINT =
-  `Contagens de 1 a 4, e taxas calculadas sobre elas, aparecem como "oculto" para não identificar ninguém.`;
+  "Contagens de 1 a 4, e taxas calculadas sobre elas, aparecem como “oculto” para não identificar ninguém.";
 export const NO_DATA_HINT = "Nada no denominador neste período: não há taxa a mostrar.";
 export const STALE_LABEL = "dados desatualizados";
 export const EMPTY_TITLE = "ainda sem dados consolidados";
 export const EMPTY_SUB = "a consolidação roda toda madrugada e cobre até o dia anterior";
 export const EPI_EMPTY_TITLE = "nenhuma pergunta marcada para Analytics";
 export const EPI_HOWTO =
-  `Para uma pergunta aparecer aqui, abra o protocolo no Editor de protocolo, marque "Usar em Analytics" ` +
+  "Para uma pergunta aparecer aqui, abra o protocolo no Editor de protocolo, marque “Usar em Analytics” " +
   "numa pergunta de sim/não ou de lista, salve o rascunho e leve a nova versão pelo ciclo de assinaturas " +
   "até a ativação. Só entram as triagens concluídas com essa versão.";
 export const FORBIDDEN_TEXT =

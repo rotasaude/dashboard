@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "./api";
 import {
-  DEFAULT_RANGE, FORBIDDEN_TEXT, analyticsError, analyticsKey, dataUntil, fmtCell, fmtPeriod, fmtRate, mondayOf,
+  DEFAULT_RANGE, EPI_HOWTO, FORBIDDEN_TEXT, HIDDEN_HINT, analyticsError, analyticsKey, dataUntil, fmtCell, fmtPeriod, fmtRate, mondayOf,
   plotValue, protocolOptions, rangeDates, rangeLabel, withGranularity
 } from "./analytics";
 import { AS_OF, HIDDEN, NOW, PROTOCOL_ROWS } from "../test/analyticsFixtures";
@@ -113,5 +113,12 @@ describe("recusas", () => {
     expect(e("invalid_protocol")).toBe("Protocolo ou versão não encontrado — escolha outro.");
     expect(e("http_500")).toBe("não foi possível carregar — tente de novo");
     expect(analyticsError(new Error("rede"))).toBe("não foi possível carregar — tente de novo");
+  });
+});
+
+describe("literais de texto", () => {
+  it("usa aspas curvas", () => {
+    expect(HIDDEN_HINT).toContain("“oculto”");
+    expect(EPI_HOWTO).toContain("“Usar em Analytics”");
   });
 });
