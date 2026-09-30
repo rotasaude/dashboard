@@ -40,7 +40,7 @@ const ANALYTIC_TYPES = new Set([ "boolean", "enum" ]);
 
 type Step = Record<string, unknown>;
 
-export interface AnalyticStep { id: string; prompt: string; answerType: string; analytic: boolean; eligible: boolean }
+export interface AnalyticStep { id: string; prompt: string; answerType: string; analytic: boolean; eligible: boolean; stranded: boolean }
 
 function stepsOf(definition: unknown): Step[] | null {
   if (!definition || typeof definition !== "object") return null;
@@ -55,7 +55,9 @@ export function analyticSteps(definition: unknown): AnalyticStep[] {
     const id = String(s.id ?? "");
     return {
       id, prompt: typeof s.prompt === "string" && s.prompt ? s.prompt : id, answerType,
-      analytic: s.analytic === true, eligible: ANALYTIC_TYPES.has(answerType)
+      analytic: s.analytic === true, eligible: ANALYTIC_TYPES.has(answerType),
+      // Qualquer chave `analytic` (true, false, "true"...) em integer/text é resíduo: sai ao salvar.
+      stranded: !ANALYTIC_TYPES.has(answerType) && "analytic" in s
     };
   });
 }
@@ -83,7 +85,7 @@ export function setAnalytic(definition: unknown, stepId: string, on: boolean): u
 }
 
 export function stripIneligibleAnalytic(definition: unknown): { definition: unknown; removed: string[] } {
-  const removed = analyticSteps(definition).filter((s) => s.analytic && !s.eligible).map((s) => s.id);
+  const removed = analyticSteps(definition).filter((s) => s.stranded).map((s) => s.id);
   if (removed.length === 0) return { definition, removed };
   return {
     definition: mapSteps(definition, (s) => (removed.includes(String(s.id ?? "")) ? withoutAnalytic(s) : s)),

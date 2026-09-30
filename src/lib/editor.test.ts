@@ -63,6 +63,18 @@ describe("perguntas analíticas (módulo 14)", () => {
     expect(stepsOf(definition)[1].analytic).toBe(true);
   });
 
+  it.each([ [ "integer", false ], [ "integer", "true" ], [ "text", false ], [ "text", "true" ] ])(
+    "stripIneligibleAnalytic tira qualquer chave analytic (%s, %j) de integer/text",
+    (answerType, value) => {
+      const d = { steps: [ { id: "q", prompt: "Q", answer_type: answerType, analytic: value } ] };
+      expect(analyticSteps(d)[0]).toMatchObject({ analytic: false, eligible: false, stranded: true });
+      const { definition, removed } = stripIneligibleAnalytic(d);
+      expect(removed).toEqual([ "q" ]);
+      expect("analytic" in stepsOf(definition)[0]).toBe(false);
+      expect("analytic" in d.steps[0]).toBe(true); // não muta
+    }
+  );
+
   it("sem nada a tirar, devolve a mesma definição", () => {
     const clean = { steps: [ { id: "febre", prompt: "Teve febre?", answer_type: "boolean", analytic: true } ] };
     expect(stripIneligibleAnalytic(clean)).toEqual({ definition: clean, removed: [] });

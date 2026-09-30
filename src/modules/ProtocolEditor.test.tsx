@@ -63,6 +63,17 @@ describe("ProtocolEditor — Usar em Analytics", () => {
     expect(await screen.findByText("Salvo: arbovirose@3 (draft)")).toBeTruthy();
   });
 
+  it("pergunta text com analytic: false também perde a chave ao salvar, com aviso", async () => {
+    render(<ProtocolEditor />);
+    typeDefinition({ ...DEF, steps: [ { ...DEF.steps[0], answer_type: "text", analytic: false }, DEF.steps[1] ] });
+    expect(screen.getByRole("alert").textContent).toContain("“Teve febre?” não é de sim/não nem de lista");
+    fireEvent.click(screen.getByRole("button", { name: "Salvar rascunho" }));
+    await waitFor(() => expect(api.saveProtocolDraft).toHaveBeenCalledTimes(1));
+    const sent = mocked(api.saveProtocolDraft).mock.calls[0][0] as { steps: Array<Record<string, unknown>> };
+    expect("analytic" in sent.steps[0]).toBe(false);
+    expect(definitionBox().value).not.toContain("analytic");
+  });
+
   it("marca válida vai inteira no rascunho", async () => {
     render(<ProtocolEditor />);
     typeDefinition({ ...DEF, steps: [ { ...DEF.steps[0], analytic: true }, DEF.steps[1] ] });

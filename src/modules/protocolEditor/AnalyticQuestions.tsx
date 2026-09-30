@@ -7,7 +7,7 @@ export function AnalyticQuestions({ definition, onChange }: { definition: unknow
   const steps = analyticSteps(definition);
   if (steps.length === 0) return null;
   const eligible = steps.filter((s) => s.eligible);
-  const stranded = steps.filter((s) => s.analytic && !s.eligible);
+  const stranded = steps.filter((s) => s.stranded);
 
   return (
     <section aria-label="Perguntas para Analytics" style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
