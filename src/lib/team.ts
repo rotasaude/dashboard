@@ -11,6 +11,8 @@ import { CAMPAIGN_MANAGER_ROLE } from "./campaigns";
 export const REVIEWER_ROLE = "protocol_reviewer";
 export const VERIFIER_ROLE = "citizen_verifier";
 export const PROFESSIONAL_ROLE = "health_professional";
+// Módulo 14 (ADR 0025): só leitura do Analytics, fora de PRIVILEGED_ROLES.
+export const ANALYST_ROLE = "analyst";
 export const REQUIRED_REVIEWERS = 2;
 
 export interface TeamMember {
@@ -26,6 +28,8 @@ export interface TeamMember {
   professionalStatus: "missing_profile" | "missing_link" | "ok" | null;
   isCampaignManager: boolean;
   campaignManagerMembershipId: string | null;
+  isAnalyst: boolean;
+  analystMembershipId: string | null;
 }
 
 export function teamMembers(rows: MembershipRow[]): TeamMember[] {
@@ -36,7 +40,7 @@ export function teamMembers(rows: MembershipRow[]): TeamMember[] {
       userId: row.user.id, email: row.user.email_address, roles: [],
       isReviewer: false, reviewerMembershipId: null,
       isVerifier: false, verifierMembershipId: null,
-      isProfessional: false, professionalMembershipId: null, professionalStatus: null, isCampaignManager: false, campaignManagerMembershipId: null
+      isProfessional: false, professionalMembershipId: null, professionalStatus: null, isCampaignManager: false, campaignManagerMembershipId: null, isAnalyst: false, analystMembershipId: null
     };
     current.roles = [ ...current.roles, row.role ].sort();
     if (row.role === REVIEWER_ROLE) {
@@ -56,6 +60,10 @@ export function teamMembers(rows: MembershipRow[]): TeamMember[] {
       current.isCampaignManager = true;
       current.campaignManagerMembershipId = row.id;
     }
+    if (row.role === ANALYST_ROLE) {
+      current.isAnalyst = true;
+      current.analystMembershipId = row.id;
+    }
     byUser.set(row.user.id, current);
   }
 
@@ -66,10 +74,11 @@ export function reviewerCount(members: TeamMember[]): number {
   return members.filter((m) => m.isReviewer).length;
 }
 
-// Os 8 papéis da cidade (Membership::ROLES na API), na ordem do seletor do
+// Os 9 papéis da cidade (Membership::ROLES na API), na ordem do seletor do
 // convite.
 export const INVITE_ROLES: { role: string; label: string }[] = [
   { role: "viewer", label: "Leitura (viewer)" },
+  { role: ANALYST_ROLE, label: "Análise" },
   { role: "protocol_author", label: "Autor de protocolo" },
   { role: "protocol_publisher", label: "Publicador de protocolo" },
   { role: "protocol_reviewer", label: "Revisor de protocolo" },

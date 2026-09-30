@@ -442,4 +442,42 @@ describe("Team", () => {
       expect(screen.getByText("Convidar com@cidade.gov.br como Gestor de campanhas.")).toBeTruthy();
     });
   });
+
+  describe("analista (módulo 14)", () => {
+    it("tornar e remover analista sem código, mesmo com a janela de step-up fechada", async () => {
+      mocked(api.fetchCurrentSession).mockResolvedValue(session({ mfa_verified_at: null }));
+      mocked(api.listMemberships).mockResolvedValue([
+        membership("ana@cidade.gov.br", "viewer"),
+        membership("bia@cidade.gov.br", "analyst", "m-bia-an")
+      ]);
+      mocked(api.grantRole).mockResolvedValue(undefined);
+      mocked(api.revokeMembership).mockResolvedValue(undefined);
+      renderTeam();
+
+      fireEvent.click(await screen.findByRole("button", { name: "Tornar analista" }));
+      expect(screen.queryByLabelText("Código do autenticador")).toBeNull();
+      fireEvent.click(await screen.findByRole("button", { name: "Confirmar" }));
+      await waitFor(() => expect(api.grantRole).toHaveBeenCalledWith("u-ana@cidade.gov.br", "analyst"));
+      expect((await screen.findByRole("status")).textContent).toBe("ana@cidade.gov.br agora é analista");
+
+      fireEvent.click(await screen.findByRole("button", { name: "Remover analista" }));
+      expect(screen.queryByLabelText("Código do autenticador")).toBeNull();
+      fireEvent.click(await screen.findByRole("button", { name: "Confirmar" }));
+      await waitFor(() => expect(api.revokeMembership).toHaveBeenCalledWith("m-bia-an"));
+      expect((await screen.findByRole("status")).textContent).toBe("bia@cidade.gov.br não é mais analista");
+      expect(api.stepUpMfa).not.toHaveBeenCalled();
+    });
+
+    it("convite como Análise não pede código", async () => {
+      mocked(api.fetchCurrentSession).mockResolvedValue(session({ mfa_verified_at: null }));
+      mocked(api.listMemberships).mockResolvedValue([]);
+      renderTeam();
+
+      fireEvent.change(await screen.findByLabelText("E-mail da pessoa"), { target: { value: "dados@cidade.gov.br" } });
+      fireEvent.change(screen.getByLabelText("Papel"), { target: { value: "analyst" } });
+      fireEvent.click(screen.getByRole("button", { name: "Convidar" }));
+      expect(await screen.findByText("Convidar dados@cidade.gov.br como Análise.")).toBeTruthy();
+      expect(screen.queryByLabelText("Código do autenticador")).toBeNull();
+    });
+  });
 });

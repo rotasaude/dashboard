@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { deactivateUser, grantRole, inviteMember, listMemberships, revokeMembership, type Invitation } from "../lib/api";
 import { describeActionError } from "../lib/actionErrors";
 import {
-  INVITE_ROLES, PROFESSIONAL_ROLE, REQUIRED_REVIEWERS, REVIEWER_ROLE, VERIFIER_ROLE, deactivateErrorMessage,
+  ANALYST_ROLE, INVITE_ROLES, PROFESSIONAL_ROLE, REQUIRED_REVIEWERS, REVIEWER_ROLE, VERIFIER_ROLE, deactivateErrorMessage,
   inviteErrorMessage, isPrivilegedRole, isValidEmail, reviewerCount, teamMembers, type TeamMember
 } from "../lib/team";
 import { STATUS_LABEL } from "../lib/professionals";
@@ -24,8 +24,8 @@ import { CAMPAIGN_MANAGER_ROLE } from "../lib/campaigns";
 // Equipe (spec do dashboard §5.2). Só municipal_admin chega aqui — a API
 // recusa o resto com 403, e o item de menu já não aparece (navGroupsFor).
 //
-// Escopo: conceder e revogar revisor, atendente, profissional de saúde e gestor de campanhas;
-// convidar pessoa com qualquer um dos 8 papéis (step-up só nos privilegiados,
+// Escopo: conceder e revogar revisor, atendente, profissional de saúde, gestor de campanhas e analista;
+// convidar pessoa com qualquer um dos 9 papéis (step-up só nos privilegiados,
 // como na API); desativar usuário (sempre com step-up, nunca a si mesmo).
 // Convite e Desativar só aparecem para municipal_admin — a API também recusa.
 // A pessoa desativada some da lista: a API só lista usuários ativos.
@@ -36,7 +36,7 @@ import { CAMPAIGN_MANAGER_ROLE } from "../lib/campaigns";
 const NO_REVIEWERS_WARNING = "sem 2 revisores, nenhum protocolo é publicado ou ativado nesta cidade";
 const GENERIC_ERROR = "não foi possível carregar — tente de novo";
 
-type Pending = { member: TeamMember; kind: "grant" | "revoke"; role: "reviewer" | "verifier" | "professional" | "campaign" };
+type Pending = { member: TeamMember; kind: "grant" | "revoke"; role: "reviewer" | "verifier" | "professional" | "campaign" | "analyst" };
 type Invite = { email: string; role: string };
 const INVALID_EMAIL = "informe um e-mail válido";
 
@@ -99,7 +99,7 @@ export function Team({ onNavigate }: { onNavigate(id: ModuleId): void }) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <PageHeader title="Equipe" sub="papéis · revisores de protocolo · atendentes · campanhas" />
+      <PageHeader title="Equipe" sub="papéis · revisores de protocolo · atendentes · campanhas · análise" />
 
       {query.isLoading && <Panel title="Pessoas"><Skeleton rows={4} /></Panel>}
       {query.isError && <ErrorState message={loadErrorMessage(query.error)} />}
@@ -152,6 +152,11 @@ export function Team({ onNavigate }: { onNavigate(id: ModuleId): void }) {
                     m.isCampaignManager
                       ? <button type="button" style={buttonStyle} onClick={() => open(m, "revoke", "campaign")}>Remover gestor de campanhas</button>
                       : <button type="button" style={buttonStyle} onClick={() => open(m, "grant", "campaign")}>Tornar gestor de campanhas</button>
+                  ) },
+                  { label: "Análise", w: "auto", align: "right", render: (m) => (
+                    m.isAnalyst
+                      ? <button type="button" style={buttonStyle} onClick={() => open(m, "revoke", "analyst")}>Remover analista</button>
+                      : <button type="button" style={buttonStyle} onClick={() => open(m, "grant", "analyst")}>Tornar analista</button>
                   ) },
                   ...(isAdmin ? [ { label: "Acesso", w: "auto", align: "right" as const, render: (m: TeamMember) => (
                     m.userId === user?.id
@@ -322,6 +327,33 @@ export function Team({ onNavigate }: { onNavigate(id: ModuleId): void }) {
             requiresStepUp
             run={async () => { await revokeMembership(pending.member.campaignManagerMembershipId!); }}
             onDone={() => finish(`${pending.member.email} não é mais gestor de campanhas`)}
+            onCancel={() => setPending(null)}
+            onGoToSecurity={() => onNavigate("security")}
+          />
+        )
+      )}
+
+      {pending && pending.role === "analyst" && (
+        pending.kind === "grant" ? (
+          // Sem step-up: analyst não é papel privilegiado (contratos §5).
+          <SensitiveAction
+            title="Tornar analista"
+            description={`${pending.member.email} poderá ler o Analytics da cidade: séries agregadas, sem dado de pessoa.`}
+            requiresStepUp={false}
+            run={async () => { await grantRole(pending.member.userId, ANALYST_ROLE); }}
+            onDone={() => finish(`${pending.member.email} agora é analista`)}
+            onCancel={() => setPending(null)}
+            onGoToSecurity={() => onNavigate("security")}
+          />
+        ) : (
+          // O `!` é seguro: "Remover analista" só existe quando isAnalyst é
+          // true, e teamMembers preenche os dois juntos.
+          <SensitiveAction
+            title="Remover analista"
+            description={`${pending.member.email} deixa de ler o Analytics da cidade.`}
+            requiresStepUp={false}
+            run={async () => { await revokeMembership(pending.member.analystMembershipId!); }}
+            onDone={() => finish(`${pending.member.email} não é mais analista`)}
             onCancel={() => setPending(null)}
             onGoToSecurity={() => onNavigate("security")}
           />

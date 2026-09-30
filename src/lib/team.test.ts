@@ -56,19 +56,20 @@ describe("reviewerCount", () => {
 const apiError = (status: number, body: unknown) => new ApiError(status, body, String(status));
 
 describe("convite", () => {
-  it("oferece os 8 papéis da cidade", () => {
+  it("oferece os 9 papéis da cidade", () => {
     expect(INVITE_ROLES.map((r) => r.role).sort()).toEqual([
-      "campaign_manager", "citizen_verifier", "health_professional", "municipal_admin", "protocol_author",
+      "analyst", "campaign_manager", "citizen_verifier", "health_professional", "municipal_admin", "protocol_author",
       "protocol_publisher", "protocol_reviewer", "viewer"
     ]);
     expect(INVITE_ROLES.find((r) => r.role === "campaign_manager")?.label).toBe("Gestor de campanhas");
+    expect(INVITE_ROLES.find((r) => r.role === "analyst")?.label).toBe("Análise");
   });
 
   it("papéis privilegiados são os mesmos que a API protege com step-up", () => {
     for (const role of [ "municipal_admin", "protocol_reviewer", "citizen_verifier", "health_professional", "campaign_manager" ]) {
       expect(isPrivilegedRole(role)).toBe(true);
     }
-    for (const role of [ "viewer", "protocol_author", "protocol_publisher" ]) {
+    for (const role of [ "viewer", "protocol_author", "protocol_publisher", "analyst" ]) {
       expect(isPrivilegedRole(role)).toBe(false);
     }
   });
@@ -121,5 +122,13 @@ describe("gestor de campanhas", () => {
     ]);
     expect(ana.isCampaignManager).toBe(true);
     expect(ana.campaignManagerMembershipId).toBe("m-2");
+  });
+});
+
+describe("analista", () => {
+  it("teamMembers marca o papel e guarda o id da membership", () => {
+    const [ ana ] = teamMembers([ row("ana@cidade.gov.br", "viewer"), row("ana@cidade.gov.br", "analyst", "m-an") ]);
+    expect(ana.isAnalyst).toBe(true);
+    expect(ana.analystMembershipId).toBe("m-an");
   });
 });
