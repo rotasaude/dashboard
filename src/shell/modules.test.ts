@@ -21,7 +21,8 @@ describe("modules", () => {
       expect(groups.some((g) => g.label === "Atendimento")).toBe(false);
       expect(groups.some((g) => g.label === "Cidade")).toBe(false);
       expect(groups.some((g) => g.label === "Comunicação")).toBe(false);
-      expect(groups.length).toBe(NAV_GROUPS.length - 5);
+      expect(groups.some((g) => g.label === "Análise")).toBe(false);
+      expect(groups.length).toBe(NAV_GROUPS.length - 6);
     });
 
     it("sem sessão, esconde Equipe, Atendimento e Cidade", () => {
@@ -31,7 +32,8 @@ describe("modules", () => {
       expect(groups.some((g) => g.label === "Atendimento")).toBe(false);
       expect(groups.some((g) => g.label === "Cidade")).toBe(false);
       expect(groups.some((g) => g.label === "Comunicação")).toBe(false);
-      expect(groups.length).toBe(NAV_GROUPS.length - 4);
+      expect(groups.some((g) => g.label === "Análise")).toBe(false);
+      expect(groups.length).toBe(NAV_GROUPS.length - 5);
     });
 
     it("Equipe só aparece para municipal_admin", () => {
@@ -104,6 +106,32 @@ describe("modules", () => {
     it("gestor de campanhas não ganha Equipe nem Território", () => {
       expect(ids(user([ "campaign_manager" ]))).not.toContain("team");
       expect(ids(user([ "campaign_manager" ]))).not.toContain("territory");
+    });
+  });
+
+  describe("módulo 14 na navegação", () => {
+    const user = (roles: string[], operator = false) => ({ operator, memberships: roles.map((role) => ({ role })) });
+    const ids = (u: Parameters<typeof navGroupsFor>[0]) => navGroupsFor(u).flatMap((g) => g.items.map((i) => i.id));
+
+    it("Analytics para analyst e municipal_admin, e para ninguém mais", () => {
+      expect(ids(user([ "analyst" ]))).toContain("analytics");
+      expect(ids(user([ "municipal_admin" ]))).toContain("analytics");
+      for (const role of [ "viewer", "citizen_verifier", "health_professional", "protocol_reviewer", "campaign_manager" ]) {
+        expect(ids(user([ role ]))).not.toContain("analytics");
+      }
+      expect(ids(null)).not.toContain("analytics");
+      expect(labelFor("analytics")).toBe("Analytics");
+    });
+
+    it("operador nunca vê Analytics, nem com papel na lista (D12)", () => {
+      expect(ids(user([], true))).not.toContain("analytics");
+      expect(ids(user([ "municipal_admin" ], true))).not.toContain("analytics");
+    });
+
+    it("analista não ganha Equipe, Território nem Campanhas", () => {
+      expect(ids(user([ "analyst" ]))).not.toContain("team");
+      expect(ids(user([ "analyst" ]))).not.toContain("territory");
+      expect(ids(user([ "analyst" ]))).not.toContain("campaigns");
     });
   });
 });

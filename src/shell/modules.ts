@@ -5,7 +5,7 @@ export type ModuleId =
   | "overview" | "ingestion" | "conversations" | "consent"
   | "triages" | "classification" | "reports" | "protocols" | "events"
   | "queues" | "health" | "protocol-editor" | "security" | "team" | "attendance"
-  | "professionals" | "my-profile" | "territory" | "campaigns";
+  | "professionals" | "my-profile" | "territory" | "campaigns" | "analytics";
 
 export interface NavItem { id: ModuleId; label: string; icon: string; }
 export interface NavGroupDef { label: string; items: NavItem[]; }
@@ -21,6 +21,9 @@ export const NAV_GROUPS: NavGroupDef[] = [
     { id: "triages", label: "Triagens", icon: "≣" },
     { id: "classification", label: "Classificação", icon: "◔" },
     { id: "reports", label: "Relatórios", icon: "▤" }
+  ]},
+  { label: "Análise", items: [
+    { id: "analytics", label: "Analytics", icon: "∿" }
   ]},
   { label: "Governança", items: [
     { id: "protocols", label: "Protocolos", icon: "❏" },
@@ -72,12 +75,16 @@ export function navGroupsFor(
   // Módulo 12: /campaigns é do campaign_manager; o municipal_admin sem o
   // papel entra para a chave de SMS da cidade (spec 2026-09-29 §7).
   const canCampaigns = isAdmin || roles.includes("campaign_manager");
+  // Módulo 14 (ADR 0025, D6/D12): Analytics é do analyst e do municipal_admin
+  // da cidade; o operador, com ou sem grant, nunca (a API responde 403).
+  const canAnalytics = !user?.operator && (isAdmin || roles.includes("analyst"));
   return NAV_GROUPS.filter((group) => {
     if (group.label === "Conta") return !user?.operator;
     if (group.label === "Equipe") return isAdmin;
     // Módulo 11: /territory recusa (403 missing_role) quem não é municipal_admin.
     if (group.label === "Cidade") return isAdmin;
     if (group.label === "Comunicação") return canCampaigns;
+    if (group.label === "Análise") return canAnalytics;
     if (group.label === "Atendimento") return canAttend;
     return true;
   }).map((group) => ({
