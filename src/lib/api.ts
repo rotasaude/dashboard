@@ -835,3 +835,127 @@ export async function getSmsSetting(): Promise<SmsSetting> {
 export async function setSmsSetting(enabled: boolean): Promise<SmsSetting> {
   return jsonFetch<SmsSetting>(`${CAMPAIGNS_BASE}/sms_setting`, { method: "PUT", body: JSON.stringify({ enabled }) });
 }
+
+// ─── Analytics (módulo 14; ADR 0025; contratos mod14 §0–§1) ─────────────────
+// Só leitura, sessão municipal, papéis analyst e municipal_admin. O envelope
+// tem `stale` além de { data, as_of }, e `as_of` é null quando a cidade nunca
+// consolidou. A supressão é da API: o cliente nunca soma nem deriva números.
+export type Cell = number | { suppressed: true };
+export type Rate = number | { suppressed: true } | null;
+export type AnalyticsFront = "demand" | "quality" | "calibration" | "epidemiology";
+export type Granularity = "week" | "month";
+
+export interface AnalyticsFilterEcho {
+  neighborhood_id: string | null;
+  health_unit_id: string | null;
+  protocol_name: string | null;
+  protocol_version: number | null;
+}
+
+export interface AnalyticsBase {
+  front: AnalyticsFront;
+  granularity?: Granularity;
+  from: string;
+  to: string;
+  filter: AnalyticsFilterEcho;
+  periods: string[];
+}
+
+export interface SeriesRow { series: Cell[]; total: Cell }
+
+// Todas as unidades da cidade, ativas e inativas, independentes do recorte:
+// a fonte do seletor de unidade em demand e quality (contratos §1).
+export interface AnalyticsUnit { health_unit_id: string; name: string; active: boolean }
+
+export interface DemandData extends AnalyticsBase {
+  units: AnalyticsUnit[];
+  triages: { started: Cell[]; completed: Cell[]; aborted: Cell[] };
+  triages_total: { started: Cell; completed: Cell; aborted: Cell };
+  by_tier: Array<SeriesRow & { tier: string }>;
+  by_protocol: Array<SeriesRow & { protocol_name: string }>;
+  by_neighborhood: Array<{ neighborhood_id: string | null; name: string; total: Cell }>;
+  attendances_by_unit: Array<SeriesRow & { health_unit_id: string; name: string }>;
+  requests_opened: Array<SeriesRow & { kind: "return" | "referral" }>;
+  requests_closed: Array<SeriesRow & { reason: string }>;
+}
+
+export type WaitBucket = "0-15" | "15-30" | "30-60" | "60-120" | "120+";
+export type AppointmentEndStatus = "checked_in" | "no_show" | "expired" | "cancelled_by_citizen";
+
+export interface QualityData extends AnalyticsBase {
+  units: AnalyticsUnit[];
+  wait: { buckets: Array<SeriesRow & { bucket: WaitBucket }>; within_30_pct: Rate[]; within_30_pct_total: Rate };
+  appointments: Array<SeriesRow & { status: AppointmentEndStatus }>;
+  no_show_pct: Rate[];
+  no_show_pct_total: Rate;
+  attendance_outcomes: Array<SeriesRow & { outcome: AttendanceOutcome }>;
+  left_pct: Rate[];
+  left_pct_total: Rate;
+  by_unit: Array<{
+    health_unit_id: string; name: string; attendances: Cell;
+    wait_within_30_pct: Rate; no_show_pct: Rate; left_pct: Rate;
+  }>;
+}
+
+export type CalibrationOutcome = AttendanceOutcome | "none";
+export interface CalibrationRow {
+  tier: string;
+  total: Cell;
+  outcomes: Record<CalibrationOutcome, Cell>;
+  shares: Record<CalibrationOutcome, Rate>;
+}
+export interface CalibrationVersion { protocol_name: string; protocol_version: number; rows: CalibrationRow[] }
+export interface CalibrationData extends AnalyticsBase { versions: CalibrationVersion[] }
+
+export interface EpiOption extends SeriesRow { value: string; label: string }
+export interface EpiQuestion {
+  protocol_name: string;
+  question_id: string;
+  prompt: string;
+  answer_type: "boolean" | "enum";
+  options: EpiOption[];
+}
+export interface EpidemiologyData extends AnalyticsBase { questions: EpiQuestion[] }
+
+export interface AnalyticsDataMap {
+  demand: DemandData;
+  quality: QualityData;
+  calibration: CalibrationData;
+  epidemiology: EpidemiologyData;
+}
+
+export interface AnalyticsEnvelope<F extends AnalyticsFront> {
+  data: AnalyticsDataMap[F];
+  as_of: string | null;
+  stale: boolean;
+}
+
+// Quem chama manda só os recortes da frente (contratos §1); null = sem recorte.
+export interface AnalyticsQuery {
+  from: string;
+  to: string;
+  granularity?: Granularity;
+  neighborhood_id?: string | null;
+  health_unit_id?: string | null;
+  protocol_name?: string | null;
+  protocol_version?: number | null;
+}
+
+export async function fetchAnalytics<F extends AnalyticsFront>(
+  front: F, query: AnalyticsQuery
+): Promise<AnalyticsEnvelope<F>> {
+  const params: Record<string, string | undefined> = {
+    from: query.from,
+    to: query.to,
+    granularity: front === "calibration" ? undefined : query.granularity,
+    neighborhood_id: query.neighborhood_id ?? undefined,
+    health_unit_id: query.health_unit_id ?? undefined,
+    protocol_name: query.protocol_name ?? undefined,
+    // Versão sozinha é 422 invalid_protocol: só vai junto com o nome.
+    protocol_version: query.protocol_name && query.protocol_version != null ? String(query.protocol_version) : undefined
+  };
+  // adminFetch tipa o envelope clássico ({ data, as_of: string }); este tem
+  // as_of anulável e `stale`, daí o cast.
+  const envelope = await adminFetch<AnalyticsDataMap[F]>(`/analytics/${front}`, params);
+  return envelope as unknown as AnalyticsEnvelope<F>;
+}
