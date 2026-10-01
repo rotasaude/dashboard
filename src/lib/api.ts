@@ -375,6 +375,31 @@ export async function revokeVerification(id: string, reason: string): Promise<vo
   });
 }
 
+// ─── Atendimento: exclusão do cadastro (ADR 0026) ────────────────────────────
+
+export interface ErasureRequestResult { id: string; status: "pending" | "confirmed" | "rejected" | "retained"; created_at: string }
+export interface PendingErasure { id: string; created_at: string; requested_by: string; pairs: number; phone_masked: string }
+
+export function requestErasure(cpf: string, documentChecked: boolean): Promise<{ request: ErasureRequestResult }> {
+  return jsonFetch(`${ATTENDANCE_BASE}/erasure_requests`, {
+    method: "POST", body: JSON.stringify({ cpf, document_checked: documentChecked })
+  });
+}
+
+export function listPendingErasures(): Promise<{ requests: PendingErasure[] }> {
+  return jsonFetch(`${ATTENDANCE_BASE}/erasure_requests`);
+}
+
+export function confirmErasure(id: string): Promise<{ request: ErasureRequestResult }> {
+  return jsonFetch(`${ATTENDANCE_BASE}/erasure_requests/${encodeURIComponent(id)}/confirm`, { method: "POST", body: "{}" });
+}
+
+export function rejectErasure(id: string, reason: string): Promise<{ request: ErasureRequestResult }> {
+  return jsonFetch(`${ATTENDANCE_BASE}/erasure_requests/${encodeURIComponent(id)}/reject`, {
+    method: "POST", body: JSON.stringify({ reason })
+  });
+}
+
 // ─── Atendimento: unidades de saúde (Task 6) ─────────────────────────────────
 
 // Endereço da unidade (módulo 11, ADR 0023; spec 2026-09-28 §4.1). Opcional em

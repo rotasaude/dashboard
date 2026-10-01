@@ -20,6 +20,8 @@ import { UnitQueue } from "./attendance/UnitQueue";
 import { Requests } from "./attendance/Requests";
 import { Agenda } from "./attendance/Agenda";
 import { Units } from "./attendance/Units";
+import { ErasureRequest } from "./attendance/ErasureRequest";
+import { ErasureRequests } from "./attendance/ErasureRequests";
 
 // Atendimento (spec 2026-09-24-citizen-presencial-verification, Task 6, e
 // 2026-09-25-citizen-appointments, Task 7): balcão de verificação presencial
@@ -101,7 +103,9 @@ export function Attendance() {
       {canVerify && unit && <Requests unit={unit} />}
       {canVerify && unit && <Agenda unit={unit} />}
       {canVerify && <Counter />}
+      {canVerify && <ErasureRequest />}
       {isAdmin && <History />}
+      {isAdmin && <ErasureRequests />}
       {isAdmin && <Units />}
     </div>
   );
