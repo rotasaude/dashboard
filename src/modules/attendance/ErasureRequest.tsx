@@ -41,7 +41,7 @@ export function ErasureRequest() {
         {done && <p role="status" style={{ margin: 0, fontSize: 12.5 }}>{done}</p>}
         <label style={labelStyle}>
           CPF do cidadão (exclusão)
-          <input value={cpf} onChange={(e) => setCpf(maskCpf(e.target.value))} style={inputStyle} inputMode="numeric" />
+          <input value={cpf} autoComplete="off" onChange={(e) => setCpf(maskCpf(e.target.value))} style={inputStyle} inputMode="numeric" />
         </label>
         <label style={{ ...labelStyle, flexDirection: "row", alignItems: "center", gap: 8 }}>
           <input type="checkbox" checked={checked} onChange={(e) => setChecked(e.target.checked)} />

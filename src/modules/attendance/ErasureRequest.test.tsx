@@ -21,6 +21,11 @@ const fill = (cpf: string, check = true) => {
 describe("ErasureRequest", () => {
   beforeEach(() => { requestErasure.mockReset(); });
 
+  it("o campo de CPF (de terceiro) não é guardado pelo navegador", () => {
+    render(<ErasureRequest />);
+    expect(screen.getByLabelText("CPF do cidadão (exclusão)").getAttribute("autocomplete")).toBe("off");
+  });
+
   it("CPF inválido desabilita o botão", () => {
     render(<ErasureRequest />);
     fill("111.111.111-11");
