@@ -93,6 +93,11 @@ const MESSAGES: Record<string, string> = {
   missing_link: "Você não tem vínculo com esta unidade",
   missing_role: "seu papel não permite esta ação",
   invalid_zip: "CEP precisa ter 8 dígitos",
+  citizen_not_found: "Nenhum cadastro com este CPF.",
+  already_pending: "Já existe um pedido pendente para este CPF.",
+  own_request: "Quem registrou o pedido não pode confirmá-lo.",
+  not_pending: "Este pedido já foi decidido.",
+  try_again: "Outra operação estava em andamento. Tente de novo.",
   invalid_neighborhood: "bairro inválido — escolha outro da lista"
 };
 
