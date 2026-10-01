@@ -555,12 +555,15 @@ export async function listUnitRequests(unitId: string): Promise<RequestRow[]> {
 
 export interface ScheduledAppointment { id: string; scheduled_at: string; status: string; confirmation_deadline_at: string | null }
 
+// allowOverlap: a recepção já viu o slot_taken e decidiu pelo encaixe (api#26).
 export async function scheduleRequest(
-  id: string, scheduledAtIso: string, healthUnitId: string
+  id: string, scheduledAtIso: string, healthUnitId: string, opts: { allowOverlap?: boolean } = {}
 ): Promise<ScheduledAppointment> {
+  const body: Record<string, unknown> = { scheduled_at: scheduledAtIso, health_unit_id: healthUnitId };
+  if (opts.allowOverlap) body.allow_overlap = true;
   const payload = await jsonFetch<{ appointment: ScheduledAppointment }>(
     `${ATTENDANCE_BASE}/requests/${encodeURIComponent(id)}/appointments`,
-    { method: "POST", body: JSON.stringify({ scheduled_at: scheduledAtIso, health_unit_id: healthUnitId }) }
+    { method: "POST", body: JSON.stringify(body) }
   );
   return payload.appointment;
 }
