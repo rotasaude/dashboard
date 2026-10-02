@@ -5,7 +5,7 @@ import {
   type HealthUnit, type RequestRow
 } from "../../lib/api";
 import { ATTENDANCE_REFETCH_MS, attendanceError } from "../../lib/attendance";
-import { fmtDateTime, fmtHourMinute, parseCityLocal } from "../../lib/format";
+import { cityDateFormat, fmtDateTime, fmtHourMinute, parseCityLocal } from "../../lib/format";
 import { Panel } from "../../components/Panel";
 import { DataTable } from "../../components/DataTable";
 import { EmptyState } from "../../components/EmptyState";
@@ -24,11 +24,8 @@ interface Props {
 }
 
 // "dd/mm hh:mm", sem segundos e sem ano (spec §6); a hora vem de fmtHourMinute.
-const dayMonthFmt = new Intl.DateTimeFormat("pt-BR", {
-  timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit"
-});
 function fmtShort(d: Date): string {
-  return `${dayMonthFmt.format(d)} ${fmtHourMinute(d.toISOString())}`;
+  return `${cityDateFormat({ day: "2-digit", month: "2-digit" }).format(d)} ${fmtHourMinute(d.toISOString())}`;
 }
 
 function kindLabel(row: RequestRow): string {

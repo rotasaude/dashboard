@@ -1,7 +1,7 @@
 // Regras do módulo 10 sem React (spec 2026-09-27 §5): CNS igual ao api
 // (Professionals::Cns), janela do turno e mensagens das recusas.
 import { ApiError } from "./api";
-import { fmtHourMinute } from "./format";
+import { cityDateFormat, cityLocalIso, fmtHourMinute } from "./format";
 
 export const COUNCILS = [ "CRM", "COREN", "CRO", "CRF", "CRP", "CREFITO", "CRN", "CRFa", "CRESS", "CRBM", "CREF", "CRMV" ];
 export const UFS = [ "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG", "PA", "PB", "PR", "PE",
@@ -21,9 +21,6 @@ export function maskCns(cns: string): string {
   return `*** **** **** ${digits(cns).slice(-4)}`;
 }
 
-// Sem horário de verão em America/Sao_Paulo desde 2019: deslocamento fixo.
-const OFFSET = "-03:00";
-
 function nextDate(date: string): string {
   const d = new Date(`${date}T12:00:00Z`);
   d.setUTCDate(d.getUTCDate() + 1);
@@ -38,7 +35,11 @@ export function shiftWindow(date: string, start: string, end: string):
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^\d{2}:\d{2}$/.test(start) || !/^\d{2}:\d{2}$/.test(end)) return null;
   const nextDay = end <= start;
   const endDate = nextDay ? nextDate(date) : date;
-  return { startsAt: `${date}T${start}:00${OFFSET}`, endsAt: `${endDate}T${end}:00${OFFSET}`, nextDay, tooLong: false };
+  // Hora de parede da cidade (api#27): o deslocamento vem do fuso da sessão.
+  const startsAt = cityLocalIso(`${date}T${start}`);
+  const endsAt = cityLocalIso(`${endDate}T${end}`);
+  if (!startsAt || !endsAt) return null;
+  return { startsAt, endsAt, nextDay, tooLong: false };
 }
 
 const FIELD_LABEL: Record<string, string> = {
@@ -70,7 +71,7 @@ const MESSAGES: Record<string, string> = {
 const GENERIC = "não foi possível concluir — tente de novo";
 
 function fmtDayMonth(iso: string): string {
-  return new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit" }).format(new Date(iso));
+  return cityDateFormat({ day: "2-digit", month: "2-digit" }).format(new Date(iso));
 }
 
 type ProfessionalErrorBody = {

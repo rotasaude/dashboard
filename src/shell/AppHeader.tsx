@@ -17,6 +17,7 @@ import { navGroupsFor, type ModuleId } from "./modules";
 import { PERIOD_OPTIONS, useScope } from "../lib/scope";
 import type { Alert } from "../lib/alerts";
 import { useAuth } from "../lib/auth";
+import { cityDateFormat, cityOffsetLabel } from "../lib/format";
 
 interface Props {
   active: ModuleId;
@@ -375,17 +376,12 @@ function LiveClock() {
         }}
       />
       <span className="mono" style={{ fontSize: 11, color: "var(--ink3)", whiteSpace: "nowrap" }}>
-        {time} <span style={{ color: "var(--ink4)" }}>BRT</span>
+        {time} <span style={{ color: "var(--ink4)" }}>{cityOffsetLabel()}</span>
       </span>
     </span>
   );
 }
 
 function formatNow(): string {
-  return new Intl.DateTimeFormat("pt-BR", {
-    timeZone: "America/Sao_Paulo",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit"
-  }).format(new Date());
+  return cityDateFormat({ hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(new Date());
 }

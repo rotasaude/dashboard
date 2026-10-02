@@ -10,6 +10,7 @@ vi.mock("./api", () => ({
 }));
 
 import { AuthProvider, useAuth } from "./auth";
+import { cityTimeZone, setCityTimeZone } from "./format";
 import * as api from "./api";
 
 const USER = {
@@ -49,5 +50,18 @@ describe("AuthProvider", () => {
     await act(async () => { await result.current.logout(); });
     expect(result.current.state.kind).toBe("anonymous");
     expect(result.current.municipalityId).toBe(null);
+  });
+
+  it("a sessão define o fuso da cidade usado na formatação (api#27)", async () => {
+    setCityTimeZone(null);
+    (api.fetchCurrentSession as ReturnType<typeof vi.fn>).mockResolvedValue({ ...USER, time_zone: "America/Manaus" });
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.state.kind).toBe("authenticated"));
+    expect(cityTimeZone()).toBe("America/Manaus");
+
+    (api.login as ReturnType<typeof vi.fn>).mockResolvedValue({ ...USER, time_zone: "America/Rio_Branco" });
+    await act(async () => { await result.current.login("admin@curitiba.demo", "pw"); });
+    expect(cityTimeZone()).toBe("America/Rio_Branco");
+    setCityTimeZone(null);
   });
 });

@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { ApiError } from "./api";
 import { isValidCns, maskCns, professionalError, professionalErrorOrNull, shiftWindow } from "./professionals";
+import { setCityTimeZone } from "./format";
 
 describe("isValidCns", () => {
   it.each([ "700000000000005", "100000000000007", "200123456789019", "898000000000002", "712345678901236", "123456789012348" ])(
@@ -82,5 +83,16 @@ describe("professionalErrorOrNull", () => {
   });
   it("sessão expirada (401): null, para o SensitiveAction usar a mensagem de sessão expirada", () => {
     expect(professionalErrorOrNull(err(401, {}))).toBeNull();
+  });
+});
+
+describe("shiftWindow no fuso da cidade (api#27)", () => {
+  afterEach(() => setCityTimeZone(null));
+
+  it("em Manaus, o turno leva o deslocamento -04:00", () => {
+    setCityTimeZone("America/Manaus");
+    expect(shiftWindow("2026-10-05", "19:00", "07:00")).toEqual({
+      startsAt: "2026-10-05T19:00:00-04:00", endsAt: "2026-10-06T07:00:00-04:00", nextDay: true, tooLong: false
+    });
   });
 });
