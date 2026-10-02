@@ -127,12 +127,20 @@ export function Requests({ unit }: Props) {
   );
 }
 
+function slotTaken(err: unknown): number {
+  const body = (err instanceof ApiError ? err.body : null) as { taken?: number } | null;
+  return typeof body?.taken === "number" && body.taken > 0 ? body.taken : 1;
+}
+
 function SchedulePanel(
   { row, unit, onCancel, onDone }: { row: RequestRow; unit: HealthUnit; onCancel(): void; onDone(): void }
 ) {
   const [ value, setValue ] = useState("");
   const [ busy, setBusy ] = useState(false);
   const [ error, setError ] = useState<string | null>(null);
+  // Quantos horários vivos já estão nesse início (409 slot_taken, api#26).
+  // Vale só para o valor que foi conferido: trocar o horário apaga o aviso.
+  const [ taken, setTaken ] = useState<number | null>(null);
 
   const parsed = parseCityLocal(value);
   const valid = !!parsed;
@@ -148,14 +156,19 @@ function SchedulePanel(
     }
   }
 
-  async function confirm() {
+  async function confirm(allowOverlap = false) {
     if (busy || !valid || !parsed) return;
     setBusy(true); setError(null);
     try {
-      await scheduleRequest(row.id, parsed.toISOString(), unit.id);
+      if (allowOverlap) {
+        await scheduleRequest(row.id, parsed.toISOString(), unit.id, { allowOverlap: true });
+      } else {
+        await scheduleRequest(row.id, parsed.toISOString(), unit.id);
+      }
       onDone();
     } catch (err) {
       if (errorCode(err) === "request_not_open") { onDone(); return; }
+      if (errorCode(err) === "slot_taken") { setTaken(slotTaken(err)); return; }
       setError(attendanceError(err));
     } finally {
       setBusy(false);
@@ -168,18 +181,39 @@ function SchedulePanel(
       {error && <p role="alert" style={{ margin: 0, fontSize: 12.5, color: "var(--down)" }}>{error}</p>}
       <label style={{ ...labelStyle, maxWidth: 240 }}>
         Horário
-        <input type="datetime-local" value={value} onChange={(e) => setValue(e.target.value)} style={inputStyle} />
+        <input
+          type="datetime-local" value={value}
+          onChange={(e) => { setValue(e.target.value); setTaken(null); }} style={inputStyle}
+        />
       </label>
       {warning && <p role="status" style={{ margin: 0, fontSize: 12.5, fontWeight: 600 }}>{warning}</p>}
+      {taken !== null && (
+        <p role="alert" style={{ margin: 0, fontSize: 12.5, fontWeight: 600, color: "var(--warn)" }}>
+          {taken === 1
+            ? `Já há 1 horário marcado na ${unit.name} nesse horário.`
+            : `Já há ${taken} horários marcados na ${unit.name} nesse horário.`} Marcar mesmo assim é um encaixe.
+        </p>
+      )}
       <div style={{ display: "flex", gap: 8 }}>
-        <button
-          type="button"
-          disabled={!valid || busy}
-          onClick={() => void confirm()}
-          style={(!valid || busy) ? disabledButtonStyle : buttonStyle}
-        >
-          Confirmar horário
-        </button>
+        {taken === null ? (
+          <button
+            type="button"
+            disabled={!valid || busy}
+            onClick={() => void confirm()}
+            style={(!valid || busy) ? disabledButtonStyle : buttonStyle}
+          >
+            Confirmar horário
+          </button>
+        ) : (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void confirm(true)}
+            style={busy ? disabledButtonStyle : buttonStyle}
+          >
+            Marcar mesmo assim
+          </button>
+        )}
         <button type="button" disabled={busy} onClick={onCancel} style={secondaryButtonStyle}>Cancelar</button>
       </div>
     </section>
