@@ -9,6 +9,7 @@ import {
   fetchCurrentSession, login as apiLogin, logout as apiLogout,
   type SessionUser
 } from "./api";
+import { setCityTimeZone } from "./format";
 
 type AuthState =
   | { kind: "loading" }
@@ -35,6 +36,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const reload = useCallback(async () => {
     const user = await fetchCurrentSession();
+    if (user) setCityTimeZone(user.time_zone);
     setState(user ? { kind: "authenticated", user } : { kind: "anonymous" });
   }, []);
 
@@ -42,6 +44,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(async (email_address: string, password: string) => {
     const user = await apiLogin(email_address, password);
+    setCityTimeZone(user.time_zone);
     setState({ kind: "authenticated", user });
   }, []);
 

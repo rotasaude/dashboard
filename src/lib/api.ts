@@ -38,6 +38,8 @@ export interface SessionUser {
   memberships: Membership[];
   mfa_enrolled: boolean;
   mfa_verified_at: string | null;
+  // Fuso IANA da cidade do host (api#27); ausente em api antigo.
+  time_zone?: string;
 }
 
 async function jsonFetch<T>(input: string, init?: RequestInit): Promise<T> {

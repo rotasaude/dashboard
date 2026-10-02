@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { listUnitAgenda, type AgendaAppointment, type HealthUnit } from "../../lib/api";
 import { ATTENDANCE_REFETCH_MS, attendanceError } from "../../lib/attendance";
-import { fmtHourMinute } from "../../lib/format";
+import { cityIsoDate, fmtHourMinute } from "../../lib/format";
 import { Panel } from "../../components/Panel";
 import { DataTable } from "../../components/DataTable";
 import { EmptyState } from "../../components/EmptyState";
@@ -15,12 +15,9 @@ interface Props {
   unit: HealthUnit;
 }
 
-// en-CA formata como YYYY-MM-DD — o mesmo formato do <input type="date">.
-const isoDateFmt = new Intl.DateTimeFormat("en-CA", {
-  timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit"
-});
+// Dia da cidade em YYYY-MM-DD — o mesmo formato do <input type="date">.
 function todayIso(): string {
-  return isoDateFmt.format(new Date());
+  return cityIsoDate();
 }
 
 function kindLabel(kind: AgendaAppointment["kind"]): string {

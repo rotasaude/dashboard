@@ -5,7 +5,7 @@
 import {
   ApiError, type Audience, type AudienceGeo, type CampaignStatus, type Criterion, type CriterionKind, type SmsStatus
 } from "./api";
-import { TIMEZONE, parseCityLocal } from "./format";
+import { cityIsoDate, parseCityLocal } from "./format";
 
 export const CAMPAIGN_MANAGER_ROLE = "campaign_manager";
 
@@ -92,11 +92,8 @@ export function isEditable(status: CampaignStatus): boolean {
 // ─── Datas ──────────────────────────────────────────────────────────────────
 // "Hoje" é o dia da CIDADE: às 23h30 em São Paulo já é amanhã em UTC, e o
 // limite "não pode terminar no futuro" do api é no fuso da cidade (spec §4.1).
-const dayParts = new Intl.DateTimeFormat("en-US", { timeZone: TIMEZONE, year: "numeric", month: "2-digit", day: "2-digit" });
-
 export function todayInCity(now: Date = new Date()): string {
-  const p = Object.fromEntries(dayParts.formatToParts(now).map((x) => [ x.type, x.value ]));
-  return `${p.year}-${p.month}-${p.day}`;
+  return cityIsoDate(now);
 }
 
 // Aritmética de dia em UTC ao meio-dia: nenhum fuso desloca a data.
