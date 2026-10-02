@@ -12,7 +12,7 @@ vi.mock("../lib/api", async (importOriginal) => {
     listUnitQueue: vi.fn(), callAttendance: vi.fn(), callNext: vi.fn(), closeAttendance: vi.fn(),
     lookupCheckIn: vi.fn(), checkIn: vi.fn(), searchCheckIn: vi.fn(), checkInByException: vi.fn(),
     listUnitRequests: vi.fn(), scheduleRequest: vi.fn(), dismissRequest: vi.fn(), listUnitAgenda: vi.fn(),
-    getMyProfessional: vi.fn()
+    getMyProfessional: vi.fn(), listPendingErasures: vi.fn()
   };
 });
 
@@ -21,6 +21,7 @@ import { ApiError } from "../lib/api";
 import { AuthProvider } from "../lib/auth";
 import { ATTENDANCE_REFETCH_MS, currentUnitKey } from "../lib/attendance";
 import { Attendance } from "./Attendance";
+import type { ModuleId } from "../shell/modules";
 
 afterEach(() => { cleanup(); localStorage.clear(); });
 const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
@@ -33,11 +34,11 @@ function session(role: string): api.SessionUser {
   };
 }
 
-function renderAttendance() {
+function renderAttendance(onNavigate: (id: ModuleId) => void = vi.fn()) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const wrapper = ({ children }: { children: ReactNode }) =>
     <QueryClientProvider client={client}><AuthProvider>{children}</AuthProvider></QueryClientProvider>;
-  render(<Attendance />, { wrapper });
+  render(<Attendance onNavigate={onNavigate} />, { wrapper });
   return { client };
 }
 
@@ -359,5 +360,18 @@ describe("Attendance", () => {
     expect(await screen.findByText("Seu cadastro profissional ainda não foi feito. Fale com a administração da cidade.")).not.toBeNull();
     expect(screen.queryByText("Você não tem vínculo com esta unidade")).toBeNull();
     expect(screen.queryByRole("button", { name: "Chamar próximo" })).toBeNull();
+  });
+
+  it("admin sem autenticador chega à Segurança a partir dos pedidos de exclusão", async () => {
+    mocked(api.fetchCurrentSession).mockResolvedValue({ ...session("municipal_admin"), mfa_enrolled: false });
+    mocked(api.listPendingErasures).mockResolvedValue({ requests: [
+      { id: "e1", created_at: "2026-10-01T10:00:00Z", requested_by: "atendente@cidade.gov.br", pairs: 1, phone_masked: "(41) *****-1234" }
+    ] });
+    const onNavigate = vi.fn();
+    renderAttendance(onNavigate);
+    fireEvent.click(await screen.findByRole("button", { name: "Confirmar exclusão" }));
+    expect(screen.getByText("Esta ação exige um autenticador cadastrado.")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "cadastre seu autenticador" }));
+    expect(onNavigate).toHaveBeenCalledWith("security");
   });
 });
