@@ -14,6 +14,7 @@ import { Tag } from "../components/Tag";
 import { KeyValue } from "../components/KeyValue";
 import { EmptyState } from "../components/EmptyState";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../components/formStyles";
+import type { ModuleId } from "../shell/modules";
 import { UnitPicker } from "./attendance/UnitPicker";
 import { CheckIn } from "./attendance/CheckIn";
 import { UnitQueue } from "./attendance/UnitQueue";
@@ -33,7 +34,8 @@ type CounterState = "form" | "found" | "done";
 
 interface Found { citizen: AttendanceCitizen; triages: AttendanceTriage[] }
 
-export function Attendance() {
+export function Attendance({ onNavigate }: { onNavigate(id: ModuleId): void }) {
+  const goToSecurity = () => onNavigate("security");
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [ unit, setUnit ] = useState<HealthUnit | null>(null);
@@ -105,7 +107,7 @@ export function Attendance() {
       {canVerify && <Counter />}
       {canVerify && <ErasureRequest />}
       {isAdmin && <History />}
-      {isAdmin && <ErasureRequests />}
+      {isAdmin && <ErasureRequests onGoToSecurity={goToSecurity} />}
       {isAdmin && <Units />}
     </div>
   );

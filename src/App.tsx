@@ -74,7 +74,7 @@ function renderModule(active: ModuleId, setActive: (id: ModuleId) => void) {
     case "health":         return <Health />;
     case "security":       return <Security />;
     case "team":           return <Team onNavigate={setActive} />;
-    case "attendance":     return <Attendance />;
+    case "attendance":     return <Attendance onNavigate={setActive} />;
     case "professionals":  return <Professionals />;
     case "my-profile":     return <MyProfile />;
     case "territory":      return <Territory />;
