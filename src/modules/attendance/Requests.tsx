@@ -11,6 +11,7 @@ import { DataTable } from "../../components/DataTable";
 import { EmptyState } from "../../components/EmptyState";
 import { Tag } from "../../components/Tag";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
+import { FrozenTextNotice } from "../../components/FrozenTextNotice";
 
 // Requests (Task 8) — pedidos de agendamento abertos da unidade (spec §6
 // "Pedidos de agendamento"). "Marcar horário" avisa, calculado no navegador
@@ -246,8 +247,10 @@ function DismissPanel(
       {error && <p role="alert" style={{ margin: 0, fontSize: 12.5, color: "var(--down)" }}>{error}</p>}
       <label style={labelStyle}>
         Justificativa
-        <textarea value={reason} onChange={(e) => setReason(e.target.value)} style={{ ...inputStyle, minHeight: 60 }} />
+        <textarea value={reason} onChange={(e) => setReason(e.target.value)} style={{ ...inputStyle, minHeight: 60 }}
+          aria-describedby="dismiss-reason-notice" />
       </label>
+      <FrozenTextNotice id="dismiss-reason-notice" />
       <div style={{ display: "flex", gap: 8 }}>
         <button
           type="button"

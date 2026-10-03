@@ -13,6 +13,7 @@ vi.mock("../../lib/api", async (importOriginal) => {
 import * as api from "../../lib/api";
 import { ApiError } from "../../lib/api";
 import { Requests } from "./Requests";
+import { expectFrozenNotice } from "../../test/frozenNotice";
 
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
@@ -134,6 +135,7 @@ describe("Requests", () => {
     fireEvent.click(screen.getByRole("button", { name: "Encerrar pedido" }));
     const confirm = screen.getByRole("button", { name: "Confirmar encerramento" }) as HTMLButtonElement;
     expect(confirm.disabled).toBe(true);
+    expectFrozenNotice(screen.getByLabelText("Justificativa"));
     fireEvent.change(screen.getByLabelText("Justificativa"), { target: { value: "curto" } });
     expect((screen.getByRole("button", { name: "Confirmar encerramento" }) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.change(screen.getByLabelText("Justificativa"), { target: { value: "cidadão desistiu do retorno" } });
