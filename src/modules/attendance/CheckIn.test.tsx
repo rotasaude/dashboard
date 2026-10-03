@@ -13,6 +13,7 @@ vi.mock("../../lib/api", async (importOriginal) => {
 import * as api from "../../lib/api";
 import { ApiError } from "../../lib/api";
 import { CheckIn } from "./CheckIn";
+import { expectFrozenNotice } from "../../test/frozenNotice";
 
 afterEach(cleanup);
 const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
@@ -216,6 +217,7 @@ describe("CheckIn", () => {
     fireEvent.click(screen.getByText(/Agendamento \d{2}:\d{2}/));
     const start = screen.getByRole("button", { name: "Iniciar atendimento" }) as HTMLButtonElement;
     expect(start.disabled).toBe(true);
+    expectFrozenNotice(screen.getByLabelText("Motivo"));
     fireEvent.change(screen.getByLabelText("Motivo"), { target: { value: "curto" } });
     expect((screen.getByRole("button", { name: "Iniciar atendimento" }) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.change(screen.getByLabelText("Motivo"), { target: { value: "documento perdido" } });

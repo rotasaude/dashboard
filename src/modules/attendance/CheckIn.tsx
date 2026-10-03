@@ -12,6 +12,7 @@ import { KeyValue } from "../../components/KeyValue";
 import { Tag } from "../../components/Tag";
 import { EmptyState } from "../../components/EmptyState";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
+import { FrozenTextNotice } from "../../components/FrozenTextNotice";
 
 // CheckIn (Task 7) — check-in por código (spec §5 "Check-in") e exceção por
 // CPF ("Cidadão sem o código"), dentro da unidade escolhida (UnitPicker,
@@ -319,8 +320,10 @@ function ExceptionFlow({ unit, onUnitInvalid }: Props) {
         <div style={{ display: "flex", flexDirection: "column", gap: 10, maxWidth: 320 }}>
           <label style={labelStyle}>
             Motivo
-            <textarea value={reason} onChange={(e) => setReason(e.target.value)} style={{ ...inputStyle, minHeight: 60 }} />
+            <textarea value={reason} onChange={(e) => setReason(e.target.value)} style={{ ...inputStyle, minHeight: 60 }}
+              aria-describedby="exception-reason-notice" />
           </label>
+          <FrozenTextNotice id="exception-reason-notice" />
           <div>
             <button
               type="button"

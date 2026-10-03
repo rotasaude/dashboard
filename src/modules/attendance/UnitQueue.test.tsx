@@ -15,6 +15,7 @@ import * as api from "../../lib/api";
 import { ApiError } from "../../lib/api";
 import { AuthProvider } from "../../lib/auth";
 import { UnitQueue } from "./UnitQueue";
+import { expectFrozenNotice } from "../../test/frozenNotice";
 
 afterEach(cleanup);
 const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
@@ -211,6 +212,7 @@ describe("UnitQueue", () => {
       const select = screen.getByLabelText("Unidade de destino") as HTMLSelectElement;
       expect(Array.from(select.options).map((o) => o.textContent)).toEqual([ "—", "UBS Centro", "UPA Norte" ]);
       expect(screen.getByLabelText("Descrição")).not.toBeNull();
+      expectFrozenNotice(screen.getByLabelText("Descrição"));
     });
 
     it("'Encaminhado' sem destino e sem descrição fica desabilitado", async () => {
@@ -260,6 +262,7 @@ describe("UnitQueue", () => {
       fireEvent.click(await screen.findByRole("button", { name: "Encerrar" }));
       fireEvent.change(screen.getByLabelText("Desfecho"), { target: { value: "return" } });
       expect(screen.getByLabelText("Nota (opcional)")).not.toBeNull();
+      expectFrozenNotice(screen.getByLabelText("Nota (opcional)"));
       expect(screen.getByText("Gera pedido de agendamento na UBS Centro")).not.toBeNull();
     });
 

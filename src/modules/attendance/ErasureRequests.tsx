@@ -9,6 +9,7 @@ import { EmptyState } from "../../components/EmptyState";
 import { SensitiveAction } from "../../components/SensitiveAction";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { RETAINED_MESSAGE } from "./ErasureRequest";
+import { FrozenTextNotice } from "../../components/FrozenTextNotice";
 
 // Pedidos de exclusão pendentes (ADR 0026), só para municipal_admin. Confirmar
 // apaga de vez e passa pelo step-up (SensitiveAction); quem registrou o pedido
@@ -112,8 +113,10 @@ function RejectPanel({ row, onCancel, onDone }: { row: PendingErasure; onCancel(
       {error && <p role="alert" style={{ margin: 0, fontSize: 12.5, color: "var(--down)" }}>{error}</p>}
       <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12, color: "var(--ink2)" }}>
         Motivo
-        <textarea value={reason} onChange={(e) => setReason(e.target.value)} style={{ ...inputStyle, minHeight: 60 }} />
+        <textarea value={reason} onChange={(e) => setReason(e.target.value)} style={{ ...inputStyle, minHeight: 60 }}
+          aria-describedby="erasure-reject-notice" />
       </label>
+      <FrozenTextNotice id="erasure-reject-notice" />
       <div style={{ display: "flex", gap: 8 }}>
         <button type="button" disabled={!valid || busy} onClick={() => void submit()} style={(!valid || busy) ? disabledButtonStyle : buttonStyle}>
           Confirmar recusa

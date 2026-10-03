@@ -11,6 +11,7 @@ import { Panel } from "../../components/Panel";
 import { DataTable } from "../../components/DataTable";
 import { EmptyState } from "../../components/EmptyState";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
+import { FrozenTextNotice } from "../../components/FrozenTextNotice";
 
 // UnitQueue (Task 7) — a fila da unidade atual (spec §6 "Fila"), em duas
 // partes: "Aguardando" (ordenada pela API — prioridade, depois chegada — esta
@@ -321,16 +322,22 @@ function ClosePanel(
           </label>
           <label style={labelStyle}>
             Descrição
-            <input value={note} onChange={(e) => setNote(e.target.value)} style={inputStyle} />
+            <input value={note} onChange={(e) => setNote(e.target.value)} style={inputStyle}
+              aria-describedby="referral-note-notice" />
           </label>
+          <FrozenTextNotice id="referral-note-notice" />
         </>
       )}
 
       {outcome === "return" && (
-        <label style={labelStyle}>
-          Nota (opcional)
-          <input value={note} onChange={(e) => setNote(e.target.value)} style={inputStyle} />
-        </label>
+        <>
+          <label style={labelStyle}>
+            Nota (opcional)
+            <input value={note} onChange={(e) => setNote(e.target.value)} style={inputStyle}
+              aria-describedby="return-note-notice" />
+          </label>
+          <FrozenTextNotice id="return-note-notice" />
+        </>
       )}
 
       {targetUnitName && (

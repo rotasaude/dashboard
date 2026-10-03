@@ -15,6 +15,7 @@ import * as api from "../../lib/api";
 import { ApiError } from "../../lib/api";
 import { AuthProvider } from "../../lib/auth";
 import { ErasureRequests } from "./ErasureRequests";
+import { expectFrozenNotice } from "../../test/frozenNotice";
 
 afterEach(cleanup);
 const m = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
@@ -83,6 +84,7 @@ describe("ErasureRequests", () => {
     renderIt();
     fireEvent.click(await screen.findByRole("button", { name: "Recusar" }));
     const confirm = screen.getByRole("button", { name: "Confirmar recusa" }) as HTMLButtonElement;
+    expectFrozenNotice(screen.getByLabelText("Motivo"));
     fireEvent.change(screen.getByLabelText("Motivo"), { target: { value: "curto" } });
     expect(confirm.disabled).toBe(true);
     fireEvent.change(screen.getByLabelText("Motivo"), { target: { value: "documento não confere" } });
