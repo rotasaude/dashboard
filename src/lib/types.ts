@@ -66,6 +66,9 @@ export interface TriagesData extends Filtered {
   completed: SmallCount;
   completionRate: SmallCount;
   byProtocol: Array<{ version: string; count: SmallCount; share: SmallCount; status: string }>;
+  // api#34: triagens revogadas do período, só a contagem (seguem em started,
+  // fora de completed e da taxa). Ausente = api antiga.
+  revoked?: SmallCount;
 }
 
 export interface SampleTriage {

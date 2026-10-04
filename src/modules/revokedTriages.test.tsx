@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup } from "@testing-library/react";
-import type { ClassificationData, EventsData, HealthData, IngestionData, OverviewData, QueuesData, SmallCount } from "../lib/types";
+import type { ClassificationData, TriagesData, EventsData, HealthData, IngestionData, OverviewData, QueuesData, SmallCount } from "../lib/types";
 import { kpiRow, renderPanel, stubResizeObserver, stubRoutes } from "../test/panelHarness";
 import { Overview } from "./Overview";
 import { Classification } from "./Classification";
+import { Triages } from "./Triages";
 
 // api#34: triagem revogada pelo cidadão não entra nas concluídas nem nos
 // tiers; os painéis mostram só a contagem do período, à parte, sem linha.
@@ -101,6 +102,44 @@ describe("Classificação — revogadas à parte (api#34)", () => {
     renderClassification();
     const row = await kpiRow();
     expect(row.getByText("Tier alta")).toBeTruthy();
+    expect(row.queryByText("Revogadas no período")).toBeNull();
+  });
+});
+
+function triages(revoked?: SmallCount): TriagesData {
+  return {
+    series: [ 0, 9 ], started: 9, completed: 7, completionRate: 77.8, byProtocol: [],
+    ...(revoked === undefined ? {} : { revoked })
+  };
+}
+
+function renderTriages(revoked?: SmallCount) {
+  stubRoutes({ "/triages": triages(revoked) });
+  renderPanel(<Triages />);
+}
+
+describe("Triagens — revogadas à parte (api#34)", () => {
+  const HINT = "Triagens revogadas pelo cidadão não entram nas concluídas nem nos tiers.";
+
+  it("mostra a contagem de revogadas do período com a explicação", async () => {
+    renderTriages(6);
+    const row = await kpiRow();
+    expect(row.getByText("Revogadas no período")).toBeTruthy();
+    expect(row.getByText("6")).toBeTruthy();
+    expect(row.getByText(HINT)).toBeTruthy();
+  });
+
+  it("contagem suprimida aparece com o marcador de contagem oculta", async () => {
+    renderTriages({ suppressed: true });
+    const row = await kpiRow();
+    expect(row.getByText("Revogadas no período")).toBeTruthy();
+    expect(row.getByText("< 5")).toBeTruthy();
+  });
+
+  it("api antiga, sem o campo: nada de revogadas, e o painel não quebra", async () => {
+    renderTriages();
+    const row = await kpiRow();
+    expect(row.getByText("Concluídas")).toBeTruthy();
     expect(row.queryByText("Revogadas no período")).toBeNull();
   });
 });
