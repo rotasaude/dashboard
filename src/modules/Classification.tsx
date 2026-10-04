@@ -21,7 +21,6 @@ import { KpiSkeleton } from "./Overview";
 import { fmtTime } from "../lib/format";
 import { Count, SegmentsOrList } from "../components/Count";
 import type { ClassificationData } from "../lib/types";
-import { normalizeClassification } from "../lib/classification";
 
 export function Classification() {
   const [ trailOf, setTrailOf ] = useState<string | null>(null);
@@ -31,7 +30,7 @@ export function Classification() {
   if (isError) return <Wrap><ErrorState message={(error as Error)?.message || "Erro"} onRetry={() => refetch()} /></Wrap>;
   if (!data) return <Wrap><EmptyState title="sem dados" /></Wrap>;
 
-  const d = normalizeClassification(data.data);
+  const d = data.data;
   return (
     <Wrap>
       <KpiGrid asOf={data.as_of}>
