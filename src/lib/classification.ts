@@ -36,6 +36,8 @@ export function normalizeClassification(raw: Legacy): ClassificationData {
       priority: typeof s.priority === "number" ? s.priority : null,
       urgent: s.urgent ?? s.priority === true
     })),
-    filter: raw.filter
+    filter: raw.filter,
+    // api#34: ausente (api antiga) continua ausente — o painel não mostra.
+    ...(raw.revoked === undefined ? {} : { revoked: raw.revoked })
   };
 }

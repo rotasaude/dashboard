@@ -29,7 +29,12 @@ export interface OverviewKpi {
   spark: SmallCount[];
   source: "live" | "proj";
 }
-export interface OverviewData extends Filtered { kpis: OverviewKpi[] }
+export interface OverviewData extends Filtered {
+  kpis: OverviewKpi[];
+  // api#34: triagens revogadas do período, só a contagem (fora de concluídas,
+  // urgentes e taxa). Ausente = api antiga.
+  revoked?: SmallCount;
+}
 
 export interface IngestionData {
   inboundSeries: number[];
@@ -85,6 +90,9 @@ export interface ClassificationData extends Filtered {
   // ponto do painel está suprimido, mesmo com total visível; ausente também é
   // tratado como oculta. [] = nenhuma no período.
   sampleTriages?: SampleTriage[] | null;
+  // api#34: triagens revogadas do período, só a contagem (fora dos tiers e da
+  // urgência). Ausente = api antiga.
+  revoked?: SmallCount;
 }
 
 export interface TrailStep {
