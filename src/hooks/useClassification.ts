@@ -8,7 +8,7 @@ export function useClassification() {
   const scope = useScope();
   const neighborhood = useNeighborhoodFilter();
   return useQuery({
-    queryKey: [ "classification", scope.period, scope.municipalityId, neighborhood ],
+    queryKey: [ "classification", scope.period, scope.citySlug, neighborhood ],
     queryFn: () => adminFetch<ClassificationData>("/classification", { ...scopeParams(scope), ...neighborhoodParams(neighborhood) }),
     staleTime: 30_000
   });

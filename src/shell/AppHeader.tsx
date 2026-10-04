@@ -135,7 +135,7 @@ function TenantChip({ user }: { user: import("../lib/api").SessionUser | null })
   if (!user) return null;
   const m = user.memberships[0];
   if (!m) return null;
-  const label = m.municipality_uf ? `${m.municipality_name} · ${m.municipality_uf}` : m.municipality_name;
+  const label = m.city_uf ? `${m.city_name} · ${m.city_uf}` : m.city_name;
   return (
     <span
       className="mono"

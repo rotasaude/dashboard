@@ -30,7 +30,7 @@ function session(role: string): api.SessionUser {
   return {
     id: "u1", email_address: "a@cidade.gov.br", operator: false, mfa_enrolled: true,
     mfa_verified_at: null,
-    memberships: [ { municipality_id: "m1", municipality_name: "Curitiba", municipality_uf: "PR", role } ]
+    memberships: [ { city_slug: "m1", city_name: "Curitiba", city_uf: "PR", role } ]
   };
 }
 
@@ -269,7 +269,7 @@ describe("Attendance", () => {
       ...session("citizen_verifier"),
       memberships: [
         ...session("citizen_verifier").memberships,
-        { municipality_id: "m1", municipality_name: "Curitiba", municipality_uf: "PR", role: "health_professional" }
+        { city_slug: "m1", city_name: "Curitiba", city_uf: "PR", role: "health_professional" }
       ]
     });
     localStorage.setItem(currentUnitKey("u1"), unit.id);

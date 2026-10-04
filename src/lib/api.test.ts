@@ -19,7 +19,7 @@ function mockFetch(status: number, body: unknown) {
 describe("adminFetch", () => {
   it("devolve o envelope { data, as_of } em 2xx", async () => {
     mockFetch(200, { data: { total: 3 }, as_of: "2026-06-26T12:00:00Z" });
-    const env = await adminFetch<{ total: number }>("/overview", { period: "7d", municipality_id: "m1" });
+    const env = await adminFetch<{ total: number }>("/overview", { period: "7d" });
     expect(env.data.total).toBe(3);
     expect(env.as_of).toBe("2026-06-26T12:00:00Z");
   });

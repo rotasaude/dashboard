@@ -27,7 +27,7 @@ const ME = "u-me";
 function session(role: string): api.SessionUser {
   return {
     id: ME, email_address: "eu@cidade.gov.br", operator: false,
-    memberships: [ { municipality_id: "m1", municipality_name: "Curitiba", municipality_uf: "PR", role } ],
+    memberships: [ { city_slug: "m1", city_name: "Curitiba", city_uf: "PR", role } ],
     mfa_enrolled: true, mfa_verified_at: new Date().toISOString()
   };
 }
@@ -73,7 +73,7 @@ function renderProtocols(role = "protocol_reviewer") {
     return (
       <QueryClientProvider client={client}>
         <AuthProvider>
-          <ScopeContext.Provider value={{ period: "7d", municipalityId: "m1", setPeriod: vi.fn() }}>
+          <ScopeContext.Provider value={{ period: "7d", citySlug: "m1", setPeriod: vi.fn() }}>
             {children}
           </ScopeContext.Provider>
         </AuthProvider>
@@ -401,7 +401,7 @@ describe("Protocols", () => {
     render(
       <QueryClientProvider client={client}>
         <AuthProvider>
-          <ScopeContext.Provider value={{ period: "7d", municipalityId: "m1", setPeriod: vi.fn() }}>
+          <ScopeContext.Provider value={{ period: "7d", citySlug: "m1", setPeriod: vi.fn() }}>
             <Protocols onNavigate={onNavigate} />
           </ScopeContext.Provider>
         </AuthProvider>

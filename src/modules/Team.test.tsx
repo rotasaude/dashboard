@@ -26,7 +26,7 @@ const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
 function session(overrides: Partial<api.SessionUser> = {}): api.SessionUser {
   return {
     id: "u-admin", email_address: "admin@cidade.gov.br", operator: false,
-    memberships: [ { municipality_id: "m1", municipality_name: "Curitiba", municipality_uf: "PR", role: "municipal_admin" } ],
+    memberships: [ { city_slug: "m1", city_name: "Curitiba", city_uf: "PR", role: "municipal_admin" } ],
     mfa_enrolled: true, mfa_verified_at: new Date().toISOString(), ...overrides
   };
 }
@@ -224,7 +224,7 @@ describe("Team", () => {
 
     it("quem não é municipal_admin não vê o convite nem o Desativar", async () => {
       mocked(api.fetchCurrentSession).mockResolvedValue(session({
-        memberships: [ { municipality_id: "m1", municipality_name: "Curitiba", municipality_uf: "PR", role: "viewer" } ]
+        memberships: [ { city_slug: "m1", city_name: "Curitiba", city_uf: "PR", role: "viewer" } ]
       }));
       mocked(api.listMemberships).mockResolvedValue([ membership("ana@cidade.gov.br", "viewer") ]);
       renderTeam();

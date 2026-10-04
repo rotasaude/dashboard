@@ -32,7 +32,7 @@ export function campaign(overrides: Partial<Campaign> = {}): Campaign {
 export function sessionWith(roles: string[], overrides: Partial<SessionUser> = {}): SessionUser {
   return {
     id: "u-1", email_address: "campanhas@curitiba.demo", operator: false,
-    memberships: roles.map((role) => ({ municipality_id: "m1", municipality_name: "Curitiba", municipality_uf: "PR", role })),
+    memberships: roles.map((role) => ({ city_slug: "m1", city_name: "Curitiba", city_uf: "PR", role })),
     mfa_enrolled: true, mfa_verified_at: new Date().toISOString(), ...overrides
   };
 }

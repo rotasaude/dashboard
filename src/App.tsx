@@ -29,10 +29,10 @@ import { MyProfile } from "./modules/MyProfile";
 export function App() {
   const [ period, setPeriod ] = useState<PeriodKey>("7d");
   const [ active, setActive ] = useState<ModuleId>("overview");
-  const { municipalityId } = useAuth();
+  const { citySlug } = useAuth();
 
   return (
-    <ScopeContext.Provider value={{ period, municipalityId, setPeriod }}>
+    <ScopeContext.Provider value={{ period, citySlug, setPeriod }}>
       <ShellInner active={active} setActive={setActive} />
     </ScopeContext.Provider>
   );

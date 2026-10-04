@@ -12,7 +12,7 @@ export const PERIOD_OPTIONS: { key: PeriodKey; label: string }[] = [
 
 export interface Scope {
   period: PeriodKey;
-  municipalityId: string | null;
+  citySlug: string | null;
   setPeriod: (p: PeriodKey) => void;
 }
 

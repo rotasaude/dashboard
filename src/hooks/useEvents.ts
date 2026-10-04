@@ -20,7 +20,7 @@ export function useEvents(filter: EventsFilter = {}) {
   const scope = useScope();
   const params = eventsParams(scope, filter);
   return useQuery({
-    queryKey: [ "events", scope.municipalityId, params ],
+    queryKey: [ "events", scope.citySlug, params ],
     queryFn: () => adminFetch<EventsData>("/events", params),
     staleTime: 15_000
   });

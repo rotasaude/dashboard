@@ -6,7 +6,7 @@ import type { ConsentData } from "../lib/types";
 export function useConsent() {
   const scope = useScope();
   return useQuery({
-    queryKey: [ "consent", scope.period, scope.municipalityId ],
+    queryKey: [ "consent", scope.period, scope.citySlug ],
     queryFn: () => adminFetch<ConsentData>("/consent", scopeParams(scope)),
     staleTime: 30_000
   });

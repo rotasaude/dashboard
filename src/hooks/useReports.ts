@@ -8,7 +8,7 @@ export function useReports() {
   const scope = useScope();
   const neighborhood = useNeighborhoodFilter();
   return useQuery({
-    queryKey: [ "reports", scope.period, scope.municipalityId, neighborhood ],
+    queryKey: [ "reports", scope.period, scope.citySlug, neighborhood ],
     queryFn: () => adminFetch<ReportsData>("/reports", { ...scopeParams(scope), ...neighborhoodParams(neighborhood) }),
     staleTime: 30_000
   });

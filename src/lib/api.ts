@@ -4,7 +4,7 @@ const BASE = import.meta.env.VITE_ADMIN_API_BASE || "/admin/api";
 const SESSION_BASE = import.meta.env.VITE_SESSION_BASE || "/session";
 
 export interface ScopeBlock {
-  municipality: { id: string | null; name: string; cross_tenant: boolean };
+  city: { slug: string; name: string; uf: string | null };
   period: { key: string; label: string; axis: string };
   tz: string;
 }
@@ -25,9 +25,9 @@ export class ApiError extends Error {
 }
 
 export interface Membership {
-  municipality_id: string;
-  municipality_name: string;
-  municipality_uf: string | null;
+  city_slug: string;
+  city_name: string;
+  city_uf: string | null;
   role: string;
 }
 

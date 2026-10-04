@@ -57,7 +57,7 @@ function renderQueue(props: {
 
 function session() {
   return { id: "u1", email_address: "dr@cidade.gov.br", operator: false, mfa_enrolled: true, mfa_verified_at: null,
-    memberships: [ { municipality_id: "m1", municipality_name: "Curitiba", municipality_uf: "PR", role: "health_professional" } ] };
+    memberships: [ { city_slug: "m1", city_name: "Curitiba", city_uf: "PR", role: "health_professional" } ] };
 }
 
 describe("UnitQueue", () => {

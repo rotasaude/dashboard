@@ -15,7 +15,7 @@ import * as api from "./api";
 
 const USER = {
   id: "u1", email_address: "admin@curitiba.demo", operator: false,
-  memberships: [{ municipality_id: "m1", municipality_name: "Curitiba", municipality_uf: "PR", role: "municipal_admin" }]
+  memberships: [{ city_slug: "m1", city_name: "Curitiba", city_uf: "PR", role: "municipal_admin" }]
 };
 
 function wrapper({ children }: { children: ReactNode }) {
@@ -29,17 +29,17 @@ describe("AuthProvider", () => {
     (api.fetchCurrentSession as ReturnType<typeof vi.fn>).mockResolvedValue(null);
     const { result } = renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(result.current.state.kind).toBe("anonymous"));
-    expect(result.current.municipalityId).toBe(null);
+    expect(result.current.citySlug).toBe(null);
   });
 
-  it("login ok → authenticated + municipalityId da membership", async () => {
+  it("login ok → authenticated + citySlug da membership", async () => {
     (api.fetchCurrentSession as ReturnType<typeof vi.fn>).mockResolvedValue(null);
     (api.login as ReturnType<typeof vi.fn>).mockResolvedValue(USER);
     const { result } = renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(result.current.state.kind).toBe("anonymous"));
     await act(async () => { await result.current.login("admin@curitiba.demo", "pw"); });
     expect(result.current.state.kind).toBe("authenticated");
-    expect(result.current.municipalityId).toBe("m1");
+    expect(result.current.citySlug).toBe("m1");
   });
 
   it("logout → anonymous", async () => {
@@ -49,7 +49,7 @@ describe("AuthProvider", () => {
     await waitFor(() => expect(result.current.state.kind).toBe("authenticated"));
     await act(async () => { await result.current.logout(); });
     expect(result.current.state.kind).toBe("anonymous");
-    expect(result.current.municipalityId).toBe(null);
+    expect(result.current.citySlug).toBe(null);
   });
 
   it("a sessão define o fuso da cidade usado na formatação (api#27)", async () => {

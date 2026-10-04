@@ -26,7 +26,7 @@ const link2 = { id: "l2", health_unit_id: "h2", unit_name: "UPA Centro", cbo_cod
 function session(stepped: boolean) {
   return { id: "u-admin", email_address: "admin@c.gov.br", operator: false, mfa_enrolled: true,
     mfa_verified_at: stepped ? new Date().toISOString() : null,
-    memberships: [ { municipality_id: "m1", municipality_name: "Curitiba", municipality_uf: "PR", role: "municipal_admin" } ] };
+    memberships: [ { city_slug: "m1", city_name: "Curitiba", city_uf: "PR", role: "municipal_admin" } ] };
 }
 
 function renderIt() {

@@ -31,7 +31,7 @@ function renderReports() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={client}>
-      <ScopeContext.Provider value={{ period: "7d", municipalityId: "m1", setPeriod: vi.fn() }}>
+      <ScopeContext.Provider value={{ period: "7d", citySlug: "m1", setPeriod: vi.fn() }}>
         <Reports />
       </ScopeContext.Provider>
     </QueryClientProvider>

@@ -19,7 +19,7 @@ type AuthState =
 interface AuthValue {
   state: AuthState;
   user: SessionUser | null;
-  municipalityId: string | null;
+  citySlug: string | null;
   login: (email_address: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   reload: () => Promise<void>;
@@ -27,8 +27,8 @@ interface AuthValue {
 
 const AuthContext = createContext<AuthValue | null>(null);
 
-function pickMunicipality(user: SessionUser): string | null {
-  return user.memberships[0]?.municipality_id ?? null;
+function pickCity(user: SessionUser): string | null {
+  return user.memberships[0]?.city_slug ?? null;
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -58,7 +58,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return {
       state,
       user,
-      municipalityId: user ? pickMunicipality(user) : null,
+      citySlug: user ? pickCity(user) : null,
       login,
       logout,
       reload

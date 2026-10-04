@@ -8,7 +8,7 @@ export function useTriages() {
   const scope = useScope();
   const neighborhood = useNeighborhoodFilter();
   return useQuery({
-    queryKey: [ "triages", scope.period, scope.municipalityId, neighborhood ],
+    queryKey: [ "triages", scope.period, scope.citySlug, neighborhood ],
     queryFn: () => adminFetch<TriagesData>("/triages", { ...scopeParams(scope), ...neighborhoodParams(neighborhood) }),
     staleTime: 30_000
   });

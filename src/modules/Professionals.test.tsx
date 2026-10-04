@@ -41,7 +41,7 @@ describe("Professionals", () => {
     mocked(api.fetchCurrentSession).mockResolvedValue({
       id: "u-admin", email_address: "admin@cidade.gov.br", operator: false, mfa_enrolled: true,
       mfa_verified_at: new Date().toISOString(),
-      memberships: [ { municipality_id: "m1", municipality_name: "Curitiba", municipality_uf: "PR", role: "municipal_admin" } ]
+      memberships: [ { city_slug: "m1", city_name: "Curitiba", city_uf: "PR", role: "municipal_admin" } ]
     });
     mocked(api.listProfessionals).mockResolvedValue([ {
       id: "p1", user_id: "u1", email_address: "medica@c.gov.br", professional_name: "Helena Duarte", council: "CRM",

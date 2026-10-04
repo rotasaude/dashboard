@@ -8,7 +8,7 @@ export function useOverview() {
   const scope = useScope();
   const neighborhood = useNeighborhoodFilter();
   return useQuery({
-    queryKey: [ "overview", scope.period, scope.municipalityId, neighborhood ],
+    queryKey: [ "overview", scope.period, scope.citySlug, neighborhood ],
     queryFn: () => adminFetch<OverviewData>("/overview", { ...scopeParams(scope), ...neighborhoodParams(neighborhood) }),
     staleTime: 30_000
   });

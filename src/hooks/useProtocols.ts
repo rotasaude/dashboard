@@ -6,7 +6,7 @@ import type { ProtocolDetailData, ProtocolsListData } from "../lib/types";
 export function useProtocols() {
   const scope = useScope();
   return useQuery({
-    queryKey: [ "protocols", scope.municipalityId ],
+    queryKey: [ "protocols", scope.citySlug ],
     queryFn: () => adminFetch<ProtocolsListData>("/protocols"),
     staleTime: 60_000
   });
