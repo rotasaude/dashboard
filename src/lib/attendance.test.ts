@@ -53,7 +53,7 @@ describe("attendance helpers", () => {
     expect(attendanceError(new ApiError(422, { error: "appointment_not_eligible" }, "x")))
       .toBe("este agendamento não está confirmado para check-in");
     expect(attendanceError(new ApiError(409, { error: "unit_has_open_requests" }, "x")))
-      .toBe("há pedidos de agendamento abertos nesta unidade — encerre-os antes de desativar");
+      .toBe("há pedidos de agendamento nesta unidade — use Esvaziar para movê-los antes de desativar");
   });
 
   it("traduz os erros do endereço da unidade (módulo 11)", () => {

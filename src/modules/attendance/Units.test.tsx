@@ -6,7 +6,8 @@ import type { ReactNode } from "react";
 vi.mock("../../lib/api", async (importOriginal) => {
   const real = await importOriginal<typeof import("../../lib/api")>();
   return {
-    ...real, listAllUnits: vi.fn(), createUnit: vi.fn(), updateUnit: vi.fn(), setUnitActive: vi.fn(), listNeighborhoods: vi.fn()
+    ...real, listAllUnits: vi.fn(), createUnit: vi.fn(), updateUnit: vi.fn(), setUnitActive: vi.fn(), listNeighborhoods: vi.fn(),
+    drainUnit: vi.fn()
   };
 });
 
@@ -14,6 +15,7 @@ import * as api from "../../lib/api";
 import { ApiError } from "../../lib/api";
 import { Units } from "./Units";
 import { EMPTY_ADDRESS } from "../../lib/unitAddress";
+import { expectFrozenNotice } from "../../test/frozenNotice";
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
@@ -34,7 +36,7 @@ function renderUnits(client = new QueryClient({ defaultOptions: { queries: { ret
 
 describe("Units", () => {
   beforeEach(() => {
-    for (const fn of [ api.listAllUnits, api.createUnit, api.updateUnit, api.setUnitActive, api.listNeighborhoods ]) mocked(fn).mockReset();
+    for (const fn of [ api.listAllUnits, api.createUnit, api.updateUnit, api.setUnitActive, api.listNeighborhoods, api.drainUnit ]) mocked(fn).mockReset();
     mocked(api.listAllUnits).mockResolvedValue(rows);
     mocked(api.listNeighborhoods).mockResolvedValue([ centro ]);
   });
@@ -154,5 +156,52 @@ describe("Units", () => {
       address_street: "Rua XV de Novembro", address_number: "100", address_complement: null,
       address_zip: "80010000", neighborhood_id: "n1"
     }));
+  });
+
+  describe("Esvaziar unidade (api#29)", () => {
+    const busy = [
+      { ...rows[0], live_requests_count: 3, live_appointments_count: 2 },
+      { id: "u3", name: "UBS Vila Nova", kind: "ubs", active: true, live_requests_count: 0, live_appointments_count: 0 },
+      rows[1]
+    ];
+
+    it("só aparece em unidade ativa com pedidos ou horários; move para a escolhida, com motivo e aviso", async () => {
+      mocked(api.listAllUnits).mockResolvedValueOnce(busy).mockResolvedValueOnce([
+        { ...busy[0], live_requests_count: 0, live_appointments_count: 0 }, busy[1], busy[2]
+      ]);
+      mocked(api.drainUnit).mockResolvedValue({ id: "d1", requests_count: 3, appointments_count: 2 });
+      renderUnits();
+      const buttons = await screen.findAllByRole("button", { name: "Esvaziar" });
+      expect(buttons).toHaveLength(1);
+      fireEvent.click(buttons[0]);
+
+      expect(screen.getByText("3 pedidos e 2 horários marcados vão para a unidade escolhida. Os horários mantêm data e hora; se faltarem 48h ou mais, o cidadão confirma de novo.")).not.toBeNull();
+      const destination = screen.getByLabelText("Unidade de destino") as HTMLSelectElement;
+      expect([ ...destination.options ].map((o) => o.textContent)).toEqual([ "—", "UBS Vila Nova" ]);
+      expectFrozenNotice(screen.getByLabelText("Motivo"));
+
+      const confirm = screen.getByRole("button", { name: "Esvaziar unidade" }) as HTMLButtonElement;
+      expect(confirm.disabled).toBe(true);
+      fireEvent.change(destination, { target: { value: "u3" } });
+      fireEvent.change(screen.getByLabelText("Motivo"), { target: { value: "curto" } });
+      expect((screen.getByRole("button", { name: "Esvaziar unidade" }) as HTMLButtonElement).disabled).toBe(true);
+      fireEvent.change(screen.getByLabelText("Motivo"), { target: { value: "unidade fechada para reforma" } });
+      fireEvent.click(screen.getByRole("button", { name: "Esvaziar unidade" }));
+
+      await waitFor(() => expect(api.drainUnit).toHaveBeenCalledWith("u1", "u3", "unidade fechada para reforma"));
+      expect(await screen.findByText("UBS Centro esvaziada: 3 pedidos e 2 horários foram para UBS Vila Nova. Se nada novo chegar a ela, já pode ser desativada.")).not.toBeNull();
+      expect(api.listAllUnits).toHaveBeenCalledTimes(2);
+    });
+
+    it("erro do api aparece no painel", async () => {
+      mocked(api.listAllUnits).mockResolvedValue(busy);
+      mocked(api.drainUnit).mockRejectedValue(new ApiError(422, { error: "invalid_target" }, "x"));
+      renderUnits();
+      fireEvent.click(await screen.findByRole("button", { name: "Esvaziar" }));
+      fireEvent.change(screen.getByLabelText("Unidade de destino"), { target: { value: "u3" } });
+      fireEvent.change(screen.getByLabelText("Motivo"), { target: { value: "unidade fechada para reforma" } });
+      fireEvent.click(screen.getByRole("button", { name: "Esvaziar unidade" }));
+      expect(await screen.findByText("escolha outra unidade ativa como destino")).not.toBeNull();
+    });
   });
 });

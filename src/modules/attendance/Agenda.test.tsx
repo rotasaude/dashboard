@@ -31,17 +31,19 @@ describe("Agenda", () => {
       { id: "a1", scheduled_at: "2026-09-25T13:00:00Z", cpf_masked: "***.982.247-**", kind: "return", status: "scheduled" },
       { id: "a2", scheduled_at: "2026-09-25T14:00:00Z", cpf_masked: "***.111.222-**", kind: "referral", status: "confirmed" },
       { id: "a3", scheduled_at: "2026-09-25T15:00:00Z", cpf_masked: "***.333.444-**", kind: "return", status: "checked_in" },
-      { id: "a4", scheduled_at: "2026-09-25T16:00:00Z", cpf_masked: "***.555.666-**", kind: "return", status: "no_show" }
+      { id: "a4", scheduled_at: "2026-09-25T16:00:00Z", cpf_masked: "***.555.666-**", kind: "return", status: "no_show" },
+      { id: "a5", scheduled_at: "2026-09-25T17:00:00Z", cpf_masked: "***.777.888-**", kind: "return", status: "moved" }
     ]);
     renderAgenda();
     expect(await screen.findByText("***.982.247-**")).not.toBeNull();
     expect(screen.getByText("***.111.222-**")).not.toBeNull();
-    expect(screen.getAllByText("Retorno").length).toBe(3);
+    expect(screen.getAllByText("Retorno").length).toBe(4);
     expect(screen.getByText("Encaminhamento")).not.toBeNull();
     expect(screen.getByText("aguardando confirmação")).not.toBeNull();
     expect(screen.getByText("confirmado")).not.toBeNull();
     expect(screen.getByText("check-in feito")).not.toBeNull();
     expect(screen.getByText("faltou")).not.toBeNull();
+    expect(screen.getByText("movido para outra unidade")).not.toBeNull(); // api#29
   });
 
   it("tem um seletor de data com hoje como padrão, e troca recarrega a agenda", async () => {
