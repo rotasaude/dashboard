@@ -416,7 +416,22 @@ export interface UnitAddress {
 }
 
 export interface HealthUnit extends Partial<UnitAddress> { id: string; name: string; kind: string }
-export interface HealthUnitRow extends HealthUnit { active: boolean }
+export interface HealthUnitRow extends HealthUnit {
+  active: boolean;
+  // O que ainda prende a unidade (api#29): pedidos vivos e horários marcados.
+  live_requests_count?: number;
+  live_appointments_count?: number;
+}
+
+export interface UnitDrainResult { id: string; requests_count: number; appointments_count: number }
+
+// Esvaziar unidade (api#29; F-09.3): move pedidos e horários para outra unidade.
+export async function drainUnit(id: string, targetUnitId: string, reason: string): Promise<UnitDrainResult> {
+  const payload = await jsonFetch<{ drain: UnitDrainResult }>(`${ATTENDANCE_BASE}/units/${encodeURIComponent(id)}/drain`, {
+    method: "POST", body: JSON.stringify({ target_unit_id: targetUnitId, reason })
+  });
+  return payload.drain;
+}
 
 export async function listActiveUnits(): Promise<HealthUnit[]> {
   const payload = await jsonFetch<{ units: HealthUnit[] }>(`${ATTENDANCE_BASE}/units`);

@@ -9,6 +9,7 @@ import { DataTable } from "../../components/DataTable";
 import { Tag } from "../../components/Tag";
 import { buttonStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { UnitForm, type UnitFormValue } from "./UnitForm";
+import { DrainUnitPanel } from "./DrainUnitPanel";
 
 // Units (Task 6) — cadastro de unidades de saúde, só para municipal_admin.
 // Lista + criar/editar (UnitForm, com/sem id) + desativar/reativar. Desde o
@@ -27,6 +28,8 @@ export function Units() {
   const [ busy, setBusy ] = useState(false);
   const [ error, setError ] = useState<string | null>(null);
   const [ editing, setEditing ] = useState<Editing | null>(null);
+  const [ draining, setDraining ] = useState<HealthUnitRow | null>(null);
+  const [ notice, setNotice ] = useState<string | null>(null);
 
   async function load() {
     try {
@@ -86,6 +89,25 @@ export function Units() {
     >
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         {error && <p role="alert" style={{ margin: 0, fontSize: 12.5, color: "var(--down)" }}>{error}</p>}
+        {notice && <p role="status" style={{ margin: 0, fontSize: 12.5, fontWeight: 600 }}>{notice}</p>}
+
+        {draining && rows && (
+          <DrainUnitPanel
+            key={draining.id}
+            unit={draining}
+            units={rows}
+            onCancel={() => setDraining(null)}
+            onDone={(result, target) => {
+              setDraining(null);
+              setNotice(`${draining.name} esvaziada: ${result.requests_count} ${result.requests_count === 1 ? "pedido" : "pedidos"} e ` +
+                `${result.appointments_count} ${result.appointments_count === 1 ? "horário foi" : "horários foram"} para ${target.name}. ` +
+                "Agora ela pode ser desativada.");
+              void queryClient.invalidateQueries({ queryKey: [ "unitRequests" ] });
+              void queryClient.invalidateQueries({ queryKey: [ "unitAgenda" ] });
+              void load();
+            }}
+          />
+        )}
 
         {editing && (
           <UnitForm
@@ -113,6 +135,12 @@ export function Units() {
                       onClick={() => setEditing({ id: r.id, initial: { name: r.name, kind: r.kind, ...addressFieldsFrom(r) } })}>
                       Editar
                     </button>
+                    {r.active && ((r.live_requests_count ?? 0) + (r.live_appointments_count ?? 0)) > 0 && (
+                      <button type="button" style={secondaryButtonStyle} disabled={busy}
+                        onClick={() => { setNotice(null); setDraining(r); }}>
+                        Esvaziar
+                      </button>
+                    )}
                     <button type="button" style={secondaryButtonStyle} disabled={busy} onClick={() => void toggleActive(r)}>
                       {r.active ? "Desativar" : "Reativar"}
                     </button>
