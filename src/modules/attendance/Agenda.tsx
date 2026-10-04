@@ -30,7 +30,8 @@ const STATUS_LABEL: Record<string, string> = {
   checked_in: "check-in feito",
   cancelled_by_citizen: "cancelado pelo cidadão",
   expired: "sem confirmação no prazo",
-  no_show: "faltou"
+  no_show: "faltou",
+  moved: "movido para outra unidade"
 };
 
 function statusLabel(status: string): string {

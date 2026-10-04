@@ -189,7 +189,7 @@ describe("Units", () => {
       fireEvent.click(screen.getByRole("button", { name: "Esvaziar unidade" }));
 
       await waitFor(() => expect(api.drainUnit).toHaveBeenCalledWith("u1", "u3", "unidade fechada para reforma"));
-      expect(await screen.findByText("UBS Centro esvaziada: 3 pedidos e 2 horários foram para UBS Vila Nova. Agora ela pode ser desativada.")).not.toBeNull();
+      expect(await screen.findByText("UBS Centro esvaziada: 3 pedidos e 2 horários foram para UBS Vila Nova. Se nada novo chegar a ela, já pode ser desativada.")).not.toBeNull();
       expect(api.listAllUnits).toHaveBeenCalledTimes(2);
     });
 

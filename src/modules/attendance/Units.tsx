@@ -101,7 +101,7 @@ export function Units() {
               setDraining(null);
               setNotice(`${draining.name} esvaziada: ${result.requests_count} ${result.requests_count === 1 ? "pedido" : "pedidos"} e ` +
                 `${result.appointments_count} ${result.appointments_count === 1 ? "horário foi" : "horários foram"} para ${target.name}. ` +
-                "Agora ela pode ser desativada.");
+                "Se nada novo chegar a ela, já pode ser desativada.");
               void queryClient.invalidateQueries({ queryKey: [ "unitRequests" ] });
               void queryClient.invalidateQueries({ queryKey: [ "unitAgenda" ] });
               void load();
