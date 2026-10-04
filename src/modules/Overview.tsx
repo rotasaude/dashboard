@@ -27,6 +27,7 @@ import { Tag } from "../components/Tag";
 import { StatusDot } from "../components/StatusDot";
 import { Divider } from "../components/Divider";
 import { fmtNumber, fmtTime } from "../lib/format";
+import { fmtCount } from "../lib/smallCount";
 import type { ModuleId } from "../shell/modules";
 
 interface Props {
@@ -51,6 +52,9 @@ export function Overview({ onNavigate }: Props) {
 }
 
 // ─── Linha 1 — 5 KPIs ────────────────────────────────────────────────────────
+// api#34: o card de concluídas leva, numa linha secundária, a contagem de
+// revogadas do período (que não entram nele); api antiga sem o campo, ou
+// null com o filtro de bairro ligado, nada.
 
 function KpisRow() {
   const { data, isLoading, isError, error, refetch } = useOverview();
@@ -75,6 +79,9 @@ function KpisRow() {
           tone={kpi.tone}
           spark={kpi.spark}
           source={kpi.source}
+          hint={kpi.id === "done" && data.data.revoked != null
+            ? `Revogadas no período: ${fmtCount(data.data.revoked)}`
+            : undefined}
         />
       ))}
     </KpiGrid5>

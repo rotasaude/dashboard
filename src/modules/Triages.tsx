@@ -6,6 +6,7 @@ import { PageHeader } from "../components/PageHeader";
 import { NeighborhoodPicker } from "../components/NeighborhoodPicker";
 import { KpiGrid } from "../components/KpiGrid";
 import { StatTile } from "../components/StatTile";
+import { RevokedTile } from "../components/RevokedTile";
 import { BarMini } from "../components/BarMini";
 import { DataTable } from "../components/DataTable";
 import { Tag } from "../components/Tag";
@@ -33,6 +34,7 @@ export function Triages() {
         <StatTile label="Iniciadas" value={d.started} source="live" />
         <StatTile label="Concluídas" value={d.completed} tone="ok" source="live" />
         <StatTile label="Taxa de conclusão" value={d.completionRate} unit="%" tone={rateTone} source="live" />
+        <RevokedTile value={d.revoked} hint="Triagens revogadas pelo cidadão contam nas iniciadas, mas não nas concluídas nem na taxa de conclusão." />
       </KpiGrid>
 
       <Panel title="Volume" sub="iniciadas por bucket" asOf={data.as_of}>
