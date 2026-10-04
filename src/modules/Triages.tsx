@@ -34,7 +34,7 @@ export function Triages() {
         <StatTile label="Iniciadas" value={d.started} source="live" />
         <StatTile label="Concluídas" value={d.completed} tone="ok" source="live" />
         <StatTile label="Taxa de conclusão" value={d.completionRate} unit="%" tone={rateTone} source="live" />
-        <RevokedTile value={d.revoked} />
+        <RevokedTile value={d.revoked} hint="Triagens revogadas pelo cidadão contam nas iniciadas, mas não nas concluídas nem na taxa de conclusão." />
       </KpiGrid>
 
       <Panel title="Volume" sub="iniciadas por bucket" asOf={data.as_of}>

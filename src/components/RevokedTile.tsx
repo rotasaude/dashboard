@@ -1,12 +1,11 @@
-// api#34: contagem de triagens revogadas no período, à parte — só o número
-// (suprimido como as outras contagens), nunca linha. Api antiga sem o campo:
-// nada aparece.
+// api#34: contagem de triagens revogadas no período, à parte — só o número,
+// nunca linha. Some quando a api não manda o campo (api antiga) ou manda null
+// (filtro de bairro ligado: a revogada anonimizada perde o bairro). O texto
+// de ajuda é de cada painel: diz de quais números a revogada sai.
 import type { SmallCount } from "../lib/types";
 import { StatTile } from "./StatTile";
 
-export const REVOKED_HINT = "Triagens revogadas pelo cidadão não entram nas concluídas nem nos tiers.";
-
-export function RevokedTile({ value }: { value: SmallCount | undefined }) {
-  if (value === undefined) return null;
-  return <StatTile label="Revogadas no período" value={value} tone="neutral" source="live" hint={REVOKED_HINT} />;
+export function RevokedTile({ value, hint }: { value: SmallCount | null | undefined; hint: string }) {
+  if (value == null) return null;
+  return <StatTile label="Revogadas no período" value={value} tone="neutral" source="live" hint={hint} />;
 }

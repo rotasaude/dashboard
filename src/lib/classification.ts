@@ -37,7 +37,8 @@ export function normalizeClassification(raw: Legacy): ClassificationData {
       urgent: s.urgent ?? s.priority === true
     })),
     filter: raw.filter,
-    // api#34: ausente (api antiga) continua ausente — o painel não mostra.
+    // api#34: ausente (api antiga) continua ausente e null (filtro) segue
+    // null — nos dois casos o painel não mostra.
     ...(raw.revoked === undefined ? {} : { revoked: raw.revoked })
   };
 }

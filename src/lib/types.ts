@@ -32,8 +32,9 @@ export interface OverviewKpi {
 export interface OverviewData extends Filtered {
   kpis: OverviewKpi[];
   // api#34: triagens revogadas do período, só a contagem (fora de concluídas,
-  // urgentes e taxa). Ausente = api antiga.
-  revoked?: SmallCount;
+  // urgentes e taxa). Ausente = api antiga; null = filtro de bairro
+  // ligado (a api não manda o número).
+  revoked?: SmallCount | null;
 }
 
 export interface IngestionData {
@@ -67,8 +68,9 @@ export interface TriagesData extends Filtered {
   completionRate: SmallCount;
   byProtocol: Array<{ version: string; count: SmallCount; share: SmallCount; status: string }>;
   // api#34: triagens revogadas do período, só a contagem (seguem em started,
-  // fora de completed e da taxa). Ausente = api antiga.
-  revoked?: SmallCount;
+  // fora de completed e da taxa). Ausente = api antiga; null = filtro de bairro
+  // ligado (a api não manda o número).
+  revoked?: SmallCount | null;
 }
 
 export interface SampleTriage {
@@ -94,8 +96,9 @@ export interface ClassificationData extends Filtered {
   // tratado como oculta. [] = nenhuma no período.
   sampleTriages?: SampleTriage[] | null;
   // api#34: triagens revogadas do período, só a contagem (fora dos tiers e da
-  // urgência). Ausente = api antiga.
-  revoked?: SmallCount;
+  // urgência). Ausente = api antiga; null = filtro de bairro
+  // ligado (a api não manda o número).
+  revoked?: SmallCount | null;
 }
 
 export interface TrailStep {

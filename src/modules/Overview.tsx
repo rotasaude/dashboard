@@ -53,7 +53,8 @@ export function Overview({ onNavigate }: Props) {
 
 // ─── Linha 1 — 5 KPIs ────────────────────────────────────────────────────────
 // api#34: o card de concluídas leva, numa linha secundária, a contagem de
-// revogadas do período (que não entram nele); api antiga sem o campo, nada.
+// revogadas do período (que não entram nele); api antiga sem o campo, ou
+// null com o filtro de bairro ligado, nada.
 
 function KpisRow() {
   const { data, isLoading, isError, error, refetch } = useOverview();
@@ -78,7 +79,7 @@ function KpisRow() {
           tone={kpi.tone}
           spark={kpi.spark}
           source={kpi.source}
-          hint={kpi.id === "done" && data.data.revoked !== undefined
+          hint={kpi.id === "done" && data.data.revoked != null
             ? `Revogadas no período: ${fmtCount(data.data.revoked)}`
             : undefined}
         />

@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup } from "@testing-library/react";
 import type { ClassificationData, TriagesData, EventsData, HealthData, IngestionData, OverviewData, QueuesData, SmallCount } from "../lib/types";
+
+type Revoked = SmallCount | null;
 import { kpiRow, renderPanel, stubResizeObserver, stubRoutes } from "../test/panelHarness";
 import { Overview } from "./Overview";
 import { Classification } from "./Classification";
@@ -15,7 +17,7 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 const kpi = (id: string, label: string, value: number, unit = "") =>
   ({ id, label, value, unit, delta: null, tone: "ok", spark: [], source: "live" as const });
 
-function overview(revoked?: SmallCount): OverviewData {
+function overview(revoked?: Revoked): OverviewData {
   return {
     kpis: [
       kpi("done", "Triagens concluídas", 42),
@@ -34,13 +36,13 @@ const events: EventsData = { total: 0, retentionMonths: 12, replayAnchor: null, 
 const health: HealthData = { projections: [], recurring: [], driftOverall: 0 };
 const conversations = { live: 0, funnel: [], exits: [], abandonRate: null, avgToCompleteMin: null, liveActive: { awaiting: 0, inProgress: 0 } };
 
-function renderOverview(revoked?: SmallCount) {
+function renderOverview(revoked?: Revoked) {
   stubRoutes({ "/overview": overview(revoked), "/ingestion": ingestion, "/queues": queues, "/events": events,
                "/health": health, "/conversations": conversations });
   renderPanel(<Overview />);
 }
 
-function classification(revoked?: SmallCount): ClassificationData {
+function classification(revoked?: Revoked): ClassificationData {
   return {
     tiers: [ { key: "alta", label: "alta", count: 7, tone: "down" } ],
     tierKeys: [ "alta" ],
@@ -54,7 +56,7 @@ function classification(revoked?: SmallCount): ClassificationData {
   };
 }
 
-function renderClassification(revoked?: SmallCount) {
+function renderClassification(revoked?: Revoked) {
   stubRoutes({ "/classification": classification(revoked) });
   renderPanel(<Classification />);
 }
@@ -66,10 +68,11 @@ describe("Visão geral — revogadas à parte (api#34)", () => {
     expect(row.getByText("Revogadas no período: 6")).toBeTruthy();
   });
 
-  it("contagem suprimida aparece com o marcador de contagem oculta", async () => {
-    renderOverview({ suppressed: true });
+  it("com o filtro de bairro (revoked: null), a linha de revogadas some", async () => {
+    renderOverview(null);
     const row = await kpiRow();
-    expect(row.getByText("Revogadas no período: < 5")).toBeTruthy();
+    expect(row.getByText("Triagens concluídas")).toBeTruthy();
+    expect(row.queryByText(/Revogadas no período/)).toBeNull();
   });
 
   it("api antiga, sem o campo: nada de revogadas, e o painel não quebra", async () => {
@@ -81,7 +84,7 @@ describe("Visão geral — revogadas à parte (api#34)", () => {
 });
 
 describe("Classificação — revogadas à parte (api#34)", () => {
-  const HINT = "Triagens revogadas pelo cidadão não entram nas concluídas nem nos tiers.";
+  const HINT = "Triagens revogadas pelo cidadão não entram nos tiers, na urgência nem na amostra.";
 
   it("mostra a contagem de revogadas do período com a explicação", async () => {
     renderClassification(6);
@@ -91,11 +94,11 @@ describe("Classificação — revogadas à parte (api#34)", () => {
     expect(row.getByText(HINT)).toBeTruthy();
   });
 
-  it("contagem suprimida aparece com o marcador de contagem oculta", async () => {
-    renderClassification({ suppressed: true });
+  it("com o filtro de bairro (revoked: null), o card de revogadas some", async () => {
+    renderClassification(null);
     const row = await kpiRow();
-    expect(row.getByText("Revogadas no período")).toBeTruthy();
-    expect(row.getByText("< 5")).toBeTruthy();
+    expect(row.getByText("Tier alta")).toBeTruthy();
+    expect(row.queryByText("Revogadas no período")).toBeNull();
   });
 
   it("api antiga, sem o campo: nada de revogadas, e o painel não quebra", async () => {
@@ -106,20 +109,20 @@ describe("Classificação — revogadas à parte (api#34)", () => {
   });
 });
 
-function triages(revoked?: SmallCount): TriagesData {
+function triages(revoked?: Revoked): TriagesData {
   return {
     series: [ 0, 9 ], started: 9, completed: 7, completionRate: 77.8, byProtocol: [],
     ...(revoked === undefined ? {} : { revoked })
   };
 }
 
-function renderTriages(revoked?: SmallCount) {
+function renderTriages(revoked?: Revoked) {
   stubRoutes({ "/triages": triages(revoked) });
   renderPanel(<Triages />);
 }
 
 describe("Triagens — revogadas à parte (api#34)", () => {
-  const HINT = "Triagens revogadas pelo cidadão não entram nas concluídas nem nos tiers.";
+  const HINT = "Triagens revogadas pelo cidadão contam nas iniciadas, mas não nas concluídas nem na taxa de conclusão.";
 
   it("mostra a contagem de revogadas do período com a explicação", async () => {
     renderTriages(6);
@@ -129,11 +132,11 @@ describe("Triagens — revogadas à parte (api#34)", () => {
     expect(row.getByText(HINT)).toBeTruthy();
   });
 
-  it("contagem suprimida aparece com o marcador de contagem oculta", async () => {
-    renderTriages({ suppressed: true });
+  it("com o filtro de bairro (revoked: null), o card de revogadas some", async () => {
+    renderTriages(null);
     const row = await kpiRow();
-    expect(row.getByText("Revogadas no período")).toBeTruthy();
-    expect(row.getByText("< 5")).toBeTruthy();
+    expect(row.getByText("Concluídas")).toBeTruthy();
+    expect(row.queryByText("Revogadas no período")).toBeNull();
   });
 
   it("api antiga, sem o campo: nada de revogadas, e o painel não quebra", async () => {

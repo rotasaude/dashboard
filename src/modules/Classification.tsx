@@ -39,7 +39,7 @@ export function Classification() {
           <StatTile key={t.key} label={`Tier ${t.label}`} value={t.count} tone={t.tone} source="live" />
         ))}
         <StatTile label={`Casos urgentes (priority ≤ ${d.urgentMaxPriority})`} value={d.urgent} tone="warn" spark={d.urgentTrend} source="live" />
-        <RevokedTile value={d.revoked} />
+        <RevokedTile value={d.revoked} hint="Triagens revogadas pelo cidadão não entram nos tiers, na urgência nem na amostra." />
       </KpiGrid>
 
       <Panel title="Distribuição de tier" sub="total no período" asOf={data.as_of}>
