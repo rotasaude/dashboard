@@ -35,18 +35,18 @@ const fail = (reason: string): OfferRead => ({ ok: false, reason });
 export function readOffer(definition: unknown): OfferRead {
   if (!isObj(definition)) return fail("a definição precisa ser um objeto JSON");
   const raw = definition.offer;
-  if (raw !== undefined && !isObj(raw)) return fail(`"offer" não é um objeto: corrija no JSON`);
+  if (raw !== undefined && !isObj(raw)) return fail(`“offer” não é um objeto: corrija no JSON`);
   const o: Obj = isObj(raw) ? raw : {};
-  if (o.title !== undefined && typeof o.title !== "string") return fail(`"offer.title" precisa ser texto: corrija no JSON`);
-  if (o.summary !== undefined && typeof o.summary !== "string") return fail(`"offer.summary" precisa ser texto: corrija no JSON`);
+  if (o.title !== undefined && typeof o.title !== "string") return fail(`“offer.title” precisa ser texto: corrija no JSON`);
+  if (o.summary !== undefined && typeof o.summary !== "string") return fail(`“offer.summary” precisa ser texto: corrija no JSON`);
   if (o.eligibility !== undefined && !isObj(o.eligibility)) {
-    return fail(`"offer.eligibility" precisa ser uma condição: corrija no JSON`);
+    return fail(`“offer.eligibility” precisa ser uma condição: corrija no JSON`);
   }
   if (o.retake_after_days !== undefined && !Number.isInteger(o.retake_after_days)) {
-    return fail(`"offer.retake_after_days" precisa ser um número inteiro de dias: corrija no JSON`);
+    return fail(`“offer.retake_after_days” precisa ser um número inteiro de dias: corrija no JSON`);
   }
   const list = definition.suggestions;
-  if (list !== undefined && !Array.isArray(list)) return fail(`"suggestions" não é uma lista: corrija no JSON`);
+  if (list !== undefined && !Array.isArray(list)) return fail(`“suggestions” não é uma lista: corrija no JSON`);
   const items: unknown[] = Array.isArray(list) ? list : [];
   const malformed = items.some((s) => !isObj(s) ||
     (s.protocol !== undefined && typeof s.protocol !== "string") || (s.when !== undefined && !isObj(s.when)));

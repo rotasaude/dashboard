@@ -30,12 +30,12 @@ describe("leitura", () => {
 
   it.each([
     [ "definição que não é objeto", [], "a definição precisa ser um objeto JSON" ],
-    [ "offer que não é objeto", { ...BASE, offer: "sim" }, `"offer" não é um objeto: corrija no JSON` ],
-    [ "título que não é texto", { ...BASE, offer: { title: 3 } }, `"offer.title" precisa ser texto: corrija no JSON` ],
-    [ "resumo que não é texto", { ...BASE, offer: { summary: [] } }, `"offer.summary" precisa ser texto: corrija no JSON` ],
-    [ "elegibilidade que não é objeto", { ...BASE, offer: { eligibility: "60+" } }, `"offer.eligibility" precisa ser uma condição: corrija no JSON` ],
-    [ "intervalo quebrado", { ...BASE, offer: { retake_after_days: 1.5 } }, `"offer.retake_after_days" precisa ser um número inteiro de dias: corrija no JSON` ],
-    [ "suggestions que não é lista", { ...BASE, suggestions: {} }, `"suggestions" não é uma lista: corrija no JSON` ],
+    [ "offer que não é objeto", { ...BASE, offer: "sim" }, `“offer” não é um objeto: corrija no JSON` ],
+    [ "título que não é texto", { ...BASE, offer: { title: 3 } }, `“offer.title” precisa ser texto: corrija no JSON` ],
+    [ "resumo que não é texto", { ...BASE, offer: { summary: [] } }, `“offer.summary” precisa ser texto: corrija no JSON` ],
+    [ "elegibilidade que não é objeto", { ...BASE, offer: { eligibility: "60+" } }, `“offer.eligibility” precisa ser uma condição: corrija no JSON` ],
+    [ "intervalo quebrado", { ...BASE, offer: { retake_after_days: 1.5 } }, `“offer.retake_after_days” precisa ser um número inteiro de dias: corrija no JSON` ],
+    [ "suggestions que não é lista", { ...BASE, suggestions: {} }, `“suggestions” não é uma lista: corrija no JSON` ],
     [ "item fora do formato", { ...BASE, suggestions: [ { protocol: 1 } ] }, "uma sugestão está fora do formato { protocol, when }: corrija no JSON" ]
   ])("%s → recusa com motivo", (_name, def, reason) => {
     expect(readOffer(def)).toEqual({ ok: false, reason });
