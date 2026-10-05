@@ -31,6 +31,9 @@ import { describeActionError } from "../lib/actionErrors";
 import { fmtDateTime } from "../lib/format";
 import type { ProtocolRow } from "../lib/types";
 import type { ModuleId } from "../shell/modules";
+import { SegmentedControl } from "../shell/SegmentedControl";
+import { canReadCatalog } from "../lib/triageCatalog";
+import { TriageCatalogTab } from "./protocols/TriageCatalogTab";
 
 // A reversão é a única ação cuja versão de sucesso NÃO é a versão sobre a qual
 // se agiu: ela sai da ativa e volta para a anterior. Nomear `pending.version`
@@ -68,7 +71,29 @@ function revertDescription(targetVersion: string | null): string {
     "Não encadeia: reverter de novo exige uma nova ativação assinada, não outra reversão.";
 }
 
+type ProtocolsTab = "versions" | "catalog";
+const TABS: { key: ProtocolsTab; label: string }[] = [
+  { key: "versions", label: "Versões" },
+  { key: "catalog", label: "Catálogo de triagens" }
+];
+
+// Módulo 15: a aba do catálogo só aparece para quem a API deixa ler
+// (GET /triage_catalog); para os outros papéis, a tela é a de sempre.
 export function Protocols({ onNavigate }: { onNavigate?: (id: ModuleId) => void } = {}) {
+  const auth = useAuth();
+  const showCatalog = canReadCatalog((auth.user?.memberships ?? []).map((m) => m.role));
+  const [ tab, setTab ] = useState<ProtocolsTab>("versions");
+  return (
+    <Wrap>
+      {showCatalog && <SegmentedControl options={TABS} value={tab} onChange={setTab} />}
+      {showCatalog && tab === "catalog"
+        ? <TriageCatalogTab onNavigate={onNavigate} />
+        : <ProtocolVersions onNavigate={onNavigate} />}
+    </Wrap>
+  );
+}
+
+function ProtocolVersions({ onNavigate }: { onNavigate?: (id: ModuleId) => void }) {
   const [ openId, setOpenId ] = useState<string | null>(null);
   const { data, isLoading, isError, error, refetch } = useProtocols();
   const auth = useAuth();
@@ -78,9 +103,9 @@ export function Protocols({ onNavigate }: { onNavigate?: (id: ModuleId) => void 
   );
   const [ onlyMine, setOnlyMine ] = useState(false);
 
-  if (isLoading) return <Wrap><KpiGrid><KpiSkeleton /><KpiSkeleton /><KpiSkeleton /></KpiGrid><Panel title="Lista"><Skeleton rows={5} /></Panel></Wrap>;
-  if (isError) return <Wrap><ErrorState message={(error as Error)?.message || "Erro"} onRetry={() => refetch()} /></Wrap>;
-  if (!data) return <Wrap><EmptyState title="sem dados" /></Wrap>;
+  if (isLoading) return <Stack><KpiGrid><KpiSkeleton /><KpiSkeleton /><KpiSkeleton /></KpiGrid><Panel title="Lista"><Skeleton rows={5} /></Panel></Stack>;
+  if (isError) return <Stack><ErrorState message={(error as Error)?.message || "Erro"} onRetry={() => refetch()} /></Stack>;
+  if (!data) return <Stack><EmptyState title="sem dados" /></Stack>;
 
   const list = data.data.list;
   // D1 — a leitura da API agora distingue "active" (em uso) de "published"
@@ -90,7 +115,7 @@ export function Protocols({ onNavigate }: { onNavigate?: (id: ModuleId) => void 
   const shown = onlyMine ? list.filter((r) => awaitingMySignature(r, viewer)) : list;
 
   return (
-    <Wrap>
+    <Stack>
       <KpiGrid asOf={data.as_of}>
         <StatTile label="Protocolos & versões" value={list.length} source="live" />
         <StatTile label="Publicados" value={published} tone="ok" source="live" />
@@ -124,7 +149,7 @@ export function Protocols({ onNavigate }: { onNavigate?: (id: ModuleId) => void 
       </Panel>
 
       {openId && <DetailDrawer id={openId} viewer={viewer} onNavigate={onNavigate} onClose={() => setOpenId(null)} />}
-    </Wrap>
+    </Stack>
   );
 }
 
@@ -397,4 +422,9 @@ function Wrap({ children }: { children: React.ReactNode }) {
       {children}
     </div>
   );
+}
+
+// O conteúdo de cada aba, sem o cabeçalho: o PageHeader fica uma vez só, no Wrap.
+function Stack({ children }: { children: React.ReactNode }) {
+  return <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>{children}</div>;
 }

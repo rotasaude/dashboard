@@ -9,7 +9,8 @@ vi.mock("../lib/api", async (importOriginal) => {
     ...real,
     fetchCurrentSession: vi.fn(), stepUpMfa: vi.fn(), adminFetch: vi.fn(),
     submitProtocol: vi.fn(), signProtocol: vi.fn(), publishProtocolVersion: vi.fn(),
-    activateProtocol: vi.fn(), retireProtocol: vi.fn(), revertProtocol: vi.fn()
+    activateProtocol: vi.fn(), retireProtocol: vi.fn(), revertProtocol: vi.fn(),
+    listTriageCatalog: vi.fn(), listPanelNeighborhoods: vi.fn()
   };
 });
 
@@ -18,6 +19,7 @@ import { ApiError } from "../lib/api";
 import { AuthProvider } from "../lib/auth";
 import { ScopeContext } from "../lib/scope";
 import { Protocols } from "./Protocols";
+import { catalogOffer } from "../test/triageCatalogFixtures";
 
 afterEach(cleanup);
 
@@ -602,5 +604,31 @@ describe("Protocols", () => {
     // clicar Confirmar de novo mandaria o mesmo token e levaria a mesma
     // recusa. O próximo clique tem de partir da linha relida.
     await waitFor(() => expect(screen.queryByRole("button", { name: "Confirmar" })).toBeNull());
+  });
+});
+
+describe("Protocols — abas", () => {
+  beforeEach(() => {
+    mocked(api.listTriageCatalog).mockReset();
+    mocked(api.listPanelNeighborhoods).mockReset();
+    mocked(api.listTriageCatalog).mockResolvedValue([ catalogOffer() ]);
+    mocked(api.listPanelNeighborhoods).mockResolvedValue([]);
+  });
+
+  it("quem lê protocolos vê a aba Catálogo de triagens e a lista do catálogo", async () => {
+    stubReads([ row() ]);
+    renderProtocols("protocol_reviewer");
+    fireEvent.click(await screen.findByRole("tab", { name: "Catálogo de triagens" }));
+    expect(await screen.findByText("Saúde do idoso")).not.toBeNull();
+    fireEvent.click(screen.getByRole("tab", { name: "Versões" }));
+    expect(await screen.findByRole("region", { name: "Protocolos & versões" })).not.toBeNull();
+  });
+
+  it("papel sem leitura de protocolo não vê as abas e nunca chama o catálogo", async () => {
+    stubReads([ row() ]);
+    renderProtocols("citizen_verifier");
+    expect(await screen.findByRole("region", { name: "Protocolos & versões" })).not.toBeNull();
+    expect(screen.queryByRole("tab", { name: "Catálogo de triagens" })).toBeNull();
+    expect(api.listTriageCatalog).not.toHaveBeenCalled();
   });
 });
