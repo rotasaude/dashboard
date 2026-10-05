@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, screen } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { ApiError } from "../../lib/api";
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const real = await importOriginal<typeof import("../../lib/api")>();
@@ -68,5 +69,93 @@ describe("TriageCatalogTab — leitura", () => {
     mocked(api.listTriageCatalog).mockRejectedValue(new Error("rede"));
     renderWithProviders(<TriageCatalogTab />);
     expect(await screen.findByText("não foi possível carregar o catálogo")).not.toBeNull();
+  });
+});
+
+describe("TriageCatalogTab — edição", () => {
+  const admin = () => mocked(api.fetchCurrentSession).mockResolvedValue(sessionWith([ "municipal_admin" ]));
+  const open = async (title: string) => {
+    fireEvent.click(await screen.findByText(title));
+    return screen.getByRole("region", { name: `Editar ${title}` });
+  };
+
+  it("admin pausa e salva com a janela de step-up aberta; a lista é relida", async () => {
+    admin();
+    mocked(api.listTriageCatalog).mockResolvedValue([ catalogOffer(), RESPIRATORY ]);
+    mocked(api.updateTriageOffer).mockResolvedValue(catalogOffer({ enabled: false }));
+    renderWithProviders(<TriageCatalogTab />);
+    const form = await open("Saúde do idoso");
+    fireEvent.click(within(form).getByLabelText("Oferecer no catálogo"));
+    fireEvent.click(within(form).getByRole("button", { name: "Salvar no catálogo…" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Confirmar" }));
+    await waitFor(() => expect(api.updateTriageOffer).toHaveBeenCalledWith("saude-do-idoso", {
+      enabled: false, position: 2, restriction: { in: [ "citizen.neighborhood_id", [ "n2" ] ] },
+      available_from: null, available_until: "2026-12-31"
+    }));
+    expect(await screen.findByText("Catálogo atualizado: Saúde do idoso")).not.toBeNull();
+    await waitFor(() => expect(api.listTriageCatalog).toHaveBeenCalledTimes(2));
+  });
+
+  it("protocolo sem linha começa na próxima posição e ganha restrição por bairro", async () => {
+    admin();
+    mocked(api.listTriageCatalog).mockResolvedValue([ catalogOffer(), RESPIRATORY ]);
+    mocked(api.updateTriageOffer).mockResolvedValue(RESPIRATORY);
+    renderWithProviders(<TriageCatalogTab />);
+    const form = await open("Sintomas respiratórios");
+    expect((within(form).getByLabelText("Ordem no catálogo") as HTMLInputElement).value).toBe("3");
+    const restriction = within(form).getByRole("group", { name: "Restrição da cidade" });
+    fireEvent.click(within(restriction).getByRole("button", { name: "+ condição" }));
+    fireEvent.change(within(restriction).getByLabelText("campo"), { target: { value: "citizen.neighborhood_id" } });
+    fireEvent.click(await within(restriction).findByLabelText("Xaxim"));
+    expect(within(restriction).queryByLabelText("Centro (bairro inativo)")).toBeNull();
+    fireEvent.click(within(form).getByRole("button", { name: "Salvar no catálogo…" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Confirmar" }));
+    await waitFor(() => expect(api.updateTriageOffer).toHaveBeenCalledWith("triage-respiratoria", {
+      enabled: true, position: 3, restriction: { in: [ "citizen.neighborhood_id", [ "n1" ] ] },
+      available_from: null, available_until: null
+    }));
+  });
+
+  it("período invertido trava o salvar", async () => {
+    admin();
+    mocked(api.listTriageCatalog).mockResolvedValue([ catalogOffer() ]);
+    renderWithProviders(<TriageCatalogTab />);
+    const form = await open("Saúde do idoso");
+    fireEvent.change(within(form).getByLabelText("Disponível a partir de"), { target: { value: "2027-01-10" } });
+    expect(within(form).getByText("o fim do período não pode ser antes do início")).not.toBeNull();
+    expect((within(form).getByRole("button", { name: "Salvar no catálogo…" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("janela de step-up fechada pede o código antes de gravar", async () => {
+    mocked(api.fetchCurrentSession).mockResolvedValue(sessionWith([ "municipal_admin" ], { mfa_verified_at: null }));
+    mocked(api.stepUpMfa).mockResolvedValue(undefined);
+    mocked(api.listTriageCatalog).mockResolvedValue([ catalogOffer() ]);
+    mocked(api.updateTriageOffer).mockResolvedValue(catalogOffer());
+    renderWithProviders(<TriageCatalogTab />);
+    const form = await open("Saúde do idoso");
+    fireEvent.click(within(form).getByRole("button", { name: "Salvar no catálogo…" }));
+    fireEvent.change(await screen.findByLabelText("Código do autenticador"), { target: { value: "123456" } });
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+    await waitFor(() => expect(api.stepUpMfa).toHaveBeenCalledWith("123456"));
+    await waitFor(() => expect(api.updateTriageOffer).toHaveBeenCalledTimes(1));
+  });
+
+  it("recusa do servidor é traduzida e o diálogo continua aberto", async () => {
+    admin();
+    mocked(api.listTriageCatalog).mockResolvedValue([ catalogOffer() ]);
+    mocked(api.updateTriageOffer).mockRejectedValue(new ApiError(422, { error: "invalid_restriction" }, "x"));
+    renderWithProviders(<TriageCatalogTab />);
+    const form = await open("Saúde do idoso");
+    fireEvent.click(within(form).getByRole("button", { name: "Salvar no catálogo…" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Confirmar" }));
+    expect(await screen.findByText("a restrição usa um campo que o catálogo não aceita ou está malformada")).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Confirmar" })).not.toBeNull();
+  });
+
+  it("revisor só lê: clicar na linha não abre edição", async () => {
+    mocked(api.listTriageCatalog).mockResolvedValue([ catalogOffer() ]);
+    renderWithProviders(<TriageCatalogTab />);
+    fireEvent.click(await screen.findByText("Saúde do idoso"));
+    expect(screen.queryByRole("button", { name: "Salvar no catálogo…" })).toBeNull();
   });
 });
