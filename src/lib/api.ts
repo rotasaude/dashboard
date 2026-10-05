@@ -1004,3 +1004,87 @@ export async function fetchAnalytics<F extends AnalyticsFront>(
   const envelope = await adminFetch<AnalyticsDataMap[F]>(`/analytics/${front}`, params);
   return envelope as unknown as AnalyticsEnvelope<F>;
 }
+
+// ─── Catálogo de triagens (módulo 15, ADR 0027; contratos §2 e §4) ───────────
+// /triage_catalog tem prefixo próprio porque /protocols/:name já captura
+// qualquer segmento. Os contadores vêm `null` quando ficam entre 1 e 4
+// (supressão do ADR 0025): quem desenha nunca os trata como zero.
+const TRIAGE_CATALOG_BASE = import.meta.env.VITE_TRIAGE_CATALOG_BASE || "/triage_catalog";
+
+// Árvore da linguagem de condição (ADR 0009). A tela nunca a avalia: só a
+// monta, a descreve e a manda.
+export type ConditionTree = Record<string, unknown>;
+
+export type Sex = "female" | "male";
+export type GenderIdentity =
+  | "cis_woman" | "cis_man" | "trans_woman" | "trans_man" | "travesti" | "non_binary" | "other";
+export interface CitizenProfile {
+  birth_date: string;
+  sex: Sex;
+  gender_identity: GenderIdentity | null;
+  profile_source: "declared" | "verified";
+}
+
+export interface TriageOfferCounters {
+  offered: number | null; started: number | null; completed: number | null; from_suggestion: number | null;
+}
+export interface TriageOffer {
+  protocol_name: string;
+  title: string;
+  active_version: number;
+  eligibility: ConditionTree | null;
+  retake_after_days: number | null;
+  // false = sem linha em triage_offers: enabled/position/restriction/período vêm null.
+  configured: boolean;
+  enabled: boolean | null;
+  position: number | null;
+  restriction: ConditionTree | null;
+  available_from: string | null;
+  available_until: string | null;
+  counters: TriageOfferCounters;
+}
+export interface TriageOfferFields {
+  enabled: boolean;
+  position: number;
+  restriction: ConditionTree | null;
+  available_from: string | null;
+  available_until: string | null;
+}
+
+export async function listTriageCatalog(): Promise<TriageOffer[]> {
+  return (await jsonFetch<{ offers: TriageOffer[] }>(TRIAGE_CATALOG_BASE)).offers;
+}
+
+// Só municipal_admin, com step-up: quem trata 401 mfa_required é o SensitiveAction.
+export async function updateTriageOffer(protocolName: string, fields: TriageOfferFields): Promise<TriageOffer> {
+  const body = await jsonFetch<{ offer: TriageOffer }>(`${TRIAGE_CATALOG_BASE}/${encodeURIComponent(protocolName)}`, {
+    method: "PUT", body: JSON.stringify(fields)
+  });
+  return body.offer;
+}
+
+export interface SimulateProfile { age: number; sex: Sex; neighborhood_id: string | null }
+export interface SimulateOutcome { tier?: string; score?: number; priority?: number }
+export interface SimulateOfferInput {
+  definition: unknown;
+  profile: SimulateProfile;
+  answers?: Record<string, string>;
+  outcome?: SimulateOutcome;
+}
+export interface SimulateOfferResult {
+  eligible: boolean;
+  // Só para conferência; a frase da tela é a do construtor (contratos §4.3).
+  eligibility_text: string | null;
+  suggestions: Array<{ protocol: string; matches: boolean }>;
+  errors: string[];
+  // Gate warnings, non-blocking, e.g. suggestion to a protocol that doesn't exist in the city
+  warnings: string[];
+}
+
+// Não grava nada. Definição que falha no gate responde 200 com
+// `eligible: false`, `suggestions: []` e os erros (contratos §4.3), nunca 422.
+export async function simulateOffer(input: SimulateOfferInput): Promise<SimulateOfferResult> {
+  return jsonFetch<SimulateOfferResult>(`${AUTHORING_BASE}/simulate_offer`, {
+    method: "POST", body: JSON.stringify(input)
+  });
+}
