@@ -15,6 +15,7 @@ export function ProtocolEditor() {
   const [ answers, setAnswers ] = useState<string>("{}");
   const [ preview, setPreview ] = useState<PreviewResult | null>(null);
   const [ saved, setSaved ] = useState<DraftResult | null>(null);
+  const [ offerKey, setOfferKey ] = useState(0);
   const timer = useRef<number | undefined>(undefined);
 
   const [ opts, setOpts ] = useState<AuthorProtocolRow[]>([]);
@@ -26,6 +27,7 @@ export function ProtocolEditor() {
 
   function onPick(value: string) {
     setLoadErr(null);
+    setOfferKey(k => k + 1); // remonta o painel: condições meio digitadas não sobrevivem à troca
     if (value === "__new__") { setText(TEMPLATE); return; }
     const [ name, version ] = value.split("@@");
     loadProtocolDefinition(name, version).then(def => {
@@ -123,6 +125,7 @@ export function ProtocolEditor() {
       <section>
         <h2 style={{ fontSize: 16, margin: "0 0 8px" }}>Oferta e sugestões</h2>
         <OfferPanel
+          key={offerKey}
           definition={current.ok ? current.value : null}
           protocolNames={protocolNames}
           onChange={(next) => setText(JSON.stringify(next, null, 2))}
