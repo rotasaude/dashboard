@@ -70,7 +70,7 @@ describe("Attendance", () => {
     mocked(api.getMyProfessional).mockResolvedValue(null);
   });
 
-  it("busca, exige a caixa do documento e valida", async () => {
+  it("busca, exige a caixa do documento e o perfil conferido, e valida", async () => {
     mocked(api.lookupCitizen).mockResolvedValue(found);
     mocked(api.verifyCitizen).mockResolvedValue(undefined);
     renderAttendance();
@@ -80,10 +80,14 @@ describe("Attendance", () => {
     expect(await screen.findByText("(**) *****-5432")).not.toBeNull();
     expect(screen.getByText("triage-respiratoria")).not.toBeNull();
     const validate = screen.getByRole("button", { name: "Validar cadastro" }) as HTMLButtonElement;
-    expect(validate.disabled).toBe(true);
     fireEvent.click(screen.getByLabelText("Conferi o documento com foto e o CPF confere"));
+    expect(validate.disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText("Data de nascimento (documento)"), { target: { value: "1990-05-10" } });
+    fireEvent.change(screen.getByLabelText("Sexo (documento)"), { target: { value: "male" } });
+    expect(validate.disabled).toBe(false);
     fireEvent.click(validate);
-    await waitFor(() => expect(api.verifyCitizen).toHaveBeenCalledWith("529.982.247-25", "123456"));
+    await waitFor(() => expect(api.verifyCitizen).toHaveBeenCalledWith("529.982.247-25", "123456",
+      { birth_date: "1990-05-10", sex: "male", gender_identity: null }));
     expect(await screen.findByText("Cadastro validado")).not.toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Próximo atendimento" }));
     expect((screen.getByLabelText("CPF do cidadão (validação)") as HTMLInputElement).value).toBe("");
@@ -373,5 +377,81 @@ describe("Attendance", () => {
     expect(screen.getByText("Esta ação exige um autenticador cadastrado.")).not.toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "cadastre seu autenticador" }));
     expect(onNavigate).toHaveBeenCalledWith("security");
+  });
+});
+
+describe("Attendance — perfil conferido no documento", () => {
+  const declared = {
+    ...found,
+    citizen: {
+      ...found.citizen,
+      profile: { birth_date: "1963-04-02", sex: "female" as const, gender_identity: "cis_woman" as const, profile_source: "declared" as const }
+    }
+  };
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: [ "Date" ] });
+    vi.setSystemTime(new Date("2026-10-05T23:30:00-03:00"));
+    for (const fn of [ api.fetchCurrentSession, api.lookupCitizen, api.verifyCitizen, api.listActiveUnits, api.getMyProfessional ]) {
+      mocked(fn).mockReset();
+    }
+    mocked(api.fetchCurrentSession).mockResolvedValue(session("citizen_verifier"));
+    mocked(api.listActiveUnits).mockResolvedValue([]);
+    mocked(api.getMyProfessional).mockResolvedValue(null);
+    mocked(api.verifyCitizen).mockResolvedValue(undefined);
+  });
+  afterEach(() => vi.useRealTimers());
+
+  async function openFound(result: typeof found) {
+    mocked(api.lookupCitizen).mockResolvedValue(result);
+    renderAttendance();
+    fireEvent.change(await screen.findByLabelText("CPF do cidadão (validação)"), { target: { value: "52998224725" } });
+    fireEvent.change(screen.getByLabelText("Código de validação"), { target: { value: "123456" } });
+    fireEvent.click(screen.getByRole("button", { name: "Buscar validação" }));
+    await screen.findByText("(**) *****-5432");
+    fireEvent.click(screen.getByLabelText("Conferi o documento com foto e o CPF confere"));
+    return screen.getByRole("button", { name: "Validar cadastro" }) as HTMLButtonElement;
+  }
+
+  it("mostra o declarado, já preenche os campos e envia o conferido", async () => {
+    const validate = await openFound(declared);
+    expect(screen.getByText("Declarado pelo cidadão: nascimento 02/04/1963 (63 anos) · sexo feminino · identidade de gênero Mulher cis"))
+      .not.toBeNull();
+    expect((screen.getByLabelText("Data de nascimento (documento)") as HTMLInputElement).value).toBe("1963-04-02");
+    fireEvent.click(validate);
+    await waitFor(() => expect(api.verifyCitizen).toHaveBeenCalledWith("529.982.247-25", "123456",
+      { birth_date: "1963-04-02", sex: "female", gender_identity: "cis_woman" }));
+  });
+
+  it("o atendente corrige o sexo e tira a identidade", async () => {
+    const validate = await openFound(declared);
+    fireEvent.change(screen.getByLabelText("Sexo (documento)"), { target: { value: "male" } });
+    fireEvent.change(screen.getByLabelText("Identidade de gênero (opcional)"), { target: { value: "" } });
+    fireEvent.click(validate);
+    await waitFor(() => expect(api.verifyCitizen).toHaveBeenCalledWith("529.982.247-25", "123456",
+      { birth_date: "1963-04-02", sex: "male", gender_identity: null }));
+  });
+
+  it("sem perfil declarado: diz isso e só valida com data e sexo", async () => {
+    const validate = await openFound(found);
+    expect(screen.getByText("Declarado pelo cidadão: sem perfil declarado")).not.toBeNull();
+    expect(validate.disabled).toBe(true);
+    expect(screen.getByText("informe a data de nascimento")).not.toBeNull();
+  });
+
+  it("data futura trava a validação (às 23h30, amanhã ainda é futuro)", async () => {
+    const validate = await openFound(declared);
+    fireEvent.change(screen.getByLabelText("Data de nascimento (documento)"), { target: { value: "2026-10-06" } });
+    expect(screen.getByText("a data de nascimento não pode ser no futuro")).not.toBeNull();
+    expect(validate.disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText("Data de nascimento (documento)"), { target: { value: "2026-10-05" } });
+    expect(validate.disabled).toBe(false);
+  });
+
+  it("recusa do servidor pela data é traduzida", async () => {
+    mocked(api.verifyCitizen).mockRejectedValue(new ApiError(422, { error: "invalid_birth_date" }, "x"));
+    const validate = await openFound(declared);
+    fireEvent.click(validate);
+    expect(await screen.findByText("data de nascimento inválida — confira no documento")).not.toBeNull();
   });
 });

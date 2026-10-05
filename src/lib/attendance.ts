@@ -99,7 +99,10 @@ const MESSAGES: Record<string, string> = {
   own_request: "Quem registrou o pedido não pode confirmá-lo.",
   not_pending: "Este pedido já foi decidido.",
   try_again: "Outra operação estava em andamento. Tente de novo.",
-  invalid_neighborhood: "bairro inválido — escolha outro da lista"
+  invalid_neighborhood: "bairro inválido — escolha outro da lista",
+  invalid_birth_date: "data de nascimento inválida — confira no documento",
+  invalid_sex: "informe o sexo que consta no documento",
+  invalid_gender_identity: "identidade de gênero inválida — escolha da lista"
 };
 
 export function attendanceError(err: unknown): string {

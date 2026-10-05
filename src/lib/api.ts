@@ -348,7 +348,12 @@ const ATTENDANCE_BASE = import.meta.env.VITE_ATTENDANCE_BASE || "/attendance";
 export interface AttendanceCitizen {
   id: string; cpf_masked: string; phone_masked: string; created_at: string;
   verification_level: "declared" | "verified";
+  // Módulo 15 (contratos §4.4): o perfil declarado do par, para o atendente
+  // confirmar ou corrigir. Opcional porque uma API anterior omite a chave.
+  profile?: CitizenProfile | null;
 }
+// O que o atendente conferiu no documento (spec §5.4).
+export interface VerifiedProfile { birth_date: string; sex: Sex; gender_identity: GenderIdentity | null }
 export interface AttendanceTriage { date: string; protocol_name: string }
 export interface VerificationRow {
   id: string; verified_at: string; verified_by: string; phone_masked: string; active: boolean;
@@ -359,9 +364,9 @@ export async function lookupCitizen(cpf: string, code: string): Promise<{ citize
   return jsonFetch(`${ATTENDANCE_BASE}/lookup`, { method: "POST", body: JSON.stringify({ cpf, code }) });
 }
 
-export async function verifyCitizen(cpf: string, code: string): Promise<void> {
+export async function verifyCitizen(cpf: string, code: string, profile: VerifiedProfile): Promise<void> {
   await jsonFetch<unknown>(`${ATTENDANCE_BASE}/verifications`, {
-    method: "POST", body: JSON.stringify({ cpf, code, document_checked: true })
+    method: "POST", body: JSON.stringify({ cpf, code, document_checked: true, ...profile })
   });
 }
 

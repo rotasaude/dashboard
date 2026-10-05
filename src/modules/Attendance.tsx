@@ -2,9 +2,10 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   getMyProfessional, listActiveUnits, lookupCitizen, revokeVerification, verifyCitizen, listVerifications,
-  type AttendanceCitizen, type AttendanceTriage, type HealthUnit, type VerificationRow
+  type AttendanceCitizen, type Sex, type AttendanceTriage, type HealthUnit, type VerificationRow
 } from "../lib/api";
 import { ATTENDANCE_REFETCH_MS, attendanceError, currentUnitKey, isValidCpf, maskCpf, nivelLabel, onlyDigits } from "../lib/attendance";
+import { todayInCity } from "../lib/campaigns";
 import { fmtDateTime } from "../lib/format";
 import { useAuth } from "../lib/auth";
 import { PageHeader } from "../components/PageHeader";
@@ -15,6 +16,7 @@ import { KeyValue } from "../components/KeyValue";
 import { EmptyState } from "../components/EmptyState";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../components/formStyles";
 import type { ModuleId } from "../shell/modules";
+import { ProfileCheck, initialProfileCheck, profileCheckProblem, type ProfileCheckValue } from "./attendance/ProfileCheck";
 import { UnitPicker } from "./attendance/UnitPicker";
 import { CheckIn } from "./attendance/CheckIn";
 import { UnitQueue } from "./attendance/UnitQueue";
@@ -118,12 +120,14 @@ function Counter() {
   const [ cpf, setCpf ] = useState("");
   const [ code, setCode ] = useState("");
   const [ checked, setChecked ] = useState(false);
+  const [ profile, setProfile ] = useState<ProfileCheckValue>(() => initialProfileCheck(null));
   const [ found, setFound ] = useState<Found | null>(null);
   const [ busy, setBusy ] = useState(false);
   const [ error, setError ] = useState<string | null>(null);
 
   function reset() {
     setState("form"); setCpf(""); setCode(""); setChecked(false); setFound(null); setError(null);
+    setProfile(initialProfileCheck(null));
   }
 
   async function search() {
@@ -135,6 +139,7 @@ function Counter() {
     try {
       const result = await lookupCitizen(cpf, code);
       setFound(result);
+      setProfile(initialProfileCheck(result.citizen.profile ?? null));
       setState("found");
     } catch (err) {
       setError(attendanceError(err));
@@ -143,13 +148,18 @@ function Counter() {
     }
   }
 
+  // "Hoje" no fuso da cidade: às 23h30 de São Paulo, amanhã ainda é futuro.
+  const profileProblem = profileCheckProblem(profile, todayInCity());
+
   async function validate() {
-    if (busy || !checked) return;
+    if (busy || !checked || profileProblem) return;
     setError(null);
     if (!/^\d{6}$/.test(code)) { setError("informe o código de 6 dígitos"); return; }
     setBusy(true);
     try {
-      await verifyCitizen(cpf, code);
+      await verifyCitizen(cpf, code, {
+        birth_date: profile.birthDate, sex: profile.sex as Sex, gender_identity: profile.genderIdentity || null
+      });
       setState("done");
     } catch (err) {
       setError(attendanceError(err));
@@ -211,6 +221,7 @@ function Counter() {
               empty="nenhuma triagem"
             />
 
+            <ProfileCheck declared={found.citizen.profile ?? null} value={profile} today={todayInCity()} onChange={setProfile} />
             <label style={{ ...labelStyle, flexDirection: "row", alignItems: "center", gap: 8 }}>
               <input type="checkbox" checked={checked} onChange={(e) => setChecked(e.target.checked)} />
               Conferi o documento com foto e o CPF confere
@@ -219,9 +230,9 @@ function Counter() {
             <div style={{ display: "flex", gap: 8 }}>
               <button
                 type="button"
-                disabled={!checked || busy}
+                disabled={!checked || busy || profileProblem !== null}
                 onClick={() => void validate()}
-                style={(!checked || busy) ? disabledButtonStyle : buttonStyle}
+                style={(!checked || busy || profileProblem !== null) ? disabledButtonStyle : buttonStyle}
               >
                 Validar cadastro
               </button>
