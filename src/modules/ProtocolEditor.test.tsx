@@ -171,4 +171,11 @@ describe("ProtocolEditor — Oferta e sugestões", () => {
     fireEvent.change(definitionBox(), { target: { value: "{ quebrado" } });
     expect(screen.getByText("Corrija o JSON para editar a oferta e as sugestões.")).not.toBeNull();
   });
+
+  it("as perguntas aparecem no visual do wpda", () => {
+    render(<ProtocolEditor />);
+    typeDefinition(DEF);
+    const preview = screen.getByRole("region", { name: "Como o cidadão vê" });
+    expect(within(preview).getByRole("heading", { name: "Teve febre?" })).not.toBeNull();
+  });
 });

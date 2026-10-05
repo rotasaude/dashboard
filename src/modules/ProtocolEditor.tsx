@@ -5,6 +5,7 @@ import { gateProtocol, previewProtocol, saveProtocolDraft,
 import { parseDefinition, stripIneligibleAnalytic, TEMPLATE } from "../lib/editor";
 import { AnalyticQuestions } from "./protocolEditor/AnalyticQuestions";
 import { OfferPanel } from "./protocolEditor/OfferPanel";
+import { QuestionPreview } from "./protocolEditor/QuestionPreview";
 
 export function ProtocolEditor() {
   const [ text, setText ] = useState<string>(TEMPLATE);
@@ -140,6 +141,7 @@ export function ProtocolEditor() {
             {JSON.stringify(preview.outcome, null, 2)}
           </pre>
         )}
+        <QuestionPreview definition={current.ok ? current.value : null} />
       </section>
     </div>
   );
