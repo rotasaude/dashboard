@@ -4,6 +4,7 @@ import { gateProtocol, previewProtocol, saveProtocolDraft,
   type GateResult, type PreviewResult, type DraftResult, type AuthorProtocolRow } from "../lib/api";
 import { parseDefinition, stripIneligibleAnalytic, TEMPLATE } from "../lib/editor";
 import { AnalyticQuestions } from "./protocolEditor/AnalyticQuestions";
+import { OfferPanel } from "./protocolEditor/OfferPanel";
 
 export function ProtocolEditor() {
   const [ text, setText ] = useState<string>(TEMPLATE);
@@ -64,6 +65,8 @@ export function ProtocolEditor() {
   }
 
   const current = parseDefinition(text);
+  // Nomes de protocolo da cidade para a sugestão (um nome por protocolo, sem a versão).
+  const protocolNames = [ ...new Set(opts.map((o) => o.name)) ].sort();
 
   return (
     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
@@ -116,7 +119,13 @@ export function ProtocolEditor() {
       </section>
 
       <section>
-        <h2 style={{ fontSize: 16, margin: "0 0 8px" }}>Preview ao vivo</h2>
+        <h2 style={{ fontSize: 16, margin: "0 0 8px" }}>Oferta e sugestões</h2>
+        <OfferPanel
+          definition={current.ok ? current.value : null}
+          protocolNames={protocolNames}
+          onChange={(next) => setText(JSON.stringify(next, null, 2))}
+        />
+        <h2 style={{ fontSize: 16, margin: "16px 0 8px" }}>Preview ao vivo</h2>
         <label style={{ fontSize: 13 }}>Respostas (JSON step → resposta)</label>
         <textarea
           value={answers}
