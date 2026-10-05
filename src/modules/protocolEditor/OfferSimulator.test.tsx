@@ -101,4 +101,29 @@ describe("OfferSimulator", () => {
     expect(screen.getByText("Elegível: a triagem aparece no catálogo deste perfil")).not.toBeNull();
     expect(screen.queryByRole("alert")).toBeNull();
   });
+
+  it("resultado some quando a idade muda ou a definição muda", async () => {
+    mocked(api.simulateOffer).mockResolvedValue(OK);
+    const { rerender } = render(<OfferSimulator definition={DEF} valid answers="{}" />);
+    simulate();
+    expect(await screen.findByRole("status")).not.toBeNull();
+    fireEvent.change(screen.getByLabelText("Idade"), { target: { value: "30" } });
+    expect(screen.queryByRole("status")).toBeNull();
+    fireEvent.change(screen.getByLabelText("Idade"), { target: { value: "62" } });
+    expect(screen.queryByRole("status")).not.toBeNull();
+    rerender(<OfferSimulator definition={{ ...DEF, version: 2 }} valid answers="{}" />);
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("duas sugestões ao mesmo protocolo não geram chave duplicada", async () => {
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    mocked(api.simulateOffer).mockResolvedValue({
+      ...OK, suggestions: [ { protocol: "saude-mental", matches: true }, { protocol: "saude-mental", matches: false } ]
+    });
+    render(<OfferSimulator definition={DEF} valid answers="{}" />);
+    simulate();
+    await screen.findByRole("status");
+    expect(err).not.toHaveBeenCalled();
+    err.mockRestore();
+  });
 });

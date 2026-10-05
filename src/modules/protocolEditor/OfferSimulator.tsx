@@ -17,13 +17,17 @@ export function OfferSimulator({ definition, valid, answers }: { definition: unk
   const [ tier, setTier ] = useState("");
   const [ score, setScore ] = useState("");
   const [ priority, setPriority ] = useState("");
-  const [ result, setResult ] = useState<SimulateOfferResult | null>(null);
+  const [ shown, setShown ] = useState<{ key: string; result: SimulateOfferResult } | null>(null);
   const [ error, setError ] = useState<string | null>(null);
   const [ busy, setBusy ] = useState(false);
 
   const ageOk = /^\d+$/.test(age) && Number(age) <= MAX_AGE;
   const optionalOk = [ score, priority ].every((v) => v.trim() === "" || INTEGER.test(v.trim()));
   const can = valid && definition !== null && ageOk && optionalOk && !busy;
+
+  // Chave das entradas: o resultado só vale enquanto elas não mudam.
+  const inputKey = JSON.stringify([ definition, answers, age, sex, tier, score.trim(), priority.trim() ]);
+  const result = shown && shown.key === inputKey ? shown.result : null;
 
   async function run() {
     if (!can) return;
@@ -38,12 +42,14 @@ export function OfferSimulator({ definition, valid, answers }: { definition: unk
       ...(priority.trim() ? { priority: Number(priority) } : {})
     };
     setBusy(true); setError(null);
+    const key = inputKey;
     try {
-      setResult(await simulateOffer({
+      const res = await simulateOffer({
         definition, profile: { age: Number(age), sex, neighborhood_id: null },
         answers: parsed.value as Record<string, string>,
         ...(Object.keys(outcome).length > 0 ? { outcome } : {})
-      }));
+      });
+      setShown({ key, result: res });
     } catch {
       setError("não foi possível simular — tente de novo");
     } finally {
@@ -100,7 +106,7 @@ function SimulationResult({ result }: { result: SimulateOfferResult }) {
       {result.eligibility_text && <small style={hint}>Regra conferida pelo servidor: {result.eligibility_text}</small>}
       {result.suggestions.length > 0 && (
         <ul style={{ margin: 0, paddingLeft: 18 }}>
-          {result.suggestions.map((s) => <li key={s.protocol}>{s.protocol}: {s.matches ? "sugere" : "não sugere"}</li>)}
+          {result.suggestions.map((s, i) => <li key={`${s.protocol}-${i}`}>{s.protocol}: {s.matches ? "sugere" : "não sugere"}</li>)}
         </ul>
       )}
       {result.warnings.length > 0 && (
