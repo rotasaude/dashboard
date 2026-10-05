@@ -6,7 +6,7 @@ vi.mock("../lib/api", async (importOriginal) => {
   const real = await importOriginal<typeof import("../lib/api")>();
   return {
     ...real, listAuthorProtocols: vi.fn(), loadProtocolDefinition: vi.fn(), gateProtocol: vi.fn(),
-    previewProtocol: vi.fn(), saveProtocolDraft: vi.fn()
+    previewProtocol: vi.fn(), saveProtocolDraft: vi.fn(), simulateOffer: vi.fn()
   };
 });
 
@@ -177,5 +177,17 @@ describe("ProtocolEditor — Oferta e sugestões", () => {
     typeDefinition(DEF);
     const preview = screen.getByRole("region", { name: "Como o cidadão vê" });
     expect(within(preview).getByRole("heading", { name: "Teve febre?" })).not.toBeNull();
+  });
+
+  it("o simulador usa a definição e as respostas do editor", async () => {
+    mocked(api.simulateOffer).mockResolvedValue({ eligible: true, eligibility_text: null, suggestions: [], errors: [], warnings: [] });
+    render(<ProtocolEditor />);
+    typeDefinition(DEF);
+    const button = screen.getByRole("button", { name: "Simular" }) as HTMLButtonElement;
+    await waitFor(() => expect(button.disabled).toBe(false));
+    fireEvent.click(button);
+    await waitFor(() => expect(api.simulateOffer).toHaveBeenCalledWith({
+      definition: DEF, profile: { age: 62, sex: "female", neighborhood_id: null }, answers: {}
+    }));
   });
 });

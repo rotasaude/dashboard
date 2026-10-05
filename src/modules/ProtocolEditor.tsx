@@ -5,6 +5,7 @@ import { gateProtocol, previewProtocol, saveProtocolDraft,
 import { parseDefinition, stripIneligibleAnalytic, TEMPLATE } from "../lib/editor";
 import { AnalyticQuestions } from "./protocolEditor/AnalyticQuestions";
 import { OfferPanel } from "./protocolEditor/OfferPanel";
+import { OfferSimulator } from "./protocolEditor/OfferSimulator";
 import { QuestionPreview } from "./protocolEditor/QuestionPreview";
 
 export function ProtocolEditor() {
@@ -142,6 +143,7 @@ export function ProtocolEditor() {
           </pre>
         )}
         <QuestionPreview definition={current.ok ? current.value : null} />
+        <OfferSimulator definition={current.ok ? current.value : null} valid={valid} answers={answers} />
       </section>
     </div>
   );
