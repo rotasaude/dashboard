@@ -10,10 +10,31 @@ import { Tag } from "../components/Tag";
 import { buttonStyle, secondaryButtonStyle } from "../components/formStyles";
 import { ProfileForm } from "./professionals/ProfileForm";
 import { ProfessionalDetail } from "./professionals/ProfessionalDetail";
+import { AppointmentTypes } from "./professionals/AppointmentTypes";
+import { SegmentedControl } from "../shell/SegmentedControl";
+
+// Módulo 17: tipos de atendimento e modelos de agenda moram aqui, com o
+// mesmo papel (municipal_admin) da lista de profissionais.
+type ProfessionalsTab = "people" | "types";
+const TABS: { key: ProfessionalsTab; label: string }[] = [
+  { key: "people", label: "Profissionais" },
+  { key: "types", label: "Tipos de atendimento" }
+];
+
+export function Professionals() {
+  const [ tab, setTab ] = useState<ProfessionalsTab>("people");
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <div><SegmentedControl options={TABS} value={tab} onChange={setTab} /></div>
+      {tab === "people" && <People />}
+      {tab === "types" && <AppointmentTypes />}
+    </div>
+  );
+}
 
 // Profissionais (módulo 10; spec 2026-09-27 §5): só municipal_admin. Lista,
 // painel de quem tem o papel sem cadastro completo e ficha por profissional.
-export function Professionals() {
+function People() {
   const queryClient = useQueryClient();
   const list = useQuery({ queryKey: [ "professionals" ], queryFn: listProfessionals });
   const pending = useQuery({ queryKey: [ "professionalsPending" ], queryFn: listPendingProfessionals });
