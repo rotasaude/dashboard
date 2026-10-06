@@ -104,7 +104,8 @@ npm run dev        # porta 5173; o compose publica em 5175
 ```
 
 O Vite proxa `/up`, `/admin/api`, `/authoring`, `/session`, `/passwords`,
-`/auth`, `/setup`, `/protocols`, `/mfa`, `/attendance`, `/professionals`, `/territory`, `/campaigns` e `/triage_catalog` para
+`/auth`, `/setup`, `/protocols`, `/mfa`, `/attendance`, `/professionals`, `/territory`, `/campaigns`, `/triage_catalog`,
+`/integrations`, `/cnes` e `/production` para
 `VITE_API_PROXY_TARGET` com `changeOrigin: false`. **Não troque para `true`**:
 o proxy reescreveria o Host para o alvo e nenhuma cidade chegaria ao Rails.
 

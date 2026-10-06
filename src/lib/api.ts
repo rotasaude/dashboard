@@ -367,9 +367,32 @@ export async function lookupCitizen(cpf: string, code: string): Promise<{ citize
   return jsonFetch(`${ATTENDANCE_BASE}/lookup`, { method: "POST", body: JSON.stringify({ cpf, code }) });
 }
 
-export async function verifyCitizen(cpf: string, code: string, profile: VerifiedProfile): Promise<void> {
+// Módulo 16 (contratos §5.4): `cadsus_confirmed` só vai quando a cidade tem a
+// consulta ao CADSUS ligada (o atendente decidiu, sim ou não). Sem `extra`, o
+// corpo é exatamente o de antes.
+export interface VerifyExtra { cadsus_confirmed?: boolean }
+
+export async function verifyCitizen(
+  cpf: string, code: string, profile: VerifiedProfile, extra: VerifyExtra = {}
+): Promise<void> {
   await jsonFetch<unknown>(`${ATTENDANCE_BASE}/verifications`, {
-    method: "POST", body: JSON.stringify({ cpf, code, document_checked: true, ...profile })
+    method: "POST", body: JSON.stringify({ cpf, code, document_checked: true, ...profile, ...extra })
+  });
+}
+
+// Consulta ao CADSUS do par do código (contratos §5.4: o CPF vai junto,
+// porque o código só identifica o par com ele). Nunca traz nome,
+// mãe ou endereço: só o CNS mascarado e se nascimento e sexo conferem.
+export interface CadsusLookupResult {
+  found: boolean;
+  cns_masked: string | null;
+  birth_date_matches: boolean | null;
+  sex_matches: boolean | null;
+}
+
+export async function cadsusLookup(cpf: string, code: string): Promise<CadsusLookupResult> {
+  return jsonFetch<CadsusLookupResult>(`${ATTENDANCE_BASE}/cadsus_lookup`, {
+    method: "POST", body: JSON.stringify({ cpf, code })
   });
 }
 
@@ -1098,5 +1121,138 @@ export interface SimulateOfferResult {
 export async function simulateOffer(input: SimulateOfferInput): Promise<SimulateOfferResult> {
   return jsonFetch<SimulateOfferResult>(`${AUTHORING_BASE}/simulate_offer`, {
     method: "POST", body: JSON.stringify(input)
+  });
+}
+
+// ─── Módulo 16: modo de prontuário e exportação (ADR 0028; contratos §5) ─────
+// Rotas da cidade, sessão municipal. Nenhuma devolve segredo: a senha da
+// credencial só vai (PUT) e nunca volta. CPF e CNS chegam mascarados da API e
+// são mostrados como vieram.
+const INTEGRATIONS_BASE = import.meta.env.VITE_INTEGRATIONS_BASE || "/integrations";
+const CNES_BASE = import.meta.env.VITE_CNES_BASE || "/cnes";
+const PRODUCTION_BASE = import.meta.env.VITE_PRODUCTION_BASE || "/production";
+
+export type RecordMode = "off" | "integrated" | "record";
+export type CredentialKind = "ledi" | "cadsus";
+export type CredentialCheckStatus = "ok" | "unauthorized" | "unreachable" | "error";
+
+export interface IntegrationCredential {
+  kind: CredentialKind;
+  set: boolean;
+  set_at: string | null;
+  set_by: string | null;
+  last_check_at: string | null;
+  last_check_status: CredentialCheckStatus | null;
+  last_check_message: string | null;
+}
+export interface CityFeatureState { key: string; enabled: boolean; usable: boolean; missing: string[] }
+export interface Integrations {
+  record_mode: RecordMode;
+  pec_url_set: boolean;
+  ibge_code_set: boolean;
+  credentials: IntegrationCredential[];
+  features: CityFeatureState[];
+}
+
+export async function getIntegrations(): Promise<Integrations> {
+  return jsonFetch<Integrations>(INTEGRATIONS_BASE);
+}
+
+// Escrita só. A senha vai como digitada (sem trim): uma senha do PEC com
+// espaço nas pontas é outra senha.
+export async function setIntegrationCredential(
+  kind: CredentialKind, username: string, password: string
+): Promise<IntegrationCredential> {
+  return jsonFetch<IntegrationCredential>(`${INTEGRATIONS_BASE}/credentials/${encodeURIComponent(kind)}`, {
+    method: "PUT", body: JSON.stringify({ username, password })
+  });
+}
+
+export async function checkIntegrationCredential(kind: CredentialKind): Promise<IntegrationCredential> {
+  return jsonFetch<IntegrationCredential>(`${INTEGRATIONS_BASE}/credentials/${encodeURIComponent(kind)}/check`, {
+    method: "POST", body: "{}"
+  });
+}
+
+export type CnesProposalKind = "unit" | "team" | "member";
+export type CnesProposalAction = "link" | "create" | "end";
+// Um lado da proposta (contratos §5.2): cada chave
+// só vem quando se aplica ao tipo; CPF e CNS sempre mascarados.
+export interface CnesSide {
+  name?: string | null;
+  cnes?: string | null;
+  ine?: string | null;
+  cbo?: string | null;
+  cpf_masked?: string | null;
+  cns_masked?: string | null;
+}
+export interface CnesProposal {
+  id: string;
+  kind: CnesProposalKind;
+  action: CnesProposalAction;
+  local: CnesSide | null;
+  cnes: CnesSide;
+  confidence: "exact" | "probable";
+}
+export interface CnesDivergence {
+  kind: string;
+  subject: { type: string; id: string; label: string };
+  detail: string | null;
+}
+export interface CnesOverview {
+  snapshot: { competence: string; imported_at: string } | null;
+  proposals: CnesProposal[];
+  divergences: CnesDivergence[];
+}
+export interface CnesApplyResult { applied: number; skipped: { id: string; reason: string }[] }
+
+export async function getCnes(): Promise<CnesOverview> {
+  return jsonFetch<CnesOverview>(CNES_BASE);
+}
+
+export async function applyCnesProposals(proposalIds: string[]): Promise<CnesApplyResult> {
+  return jsonFetch<CnesApplyResult>(`${CNES_BASE}/apply`, {
+    method: "POST", body: JSON.stringify({ proposal_ids: proposalIds })
+  });
+}
+
+export type CompetenceAlert = "none" | "attention" | "critical";
+export type FichaStatus = "pending" | "sending" | "accepted" | "rejected" | "failed";
+export interface LediFicha {
+  id: string;
+  ficha_type: string;
+  status: FichaStatus;
+  attempts: number;
+  last_error: string | null;
+  created_at: string;
+  accepted_at: string | null;
+}
+export interface Production {
+  competence: string;
+  deadline_on: string;
+  business_days_left: number;
+  alert: CompetenceAlert;
+  // `sending` pode faltar na resposta e `pending` não o soma (contratos §5.3).
+  counts: { accepted: number; rejected: number; pending: number; failed: number; sending?: number };
+  rejections: { message: string; count: number }[];
+  fichas: LediFicha[];
+  // Total de fichas da competência, para a paginação (contratos §5.3).
+  fichas_total: number;
+}
+// Página fixa da API (contratos §5.3).
+export const FICHAS_PER_PAGE = 50;
+
+// `competence` null = a corrente, decidida pela API no fuso da cidade.
+export async function getProduction(competence: string | null, page: number): Promise<Production> {
+  const params = new URLSearchParams();
+  if (competence) params.set("competence", competence);
+  if (page > 1) params.set("page", String(page));
+  const qs = params.toString();
+  return jsonFetch<Production>(qs ? `${PRODUCTION_BASE}?${qs}` : PRODUCTION_BASE);
+}
+
+export async function resendFicha(id: string): Promise<LediFicha> {
+  return jsonFetch<LediFicha>(`${PRODUCTION_BASE}/fichas/${encodeURIComponent(id)}/resend`, {
+    method: "POST", body: "{}"
   });
 }
