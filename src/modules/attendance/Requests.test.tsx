@@ -77,6 +77,28 @@ describe("Requests", () => {
     expect(screen.queryByText("não consigo sair do trabalho de manhã")).toBeNull();
   });
 
+  it("nota longa do cidadão aparece inteira, fora do par rótulo/valor de uma linha", async () => {
+    const longNote = "trabalho em turno até as 14h de segunda a sexta; ".repeat(4).trim();
+    mocked(api.listUnitRequests).mockResolvedValue([ rows[2] ]);
+    mocked(api.getRequest).mockResolvedValue({ ...rows[2], reschedule_note: longNote });
+    renderRequests();
+    await screen.findByText("***.333.444-**");
+    fireEvent.click(screen.getByRole("button", { name: "Detalhes" }));
+    const note = await screen.findByText(longNote);
+    expect(note.textContent).toBe(longNote);
+    expect(note.style.whiteSpace).toBe("pre-wrap");
+    expect(note.style.textOverflow).toBe("");
+  });
+
+  it("detalhe de pedido que sumiu (404 not_found) pede para atualizar a fila", async () => {
+    mocked(api.listUnitRequests).mockResolvedValue([ rows[0] ]);
+    mocked(api.getRequest).mockRejectedValue(new ApiError(404, { error: "not_found" }, "x"));
+    renderRequests();
+    await screen.findByText("***.982.247-**");
+    fireEvent.click(screen.getByRole("button", { name: "Detalhes" }));
+    expect(await screen.findByText("pedido não encontrado — atualize a fila")).not.toBeNull();
+  });
+
   // P5: pedido `scheduled` que precisa remarcar volta na fila com o horário
   // vivo; o api recusa encerrar (409 request_not_open), então a tela não oferece.
   it("pedido marcado que precisa remarcar não oferece Encerrar pedido", async () => {
