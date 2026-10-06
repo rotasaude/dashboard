@@ -30,15 +30,15 @@ function renderRequests() {
 const rows: api.RequestRow[] = [
   {
     id: "r1", kind: "return", origin_unit_name: "UBS Centro", created_at: "2026-09-24T10:00:00Z",
-    cpf_masked: "***.982.247-**", priority: 2, note: "controle de pressão", reopened_reason: null
+    cpf_masked: "***.982.247-**", priority: 2, note: "controle de pressão", reopened_reason: null, target_unit_id: "u1", appointment: null
   },
   {
     id: "r2", kind: "referral", origin_unit_name: "UPA Norte", created_at: "2026-09-23T09:00:00Z",
-    cpf_masked: "***.111.222-**", priority: 1, note: null, reopened_reason: "expired"
+    cpf_masked: "***.111.222-**", priority: 1, note: null, reopened_reason: "expired", target_unit_id: "u1", appointment: null
   },
   {
     id: "r3", kind: "return", origin_unit_name: "UBS Centro", created_at: "2026-09-22T09:00:00Z",
-    cpf_masked: "***.333.444-**", priority: null, note: null, reopened_reason: "no_show"
+    cpf_masked: "***.333.444-**", priority: null, note: null, reopened_reason: "no_show", target_unit_id: "u1", appointment: null
   }
 ];
 

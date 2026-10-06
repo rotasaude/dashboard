@@ -192,7 +192,9 @@ export async function resetPassword(token: string, password: string, password_co
 
 const AUTHORING_BASE = import.meta.env.VITE_AUTHORING_BASE || "/authoring/protocols";
 
-export interface GateResult { valid: boolean; errors?: string[]; }
+// Módulo 17 (contratos §1): o gate pode aceitar com avisos (tipo de
+// atendimento inexistente na cidade). Sem avisos, continua { valid: true }.
+export interface GateResult { valid: boolean; errors?: string[]; warnings?: string[]; }
 export interface PreviewResult { outcome?: Record<string, unknown>; valid?: boolean; errors?: string[]; }
 export interface DraftResult {
   id?: string; name?: string; version?: number; status?: string;
@@ -201,10 +203,16 @@ export interface DraftResult {
 
 export async function gateProtocol(definition: unknown): Promise<GateResult> {
   try {
-    await jsonFetch<unknown>(`${AUTHORING_BASE}/gate`, {
+    const body = await jsonFetch<{ warnings?: unknown } | null>(`${AUTHORING_BASE}/gate`, {
       method: "POST", body: JSON.stringify({ definition })
+    }).catch((err: unknown) => {
+      // 200 sem corpo JSON: res.json() falha, e isso não é recusa.
+      if (err instanceof SyntaxError) return null;
+      throw err;
     });
-    return { valid: true };
+    const warnings = Array.isArray(body?.warnings)
+      ? body.warnings.filter((w): w is string => typeof w === "string") : [];
+    return warnings.length > 0 ? { valid: true, warnings } : { valid: true };
   } catch (err) {
     if (err instanceof ApiError && err.status === 422) {
       const body = (err.body ?? {}) as GateResult;
@@ -594,6 +602,11 @@ export interface RequestRow {
   id: string; kind: "return" | "referral"; origin_unit_name: string; created_at: string;
   cpf_masked: string; priority: number | null; note: string | null;
   reopened_reason: "expired" | "no_show" | null;
+  // Módulo 17 (contratos §10; api Scheduling::RequestJson): unidade de destino
+  // (nula na fila "sem unidade") e o horário vivo (não nulo em pedido
+  // `scheduled` com needs_reschedule).
+  target_unit_id: string | null;
+  appointment: AppointmentView | null;
 }
 
 export async function listUnitRequests(unitId: string): Promise<RequestRow[]> {
@@ -667,6 +680,8 @@ export interface ProfessionalLink {
   started_by: string;
   ended_at: string | null;
   ended_by: string | null;
+  // Módulo 17: tipo padrão do vínculo para turno sem modelo (nulo = o da base pelo CBO).
+  default_appointment_type_key?: string | null;
 }
 
 export interface ProfessionalShift {
@@ -677,6 +692,8 @@ export interface ProfessionalShift {
   ends_at: string;
   cancelled_at: string | null;
   cancel_reason: string | null;
+  // Módulo 17: modelo de agenda do turno (nulo = turno inteiro como vagas do tipo padrão).
+  schedule_template_id?: string | null;
 }
 
 export interface CboEntry { code: string; title: string; council: string | null }
@@ -741,9 +758,13 @@ export async function listProfessionalShifts(professional: string, from: string,
   return (await jsonFetch<{ shifts: ProfessionalShift[] }>(`${PROFESSIONALS_BASE}/${professionalId(professional)}/shifts?${qs}`)).shifts;
 }
 
-export async function scheduleShift(linkId: string, startsAt: string, endsAt: string): Promise<ProfessionalShift> {
+export async function scheduleShift(
+  linkId: string, startsAt: string, endsAt: string, templateId?: string | null
+): Promise<ProfessionalShift> {
+  const body: Record<string, unknown> = { starts_at: startsAt, ends_at: endsAt };
+  if (templateId) body.schedule_template_id = templateId;
   return (await jsonFetch<{ shift: ProfessionalShift }>(`${PROFESSIONALS_BASE}/links/${professionalId(linkId)}/shifts`,
-    postProfessional({ starts_at: startsAt, ends_at: endsAt }))).shift;
+    postProfessional(body))).shift;
 }
 
 export async function cancelShift(shiftId: string, reason: string): Promise<ProfessionalShift> {
@@ -1255,4 +1276,143 @@ export async function resendFicha(id: string): Promise<LediFicha> {
   return jsonFetch<LediFicha>(`${PRODUCTION_BASE}/fichas/${encodeURIComponent(id)}/resend`, {
     method: "POST", body: "{}"
   });
+}
+
+// ─── Agenda (módulo 17, ADR 0029; contratos 2026-10-05 §2–§4) ───────────────
+// Rotas NOVAS devolvem o objeto puro na escrita (contratos, cabeçalho); as que
+// já existiam mantêm o envelope de hoje ({ shift }, { appointment }, { requests }).
+// POST e segmento de URL reusam postProfessional/professionalId (mesma forma
+// para /professionals e /attendance).
+
+export type AppointmentTypeOrigin = "platform" | "city";
+export interface AppointmentType {
+  key: string; name: string; duration_minutes: number; cbo_prefixes: string[]; active: boolean; origin: AppointmentTypeOrigin;
+}
+export interface AppointmentTypeFields { name?: string; duration_minutes?: number; cbo_prefixes?: string[]; active?: boolean }
+export interface NewAppointmentType { key: string; name: string; duration_minutes: number; cbo_prefixes: string[] }
+
+export type BlockKind = "walk_in" | "bookable" | "blocked";
+// `appointment_type_name` só vem nas respostas (§9: faixas `bookable` da agenda
+// e da Minha agenda); nunca é enviado de volta.
+export interface ScheduleBlock {
+  starts: string; ends: string; kind: BlockKind; appointment_type_key?: string; slot_minutes?: number;
+  appointment_type_name?: string;
+}
+export interface ScheduleTemplate { id: string; name: string; fit_in_limit: number; blocks: ScheduleBlock[]; active: boolean }
+export interface ScheduleTemplateFields { name?: string; fit_in_limit?: number; blocks?: ScheduleBlock[]; active?: boolean }
+export interface NewScheduleTemplate { name: string; fit_in_limit: number; blocks: ScheduleBlock[] }
+export interface TemplatePreviewInput {
+  blocks: ScheduleBlock[]; fit_in_limit: number; sample: { starts_at: string; ends_at: string; cbo_code: string };
+}
+export interface TemplatePreview {
+  slots: { starts_at: string; ends_at: string; appointment_type_key: string }[];
+  blocks: ScheduleBlock[];
+}
+
+export type SchedulingPriority = "routine" | "priority";
+export type PreferredPeriod = "morning" | "afternoon" | "any";
+export type RescheduleReasonCode = "work" | "health" | "transport" | "other";
+export type BookingKind = "slot" | "fit_in" | "legacy";
+
+// Horário (contratos §4.4), a mesma forma na agenda, na fila e na Minha agenda.
+// Em `legacy`, fim, tipo, profissional e turno vêm nulos.
+export interface AppointmentView {
+  id: string; status: string; booking_kind: BookingKind; scheduled_at: string; ends_at: string | null;
+  appointment_type_key: string | null; appointment_type_name: string | null;
+  professional: { id: string; name: string } | null; shift_id: string | null; fit_in: boolean;
+  fit_in_reason?: string; outside_template: boolean; shift_cancelled: boolean;
+  citizen: { id: string; cpf_masked: string; name?: string };
+}
+
+export interface AgendaShift {
+  shift_id: string; starts_at: string; ends_at: string; blocks: ScheduleBlock[];
+  fit_in_count: number; fit_in_limit: number;
+  // Turno cancelado continua na agenda (spec §4.3; contratos §9).
+  cancelled_at: string | null;
+}
+export interface AgendaProfessional { id: string; name: string; shifts: AgendaShift[]; appointments: AppointmentView[] }
+export interface UnitAgenda { date: string; professionals: AgendaProfessional[]; unassigned: AppointmentView[] }
+
+export interface AvailabilitySlot {
+  professional_id: string; professional_name: string; shift_id: string; starts_at: string; ends_at: string;
+}
+export interface Availability { slots: AvailabilitySlot[]; legacy_days: string[] }
+
+export type BookingInput =
+  | { kind: "slot"; professional_id: string; starts_at: string; appointment_type_key: string }
+  | { kind: "fit_in"; professional_id: string; shift_id: string; starts_at: string; appointment_type_key: string; reason: string }
+  | { kind: "legacy"; scheduled_at: string; allow_overlap?: boolean };
+
+export interface MyAgendaShift {
+  shift_id: string; unit: { id: string; name: string }; starts_at: string; ends_at: string; cancelled_at: string | null;
+  blocks: ScheduleBlock[]; appointments: AppointmentView[];
+}
+export interface MyAgendaDay { date: string; shifts: MyAgendaShift[] }
+export interface MyAgenda { days: MyAgendaDay[] }
+
+export async function listAppointmentTypes(): Promise<AppointmentType[]> {
+  return (await jsonFetch<{ types: AppointmentType[] }>(`${PROFESSIONALS_BASE}/appointment_types`)).types;
+}
+
+export function createAppointmentType(input: NewAppointmentType): Promise<AppointmentType> {
+  return jsonFetch(`${PROFESSIONALS_BASE}/appointment_types`, postProfessional(input));
+}
+
+export function updateAppointmentType(key: string, fields: AppointmentTypeFields): Promise<AppointmentType> {
+  return jsonFetch(`${PROFESSIONALS_BASE}/appointment_types/${professionalId(key)}`, postProfessional(fields));
+}
+
+export async function listScheduleTemplates(): Promise<ScheduleTemplate[]> {
+  return (await jsonFetch<{ templates: ScheduleTemplate[] }>(`${PROFESSIONALS_BASE}/schedule_templates`)).templates;
+}
+
+export function createScheduleTemplate(input: NewScheduleTemplate): Promise<ScheduleTemplate> {
+  return jsonFetch(`${PROFESSIONALS_BASE}/schedule_templates`, postProfessional(input));
+}
+
+export function updateScheduleTemplate(id: string, fields: ScheduleTemplateFields): Promise<ScheduleTemplate> {
+  return jsonFetch(`${PROFESSIONALS_BASE}/schedule_templates/${professionalId(id)}`, postProfessional(fields));
+}
+
+export function previewScheduleTemplate(input: TemplatePreviewInput): Promise<TemplatePreview> {
+  return jsonFetch(`${PROFESSIONALS_BASE}/schedule_templates/preview`, postProfessional(input));
+}
+
+export async function setShiftTemplate(shiftId: string, templateId: string | null): Promise<void> {
+  await jsonFetch<unknown>(`${PROFESSIONALS_BASE}/shifts/${professionalId(shiftId)}/template`,
+    postProfessional({ schedule_template_id: templateId }));
+}
+
+export async function setLinkDefaultType(linkId: string, key: string | null): Promise<void> {
+  await jsonFetch<unknown>(`${PROFESSIONALS_BASE}/links/${professionalId(linkId)}/default_type`,
+    postProfessional({ appointment_type_key: key }));
+}
+
+export function getMyAgenda(from: string, to: string): Promise<MyAgenda> {
+  return jsonFetch(`${PROFESSIONALS_BASE}/me/agenda?${new URLSearchParams({ from, to }).toString()}`);
+}
+
+export async function listUnassignedRequests(): Promise<RequestRow[]> {
+  return (await jsonFetch<{ requests: RequestRow[] }>(`${ATTENDANCE_BASE}/requests/unassigned`)).requests;
+}
+
+export function assignRequestUnit(id: string, unitId: string): Promise<RequestRow> {
+  return jsonFetch(`${ATTENDANCE_BASE}/requests/${professionalId(id)}/assign_unit`, postProfessional({ unit_id: unitId }));
+}
+
+export function getUnitAvailability(unitId: string, type: string, from: string, to: string): Promise<Availability> {
+  const qs = new URLSearchParams({ type, from, to }).toString();
+  return jsonFetch(`${ATTENDANCE_BASE}/units/${professionalId(unitId)}/availability?${qs}`);
+}
+
+// A unidade vai em toda forma: o api confere `wrong_unit` como hoje.
+export async function bookAppointment(requestId: string, unitId: string, input: BookingInput): Promise<ScheduledAppointment> {
+  const payload = await jsonFetch<{ appointment: ScheduledAppointment }>(
+    `${ATTENDANCE_BASE}/requests/${professionalId(requestId)}/appointments`, postProfessional({ ...input, health_unit_id: unitId })
+  );
+  return payload.appointment;
+}
+
+export function getUnitAgenda(unitId: string, date: string): Promise<UnitAgenda> {
+  return jsonFetch(`${ATTENDANCE_BASE}/units/${professionalId(unitId)}/agenda?date=${professionalId(date)}`);
 }
