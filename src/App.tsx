@@ -25,6 +25,9 @@ import { Territory } from "./modules/Territory";
 import { Campaigns } from "./modules/Campaigns";
 import { Analytics } from "./modules/Analytics";
 import { MyProfile } from "./modules/MyProfile";
+import { Integrations } from "./modules/Integrations";
+import { Cnes } from "./modules/Cnes";
+import { Production } from "./modules/Production";
 
 export function App() {
   const [ period, setPeriod ] = useState<PeriodKey>("7d");
@@ -80,6 +83,9 @@ function renderModule(active: ModuleId, setActive: (id: ModuleId) => void) {
     case "territory":      return <Territory />;
     case "campaigns":      return <Campaigns onNavigate={setActive} />;
     case "analytics":      return <Analytics />;
+    case "integrations":   return <Integrations onGoToSecurity={() => setActive("security")} />;
+    case "cnes":           return <Cnes onGoToSecurity={() => setActive("security")} />;
+    case "production":     return <Production onGoToSecurity={() => setActive("security")} />;
     default:               return <Placeholder title={labelFor(active)} />;
   }
 }

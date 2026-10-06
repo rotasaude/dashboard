@@ -22,7 +22,8 @@ describe("modules", () => {
       expect(groups.some((g) => g.label === "Cidade")).toBe(false);
       expect(groups.some((g) => g.label === "Comunicação")).toBe(false);
       expect(groups.some((g) => g.label === "Análise")).toBe(false);
-      expect(groups.length).toBe(NAV_GROUPS.length - 6);
+      expect(groups.some((g) => g.label === "e-SUS")).toBe(false);
+      expect(groups.length).toBe(NAV_GROUPS.length - 7);
     });
 
     it("sem sessão, esconde Equipe, Atendimento e Cidade", () => {
@@ -33,7 +34,8 @@ describe("modules", () => {
       expect(groups.some((g) => g.label === "Cidade")).toBe(false);
       expect(groups.some((g) => g.label === "Comunicação")).toBe(false);
       expect(groups.some((g) => g.label === "Análise")).toBe(false);
-      expect(groups.length).toBe(NAV_GROUPS.length - 5);
+      expect(groups.some((g) => g.label === "e-SUS")).toBe(false);
+      expect(groups.length).toBe(NAV_GROUPS.length - 6);
     });
 
     it("Equipe só aparece para municipal_admin", () => {
@@ -132,6 +134,47 @@ describe("modules", () => {
       expect(ids(user([ "analyst" ]))).not.toContain("team");
       expect(ids(user([ "analyst" ]))).not.toContain("territory");
       expect(ids(user([ "analyst" ]))).not.toContain("campaigns");
+    });
+  });
+
+  describe("módulo 16 na navegação", () => {
+    const user = (roles: string[], features?: unknown, operator = false) =>
+      ({ operator, memberships: roles.map((role) => ({ role })), features });
+    const ids = (u: Parameters<typeof navGroupsFor>[0]) => navGroupsFor(u).flatMap((g) => g.items.map((i) => i.id));
+
+    it("Integrações e CNES só para municipal_admin", () => {
+      expect(ids(user([ "municipal_admin" ]))).toEqual(expect.arrayContaining([ "integrations", "cnes" ]));
+      for (const role of [ "analyst", "viewer", "citizen_verifier", "health_professional", "campaign_manager" ]) {
+        expect(ids(user([ role ], [ "ledi_export" ]))).not.toContain("integrations");
+        expect(ids(user([ role ], [ "ledi_export" ]))).not.toContain("cnes");
+      }
+      expect(labelFor("integrations")).toBe("Integrações");
+      expect(labelFor("cnes")).toBe("CNES");
+    });
+
+    it("Produção e-SUS para municipal_admin e analyst, só com ledi_export ligado", () => {
+      expect(ids(user([ "municipal_admin" ], [ "ledi_export" ]))).toContain("production");
+      expect(ids(user([ "analyst" ], [ "ledi_export" ]))).toContain("production");
+      expect(ids(user([ "municipal_admin" ]))).not.toContain("production");
+      expect(ids(user([ "municipal_admin" ], [ "cadsus_lookup" ]))).not.toContain("production");
+      expect(ids(user([ "viewer" ], [ "ledi_export" ]))).not.toContain("production");
+      expect(labelFor("production")).toBe("Produção e-SUS");
+    });
+
+    it("grupo e-SUS some quando não sobra item", () => {
+      expect(navGroupsFor(user([ "analyst" ])).some((g) => g.label === "e-SUS")).toBe(false);
+      expect(navGroupsFor(user([ "analyst" ], [ "ledi_export" ])).find((g) => g.label === "e-SUS")?.items.map((i) => i.id))
+        .toEqual([ "production" ]);
+    });
+
+    it("operador nunca vê e-SUS, nem com papel e interruptor", () => {
+      expect(ids(user([ "municipal_admin" ], [ "ledi_export" ], true))).not.toContain("integrations");
+      expect(ids(user([ "municipal_admin" ], [ "ledi_export" ], true))).not.toContain("production");
+    });
+
+    it("features fora de formato não quebra o menu", () => {
+      expect(ids(user([ "municipal_admin" ], "ledi_export"))).not.toContain("production");
+      expect(ids(user([ "municipal_admin" ], null))).toContain("integrations");
     });
   });
 });

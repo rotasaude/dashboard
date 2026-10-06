@@ -1,11 +1,13 @@
 // Catálogo de módulos do dashboard (tenant-scoped). Subconjunto operacional do
 // admin — sem o grupo Setup (cross-tenant) nem ScopePicker. Inclui `health`
 // porque o Overview navega para queues/health.
+import { hasFeature } from "../lib/features";
 export type ModuleId =
   | "overview" | "ingestion" | "conversations" | "consent"
   | "triages" | "classification" | "reports" | "protocols" | "events"
   | "queues" | "health" | "protocol-editor" | "security" | "team" | "attendance"
-  | "professionals" | "my-profile" | "territory" | "campaigns" | "analytics";
+  | "professionals" | "my-profile" | "territory" | "campaigns" | "analytics"
+  | "integrations" | "cnes" | "production";
 
 export interface NavItem { id: ModuleId; label: string; icon: string; }
 export interface NavGroupDef { label: string; items: NavItem[]; }
@@ -47,6 +49,11 @@ export const NAV_GROUPS: NavGroupDef[] = [
   { label: "Cidade", items: [
     { id: "territory", label: "Território", icon: "⌖" }
   ]},
+  { label: "e-SUS", items: [
+    { id: "integrations", label: "Integrações", icon: "⇌" },
+    { id: "cnes", label: "CNES", icon: "⌗" },
+    { id: "production", label: "Produção e-SUS", icon: "⇪" }
+  ]},
   { label: "Conta", items: [
     { id: "security", label: "Segurança", icon: "⚿" },
     { id: "my-profile", label: "Meu perfil", icon: "☺" }
@@ -66,7 +73,7 @@ export function labelFor(id: ModuleId): string {
 // não se sabe quem é. A API recusaria (403) para qualquer outro papel, então
 // oferecer o item antes da sessão seria oferecer uma porta trancada.
 export function navGroupsFor(
-  user: { operator: boolean; memberships?: { role: string }[] } | null
+  user: { operator: boolean; memberships?: { role: string }[]; features?: unknown } | null
 ): NavGroupDef[] {
   const roles = user?.memberships?.map((m) => m.role) ?? [];
   const isAdmin = roles.includes("municipal_admin");
@@ -78,6 +85,11 @@ export function navGroupsFor(
   // Módulo 14 (ADR 0025, D6/D12): Analytics é do analyst e do municipal_admin
   // da cidade; o operador, com ou sem grant, nunca (a API responde 403).
   const canAnalytics = !user?.operator && (isAdmin || roles.includes("analyst"));
+  // Módulo 16 (ADR 0028; contratos §1 e §5): Integrações e CNES são do
+  // municipal_admin; Produção é também do analyst e só aparece com
+  // `ledi_export` ligado na sessão. O operador nunca vê o grupo.
+  const canIntegrations = !user?.operator && isAdmin;
+  const canProduction = !user?.operator && (isAdmin || roles.includes("analyst")) && hasFeature(user, "ledi_export");
   return NAV_GROUPS.filter((group) => {
     if (group.label === "Conta") return !user?.operator;
     if (group.label === "Equipe") return isAdmin;
@@ -89,8 +101,13 @@ export function navGroupsFor(
     return true;
   }).map((group) => ({
     ...group,
-    // Módulo 10: "Meu perfil" é do profissional; sem sessão ainda, some
-    // (a API responderia 404 no_profile para quem não é profissional).
-    items: group.items.filter((item) => item.id !== "my-profile" || isProfessional)
-  }));
+    items: group.items.filter((item) => {
+      // Módulo 10: "Meu perfil" é do profissional; sem sessão ainda, some
+      // (a API responderia 404 no_profile para quem não é profissional).
+      if (item.id === "my-profile") return isProfessional;
+      if (item.id === "integrations" || item.id === "cnes") return canIntegrations;
+      if (item.id === "production") return canProduction;
+      return true;
+    })
+  })).filter((group) => group.items.length > 0);
 }
