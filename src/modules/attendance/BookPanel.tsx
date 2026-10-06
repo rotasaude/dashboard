@@ -54,7 +54,10 @@ export function BookPanel({ row, unit, onCancel, onDone }: Props) {
   const daySlots = day ? (byDay.get(day) ?? []) : [];
   const professionals = [ ...new Map(daySlots.map((s) => [ s.professional_id, s.professional_name ])).entries() ]
     .sort((a, b) => a[1].localeCompare(b[1], "pt-BR"));
-  const visible = professionalId ? daySlots.filter((s) => s.professional_id === professionalId) : daySlots;
+  // O filtro só vale enquanto o profissional ainda tem vaga no dia: depois de
+  // recarregar, um filtro órfão esconderia as vagas dos outros.
+  const filterId = professionals.some(([ id ]) => id === professionalId) ? professionalId : "";
+  const visible = filterId ? daySlots.filter((s) => s.professional_id === filterId) : daySlots;
   const isLegacy = day !== null && legacyDays.has(day);
   const legacyAt = isLegacy && legacyAllowed && /^\d{2}:\d{2}$/.test(legacyTime) ? parseCityLocal(`${day}T${legacyTime}`) : null;
   const start = picked ? new Date(picked.starts_at) : legacyAt;
@@ -132,6 +135,7 @@ export function BookPanel({ row, unit, onCancel, onDone }: Props) {
           <label style={{ ...label, maxWidth: 320 }}>Dia
             <select value={day ?? ""} style={inputStyle} onChange={(e) => {
               setDay(e.target.value || null); setPicked(null); setProfessionalId(""); setLegacyTime(""); setTaken(null);
+              setNotice(null); setError(null);
             }}>
               <option value="">escolha…</option>
               {daysBetween(from, to).map((d) => <option key={d} value={d}>{dayOption(d)}</option>)}
@@ -143,7 +147,7 @@ export function BookPanel({ row, unit, onCancel, onDone }: Props) {
         <>
           {professionals.length > 1 && (
             <label style={{ ...label, maxWidth: 320 }}>Profissional
-              <select value={professionalId} style={inputStyle}
+              <select value={filterId} style={inputStyle}
                 onChange={(e) => { setProfessionalId(e.target.value); setPicked(null); }}>
                 <option value="">todos</option>
                 {professionals.map(([ id, name ]) => <option key={id} value={id}>{name}</option>)}

@@ -89,13 +89,17 @@ describe("BookPanel", () => {
   });
 
   it("slot_unavailable também recarrega, com a frase da recusa", async () => {
-    renderIt();
+    const { onDone } = renderIt();
     mocked(api.bookAppointment).mockRejectedValueOnce(new ApiError(409, { error: "slot_unavailable" }, "x"));
     await pickDay("2026-10-06");
     fireEvent.click(screen.getByRole("radio", { name: "09:00 · Helena Duarte" }));
     fireEvent.click(confirm());
     expect(await screen.findByText("essa vaga não está mais disponível — as vagas foram recarregadas")).not.toBeNull();
     await waitFor(() => expect(api.getUnitAvailability).toHaveBeenCalledTimes(2));
+    expect(api.bookAppointment).toHaveBeenCalledTimes(1);
+    expect(onDone).not.toHaveBeenCalled();
+    expect(screen.getAllByRole("radio").some((r) => (r as HTMLInputElement).checked)).toBe(false);
+    expect(confirm().disabled).toBe(true);
   });
 
   it("citizen_busy fica como erro, sem recarregar", async () => {
@@ -206,5 +210,39 @@ describe("BookPanel", () => {
       kind: "slot", professional_id: "p1", starts_at: "2026-10-06T09:00:00-03:00", appointment_type_key: "consulta_medica"
     }));
     await waitFor(() => expect(onDone).toHaveBeenCalled());
+  });
+
+  it("filtro de profissional cuja última vaga sumiu não esconde as vagas dos outros", async () => {
+    mocked(api.getUnitAvailability)
+      .mockResolvedValueOnce(AVAILABILITY)
+      .mockResolvedValueOnce({ slots: [ AVAILABILITY.slots[2] ], legacy_days: [] });
+    mocked(api.bookAppointment).mockRejectedValueOnce(new ApiError(409, { error: "slot_taken" }, "x"));
+    renderIt();
+    await pickDay("2026-10-06");
+    fireEvent.change(screen.getByLabelText("Profissional"), { target: { value: "p1" } });
+    fireEvent.click(screen.getByRole("radio", { name: "09:00 · Helena Duarte" }));
+    fireEvent.click(confirm());
+    expect(await screen.findByRole("radio", { name: "09:00 · Marta Lima" })).not.toBeNull();
+    expect(screen.queryByText("nenhuma vaga neste dia")).toBeNull();
+  });
+
+  it("trocar o dia apaga o aviso de recarga e o erro anteriores", async () => {
+    mocked(api.bookAppointment)
+      .mockRejectedValueOnce(new ApiError(409, { error: "slot_taken" }, "x"))
+      .mockRejectedValueOnce(new ApiError(409, { error: "citizen_busy" }, "x"));
+    renderIt();
+    await pickDay("2026-10-06");
+    fireEvent.click(screen.getByRole("radio", { name: "09:00 · Helena Duarte" }));
+    fireEvent.click(confirm());
+    const notice = "Essa vaga acabou de ser ocupada. As vagas foram recarregadas — escolha outra.";
+    expect(await screen.findByText(notice)).not.toBeNull();
+    await pickDay("2026-10-08");
+    expect(screen.queryByText(notice)).toBeNull();
+    await pickDay("2026-10-06");
+    fireEvent.click(await screen.findByRole("radio", { name: "09:20 · Helena Duarte" }));
+    fireEvent.click(confirm());
+    expect(await screen.findByText("o cidadão já tem outro horário nesse período")).not.toBeNull();
+    await pickDay("2026-10-08");
+    expect(screen.queryByText("o cidadão já tem outro horário nesse período")).toBeNull();
   });
 });
