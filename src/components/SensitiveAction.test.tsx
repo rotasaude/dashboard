@@ -254,4 +254,18 @@ describe("SensitiveAction", () => {
 
     expect((await screen.findByRole("alert")).textContent).toBe("recusado pela API");
   });
+  it("campo do tipo password não mostra o valor e não é autocompletado", async () => {
+    const run = vi.fn().mockResolvedValue(undefined);
+    fetchSession.mockResolvedValue(session({ mfa_verified_at: minutesAgo(1) }));
+    renderAction({ run, fields: [ { name: "username", label: "Usuário", required: true },
+      { name: "password", label: "Senha", type: "password", required: true } ] });
+    const password = (await screen.findByLabelText("Senha")) as HTMLInputElement;
+    expect(password.type).toBe("password");
+    expect(password.getAttribute("autocomplete")).toBe("new-password");
+    expect((screen.getByLabelText("Usuário") as HTMLInputElement).type).toBe("text");
+    fireEvent.change(screen.getByLabelText("Usuário"), { target: { value: "integ" } });
+    fireEvent.change(password, { target: { value: " a b " } });
+    fireEvent.click(confirm());
+    await waitFor(() => expect(run).toHaveBeenCalledWith({ username: "integ", password: " a b " }));
+  });
 });

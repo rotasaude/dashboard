@@ -11,7 +11,9 @@ import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } fr
 // O código TOTP vive só em estado local e é limpo antes de cada chamada.
 // `mfa_required` vindo da ação (a janela fechou entre a leitura e o clique)
 // pede um código novo e repete a ação uma vez; a segunda vez para.
-export interface SensitiveField { name: string; label: string; required?: boolean; }
+// `type: "password"` (módulo 16, credencial de integração): o valor não
+// aparece na tela e o navegador não o autocompleta com a senha do usuário.
+export interface SensitiveField { name: string; label: string; required?: boolean; type?: "text" | "password"; }
 
 export interface SensitiveActionProps {
   title: string;
@@ -111,6 +113,8 @@ export function SensitiveAction({
           <label key={f.name} style={label}>
             {f.label}
             <input
+              type={f.type ?? "text"}
+              autoComplete={f.type === "password" ? "new-password" : undefined}
               value={values[f.name] ?? ""}
               onChange={(e) => setValues((prev) => ({ ...prev, [f.name]: e.target.value }))}
               style={inputStyle}
