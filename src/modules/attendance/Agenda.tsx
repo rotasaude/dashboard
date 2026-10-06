@@ -1,49 +1,76 @@
+// Agenda da unidade por dia (módulo 17; contratos §4.5): um bloco por
+// profissional com turnos (faixas, contador de encaixes, cancelado) e
+// horários (encaixe, fora do modelo, turno cancelado), e os horários de
+// marcação livre sem profissional. Marcação livre vem do api sem tipo, fim,
+// profissional e turno: a coluna do tipo mostra "—". O motivo do encaixe só
+// vem para quem marca e para o municipal_admin (o api filtra); a tela mostra
+// só o que veio. O seletor de data começa em hoje no fuso da cidade.
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { listUnitAgenda, type AgendaAppointment, type HealthUnit } from "../../lib/api";
+import { getUnitAgenda, type AgendaProfessional, type AppointmentView, type HealthUnit } from "../../lib/api";
 import { ATTENDANCE_REFETCH_MS, attendanceError } from "../../lib/attendance";
 import { cityIsoDate, fmtHourMinute } from "../../lib/format";
+import { appointmentFlags, blockLine, statusLabel } from "../../lib/scheduling";
 import { Panel } from "../../components/Panel";
 import { DataTable } from "../../components/DataTable";
 import { EmptyState } from "../../components/EmptyState";
+import { Tag } from "../../components/Tag";
 import { inputStyle } from "../../components/formStyles";
+import { unitAgendaKey } from "./FitInPanel";
 
-// Agenda (Task 8) — horários de hoje na unidade (spec §6 "Agenda do dia").
-// O seletor de data começa em hoje (fuso da cidade) mas deixa a recepção
-// olhar outro dia.
-interface Props {
-  unit: HealthUnit;
+interface Props { unit: HealthUnit }
+
+const span = (a: AppointmentView) =>
+  a.ends_at ? `${fmtHourMinute(a.scheduled_at)}–${fmtHourMinute(a.ends_at)}` : fmtHourMinute(a.scheduled_at);
+
+export function AppointmentsTable({ rows }: { rows: AppointmentView[] }) {
+  return (
+    <DataTable<AppointmentView>
+      cols={[
+        { label: "Hora", w: "1fr", render: span },
+        { label: "CPF", w: "1.5fr", render: (a) => a.citizen.cpf_masked },
+        { label: "Atendimento", w: "1.5fr", render: (a) => a.appointment_type_name ?? "—" },
+        { label: "Estado", w: "1.5fr", render: (a) => statusLabel(a.status) },
+        { label: "Marcas", w: "2fr", render: (a) => {
+          const flags = appointmentFlags(a);
+          if (flags.length === 0 && !a.fit_in_reason) return "—";
+          return (
+            <span style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
+              {flags.map((f) => <Tag key={f} tone={f === "turno cancelado" ? "down" : "warn"}>{f}</Tag>)}
+              {a.fit_in_reason && <small style={{ color: "var(--ink3)" }}>{a.fit_in_reason}</small>}
+            </span>
+          );
+        } }
+      ]}
+      rows={rows}
+      rowKey={(a) => a.id}
+      empty="nenhum horário"
+    />
+  );
 }
 
-// Dia da cidade em YYYY-MM-DD — o mesmo formato do <input type="date">.
-function todayIso(): string {
-  return cityIsoDate();
-}
-
-function kindLabel(kind: AgendaAppointment["kind"]): string {
-  return kind === "return" ? "Retorno" : "Encaminhamento";
-}
-
-const STATUS_LABEL: Record<string, string> = {
-  scheduled: "aguardando confirmação",
-  confirmed: "confirmado",
-  checked_in: "check-in feito",
-  cancelled_by_citizen: "cancelado pelo cidadão",
-  expired: "sem confirmação no prazo",
-  no_show: "faltou",
-  moved: "movido para outra unidade"
-};
-
-function statusLabel(status: string): string {
-  return STATUS_LABEL[status] ?? status;
+function ProfessionalBlock({ p }: { p: AgendaProfessional }) {
+  return (
+    <section aria-label={p.name} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      <strong style={{ fontSize: 13 }}>{p.name}</strong>
+      {p.shifts.map((s) => (
+        <div key={s.shift_id} style={{ display: "flex", flexDirection: "column", gap: 2, fontSize: 12.5 }}>
+          <span>{`Turno ${fmtHourMinute(s.starts_at)}–${fmtHourMinute(s.ends_at)} · encaixes ${s.fit_in_count} de ${s.fit_in_limit}${s.cancelled_at ? " · cancelado" : ""}`}</span>
+          {s.blocks.map((b, i) => <span key={i} style={{ color: "var(--ink3)" }}>{blockLine(b, null)}</span>)}
+        </div>
+      ))}
+      <AppointmentsTable rows={p.appointments} />
+    </section>
+  );
 }
 
 export function Agenda({ unit }: Props) {
-  const [ date, setDate ] = useState(() => todayIso());
-  const query = useQuery({ queryKey: [ "unitAgenda", unit.id, date ], queryFn: () => listUnitAgenda(unit.id, date),
+  const [ date, setDate ] = useState(() => cityIsoDate());
+  const query = useQuery({ queryKey: unitAgendaKey(unit.id, date), queryFn: () => getUnitAgenda(unit.id, date),
     refetchInterval: ATTENDANCE_REFETCH_MS
   });
-  const rows = query.data ?? [];
+  const data = query.data;
+  const empty = !!data && data.professionals.length === 0 && data.unassigned.length === 0;
 
   return (
     <Panel
@@ -57,21 +84,20 @@ export function Agenda({ unit }: Props) {
     >
       {query.isError ? (
         <p role="alert" style={{ margin: 0, fontSize: 12.5, color: "var(--down)" }}>{attendanceError(query.error)}</p>
-      ) : query.isPending ? (
+      ) : query.isPending || !data ? (
         <p className="mono" style={{ margin: 0, fontSize: 10.5, color: "var(--ink3)" }}>carregando…</p>
-      ) : rows.length === 0 ? (
-        <EmptyState title="nenhum horário para este dia" />
+      ) : empty ? (
+        <EmptyState title="nenhum turno nem horário neste dia" />
       ) : (
-        <DataTable<AgendaAppointment>
-          cols={[
-            { label: "Hora", w: "1fr", render: (r) => fmtHourMinute(r.scheduled_at) },
-            { label: "CPF", w: "1.5fr", render: (r) => r.cpf_masked },
-            { label: "Tipo", w: "1fr", render: (r) => kindLabel(r.kind) },
-            { label: "Estado", w: "1.5fr", render: (r) => statusLabel(r.status) }
-          ]}
-          rows={rows}
-          rowKey={(r) => r.id}
-        />
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          {data.professionals.map((p) => <ProfessionalBlock key={p.id} p={p} />)}
+          {data.unassigned.length > 0 && (
+            <section aria-label="Sem profissional (marcação livre)" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <strong style={{ fontSize: 13 }}>Sem profissional (marcação livre)</strong>
+              <AppointmentsTable rows={data.unassigned} />
+            </section>
+          )}
+        </div>
       )}
     </Panel>
   );

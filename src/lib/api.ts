@@ -647,17 +647,6 @@ export async function dismissRequest(
   return payload.request;
 }
 
-export interface AgendaAppointment {
-  id: string; scheduled_at: string; cpf_masked: string; kind: "return" | "referral"; status: string;
-}
-
-export async function listUnitAgenda(unitId: string, dateIso: string): Promise<AgendaAppointment[]> {
-  const payload = await jsonFetch<{ appointments: AgendaAppointment[] }>(
-    `${ATTENDANCE_BASE}/units/${encodeURIComponent(unitId)}/agenda?date=${encodeURIComponent(dateIso)}`
-  );
-  return payload.appointments;
-}
-
 // ─── Profissionais (módulo 10) ───────────────────────────────────────────────
 
 // Profissionais (módulo 10, ADR 0021; spec 2026-09-27 §4.1). Tudo sob

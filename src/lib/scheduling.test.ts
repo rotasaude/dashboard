@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   addDaysIso, appointmentFlags, blockLine, blockProblem, confirmationWarning, dayLabel, daysBetween, fmtDueOn,
-  MAX_BLOCKS, NAME_MAX, overlappingBlocks, parseCboPrefixes, parseFitInLimit, requestKindLabel, requestMarks, slotsByDay, templateDraftFrom,
+  MAX_BLOCKS, NAME_MAX, overlappingBlocks, parseCboPrefixes, parseFitInLimit, requestKindLabel, requestMarks, slotsByDay, statusLabel, templateDraftFrom,
   templateProblem, typeDraftFrom, typeDraftProblem, typeLabel, typeServes, weekStart
 } from "./scheduling";
 import type { ScheduleBlock } from "./api";
@@ -190,5 +190,13 @@ describe("rótulo do pedido", () => {
     expect(requestKindLabel({ kind: "referral", origin_unit_name: "UPA Norte" })).toBe("Encaminhado de UPA Norte");
     expect(requestKindLabel({ kind: "referral", origin_unit_name: null })).toBe("Encaminhamento");
     expect(requestKindLabel({ kind: "triage", origin_unit_name: null })).toBe("Triagem");
+  });
+});
+
+describe("estado do horário", () => {
+  it("rótulos de hoje; código novo aparece como veio", () => {
+    expect(statusLabel("scheduled")).toBe("aguardando confirmação");
+    expect(statusLabel("moved")).toBe("movido para outra unidade");
+    expect(statusLabel("algo_novo")).toBe("algo_novo");
   });
 });

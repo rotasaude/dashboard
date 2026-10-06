@@ -236,3 +236,19 @@ export function appointmentFlags(a: AppointmentView): string[] {
   if (a.shift_cancelled) out.push("turno cancelado");
   return out;
 }
+
+// Estado do horário (o mesmo texto da agenda de hoje); código novo do api
+// aparece como veio.
+export const APPOINTMENT_STATUS_LABEL: Record<string, string> = {
+  scheduled: "aguardando confirmação",
+  confirmed: "confirmado",
+  checked_in: "check-in feito",
+  cancelled_by_citizen: "cancelado pelo cidadão",
+  expired: "sem confirmação no prazo",
+  no_show: "faltou",
+  moved: "movido para outra unidade"
+};
+
+export function statusLabel(status: string): string {
+  return APPOINTMENT_STATUS_LABEL[status] ?? status;
+}

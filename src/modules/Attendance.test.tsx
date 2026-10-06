@@ -12,7 +12,7 @@ vi.mock("../lib/api", async (importOriginal) => {
     listUnitQueue: vi.fn(), callAttendance: vi.fn(), callNext: vi.fn(), closeAttendance: vi.fn(),
     lookupCheckIn: vi.fn(), checkIn: vi.fn(), searchCheckIn: vi.fn(), checkInByException: vi.fn(),
     listUnitRequests: vi.fn(), bookAppointment: vi.fn(), getUnitAvailability: vi.fn(), dismissRequest: vi.fn(),
-    listUnitAgenda: vi.fn(),
+    getUnitAgenda: vi.fn(),
     getMyProfessional: vi.fn(), listPendingErasures: vi.fn(), cadsusLookup: vi.fn()
   };
 });
@@ -58,7 +58,7 @@ describe("Attendance", () => {
       api.listActiveUnits, api.listAllUnits, api.createUnit, api.updateUnit, api.setUnitActive,
       api.listUnitQueue, api.callAttendance, api.callNext, api.closeAttendance,
       api.lookupCheckIn, api.checkIn, api.searchCheckIn, api.checkInByException,
-      api.listUnitRequests, api.bookAppointment, api.getUnitAvailability, api.dismissRequest, api.listUnitAgenda,
+      api.listUnitRequests, api.bookAppointment, api.getUnitAvailability, api.dismissRequest, api.getUnitAgenda,
       api.getMyProfessional
     ]) {
       mocked(fn).mockReset();
@@ -68,7 +68,7 @@ describe("Attendance", () => {
     mocked(api.listAllUnits).mockResolvedValue([]);
     mocked(api.listUnitQueue).mockResolvedValue({ waiting: [], in_care: [] });
     mocked(api.listUnitRequests).mockResolvedValue([]);
-    mocked(api.listUnitAgenda).mockResolvedValue([]);
+    mocked(api.getUnitAgenda).mockResolvedValue({ date: "2026-10-05", professionals: [], unassigned: [] });
     mocked(api.getMyProfessional).mockResolvedValue(null);
   });
 
