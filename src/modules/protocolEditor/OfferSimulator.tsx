@@ -106,7 +106,7 @@ function SimulationResult({ result }: { result: SimulateOfferResult }) {
       {result.eligibility_text && <small style={hint}>Regra conferida pelo servidor: {result.eligibility_text}</small>}
       {result.suggestions.length > 0 && (
         <ul style={{ margin: 0, paddingLeft: 18 }}>
-          {result.suggestions.map((s, i) => <li key={`${s.protocol}-${i}`}>{s.protocol}: {s.matches ? "sugere" : "não sugere"}</li>)}
+          {result.suggestions.map((s, i) => <li key={`${s.protocol}-${i}`}>{s.title ?? s.protocol}: {s.matches ? "sugere" : "não sugere"}</li>)}
         </ul>
       )}
       {result.warnings.length > 0 && (

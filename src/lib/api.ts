@@ -1080,7 +1080,8 @@ export interface SimulateOfferResult {
   eligible: boolean;
   // Só para conferência; a frase da tela é a do construtor (contratos §4.3).
   eligibility_text: string | null;
-  suggestions: Array<{ protocol: string; matches: boolean }>;
+  // title: como o cidadão vê o protocolo sugerido; ausente em api anterior a ele.
+  suggestions: Array<{ protocol: string; title?: string; matches: boolean }>;
   errors: string[];
   // Gate warnings, non-blocking, e.g. suggestion to a protocol that doesn't exist in the city
   warnings: string[];

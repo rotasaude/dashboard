@@ -20,7 +20,7 @@ const DEF = {
   offer: { eligibility: { gte: [ "profile.age", 60 ] } },
   suggestions: [ { protocol: "saude-mental", when: { gte: [ "outcome.score", 15 ] } } ]
 };
-const OK = { eligible: true, eligibility_text: "idade ≥ 60", suggestions: [ { protocol: "saude-mental", matches: true } ], errors: [], warnings: [] };
+const OK = { eligible: true, eligibility_text: "idade ≥ 60", suggestions: [ { protocol: "saude-mental", title: "Saúde mental", matches: true } ], errors: [], warnings: [] };
 const simulate = () => fireEvent.click(screen.getByRole("button", { name: "Simular" }));
 
 describe("OfferSimulator", () => {
@@ -35,7 +35,7 @@ describe("OfferSimulator", () => {
       definition: DEF, profile: { age: 62, sex: "female", neighborhood_id: null }, answers: { s1: "true" }
     }));
     expect(await screen.findByText("Elegível: a triagem aparece no catálogo deste perfil")).not.toBeNull();
-    expect(screen.getByText("saude-mental: sugere")).not.toBeNull();
+    expect(screen.getByText("Saúde mental: sugere")).not.toBeNull();
   });
 
   it("resultado preenchido vai como números, com a classificação do protocolo", async () => {
@@ -125,5 +125,11 @@ describe("OfferSimulator", () => {
     await screen.findByRole("status");
     expect(err).not.toHaveBeenCalled();
     err.mockRestore();
+  });
+  it("sem título na resposta (api antigo), mostra o nome do protocolo", async () => {
+    mocked(api.simulateOffer).mockResolvedValue({ ...OK, suggestions: [ { protocol: "saude-mental", matches: false } ] });
+    render(<OfferSimulator definition={DEF} valid answers="{}" />);
+    simulate();
+    expect(await screen.findByText("saude-mental: não sugere")).not.toBeNull();
   });
 });
