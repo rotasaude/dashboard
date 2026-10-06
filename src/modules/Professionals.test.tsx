@@ -7,7 +7,7 @@ vi.mock("../lib/api", async (importOriginal) => {
   const real = await importOriginal<typeof import("../lib/api")>();
   return { ...real, fetchCurrentSession: vi.fn(), listProfessionals: vi.fn(), listPendingProfessionals: vi.fn(),
     createProfessional: vi.fn(), getProfessional: vi.fn(), listProfessionalShifts: vi.fn(), listCbo: vi.fn(),
-    listActiveUnits: vi.fn() };
+    listActiveUnits: vi.fn(), listAppointmentTypes: vi.fn(), listScheduleTemplates: vi.fn() };
 });
 
 // ProfessionalDetail (Task 4) ainda é um stub que renderiza `null`; para
@@ -21,6 +21,7 @@ import * as api from "../lib/api";
 import { ApiError } from "../lib/api";
 import { AuthProvider } from "../lib/auth";
 import { Professionals } from "./Professionals";
+import { MORNING, TYPES } from "../test/schedulingFixtures";
 
 afterEach(cleanup);
 const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
@@ -160,5 +161,22 @@ describe("Professionals", () => {
     renderIt();
     expect(await screen.findByText("Marcos Silva")).toBeTruthy();
     expect(screen.getByText("sem vínculo")).toBeTruthy();
+  });
+  it("aba Tipos de atendimento mostra a lista de tipos", async () => {
+    mocked(api.listAppointmentTypes).mockResolvedValue(TYPES);
+    renderIt();
+    fireEvent.click(screen.getByRole("tab", { name: "Tipos de atendimento" }));
+    expect(await screen.findByText("Consulta de enfermagem")).toBeTruthy();
+    expect(screen.queryByText("Helena Duarte")).toBeNull();
+  });
+
+  it("aba Modelos de agenda mostra os modelos com as faixas", async () => {
+    mocked(api.listAppointmentTypes).mockResolvedValue(TYPES);
+    mocked(api.listScheduleTemplates).mockResolvedValue([ MORNING ]);
+    renderIt();
+    fireEvent.click(screen.getByRole("tab", { name: "Modelos de agenda" }));
+    expect(await screen.findByText("09:00–11:00 · agendável · Consulta médica")).toBeTruthy();
+    expect(screen.getByText("Manhã")).toBeTruthy();
+    expect(screen.queryByText("Helena Duarte")).toBeNull();
   });
 });

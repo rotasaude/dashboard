@@ -11,14 +11,16 @@ import { buttonStyle, secondaryButtonStyle } from "../components/formStyles";
 import { ProfileForm } from "./professionals/ProfileForm";
 import { ProfessionalDetail } from "./professionals/ProfessionalDetail";
 import { AppointmentTypes } from "./professionals/AppointmentTypes";
+import { ScheduleTemplates } from "./professionals/ScheduleTemplates";
 import { SegmentedControl } from "../shell/SegmentedControl";
 
 // Módulo 17: tipos de atendimento e modelos de agenda moram aqui, com o
 // mesmo papel (municipal_admin) da lista de profissionais.
-type ProfessionalsTab = "people" | "types";
+type ProfessionalsTab = "people" | "types" | "templates";
 const TABS: { key: ProfessionalsTab; label: string }[] = [
   { key: "people", label: "Profissionais" },
-  { key: "types", label: "Tipos de atendimento" }
+  { key: "types", label: "Tipos de atendimento" },
+  { key: "templates", label: "Modelos de agenda" }
 ];
 
 export function Professionals() {
@@ -28,6 +30,7 @@ export function Professionals() {
       <div><SegmentedControl options={TABS} value={tab} onChange={setTab} /></div>
       {tab === "people" && <People />}
       {tab === "types" && <AppointmentTypes />}
+      {tab === "templates" && <ScheduleTemplates />}
     </div>
   );
 }
