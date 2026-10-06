@@ -1,6 +1,6 @@
 // Test fixtures for module 16 (record mode).
 // Common data for tests; types from api only.
-import type { CnesOverview, CnesProposal, IntegrationCredential, Integrations } from "../lib/api";
+import type { CnesOverview, CnesProposal, IntegrationCredential, Integrations, LediFicha, Production } from "../lib/api";
 
 export function credential(overrides: Partial<IntegrationCredential> = {}): IntegrationCredential {
   return {
@@ -45,6 +45,28 @@ export function cnesFixture(overrides: Partial<CnesOverview> = {}): CnesOverview
     divergences: [
       { kind: "cbo_mismatch", subject: { type: "professional", id: "pr1", label: "Bruno Lima" }, detail: "CBO local 225125, CNES 225142" }
     ],
+    ...overrides
+  };
+}
+
+export function ficha(overrides: Partial<LediFicha> = {}): LediFicha {
+  return {
+    id: "f1", ficha_type: "synthetic", status: "accepted", attempts: 1, last_error: null,
+    created_at: "2026-10-02T13:00:00Z", accepted_at: "2026-10-02T13:01:00Z", ...overrides
+  };
+}
+
+// 16/11/2026 é o 10º dia útil de novembro (02/11 Finados; 20/11 é depois).
+export function productionFixture(overrides: Partial<Production> = {}): Production {
+  return {
+    competence: "202610", deadline_on: "2026-11-16", business_days_left: 7, alert: "attention",
+    counts: { accepted: 120, rejected: 3, pending: 10, sending: 0, failed: 0 },
+    rejections: [ { message: "CNS do profissional inválido", count: 3 } ],
+    fichas: [
+      ficha(),
+      ficha({ id: "f2", status: "rejected", accepted_at: null, last_error: "CNS do profissional inválido" })
+    ],
+    fichas_total: 2,
     ...overrides
   };
 }
