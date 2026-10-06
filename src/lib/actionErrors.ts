@@ -3,6 +3,7 @@
 // A mensagem de domínio (`message` dos commands) sai verbatim; um código cru
 // (`invalid_state`, `http_500`) nunca chega ao usuário.
 import { ApiError } from "./api";
+import { FEATURE_DISABLED_MESSAGE } from "./features";
 
 export type ActionError =
   | { kind: "mfa_required" }
@@ -54,6 +55,11 @@ export function describeActionError(err: unknown): ActionError {
   // o 409 genérico logo abaixo não diz.
   if (err.status === 409 && code === "current_version_changed") {
     return { kind: "rejected", code, message: bodyField(err.body, "message") ?? GENERIC_STALE };
+  }
+  // Módulo 16 (contratos §1): o mantenedor desligou a funcionalidade entre a
+  // leitura da tela e o clique. Não é questão de papel.
+  if (err.status === 403 && code === "feature_disabled") {
+    return { kind: "rejected", code, message: FEATURE_DISABLED_MESSAGE };
   }
   if (err.status === 403) return { kind: "forbidden", message: "seu papel não permite esta ação" };
   if (err.status === 429) return { kind: "rate_limited", message: "muitas tentativas — aguarde alguns minutos" };

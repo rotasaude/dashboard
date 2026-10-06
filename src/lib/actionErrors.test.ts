@@ -36,6 +36,11 @@ describe("describeActionError", () => {
       .toEqual({ kind: "forbidden", message: "seu papel não permite esta ação" });
   });
 
+  it("403 feature_disabled diz que a funcionalidade foi desligada, não o papel", () => {
+    expect(describeActionError(apiError(403, { error: "feature_disabled", feature: "ledi_export" })))
+      .toEqual({ kind: "rejected", code: "feature_disabled", message: "esta funcionalidade está desligada para a cidade" });
+  });
+
   it("422/409 com mensagem do domínio: a mensagem da API, verbatim", () => {
     expect(describeActionError(apiError(422, { error: "insufficient_signatures", message: "falta 1 assinatura" })))
       .toEqual({ kind: "rejected", message: "falta 1 assinatura" });

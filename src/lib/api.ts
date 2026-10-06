@@ -40,6 +40,9 @@ export interface SessionUser {
   mfa_verified_at: string | null;
   // Fuso IANA da cidade do host (api#27); ausente em api antigo.
   time_zone?: string;
+  // Módulo 16 (session-v1.1.0): interruptores LIGADOS da cidade do host.
+  // Ausente em api antigo e na sessão do console; leia por sessionFeatures.
+  features?: string[];
 }
 
 async function jsonFetch<T>(input: string, init?: RequestInit): Promise<T> {
