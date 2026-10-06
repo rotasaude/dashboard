@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   addDaysIso, appointmentFlags, blockLine, blockProblem, confirmationWarning, dayLabel, daysBetween, fmtDueOn,
-  MAX_BLOCKS, NAME_MAX, overlappingBlocks, parseCboPrefixes, parseFitInLimit, requestMarks, slotsByDay, templateDraftFrom,
+  MAX_BLOCKS, NAME_MAX, overlappingBlocks, parseCboPrefixes, parseFitInLimit, requestKindLabel, requestMarks, slotsByDay, templateDraftFrom,
   templateProblem, typeDraftFrom, typeDraftProblem, typeLabel, typeServes, weekStart
 } from "./scheduling";
 import type { ScheduleBlock } from "./api";
@@ -181,5 +181,14 @@ describe("tipo serve o CBO", () => {
     expect(typeServes(TYPES[0], "225125")).toBe(true);
     expect(typeServes(TYPES[0], "223505")).toBe(false);
     expect(typeServes(TYPES[1], "223505")).toBe(true);
+  });
+});
+
+describe("rótulo do pedido", () => {
+  it("retorno, encaminhamento com e sem unidade de origem, triagem", () => {
+    expect(requestKindLabel({ kind: "return", origin_unit_name: "UBS Centro" })).toBe("Retorno");
+    expect(requestKindLabel({ kind: "referral", origin_unit_name: "UPA Norte" })).toBe("Encaminhado de UPA Norte");
+    expect(requestKindLabel({ kind: "referral", origin_unit_name: null })).toBe("Encaminhamento");
+    expect(requestKindLabel({ kind: "triage", origin_unit_name: null })).toBe("Triagem");
   });
 });

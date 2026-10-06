@@ -6,7 +6,7 @@ import type { ReactNode } from "react";
 vi.mock("../../lib/api", async (importOriginal) => {
   const real = await importOriginal<typeof import("../../lib/api")>();
   return {
-    ...real, listUnitRequests: vi.fn(), scheduleRequest: vi.fn(), dismissRequest: vi.fn()
+    ...real, listUnitRequests: vi.fn(), scheduleRequest: vi.fn(), dismissRequest: vi.fn(), getRequest: vi.fn()
   };
 });
 
@@ -14,6 +14,7 @@ import * as api from "../../lib/api";
 import { ApiError } from "../../lib/api";
 import { Requests } from "./Requests";
 import { expectFrozenNotice } from "../../test/frozenNotice";
+import { appointmentView, requestRow } from "../../test/schedulingFixtures";
 
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
@@ -28,35 +29,66 @@ function renderRequests() {
 }
 
 const rows: api.RequestRow[] = [
-  {
-    id: "r1", kind: "return", origin_unit_name: "UBS Centro", created_at: "2026-09-24T10:00:00Z",
-    cpf_masked: "***.982.247-**", priority: 2, note: "controle de pressão", reopened_reason: null, target_unit_id: "u1", appointment: null
-  },
-  {
-    id: "r2", kind: "referral", origin_unit_name: "UPA Norte", created_at: "2026-09-23T09:00:00Z",
-    cpf_masked: "***.111.222-**", priority: 1, note: null, reopened_reason: "expired", target_unit_id: "u1", appointment: null
-  },
-  {
-    id: "r3", kind: "return", origin_unit_name: "UBS Centro", created_at: "2026-09-22T09:00:00Z",
-    cpf_masked: "***.333.444-**", priority: null, note: null, reopened_reason: "no_show", target_unit_id: "u1", appointment: null
-  }
+  requestRow({ id: "r1" }),
+  requestRow({ id: "r2", kind: "referral", origin_unit_name: "UPA Norte", cpf_masked: "***.111.222-**", note: null,
+    reopened_reason: "expired", priority: "priority", due_on: "2026-10-01", overdue: true }),
+  requestRow({ id: "r3", kind: "triage", origin: "triage", origin_unit_name: null, cpf_masked: "***.333.444-**", note: null,
+    reopened_reason: "no_show", reschedule_requested: true, reschedule_reason_code: "work", preferred_period: "morning",
+    reschedule_count: 1, needs_reschedule: true })
 ];
 
 describe("Requests", () => {
   beforeEach(() => {
-    for (const fn of [ api.listUnitRequests, api.scheduleRequest, api.dismissRequest ]) mocked(fn).mockReset();
+    for (const fn of [ api.listUnitRequests, api.scheduleRequest, api.dismissRequest, api.getRequest ]) mocked(fn).mockReset();
   });
 
-  it("lista os pedidos com tipo, data, CPF, prioridade, nota e a marca", async () => {
+  it("lista na ordem do api, com pedido, atendimento, prazo, prioridade, nota e marcas", async () => {
     mocked(api.listUnitRequests).mockResolvedValue(rows);
     renderRequests();
-    expect((await screen.findAllByText("Retorno")).length).toBe(2);
+    const cpfs = (await screen.findAllByText(/\*\*\*\.\d{3}\.\d{3}-\*\*/)).map((n) => n.textContent);
+    expect(cpfs).toEqual([ "***.982.247-**", "***.111.222-**", "***.333.444-**" ]);
+    expect(screen.getByText("Retorno")).not.toBeNull();
     expect(screen.getByText("Encaminhado de UPA Norte")).not.toBeNull();
-    expect(screen.getByText("***.982.247-**")).not.toBeNull();
+    expect(screen.getByText("Triagem")).not.toBeNull();
+    expect(screen.getAllByText("Consulta médica")).toHaveLength(3);
+    expect(screen.getByText("até 01/10")).not.toBeNull();
+    expect(screen.getByText("prioritária")).not.toBeNull();
     expect(screen.getByText("controle de pressão")).not.toBeNull();
-    expect(screen.getByText("novo")).not.toBeNull();
+    expect(screen.getByText("atrasado")).not.toBeNull();
     expect(screen.getByText("sem confirmação")).not.toBeNull();
+    expect(screen.getByText("pediu outro horário")).not.toBeNull();
+    expect(screen.getByText("precisa remarcar")).not.toBeNull();
     expect(screen.getByText("faltou")).not.toBeNull();
+  });
+
+  it("nota do cidadão só no detalhe, com motivo, período e quantas vezes pediu", async () => {
+    mocked(api.listUnitRequests).mockResolvedValue([ rows[2] ]);
+    mocked(api.getRequest).mockResolvedValue({ ...rows[2], reschedule_note: "não consigo sair do trabalho de manhã" });
+    renderRequests();
+    await screen.findByText("***.333.444-**");
+    expect(screen.queryByText("não consigo sair do trabalho de manhã")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Detalhes" }));
+    await waitFor(() => expect(api.getRequest).toHaveBeenCalledWith("r3"));
+    expect(await screen.findByText("não consigo sair do trabalho de manhã")).not.toBeNull();
+    expect(screen.getByText("trabalho")).not.toBeNull();
+    expect(screen.getByText("manhã")).not.toBeNull();
+    expect(screen.getByText("1 vez")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Fechar detalhes" }));
+    expect(screen.queryByText("não consigo sair do trabalho de manhã")).toBeNull();
+  });
+
+  // P5: pedido `scheduled` que precisa remarcar volta na fila com o horário
+  // vivo; o api recusa encerrar (409 request_not_open), então a tela não oferece.
+  it("pedido marcado que precisa remarcar não oferece Encerrar pedido", async () => {
+    mocked(api.listUnitRequests).mockResolvedValue([
+      requestRow({ id: "r4", cpf_masked: "***.555.666-**", needs_reschedule: true,
+        appointment: appointmentView({ shift_cancelled: true }) })
+    ]);
+    renderRequests();
+    await screen.findByText("***.555.666-**");
+    expect(screen.getByText("precisa remarcar")).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Encerrar pedido" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Detalhes" })).not.toBeNull();
   });
 
   it("Marcar horário: menos de 48h avisa que o horário nasce confirmado", async () => {
@@ -65,7 +97,7 @@ describe("Requests", () => {
     mocked(api.listUnitRequests).mockResolvedValue([ rows[0] ]);
     mocked(api.scheduleRequest).mockResolvedValue({ id: "a1", scheduled_at: "x", status: "scheduled", confirmation_deadline_at: "y" });
     renderRequests();
-    await screen.findByText("Retorno");
+    await screen.findByText("***.982.247-**");
     fireEvent.click(screen.getByRole("button", { name: "Marcar horário" }));
     fireEvent.change(screen.getByLabelText("Horário"), { target: { value: "2026-09-26T09:00" } });
     expect(await screen.findByText("O horário nasce confirmado")).not.toBeNull();
@@ -81,7 +113,7 @@ describe("Requests", () => {
     vi.setSystemTime(new Date("2026-09-25T10:00:00-03:00"));
     mocked(api.listUnitRequests).mockResolvedValue([ rows[0] ]);
     renderRequests();
-    await screen.findByText("Retorno");
+    await screen.findByText("***.982.247-**");
     fireEvent.click(screen.getByRole("button", { name: "Marcar horário" }));
     fireEvent.change(screen.getByLabelText("Horário"), { target: { value: "2026-10-02T14:30" } });
     expect(await screen.findByText("O cidadão precisa confirmar até 01/10 14:30")).not.toBeNull();
@@ -95,7 +127,7 @@ describe("Requests", () => {
       .mockRejectedValueOnce(new ApiError(409, { error: "slot_taken", taken: 2 }, "x"))
       .mockResolvedValueOnce({ id: "a1", scheduled_at: "x", status: "scheduled", confirmation_deadline_at: "y" });
     renderRequests();
-    await screen.findByText("Retorno");
+    await screen.findByText("***.982.247-**");
     fireEvent.click(screen.getByRole("button", { name: "Marcar horário" }));
     fireEvent.change(screen.getByLabelText("Horário"), { target: { value: "2026-10-02T14:30" } });
     fireEvent.click(screen.getByRole("button", { name: "Confirmar horário" }));
@@ -116,7 +148,7 @@ describe("Requests", () => {
     mocked(api.listUnitRequests).mockResolvedValue([ rows[0] ]);
     mocked(api.scheduleRequest).mockRejectedValueOnce(new ApiError(409, { error: "slot_taken", taken: 1 }, "x"));
     renderRequests();
-    await screen.findByText("Retorno");
+    await screen.findByText("***.982.247-**");
     fireEvent.click(screen.getByRole("button", { name: "Marcar horário" }));
     fireEvent.change(screen.getByLabelText("Horário"), { target: { value: "2030-10-02T14:30" } });
     fireEvent.click(screen.getByRole("button", { name: "Confirmar horário" }));
@@ -131,7 +163,7 @@ describe("Requests", () => {
     mocked(api.listUnitRequests).mockResolvedValue([ rows[0] ]);
     mocked(api.dismissRequest).mockRejectedValue(new ApiError(409, { error: "request_not_open" }, "x"));
     renderRequests();
-    await screen.findByText("Retorno");
+    await screen.findByText("***.982.247-**");
     fireEvent.click(screen.getByRole("button", { name: "Encerrar pedido" }));
     const confirm = screen.getByRole("button", { name: "Confirmar encerramento" }) as HTMLButtonElement;
     expect(confirm.disabled).toBe(true);

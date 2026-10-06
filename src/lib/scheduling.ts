@@ -208,6 +208,12 @@ export function slotsByDay(slots: AvailabilitySlot[]): Map<string, AvailabilityS
   return map;
 }
 
+export function requestKindLabel(row: { kind: "return" | "referral" | "triage"; origin_unit_name: string | null }): string {
+  if (row.kind === "return") return "Retorno";
+  if (row.kind === "triage") return "Triagem";
+  return row.origin_unit_name ? `Encaminhado de ${row.origin_unit_name}` : "Encaminhamento";
+}
+
 export interface QueueMarksInput {
   overdue: boolean; reschedule_requested: boolean; needs_reschedule: boolean; reopened_reason: "expired" | "no_show" | null;
 }

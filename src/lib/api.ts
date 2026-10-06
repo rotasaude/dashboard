@@ -598,13 +598,20 @@ export async function closeAttendance(
 
 // ─── Atendimento: pedidos de agendamento, agenda e check-in por horário (Task 8) ─
 
+// Pedido de agendamento (contratos §4.1, §9, §10; api Scheduling::RequestJson).
+// `priority` é a prioridade do pedido (rotina/prioritária); a da triagem é
+// `triage_priority`.
 export interface RequestRow {
-  id: string; kind: "return" | "referral"; origin_unit_name: string; created_at: string;
-  cpf_masked: string; priority: number | null; note: string | null;
+  id: string; kind: "return" | "referral" | "triage"; origin: "attendance" | "triage";
+  origin_unit_name: string | null; created_at: string; cpf_masked: string; note: string | null;
   reopened_reason: "expired" | "no_show" | null;
-  // Módulo 17 (contratos §10; api Scheduling::RequestJson): unidade de destino
-  // (nula na fila "sem unidade") e o horário vivo (não nulo em pedido
-  // `scheduled` com needs_reschedule).
+  appointment_type_key: string; appointment_type_name: string; priority: SchedulingPriority; due_on: string;
+  // O número de prioridade da triagem que a fila já mandava como `priority` (§9).
+  triage_priority: number | null;
+  overdue: boolean; reschedule_requested: boolean; reschedule_reason_code: RescheduleReasonCode | null;
+  preferred_period: PreferredPeriod | null; reschedule_count: number; needs_reschedule: boolean;
+  // Unidade de destino (nula na fila "sem unidade") e o horário vivo (não nulo
+  // em pedido `scheduled` com needs_reschedule).
   target_unit_id: string | null;
   appointment: AppointmentView | null;
 }
@@ -612,6 +619,13 @@ export interface RequestRow {
 export async function listUnitRequests(unitId: string): Promise<RequestRow[]> {
   const payload = await jsonFetch<{ requests: RequestRow[] }>(`${ATTENDANCE_BASE}/units/${encodeURIComponent(unitId)}/requests`);
   return payload.requests;
+}
+
+// Só o detalhe traz a nota livre do cidadão (spec §8; contratos §9: o item + reschedule_note).
+export interface RequestDetail extends RequestRow { reschedule_note: string | null }
+
+export function getRequest(id: string): Promise<RequestDetail> {
+  return jsonFetch(`${ATTENDANCE_BASE}/requests/${encodeURIComponent(id)}`);
 }
 
 export interface ScheduledAppointment { id: string; scheduled_at: string; status: string; confirmation_deadline_at: string | null }

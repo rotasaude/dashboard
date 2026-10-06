@@ -1,6 +1,6 @@
 // Dados comuns aos testes do módulo 17. Relógio dos testes: segunda,
 // 2026-10-05 10:00 em São Paulo (-03:00).
-import type { AppointmentType, AppointmentView, AvailabilitySlot, ScheduleTemplate } from "../lib/api";
+import type { AppointmentType, AppointmentView, AvailabilitySlot, RequestRow, ScheduleTemplate } from "../lib/api";
 
 export const NOW = "2026-10-05T10:00:00-03:00";
 
@@ -31,5 +31,17 @@ export function appointmentView(over: Partial<AppointmentView> = {}): Appointmen
     ends_at: "2026-10-06T09:20:00-03:00", appointment_type_key: "consulta_medica", appointment_type_name: "Consulta médica",
     professional: { id: "p1", name: "Helena Duarte" }, shift_id: "s1", fit_in: false, outside_template: false,
     shift_cancelled: false, citizen: { id: "c1", cpf_masked: "***.982.247-**" }, ...over
+  };
+}
+
+// Item da fila como o api manda (Scheduling::RequestJson): pedido aberto, sem
+// horário vivo.
+export function requestRow(over: Partial<RequestRow> = {}): RequestRow {
+  return {
+    id: "r1", kind: "return", origin: "attendance", origin_unit_name: "UBS Centro", target_unit_id: "u1",
+    created_at: "2026-09-24T10:00:00Z", cpf_masked: "***.982.247-**", note: "controle de pressão", reopened_reason: null,
+    appointment_type_key: "consulta_medica", appointment_type_name: "Consulta médica", priority: "routine",
+    triage_priority: 2, due_on: "2026-10-20", overdue: false, reschedule_requested: false, reschedule_reason_code: null,
+    preferred_period: null, reschedule_count: 0, needs_reschedule: false, appointment: null, ...over
   };
 }
