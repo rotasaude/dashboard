@@ -140,7 +140,7 @@ export function Cnes({ onGoToSecurity }: { onGoToSecurity?(): void }) {
                 { label: "Detalhe", w: "2fr", render: (d) => d.detail ?? "—" }
               ]}
               rows={data.divergences}
-              rowKey={(d) => `${d.kind}:${d.subject.type}:${d.subject.id}`}
+              rowKey={(d, i) => `${d.kind}:${d.subject.type}:${d.subject.id}:${i}`}
               empty="nenhuma divergência"
             />
           </Panel>

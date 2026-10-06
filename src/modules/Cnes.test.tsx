@@ -42,6 +42,20 @@ describe("CNES (módulo 16)", () => {
     expect(screen.getByText("CBO local 225125, CNES 225142")).not.toBeNull();
   });
 
+  it("duas divergências com mesmo tipo e sujeito, só o detalhe muda: as duas aparecem, sem chave repetida", async () => {
+    const subject = { type: "professional", id: "pr9", label: "Carla Dias" };
+    m(api.getCnes).mockResolvedValue(cnesFixture({ divergences: [
+      { kind: "no_bond_in_cnes", subject, detail: "UBS CENTRO" },
+      { kind: "no_bond_in_cnes", subject, detail: "UBS NORTE" }
+    ] }));
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    renderWithProviders(<Cnes />);
+    expect(await screen.findByText("UBS CENTRO")).not.toBeNull();
+    expect(screen.getByText("UBS NORTE")).not.toBeNull();
+    expect(errors.mock.calls.some((c) => String(c[0]).includes("same key"))).toBe(false);
+    errors.mockRestore();
+  });
+
   it("nada é aplicado sem confirmar: botão travado, seleção, step-up e releitura", async () => {
     m(api.applyCnesProposals).mockResolvedValue({ applied: 2, skipped: [] });
     renderWithProviders(<Cnes />);
