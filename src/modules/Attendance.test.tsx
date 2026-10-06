@@ -12,7 +12,7 @@ vi.mock("../lib/api", async (importOriginal) => {
     listUnitQueue: vi.fn(), callAttendance: vi.fn(), callNext: vi.fn(), closeAttendance: vi.fn(),
     lookupCheckIn: vi.fn(), checkIn: vi.fn(), searchCheckIn: vi.fn(), checkInByException: vi.fn(),
     listUnitRequests: vi.fn(), bookAppointment: vi.fn(), getUnitAvailability: vi.fn(), dismissRequest: vi.fn(),
-    getUnitAgenda: vi.fn(),
+    getUnitAgenda: vi.fn(), listUnassignedRequests: vi.fn(),
     getMyProfessional: vi.fn(), listPendingErasures: vi.fn(), cadsusLookup: vi.fn()
   };
 });
@@ -59,7 +59,7 @@ describe("Attendance", () => {
       api.listUnitQueue, api.callAttendance, api.callNext, api.closeAttendance,
       api.lookupCheckIn, api.checkIn, api.searchCheckIn, api.checkInByException,
       api.listUnitRequests, api.bookAppointment, api.getUnitAvailability, api.dismissRequest, api.getUnitAgenda,
-      api.getMyProfessional
+      api.listUnassignedRequests, api.getMyProfessional
     ]) {
       mocked(fn).mockReset();
     }
@@ -69,7 +69,22 @@ describe("Attendance", () => {
     mocked(api.listUnitQueue).mockResolvedValue({ waiting: [], in_care: [] });
     mocked(api.listUnitRequests).mockResolvedValue([]);
     mocked(api.getUnitAgenda).mockResolvedValue({ date: "2026-10-05", professionals: [], unassigned: [] });
+    mocked(api.listUnassignedRequests).mockResolvedValue([]);
     mocked(api.getMyProfessional).mockResolvedValue(null);
+  });
+
+  it("recepção vê 'Pedidos sem unidade' mesmo sem unidade escolhida", async () => {
+    renderAttendance();
+    expect(await screen.findByRole("region", { name: "Pedidos sem unidade" })).not.toBeNull();
+  });
+
+  it("sem citizen_verifier não aparece 'Pedidos sem unidade'", async () => {
+    mocked(api.fetchCurrentSession).mockResolvedValue(session("municipal_admin"));
+    renderAttendance();
+    await waitFor(() => expect(api.fetchCurrentSession).toHaveBeenCalled());
+    await screen.findByRole("region", { name: "Unidades" });
+    expect(screen.queryByRole("region", { name: "Pedidos sem unidade" })).toBeNull();
+    expect(api.listUnassignedRequests).not.toHaveBeenCalled();
   });
 
   it("busca, exige a caixa do documento e o perfil conferido, e valida", async () => {

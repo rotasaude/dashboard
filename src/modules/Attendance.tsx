@@ -22,6 +22,7 @@ import { CheckIn } from "./attendance/CheckIn";
 import { UnitQueue } from "./attendance/UnitQueue";
 import { Requests } from "./attendance/Requests";
 import { Agenda } from "./attendance/Agenda";
+import { UnassignedRequests } from "./attendance/UnassignedRequests";
 import { Units } from "./attendance/Units";
 import { ErasureRequest } from "./attendance/ErasureRequest";
 import { ErasureRequests } from "./attendance/ErasureRequests";
@@ -108,6 +109,7 @@ export function Attendance({ onNavigate }: { onNavigate(id: ModuleId): void }) {
       )}
       {canVerify && unit && <Requests unit={unit} />}
       {canVerify && unit && <Agenda unit={unit} />}
+      {canVerify && <UnassignedRequests />}
       {canVerify && <Counter cadsusOn={hasFeature(user, "cadsus_lookup")} />}
       {canVerify && <ErasureRequest />}
       {isAdmin && <History />}
