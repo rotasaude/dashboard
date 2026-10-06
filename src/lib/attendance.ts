@@ -102,7 +102,11 @@ const MESSAGES: Record<string, string> = {
   invalid_neighborhood: "bairro inválido — escolha outro da lista",
   invalid_birth_date: "data de nascimento inválida — confira no documento",
   invalid_sex: "informe o sexo que consta no documento",
-  invalid_gender_identity: "identidade de gênero inválida — escolha da lista"
+  invalid_gender_identity: "identidade de gênero inválida — escolha da lista",
+  // Módulo 16 (contratos §5.4): o CADSUS nunca trava o balcão.
+  cadsus_unavailable: "CADSUS indisponível agora — siga pela conferência do documento",
+  feature_disabled: "a consulta ao CADSUS foi desligada para a cidade — siga pela conferência do documento",
+  cadsus_lookup_missing: "a consulta ao CADSUS venceu — consulte de novo ou desmarque a gravação do CNS"
 };
 
 export function attendanceError(err: unknown): string {

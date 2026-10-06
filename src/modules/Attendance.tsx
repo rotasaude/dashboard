@@ -25,6 +25,8 @@ import { Agenda } from "./attendance/Agenda";
 import { Units } from "./attendance/Units";
 import { ErasureRequest } from "./attendance/ErasureRequest";
 import { ErasureRequests } from "./attendance/ErasureRequests";
+import { CadsusCheck } from "./attendance/CadsusCheck";
+import { hasFeature } from "../lib/features";
 
 // Atendimento (spec 2026-09-24-citizen-presencial-verification, Task 6, e
 // 2026-09-25-citizen-appointments, Task 7): balcão de verificação presencial
@@ -106,7 +108,7 @@ export function Attendance({ onNavigate }: { onNavigate(id: ModuleId): void }) {
       )}
       {canVerify && unit && <Requests unit={unit} />}
       {canVerify && unit && <Agenda unit={unit} />}
-      {canVerify && <Counter />}
+      {canVerify && <Counter cadsusOn={hasFeature(user, "cadsus_lookup")} />}
       {canVerify && <ErasureRequest />}
       {isAdmin && <History />}
       {isAdmin && <ErasureRequests onGoToSecurity={goToSecurity} />}
@@ -115,8 +117,10 @@ export function Attendance({ onNavigate }: { onNavigate(id: ModuleId): void }) {
   );
 }
 
-function Counter() {
+// `cadsusOn` (módulo 16): a cidade tem `cadsus_lookup` ligado na sessão.
+function Counter({ cadsusOn }: { cadsusOn: boolean }) {
   const [ state, setState ] = useState<CounterState>("form");
+  const [ cadsusConfirmed, setCadsusConfirmed ] = useState(false);
   const [ cpf, setCpf ] = useState("");
   const [ code, setCode ] = useState("");
   const [ checked, setChecked ] = useState(false);
@@ -128,6 +132,7 @@ function Counter() {
   function reset() {
     setState("form"); setCpf(""); setCode(""); setChecked(false); setFound(null); setError(null);
     setProfile(initialProfileCheck(null));
+    setCadsusConfirmed(false);
   }
 
   async function search() {
@@ -139,6 +144,7 @@ function Counter() {
     try {
       const result = await lookupCitizen(cpf, code);
       setFound(result);
+      setCadsusConfirmed(false);
       setProfile(initialProfileCheck(result.citizen.profile ?? null));
       setState("found");
     } catch (err) {
@@ -157,9 +163,11 @@ function Counter() {
     if (!/^\d{6}$/.test(code)) { setError("informe o código de 6 dígitos"); return; }
     setBusy(true);
     try {
-      await verifyCitizen(cpf, code, {
+      const profileBody = {
         birth_date: profile.birthDate, sex: profile.sex as Sex, gender_identity: profile.genderIdentity || null
-      });
+      };
+      if (cadsusOn) await verifyCitizen(cpf, code, profileBody, { cadsus_confirmed: cadsusConfirmed });
+      else await verifyCitizen(cpf, code, profileBody);
       setState("done");
     } catch (err) {
       setError(attendanceError(err));
@@ -222,6 +230,9 @@ function Counter() {
             />
 
             <ProfileCheck declared={found.citizen.profile ?? null} value={profile} today={todayInCity()} onChange={setProfile} />
+            {cadsusOn && (
+              <CadsusCheck cpf={cpf} code={code} confirmed={cadsusConfirmed} onConfirmedChange={setCadsusConfirmed} />
+            )}
             <label style={{ ...labelStyle, flexDirection: "row", alignItems: "center", gap: 8 }}>
               <input type="checkbox" checked={checked} onChange={(e) => setChecked(e.target.checked)} />
               Conferi o documento com foto e o CPF confere

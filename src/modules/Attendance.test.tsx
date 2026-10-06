@@ -12,7 +12,7 @@ vi.mock("../lib/api", async (importOriginal) => {
     listUnitQueue: vi.fn(), callAttendance: vi.fn(), callNext: vi.fn(), closeAttendance: vi.fn(),
     lookupCheckIn: vi.fn(), checkIn: vi.fn(), searchCheckIn: vi.fn(), checkInByException: vi.fn(),
     listUnitRequests: vi.fn(), scheduleRequest: vi.fn(), dismissRequest: vi.fn(), listUnitAgenda: vi.fn(),
-    getMyProfessional: vi.fn(), listPendingErasures: vi.fn()
+    getMyProfessional: vi.fn(), listPendingErasures: vi.fn(), cadsusLookup: vi.fn()
   };
 });
 
@@ -453,5 +453,87 @@ describe("Attendance — perfil conferido no documento", () => {
     const validate = await openFound(declared);
     fireEvent.click(validate);
     expect(await screen.findByText("data de nascimento inválida — confira no documento")).not.toBeNull();
+  });
+});
+
+describe("Attendance — CADSUS no balcão (módulo 16)", () => {
+  const withCadsus = (): api.SessionUser => ({ ...session("citizen_verifier"), features: [ "cadsus_lookup" ] });
+  const profileBody = { birth_date: "1963-04-02", sex: "female", gender_identity: null };
+
+  beforeEach(() => {
+    for (const fn of [ api.fetchCurrentSession, api.lookupCitizen, api.verifyCitizen, api.cadsusLookup, api.listActiveUnits, api.getMyProfessional ]) {
+      mocked(fn).mockReset();
+    }
+    mocked(api.fetchCurrentSession).mockResolvedValue(withCadsus());
+    mocked(api.listActiveUnits).mockResolvedValue([]);
+    mocked(api.getMyProfessional).mockResolvedValue(null);
+    mocked(api.lookupCitizen).mockResolvedValue(found);
+    mocked(api.verifyCitizen).mockResolvedValue(undefined);
+  });
+
+  async function search() {
+    fireEvent.change(await screen.findByLabelText("CPF do cidadão (validação)"), { target: { value: "52998224725" } });
+    fireEvent.change(screen.getByLabelText("Código de validação"), { target: { value: "123456" } });
+    fireEvent.click(screen.getByRole("button", { name: "Buscar validação" }));
+    await screen.findByText("(**) *****-5432");
+    fireEvent.change(screen.getByLabelText("Data de nascimento (documento)"), { target: { value: "1963-04-02" } });
+    fireEvent.change(screen.getByLabelText("Sexo (documento)"), { target: { value: "female" } });
+    fireEvent.click(screen.getByLabelText("Conferi o documento com foto e o CPF confere"));
+  }
+
+  it("sem o interruptor na sessão, não há botão e a validação manda o corpo de antes", async () => {
+    mocked(api.fetchCurrentSession).mockResolvedValue(session("citizen_verifier"));
+    renderAttendance();
+    await search();
+    expect(screen.queryByRole("button", { name: "Consultar CADSUS" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Validar cadastro" }));
+    await waitFor(() => expect(api.verifyCitizen).toHaveBeenCalledWith("529.982.247-25", "123456", profileBody));
+    expect(mocked(api.verifyCitizen).mock.calls[0]).toHaveLength(3);
+  });
+
+  it("consulta, confirma e envia cadsus_confirmed: true", async () => {
+    mocked(api.cadsusLookup).mockResolvedValue({ found: true, cns_masked: "7** **** **** 1234", birth_date_matches: true, sex_matches: true });
+    renderAttendance();
+    await search();
+    fireEvent.click(screen.getByRole("button", { name: "Consultar CADSUS" }));
+    expect(await screen.findByText("7** **** **** 1234")).not.toBeNull();
+    fireEvent.click(screen.getByLabelText("Gravar o CNS do CADSUS no cadastro"));
+    fireEvent.click(screen.getByRole("button", { name: "Validar cadastro" }));
+    await waitFor(() => expect(api.verifyCitizen).toHaveBeenCalledWith("529.982.247-25", "123456", profileBody, { cadsus_confirmed: true }));
+  });
+
+  it("CADSUS fora do ar: o balcão segue pelo documento com cadsus_confirmed: false", async () => {
+    mocked(api.cadsusLookup).mockRejectedValue(new ApiError(503, { error: "cadsus_unavailable" }, "503"));
+    renderAttendance();
+    await search();
+    fireEvent.click(screen.getByRole("button", { name: "Consultar CADSUS" }));
+    expect(await screen.findByText("CADSUS indisponível agora — siga pela conferência do documento")).not.toBeNull();
+    const validate = screen.getByRole("button", { name: "Validar cadastro" }) as HTMLButtonElement;
+    expect(validate.disabled).toBe(false);
+    fireEvent.click(validate);
+    await waitFor(() => expect(api.verifyCitizen).toHaveBeenCalledWith("529.982.247-25", "123456", profileBody, { cadsus_confirmed: false }));
+  });
+
+  it("nova busca limpa a confirmação anterior", async () => {
+    mocked(api.cadsusLookup).mockResolvedValue({ found: true, cns_masked: "7** **** **** 1234", birth_date_matches: true, sex_matches: true });
+    renderAttendance();
+    await search();
+    fireEvent.click(screen.getByRole("button", { name: "Consultar CADSUS" }));
+    fireEvent.click(await screen.findByLabelText("Gravar o CNS do CADSUS no cadastro"));
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+    await search();
+    fireEvent.click(screen.getByRole("button", { name: "Validar cadastro" }));
+    await waitFor(() => expect(api.verifyCitizen).toHaveBeenCalledWith("529.982.247-25", "123456", profileBody, { cadsus_confirmed: false }));
+  });
+
+  it("consulta vencida (409 cadsus_lookup_missing): a mensagem orienta a consultar de novo", async () => {
+    mocked(api.cadsusLookup).mockResolvedValue({ found: true, cns_masked: "7** **** **** 1234", birth_date_matches: true, sex_matches: true });
+    mocked(api.verifyCitizen).mockRejectedValue(new ApiError(409, { error: "cadsus_lookup_missing" }, "409"));
+    renderAttendance();
+    await search();
+    fireEvent.click(screen.getByRole("button", { name: "Consultar CADSUS" }));
+    fireEvent.click(await screen.findByLabelText("Gravar o CNS do CADSUS no cadastro"));
+    fireEvent.click(screen.getByRole("button", { name: "Validar cadastro" }));
+    expect(await screen.findByText("a consulta ao CADSUS venceu — consulte de novo ou desmarque a gravação do CNS")).not.toBeNull();
   });
 });
