@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   addDaysIso, appointmentFlags, blockLine, blockProblem, confirmationWarning, dayLabel, daysBetween, fmtDueOn,
   MAX_BLOCKS, NAME_MAX, overlappingBlocks, parseCboPrefixes, parseFitInLimit, requestMarks, slotsByDay, templateDraftFrom,
-  templateProblem, typeDraftFrom, typeDraftProblem, typeLabel, weekStart
+  templateProblem, typeDraftFrom, typeDraftProblem, typeLabel, typeServes, weekStart
 } from "./scheduling";
 import type { ScheduleBlock } from "./api";
 import { appointmentView, MORNING, slot, TYPES } from "../test/schedulingFixtures";
@@ -173,5 +173,13 @@ describe("fila e agenda", () => {
     expect(appointmentFlags(appointmentView())).toEqual([]);
     expect(appointmentFlags(appointmentView({ fit_in: true, outside_template: true, shift_cancelled: true })))
       .toEqual([ "encaixe", "fora do modelo", "turno cancelado" ]);
+  });
+});
+
+describe("tipo serve o CBO", () => {
+  it("por prefixo do grupo", () => {
+    expect(typeServes(TYPES[0], "225125")).toBe(true);
+    expect(typeServes(TYPES[0], "223505")).toBe(false);
+    expect(typeServes(TYPES[1], "223505")).toBe(true);
   });
 });

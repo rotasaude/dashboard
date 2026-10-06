@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  cancelShift, endProfessionalLink, getProfessional, listActiveUnits, listCbo, listProfessionalShifts,
-  openProfessionalLink, scheduleShift, updateProfessional, type CboEntry, type HealthUnit,
-  type ProfessionalLink, type ProfessionalShift
+  cancelShift, endProfessionalLink, getProfessional, listActiveUnits, listAppointmentTypes, listCbo, listProfessionalShifts,
+  listScheduleTemplates, openProfessionalLink, scheduleShift, setLinkDefaultType, setShiftTemplate, updateProfessional,
+  type AppointmentType, type CboEntry, type HealthUnit, type ProfessionalLink, type ProfessionalShift, type ScheduleTemplate
 } from "../../lib/api";
 import { professionalError, professionalErrorOrNull, shiftWindow } from "../../lib/professionals";
 import { cityIsoDate, fmtDateTime } from "../../lib/format";
-import { addDaysIso as addDays, ddmm } from "../../lib/scheduling";
+import { addDaysIso as addDays, ddmm, typeLabel, typeServes } from "../../lib/scheduling";
 import { PageHeader } from "../../components/PageHeader";
 import { Panel } from "../../components/Panel";
 import { DataTable } from "../../components/DataTable";
@@ -15,6 +15,8 @@ import { KeyValue } from "../../components/KeyValue";
 import { SensitiveAction } from "../../components/SensitiveAction";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { ProfileForm } from "./ProfileForm";
+import { APPOINTMENT_TYPES_KEY } from "./AppointmentTypes";
+import { SCHEDULE_TEMPLATES_KEY } from "./ScheduleTemplates";
 
 // Ficha do profissional (spec §5): perfil, vínculos (step-up para abrir e
 // encerrar, D5) e turnos por vínculo numa janela de 14 dias (D6, D8).
@@ -35,6 +37,10 @@ export function ProfessionalDetail({ professionalId, onBack }: Props) {
   // pessoa clica em "Abrir vínculo".
   const units = useQuery({ queryKey: [ "activeUnits" ], queryFn: listActiveUnits });
   const cbo = useQuery({ queryKey: [ "cbo" ], queryFn: listCbo });
+  // Modelos e tipos (módulo 17): antes do retorno antecipado abaixo — hooks
+  // sempre na mesma ordem.
+  const templates = useQuery({ queryKey: SCHEDULE_TEMPLATES_KEY, queryFn: listScheduleTemplates });
+  const types = useQuery({ queryKey: APPOINTMENT_TYPES_KEY, queryFn: listAppointmentTypes });
   const [ opening, setOpening ] = useState(false);
   const [ ending, setEnding ] = useState<ProfessionalLink | null>(null);
   const [ scheduling, setScheduling ] = useState<ProfessionalLink | null>(null);
@@ -45,10 +51,19 @@ export function ProfessionalDetail({ professionalId, onBack }: Props) {
   // próximo turno.
   const [ scheduleOpenSeq, setScheduleOpenSeq ] = useState(0);
   const [ cancelling, setCancelling ] = useState<ProfessionalShift | null>(null);
+  const [ templateFor, setTemplateFor ] = useState<ProfessionalShift | null>(null);
+  const [ defaultFor, setDefaultFor ] = useState<ProfessionalLink | null>(null);
 
   function refresh() {
     void queryClient.invalidateQueries({ queryKey: [ "professional", professionalId ] });
     void queryClient.invalidateQueries({ queryKey: [ "professionalShifts", professionalId ] });
+  }
+
+  function templateName(id: string | null | undefined): string {
+    if (!id) return "sem modelo";
+    const t = (templates.data ?? []).find((x) => x.id === id);
+    if (!t) return templates.data ? "modelo removido" : "—";
+    return t.active ? t.name : `${t.name} (inativo)`;
   }
 
   function openSchedule(link: ProfessionalLink) {
@@ -79,10 +94,13 @@ export function ProfessionalDetail({ professionalId, onBack }: Props) {
           cols={[
             { label: "Unidade", w: "2fr", render: (l) => l.unit_name },
             { label: "Ocupação", w: "2fr", render: (l) => `${l.cbo_code} · ${l.cbo_title ?? ""}` },
+            { label: "Tipo padrão", w: "1.5fr", render: (l) =>
+              l.default_appointment_type_key ? typeLabel(l.default_appointment_type_key, types.data ?? null) : "pelo CBO" },
             { label: "Início", w: "1.5fr", render: (l) => `${fmtDateTime(l.started_at)} · ${l.started_by}` },
             { label: "Fim", w: "1.5fr", render: (l) => l.ended_at ? `${fmtDateTime(l.ended_at)} · ${l.ended_by}` : "ativo" },
             { label: "", w: "auto", align: "right", render: (l) => !l.ended_at && (
               <span style={{ display: "flex", gap: 6 }}>
+                <button type="button" style={secondaryButtonStyle} onClick={() => setDefaultFor(l)}>Tipo padrão</button>
                 <button type="button" style={secondaryButtonStyle} onClick={() => openSchedule(l)}>Lançar turno</button>
                 <button type="button" style={secondaryButtonStyle} onClick={() => setEnding(l)}>Encerrar</button>
               </span>
@@ -112,6 +130,15 @@ export function ProfessionalDetail({ professionalId, onBack }: Props) {
             onCancel={() => setEnding(null)}
           />
         )}
+        {defaultFor && (
+          <DefaultTypePanel
+            key={defaultFor.id}
+            link={defaultFor}
+            types={types.data ?? []}
+            onDone={() => { setDefaultFor(null); refresh(); }}
+            onCancel={() => setDefaultFor(null)}
+          />
+        )}
       </Panel>
 
       <Panel title="Turnos" sub={`${ddmm(from)} a ${ddmm(to)}`} right={
@@ -124,6 +151,7 @@ export function ProfessionalDetail({ professionalId, onBack }: Props) {
           <ScheduleShift
             key={`${scheduling.id}-${scheduleOpenSeq}`}
             link={scheduling}
+            templates={templates.data ?? []}
             onSaved={refresh}
             onClose={() => setScheduling(null)}
           />
@@ -140,9 +168,13 @@ export function ProfessionalDetail({ professionalId, onBack }: Props) {
               } },
               { label: "Início", w: "1.5fr", render: (s) => fmtDateTime(s.starts_at) },
               { label: "Fim", w: "1.5fr", render: (s) => fmtDateTime(s.ends_at) },
+              { label: "Modelo", w: "1.5fr", render: (s) => templateName(s.schedule_template_id) },
               { label: "Situação", w: "2fr", render: (s) => s.cancelled_at ? `cancelado — ${s.cancel_reason}` : "válido" },
               { label: "", w: "auto", align: "right", render: (s) => !s.cancelled_at && (
-                <button type="button" style={secondaryButtonStyle} onClick={() => setCancelling(s)}>Cancelar</button>
+                <span style={{ display: "flex", gap: 6 }}>
+                  <button type="button" style={secondaryButtonStyle} onClick={() => setTemplateFor(s)}>Modelo</button>
+                  <button type="button" style={secondaryButtonStyle} onClick={() => setCancelling(s)}>Cancelar</button>
+                </span>
               ) }
             ]}
             rows={shifts.data ?? []}
@@ -151,6 +183,15 @@ export function ProfessionalDetail({ professionalId, onBack }: Props) {
           />
         )}
         {cancelling && <CancelShiftPanel shift={cancelling} onDone={() => { setCancelling(null); refresh(); }} onCancel={() => setCancelling(null)} />}
+        {templateFor && (
+          <ShiftTemplatePanel
+            key={templateFor.id}
+            shift={templateFor}
+            templates={templates.data ?? []}
+            onDone={() => { setTemplateFor(null); refresh(); }}
+            onCancel={() => setTemplateFor(null)}
+          />
+        )}
       </Panel>
       {active.length === 0 && <p style={{ fontSize: 12.5 }}>Sem vínculo ativo: este profissional não chama pacientes.</p>}
     </div>
@@ -293,10 +334,13 @@ function fmtShiftLine(span: { startsAt: string; endsAt: string }): string {
   return `${ddmm(span.startsAt.slice(0, 10))} ${span.startsAt.slice(11, 16)}–${span.endsAt.slice(11, 16)}`;
 }
 
-function ScheduleShift({ link, onSaved, onClose }: { link: ProfessionalLink; onSaved(): void; onClose(): void }) {
+function ScheduleShift({ link, templates, onSaved, onClose }: {
+  link: ProfessionalLink; templates: ScheduleTemplate[]; onSaved(): void; onClose(): void;
+}) {
   const [ date, setDate ] = useState("");
   const [ start, setStart ] = useState("");
   const [ end, setEnd ] = useState("");
+  const [ templateId, setTemplateId ] = useState("");
   const [ busy, setBusy ] = useState(false);
   const [ error, setError ] = useState<string | null>(null);
   // Depois de salvar, o painel mostra a linha "turno lançado" em vez de
@@ -309,7 +353,7 @@ function ScheduleShift({ link, onSaved, onClose }: { link: ProfessionalLink; onS
     if (busy || !span) return;
     setBusy(true); setError(null);
     try {
-      await scheduleShift(link.id, span.startsAt, span.endsAt);
+      await scheduleShift(link.id, span.startsAt, span.endsAt, templateId === "" ? null : templateId);
       onSaved();
       setSaved(span);
     } catch (err) {
@@ -338,6 +382,12 @@ function ScheduleShift({ link, onSaved, onClose }: { link: ProfessionalLink; onS
         <label style={labelStyle}>Início<input type="time" value={start} onChange={(e) => setStart(e.target.value)} style={inputStyle} /></label>
         <label style={labelStyle}>Fim<input type="time" value={end} onChange={(e) => setEnd(e.target.value)} style={inputStyle} /></label>
       </div>
+      <label style={labelStyle}>Modelo de agenda
+        <select value={templateId} onChange={(e) => setTemplateId(e.target.value)} style={inputStyle}>
+          <option value="">sem modelo (vagas do tipo padrão)</option>
+          {templates.filter((t) => t.active).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+        </select>
+      </label>
       {span?.nextDay && <p style={{ margin: 0, fontSize: 12.5 }}>{`termina em ${ddmm(span.endsAt.slice(0, 10))} às ${end}`}</p>}
       <div style={{ display: "flex", gap: 8 }}>
         <button type="button" disabled={!span || busy} onClick={() => void save()} style={!span || busy ? disabledButtonStyle : buttonStyle}>Salvar turno</button>
@@ -375,6 +425,103 @@ function CancelShiftPanel({ shift, onDone, onCancel }: { shift: ProfessionalShif
         <button type="button" disabled={busy} onClick={onCancel} style={secondaryButtonStyle}>Voltar</button>
       </div>
     </section>
+  );
+}
+
+interface PickOption { value: string; label: string }
+
+// Casca comum aos dois painéis de escolha (modelo do turno, tipo padrão do
+// vínculo): um select com "nenhum" + as opções válidas, e o valor atual
+// mantido visível quando já não é válido (P8) — mas sem deixar salvá-lo de
+// novo, porque o api só aceita modelo/tipo ativo (invalid_template,
+// inactive_type, type_not_served).
+function PickAndSavePanel({ title, label, noneLabel, options, current, note, staleHint, saveLabel, run, onDone, onCancel }: {
+  title: string; label: string; noneLabel: string; options: PickOption[]; current: PickOption | null;
+  note: string; staleHint: string; saveLabel: string; run(value: string | null): Promise<void>;
+  onDone(): void; onCancel(): void;
+}) {
+  const [ value, setValue ] = useState(current?.value ?? "");
+  const [ busy, setBusy ] = useState(false);
+  const [ error, setError ] = useState<string | null>(null);
+  const stale = current && !options.some((o) => o.value === current.value) ? current : null;
+  const savable = value === "" || options.some((o) => o.value === value);
+
+  async function save() {
+    if (busy || !savable) return;
+    setBusy(true); setError(null);
+    try {
+      await run(value === "" ? null : value);
+      onDone();
+    } catch (err) {
+      setError(professionalError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section style={panelStyle}>
+      <strong>{title}</strong>
+      {error && <p role="alert" style={alertStyle}>{error}</p>}
+      <label style={labelStyle}>{label}
+        <select value={value} onChange={(e) => setValue(e.target.value)} style={inputStyle}>
+          <option value="">{noneLabel}</option>
+          {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          {stale && <option value={stale.value}>{stale.label}</option>}
+        </select>
+      </label>
+      <p style={{ margin: 0, fontSize: 12.5 }}>{note}</p>
+      {!savable && <p style={{ margin: 0, fontSize: 12.5 }}>{staleHint}</p>}
+      <div style={{ display: "flex", gap: 8 }}>
+        <button type="button" disabled={busy || !savable} onClick={() => void save()}
+          style={busy || !savable ? disabledButtonStyle : buttonStyle}>{saveLabel}</button>
+        <button type="button" disabled={busy} onClick={onCancel} style={secondaryButtonStyle}>Voltar</button>
+      </div>
+    </section>
+  );
+}
+
+function ShiftTemplatePanel({ shift, templates, onDone, onCancel }: {
+  shift: ProfessionalShift; templates: ScheduleTemplate[]; onDone(): void; onCancel(): void;
+}) {
+  const id = shift.schedule_template_id;
+  const found = id ? templates.find((t) => t.id === id) : undefined;
+  const current = id ? { value: id, label: found ? (found.active ? found.name : `${found.name} (inativo)`) : "modelo removido" } : null;
+  return (
+    <PickAndSavePanel
+      title={`Modelo do turno de ${fmtDateTime(shift.starts_at)}`}
+      label="Modelo do turno"
+      noneLabel="sem modelo (vagas do tipo padrão)"
+      options={templates.filter((t) => t.active).map((t) => ({ value: t.id, label: t.name }))}
+      current={current}
+      note="Horários já marcados ficam como estão; os que saírem do modelo aparecem como “fora do modelo”."
+      staleHint="O modelo atual está desativado — escolha um modelo ativo ou “sem modelo” para salvar."
+      saveLabel="Salvar modelo do turno"
+      run={(value) => setShiftTemplate(shift.id, value)}
+      onDone={onDone}
+      onCancel={onCancel}
+    />
+  );
+}
+
+function DefaultTypePanel({ link, types, onDone, onCancel }: {
+  link: ProfessionalLink; types: AppointmentType[]; onDone(): void; onCancel(): void;
+}) {
+  const key = link.default_appointment_type_key;
+  return (
+    <PickAndSavePanel
+      title={`Tipo padrão em ${link.unit_name}`}
+      label="Tipo padrão do vínculo"
+      noneLabel="pelo CBO (tipo da base)"
+      options={types.filter((t) => t.active && typeServes(t, link.cbo_code)).map((t) => ({ value: t.key, label: t.name }))}
+      current={key ? { value: key, label: typeLabel(key, types) } : null}
+      note="Vale para turno sem modelo: o turno inteiro vira vagas deste tipo."
+      staleHint="O tipo atual está desativado ou não atende a ocupação — escolha outro ou “pelo CBO” para salvar."
+      saveLabel="Salvar tipo padrão"
+      run={(value) => setLinkDefaultType(link.id, value)}
+      onDone={onDone}
+      onCancel={onCancel}
+    />
   );
 }
 

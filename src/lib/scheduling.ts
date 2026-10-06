@@ -158,6 +158,11 @@ export function typeLabel(key: string | null | undefined, types: AppointmentType
   return t.active ? t.name : `${t.name} (inativo)`;
 }
 
+// Grupos de CBO são prefixos (spec §3.1; Scheduling::AppointmentTypes.serves?).
+export function typeServes(type: AppointmentType, cboCode: string): boolean {
+  return type.cbo_prefixes.some((p) => cboCode.startsWith(p));
+}
+
 export function blockLine(block: ScheduleBlock, types: AppointmentType[] | null): string {
   const parts = [ `${block.starts}–${block.ends}`, BLOCK_KIND_LABEL[block.kind] ];
   if (block.kind === "bookable") {

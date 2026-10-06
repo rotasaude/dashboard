@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 
@@ -7,13 +7,15 @@ vi.mock("../../lib/api", async (importOriginal) => {
   const real = await importOriginal<typeof import("../../lib/api")>();
   return { ...real, fetchCurrentSession: vi.fn(), stepUpMfa: vi.fn(), getProfessional: vi.fn(), updateProfessional: vi.fn(),
     listCbo: vi.fn(), listActiveUnits: vi.fn(), openProfessionalLink: vi.fn(), endProfessionalLink: vi.fn(),
-    listProfessionalShifts: vi.fn(), scheduleShift: vi.fn(), cancelShift: vi.fn() };
+    listProfessionalShifts: vi.fn(), scheduleShift: vi.fn(), cancelShift: vi.fn(),
+    listScheduleTemplates: vi.fn(), listAppointmentTypes: vi.fn(), setShiftTemplate: vi.fn(), setLinkDefaultType: vi.fn() };
 });
 
 import * as api from "../../lib/api";
 import { ApiError } from "../../lib/api";
 import { AuthProvider } from "../../lib/auth";
 import { ProfessionalDetail } from "./ProfessionalDetail";
+import { MORNING, TYPES } from "../../test/schedulingFixtures";
 
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
@@ -51,6 +53,8 @@ describe("ProfessionalDetail", () => {
     mocked(api.listCbo).mockResolvedValue([ { code: "225124", title: "Médico pediatra", council: "CRM" } ]);
     mocked(api.listActiveUnits).mockResolvedValue([ { id: "h2", name: "UPA Centro", kind: "upa" } ]);
     mocked(api.listProfessionalShifts).mockResolvedValue([]);
+    mocked(api.listScheduleTemplates).mockResolvedValue([ MORNING, { ...MORNING, id: "t2", name: "Antigo", active: false } ]);
+    mocked(api.listAppointmentTypes).mockResolvedValue(TYPES);
   });
 
   it("mostra o CNS mascarado, nunca em claro", async () => {
@@ -147,7 +151,7 @@ describe("ProfessionalDetail", () => {
     fireEvent.change(screen.getByLabelText("Fim"), { target: { value: "07:00" } });
     expect(screen.getByText("termina em 07/10 às 07:00")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Salvar turno" }));
-    await waitFor(() => expect(api.scheduleShift).toHaveBeenCalledWith("l1", "2026-10-06T19:00:00-03:00", "2026-10-07T07:00:00-03:00"));
+    await waitFor(() => expect(api.scheduleShift).toHaveBeenCalledWith("l1", "2026-10-06T19:00:00-03:00", "2026-10-07T07:00:00-03:00", null));
   });
 
   it("sobreposição aparece nomeando o turno em conflito", async () => {
@@ -316,5 +320,126 @@ describe("ProfessionalDetail", () => {
     // uma segunda ocorrência de cada.
     expect(await screen.findAllByText("Ocupação")).toHaveLength(2);
     expect(await screen.findAllByText("225125 · Médico clínico")).toHaveLength(2);
+  });
+
+  it("lançar turno com modelo manda o id; só modelos ativos aparecem", async () => {
+    mocked(api.scheduleShift).mockResolvedValue({} as api.ProfessionalShift);
+    renderIt();
+    fireEvent.click(await screen.findByRole("button", { name: "Lançar turno" }));
+    const select = screen.getByLabelText("Modelo de agenda") as HTMLSelectElement;
+    await screen.findByRole("option", { name: "Manhã" });
+    expect(screen.queryByRole("option", { name: "Antigo" })).toBeNull();
+    fireEvent.change(screen.getByLabelText("Data"), { target: { value: "2026-10-06" } });
+    fireEvent.change(screen.getByLabelText("Início"), { target: { value: "07:00" } });
+    fireEvent.change(screen.getByLabelText("Fim"), { target: { value: "12:00" } });
+    fireEvent.change(select, { target: { value: "t1" } });
+    fireEvent.click(screen.getByRole("button", { name: "Salvar turno" }));
+    await waitFor(() => expect(api.scheduleShift).toHaveBeenCalledWith("l1", "2026-10-06T07:00:00-03:00", "2026-10-06T12:00:00-03:00", "t1"));
+  });
+
+  it("turno mostra o modelo; trocar o modelo grava e avisa que horários marcados ficam", async () => {
+    mocked(api.listProfessionalShifts).mockResolvedValue([
+      { id: "s1", professional_link_id: "l1", unit_name: "UBS Jardim", starts_at: "2026-10-06T10:00:00Z",
+        ends_at: "2026-10-06T15:00:00Z", cancelled_at: null, cancel_reason: null, schedule_template_id: "t2" }
+    ]);
+    mocked(api.setShiftTemplate).mockResolvedValue(undefined);
+    renderIt();
+    expect(await screen.findByText("Antigo (inativo)")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Modelo" }));
+    expect(screen.getByText("Horários já marcados ficam como estão; os que saírem do modelo aparecem como “fora do modelo”.")).not.toBeNull();
+    fireEvent.change(screen.getByLabelText("Modelo do turno"), { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: "Salvar modelo do turno" }));
+    await waitFor(() => expect(api.setShiftTemplate).toHaveBeenCalledWith("s1", null));
+    await waitFor(() => expect(api.listProfessionalShifts).toHaveBeenCalledTimes(2));
+  });
+
+  it("vínculo mostra o tipo padrão e só oferece tipos que servem o CBO", async () => {
+    mocked(api.getProfessional).mockResolvedValue({
+      professional: { id: "p1", user_id: "u1", email_address: "medica@c.gov.br", professional_name: "Helena Duarte",
+        council: "CRM", council_state: "PR", registration_number: "12345", cns_masked: "*** **** **** 0005",
+        cns: "700000000000005", phone: null, contact_email: null },
+      links: [ { ...link, default_appointment_type_key: null } ]
+    });
+    mocked(api.setLinkDefaultType).mockResolvedValue(undefined);
+    renderIt();
+    expect(await screen.findByText("pelo CBO")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Tipo padrão" }));
+    const select = screen.getByLabelText("Tipo padrão do vínculo") as HTMLSelectElement;
+    await within(select).findByRole("option", { name: "Consulta médica" });
+    expect(within(select).queryByRole("option", { name: "Consulta de enfermagem" })).toBeNull();
+    fireEvent.change(select, { target: { value: "retorno" } });
+    fireEvent.click(screen.getByRole("button", { name: "Salvar tipo padrão" }));
+    await waitFor(() => expect(api.setLinkDefaultType).toHaveBeenCalledWith("l1", "retorno"));
+  });
+
+  // P8: o api só aceita modelo/tipo ativo (422 invalid_template / inactive_type).
+  // O valor atual inativo continua visível, mas não dá para salvá-lo de novo.
+  it("modelo atual inativo aparece marcado mas não pode ser salvo de novo", async () => {
+    mocked(api.listProfessionalShifts).mockResolvedValue([
+      { id: "s1", professional_link_id: "l1", unit_name: "UBS Jardim", starts_at: "2026-10-06T10:00:00Z",
+        ends_at: "2026-10-06T15:00:00Z", cancelled_at: null, cancel_reason: null, schedule_template_id: "t2" }
+    ]);
+    renderIt();
+    fireEvent.click(await screen.findByRole("button", { name: "Modelo" }));
+    const select = screen.getByLabelText("Modelo do turno") as HTMLSelectElement;
+    expect(select.value).toBe("t2");
+    expect(within(select).getByRole("option", { name: "Antigo (inativo)" })).not.toBeNull();
+    const save = screen.getByRole("button", { name: "Salvar modelo do turno" }) as HTMLButtonElement;
+    expect(save.disabled).toBe(true);
+    fireEvent.click(save);
+    expect(api.setShiftTemplate).not.toHaveBeenCalled();
+    fireEvent.change(select, { target: { value: "t1" } });
+    expect(save.disabled).toBe(false);
+    fireEvent.change(select, { target: { value: "t2" } });
+    expect(save.disabled).toBe(true);
+    fireEvent.change(select, { target: { value: "" } });
+    expect(save.disabled).toBe(false);
+  });
+
+  it("tipo padrão atual inativo aparece marcado mas não pode ser salvo de novo", async () => {
+    mocked(api.getProfessional).mockResolvedValue({
+      professional: { id: "p1", user_id: "u1", email_address: "medica@c.gov.br", professional_name: "Helena Duarte",
+        council: "CRM", council_state: "PR", registration_number: "12345", cns_masked: "*** **** **** 0005",
+        cns: "700000000000005", phone: null, contact_email: null },
+      links: [ { ...link, cbo_code: "223505", cbo_title: "Enfermeiro", default_appointment_type_key: "puericultura" } ]
+    });
+    renderIt();
+    expect(await screen.findByText("Puericultura (inativo)")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Tipo padrão" }));
+    const select = screen.getByLabelText("Tipo padrão do vínculo") as HTMLSelectElement;
+    expect(select.value).toBe("puericultura");
+    const save = screen.getByRole("button", { name: "Salvar tipo padrão" }) as HTMLButtonElement;
+    expect(save.disabled).toBe(true);
+    fireEvent.click(save);
+    expect(api.setLinkDefaultType).not.toHaveBeenCalled();
+    fireEvent.change(select, { target: { value: "consulta_enfermagem" } });
+    expect(save.disabled).toBe(false);
+    fireEvent.change(select, { target: { value: "" } });
+    expect(save.disabled).toBe(false);
+  });
+
+  it("recusa do api ao trocar o modelo do turno aparece traduzida", async () => {
+    mocked(api.listProfessionalShifts).mockResolvedValue([
+      { id: "s1", professional_link_id: "l1", unit_name: "UBS Jardim", starts_at: "2026-10-06T10:00:00Z",
+        ends_at: "2026-10-06T15:00:00Z", cancelled_at: null, cancel_reason: null, schedule_template_id: null }
+    ]);
+    mocked(api.setShiftTemplate).mockRejectedValue(new ApiError(422, { error: "invalid_template" }, "x"));
+    renderIt();
+    fireEvent.click(await screen.findByRole("button", { name: "Modelo" }));
+    await screen.findByRole("option", { name: "Manhã" });
+    fireEvent.change(screen.getByLabelText("Modelo do turno"), { target: { value: "t1" } });
+    fireEvent.click(screen.getByRole("button", { name: "Salvar modelo do turno" }));
+    expect(await screen.findByText("modelo de agenda inexistente ou desativado — escolha outro")).not.toBeNull();
+  });
+
+  it("recusa do api ao trocar o tipo padrão aparece traduzida", async () => {
+    mocked(api.setLinkDefaultType).mockRejectedValue(new ApiError(422, { error: "inactive_type" }, "x"));
+    renderIt();
+    fireEvent.click(await screen.findByRole("button", { name: "Tipo padrão" }));
+    const select = screen.getByLabelText("Tipo padrão do vínculo") as HTMLSelectElement;
+    await within(select).findByRole("option", { name: "Retorno" });
+    fireEvent.change(select, { target: { value: "retorno" } });
+    fireEvent.click(screen.getByRole("button", { name: "Salvar tipo padrão" }));
+    expect(await screen.findByText("tipo de atendimento desativado — escolha um tipo ativo")).not.toBeNull();
   });
 });
