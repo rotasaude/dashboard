@@ -1,12 +1,12 @@
 // src/modules/ProtocolEditor.test.tsx
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 
 vi.mock("../lib/api", async (importOriginal) => {
   const real = await importOriginal<typeof import("../lib/api")>();
   return {
     ...real, listAuthorProtocols: vi.fn(), loadProtocolDefinition: vi.fn(), gateProtocol: vi.fn(),
-    previewProtocol: vi.fn(), saveProtocolDraft: vi.fn(), simulateOffer: vi.fn()
+    previewProtocol: vi.fn(), saveProtocolDraft: vi.fn(), simulateOffer: vi.fn(), listAppointmentTypes: vi.fn()
   };
 });
 
@@ -189,5 +189,63 @@ describe("ProtocolEditor — Oferta e sugestões", () => {
     await waitFor(() => expect(api.simulateOffer).toHaveBeenCalledWith({
       definition: DEF, profile: { age: 62, sex: "female", neighborhood_id: null }, answers: {}
     }));
+  });
+});
+
+describe("ProtocolEditor — Agendamento", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    mocked(api.listAuthorProtocols).mockResolvedValue([]);
+    mocked(api.gateProtocol).mockResolvedValue({ valid: true });
+  });
+
+  // Espera a carga dos tipos chegar ao fim (resolvida ou recusada) antes de olhar o painel.
+  const typesSettled = async () => {
+    await waitFor(() => expect(api.listAppointmentTypes).toHaveBeenCalledTimes(1));
+    await act(() => new Promise((r) => setTimeout(r, 0)));
+  };
+
+  it("o painel aparece ao lado do JSON e usa a lista de tipos quando o papel lê", async () => {
+    mocked(api.listAppointmentTypes).mockResolvedValue([
+      { key: "consulta_medica", name: "Consulta médica", duration_minutes: 20, cbo_prefixes: [ "2251" ], active: true, origin: "platform" }
+    ]);
+    render(<ProtocolEditor />);
+    typeDefinition(DEF);
+    fireEvent.click(screen.getByRole("button", { name: "+ regra de agendamento" }));
+    expect(await screen.findByRole("option", { name: "Consulta médica" })).not.toBeNull();
+    expect(screen.queryByLabelText("Tipo de atendimento (chave)")).toBeNull();
+  });
+
+  it("403 nos tipos: o painel continua, com campo de texto", async () => {
+    mocked(api.listAppointmentTypes).mockRejectedValue(new api.ApiError(403, { error: "forbidden" }, "x"));
+    render(<ProtocolEditor />);
+    typeDefinition(DEF);
+    await typesSettled();
+    fireEvent.click(screen.getByRole("button", { name: "+ regra de agendamento" }));
+    const field = screen.getByLabelText("Tipo de atendimento (chave)") as HTMLInputElement;
+    expect(field.tagName).toBe("INPUT");
+    expect(screen.queryByLabelText("Tipo de atendimento")).toBeNull();
+    fireEvent.change(field, { target: { value: "consulta_medica" } });
+    expect(JSON.parse(definitionBox().value).scheduling[0].appointment_type).toBe("consulta_medica");
+  });
+
+  it("abrir o painel não reescreve a definição", async () => {
+    mocked(api.listAppointmentTypes).mockResolvedValue([]);
+    render(<ProtocolEditor />);
+    const raw = JSON.stringify(DEF);
+    fireEvent.change(definitionBox(), { target: { value: raw } });
+    await typesSettled();
+    expect(definitionBox().value).toBe(raw);
+  });
+
+  it("avisos do gate aparecem sem tirar o 'válido'", async () => {
+    mocked(api.listAppointmentTypes).mockResolvedValue([]);
+    mocked(api.gateProtocol).mockResolvedValue({ valid: true,
+      warnings: [ "scheduling appointment_type 'puericultura' is inactive in this city" ] });
+    render(<ProtocolEditor />);
+    typeDefinition(DEF);
+    expect(await screen.findByText("aviso: scheduling appointment_type 'puericultura' is inactive in this city", {}, { timeout: 2000 }))
+      .not.toBeNull();
+    expect(screen.getByText("válido ✓")).not.toBeNull();
   });
 });

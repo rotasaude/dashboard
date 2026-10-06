@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { gateProtocol, previewProtocol, saveProtocolDraft,
-  listAuthorProtocols, loadProtocolDefinition,
-  type GateResult, type PreviewResult, type DraftResult, type AuthorProtocolRow } from "../lib/api";
+  listAuthorProtocols, loadProtocolDefinition, listAppointmentTypes,
+  type AppointmentType, type GateResult, type PreviewResult, type DraftResult, type AuthorProtocolRow } from "../lib/api";
 import { parseDefinition, stripIneligibleAnalytic, TEMPLATE } from "../lib/editor";
 import { AnalyticQuestions } from "./protocolEditor/AnalyticQuestions";
 import { OfferPanel } from "./protocolEditor/OfferPanel";
 import { OfferSimulator } from "./protocolEditor/OfferSimulator";
 import { QuestionPreview } from "./protocolEditor/QuestionPreview";
+import { SchedulingPanel } from "./protocolEditor/SchedulingPanel";
 
 export function ProtocolEditor() {
   const [ text, setText ] = useState<string>(TEMPLATE);
@@ -23,6 +24,18 @@ export function ProtocolEditor() {
 
   useEffect(() => {
     listAuthorProtocols().then(setOpts).catch(() => setOpts([]));
+  }, []);
+
+  // Tipos de atendimento para o painel "Agendamento". Leem a lista
+  // municipal_admin, citizen_verifier, health_professional, protocol_author e
+  // protocol_reviewer; null (403 de outro papel que chegue ao editor, ou falha
+  // de rede) faz o painel usar texto livre com o padrão da chave.
+  // Promise.resolve protege contra mock sem implementação.
+  const [ types, setTypes ] = useState<AppointmentType[] | null>(null);
+  useEffect(() => {
+    Promise.resolve().then(() => listAppointmentTypes())
+      .then((list) => setTypes(Array.isArray(list) ? list : null))
+      .catch(() => setTypes(null));
   }, []);
 
   function onPick(value: string) {
@@ -103,6 +116,13 @@ export function ProtocolEditor() {
               {(gate.errors ?? []).map((e, i) => <li key={i}>{e}</li>)}
             </ul>
           )}
+          {/* Avisos não bloqueiam (tipo inexistente/inativo do módulo 17, destino de
+              sugestão do módulo 15); vêm do api como estão, em inglês. */}
+          {!parseError && (gate?.warnings ?? []).length > 0 && (
+            <ul style={{ color: "var(--warn, #a60)", margin: 0, paddingLeft: 18 }}>
+              {(gate?.warnings ?? []).map((w, i) => <li key={i}>{`aviso: ${w}`}</li>)}
+            </ul>
+          )}
         </div>
         <AnalyticQuestions
           definition={current.ok ? current.value : null}
@@ -128,6 +148,13 @@ export function ProtocolEditor() {
           key={offerKey}
           definition={current.ok ? current.value : null}
           protocolNames={protocolNames}
+          onChange={(next) => setText(JSON.stringify(next, null, 2))}
+        />
+        <h2 style={{ fontSize: 16, margin: "16px 0 8px" }}>Agendamento</h2>
+        <SchedulingPanel
+          key={offerKey}
+          definition={current.ok ? current.value : null}
+          types={types}
           onChange={(next) => setText(JSON.stringify(next, null, 2))}
         />
         <h2 style={{ fontSize: 16, margin: "16px 0 8px" }}>Preview ao vivo</h2>
