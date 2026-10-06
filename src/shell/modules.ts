@@ -7,7 +7,7 @@ export type ModuleId =
   | "triages" | "classification" | "reports" | "protocols" | "events"
   | "queues" | "health" | "protocol-editor" | "security" | "team" | "attendance"
   | "professionals" | "my-profile" | "territory" | "campaigns" | "analytics"
-  | "integrations" | "cnes" | "production";
+  | "integrations" | "cnes" | "production" | "my-agenda";
 
 export interface NavItem { id: ModuleId; label: string; icon: string; }
 export interface NavGroupDef { label: string; items: NavItem[]; }
@@ -37,7 +37,8 @@ export const NAV_GROUPS: NavGroupDef[] = [
     { id: "health", label: "Saúde", icon: "◍" }
   ]},
   { label: "Atendimento", items: [
-    { id: "attendance", label: "Atendimento", icon: "☑" }
+    { id: "attendance", label: "Atendimento", icon: "☑" },
+    { id: "my-agenda", label: "Minha agenda", icon: "◷" }
   ]},
   { label: "Comunicação", items: [
     { id: "campaigns", label: "Campanhas", icon: "✉" }
@@ -105,6 +106,8 @@ export function navGroupsFor(
       // Módulo 10: "Meu perfil" é do profissional; sem sessão ainda, some
       // (a API responderia 404 no_profile para quem não é profissional).
       if (item.id === "my-profile") return isProfessional;
+      // Módulo 17: "Minha agenda" idem (GET /me/agenda responde 403/404 a quem não é).
+      if (item.id === "my-agenda") return isProfessional;
       if (item.id === "integrations" || item.id === "cnes") return canIntegrations;
       if (item.id === "production") return canProduction;
       return true;

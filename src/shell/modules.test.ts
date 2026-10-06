@@ -79,6 +79,20 @@ describe("modules", () => {
     });
   });
 
+  describe("módulo 17 na navegação", () => {
+    const user = (roles: string[], operator = false) => ({ operator, memberships: roles.map((role) => ({ role })) });
+    const atendimento = (u: Parameters<typeof navGroupsFor>[0]) =>
+      navGroupsFor(u).find((g) => g.label === "Atendimento")?.items.map((i) => i.id) ?? [];
+
+    it("Minha agenda só para health_professional, no grupo Atendimento", () => {
+      expect(atendimento(user([ "health_professional" ]))).toEqual([ "attendance", "my-agenda" ]);
+      expect(atendimento(user([ "municipal_admin" ]))).not.toContain("my-agenda");
+      expect(atendimento(user([ "citizen_verifier" ]))).not.toContain("my-agenda");
+      expect(navGroupsFor(null).flatMap((g) => g.items.map((i) => i.id))).not.toContain("my-agenda");
+      expect(labelFor("my-agenda")).toBe("Minha agenda");
+    });
+  });
+
   describe("módulo 11 na navegação", () => {
     const user = (roles: string[]) => ({ operator: false, memberships: roles.map((role) => ({ role })) });
     const ids = (u: Parameters<typeof navGroupsFor>[0]) => navGroupsFor(u).flatMap((g) => g.items.map((i) => i.id));

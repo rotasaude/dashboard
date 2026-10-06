@@ -25,6 +25,7 @@ import { Territory } from "./modules/Territory";
 import { Campaigns } from "./modules/Campaigns";
 import { Analytics } from "./modules/Analytics";
 import { MyProfile } from "./modules/MyProfile";
+import { MyAgenda } from "./modules/MyAgenda";
 import { Integrations } from "./modules/Integrations";
 import { Cnes } from "./modules/Cnes";
 import { Production } from "./modules/Production";
@@ -80,6 +81,7 @@ function renderModule(active: ModuleId, setActive: (id: ModuleId) => void) {
     case "attendance":     return <Attendance onNavigate={setActive} />;
     case "professionals":  return <Professionals />;
     case "my-profile":     return <MyProfile />;
+    case "my-agenda":      return <MyAgenda />;
     case "territory":      return <Territory />;
     case "campaigns":      return <Campaigns onNavigate={setActive} />;
     case "analytics":      return <Analytics />;
