@@ -6,7 +6,8 @@ import type { ReactNode } from "react";
 vi.mock("../../lib/api", async (importOriginal) => {
   const real = await importOriginal<typeof import("../../lib/api")>();
   return {
-    ...real, listUnitRequests: vi.fn(), scheduleRequest: vi.fn(), dismissRequest: vi.fn(), getRequest: vi.fn()
+    ...real, listUnitRequests: vi.fn(), bookAppointment: vi.fn(), getUnitAvailability: vi.fn(), dismissRequest: vi.fn(),
+    getRequest: vi.fn()
   };
 });
 
@@ -14,7 +15,7 @@ import * as api from "../../lib/api";
 import { ApiError } from "../../lib/api";
 import { Requests } from "./Requests";
 import { expectFrozenNotice } from "../../test/frozenNotice";
-import { appointmentView, requestRow } from "../../test/schedulingFixtures";
+import { appointmentView, requestRow, slot } from "../../test/schedulingFixtures";
 
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
@@ -39,7 +40,9 @@ const rows: api.RequestRow[] = [
 
 describe("Requests", () => {
   beforeEach(() => {
-    for (const fn of [ api.listUnitRequests, api.scheduleRequest, api.dismissRequest, api.getRequest ]) mocked(fn).mockReset();
+    for (const fn of [
+      api.listUnitRequests, api.bookAppointment, api.getUnitAvailability, api.dismissRequest, api.getRequest
+    ]) mocked(fn).mockReset();
   });
 
   it("lista na ordem do api, com pedido, atendimento, prazo, prioridade, nota e marcas", async () => {
@@ -113,72 +116,19 @@ describe("Requests", () => {
     expect(screen.getByRole("button", { name: "Detalhes" })).not.toBeNull();
   });
 
-  it("Marcar horário: menos de 48h avisa que o horário nasce confirmado", async () => {
+  it("Marcar horário abre as vagas do tipo do pedido; marcar recarrega a fila", async () => {
     vi.useFakeTimers({ toFake: [ "Date" ] });
-    vi.setSystemTime(new Date("2026-09-25T10:00:00-03:00"));
+    vi.setSystemTime(new Date("2026-10-05T10:00:00-03:00"));
     mocked(api.listUnitRequests).mockResolvedValue([ rows[0] ]);
-    mocked(api.scheduleRequest).mockResolvedValue({ id: "a1", scheduled_at: "x", status: "scheduled", confirmation_deadline_at: "y" });
+    mocked(api.getUnitAvailability).mockResolvedValue({ slots: [ slot() ], legacy_days: [] });
+    mocked(api.bookAppointment).mockResolvedValue({ id: "a1", scheduled_at: "x", status: "scheduled", confirmation_deadline_at: null });
     renderRequests();
     await screen.findByText("***.982.247-**");
     fireEvent.click(screen.getByRole("button", { name: "Marcar horário" }));
-    fireEvent.change(screen.getByLabelText("Horário"), { target: { value: "2026-09-26T09:00" } });
-    expect(await screen.findByText("O horário nasce confirmado")).not.toBeNull();
+    fireEvent.change(await screen.findByLabelText("Dia"), { target: { value: "2026-10-06" } });
+    fireEvent.click(screen.getByRole("radio", { name: "09:00 · Helena Duarte" }));
     fireEvent.click(screen.getByRole("button", { name: "Confirmar horário" }));
-    await waitFor(() => expect(api.scheduleRequest).toHaveBeenCalledWith(
-      "r1", "2026-09-26T12:00:00.000Z", "u1"
-    ));
     await waitFor(() => expect(api.listUnitRequests).toHaveBeenCalledTimes(2));
-  });
-
-  it("Marcar horário: 48h ou mais avisa o prazo de confirmação (horário menos 24h)", async () => {
-    vi.useFakeTimers({ toFake: [ "Date" ] });
-    vi.setSystemTime(new Date("2026-09-25T10:00:00-03:00"));
-    mocked(api.listUnitRequests).mockResolvedValue([ rows[0] ]);
-    renderRequests();
-    await screen.findByText("***.982.247-**");
-    fireEvent.click(screen.getByRole("button", { name: "Marcar horário" }));
-    fireEvent.change(screen.getByLabelText("Horário"), { target: { value: "2026-10-02T14:30" } });
-    expect(await screen.findByText("O cidadão precisa confirmar até 01/10 14:30")).not.toBeNull();
-  });
-
-  it("Marcar horário ocupado: avisa quantos já estão no horário e 'Marcar mesmo assim' envia o encaixe", async () => {
-    vi.useFakeTimers({ toFake: [ "Date" ] });
-    vi.setSystemTime(new Date("2026-09-25T10:00:00-03:00"));
-    mocked(api.listUnitRequests).mockResolvedValue([ rows[0] ]);
-    mocked(api.scheduleRequest)
-      .mockRejectedValueOnce(new ApiError(409, { error: "slot_taken", taken: 2 }, "x"))
-      .mockResolvedValueOnce({ id: "a1", scheduled_at: "x", status: "scheduled", confirmation_deadline_at: "y" });
-    renderRequests();
-    await screen.findByText("***.982.247-**");
-    fireEvent.click(screen.getByRole("button", { name: "Marcar horário" }));
-    fireEvent.change(screen.getByLabelText("Horário"), { target: { value: "2026-10-02T14:30" } });
-    fireEvent.click(screen.getByRole("button", { name: "Confirmar horário" }));
-    expect(await screen.findByText(
-      "Já há 2 horários marcados na UBS Centro nesse horário. Marcar mesmo assim é um encaixe."
-    )).not.toBeNull();
-    expect(api.listUnitRequests).toHaveBeenCalledTimes(1); // o painel continua aberto
-
-    fireEvent.click(screen.getByRole("button", { name: "Marcar mesmo assim" }));
-    await waitFor(() => expect(api.scheduleRequest).toHaveBeenLastCalledWith(
-      "r1", "2026-10-02T17:30:00.000Z", "u1", { allowOverlap: true }
-    ));
-    await waitFor(() => expect(api.listUnitRequests).toHaveBeenCalledTimes(2));
-    vi.useRealTimers();
-  });
-
-  it("Marcar horário ocupado: trocar o horário tira o aviso de encaixe", async () => {
-    mocked(api.listUnitRequests).mockResolvedValue([ rows[0] ]);
-    mocked(api.scheduleRequest).mockRejectedValueOnce(new ApiError(409, { error: "slot_taken", taken: 1 }, "x"));
-    renderRequests();
-    await screen.findByText("***.982.247-**");
-    fireEvent.click(screen.getByRole("button", { name: "Marcar horário" }));
-    fireEvent.change(screen.getByLabelText("Horário"), { target: { value: "2030-10-02T14:30" } });
-    fireEvent.click(screen.getByRole("button", { name: "Confirmar horário" }));
-    expect(await screen.findByText(
-      "Já há 1 horário marcado na UBS Centro nesse horário. Marcar mesmo assim é um encaixe."
-    )).not.toBeNull();
-    fireEvent.change(screen.getByLabelText("Horário"), { target: { value: "2030-10-02T15:00" } });
-    expect(screen.queryByRole("button", { name: "Marcar mesmo assim" })).toBeNull();
   });
 
   it("Encerrar pedido exige justificativa de 10+ caracteres, e request_not_open recarrega a lista", async () => {

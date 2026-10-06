@@ -11,7 +11,8 @@ vi.mock("../lib/api", async (importOriginal) => {
     listActiveUnits: vi.fn(), listAllUnits: vi.fn(), createUnit: vi.fn(), updateUnit: vi.fn(), setUnitActive: vi.fn(),
     listUnitQueue: vi.fn(), callAttendance: vi.fn(), callNext: vi.fn(), closeAttendance: vi.fn(),
     lookupCheckIn: vi.fn(), checkIn: vi.fn(), searchCheckIn: vi.fn(), checkInByException: vi.fn(),
-    listUnitRequests: vi.fn(), scheduleRequest: vi.fn(), dismissRequest: vi.fn(), listUnitAgenda: vi.fn(),
+    listUnitRequests: vi.fn(), bookAppointment: vi.fn(), getUnitAvailability: vi.fn(), dismissRequest: vi.fn(),
+    listUnitAgenda: vi.fn(),
     getMyProfessional: vi.fn(), listPendingErasures: vi.fn(), cadsusLookup: vi.fn()
   };
 });
@@ -57,7 +58,8 @@ describe("Attendance", () => {
       api.listActiveUnits, api.listAllUnits, api.createUnit, api.updateUnit, api.setUnitActive,
       api.listUnitQueue, api.callAttendance, api.callNext, api.closeAttendance,
       api.lookupCheckIn, api.checkIn, api.searchCheckIn, api.checkInByException,
-      api.listUnitRequests, api.scheduleRequest, api.dismissRequest, api.listUnitAgenda, api.getMyProfessional
+      api.listUnitRequests, api.bookAppointment, api.getUnitAvailability, api.dismissRequest, api.listUnitAgenda,
+      api.getMyProfessional
     ]) {
       mocked(fn).mockReset();
     }

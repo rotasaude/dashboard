@@ -24,6 +24,13 @@ export class ApiError extends Error {
   }
 }
 
+// Código de erro do corpo (`{ error: "..." }`) de uma recusa do api; undefined
+// para qualquer outra falha. Os painéis do balcão decidem por ele (recarregar,
+// fechar, avisar) antes de traduzir a frase.
+export function errorCode(err: unknown): string | undefined {
+  return err instanceof ApiError ? (err.body as { error?: string } | undefined)?.error : undefined;
+}
+
 export interface Membership {
   city_slug: string;
   city_name: string;
@@ -629,19 +636,6 @@ export function getRequest(id: string): Promise<RequestDetail> {
 }
 
 export interface ScheduledAppointment { id: string; scheduled_at: string; status: string; confirmation_deadline_at: string | null }
-
-// allowOverlap: a recepção já viu o slot_taken e decidiu pelo encaixe (api#26).
-export async function scheduleRequest(
-  id: string, scheduledAtIso: string, healthUnitId: string, opts: { allowOverlap?: boolean } = {}
-): Promise<ScheduledAppointment> {
-  const body: Record<string, unknown> = { scheduled_at: scheduledAtIso, health_unit_id: healthUnitId };
-  if (opts.allowOverlap) body.allow_overlap = true;
-  const payload = await jsonFetch<{ appointment: ScheduledAppointment }>(
-    `${ATTENDANCE_BASE}/requests/${encodeURIComponent(id)}/appointments`,
-    { method: "POST", body: JSON.stringify(body) }
-  );
-  return payload.appointment;
-}
 
 export async function dismissRequest(
   id: string, reason: string, healthUnitId: string

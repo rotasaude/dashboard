@@ -1,11 +1,7 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  ApiError, dismissRequest, listUnitRequests, scheduleRequest,
-  type HealthUnit, type RequestRow
-} from "../../lib/api";
+import { dismissRequest, errorCode, listUnitRequests, type HealthUnit, type RequestRow } from "../../lib/api";
 import { ATTENDANCE_REFETCH_MS, attendanceError } from "../../lib/attendance";
-import { cityDateFormat, fmtHourMinute, parseCityLocal } from "../../lib/format";
 import { PRIORITY_LABEL, fmtDueOn, requestKindLabel, requestMarks } from "../../lib/scheduling";
 import { Panel } from "../../components/Panel";
 import { DataTable } from "../../components/DataTable";
@@ -14,12 +10,11 @@ import { Tag } from "../../components/Tag";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { FrozenTextNotice } from "../../components/FrozenTextNotice";
 import { RequestDetailPanel } from "./RequestDetailPanel";
+import { BookPanel, availabilityKey } from "./BookPanel";
 
 // Requests (Task 8) — pedidos de agendamento abertos da unidade (spec §6
-// "Pedidos de agendamento"). "Marcar horário" avisa, calculado no navegador
-// a partir do valor do <input type="datetime-local"> (lido no fuso da cidade,
-// parseCityLocal), se o horário nasce
-// confirmado (< 48h) ou o prazo de confirmação (horário - 24h, com >= 48h).
+// "Pedidos de agendamento"). "Marcar horário" abre o BookPanel (vagas por dia e
+// profissional; marcação livre só em dia sem turno).
 // `request_not_open` em qualquer uma das duas ações (outro atendente já
 // marcou/encerrou o pedido) recarrega a lista em vez de mostrar erro parado.
 // A fila vem na ordem do api (atrasados, prazo, prioridade; módulo 17) e a tela
@@ -28,15 +23,6 @@ import { RequestDetailPanel } from "./RequestDetailPanel";
 // voltaria igual.
 interface Props {
   unit: HealthUnit;
-}
-
-// "dd/mm hh:mm", sem segundos e sem ano (spec §6); a hora vem de fmtHourMinute.
-function fmtShort(d: Date): string {
-  return `${cityDateFormat({ day: "2-digit", month: "2-digit" }).format(d)} ${fmtHourMinute(d.toISOString())}`;
-}
-
-function errorCode(err: unknown): string | undefined {
-  return err instanceof ApiError ? (err.body as { error?: string } | undefined)?.error : undefined;
 }
 
 export function Requests({ unit }: Props) {
@@ -54,6 +40,7 @@ export function Requests({ unit }: Props) {
   function invalidateAll() {
     invalidateRequests();
     void queryClient.invalidateQueries({ queryKey: [ "unitAgenda", unit.id ] });
+    void queryClient.invalidateQueries({ queryKey: availabilityKey(unit.id) });
   }
 
   const rows = query.data ?? [];
@@ -114,7 +101,7 @@ export function Requests({ unit }: Props) {
         {detail && <RequestDetailPanel key={detail.id} requestId={detail.id} onClose={() => setDetail(null)} />}
 
         {scheduling && (
-          <SchedulePanel
+          <BookPanel
             key={`s-${scheduling.id}`}
             row={scheduling}
             unit={unit}
@@ -134,99 +121,6 @@ export function Requests({ unit }: Props) {
         )}
       </div>
     </Panel>
-  );
-}
-
-function slotTaken(err: unknown): number {
-  const body = (err instanceof ApiError ? err.body : null) as { taken?: number } | null;
-  return typeof body?.taken === "number" && body.taken > 0 ? body.taken : 1;
-}
-
-function SchedulePanel(
-  { row, unit, onCancel, onDone }: { row: RequestRow; unit: HealthUnit; onCancel(): void; onDone(): void }
-) {
-  const [ value, setValue ] = useState("");
-  const [ busy, setBusy ] = useState(false);
-  const [ error, setError ] = useState<string | null>(null);
-  // Quantos horários vivos já estão nesse início (409 slot_taken, api#26).
-  // Vale só para o valor que foi conferido: trocar o horário apaga o aviso.
-  const [ taken, setTaken ] = useState<number | null>(null);
-
-  const parsed = parseCityLocal(value);
-  const valid = !!parsed;
-
-  let warning: string | null = null;
-  if (valid && parsed) {
-    const hoursUntil = (parsed.getTime() - Date.now()) / 3_600_000;
-    if (hoursUntil < 48) {
-      warning = "O horário nasce confirmado";
-    } else {
-      const deadline = new Date(parsed.getTime() - 24 * 3_600_000);
-      warning = `O cidadão precisa confirmar até ${fmtShort(deadline)}`;
-    }
-  }
-
-  async function confirm(allowOverlap = false) {
-    if (busy || !valid || !parsed) return;
-    setBusy(true); setError(null);
-    try {
-      if (allowOverlap) {
-        await scheduleRequest(row.id, parsed.toISOString(), unit.id, { allowOverlap: true });
-      } else {
-        await scheduleRequest(row.id, parsed.toISOString(), unit.id);
-      }
-      onDone();
-    } catch (err) {
-      if (errorCode(err) === "request_not_open") { onDone(); return; }
-      if (errorCode(err) === "slot_taken") { setTaken(slotTaken(err)); return; }
-      setError(attendanceError(err));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <section style={{ display: "flex", flexDirection: "column", gap: 10, padding: 16, border: "1px solid var(--rule)", borderRadius: 8 }}>
-      <strong>Marcar horário</strong>
-      {error && <p role="alert" style={{ margin: 0, fontSize: 12.5, color: "var(--down)" }}>{error}</p>}
-      <label style={{ ...labelStyle, maxWidth: 240 }}>
-        Horário
-        <input
-          type="datetime-local" value={value}
-          onChange={(e) => { setValue(e.target.value); setTaken(null); }} style={inputStyle}
-        />
-      </label>
-      {warning && <p role="status" style={{ margin: 0, fontSize: 12.5, fontWeight: 600 }}>{warning}</p>}
-      {taken !== null && (
-        <p role="alert" style={{ margin: 0, fontSize: 12.5, fontWeight: 600, color: "var(--warn)" }}>
-          {taken === 1
-            ? `Já há 1 horário marcado na ${unit.name} nesse horário.`
-            : `Já há ${taken} horários marcados na ${unit.name} nesse horário.`} Marcar mesmo assim é um encaixe.
-        </p>
-      )}
-      <div style={{ display: "flex", gap: 8 }}>
-        {taken === null ? (
-          <button
-            type="button"
-            disabled={!valid || busy}
-            onClick={() => void confirm()}
-            style={(!valid || busy) ? disabledButtonStyle : buttonStyle}
-          >
-            Confirmar horário
-          </button>
-        ) : (
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => void confirm(true)}
-            style={busy ? disabledButtonStyle : buttonStyle}
-          >
-            Marcar mesmo assim
-          </button>
-        )}
-        <button type="button" disabled={busy} onClick={onCancel} style={secondaryButtonStyle}>Cancelar</button>
-      </div>
-    </section>
   );
 }
 

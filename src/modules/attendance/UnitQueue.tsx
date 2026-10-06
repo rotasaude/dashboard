@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  ApiError, callAttendance, callNext, closeAttendance, listUnitQueue,
+  callAttendance, callNext, closeAttendance, errorCode, listUnitQueue,
   type AppointmentRequestSummary, type AttendanceOutcome, type HealthUnit, type QueueRow
 } from "../../lib/api";
 import { ATTENDANCE_REFETCH_MS, attendanceError, splitReferenceUnits } from "../../lib/attendance";
@@ -35,10 +35,6 @@ const OUTCOME_LABEL: Record<Exclude<AttendanceOutcome, "left">, string> = {
   referred: "Encaminhado",
   return: "Retorno"
 };
-
-function errorCode(err: unknown): string | undefined {
-  return err instanceof ApiError ? (err.body as { error?: string } | undefined)?.error : undefined;
-}
 
 // missing_role (o papel health_professional foi revogado) precisa recarregar
 // a sessão além de invalidar o vínculo: canCareRole vem de user.memberships
