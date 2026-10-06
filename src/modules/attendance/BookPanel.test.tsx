@@ -155,6 +155,51 @@ describe("BookPanel", () => {
     expect(screen.queryByLabelText("Horário (marcação livre)")).toBeNull();
   });
 
+  // Revisão final: "Marcar mesmo assim" que volta use_slots (o dia ganhou turno)
+  // não pode deixar o aviso de sobreposição nem o botão de sobrepor de pé.
+  it("use_slots depois de 'Marcar mesmo assim' apaga o aviso de sobreposição e exige escolher a vaga", async () => {
+    mocked(api.getUnitAvailability)
+      .mockResolvedValueOnce(AVAILABILITY)
+      .mockResolvedValueOnce({ slots: [ ...AVAILABILITY.slots, slot({ starts_at: "2026-10-07T08:00:00-03:00", ends_at: "2026-10-07T08:20:00-03:00" }) ],
+        legacy_days: [] });
+    mocked(api.bookAppointment)
+      .mockRejectedValueOnce(new ApiError(409, { error: "slot_taken", taken: 2 }, "x"))
+      .mockRejectedValueOnce(new ApiError(409, { error: "use_slots" }, "x"))
+      .mockResolvedValueOnce(APPOINTMENT);
+    renderIt();
+    await pickDay("2026-10-07");
+    fireEvent.change(screen.getByLabelText("Horário (marcação livre)"), { target: { value: "14:30" } });
+    fireEvent.click(confirm());
+    fireEvent.click(await screen.findByRole("button", { name: "Marcar mesmo assim" }));
+    expect(await screen.findByRole("radio", { name: "08:00 · Helena Duarte" })).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Marcar mesmo assim" })).toBeNull();
+    expect(screen.queryByText(/Marcar mesmo assim deixa os dois no mesmo horário/)).toBeNull();
+    expect(confirm().disabled).toBe(true);
+    fireEvent.click(screen.getByRole("radio", { name: "08:00 · Helena Duarte" }));
+    fireEvent.click(confirm());
+    await waitFor(() => expect(api.bookAppointment).toHaveBeenLastCalledWith("r1", "u1", {
+      kind: "slot", professional_id: "p1", starts_at: "2026-10-07T08:00:00-03:00", appointment_type_key: "consulta_medica"
+    }));
+  });
+
+  // Revisão final: o profissional deixou de atender o tipo entre a leitura e o
+  // clique (422 type_not_served, commands/appointments/book.rb:22). Recarrega
+  // como a vaga indisponível e nunca marca outra sozinha.
+  it("type_not_served numa vaga recarrega as vagas, avisa e não marca outra", async () => {
+    const { onDone } = renderIt();
+    mocked(api.bookAppointment).mockRejectedValueOnce(new ApiError(422, { error: "type_not_served" }, "x"));
+    await pickDay("2026-10-06");
+    fireEvent.click(screen.getByRole("radio", { name: "09:00 · Helena Duarte" }));
+    fireEvent.click(confirm());
+    expect(await screen.findByText("este profissional não atende este tipo de atendimento")).not.toBeNull();
+    await waitFor(() => expect(api.getUnitAvailability).toHaveBeenCalledTimes(2));
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(api.bookAppointment).toHaveBeenCalledTimes(1);
+    expect(onDone).not.toHaveBeenCalled();
+    expect(screen.getAllByRole("radio").some((r) => (r as HTMLInputElement).checked)).toBe(false);
+    expect(confirm().disabled).toBe(true);
+  });
+
   it("14 dias → pede o período seguinte; ← volta e nunca passa de hoje", async () => {
     renderIt();
     await screen.findByLabelText("Dia");

@@ -2,7 +2,7 @@
 // recepção escolhe dia, profissional e vaga calculada pelo api. Marcação livre
 // (sem profissional) só em dia sem nenhum turno na unidade (`legacy_days`).
 // Vaga que some entre a leitura e o clique (slot_taken, slot_unavailable,
-// invalid_time — o início já passou —, use_slots) recarrega as vagas e deixa a
+// type_not_served, invalid_time — o início já passou —, use_slots) recarrega as vagas e deixa a
 // pessoa escolher de novo: a tela nunca marca outra vaga sozinha.
 // Pedido já marcado que precisa remarcar (`appointment` não nulo) só remarca
 // numa vaga: o api recusa a marcação livre com request_not_open.
@@ -78,7 +78,7 @@ export function BookPanel({ row, unit, onCancel, onDone }: Props) {
   }
 
   function reloadSlots(message: string) {
-    setPicked(null); setNotice(message);
+    setPicked(null); setTaken(null); setNotice(message);
     void queryClient.invalidateQueries({ queryKey: availabilityKey(unit.id) });
   }
 
@@ -108,6 +108,9 @@ export function BookPanel({ row, unit, onCancel, onDone }: Props) {
         reloadSlots("Essa vaga já começou. As vagas foram recarregadas — escolha outra.");
         return;
       }
+      // O profissional deixou de atender o tipo (vínculo encerrado, tipo
+      // desativado) entre a leitura e o clique: recarrega como vaga indisponível.
+      if (input.kind === "slot" && code === "type_not_served") { reloadSlots(attendanceError(err)); return; }
       if (code === "slot_taken") { setTaken(takenCount(err)); return; }
       if (code === "slot_unavailable") { reloadSlots(attendanceError(err)); return; }
       if (code === "use_slots") { setLegacyTime(""); reloadSlots(attendanceError(err)); return; }

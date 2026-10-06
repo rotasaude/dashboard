@@ -67,13 +67,13 @@ export function blockProblem(block: ScheduleBlock, types: AppointmentType[]): Bl
   if (!HHMM.test(block.starts) || !HHMM.test(block.ends)) return "bad_time";
   if (!validSpan(block)) return "crosses_midnight";
   if (block.kind !== "bookable") {
-    return block.appointment_type_key !== undefined || block.slot_minutes !== undefined ? "bad_block" : null;
+    return block.appointment_type_key !== undefined || block.slot_minutes != null ? "bad_block" : null;
   }
   if (!block.appointment_type_key) return "missing_type";
   const type = types.find((t) => t.key === block.appointment_type_key);
   if (!type) return "unknown_type";
   if (!type.active) return "inactive_type";
-  if (block.slot_minutes !== undefined &&
+  if (block.slot_minutes != null &&
       (!Number.isInteger(block.slot_minutes) || block.slot_minutes < DURATION_MIN || block.slot_minutes > DURATION_MAX)) {
     return "bad_slot_minutes";
   }
@@ -168,7 +168,7 @@ export function blockLine(block: ScheduleBlock, types: AppointmentType[] | null)
   if (block.kind === "bookable") {
     parts.push(!types && block.appointment_type_name ? block.appointment_type_name : typeLabel(block.appointment_type_key, types));
   }
-  if (block.slot_minutes !== undefined) parts.push(`vagas de ${block.slot_minutes} min`);
+  if (block.slot_minutes != null) parts.push(`vagas de ${block.slot_minutes} min`);
   return parts.join(" · ");
 }
 

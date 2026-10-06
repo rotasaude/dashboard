@@ -27,6 +27,15 @@ describe("faixas do modelo", () => {
     expect(blockProblem(block, TYPES)).toBe(expected);
   });
 
+  // O api aceita slot_minutes nulo como ausente (usa a duração do tipo).
+  it("slot_minutes nulo é o mesmo que ausente", () => {
+    expect(blockProblem({ starts: "09:00", ends: "11:00", kind: "bookable", appointment_type_key: "consulta_medica", slot_minutes: null }, TYPES))
+      .toBeNull();
+    expect(blockProblem({ starts: "07:00", ends: "09:00", kind: "walk_in", slot_minutes: null }, TYPES)).toBeNull();
+    expect(blockLine({ starts: "09:00", ends: "11:00", kind: "bookable", appointment_type_key: "consulta_medica", slot_minutes: null }, TYPES))
+      .toBe("09:00–11:00 · agendável · Consulta médica");
+  });
+
   it("tipo inativo é inactive_type, não unknown_type", () => {
     expect(blockProblem({ starts: "09:00", ends: "11:00", kind: "bookable", appointment_type_key: "puericultura" }, TYPES))
       .toBe("inactive_type");

@@ -1292,7 +1292,7 @@ export type BlockKind = "walk_in" | "bookable" | "blocked";
 // `appointment_type_name` só vem nas respostas (§9: faixas `bookable` da agenda
 // e da Minha agenda); nunca é enviado de volta.
 export interface ScheduleBlock {
-  starts: string; ends: string; kind: BlockKind; appointment_type_key?: string; slot_minutes?: number;
+  starts: string; ends: string; kind: BlockKind; appointment_type_key?: string; slot_minutes?: number | null;
   appointment_type_name?: string;
 }
 export interface ScheduleTemplate { id: string; name: string; fit_in_limit: number; blocks: ScheduleBlock[]; active: boolean }
