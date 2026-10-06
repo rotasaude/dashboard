@@ -89,11 +89,24 @@ describe("TriageCatalogTab — edição", () => {
     fireEvent.click(within(form).getByRole("button", { name: "Salvar no catálogo…" }));
     fireEvent.click(await screen.findByRole("button", { name: "Confirmar" }));
     await waitFor(() => expect(api.updateTriageOffer).toHaveBeenCalledWith("saude-do-idoso", {
-      enabled: false, position: 2, restriction: { in: [ "citizen.neighborhood_id", [ "n2" ] ] },
+      enabled: false, suggestion_only: false, position: 2, restriction: { in: [ "citizen.neighborhood_id", [ "n2" ] ] },
       available_from: null, available_until: "2026-12-31"
     }));
     expect(await screen.findByText("Catálogo atualizado: Saúde do idoso")).not.toBeNull();
     await waitFor(() => expect(api.listTriageCatalog).toHaveBeenCalledTimes(2));
+  });
+
+  it("marca só por sugestão e manda no PUT", async () => {
+    admin();
+    mocked(api.listTriageCatalog).mockResolvedValue([ catalogOffer(), RESPIRATORY ]);
+    mocked(api.updateTriageOffer).mockResolvedValue(catalogOffer({ suggestion_only: true }));
+    renderWithProviders(<TriageCatalogTab />);
+    const form = await open("Saúde do idoso");
+    fireEvent.click(within(form).getByLabelText("Só por sugestão"));
+    fireEvent.click(within(form).getByRole("button", { name: "Salvar no catálogo…" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Confirmar" }));
+    await waitFor(() => expect(api.updateTriageOffer).toHaveBeenCalledWith("saude-do-idoso",
+      expect.objectContaining({ enabled: true, suggestion_only: true })));
   });
 
   it("protocolo sem linha começa na próxima posição e ganha restrição por bairro", async () => {
@@ -111,7 +124,7 @@ describe("TriageCatalogTab — edição", () => {
     fireEvent.click(within(form).getByRole("button", { name: "Salvar no catálogo…" }));
     fireEvent.click(await screen.findByRole("button", { name: "Confirmar" }));
     await waitFor(() => expect(api.updateTriageOffer).toHaveBeenCalledWith("triage-respiratoria", {
-      enabled: true, position: 3, restriction: { in: [ "citizen.neighborhood_id", [ "n1" ] ] },
+      enabled: true, suggestion_only: false, position: 3, restriction: { in: [ "citizen.neighborhood_id", [ "n1" ] ] },
       available_from: null, available_until: null
     }));
   });

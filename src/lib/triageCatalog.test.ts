@@ -25,7 +25,9 @@ describe("situação no catálogo (ADR 0027, regra de oferta)", () => {
     [ "pausada", catalogOffer({ enabled: false }), "pausada", "neutral" ],
     [ "antes do início", catalogOffer({ available_from: "2026-10-06" }), "agendada", "info" ],
     [ "depois do fim", catalogOffer({ available_until: "2026-10-04" }), "período encerrado", "warn" ],
-    [ "no último dia ainda vale", catalogOffer({ available_until: TODAY }), "oferecida", "ok" ]
+    [ "no último dia ainda vale", catalogOffer({ available_until: TODAY }), "oferecida", "ok" ],
+    [ "só por sugestão", catalogOffer({ suggestion_only: true }), "só por sugestão", "info" ],
+    [ "pausada vale mais que só por sugestão", catalogOffer({ enabled: false, suggestion_only: true }), "pausada", "neutral" ]
   ])("%s", (_name, offer, label, tone) => {
     expect(offerState(offer, TODAY)).toEqual({ label, tone });
   });
@@ -49,13 +51,17 @@ describe("período e contadores", () => {
 describe("formulário", () => {
   it("linha configurada vem como está; datas nulas viram campo vazio", () => {
     expect(formFrom(catalogOffer(), [])).toEqual({
-      enabled: true, position: "2", restriction: { in: [ "citizen.neighborhood_id", [ "n2" ] ] }, from: "", until: "2026-12-31"
+      enabled: true, suggestionOnly: false, position: "2", restriction: { in: [ "citizen.neighborhood_id", [ "n2" ] ] },
+      from: "", until: "2026-12-31"
     });
+    expect(formFrom(catalogOffer({ suggestion_only: true }), []).suggestionOnly).toBe(true);
+    // api anterior ao campo: não manda a chave.
+    expect(formFrom(catalogOffer({ suggestion_only: undefined }), []).suggestionOnly).toBe(false);
   });
 
   it("protocolo sem linha começa oferecido, na próxima posição livre", () => {
     expect(formFrom(RESPIRATORY, [ catalogOffer(), RESPIRATORY ])).toEqual({
-      enabled: true, position: "3", restriction: null, from: "", until: ""
+      enabled: true, suggestionOnly: false, position: "3", restriction: null, from: "", until: ""
     });
     expect(formFrom(RESPIRATORY, [ RESPIRATORY ]).position).toBe("1");
   });
@@ -70,8 +76,9 @@ describe("formulário", () => {
   });
 
   it("payload: número na ordem e data vazia como null", () => {
-    expect(offerPayload({ enabled: false, position: " 4 ", restriction: null, from: "", until: "2026-12-31" }))
-      .toEqual({ enabled: false, position: 4, restriction: null, available_from: null, available_until: "2026-12-31" });
+    expect(offerPayload({ enabled: false, suggestionOnly: true, position: " 4 ", restriction: null, from: "", until: "2026-12-31" }))
+      .toEqual({ enabled: false, suggestion_only: true, position: 4, restriction: null, available_from: null,
+                 available_until: "2026-12-31" });
   });
 });
 
@@ -83,6 +90,8 @@ describe("recusas da API", () => {
     expect(triageCatalogError(new ApiError(422, { error: "invalid_position" }, "x"))).toBe("a ordem precisa ser um número inteiro a partir de 1");
     expect(triageCatalogError(new ApiError(422, { error: "invalid_enabled" }, "x")))
       .toBe("o campo “oferecer no catálogo” precisa ser sim ou não");
+    expect(triageCatalogError(new ApiError(422, { error: "invalid_suggestion_only" }, "x")))
+      .toBe("o campo “só por sugestão” precisa ser sim ou não");
     expect(triageCatalogError(new ApiError(404, { error: "unknown_protocol" }, "x")))
       .toBe("este protocolo não existe mais nesta cidade — recarregue a lista");
     expect(triageCatalogError(new ApiError(422, { error: "outra_coisa" }, "x"))).toBeNull();

@@ -39,6 +39,11 @@ export function TriageOfferForm({ offer, all, onSaved, onCancel, onGoToSecurity 
         <input type="checkbox" checked={form.enabled} onChange={(e) => set({ enabled: e.target.checked })} />
         Oferecer no catálogo
       </label>
+      <label style={{ ...label, flexDirection: "row", alignItems: "center", gap: 8 }}>
+        <input type="checkbox" checked={form.suggestionOnly} onChange={(e) => set({ suggestionOnly: e.target.checked })} />
+        Só por sugestão
+      </label>
+      <p style={hint}>Só por sugestão: fica fora de “Disponíveis” no wpda e só começa pela sugestão de outra triagem.</p>
       <label style={label}>
         Ordem no catálogo
         <input inputMode="numeric" value={form.position} style={{ ...inputStyle, width: 120 }}

@@ -29,6 +29,7 @@ export function offerState(o: TriageOffer, today: string): { label: string; tone
   if (!o.enabled) return { label: "pausada", tone: "neutral" };
   if (o.available_from && today < o.available_from) return { label: "agendada", tone: "info" };
   if (o.available_until && today > o.available_until) return { label: "período encerrado", tone: "warn" };
+  if (o.suggestion_only) return { label: "só por sugestão", tone: "info" };
   return { label: "oferecida", tone: "ok" };
 }
 
@@ -46,6 +47,7 @@ export function fmtCounter(v: number | null): string {
 
 export interface OfferFormState {
   enabled: boolean;
+  suggestionOnly: boolean;
   position: string;
   restriction: ConditionTree | null;
   from: string;
@@ -55,12 +57,13 @@ export interface OfferFormState {
 export function formFrom(o: TriageOffer, all: TriageOffer[]): OfferFormState {
   if (o.configured) {
     return {
-      enabled: o.enabled ?? true, position: String(o.position ?? 1), restriction: o.restriction,
+      enabled: o.enabled ?? true, suggestionOnly: o.suggestion_only ?? false, position: String(o.position ?? 1),
+      restriction: o.restriction,
       from: o.available_from ?? "", until: o.available_until ?? ""
     };
   }
   const last = Math.max(0, ...all.map((x) => x.position ?? 0));
-  return { enabled: true, position: String(last + 1), restriction: null, from: "", until: "" };
+  return { enabled: true, suggestionOnly: false, position: String(last + 1), restriction: null, from: "", until: "" };
 }
 
 export function offerFormProblem(f: OfferFormState): string | null {
@@ -71,7 +74,7 @@ export function offerFormProblem(f: OfferFormState): string | null {
 
 export function offerPayload(f: OfferFormState): TriageOfferFields {
   return {
-    enabled: f.enabled, position: Number(f.position.trim()), restriction: f.restriction,
+    enabled: f.enabled, suggestion_only: f.suggestionOnly, position: Number(f.position.trim()), restriction: f.restriction,
     available_from: f.from || null, available_until: f.until || null
   };
 }
@@ -81,6 +84,7 @@ const MESSAGES: Record<string, string> = {
   invalid_period: "o fim do período não pode ser antes do início",
   invalid_position: "a ordem precisa ser um número inteiro a partir de 1",
   invalid_enabled: "o campo “oferecer no catálogo” precisa ser sim ou não",
+  invalid_suggestion_only: "o campo “só por sugestão” precisa ser sim ou não",
   unknown_protocol: "este protocolo não existe mais nesta cidade — recarregue a lista"
 };
 

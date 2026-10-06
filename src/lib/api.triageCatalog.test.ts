@@ -17,7 +17,7 @@ const OFFER: TriageOffer = {
   enabled: true, position: 2, restriction: null, available_from: null, available_until: "2026-12-31",
   counters: { offered: 120, started: 40, completed: null, from_suggestion: 6 }
 };
-const FIELDS = { enabled: false, position: 2, restriction: null, available_from: null, available_until: null };
+const FIELDS = { enabled: false, suggestion_only: false, position: 2, restriction: null, available_from: null, available_until: null };
 
 describe("cliente do catálogo de triagens", () => {
   it("lista desembrulha { offers }, manda o cookie e mantém o null dos contadores", async () => {

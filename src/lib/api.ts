@@ -1044,12 +1044,15 @@ export interface TriageOffer {
   enabled: boolean | null;
   position: number | null;
   restriction: ConditionTree | null;
+  // Só chega pela sugestão: fora de "Disponíveis" no wpda. Ausente em api anterior.
+  suggestion_only?: boolean | null;
   available_from: string | null;
   available_until: string | null;
   counters: TriageOfferCounters;
 }
 export interface TriageOfferFields {
   enabled: boolean;
+  suggestion_only: boolean;
   position: number;
   restriction: ConditionTree | null;
   available_from: string | null;
