@@ -1,6 +1,8 @@
 // Dados comuns aos testes do módulo 17. Relógio dos testes: segunda,
 // 2026-10-05 10:00 em São Paulo (-03:00).
-import type { AppointmentType, AppointmentView, AvailabilitySlot, RequestRow, ScheduleTemplate } from "../lib/api";
+import type {
+  AgendaShift, AppointmentType, AppointmentView, AvailabilitySlot, RequestRow, ScheduleTemplate, UnitAgenda
+} from "../lib/api";
 
 export const NOW = "2026-10-05T10:00:00-03:00";
 
@@ -43,5 +45,24 @@ export function requestRow(over: Partial<RequestRow> = {}): RequestRow {
     appointment_type_key: "consulta_medica", appointment_type_name: "Consulta médica", priority: "routine",
     triage_priority: 2, due_on: "2026-10-20", overdue: false, reschedule_requested: false, reschedule_reason_code: null,
     preferred_period: null, reschedule_count: 0, needs_reschedule: false, appointment: null, ...over
+  };
+}
+
+export function agendaShift(over: Partial<AgendaShift> = {}): AgendaShift {
+  return { shift_id: "s1", starts_at: "2026-10-06T07:00:00-03:00", ends_at: "2026-10-06T12:00:00-03:00",
+    blocks: MORNING.blocks, fit_in_count: 1, fit_in_limit: 2, cancelled_at: null, ...over };
+}
+
+// Agenda da unidade em 06/10: Helena com turno da manhã (1 de 2 encaixes) e
+// Marta com o turno cancelado.
+export function unitAgenda(over: Partial<UnitAgenda> = {}): UnitAgenda {
+  return {
+    date: "2026-10-06",
+    professionals: [
+      { id: "p1", name: "Helena Duarte", shifts: [ agendaShift() ], appointments: [ appointmentView() ] },
+      { id: "p2", name: "Marta Lima", shifts: [ agendaShift({ shift_id: "s2", cancelled_at: "2026-10-05T08:00:00-03:00" }) ], appointments: [] }
+    ],
+    unassigned: [],
+    ...over
   };
 }

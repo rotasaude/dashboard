@@ -6,6 +6,7 @@
 // pessoa escolher de novo: a tela nunca marca outra vaga sozinha.
 // Pedido já marcado que precisa remarcar (`appointment` não nulo) só remarca
 // numa vaga: o api recusa a marcação livre com request_not_open.
+// Encaixe (FitInPanel) só em dia com turno na unidade (não em dia de marcação livre).
 import { useState, type CSSProperties } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -16,6 +17,7 @@ import { attendanceError } from "../../lib/attendance";
 import { cityIsoDate, fmtHourMinute, parseCityLocal } from "../../lib/format";
 import { AVAILABILITY_DAYS, addDaysIso, confirmationWarning, dayLabel, daysBetween, fmtDueOn, slotsByDay } from "../../lib/scheduling";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
+import { FitInPanel } from "./FitInPanel";
 
 interface Props { row: RequestRow; unit: HealthUnit; onCancel(): void; onDone(): void }
 
@@ -46,6 +48,7 @@ export function BookPanel({ row, unit, onCancel, onDone }: Props) {
   const [ busy, setBusy ] = useState(false);
   const [ error, setError ] = useState<string | null>(null);
   const [ notice, setNotice ] = useState<string | null>(null);
+  const [ fitIn, setFitIn ] = useState(false);
 
   // P5: pedido `scheduled` (needs_reschedule) não aceita marcação livre.
   const legacyAllowed = row.appointment === null;
@@ -116,6 +119,10 @@ export function BookPanel({ row, unit, onCancel, onDone }: Props) {
 
   const ready = !!picked || !!legacyAt;
 
+  if (fitIn && day) {
+    return <FitInPanel row={row} unit={unit} date={day} onBack={() => setFitIn(false)} onDone={onDone} />;
+  }
+
   return (
     <section aria-label="Marcar horário" style={panel}>
       <strong>{`Marcar horário — ${row.appointment_type_name} · prazo ${fmtDueOn(row.due_on)}`}</strong>
@@ -165,6 +172,9 @@ export function BookPanel({ row, unit, onCancel, onDone }: Props) {
               ))}
             </div>
           )}
+          <div>
+            <button type="button" style={secondaryButtonStyle} onClick={() => setFitIn(true)}>Encaixe</button>
+          </div>
         </>
       )}
 

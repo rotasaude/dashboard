@@ -11,7 +11,7 @@ vi.mock("../../lib/api", async (importOriginal) => {
 import * as api from "../../lib/api";
 import { ApiError } from "../../lib/api";
 import { BookPanel } from "./BookPanel";
-import { NOW, appointmentView, requestRow, slot } from "../../test/schedulingFixtures";
+import { NOW, appointmentView, requestRow, slot, unitAgenda } from "../../test/schedulingFixtures";
 
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
@@ -244,5 +244,18 @@ describe("BookPanel", () => {
     expect(await screen.findByText("o cidadão já tem outro horário nesse período")).not.toBeNull();
     await pickDay("2026-10-08");
     expect(screen.queryByText("o cidadão já tem outro horário nesse período")).toBeNull();
+  });
+
+  it("Encaixe aparece em dia com turno, não em dia de marcação livre, e abre o painel do dia", async () => {
+    mocked(api.getUnitAgenda).mockResolvedValue(unitAgenda());
+    renderIt();
+    await pickDay("2026-10-07");
+    expect(screen.queryByRole("button", { name: "Encaixe" })).toBeNull();
+    await pickDay("2026-10-06");
+    fireEvent.click(screen.getByRole("button", { name: "Encaixe" }));
+    expect(await screen.findByLabelText("Justificativa do encaixe")).not.toBeNull();
+    expect(api.getUnitAgenda).toHaveBeenCalledWith("u1", "2026-10-06");
+    fireEvent.click(screen.getByRole("button", { name: "Voltar às vagas" }));
+    expect(screen.getByLabelText("Dia")).not.toBeNull();
   });
 });
