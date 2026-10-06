@@ -82,3 +82,27 @@ describe("splitReferenceUnits", () => {
     expect(otherUnits.map((u) => u.id)).toEqual([ "u1", "u3" ]);
   });
 });
+
+describe("recusas do módulo 17 no balcão", () => {
+  const msg = (error: string) => attendanceError(new ApiError(422, { error }, "x"));
+
+  it("marcação, encaixe e atribuição", () => {
+    expect(msg("slot_unavailable")).toBe("essa vaga não está mais disponível — as vagas foram recarregadas");
+    expect(msg("citizen_busy")).toBe("o cidadão já tem outro horário nesse período");
+    expect(msg("fit_in_limit")).toBe("o turno já chegou ao limite de encaixes");
+    expect(msg("use_slots")).toBe("a unidade tem turno neste dia — marque numa vaga ou faça um encaixe");
+    expect(msg("invalid_reason")).toBe("a justificativa do encaixe precisa de pelo menos 10 caracteres");
+    expect(msg("type_not_served")).toBe("este profissional não atende este tipo de atendimento");
+    expect(msg("outside_shift")).toBe("o encaixe precisa começar e terminar dentro do turno");
+    expect(msg("already_assigned")).toBe("este pedido já foi atribuído a uma unidade");
+  });
+
+  it("período inválido e tipo inválido com texto que serve à unidade e à marcação", () => {
+    expect(msg("invalid_range")).toBe("período inválido — confira as datas");
+    expect(msg("invalid_kind")).toBe("tipo inválido — escolha uma das opções");
+  });
+
+  it("o CADSUS do módulo 16 continua traduzido", () => {
+    expect(msg("cadsus_lookup_missing")).toBe("a consulta ao CADSUS venceu — consulte de novo ou desmarque a gravação do CNS");
+  });
+});

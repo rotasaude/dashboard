@@ -78,7 +78,8 @@ const MESSAGES: Record<string, string> = {
   referral_required: "informe a unidade de destino ou a descrição do encaminhamento",
   already_closed: "este atendimento já foi encerrado",
   unit_name_taken: "já existe uma unidade com este nome",
-  invalid_kind: "tipo de unidade inválido",
+  // Vem da criação de unidade e do kind da marcação (módulo 17): texto neutro.
+  invalid_kind: "tipo inválido — escolha uma das opções",
   invalid_outcome: "desfecho inválido",
   unit_has_open_attendances: "há atendimentos abertos nesta unidade — encerre-os antes de desativar",
   already_called: "este atendimento já foi chamado por outro profissional",
@@ -106,7 +107,19 @@ const MESSAGES: Record<string, string> = {
   // Módulo 16 (contratos §5.4): o CADSUS nunca trava o balcão.
   cadsus_unavailable: "CADSUS indisponível agora — siga pela conferência do documento",
   feature_disabled: "a consulta ao CADSUS foi desligada para a cidade — siga pela conferência do documento",
-  cadsus_lookup_missing: "a consulta ao CADSUS venceu — consulte de novo ou desmarque a gravação do CNS"
+  cadsus_lookup_missing: "a consulta ao CADSUS venceu — consulte de novo ou desmarque a gravação do CNS",
+  // Módulo 17 (contratos §4.3 e §4.1). `slot_taken` fica fora: cada painel
+  // trata o 409 antes de chamar attendanceError.
+  slot_unavailable: "essa vaga não está mais disponível — as vagas foram recarregadas",
+  citizen_busy: "o cidadão já tem outro horário nesse período",
+  fit_in_limit: "o turno já chegou ao limite de encaixes",
+  use_slots: "a unidade tem turno neste dia — marque numa vaga ou faça um encaixe",
+  invalid_reason: "a justificativa do encaixe precisa de pelo menos 10 caracteres",
+  type_not_served: "este profissional não atende este tipo de atendimento",
+  outside_shift: "o encaixe precisa começar e terminar dentro do turno",
+  already_assigned: "este pedido já foi atribuído a uma unidade",
+  // Vagas da recepção e Minha agenda (appointment_requests_controller, professional_agenda_controller).
+  invalid_range: "período inválido — confira as datas"
 };
 
 export function attendanceError(err: unknown): string {

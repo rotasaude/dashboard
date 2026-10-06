@@ -7,6 +7,7 @@ import {
 } from "../../lib/api";
 import { professionalError, professionalErrorOrNull, shiftWindow } from "../../lib/professionals";
 import { cityIsoDate, fmtDateTime } from "../../lib/format";
+import { addDaysIso as addDays, ddmm } from "../../lib/scheduling";
 import { PageHeader } from "../../components/PageHeader";
 import { Panel } from "../../components/Panel";
 import { DataTable } from "../../components/DataTable";
@@ -21,8 +22,6 @@ interface Props { professionalId: string; onBack(): void }
 
 const WINDOW_DAYS = 14;
 const dayIso = (d: Date) => cityIsoDate(d);
-const addDays = (iso: string, n: number) => { const d = new Date(`${iso}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
-const ddmm = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
 
 export function ProfessionalDetail({ professionalId, onBack }: Props) {
   const queryClient = useQueryClient();

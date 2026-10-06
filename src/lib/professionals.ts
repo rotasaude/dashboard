@@ -2,6 +2,7 @@
 // (Professionals::Cns), janela do turno e mensagens das recusas.
 import { ApiError } from "./api";
 import { cityDateFormat, cityLocalIso, fmtHourMinute } from "./format";
+import { addDaysIso, BLOCK_DETAIL_MESSAGE, type BlockProblem } from "./scheduling";
 
 export const COUNCILS = [ "CRM", "COREN", "CRO", "CRF", "CRP", "CREFITO", "CRN", "CRFa", "CRESS", "CRBM", "CREF", "CRMV" ];
 export const UFS = [ "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG", "PA", "PB", "PR", "PE",
@@ -21,12 +22,6 @@ export function maskCns(cns: string): string {
   return `*** **** **** ${digits(cns).slice(-4)}`;
 }
 
-function nextDate(date: string): string {
-  const d = new Date(`${date}T12:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + 1);
-  return d.toISOString().slice(0, 10);
-}
-
 // Data + horas da tela → instantes da API. Fim ≤ início = dia seguinte (D6);
 // 24h exatas (07:00–07:00) são o máximo, então `tooLong` nunca vem daqui —
 // fica para a API recusar o que a tela não consegue expressar.
@@ -34,7 +29,7 @@ export function shiftWindow(date: string, start: string, end: string):
   { startsAt: string; endsAt: string; nextDay: boolean; tooLong: boolean } | null {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^\d{2}:\d{2}$/.test(start) || !/^\d{2}:\d{2}$/.test(end)) return null;
   const nextDay = end <= start;
-  const endDate = nextDay ? nextDate(date) : date;
+  const endDate = nextDay ? addDaysIso(date, 1) : date;
   // Hora de parede da cidade (api#27): o deslocamento vem do fuso da sessão.
   const startsAt = cityLocalIso(`${date}T${start}`);
   const endsAt = cityLocalIso(`${endDate}T${end}`);
@@ -66,7 +61,19 @@ const MESSAGES: Record<string, string> = {
   reason_too_long: "motivo com mais de 200 caracteres",
   already_cancelled: "este turno já foi cancelado",
   invalid_range: "intervalo de datas inválido",
-  forbidden: "seu papel não permite esta ação"
+  forbidden: "seu papel não permite esta ação",
+  // Módulo 17: tipos de atendimento e modelos (save_appointment_type.rb, save_template.rb).
+  invalid_key: "chave inválida: minúsculas, números e _, começando por letra",
+  key_taken: "já existe um tipo com esta chave",
+  invalid_duration: "duração entre 5 e 240 minutos",
+  invalid_cbo_prefixes: "grupos de CBO inválidos — de 1 a 20, só números (até 6 dígitos cada)",
+  platform_type_locked: "tipo da plataforma: a chave e os grupos de CBO não mudam",
+  invalid_fit_in_limit: "limite de encaixes entre 0 e 20",
+  invalid_name: "nome obrigatório, com até 60 caracteres",
+  // Modelo do turno e tipo padrão do vínculo (set_shift_template.rb, set_link_default_type.rb).
+  invalid_template: "modelo de agenda inexistente ou desativado — escolha outro",
+  inactive_type: "tipo de atendimento desativado — escolha um tipo ativo",
+  type_not_served: "a ocupação do vínculo não atende este tipo de atendimento"
 };
 const GENERIC = "não foi possível concluir — tente de novo";
 
@@ -75,7 +82,7 @@ function fmtDayMonth(iso: string): string {
 }
 
 type ProfessionalErrorBody = {
-  error?: string; fields?: string[]; conflict?: { unit_name?: string; starts_at: string; ends_at: string };
+  error?: string; fields?: string[]; detail?: string; conflict?: { unit_name?: string; starts_at: string; ends_at: string };
 };
 
 // Núcleo comum a professionalError e professionalErrorOrNull — a única
@@ -95,6 +102,10 @@ function translateProfessionalErrorBody(body: ProfessionalErrorBody): string | n
     return "conflita com outro turno do profissional";
   }
   if (body.error === "not_found") return "registro não encontrado — recarregue a página";
+  if (body.error === "invalid_blocks") {
+    const detail = body.detail as BlockProblem | undefined;
+    return (detail && BLOCK_DETAIL_MESSAGE[detail]) || "faixas inválidas — confira o modelo";
+  }
   return (body.error && MESSAGES[body.error]) || null;
 }
 

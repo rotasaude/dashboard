@@ -96,3 +96,33 @@ describe("shiftWindow no fuso da cidade (api#27)", () => {
     });
   });
 });
+
+describe("recusas do módulo 17", () => {
+  it("invalid_blocks traduz o detail; sem detail, frase genérica", () => {
+    expect(professionalError(new ApiError(422, { error: "invalid_blocks", detail: "overlap" }, "x")))
+      .toBe("faixas sobrepostas — ajuste os horários");
+    expect(professionalError(new ApiError(422, { error: "invalid_blocks" }, "x"))).toBe("faixas inválidas — confira o modelo");
+    expect(professionalError(new ApiError(422, { error: "invalid_blocks", detail: "inactive_type" }, "x")))
+      .toBe("faixa com tipo de atendimento desativado — escolha um tipo ativo");
+    expect(professionalError(new ApiError(422, { error: "invalid_blocks", detail: "bad_block" }, "x")))
+      .toBe("faixa inválida ou mais de 24 faixas — confira o modelo");
+    expect(professionalError(new ApiError(422, { error: "invalid_blocks", detail: "nao_existe" }, "x")))
+      .toBe("faixas inválidas — confira o modelo");
+    expect(professionalError(new ApiError(422, { error: "platform_type_locked" }, "x")))
+      .toBe("tipo da plataforma: a chave e os grupos de CBO não mudam");
+  });
+
+  it("tipos, modelos, modelo do turno e tipo padrão do vínculo", () => {
+    const msg = (error: string) => professionalError(new ApiError(422, { error }, "x"));
+    expect(msg("invalid_name")).toBe("nome obrigatório, com até 60 caracteres");
+    expect(msg("invalid_key")).toBe("chave inválida: minúsculas, números e _, começando por letra");
+    expect(msg("key_taken")).toBe("já existe um tipo com esta chave");
+    expect(msg("invalid_duration")).toBe("duração entre 5 e 240 minutos");
+    expect(msg("invalid_fit_in_limit")).toBe("limite de encaixes entre 0 e 20");
+    expect(msg("invalid_template")).toBe("modelo de agenda inexistente ou desativado — escolha outro");
+    expect(msg("inactive_type")).toBe("tipo de atendimento desativado — escolha um tipo ativo");
+    expect(msg("type_not_served")).toBe("a ocupação do vínculo não atende este tipo de atendimento");
+    expect(msg("already_cancelled")).toBe("este turno já foi cancelado");
+    expect(msg("already_ended")).toBe("este vínculo já foi encerrado");
+  });
+});
