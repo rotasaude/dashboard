@@ -54,6 +54,15 @@ describe("CadsusCheck (contratos §5.4)", () => {
     expect((screen.getByLabelText("Gravar o CNS do CADSUS no cadastro") as HTMLInputElement).checked).toBe(false);
   });
 
+  it("encontrado sem CNS: mostra as conferências e não oferece gravar", async () => {
+    m(api.cadsusLookup).mockResolvedValue({ found: true, cns_masked: null, birth_date_matches: true, sex_matches: null });
+    renderCheck();
+    fireEvent.click(screen.getByRole("button", { name: "Consultar CADSUS" }));
+    expect(await screen.findByText("Data de nascimento: confere")).not.toBeNull();
+    expect(screen.getByText("Sexo: sem dado para comparar")).not.toBeNull();
+    expect(screen.queryByLabelText("Gravar o CNS do CADSUS no cadastro")).toBeNull();
+  });
+
   it("não encontrado: sem CNS e sem caixa", async () => {
     m(api.cadsusLookup).mockResolvedValue({ found: false, cns_masked: null, birth_date_matches: null, sex_matches: null });
     renderCheck();

@@ -56,10 +56,12 @@ export function CadsusCheck({ cpf, code, confirmed, onConfirmedChange }: {
           {diverges && (
             <p role="status" style={warnStyle}>Há divergência com o que o cidadão declarou. Confira no documento antes de decidir.</p>
           )}
+          {result.cns_masked && (
           <label style={checkLabel}>
             <input type="checkbox" checked={confirmed} onChange={(e) => onConfirmedChange(e.target.checked)} />
             Gravar o CNS do CADSUS no cadastro
           </label>
+          )}
         </>
       )}
     </section>
