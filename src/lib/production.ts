@@ -48,7 +48,7 @@ export function alertBanner(alert: string): { tone: "warn" | "down"; text: strin
       text: "Nenhuma ficha aceita nesta competência, e o prazo está perto. Sem envio, o repasse da cidade fica em risco." };
   }
   if (alert === "attention") {
-    return { tone: "warn", text: "Há fichas pendentes ou recusadas, e o prazo está perto. Confira as recusas abaixo." };
+    return { tone: "warn", text: "Há fichas pendentes, recusadas ou com falha, e o prazo está perto. Confira a situação abaixo." };
   }
   return null;
 }

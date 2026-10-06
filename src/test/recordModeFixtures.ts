@@ -56,7 +56,8 @@ export function ficha(overrides: Partial<LediFicha> = {}): LediFicha {
   };
 }
 
-// 16/11/2026 é o 10º dia útil de novembro (02/11 Finados; 20/11 é depois).
+// 16/11/2026 é um prazo de exemplo, como a API o envia (tabela oficial do SIAPS;
+// dia útil só como reserva).
 export function productionFixture(overrides: Partial<Production> = {}): Production {
   return {
     competence: "202610", deadline_on: "2026-11-16", business_days_left: 7, alert: "attention",

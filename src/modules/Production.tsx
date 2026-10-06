@@ -51,7 +51,7 @@ export function Production({ onGoToSecurity }: { onGoToSecurity?(): void }) {
   useEffect(() => {
     if (disabledByServer && !reloaded.current) {
       reloaded.current = true;
-      void reload();
+      reload().catch(() => {});
     }
   }, [ disabledByServer, reload ]);
 
@@ -119,6 +119,7 @@ export function Production({ onGoToSecurity }: { onGoToSecurity?(): void }) {
           translateError={(err) => {
             const code = productionErrorCode(err);
             if (code === "invalid_competence") return productionError(err);
+            if (featureDisabledKey(err) !== null) { refresh(); return productionError(err); }
             if (code !== "not_rejected") return null;
             refresh();
             return RESEND_STALE;

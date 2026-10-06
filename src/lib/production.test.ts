@@ -16,7 +16,7 @@ describe("Produção — prazo e alertas (spec §6.5)", () => {
 
   it("alerta: atenção, crítico e nenhum", () => {
     expect(alertBanner("attention")).toEqual({ tone: "warn",
-      text: "Há fichas pendentes ou recusadas, e o prazo está perto. Confira as recusas abaixo." });
+      text: "Há fichas pendentes, recusadas ou com falha, e o prazo está perto. Confira a situação abaixo." });
     expect(alertBanner("critical")).toEqual({ tone: "down",
       text: "Nenhuma ficha aceita nesta competência, e o prazo está perto. Sem envio, o repasse da cidade fica em risco." });
     expect(alertBanner("none")).toBeNull();

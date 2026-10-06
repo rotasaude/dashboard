@@ -33,7 +33,7 @@ describe("Produção e-SUS (módulo 16)", () => {
     m(api.fetchCurrentSession).mockResolvedValue(withLedi([ "analyst" ]));
     renderWithProviders(<Production />);
     expect(await screen.findByText("prazo em 16/11/2026 · faltam 7 dias úteis")).not.toBeNull();
-    expect(screen.getByText("Há fichas pendentes ou recusadas, e o prazo está perto. Confira as recusas abaixo.")).not.toBeNull();
+    expect(screen.getByText("Há fichas pendentes, recusadas ou com falha, e o prazo está perto. Confira a situação abaixo.")).not.toBeNull();
     expect(screen.getAllByText("CNS do profissional inválido").length).toBe(2);
     expect(screen.getByText("recusada")).not.toBeNull();
     expect(screen.queryByRole("button", { name: /Reenviar ficha/ })).toBeNull();
@@ -97,6 +97,15 @@ describe("Produção e-SUS (módulo 16)", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Reenviar ficha f2" }));
     fireEvent.click(await screen.findByRole("button", { name: "Reenviar" }));
     expect(await screen.findByText("esta ficha não está mais recusada — a lista foi atualizada")).not.toBeNull();
+    await waitFor(() => expect(api.getProduction).toHaveBeenCalledTimes(2));
+  });
+
+  it("403 feature_disabled no reenvio: frase de desligada e a lista é relida", async () => {
+    m(api.resendFicha).mockRejectedValue(new ApiError(403, { error: "feature_disabled", feature: "ledi_export" }, "403"));
+    renderWithProviders(<Production />);
+    fireEvent.click(await screen.findByRole("button", { name: "Reenviar ficha f2" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Reenviar" }));
+    expect(await screen.findByText("esta funcionalidade está desligada para a cidade")).not.toBeNull();
     await waitFor(() => expect(api.getProduction).toHaveBeenCalledTimes(2));
   });
 
