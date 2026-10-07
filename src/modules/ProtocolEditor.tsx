@@ -8,6 +8,9 @@ import { OfferPanel } from "./protocolEditor/OfferPanel";
 import { OfferSimulator } from "./protocolEditor/OfferSimulator";
 import { QuestionPreview } from "./protocolEditor/QuestionPreview";
 import { SchedulingPanel } from "./protocolEditor/SchedulingPanel";
+import { RiskRulesPanel } from "./protocolEditor/RiskRulesPanel";
+import { ScreeningSimulator } from "./protocolEditor/ScreeningSimulator";
+import { SCREENING_TEMPLATE, isScreeningDefinition } from "../lib/riskRules";
 
 export function ProtocolEditor() {
   const [ text, setText ] = useState<string>(TEMPLATE);
@@ -42,6 +45,7 @@ export function ProtocolEditor() {
     setLoadErr(null);
     setOfferKey(k => k + 1); // remonta o painel: condições meio digitadas não sobrevivem à troca
     if (value === "__new__") { setText(TEMPLATE); return; }
+    if (value === "__new_screening__") { setText(SCREENING_TEMPLATE); return; }
     const [ name, version ] = value.split("@@");
     loadProtocolDefinition(name, version).then(def => {
       if (def) setText(JSON.stringify(def, null, 2));
@@ -82,6 +86,8 @@ export function ProtocolEditor() {
   }
 
   const current = parseDefinition(text);
+  // Módulo 18: `kind: "screening"` troca a coluna da direita pelas regras de cor e o simulador do acolhimento.
+  const screeningKind = current.ok && isScreeningDefinition(current.value);
   // Nomes de protocolo da cidade para a sugestão (um nome por protocolo, sem a versão).
   const protocolNames = [ ...new Set(opts.map((o) => o.name)) ].sort();
 
@@ -95,6 +101,7 @@ export function ProtocolEditor() {
           style={{ display: "block", marginBottom: 8, fontSize: 13 }}
         >
           <option value="__new__">Nova (template)</option>
+          <option value="__new_screening__">Novo acolhimento (modelo)</option>
           {opts.map(o => (
             <option key={`${o.name}@@${o.version}`} value={`${o.name}@@${o.version}`}>
               {o.name}@{o.version} ({o.status})
@@ -142,6 +149,17 @@ export function ProtocolEditor() {
         )}
       </section>
 
+      {screeningKind ? (
+        <section>
+          <h2 style={{ fontSize: 16, margin: "0 0 8px" }}>Regras de cor (acolhimento)</h2>
+          <RiskRulesPanel
+            key={offerKey}
+            definition={current.ok ? current.value : null}
+            onChange={(next) => setText(JSON.stringify(next, null, 2))}
+          />
+          <ScreeningSimulator definition={current.ok ? current.value : null} valid={valid} />
+        </section>
+      ) : (
       <section>
         <h2 style={{ fontSize: 16, margin: "0 0 8px" }}>Oferta e sugestões</h2>
         <OfferPanel
@@ -175,6 +193,7 @@ export function ProtocolEditor() {
         <QuestionPreview definition={current.ok ? current.value : null} />
         <OfferSimulator definition={current.ok ? current.value : null} valid={valid} answers={answers} />
       </section>
+      )}
     </div>
   );
 }

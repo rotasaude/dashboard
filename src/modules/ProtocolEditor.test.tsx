@@ -28,6 +28,36 @@ const definitionBox = () => screen.getAllByRole("textbox")[0] as HTMLTextAreaEle
 const typeDefinition = (value: unknown) =>
   fireEvent.change(definitionBox(), { target: { value: JSON.stringify(value, null, 2) } });
 
+describe("ProtocolEditor — acolhimento (módulo 18)", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    mocked(api.listAuthorProtocols).mockResolvedValue([]);
+    mocked(api.gateProtocol).mockResolvedValue({ valid: true });
+    mocked(api.listAppointmentTypes).mockResolvedValue([]);
+  });
+
+  it("o modelo de acolhimento troca a coluna pelas regras de cor e o simulador", async () => {
+    render(<ProtocolEditor />);
+    expect(screen.getByText("Oferta e sugestões")).not.toBeNull();
+    fireEvent.change(screen.getAllByRole("combobox")[0], { target: { value: "__new_screening__" } });
+    expect(JSON.parse(definitionBox().value).kind).toBe("screening");
+    expect(screen.getByRole("region", { name: "Regras de cor" })).not.toBeNull();
+    expect(screen.getByRole("region", { name: "Simulador do acolhimento" })).not.toBeNull();
+    expect(screen.queryByText("Oferta e sugestões")).toBeNull();
+    expect(screen.queryByRole("region", { name: "Agendamento" })).toBeNull();
+    await waitFor(() => expect(api.gateProtocol).toHaveBeenCalled());
+  });
+
+  it("editar a cor no painel grava no JSON", () => {
+    render(<ProtocolEditor />);
+    typeDefinition({ name: "acolhimento", version: 2, kind: "screening",
+      risk_rules: [ { when: { gte: [ "vitals.systolic", 180 ] }, color: "red" } ] });
+    fireEvent.change(within(screen.getByRole("group", { name: "regra de cor 1" })).getByLabelText("Cor sugerida"),
+      { target: { value: "yellow" } });
+    expect(JSON.parse(definitionBox().value).risk_rules[0].color).toBe("yellow");
+  });
+});
+
 describe("ProtocolEditor — Usar em Analytics", () => {
   beforeEach(() => {
     vi.resetAllMocks();
