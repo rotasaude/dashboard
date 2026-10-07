@@ -45,6 +45,12 @@ describe("CriterionCard", () => {
     expect(onChange).toHaveBeenLastCalledWith({ kind: "attendance_outcome", outcomes: [ "referred" ], health_unit_id: "u1", ...P });
   });
 
+  it("desfecho: oferece os dois desfechos do acolhimento", () => {
+    renderCard({ kind: "attendance_outcome", outcomes: [], ...P });
+    expect(screen.getByRole("checkbox", { name: "agendado pelo acolhimento" })).toBeTruthy();
+    expect(screen.getByRole("checkbox", { name: "orientado no acolhimento" })).toBeTruthy();
+  });
+
   it("desfecho: voltar para 'qualquer unidade' limpa o campo", () => {
     const { onChange } = renderCard({ kind: "attendance_outcome", outcomes: [ "referred" ], health_unit_id: "u1", ...P });
     fireEvent.change(screen.getByLabelText("Unidade do atendimento (opcional)"), { target: { value: "" } });

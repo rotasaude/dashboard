@@ -203,6 +203,8 @@ describe("UnitQueue", () => {
       const outcome = screen.getByLabelText("Desfecho") as HTMLSelectElement;
       const options = Array.from(outcome.options).map((o) => o.textContent);
       expect(options).toEqual([ "Atendido e liberado", "Encaminhado", "Retorno" ]);
+      expect(options).not.toContain("Agendado pelo acolhimento");
+      expect(options).not.toContain("Orientado no acolhimento");
     });
 
     it("'Encaminhado' oferece as unidades ativas, incluindo a própria, e uma descrição", async () => {

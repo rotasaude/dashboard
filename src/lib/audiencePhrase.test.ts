@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Audience, Criterion } from "./api";
 import { describeAudience, fmtDay, joinPt } from "./audiencePhrase";
 import { OPTIONS } from "../test/campaignFixtures";
+import { OUTCOME_LABEL } from "./campaigns";
 
 const aud = (geo: Audience["geo"], all: Criterion[] = []): Audience => ({ version: 1, geo, clinical: { all } });
 const city = (c: Criterion) => describeAudience(aud({ scope: "city" }, [ c ]), OPTIONS);
@@ -73,5 +74,14 @@ describe("describeAudience", () => {
       "moradores de Xaxim que faltaram a um agendamento entre 01/07/2026 e 31/07/2026 " +
       "e também têm pedido de agendamento aberto"
     );
+  });
+});
+
+describe("desfechos do acolhimento", () => {
+  it("rótulos e frase do público", () => {
+    expect(OUTCOME_LABEL.scheduled_from_screening).toBe("agendado pelo acolhimento");
+    expect(OUTCOME_LABEL.oriented).toBe("orientado no acolhimento");
+    expect(city({ kind: "attendance_outcome", outcomes: [ "scheduled_from_screening", "oriented" ], from: "2026-07-01", to: "2026-09-29" }))
+      .toBe("cidadãos de toda a cidade que tiveram atendimento encerrado como agendado pelo acolhimento ou orientado no acolhimento entre 01/07/2026 e 29/09/2026");
   });
 });

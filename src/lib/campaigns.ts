@@ -62,7 +62,8 @@ export const CRITERION_LABEL: Record<CriterionKind, string> = {
 export const CRITERION_KINDS = Object.keys(CRITERION_LABEL) as CriterionKind[];
 
 export const OUTCOME_LABEL: Record<string, string> = {
-  discharged: "atendido e liberado", referred: "encaminhado", return: "retorno", left: "saiu sem atendimento"
+  discharged: "atendido e liberado", referred: "encaminhado", return: "retorno", left: "saiu sem atendimento",
+  scheduled_from_screening: "agendado pelo acolhimento", oriented: "orientado no acolhimento"
 };
 export const REQUEST_KIND_LABEL: Record<string, string> = { return: "retorno", referral: "encaminhamento" };
 

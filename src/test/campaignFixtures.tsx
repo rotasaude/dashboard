@@ -11,7 +11,7 @@ import type { Audience, Campaign, CampaignOptions, SessionUser } from "../lib/ap
 export const OPTIONS: CampaignOptions = {
   protocols: [ "Dor torácica", "Febre" ],
   tiers: [ "vermelha", "amarela" ],
-  outcomes: [ "discharged", "referred", "return", "left" ],
+  outcomes: [ "discharged", "referred", "return", "left", "scheduled_from_screening", "oriented" ],
   neighborhoods: [ { id: "n1", name: "Boqueirão" }, { id: "n2", name: "Xaxim" }, { id: "n3", name: "Centro" } ],
   units: [ { id: "u1", name: "UBS Centro" }, { id: "u2", name: "UPA Boqueirão" } ]
 };

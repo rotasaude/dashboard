@@ -46,7 +46,9 @@ type ScreeningPanel =
 const redRow = (r: QueueRow) =>
   r.screening?.color === "red" ? { background: "var(--down-bg)", boxShadow: "inset 3px 0 0 var(--down)" } : undefined;
 
-const OUTCOME_LABEL: Record<Exclude<AttendanceOutcome, "left">, string> = {
+// Só o acolhimento escreve "agendado/orientado pelo acolhimento"; "left" é a recepção.
+type CloseFormOutcome = Exclude<AttendanceOutcome, "left" | "scheduled_from_screening" | "oriented">;
+const OUTCOME_LABEL: Record<CloseFormOutcome, string> = {
   discharged: "Atendido e liberado",
   referred: "Encaminhado",
   return: "Retorno"
@@ -326,7 +328,7 @@ function ClosePanel(
   }
 ) {
   const auth = useAuth();
-  const [ outcome, setOutcome ] = useState<Exclude<AttendanceOutcome, "left">>("discharged");
+  const [ outcome, setOutcome ] = useState<CloseFormOutcome>("discharged");
   // Módulo 11 (D4): a primeira unidade de referência, por nome, já vem
   // escolhida; o profissional troca ou volta para "—". null = ainda não
   // mexeu, e aí vale a sugestão (que pode chegar depois, com `units`).
@@ -371,8 +373,8 @@ function ClosePanel(
 
       <label style={labelStyle}>
         Desfecho
-        <select value={outcome} onChange={(e) => setOutcome(e.target.value as Exclude<AttendanceOutcome, "left">)} style={inputStyle}>
-          {(Object.keys(OUTCOME_LABEL) as (Exclude<AttendanceOutcome, "left">)[]).map((o) => (
+        <select value={outcome} onChange={(e) => setOutcome(e.target.value as CloseFormOutcome)} style={inputStyle}>
+          {(Object.keys(OUTCOME_LABEL) as (CloseFormOutcome)[]).map((o) => (
             <option key={o} value={o}>{OUTCOME_LABEL[o]}</option>
           ))}
         </select>

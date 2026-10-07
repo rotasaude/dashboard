@@ -549,7 +549,10 @@ export interface QueueRow {
 
 export interface AppointmentRequestSummary { id: string; kind: string; target_unit_name: string; status: string }
 
-export type AttendanceOutcome = "discharged" | "referred" | "return" | "left";
+export type AttendanceOutcome = "discharged" | "referred" | "return" | "left" | "scheduled_from_screening" | "oriented";
+// Desfechos que o encerramento aceita (o api recusa os dois do acolhimento) e os que a analítica conta.
+export type CloseOutcome = Exclude<AttendanceOutcome, "scheduled_from_screening" | "oriented">;
+export type AnalyticsOutcome = CloseOutcome;
 
 export async function lookupCheckIn(
   cpf: string, code: string, healthUnitId: string
@@ -603,7 +606,7 @@ export async function callNext(unitId: string): Promise<CallResult> {
 }
 
 export async function closeAttendance(
-  id: string, outcome: AttendanceOutcome, referralUnitId?: string, referralNote?: string
+  id: string, outcome: CloseOutcome, referralUnitId?: string, referralNote?: string
 ): Promise<{ attendance: Attendance; appointmentRequest: AppointmentRequestSummary | null }> {
   const body: Record<string, unknown> = { outcome };
   if (referralUnitId) body.referral_unit_id = referralUnitId;
@@ -993,7 +996,7 @@ export interface QualityData extends AnalyticsBase {
   appointments: Array<SeriesRow & { status: AppointmentEndStatus }>;
   no_show_pct: Rate[];
   no_show_pct_total: Rate;
-  attendance_outcomes: Array<SeriesRow & { outcome: AttendanceOutcome }>;
+  attendance_outcomes: Array<SeriesRow & { outcome: AnalyticsOutcome }>;
   left_pct: Rate[];
   left_pct_total: Rate;
   by_unit: Array<{
@@ -1002,7 +1005,7 @@ export interface QualityData extends AnalyticsBase {
   }>;
 }
 
-export type CalibrationOutcome = AttendanceOutcome | "none";
+export type CalibrationOutcome = AnalyticsOutcome | "none";
 export interface CalibrationRow {
   tier: string;
   total: Cell;
