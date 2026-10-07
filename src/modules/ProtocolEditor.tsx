@@ -153,7 +153,7 @@ export function ProtocolEditor() {
         <section>
           <h2 style={{ fontSize: 16, margin: "0 0 8px" }}>Regras de cor (acolhimento)</h2>
           <RiskRulesPanel
-            key={offerKey}
+            key={`risk-${offerKey}`}
             definition={current.ok ? current.value : null}
             onChange={(next) => setText(JSON.stringify(next, null, 2))}
           />
@@ -163,14 +163,14 @@ export function ProtocolEditor() {
       <section>
         <h2 style={{ fontSize: 16, margin: "0 0 8px" }}>Oferta e sugestões</h2>
         <OfferPanel
-          key={offerKey}
+          key={`offer-${offerKey}`}
           definition={current.ok ? current.value : null}
           protocolNames={protocolNames}
           onChange={(next) => setText(JSON.stringify(next, null, 2))}
         />
         <h2 style={{ fontSize: 16, margin: "16px 0 8px" }}>Agendamento</h2>
         <SchedulingPanel
-          key={offerKey}
+          key={`sched-${offerKey}`}
           definition={current.ok ? current.value : null}
           types={types}
           onChange={(next) => setText(JSON.stringify(next, null, 2))}
