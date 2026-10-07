@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { createUnit, listAllUnits, listNeighborhoods, setUnitActive, updateUnit, type HealthUnitRow } from "../../lib/api";
+import {
+  createUnit, listAllUnits, listNeighborhoods, setUnitActive, updateUnit, type HealthUnitRow, type ScreeningScope
+} from "../../lib/api";
 import { UNIT_KINDS, attendanceError } from "../../lib/attendance";
 import { NEIGHBORHOODS_KEY } from "../../lib/territory";
 import { EMPTY_ADDRESS_FIELDS, addressFieldsFrom, addressPayload, formatAddress } from "../../lib/unitAddress";
@@ -18,6 +20,8 @@ import { DrainUnitPanel } from "./DrainUnitPanel";
 // destino de encaminhamento em UnitQueue): invalida a query `activeUnits`
 // para essas telas recarregarem (card dashboard#4, item 1 — Task 7).
 const KIND_LABEL: Record<string, string> = Object.fromEntries(UNIT_KINDS.map((k) => [ k.value, k.label ]));
+// Módulo 18 (contratos §5): quem passa pela escuta inicial nesta unidade.
+const SCOPE_SHORT: Record<ScreeningScope, string> = { walk_in: "sem horário", all: "todos" };
 
 interface Editing { id: string | null; initial: UnitFormValue }
 
@@ -61,7 +65,7 @@ export function Units() {
     try {
       const address = addressPayload(value);
       if (editing.id) {
-        await updateUnit(editing.id, value.name, value.kind, address);
+        await updateUnit(editing.id, value.name, value.kind, address, value.screeningScope);
       } else {
         await createUnit(value.name, value.kind, address);
         void queryClient.invalidateQueries({ queryKey: [ "activeUnits" ] });
@@ -127,12 +131,15 @@ export function Units() {
               { label: "Tipo", w: "1fr", render: (r) => KIND_LABEL[r.kind] ?? r.kind },
               { label: "Endereço", w: "3fr", render: (r) =>
                 formatAddress(r, r.neighborhood_id ? nameOf.get(r.neighborhood_id) : null) },
+              { label: "Acolhimento", w: "1.2fr", render: (r) => SCOPE_SHORT[r.screening_scope ?? "walk_in"] },
               { label: "Situação", w: "1fr", render: (r) => <Tag tone={r.active ? "ok" : undefined}>{r.active ? "ativa" : "inativa"}</Tag> },
               {
                 label: "", w: "auto", align: "right", render: (r) => (
                   <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
                     <button type="button" style={secondaryButtonStyle}
-                      onClick={() => setEditing({ id: r.id, initial: { name: r.name, kind: r.kind, ...addressFieldsFrom(r) } })}>
+                      onClick={() => setEditing({ id: r.id, initial: {
+                        name: r.name, kind: r.kind, ...addressFieldsFrom(r), screeningScope: r.screening_scope ?? "walk_in"
+                      } })}>
                       Editar
                     </button>
                     {r.active && ((r.live_requests_count ?? 0) + (r.live_appointments_count ?? 0)) > 0 && (

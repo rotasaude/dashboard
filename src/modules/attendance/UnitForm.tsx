@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
-import type { Neighborhood } from "../../lib/api";
+import type { Neighborhood, ScreeningScope } from "../../lib/api";
+import { SCOPE_LABEL } from "../../lib/screening";
 import { UNIT_KINDS, onlyDigits } from "../../lib/attendance";
 import { matchNeighborhood, sortByName } from "../../lib/territory";
 import { maskCep, zipError, type AddressFields } from "../../lib/unitAddress";
@@ -11,7 +12,8 @@ import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } fr
 // vem preenchido, e o bairro do CEP é só sugestão. Ele pré-seleciona um
 // bairro ATIVO de mesmo nome apenas se o admin ainda não escolheu nenhum.
 // Qualquer falha deixa os campos livres.
-export interface UnitFormValue extends AddressFields { name: string; kind: string }
+// `screeningScope` (módulo 18) só existe na edição: a unidade nova nasce `walk_in` no api.
+export interface UnitFormValue extends AddressFields { name: string; kind: string; screeningScope?: ScreeningScope }
 
 interface Props {
   initial: UnitFormValue;
@@ -115,6 +117,15 @@ export function UnitForm({ initial, neighborhoods, busy, cepTimeoutMs = VIACEP_T
           {options.map((n) => <option key={n.id} value={n.id}>{n.active ? n.name : `${n.name} (inativo)`}</option>)}
         </select>
       </label>
+      {value.screeningScope !== undefined && (
+        <label style={labelStyle}>
+          Acolhimento (escuta inicial)
+          <select value={value.screeningScope} style={inputStyle}
+            onChange={(e) => set({ screeningScope: e.target.value as ScreeningScope })}>
+            {(Object.keys(SCOPE_LABEL) as ScreeningScope[]).map((k) => <option key={k} value={k}>{SCOPE_LABEL[k]}</option>)}
+          </select>
+        </label>
+      )}
       <div style={{ display: "flex", gap: 8 }}>
         <button type="button" disabled={blocked} onClick={save} style={blocked ? disabledButtonStyle : buttonStyle}>Salvar</button>
         <button type="button" disabled={busy} onClick={onCancel} style={secondaryButtonStyle}>Cancelar</button>

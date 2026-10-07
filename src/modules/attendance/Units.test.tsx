@@ -66,8 +66,36 @@ describe("Units", () => {
     fireEvent.click(screen.getByRole("button", { name: "Salvar" }));
     await waitFor(() => expect(api.updateUnit).toHaveBeenCalledWith("u1", "UBS Centro Novo", "ubs", {
       address_street: "Rua A", address_number: "1", address_complement: null, address_zip: null, neighborhood_id: "n1"
-    }));
+    }, "walk_in"));
     expect(await screen.findByText("UBS Centro Novo")).not.toBeNull();
+  });
+
+  it("acolhimento (módulo 18): a lista mostra o escopo e a edição troca para todos", async () => {
+    mocked(api.listAllUnits).mockResolvedValue([ { ...rows[0], screening_scope: "walk_in" }, { ...rows[1], screening_scope: "all" } ]);
+    mocked(api.updateUnit).mockResolvedValue({ id: "u1", name: "UBS Centro", kind: "ubs", active: true, screening_scope: "all" });
+    renderUnits();
+    expect(await screen.findByText("sem horário")).not.toBeNull();
+    expect(screen.getByText("todos")).not.toBeNull();
+    fireEvent.click((await screen.findAllByRole("button", { name: "Editar" }))[0]);
+    const scope = screen.getByLabelText("Acolhimento (escuta inicial)") as HTMLSelectElement;
+    expect(scope.value).toBe("walk_in");
+    fireEvent.change(scope, { target: { value: "all" } });
+    fireEvent.click(screen.getByRole("button", { name: "Salvar" }));
+    await waitFor(() => expect(api.updateUnit).toHaveBeenCalledWith("u1", "UBS Centro", "ubs", expect.anything(), "all"));
+  });
+
+  it("unidade nova não mostra o escopo (nasce só demanda espontânea)", async () => {
+    renderUnits();
+    fireEvent.click(await screen.findByRole("button", { name: "Nova unidade" }));
+    expect(screen.queryByLabelText("Acolhimento (escuta inicial)")).toBeNull();
+  });
+
+  it("recusa invalid_screening_scope é traduzida", async () => {
+    mocked(api.updateUnit).mockRejectedValue(new ApiError(422, { error: "invalid_screening_scope" }, "x"));
+    renderUnits();
+    fireEvent.click((await screen.findAllByRole("button", { name: "Editar" }))[0]);
+    fireEvent.click(screen.getByRole("button", { name: "Salvar" }));
+    expect((await screen.findByRole("alert")).textContent).toBe("escolha uma das opções de acolhimento");
   });
 
   it("desativa uma unidade ativa", async () => {
