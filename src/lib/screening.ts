@@ -72,7 +72,8 @@ export function vitalsFormFrom(v: VitalSigns): VitalsForm {
 
 function decimalsOf(text: string): number {
   const dot = text.indexOf(".");
-  return dot < 0 ? 0 : text.length - dot - 1;
+  if (dot < 0) return 0;
+  return text.slice(dot + 1).replace(/0+$/, "").length;
 }
 
 // Valor válido entra em `vitals`; campo com problema fica de fora e ganha a frase.

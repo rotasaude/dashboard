@@ -15,7 +15,8 @@ describe("sinais vitais", () => {
 
   it.each([
     [ "systolic", "300", 300 ], [ "systolic", "50", 50 ], [ "spo2", "100", 100 ], [ "temperature_c", "37,8", 37.8 ],
-    [ "weight_kg", "0,5", 0.5 ], [ "weight_kg", "72,35", 72.35 ], [ "pain_score", "0", 0 ], [ "capillary_glucose", "800", 800 ]
+    [ "weight_kg", "0,5", 0.5 ], [ "weight_kg", "72,35", 72.35 ], [ "temperature_c", "37,80", 37.8 ],
+    [ "weight_kg", "72,350", 72.35 ], [ "heart_rate", "88,0", 88 ], [ "pain_score", "0", 0 ], [ "capillary_glucose", "800", 800 ]
   ] as const)("%s = %s nas bordas é aceito", (key, text, value) => {
     const extra = key === "systolic" ? { diastolic: "40" } : key === "capillary_glucose" ? { glucose_moment: "random" as const } : {};
     const out = parseVitals(form({ [key]: text, ...extra }));
