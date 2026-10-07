@@ -13,7 +13,8 @@ vi.mock("../lib/api", async (importOriginal) => {
     lookupCheckIn: vi.fn(), checkIn: vi.fn(), searchCheckIn: vi.fn(), checkInByException: vi.fn(),
     listUnitRequests: vi.fn(), bookAppointment: vi.fn(), getUnitAvailability: vi.fn(), dismissRequest: vi.fn(),
     getUnitAgenda: vi.fn(), listUnassignedRequests: vi.fn(),
-    getMyProfessional: vi.fn(), listPendingErasures: vi.fn(), cadsusLookup: vi.fn()
+    getMyProfessional: vi.fn(), listPendingErasures: vi.fn(), cadsusLookup: vi.fn(),
+    listScreeningQueue: vi.fn(), listAppointmentTypes: vi.fn()
   };
 });
 
@@ -59,7 +60,7 @@ describe("Attendance", () => {
       api.listUnitQueue, api.callAttendance, api.callNext, api.closeAttendance,
       api.lookupCheckIn, api.checkIn, api.searchCheckIn, api.checkInByException,
       api.listUnitRequests, api.bookAppointment, api.getUnitAvailability, api.dismissRequest, api.getUnitAgenda,
-      api.listUnassignedRequests, api.getMyProfessional
+      api.listUnassignedRequests, api.getMyProfessional, api.listScreeningQueue, api.listAppointmentTypes
     ]) {
       mocked(fn).mockReset();
     }
@@ -71,6 +72,8 @@ describe("Attendance", () => {
     mocked(api.getUnitAgenda).mockResolvedValue({ date: "2026-10-05", professionals: [], unassigned: [] });
     mocked(api.listUnassignedRequests).mockResolvedValue([]);
     mocked(api.getMyProfessional).mockResolvedValue(null);
+    mocked(api.listScreeningQueue).mockResolvedValue([]);
+    mocked(api.listAppointmentTypes).mockResolvedValue([]);
   });
 
   it("recepção vê 'Pedidos sem unidade' mesmo sem unidade escolhida", async () => {
@@ -254,6 +257,27 @@ describe("Attendance", () => {
     expect(screen.queryByLabelText("CPF do cidadão (validação)")).toBeNull();
     expect(screen.queryByText("Pedidos de agendamento")).toBeNull();
     expect(screen.queryByText("Agenda do dia")).toBeNull();
+  });
+
+  it("acolhimento (módulo 18): profissional com vínculo vê a fila da escuta; a recepção não", async () => {
+    const unit = { id: "un1", name: "UBS Centro", kind: "ubs" };
+    localStorage.setItem(currentUnitKey("u1"), unit.id);
+    mocked(api.listActiveUnits).mockResolvedValue([ unit ]);
+    renderAttendance();
+    expect(await screen.findByText("Pedidos de agendamento")).not.toBeNull();
+    expect(screen.queryByRole("region", { name: "Acolhimento" })).toBeNull();
+    expect(api.listScreeningQueue).not.toHaveBeenCalled();
+    cleanup();
+
+    mocked(api.fetchCurrentSession).mockResolvedValue(session("health_professional"));
+    mocked(api.getMyProfessional).mockResolvedValue({
+      professional: {} as api.Professional, shifts: [],
+      links: [ { id: "l1", health_unit_id: "un1", unit_name: "UBS Centro", cbo_code: "223505", cbo_title: null,
+        started_at: "x", started_by: "a", ended_at: null, ended_by: null } ]
+    });
+    renderAttendance();
+    expect(await screen.findByRole("region", { name: "Acolhimento" })).not.toBeNull();
+    await waitFor(() => expect(api.listScreeningQueue).toHaveBeenCalledWith("un1"));
   });
 
   it("profissional sem vínculo com a unidade escolhida: sem ações clínicas", async () => {

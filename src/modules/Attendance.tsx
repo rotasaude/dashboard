@@ -20,6 +20,7 @@ import { ProfileCheck, initialProfileCheck, profileCheckProblem, type ProfileChe
 import { UnitPicker } from "./attendance/UnitPicker";
 import { CheckIn } from "./attendance/CheckIn";
 import { UnitQueue } from "./attendance/UnitQueue";
+import { ScreeningQueue } from "./attendance/ScreeningQueue";
 import { Requests } from "./attendance/Requests";
 import { Agenda } from "./attendance/Agenda";
 import { UnassignedRequests } from "./attendance/UnassignedRequests";
@@ -98,6 +99,7 @@ export function Attendance({ onNavigate }: { onNavigate(id: ModuleId): void }) {
       <PageHeader title="Atendimento" sub="balcão · verificação presencial" />
       {(canVerify || canCareRole) && <UnitPicker key={pickerKey} userId={user.id} onChange={setUnit} />}
       {canVerify && unit && <CheckIn unit={unit} onUnitInvalid={onUnitInvalid} />}
+      {canCare && unit && <ScreeningQueue unit={unit} units={unitsQuery.data ?? []} />}
       {(canVerify || canCareRole) && unit && (
         <UnitQueue
           unit={unit}
