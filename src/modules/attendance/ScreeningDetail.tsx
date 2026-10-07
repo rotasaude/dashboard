@@ -3,6 +3,7 @@
 // só para o profissional. Abrir pelo GET gera a trilha de leitura no api
 // (`screening.viewed`); a recepção nunca chega aqui.
 import type { CSSProperties } from "react";
+import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getScreening, type Screening, type ScreeningRevision } from "../../lib/api";
 import {
@@ -12,10 +13,19 @@ import { fmtDateTime, fmtNumber } from "../../lib/format";
 import { Tag } from "../../components/Tag";
 import { secondaryButtonStyle } from "../../components/formStyles";
 
-export function ScreeningDetailLoader({ id, onClose }: { id: string; onClose(): void }) {
+export function ScreeningDetailLoader({ id, onClose, onError }: { id: string; onClose(): void; onError?(err: unknown): void }) {
   const query = useQuery({ queryKey: [ "screening", id ], queryFn: () => getScreening(id), staleTime: 0 });
-  if (query.isPending) return <p className="mono" style={{ margin: 0, fontSize: 10.5, color: "var(--ink3)" }}>carregando a escuta…</p>;
-  if (query.isError) return <p role="alert" style={{ margin: 0, fontSize: 12.5, color: "var(--down)" }}>{screeningError(query.error)}</p>;
+  useEffect(() => { if (query.error) onError?.(query.error); }, [ query.error ]); // eslint-disable-line react-hooks/exhaustive-deps
+  if (query.isPending || query.isError) {
+    return (
+      <section aria-label="Leitura da escuta" style={panel}>
+        {query.isPending
+          ? <p className="mono" style={muted}>carregando a escuta…</p>
+          : <p role="alert" style={{ margin: 0, fontSize: 12.5, color: "var(--down)" }}>{screeningError(query.error)}</p>}
+        <div><button type="button" style={secondaryButtonStyle} onClick={onClose}>Fechar escuta</button></div>
+      </section>
+    );
+  }
   return <ScreeningDetail screening={query.data} onClose={onClose} />;
 }
 

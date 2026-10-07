@@ -145,4 +145,39 @@ describe("UnitQueue — acolhimento (módulo 18)", () => {
       expect(within(rows[0]).getByText("aguardando acolhimento")).not.toBeNull();
       expect(within(rows[1]).queryByText("aguardando acolhimento")).toBeNull();
     });
+
+  it("o marcador não tem o estilo do azul (baixo risco)", async () => {
+    mocked(api.listUnitQueue).mockResolvedValue({ waiting: [ awaiting, { ...plain, screening: { id: "scb", color: "blue", destination: "same_day", waited_minutes: 3 } } ], in_care: [] });
+    renderQueue(true);
+    const rows = await waitingRows();
+    const marker = within(rows[0]).getByText("aguardando acolhimento");
+    const blue = within(rows[1]).getByText("azul");
+    expect(marker.style.color).not.toBe(blue.style.color);
+    expect(marker.style.background).not.toBe(blue.style.background);
+  });
+
+  it("Ver escuta recusada: mostra a frase, Fechar escuta funciona e a recusa clínica é tratada", async () => {
+    const onClinicalRefused = vi.fn();
+    mocked(api.getScreening).mockRejectedValue(new api.ApiError(403, { error: "missing_link" }, "403"));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={client}><AuthProvider>
+      <UnitQueue unit={unit} units={[ unit ]} canCare onClinicalRefused={onClinicalRefused} /></AuthProvider></QueryClientProvider>);
+    fireEvent.click(await screen.findByRole("button", { name: "Ver escuta" }));
+    expect(await screen.findByRole("alert")).not.toBeNull();
+    await waitFor(() => expect(onClinicalRefused).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole("button", { name: "Fechar escuta" }));
+    expect(screen.queryByRole("region", { name: "Leitura da escuta" })).toBeNull();
+  });
+
+  it("Reavaliar recusado trata a recusa clínica e mostra a frase", async () => {
+    const onClinicalRefused = vi.fn();
+    mocked(api.getScreening).mockRejectedValue(new api.ApiError(403, { error: "missing_link" }, "403"));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={client}><AuthProvider>
+      <UnitQueue unit={unit} units={[ unit ]} canCare onClinicalRefused={onClinicalRefused} /></AuthProvider></QueryClientProvider>);
+    const rows = await waitingRows();
+    fireEvent.click(within(rows[0]).getByRole("button", { name: "Reavaliar" }));
+    expect(await screen.findByRole("alert")).not.toBeNull();
+    expect(onClinicalRefused).toHaveBeenCalled();
+  });
 });

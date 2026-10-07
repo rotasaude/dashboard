@@ -146,6 +146,7 @@ export function UnitQueue({ unit, units, canCare, careBlocked, onClinicalRefused
     try {
       setPanel({ kind: "reassess", row, screening: await getScreening(row.screening.id) });
     } catch (err) {
+      handleClinicalRefusal(errorCode(err), () => void auth.reload(), onClinicalRefused);
       setActionError(screeningError(err));
     } finally {
       setRowBusy(null);
@@ -274,7 +275,8 @@ export function UnitQueue({ unit, units, canCare, careBlocked, onClinicalRefused
         )}
 
         {canCare && panel?.kind === "called" && <ScreeningDetail screening={panel.screening} onClose={() => setPanel(null)} />}
-        {canCare && panel?.kind === "view" && <ScreeningDetailLoader key={panel.id} id={panel.id} onClose={() => setPanel(null)} />}
+        {canCare && panel?.kind === "view" && <ScreeningDetailLoader key={panel.id} id={panel.id} onClose={() => setPanel(null)}
+          onError={(err) => handleClinicalRefusal(errorCode(err), () => void auth.reload(), onClinicalRefused)} />}
         {canCare && panel?.kind === "reassess" && (
           <ScreeningForm
             key={panel.screening.id}
@@ -300,6 +302,7 @@ export function UnitQueue({ unit, units, canCare, careBlocked, onClinicalRefused
             onCancel={() => setClosing(null)}
             onDone={(appointmentRequest) => {
               setClosing(null);
+              setPanel(null);
               invalidate();
               // o pedido nasce na tela Pedidos (desta unidade ou de outra, se
               // encaminhado) — invalida pelo prefixo para cobrir as duas.
@@ -430,6 +433,6 @@ const labelStyle = { display: "flex", flexDirection: "column" as const, gap: 4, 
 // cor (contratos §4): nada de queixa nem sinais nesta tela.
 function colorTag(r: QueueRow) {
   if (r.screening) return <Tag tone={COLOR_TONE[r.screening.color]}>{COLOR_LABEL[r.screening.color]}</Tag>;
-  if (r.awaiting_screening) return <Tag tone="info">aguardando acolhimento</Tag>;
+  if (r.awaiting_screening) return <Tag tone="neutral">aguardando acolhimento</Tag>;
   return "—";
 }
