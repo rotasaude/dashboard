@@ -91,7 +91,7 @@ describe("cliente da Produção (contratos §5.3)", () => {
   });
 
   it("reenvia a ficha com POST no id escapado", async () => {
-    const fn = stub({ id: "a/b", ficha_type: "synthetic", status: "pending", attempts: 2, last_error: null,
+    const fn = stub({ id: "a/b", ficha_type: "synthetic", status: "pending", attempts: 2, last_error_codes: [], replaces_outbox_id: null,
       created_at: "2026-10-02T13:00:00Z", accepted_at: null });
     expect((await resendFicha("a/b")).status).toBe("pending");
     expect(call(fn)[0]).toBe("/production/fichas/a%2Fb/resend");

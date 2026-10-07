@@ -2,7 +2,8 @@
 import { describe, expect, it } from "vitest";
 import { ApiError } from "./api";
 import {
-  FICHA_STATUS, alertBanner, canReadProduction, canResend, deadlinePhrase, hasNextPage, productionError, productionErrorCode
+  FICHA_STATUS, alertBanner, canReadProduction, canResend, canRetryGeneration, deadlinePhrase, errorCodesLabel, hasNextPage,
+  productionError, productionErrorCode, reasonsLabel, replacedIds, retryOutcome
 } from "./production";
 import { ficha } from "../test/recordModeFixtures";
 
@@ -46,6 +47,42 @@ describe("Produção — papéis e paginação", () => {
     expect(hasNextPage(2, 100)).toBe(false);
     expect(hasNextPage(2, 101)).toBe(true);
     expect(hasNextPage(1, 0)).toBe(false);
+  });
+});
+
+describe("Produção — códigos e fichas não geradas (módulo 18)", () => {
+  it("códigos de recusa como vêm; other/unknown vira 'erro não classificado'; vazio é traço", () => {
+    expect(errorCodesLabel([ { field: "profissional.cns", code: "invalid" }, { field: "other", code: "unknown" } ]))
+      .toBe("profissional.cns · invalid; erro não classificado");
+    expect(errorCodesLabel([])).toBe("—");
+    expect(errorCodesLabel(undefined)).toBe("—");
+  });
+
+  it("motivos em português; desconhecido aparece como veio", () => {
+    expect(reasonsLabel([ "unit_without_cnes", "citizen_without_sex", "new_reason" ]))
+      .toBe("unidade sem CNES, cidadão sem sexo no cadastro, new_reason");
+  });
+
+  it("gerar de novo: resolvida ou o que ainda falta", () => {
+    expect(retryOutcome({ resolved_at: "2026-10-07T10:00:00Z", reason_codes: [] })).toBe("Ficha gerada: ela entra na fila de envio.");
+    expect(retryOutcome({ resolved_at: null, reason_codes: [ "professional_without_team" ] }))
+      .toBe("Ainda não foi possível gerar: profissional sem equipe (INE). Corrija na origem e tente de novo.");
+  });
+
+  it("só o municipal_admin gera de novo; already_resolved, generation_failed e export_unusable têm frase", () => {
+    expect(canRetryGeneration([ "municipal_admin" ])).toBe(true);
+    expect(canRetryGeneration([ "analyst" ])).toBe(false);
+    expect(productionError(new ApiError(409, { error: "already_resolved" }, "409"))).toBe("esta ficha já foi gerada — a lista foi atualizada");
+    expect(productionError(new ApiError(409, { error: "generation_failed" }, "409")))
+      .toBe('não foi possível gerar a ficha de novo — veja "Fichas que não puderam ser geradas"');
+    expect(productionError(new ApiError(409, { error: "export_unusable" }, "409")))
+      .toBe("o envio da produção ao e-SUS não está utilizável agora nesta cidade");
+  });
+
+  it("substituída: o id que outra ficha da página aponta", () => {
+    const set = replacedIds([ ficha({ id: "a" }), ficha({ id: "b", replaces_outbox_id: "a" }) ]);
+    expect(set.has("a")).toBe(true);
+    expect(set.has("b")).toBe(false);
   });
 });
 

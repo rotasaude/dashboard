@@ -4,9 +4,9 @@
 // prazos do SIAPS do ano (dias úteis com feriados nacionais só como fallback
 // para ano sem tabela); aqui só se diz em português. `deadline_on` é data sem
 // hora: formata por texto (fmtDay), nunca por new Date.
-// Mensagens de recusa (`rejections[].message`, `last_error`) já chegam
-// mascaradas da API e são mostradas como vieram.
-import { ApiError, FICHAS_PER_PAGE, type LediFicha } from "./api";
+// Desde o módulo 18 (ADR 0030; api#43) a recusa chega só como códigos
+// (`{ field, code }`), nunca o texto do PEC: a tela mostra os códigos como vêm.
+import { ApiError, FICHAS_PER_PAGE, type LediErrorCode, type LediFicha } from "./api";
 import { describeActionError } from "./actionErrors";
 import { FEATURE_DISABLED_MESSAGE, featureDisabledKey } from "./features";
 import { fmtDay } from "./audiencePhrase";
@@ -23,6 +23,50 @@ export const FICHA_STATUS: Record<string, { label: string; tone: "neutral" | "in
   rejected: { label: "recusada", tone: "down" },
   failed: { label: "falhou — sem novas tentativas", tone: "down" }
 };
+
+export const ALREADY_RESOLVED = "esta ficha já foi gerada — a lista foi atualizada";
+export const RESEND_GENERATION_FAILED =
+  "não foi possível gerar a ficha de novo — veja \"Fichas que não puderam ser geradas\"";
+export const EXPORT_UNUSABLE = "o envio da produção ao e-SUS não está utilizável agora nesta cidade";
+
+export function errorCodeLabel(c: LediErrorCode): string {
+  return c.field === "other" && c.code === "unknown" ? "erro não classificado" : `${c.field} · ${c.code}`;
+}
+
+export function errorCodesLabel(codes: LediErrorCode[] | undefined): string {
+  return codes && codes.length > 0 ? codes.map(errorCodeLabel).join("; ") : "—";
+}
+
+// Fichas que não puderam ser geradas (módulo 18; spec §5): o que falta na origem.
+export const GENERATION_REASON: Record<string, string> = {
+  unit_without_cnes: "unidade sem CNES",
+  professional_without_team: "profissional sem equipe (INE)",
+  professional_without_cns: "profissional sem CNS",
+  citizen_without_birth_date: "cidadão sem data de nascimento",
+  citizen_without_sex: "cidadão sem sexo no cadastro",
+  unknown_ciap2: "CIAP-2 fora da terminologia ativa"
+};
+export const SOURCE_LABEL: Record<string, string> = { Screening: "escuta inicial" };
+
+export function reasonsLabel(codes: string[]): string {
+  return codes.map((c) => GENERATION_REASON[c] ?? c).join(", ");
+}
+
+// Gerar de novo: resolvida = ficha nasceu; senão, diz o que ainda falta.
+export function retryOutcome(f: { resolved_at: string | null; reason_codes: string[] }): string {
+  return f.resolved_at
+    ? "Ficha gerada: ela entra na fila de envio."
+    : `Ainda não foi possível gerar: ${reasonsLabel(f.reason_codes)}. Corrija na origem e tente de novo.`;
+}
+
+export function canRetryGeneration(roles: string[]): boolean {
+  return roles.includes("municipal_admin");
+}
+
+// Ficha recusada que já foi regenerada: outra linha da página aponta para ela.
+export function replacedIds(fichas: LediFicha[]): Set<string> {
+  return new Set(fichas.map((f) => f.replaces_outbox_id).filter((id): id is string => !!id));
+}
 
 export function canReadProduction(roles: string[]): boolean {
   return roles.includes("municipal_admin") || roles.includes("analyst");
@@ -67,6 +111,9 @@ export function productionErrorCode(err: unknown): string | null {
 export function productionError(err: unknown): string {
   const code = productionErrorCode(err);
   if (code === "not_rejected") return RESEND_STALE;
+  if (code === "already_resolved") return ALREADY_RESOLVED;
+  if (code === "generation_failed") return RESEND_GENERATION_FAILED;
+  if (code === "export_unusable") return EXPORT_UNUSABLE;
   if (code === "invalid_competence") return INVALID_COMPETENCE;
   if (featureDisabledKey(err) !== null) return FEATURE_DISABLED_MESSAGE;
   const d = describeActionError(err);

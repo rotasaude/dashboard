@@ -7,16 +7,17 @@
 // esconder a tela; nunca entra em laço.
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { getProduction, resendFicha, type LediFicha } from "../lib/api";
+import { getProduction, resendFicha, type LediFicha, type LediRejection } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { featureDisabledKey, hasFeature } from "../lib/features";
 import { competenceLabel, competenceOptions } from "../lib/competence";
 import { todayInCity } from "../lib/campaigns";
 import { fmtDateTime, fmtNumber } from "../lib/format";
 import {
-  FICHA_STATUS, PRODUCTION_KEY, RESEND_STALE, alertBanner, canReadProduction, canResend, deadlinePhrase, hasNextPage,
-  productionError, productionErrorCode
+  FICHA_STATUS, PRODUCTION_KEY, RESEND_STALE, alertBanner, canReadProduction, canResend, deadlinePhrase, errorCodeLabel,
+  errorCodesLabel, hasNextPage, productionError, productionErrorCode, replacedIds
 } from "../lib/production";
+import { GENERATION_FAILURES_KEY, GenerationFailures } from "./production/GenerationFailures";
 import { PageHeader } from "../components/PageHeader";
 import { Panel } from "../components/Panel";
 import { DataTable, type Column } from "../components/DataTable";
@@ -71,15 +72,18 @@ export function Production({ onGoToSecurity }: { onGoToSecurity?(): void }) {
     setPage(next);
   }
 
+  const replaced = replacedIds(data?.fichas ?? []);
   const cols: Column<LediFicha>[] = [
     { label: "Tipo", w: "1fr", render: (f) => <span className="mono">{f.ficha_type}</span> },
     { label: "Situação", w: "1.2fr", render: (f) =>
       <Tag tone={FICHA_STATUS[f.status]?.tone}>{FICHA_STATUS[f.status]?.label ?? f.status}</Tag> },
     { label: "Tentativas", w: "0.7fr", align: "right", render: (f) => <span className="mono">{fmtNumber(f.attempts)}</span> },
-    { label: "Último erro", w: "2fr", render: (f) => f.last_error ?? "—" },
+    { label: "Último erro", w: "2fr", render: (f) => <span className="mono">{errorCodesLabel(f.last_error_codes)}</span> },
     { label: "Criada em", w: "1fr", render: (f) => fmtDateTime(f.created_at) },
     { label: "Aceita em", w: "1fr", render: (f) => fmtDateTime(f.accepted_at) },
-    { label: "", w: "auto", align: "right", render: (f) => canResend(roles, f) && (
+    { label: "", w: "auto", align: "right", render: (f) => replaced.has(f.id) ? (
+      <span className="mono" style={{ fontSize: 10.5, color: "var(--ink3)" }}>substituída</span>
+    ) : canResend(roles, f) && (
       <button type="button" aria-label={`Reenviar ficha ${f.id}`} style={secondaryButtonStyle}
         onClick={() => { setDone(null); setResending(f); }}>
         Reenviar
@@ -111,7 +115,7 @@ export function Production({ onGoToSecurity }: { onGoToSecurity?(): void }) {
           run={async () => { await resendFicha(resending.id); }}
           onDone={() => {
             setResending(null);
-            setDone("Ficha reenviada para a fila. A situação muda quando o PEC responder.");
+            setDone("Ficha enviada de novo para a fila. A situação muda quando o PEC responder.");
             refresh();
           }}
           onCancel={() => setResending(null)}
@@ -120,6 +124,12 @@ export function Production({ onGoToSecurity }: { onGoToSecurity?(): void }) {
             const code = productionErrorCode(err);
             if (code === "invalid_competence") return productionError(err);
             if (featureDisabledKey(err) !== null) { refresh(); return productionError(err); }
+            if (code === "generation_failed") {
+              refresh();
+              void queryClient.invalidateQueries({ queryKey: [ GENERATION_FAILURES_KEY ] });
+              return productionError(err);
+            }
+            if (code === "export_unusable") return productionError(err);
             if (code !== "not_rejected") return null;
             refresh();
             return RESEND_STALE;
@@ -144,14 +154,14 @@ export function Production({ onGoToSecurity }: { onGoToSecurity?(): void }) {
             <StatTile label="Falharam" value={data.counts.failed} tone={data.counts.failed > 0 ? "down" : undefined} />
           </KpiGrid>
 
-          <Panel title="Motivos de recusa" sub="agrupados pela mensagem do PEC">
-            <DataTable<{ message: string; count: number }>
+          <Panel title="Motivos de recusa" sub="agrupados por campo e código">
+            <DataTable<LediRejection>
               cols={[
-                { label: "Motivo", w: "3fr", render: (r) => r.message },
+                { label: "Campo e código", w: "3fr", render: (r) => <span className="mono">{errorCodeLabel(r)}</span> },
                 { label: "Fichas", w: "0.7fr", align: "right", render: (r) => <span className="mono">{fmtNumber(r.count)}</span> }
               ]}
               rows={data.rejections}
-              rowKey={(r) => r.message}
+              rowKey={(r) => `${r.field}:${r.code}`}
               empty="nenhuma recusa nesta competência"
             />
           </Panel>
@@ -174,6 +184,8 @@ export function Production({ onGoToSecurity }: { onGoToSecurity?(): void }) {
           </Panel>
         </>
       )}
+
+      <GenerationFailures roles={roles} onGoToSecurity={onGoToSecurity} />
     </Frame>
   );
 }

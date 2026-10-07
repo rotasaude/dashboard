@@ -1247,12 +1247,17 @@ export async function applyCnesProposals(proposalIds: string[]): Promise<CnesApp
 
 export type CompetenceAlert = "none" | "attention" | "critical";
 export type FichaStatus = "pending" | "sending" | "accepted" | "rejected" | "failed";
+export interface LediErrorCode { field: string; code: string }
+export interface LediRejection extends LediErrorCode { count: number }
 export interface LediFicha {
   id: string;
   ficha_type: string;
   status: FichaStatus;
   attempts: number;
-  last_error: string | null;
+  // Módulo 18 (ADR 0030; contratos §6): só códigos, nunca o texto do PEC.
+  last_error_codes: LediErrorCode[];
+  // Ficha recusada reenviada é regenerada: a nova aponta para a antiga (contratos §9).
+  replaces_outbox_id: string | null;
   created_at: string;
   accepted_at: string | null;
 }
@@ -1263,7 +1268,7 @@ export interface Production {
   alert: CompetenceAlert;
   // `sending` pode faltar na resposta e `pending` não o soma (contratos §5.3).
   counts: { accepted: number; rejected: number; pending: number; failed: number; sending?: number };
-  rejections: { message: string; count: number }[];
+  rejections: LediRejection[];
   fichas: LediFicha[];
   // Total de fichas da competência, para a paginação (contratos §5.3).
   fichas_total: number;

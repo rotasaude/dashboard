@@ -51,7 +51,7 @@ export function cnesFixture(overrides: Partial<CnesOverview> = {}): CnesOverview
 
 export function ficha(overrides: Partial<LediFicha> = {}): LediFicha {
   return {
-    id: "f1", ficha_type: "synthetic", status: "accepted", attempts: 1, last_error: null,
+    id: "f1", ficha_type: "synthetic", status: "accepted", attempts: 1, last_error_codes: [], replaces_outbox_id: null,
     created_at: "2026-10-02T13:00:00Z", accepted_at: "2026-10-02T13:01:00Z", ...overrides
   };
 }
@@ -62,10 +62,10 @@ export function productionFixture(overrides: Partial<Production> = {}): Producti
   return {
     competence: "202610", deadline_on: "2026-11-16", business_days_left: 7, alert: "attention",
     counts: { accepted: 120, rejected: 3, pending: 10, sending: 0, failed: 0 },
-    rejections: [ { message: "CNS do profissional inválido", count: 3 } ],
+    rejections: [ { field: "profissional.cns", code: "invalid", count: 3 } ],
     fichas: [
       ficha(),
-      ficha({ id: "f2", status: "rejected", accepted_at: null, last_error: "CNS do profissional inválido" })
+      ficha({ id: "f2", status: "rejected", accepted_at: null, last_error_codes: [ { field: "profissional.cns", code: "invalid" } ] })
     ],
     fichas_total: 2,
     ...overrides
