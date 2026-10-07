@@ -119,7 +119,26 @@ const MESSAGES: Record<string, string> = {
   outside_shift: "o encaixe precisa começar e terminar dentro do turno",
   already_assigned: "este pedido já foi atribuído a uma unidade",
   // Vagas da recepção e Minha agenda (appointment_requests_controller, professional_agenda_controller).
-  invalid_range: "período inválido — confira as datas"
+  invalid_range: "período inválido — confira as datas",
+  // Módulo 18 (contratos §3 e §5). `implausible_vital` com `field` é traduzido em screeningError.
+  already_screening: "outra pessoa já começou a escuta deste atendimento — a fila foi atualizada",
+  not_waiting: "este atendimento não está mais aguardando — a fila foi atualizada",
+  screening_not_required: "esta unidade não faz acolhimento para este atendimento — a fila foi atualizada",
+  cbo_not_allowed: "sua ocupação (CBO) não faz acolhimento",
+  not_in_progress: "esta escuta não está mais em andamento — a fila foi atualizada",
+  invalid_ciap2: "escolha a queixa (CIAP-2) da lista",
+  implausible_vital: "um sinal vital está fora do plausível — confira os valores",
+  bp_incomplete: "informe a sistólica e a diastólica juntas",
+  invalid_color: "escolha uma das quatro cores",
+  color_change_reason_required: "explique por que a cor final é diferente da sugerida",
+  invalid_destination: "escolha o destino",
+  orientation_required: "escreva a orientação dada",
+  invalid_schedule: "confira o tipo, a prioridade e o prazo do agendamento",
+  attendance_not_waiting: "o atendimento não está mais aguardando — a escuta não foi concluída",
+  not_reassessable: "esta escuta não pode mais ser reavaliada — a fila foi atualizada",
+  invalid_screening_scope: "escolha uma das opções de acolhimento",
+  note_too_long: "o texto passa de 500 caracteres",
+  terminology_unavailable: "a CIAP-2 não está disponível agora — tente de novo em instantes"
 };
 
 export function attendanceError(err: unknown): string {
