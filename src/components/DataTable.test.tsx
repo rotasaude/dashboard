@@ -25,6 +25,14 @@ const plainCols: Column<Row>[] = [ { label: "Nome", render: (r) => r.label } ];
 let actionClicked: (r: Row) => void;
 
 describe("DataTable", () => {
+  it("rowStyle destaca só as linhas que pedem", () => {
+    render(<DataTable<Row> cols={plainCols} rows={rows} rowKey={(r) => r.id}
+      rowStyle={(r) => (r.id === "2" ? { background: "var(--down-bg)" } : undefined)} />);
+    const rowEls = screen.getAllByRole("row").slice(1);
+    expect(rowEls[0].style.background).toBe("transparent");
+    expect(rowEls[1].style.background).toBe("var(--down-bg)");
+  });
+
   it("sem onRowClick, a linha não é <button> e um botão de ação na célula recebe o clique", async () => {
     const onAction = vi.fn();
     actionClicked = onAction;

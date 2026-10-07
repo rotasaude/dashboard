@@ -1,7 +1,7 @@
 // DataTable — tabela em CSS grid. Header mono uppercase. Linhas via render(row).
 // `cols[*].w` aceita qualquer grid-template-columns value (fr, px, minmax).
 
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 
 export interface Column<T> {
   label: string;
@@ -16,9 +16,11 @@ interface Props<T> {
   rowKey: (row: T, i: number) => string;
   onRowClick?: (row: T) => void;
   empty?: ReactNode;
+  // Destaque de uma linha (ex.: cor vermelha do acolhimento, módulo 18).
+  rowStyle?: (row: T) => CSSProperties | undefined;
 }
 
-export function DataTable<T>({ cols, rows, rowKey, onRowClick, empty }: Props<T>) {
+export function DataTable<T>({ cols, rows, rowKey, onRowClick, empty, rowStyle: extraStyle }: Props<T>) {
   const gridCols = cols.map((c) => c.w || "1fr").join(" ");
   if (rows.length === 0) {
     return <div className="mono" style={{ fontSize: 10.5, color: "var(--ink3)" }}>{empty ?? "sem dados"}</div>;
@@ -61,7 +63,8 @@ export function DataTable<T>({ cols, rows, rowKey, onRowClick, empty }: Props<T>
           color: "var(--ink)",
           cursor: onRowClick ? "pointer" : "default",
           textAlign: "left" as const,
-          alignItems: "center"
+          alignItems: "center",
+          ...(extraStyle?.(r) ?? {})
         };
         const cells = cols.map((c, ci) => (
           <span key={ci} role="cell" style={{ textAlign: c.align || "left", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>

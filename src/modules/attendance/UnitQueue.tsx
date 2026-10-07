@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  callAttendance, callNext, closeAttendance, errorCode, listUnitQueue,
-  type AppointmentRequestSummary, type AttendanceOutcome, type HealthUnit, type QueueRow
+  callAttendance, callNext, closeAttendance, errorCode, getScreening, listUnitQueue,
+  type AppointmentRequestSummary, type AttendanceOutcome, type HealthUnit, type QueueRow, type Screening
 } from "../../lib/api";
 import { ATTENDANCE_REFETCH_MS, attendanceError, splitReferenceUnits } from "../../lib/attendance";
 import { fmtDateTime, fmtHourMinute } from "../../lib/format";
@@ -12,6 +12,10 @@ import { DataTable } from "../../components/DataTable";
 import { EmptyState } from "../../components/EmptyState";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { FrozenTextNotice } from "../../components/FrozenTextNotice";
+import { Tag } from "../../components/Tag";
+import { COLOR_LABEL, COLOR_TONE, screeningError, waitLabel, waitedMinutes } from "../../lib/screening";
+import { ScreeningDetail, ScreeningDetailLoader } from "./ScreeningDetail";
+import { ScreeningForm } from "./ScreeningForm";
 
 // UnitQueue (Task 7) — a fila da unidade atual (spec §6 "Fila"), em duas
 // partes: "Aguardando" (ordenada pela API — prioridade, depois chegada — esta
@@ -28,7 +32,19 @@ interface Props {
   canCare: boolean;
   careBlocked?: string | null;
   onClinicalRefused?(): void;
+  now?(): Date;
 }
+
+// Módulo 18: a escuta aberta no painel — a que veio na chamada, uma lida pelo
+// id ("Ver escuta") ou a reavaliação de quem espera com destino "no dia".
+type ScreeningPanel =
+  | { kind: "called"; screening: Screening }
+  | { kind: "view"; id: string }
+  | { kind: "reassess"; row: QueueRow; screening: Screening };
+
+// Vermelho no topo e destacado (spec §4); a ordem é do api.
+const redRow = (r: QueueRow) =>
+  r.screening?.color === "red" ? { background: "var(--down-bg)", boxShadow: "inset 3px 0 0 var(--down)" } : undefined;
 
 const OUTCOME_LABEL: Record<Exclude<AttendanceOutcome, "left">, string> = {
   discharged: "Atendido e liberado",
@@ -46,7 +62,7 @@ function handleClinicalRefusal(code: string | undefined, reload: () => void, onC
   if (code === "missing_role") void reload();
 }
 
-export function UnitQueue({ unit, units, canCare, careBlocked, onClinicalRefused }: Props) {
+export function UnitQueue({ unit, units, canCare, careBlocked, onClinicalRefused, now = () => new Date() }: Props) {
   const queryClient = useQueryClient();
   const auth = useAuth();
   const query = useQuery({ queryKey: [ "unitQueue", unit.id ], queryFn: () => listUnitQueue(unit.id),
@@ -57,6 +73,7 @@ export function UnitQueue({ unit, units, canCare, careBlocked, onClinicalRefused
   const [ actionError, setActionError ] = useState<string | null>(null);
   const [ callingNext, setCallingNext ] = useState(false);
   const [ rowBusy, setRowBusy ] = useState<string | null>(null);
+  const [ panel, setPanel ] = useState<ScreeningPanel | null>(null);
 
   function invalidate() {
     void queryClient.invalidateQueries({ queryKey: [ "unitQueue", unit.id ] });
@@ -66,7 +83,9 @@ export function UnitQueue({ unit, units, canCare, careBlocked, onClinicalRefused
     if (callingNext) return;
     setCallingNext(true); setActionError(null);
     try {
-      await callNext(unit.id);
+      const result = await callNext(unit.id);
+      // Contrato §9: a escuta vem dentro de `attendance`.
+      if (result.attendance.screening) setPanel({ kind: "called", screening: result.attendance.screening });
       invalidate();
     } catch (err) {
       const code = errorCode(err);
@@ -92,7 +111,8 @@ export function UnitQueue({ unit, units, canCare, careBlocked, onClinicalRefused
     if (rowBusy) return;
     setRowBusy(row.id); setActionError(null);
     try {
-      await callAttendance(row.id, unit.id);
+      const result = await callAttendance(row.id, unit.id);
+      if (result.attendance.screening) setPanel({ kind: "called", screening: result.attendance.screening });
       invalidate();
     } catch (err) {
       const code = errorCode(err);
@@ -120,6 +140,19 @@ export function UnitQueue({ unit, units, canCare, careBlocked, onClinicalRefused
     }
   }
 
+  async function onReassess(row: QueueRow) {
+    if (rowBusy || !row.screening?.id) return;
+    setRowBusy(row.id); setActionError(null);
+    try {
+      setPanel({ kind: "reassess", row, screening: await getScreening(row.screening.id) });
+    } catch (err) {
+      setActionError(screeningError(err));
+    } finally {
+      setRowBusy(null);
+    }
+  }
+
+  const at = now();
   const waiting = query.data?.waiting ?? [];
   const inCare = query.data?.in_care ?? [];
 
@@ -154,9 +187,13 @@ export function UnitQueue({ unit, units, canCare, careBlocked, onClinicalRefused
                 <EmptyState title="Ninguém aguardando" />
               ) : (
                 <DataTable<QueueRow>
+                  rowStyle={redRow}
                   cols={[
                     { label: "CPF", w: "1.5fr", render: (r) => r.cpf_masked },
+                    { label: "Cor", w: "0.8fr", render: (r) => colorTag(r) },
                     { label: "Chegada", w: "1fr", render: (r) => fmtDateTime(r.checked_in_at) },
+                    { label: "Espera", w: "0.8fr", render: (r) =>
+                      waitLabel(r.screening?.waited_minutes ?? waitedMinutes(r.checked_in_at, at)) },
                     { label: "Protocolo", w: "1.5fr", render: (r) => r.protocol_name ?? "—" },
                     { label: "Prioridade", w: "1fr", render: (r) => String(r.priority ?? "—") },
                     {
@@ -166,6 +203,12 @@ export function UnitQueue({ unit, units, canCare, careBlocked, onClinicalRefused
                     {
                       label: "", w: "auto", align: "right", render: (r) => (
                         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                          {canCare && r.screening?.id && r.screening.destination === "same_day" && (
+                            <button type="button" disabled={rowBusy === r.id} onClick={() => void onReassess(r)}
+                              style={rowBusy === r.id ? disabledButtonStyle : secondaryButtonStyle}>
+                              Reavaliar
+                            </button>
+                          )}
                           {canCare && (
                             <button
                               type="button"
@@ -204,12 +247,21 @@ export function UnitQueue({ unit, units, canCare, careBlocked, onClinicalRefused
                 <DataTable<QueueRow>
                   cols={[
                     { label: "CPF", w: "1.5fr", render: (r) => r.cpf_masked },
+                    { label: "Cor", w: "0.8fr", render: (r) => colorTag(r) },
                     { label: "Protocolo", w: "1.5fr", render: (r) => r.protocol_name ?? "—" },
                     { label: "Prioridade", w: "1fr", render: (r) => String(r.priority ?? "—") },
                     { label: "Chamada", w: "2fr", render: (r) => `chamado por ${r.called_by_name} às ${fmtHourMinute(r.called_at)}` },
                     ...(canCare ? [ {
                       label: "", w: "auto" as const, align: "right" as const, render: (r: QueueRow) => (
-                        <button type="button" style={secondaryButtonStyle} onClick={() => setClosing(r)}>Encerrar</button>
+                        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                          {r.screening?.id && (
+                            <button type="button" style={secondaryButtonStyle}
+                              onClick={() => setPanel({ kind: "view", id: r.screening!.id })}>
+                              Ver escuta
+                            </button>
+                          )}
+                          <button type="button" style={secondaryButtonStyle} onClick={() => setClosing(r)}>Encerrar</button>
+                        </div>
                       )
                     } ] : [])
                   ]}
@@ -219,6 +271,23 @@ export function UnitQueue({ unit, units, canCare, careBlocked, onClinicalRefused
               )}
             </section>
           </>
+        )}
+
+        {canCare && panel?.kind === "called" && <ScreeningDetail screening={panel.screening} onClose={() => setPanel(null)} />}
+        {canCare && panel?.kind === "view" && <ScreeningDetailLoader key={panel.id} id={panel.id} onClose={() => setPanel(null)} />}
+        {canCare && panel?.kind === "reassess" && (
+          <ScreeningForm
+            key={panel.screening.id}
+            mode="reassess"
+            screening={panel.screening}
+            citizenLabel={`${panel.row.cpf_masked} · chegou às ${fmtHourMinute(panel.row.checked_in_at)}`}
+            unit={unit}
+            units={units}
+            types={null}
+            onDone={() => { setPanel(null); invalidate(); setDone("Reavaliação registrada."); }}
+            onClosed={(message) => { setPanel(null); invalidate(); setActionError(message); }}
+            onCancel={() => setPanel(null)}
+          />
         )}
 
         {closing && (
@@ -355,3 +424,12 @@ function ClosePanel(
 }
 
 const labelStyle = { display: "flex", flexDirection: "column" as const, gap: 4, fontSize: 12, color: "var(--ink2)" };
+
+// Cor da escuta; "aguardando acolhimento" é só um marcador neutro (não é dado
+// clínico), por isso a recepção também o vê (contrato §9). A recepção vê só a
+// cor (contratos §4): nada de queixa nem sinais nesta tela.
+function colorTag(r: QueueRow) {
+  if (r.screening) return <Tag tone={COLOR_TONE[r.screening.color]}>{COLOR_LABEL[r.screening.color]}</Tag>;
+  if (r.awaiting_screening) return <Tag tone="info">aguardando acolhimento</Tag>;
+  return "—";
+}
