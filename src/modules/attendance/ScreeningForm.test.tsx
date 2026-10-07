@@ -141,6 +141,22 @@ describe("ScreeningForm — concluir", () => {
     await waitFor(() => expect(mocked(api.suggestScreening).mock.calls.length).toBeGreaterThan(calls));
   });
 
+  it("422 color_change_reason_required: a cor enviada fica fixa quando a nova sugestão difere", async () => {
+    mocked(api.completeScreening).mockRejectedValueOnce(new ApiError(422, { error: "color_change_reason_required" }, "x"));
+    renderForm();
+    await fillRedSameDay();
+    await waitFor(() => expect(conclude().disabled).toBe(false));
+    const calls = mocked(api.suggestScreening).mock.calls.length;
+    mocked(api.suggestScreening).mockResolvedValue(suggestion({ suggested_color: "yellow", alerts: [] }));
+    fireEvent.click(conclude());
+    expect(await screen.findByLabelText("Justificativa da mudança de cor")).not.toBeNull();
+    await waitFor(() => expect(mocked(api.suggestScreening).mock.calls.length).toBeGreaterThan(calls));
+    await waitFor(() => expect(conclude().disabled).toBe(true));
+    expect((screen.getByRole("radio", { name: /vermelho/ }) as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByRole("radio", { name: /amarelo/ }) as HTMLInputElement).checked).toBe(false);
+    expect(screen.getByLabelText("Justificativa da mudança de cor")).not.toBeNull();
+  });
+
   it("atendimento que saiu da espera fecha o formulário com a frase", async () => {
     mocked(api.completeScreening).mockRejectedValueOnce(new ApiError(409, { error: "attendance_not_waiting" }, "x"));
     const props = renderForm();

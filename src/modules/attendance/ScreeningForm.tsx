@@ -114,7 +114,7 @@ export function ScreeningForm(props: ScreeningFormProps) {
     } catch (err) {
       const code = errorCode(err);
       if (code && CLOSING.has(code)) { onClosed(screeningError(err)); return; }
-      if (code === "color_change_reason_required") { setForceReason(true); setRefresh((n) => n + 1); }
+      if (code === "color_change_reason_required") { setFinalChoice(final); setForceReason(true); setRefresh((n) => n + 1); }
       setError(screeningError(err));
     } finally {
       setBusy(false);
