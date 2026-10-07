@@ -38,7 +38,7 @@ function withUnit(v: unknown, field?: ConditionField): string {
 
 function valueLabel(v: unknown, field?: ConditionField): string {
   const s = String(v);
-  if (!field?.options) return s;
+  if (!field?.options || field.codes) return s;
   return field.options.find((o) => o.value === s)?.label ?? `${s} (fora da lista)`;
 }
 

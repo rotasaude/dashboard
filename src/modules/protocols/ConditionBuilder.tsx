@@ -176,6 +176,8 @@ function ValueEditor({ row, field, onChange }: { row: ConditionRow; field: Condi
     );
   }
 
+  if (row.op === "in" && field.codes) return <CodesInput row={row} example={field.codes.example} onChange={onChange} />;
+
   // Opção inativa só aparece se já estiver marcada (bairro desativado depois
   // da regra); valor que nem existe na lista aparece como "fora da lista".
   if (row.op !== "in") return null;
@@ -196,6 +198,22 @@ function ValueEditor({ row, field, onChange }: { row: ConditionRow; field: Condi
         </label>
       ))}
     </span>
+  );
+}
+
+// Códigos digitados (CIAP-2): o texto fica local; a lista vai em maiúsculas,
+// sem repetir. Código fora do padrão aparece no motivo da linha (rowProblem).
+function CodesInput({ row, example, onChange }: {
+  row: Extract<ConditionRow, { op: "in" }>; example: string; onChange(next: ConditionRow): void;
+}) {
+  const [ text, setText ] = useState(row.value.join(", "));
+  return (
+    <input aria-label="códigos" value={text} placeholder={example} style={{ ...inputStyle, width: 160, marginTop: 0, padding: 6, fontSize: 12.5 }}
+      onChange={(e) => {
+        setText(e.target.value);
+        const codes = e.target.value.split(/[\s,;]+/).map((c) => c.trim().toUpperCase()).filter((c) => c !== "");
+        onChange({ ...row, value: [ ...new Set(codes) ] });
+      }} />
   );
 }
 

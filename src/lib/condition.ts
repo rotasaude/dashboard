@@ -15,8 +15,9 @@
 // Uma raiz E com uma linha só sai como a linha sozinha ({gte:["profile.age",60]}).
 import type { ConditionTree, PanelNeighborhood } from "./api";
 import { SEX_OPTIONS } from "./profile";
+import { GLUCOSE_MOMENTS, GLUCOSE_MOMENT_LABEL, VITALS } from "./screening";
 
-export type ConditionContext = "eligibility" | "suggestion" | "restriction";
+export type ConditionContext = "eligibility" | "suggestion" | "restriction" | "screening";
 export type FieldKind = "number" | "choice" | "boolean";
 export interface FieldOption { value: string; label: string; inactive?: boolean }
 export interface ConditionField {
@@ -31,6 +32,9 @@ export interface ConditionField {
   options?: FieldOption[];
   // Entre o rótulo e o valor na frase: " " para "sexo feminino", " é " para respostas.
   verb?: string;
+  // Campo de escolha sem lista fechada (CIAP-2, módulo 18): códigos digitados,
+  // conferidos pelo padrão; o gate do api confere se existem.
+  codes?: { pattern: RegExp; example: string };
 }
 
 export type ConditionRow =
@@ -49,7 +53,7 @@ export interface ConditionGroup {
 export type ConditionNode = ConditionRow | ConditionGroup;
 export type ParsedCondition = { ok: true; root: ConditionGroup } | { ok: false };
 
-export const RESERVED_PREFIXES = [ "profile.", "outcome.", "citizen." ];
+export const RESERVED_PREFIXES = [ "profile.", "outcome.", "citizen.", "vitals.", "complaint." ];
 export const BOOLEAN_OPTIONS: FieldOption[] = [ { value: "true", label: "sim" }, { value: "false", label: "não" } ];
 export const OP_LABELS: Record<RowOp, string> = {
   gte: "a partir de", lte: "até", between: "entre", eq: "igual a", in: "é um de", is: "é"
@@ -67,8 +71,26 @@ const SEX: ConditionField = {
 
 export interface FieldSources { definition?: unknown; neighborhoods?: PanelNeighborhood[] }
 
+// Acolhimento (módulo 18; contratos §1): sinais vitais, queixa e perfil. Os
+// limites de valor são os de plausibilidade da escuta.
+const lowerFirst = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
+const VITAL_FIELDS: ConditionField[] = [
+  ...VITALS.map((v): ConditionField => ({
+    id: `vitals.${v.key}`, label: lowerFirst(v.label), kind: "number", group: "Sinais vitais",
+    unit: v.unit === "" ? undefined : v.unit === "%" ? "%" : ` ${v.unit}`, min: v.min, max: v.max
+  })),
+  { id: "vitals.bmi", label: "IMC", kind: "number", group: "Sinais vitais" },
+  { id: "vitals.glucose_moment", label: "momento da glicemia", kind: "choice", group: "Sinais vitais",
+    options: GLUCOSE_MOMENTS.map((m) => ({ value: m, label: GLUCOSE_MOMENT_LABEL[m] })) }
+];
+const CIAP2: ConditionField = {
+  id: "complaint.ciap2", label: "queixa (CIAP-2)", kind: "choice", group: "Queixa", verb: " é ",
+  codes: { pattern: /^[A-Z]\d{2}$/, example: "K86, A03" }
+};
+
 export function fieldsFor(context: ConditionContext, sources: FieldSources = {}): ConditionField[] {
   if (context === "eligibility") return [ AGE, SEX ];
+  if (context === "screening") return [ ...VITAL_FIELDS, CIAP2, AGE, SEX ];
   if (context === "restriction") return [ AGE, SEX, neighborhoodField(sources.neighborhoods ?? []) ];
   return [ AGE, SEX, ...stepFields(sources.definition), ...outcomeFields(sources.definition) ];
 }
@@ -189,6 +211,11 @@ export function rowProblem(row: ConditionRow, field: ConditionField | undefined)
     ((field.min !== undefined && n < field.min) || (field.max !== undefined && n > field.max)));
   if (outOfRange) return `use um valor entre ${field.min ?? "…"} e ${field.max ?? "…"}`;
   if (row.op === "between" && (row.value[0] as number) >= (row.value[1] as number)) return "o início precisa ser menor que o fim";
+  if (row.op === "in" && field.codes) {
+    if (row.value.length === 0) return "informe ao menos um código";
+    const bad = row.value.find((v) => !field.codes!.pattern.test(v));
+    if (bad !== undefined) return `código inválido: ${bad} (ex.: ${field.codes.example})`;
+  }
   if (row.op === "in" && row.value.length === 0) return "marque ao menos uma opção";
   return null;
 }

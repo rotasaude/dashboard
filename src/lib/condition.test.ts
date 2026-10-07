@@ -9,7 +9,8 @@ import { NEIGHBORHOODS, SUGGESTION_DEF } from "../test/conditionFixtures";
 const FIELDS: Record<ConditionContext, ConditionField[]> = {
   eligibility: fieldsFor("eligibility"),
   suggestion: fieldsFor("suggestion", { definition: SUGGESTION_DEF }),
-  restriction: fieldsFor("restriction", { neighborhoods: NEIGHBORHOODS })
+  restriction: fieldsFor("restriction", { neighborhoods: NEIGHBORHOODS }),
+  screening: fieldsFor("screening")
 };
 const field = (context: ConditionContext, id: string) => FIELDS[context].find((f) => f.id === id)!;
 const AGE = "profile.age";
@@ -84,6 +85,43 @@ const CANONICAL: Array<[ ConditionContext, string, unknown ]> = [
   [ "restriction", "bairro inativo", { in: [ "citizen.neighborhood_id", [ "n3" ] ] } ],
   [ "restriction", "idade e bairro", { all: [ { gte: [ AGE, 60 ] }, { in: [ "citizen.neighborhood_id", [ "n2" ] ] } ] } ]
 ];
+
+describe("acolhimento (módulo 18)", () => {
+  it("sinais vitais, queixa e perfil, com os limites da escuta", () => {
+    expect(FIELDS.screening.map((f) => f.id)).toEqual([
+      "vitals.systolic", "vitals.diastolic", "vitals.heart_rate", "vitals.respiratory_rate", "vitals.temperature_c", "vitals.spo2",
+      "vitals.capillary_glucose", "vitals.weight_kg", "vitals.height_cm", "vitals.pain_score", "vitals.bmi", "vitals.glucose_moment",
+      "complaint.ciap2", "profile.age", "profile.sex"
+    ]);
+    expect(field("screening", "vitals.systolic")).toMatchObject({ label: "pressão sistólica", unit: " mmHg", min: 50, max: 300 });
+    expect(field("screening", "vitals.spo2").unit).toBe("%");
+    expect(field("screening", "vitals.pain_score").unit).toBeUndefined();
+  });
+
+  it("decimal na temperatura vai e volta; fora do plausível é dito", () => {
+    const tree = { gte: [ "vitals.temperature_c", 37.8 ] };
+    const parsed = fromTree(tree, FIELDS.screening);
+    expect(parsed.ok && toTree(parsed.root)).toEqual(tree);
+    const row = { ...newRow(field("screening", "vitals.spo2"), "lte"), value: 120 } as ConditionRow;
+    expect(rowProblem(row, field("screening", "vitals.spo2"))).toBe("use um valor entre 50 e 100");
+  });
+
+  it("CIAP-2: lista de códigos com o padrão conferido", () => {
+    const ciap = field("screening", "complaint.ciap2");
+    const parsed = fromTree({ in: [ "complaint.ciap2", [ "K86", "K87" ] ] }, FIELDS.screening);
+    expect(parsed.ok && parsed.root.children[0]).toMatchObject({ field: "complaint.ciap2", op: "in", value: [ "K86", "K87" ] });
+    const empty = newRow(ciap);
+    expect(rowProblem(empty, ciap)).toBe("informe ao menos um código");
+    expect(rowProblem({ ...empty, value: [ "K86", "hipertensão" ] } as ConditionRow, ciap)).toBe("código inválido: hipertensão (ex.: K86, A03)");
+  });
+
+  it("passo com prefixo vitals. ou complaint. não vira campo de resposta", () => {
+    const def = { steps: [ { id: "vitals.pa", prompt: "PA?", answer_type: "integer" }, { id: "complaint.x", prompt: "Q?", answer_type: "boolean" } ] };
+    const ids = fieldsFor("suggestion", { definition: def }).map((f) => f.id);
+    expect(ids).not.toContain("vitals.pa");
+    expect(ids).not.toContain("complaint.x");
+  });
+});
 
 describe("ida e volta", () => {
   it.each(CANONICAL)("%s / %s: árvore → modelo → árvore é a mesma", (context, _name, tree) => {

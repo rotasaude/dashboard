@@ -25,6 +25,35 @@ function Harness({ initial, fields = ELIG, onTree }: { initial: unknown; fields?
 const lastTree = (fn: ReturnType<typeof vi.fn>) => fn.mock.calls[fn.mock.calls.length - 1][0];
 const row = (n: number) => screen.getByRole("group", { name: `condição ${n}` });
 
+describe("ConditionBuilder — acolhimento (módulo 18)", () => {
+  const SCREENING = fieldsFor("screening");
+
+  it("sistólica a partir de 180 vira árvore e frase com a unidade", () => {
+    const onTree = vi.fn();
+    render(<Harness initial={undefined} fields={SCREENING} onTree={onTree} />);
+    fireEvent.click(screen.getByRole("button", { name: "+ condição" }));
+    fireEvent.change(within(row(1)).getByLabelText("valor"), { target: { value: "180" } });
+    expect(lastTree(onTree)).toEqual({ gte: [ "vitals.systolic", 180 ] });
+    expect(screen.getByText("pressão sistólica a partir de 180 mmHg")).not.toBeNull();
+  });
+
+  it("CIAP-2 por códigos digitados, em maiúsculas e sem repetir", () => {
+    const onTree = vi.fn();
+    render(<Harness initial={undefined} fields={SCREENING} onTree={onTree} />);
+    fireEvent.click(screen.getByRole("button", { name: "+ condição" }));
+    fireEvent.change(within(row(1)).getByLabelText("campo"), { target: { value: "complaint.ciap2" } });
+    fireEvent.change(within(row(1)).getByLabelText("códigos"), { target: { value: "k86, A03 k86" } });
+    expect(lastTree(onTree)).toEqual({ in: [ "complaint.ciap2", [ "K86", "A03" ] ] });
+    expect(screen.getByText("queixa (CIAP-2) é K86 ou A03")).not.toBeNull();
+  });
+
+  it("código fora do padrão aparece no motivo da linha", () => {
+    render(<Harness initial={{ in: [ "complaint.ciap2", [ "K86" ] ] }} fields={SCREENING} onTree={vi.fn()} />);
+    fireEvent.change(within(row(1)).getByLabelText("códigos"), { target: { value: "K86, febre" } });
+    expect(within(row(1)).getByText("código inválido: FEBRE (ex.: K86, A03)")).not.toBeNull();
+  });
+});
+
 describe("ConditionBuilder", () => {
   it("vazio diz 'para todos'; idade a partir de 60 vira a árvore e a frase", () => {
     const onTree = vi.fn();
