@@ -87,7 +87,7 @@ export function UnitQueue({ unit, units, canCare, careBlocked, onClinicalRefused
     try {
       const result = await callNext(unit.id);
       // Contrato §9: a escuta vem dentro de `attendance`.
-      if (result.attendance.screening) setPanel({ kind: "called", screening: result.attendance.screening });
+      setPanel(result.attendance.screening ? { kind: "called", screening: result.attendance.screening } : null);
       invalidate();
     } catch (err) {
       const code = errorCode(err);
@@ -114,7 +114,7 @@ export function UnitQueue({ unit, units, canCare, careBlocked, onClinicalRefused
     setRowBusy(row.id); setActionError(null);
     try {
       const result = await callAttendance(row.id, unit.id);
-      if (result.attendance.screening) setPanel({ kind: "called", screening: result.attendance.screening });
+      setPanel(result.attendance.screening ? { kind: "called", screening: result.attendance.screening } : null);
       invalidate();
     } catch (err) {
       const code = errorCode(err);

@@ -101,6 +101,31 @@ describe("UnitQueue — acolhimento (módulo 18)", () => {
     expect(screen.queryByRole("region", { name: "Escuta inicial do atendimento" })).toBeNull();
   });
 
+  it("Chamar próximo abre a escuta que veio no resultado", async () => {
+    mocked(api.callNext).mockResolvedValue({ attendance: { id: "a1",
+      screening: screening({ status: "completed", destination: "same_day", current_revision: revision(), revisions_count: 1 }) } } as never);
+    renderQueue(true);
+    await waitingRows();
+    fireEvent.click(screen.getByRole("button", { name: /Chamar próximo/ }));
+    const detail = await screen.findByRole("region", { name: "Escuta inicial do atendimento" });
+    expect(within(detail).getByText("K86")).not.toBeNull();
+  });
+
+  it("chamar quem não tem escuta fecha a escuta aberta da pessoa anterior", async () => {
+    mocked(api.callAttendance)
+      .mockResolvedValueOnce({ attendance: { id: "a1",
+        screening: screening({ status: "completed", destination: "same_day", current_revision: revision(), revisions_count: 1 }) } } as never)
+      .mockResolvedValueOnce({ attendance: { id: "a2", screening: null } } as never);
+    renderQueue(true);
+    let rows = await waitingRows();
+    fireEvent.click(within(rows[0]).getByRole("button", { name: "Chamar" }));
+    await screen.findByRole("region", { name: "Escuta inicial do atendimento" });
+    rows = await waitingRows();
+    fireEvent.click(within(rows[1]).getByRole("button", { name: "Chamar" }));
+    await waitFor(() => expect(api.callAttendance).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByRole("region", { name: "Escuta inicial do atendimento" })).toBeNull());
+  });
+
   it("Ver escuta lê pelo id (trilha de leitura) e mostra as revisões anteriores", async () => {
     const older = revision({ id: "rv0", final_color: "red", created_at: "2026-10-07T09:10:00-03:00" });
     mocked(api.getScreening).mockResolvedValue(screening({ id: "sc3", status: "completed", destination: "same_day",
