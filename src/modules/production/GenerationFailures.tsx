@@ -6,7 +6,7 @@ import { useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { listGenerationFailures, retryGenerationFailure, type GenerationFailure } from "../../lib/api";
 import {
-  ALREADY_RESOLVED, SOURCE_LABEL, canRetryGeneration, productionError, productionErrorCode, reasonsLabel, retryOutcome
+  ALREADY_RESOLVED, PRODUCTION_KEY, SOURCE_LABEL, canRetryGeneration, productionError, productionErrorCode, reasonsLabel, retryOutcome
 } from "../../lib/production";
 import { featureDisabledKey } from "../../lib/features";
 import { fmtDateTime } from "../../lib/format";
@@ -43,6 +43,7 @@ export function GenerationFailures({ roles, onGoToSecurity }: { roles: string[];
               setRetrying(null);
               setDone(outcome.current ? retryOutcome(outcome.current) : null);
               refresh();
+              void queryClient.invalidateQueries({ queryKey: [ PRODUCTION_KEY ] });
             }}
             onCancel={() => setRetrying(null)}
             onGoToSecurity={onGoToSecurity}

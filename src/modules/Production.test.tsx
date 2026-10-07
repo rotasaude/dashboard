@@ -165,6 +165,7 @@ describe("Produção e-SUS (módulo 16)", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Gerar de novo g1" }));
     fireEvent.click(await screen.findByRole("button", { name: "Gerar de novo" }));
     expect(await screen.findByText("Ficha gerada: ela entra na fila de envio.")).not.toBeNull();
+    await waitFor(() => expect(api.getProduction).toHaveBeenCalledTimes(2));
 
     m(api.retryGenerationFailure).mockRejectedValueOnce(new ApiError(409, { error: "already_resolved" }, "409"));
     fireEvent.click(await screen.findByRole("button", { name: "Gerar de novo g1" }));
