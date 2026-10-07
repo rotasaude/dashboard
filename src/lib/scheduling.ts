@@ -2,7 +2,7 @@
 // A validação daqui espelha os 422 do api para a tela avisar antes de enviar;
 // quem garante continua sendo o api.
 import type {
-  AppointmentType, AppointmentView, AvailabilitySlot, BlockKind, BookingKind, PreferredPeriod, RescheduleReasonCode,
+  AppointmentType, AppointmentView, AvailabilitySlot, BlockKind, BookingKind, PreferredPeriod, RequestRow, RescheduleReasonCode,
   ScheduleBlock, ScheduleTemplate, SchedulingPriority
 } from "./api";
 import { cityDateFormat, cityIsoDate, fmtHourMinute } from "./format";
@@ -208,9 +208,10 @@ export function slotsByDay(slots: AvailabilitySlot[]): Map<string, AvailabilityS
   return map;
 }
 
-export function requestKindLabel(row: { kind: "return" | "referral" | "triage"; origin_unit_name: string | null }): string {
+export function requestKindLabel(row: { kind: RequestRow["kind"]; origin_unit_name: string | null }): string {
   if (row.kind === "return") return "Retorno";
   if (row.kind === "triage") return "Triagem";
+  if (row.kind === "screening") return "Acolhimento";
   return row.origin_unit_name ? `Encaminhado de ${row.origin_unit_name}` : "Encaminhamento";
 }
 

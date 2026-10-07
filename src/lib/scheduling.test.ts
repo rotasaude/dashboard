@@ -200,6 +200,10 @@ describe("rótulo do pedido", () => {
     expect(requestKindLabel({ kind: "referral", origin_unit_name: null })).toBe("Encaminhamento");
     expect(requestKindLabel({ kind: "triage", origin_unit_name: null })).toBe("Triagem");
   });
+
+  it("pedido nascido no acolhimento (módulo 18)", () => {
+    expect(requestKindLabel({ kind: "screening", origin_unit_name: null })).toBe("Acolhimento");
+  });
 });
 
 describe("estado do horário", () => {

@@ -461,7 +461,8 @@ export interface UnitAddress {
   neighborhood_id: string | null;
 }
 
-export interface HealthUnit extends Partial<UnitAddress> { id: string; name: string; kind: string }
+// `screening_scope` (módulo 18; contrato §5): ausente em api anterior = `walk_in`.
+export interface HealthUnit extends Partial<UnitAddress> { id: string; name: string; kind: string; screening_scope?: ScreeningScope }
 export interface HealthUnitRow extends HealthUnit {
   active: boolean;
   // O que ainda prende a unidade (api#29): pedidos vivos e horários marcados.
@@ -496,9 +497,12 @@ export async function createUnit(name: string, kind: string, address: UnitAddres
   return payload.unit;
 }
 
-export async function updateUnit(id: string, name: string, kind: string, address: UnitAddress): Promise<HealthUnitRow> {
+export async function updateUnit(
+  id: string, name: string, kind: string, address: UnitAddress, screeningScope?: ScreeningScope
+): Promise<HealthUnitRow> {
+  const body = screeningScope ? { name, kind, ...address, screening_scope: screeningScope } : { name, kind, ...address };
   const payload = await jsonFetch<{ unit: HealthUnitRow }>(`${ATTENDANCE_BASE}/units/${encodeURIComponent(id)}`, {
-    method: "POST", body: JSON.stringify({ name, kind, ...address })
+    method: "POST", body: JSON.stringify(body)
   });
   return payload.unit;
 }
@@ -537,6 +541,10 @@ export interface QueueRow {
   // triagem deste atendimento (sem triagem, o bairro atual do cidadão).
   // Opcional: a API anterior ao módulo 11 não manda.
   reference_unit_ids?: string[];
+  // Módulo 18 (contrato §9): cor, destino e espera da escuta; null sem escuta.
+  screening?: QueueScreening | null;
+  // Módulo 18 (contrato §9): true enquanto a escuta ainda não terminou.
+  awaiting_screening?: boolean;
 }
 
 export interface AppointmentRequestSummary { id: string; kind: string; target_unit_name: string; status: string }
@@ -581,13 +589,16 @@ export async function listUnitQueue(unitId: string): Promise<{ waiting: QueueRow
   return jsonFetch(`${ATTENDANCE_BASE}/units/${encodeURIComponent(unitId)}/queue`);
 }
 
-export async function callAttendance(id: string, healthUnitId: string): Promise<{ attendance: Attendance }> {
+// Módulo 18 (contrato §9): a chamada devolve a escuta aninhada no atendimento, para o profissional.
+export interface CallResult { attendance: Attendance & { screening?: Screening | null } }
+
+export async function callAttendance(id: string, healthUnitId: string): Promise<CallResult> {
   return jsonFetch(`${ATTENDANCE_BASE}/attendances/${encodeURIComponent(id)}/call`, {
     method: "POST", body: JSON.stringify({ health_unit_id: healthUnitId })
   });
 }
 
-export async function callNext(unitId: string): Promise<{ attendance: Attendance }> {
+export async function callNext(unitId: string): Promise<CallResult> {
   return jsonFetch(`${ATTENDANCE_BASE}/units/${encodeURIComponent(unitId)}/call_next`, { method: "POST", body: "{}" });
 }
 
@@ -609,7 +620,7 @@ export async function closeAttendance(
 // `priority` é a prioridade do pedido (rotina/prioritária); a da triagem é
 // `triage_priority`.
 export interface RequestRow {
-  id: string; kind: "return" | "referral" | "triage"; origin: "attendance" | "triage";
+  id: string; kind: "return" | "referral" | "triage" | "screening"; origin: "attendance" | "triage";
   origin_unit_name: string | null; created_at: string; cpf_masked: string; note: string | null;
   reopened_reason: "expired" | "no_show" | null;
   appointment_type_key: string; appointment_type_name: string; priority: SchedulingPriority; due_on: string;
@@ -1412,4 +1423,128 @@ export async function bookAppointment(requestId: string, unitId: string, input: 
 
 export function getUnitAgenda(unitId: string, date: string): Promise<UnitAgenda> {
   return jsonFetch(`${ATTENDANCE_BASE}/units/${professionalId(unitId)}/agenda?date=${professionalId(date)}`);
+}
+
+// ─── Acolhimento (módulo 18, ADR 0030; contratos 2026-10-07 §2–§6, §9) ───────
+// Texto livre (queixa, justificativa, orientação) só no corpo de POST, nunca
+// em URL. A recepção não chama nada daqui: ela só lê o bloco `screening` da fila.
+
+export type ScreeningColor = "red" | "yellow" | "green" | "blue";
+export type ScreeningDestination = "same_day" | "schedule" | "oriented" | "referred";
+export type ScreeningStatus = "in_progress" | "completed" | "abandoned";
+export type ScreeningScope = "walk_in" | "all";
+export type GlucoseMoment = "fasting" | "postprandial" | "random";
+
+export interface VitalSigns {
+  systolic?: number; diastolic?: number; heart_rate?: number; respiratory_rate?: number; temperature_c?: number;
+  spo2?: number; capillary_glucose?: number; glucose_moment?: GlucoseMoment; weight_kg?: number; height_cm?: number;
+  pain_score?: number;
+  // Só nas respostas (calculado pela API).
+  bmi?: number;
+}
+export interface Ciap2Ref { code: string; label: string }
+export interface MatchedRule { index: number; text: string }
+
+export interface ScreeningRevision {
+  id: string; created_at: string; by: { id: string; name: string };
+  ciap2: Ciap2Ref; complaint_note?: string | null; vitals: VitalSigns; alerts: string[];
+  suggested_color: ScreeningColor | null; final_color: ScreeningColor; color_change_reason?: string | null;
+  matched_rules: MatchedRule[];
+}
+export interface Screening {
+  id: string; attendance_id: string; status: ScreeningStatus; started_at: string; completed_at: string | null;
+  destination: ScreeningDestination | null; orientation_note?: string | null; appointment_request_id?: string | null;
+  current_revision: ScreeningRevision | null; revisions_count: number;
+  // Só em GET /attendance/screenings/:id.
+  revisions?: ScreeningRevision[];
+}
+export interface ScreeningQueueItem {
+  attendance_id: string; citizen: { id: string; cpf_masked: string }; checked_in_at: string; triage_priority: number | null;
+  screening: { id: string; status: ScreeningStatus; started_by_name: string } | null;
+}
+// Bloco da fila do profissional (contrato §9). Com `id`, "Ver escuta" e
+// "Reavaliar" sabem qual escuta abrir.
+export interface QueueScreening { id: string; color: ScreeningColor; destination: ScreeningDestination; waited_minutes: number }
+
+export interface ScreeningSuggestion { suggested_color: ScreeningColor | null; matched_rules: MatchedRule[]; alerts: string[]; bmi: number | null }
+// `attendance_id` no lugar de `citizen_id` (contrato §9); sem queixa escolhida, `ciap2_code` fica de fora.
+export interface ScreeningSuggestInput { ciap2_code?: string; vitals: VitalSigns; attendance_id: string }
+
+export interface ScreeningRevisionInput {
+  ciap2_code: string; complaint_note?: string; vitals: VitalSigns; final_color: ScreeningColor; color_change_reason?: string;
+}
+export interface ScreeningScheduleInput { appointment_type_key: string; priority: SchedulingPriority; due_in_days: number }
+export interface ScreeningReferralInput { referral_unit_id?: string; referral_note?: string }
+export interface ScreeningCompleteInput extends ScreeningRevisionInput {
+  destination: ScreeningDestination; orientation_note?: string; schedule?: ScreeningScheduleInput; referral?: ScreeningReferralInput;
+}
+
+export interface SimulateScreeningInput {
+  definition: unknown; ciap2_code: string | null; vitals: VitalSigns; profile: { age: number; sex: Sex };
+}
+// Sem `alerts` nem `bmi`: o simulador só avalia as regras do rascunho (contrato §9).
+export interface SimulateScreeningResult {
+  suggested_color: ScreeningColor | null; matched_rules: MatchedRule[]; errors: string[]; warnings: string[];
+}
+
+export interface GenerationFailure {
+  id: string; source_type: string; source_id: string; attendance_id: string | null; reason_codes: string[];
+  created_at: string; resolved_at: string | null;
+}
+
+const screeningPath = (id: string, action?: string) =>
+  `${ATTENDANCE_BASE}/screenings/${encodeURIComponent(id)}${action ? `/${action}` : ""}`;
+
+export async function listScreeningQueue(unitId: string): Promise<ScreeningQueueItem[]> {
+  const payload = await jsonFetch<{ items: ScreeningQueueItem[] }>(`${ATTENDANCE_BASE}/units/${encodeURIComponent(unitId)}/screening_queue`);
+  return payload.items;
+}
+
+export function startScreening(attendanceId: string): Promise<Screening> {
+  return jsonFetch(`${ATTENDANCE_BASE}/attendances/${encodeURIComponent(attendanceId)}/screening`, postProfessional({}));
+}
+
+export function abandonScreening(id: string): Promise<Screening> {
+  return jsonFetch(screeningPath(id, "abandon"), postProfessional({}));
+}
+
+// Não grava nada.
+export function suggestScreening(input: ScreeningSuggestInput): Promise<ScreeningSuggestion> {
+  return jsonFetch(`${ATTENDANCE_BASE}/screenings/suggest`, postProfessional(input));
+}
+
+export function completeScreening(id: string, input: ScreeningCompleteInput): Promise<Screening> {
+  return jsonFetch(screeningPath(id, "complete"), postProfessional(input));
+}
+
+export function reassessScreening(id: string, input: ScreeningRevisionInput): Promise<Screening> {
+  return jsonFetch(screeningPath(id, "reassess"), postProfessional(input));
+}
+
+// Abrir a escuta gera a trilha de leitura (`screening.viewed`) no api.
+export function getScreening(id: string): Promise<Screening> {
+  return jsonFetch(screeningPath(id));
+}
+
+// Contrato §9: busca de CIAP-2 por nome ou código, no corpo (o termo pode
+// descrever a queixa) e na terminologia ativa.
+export async function searchCiap2(q: string): Promise<Ciap2Ref[]> {
+  const payload = await jsonFetch<{ items: Ciap2Ref[] }>(`${ATTENDANCE_BASE}/ciap2/search`, postProfessional({ q }));
+  return payload.items;
+}
+
+// Contrato §9: simulador do editor com a definição do rascunho. Como o
+// simulate_offer, definição que falha no gate responde 200 com `errors`.
+export function simulateScreening(input: SimulateScreeningInput): Promise<SimulateScreeningResult> {
+  return jsonFetch(`${AUTHORING_BASE}/simulate_screening`, postProfessional(input));
+}
+
+export async function listGenerationFailures(): Promise<GenerationFailure[]> {
+  const payload = await jsonFetch<{ items: GenerationFailure[] }>(`${PRODUCTION_BASE}/generation_failures?resolved=false`);
+  return payload.items;
+}
+
+// Step-up: quem trata 401 mfa_required é o SensitiveAction.
+export function retryGenerationFailure(id: string): Promise<GenerationFailure> {
+  return jsonFetch(`${PRODUCTION_BASE}/generation_failures/${encodeURIComponent(id)}/retry`, postProfessional({}));
 }
