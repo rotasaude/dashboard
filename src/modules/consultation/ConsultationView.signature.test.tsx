@@ -6,7 +6,7 @@ import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/re
 vi.mock("../../lib/api", async (importOriginal) => {
   const real = await importOriginal<typeof import("../../lib/api")>();
   return { ...real, fetchCurrentSession: vi.fn(), fetchConsultationPdf: vi.fn(), getConsultation: vi.fn(),
-    addAddendum: vi.fn(), getSignature: vi.fn() };
+    addAddendum: vi.fn(), getSignature: vi.fn(), verifySignature: vi.fn() };
 });
 
 import * as api from "../../lib/api";
@@ -28,7 +28,7 @@ const view = (c: ReturnType<typeof finalized>, extra: { readOnly?: boolean; onOp
 
 describe("ConsultationView com assinatura digital (19b)", () => {
   beforeEach(() => {
-    for (const fn of [ api.fetchCurrentSession, api.getConsultation, api.getSignature ]) mocked(fn).mockReset();
+    for (const fn of [ api.fetchCurrentSession, api.getConsultation, api.getSignature, api.verifySignature ]) mocked(fn).mockReset();
     mocked(api.fetchCurrentSession).mockResolvedValue(signer());
     mocked(api.getSignature).mockResolvedValue(signatureDetail());
   });
@@ -43,6 +43,24 @@ describe("ConsultationView com assinatura digital (19b)", () => {
     expect(within(added).getByText("sem sessão de assinatura aberta")).not.toBeNull();
     expect(screen.getByText("com adendo, o impresso é o do prontuário; os documentos assinados estão em “Ver o que foi assinado”"))
       .not.toBeNull();
+  });
+
+  it("pendente logo depois de finalizar (pedido criado, job assinando): diz que está assinando", () => {
+    view(finalized({ signature: { mode: "pending", request_id: "sr1" } }));
+    const group = screen.getByRole("group", { name: "assinatura da consulta" });
+    expect(within(group).getByText("assinatura pendente")).not.toBeNull();
+    expect(within(group).getByText("assinando…")).not.toBeNull();
+  });
+
+  it("Revalidar devolve indeterminada: o marcador acompanha o detalhe (a consulta não é relida aqui)", async () => {
+    mocked(api.verifySignature).mockResolvedValue(signatureDetail({ verification: "indeterminate" }));
+    view(finalized({ signature: signatureBlock() }));
+    const group = screen.getByRole("group", { name: "assinatura da consulta" });
+    fireEvent.click(within(group).getByRole("button", { name: "Ver o que foi assinado" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Revalidar" }));
+    expect(await screen.findByText("revalidada: indeterminada")).not.toBeNull();
+    expect(within(group).getByText("assinatura digital indeterminada")).not.toBeNull();
+    expect(within(group).queryByText("assinada digitalmente")).toBeNull();
   });
 
   it("consulta digital sem adendo: o impresso é o PDF assinado", () => {

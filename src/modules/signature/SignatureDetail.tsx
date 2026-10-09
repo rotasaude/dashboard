@@ -27,6 +27,10 @@ interface Props {
   onOpeningRequired?(): void;
   // Leitura administrativa: Cancelar no step-up fecha o detalhe.
   onClose?(): void;
+  // Consulta dona do documento: Revalidar invalida só a leitura dela.
+  consultationId?: string;
+  // Revalidar devolveu a validação nova: o marcador acompanha.
+  onVerified?(detail: Detail): void;
 }
 
 export function SignatureDetail(props: Props) {
@@ -54,7 +58,7 @@ function AdministrativeDetail({ id, onClose }: Props) {
   );
 }
 
-function AuthorDetail({ id, onOpeningRequired }: Props) {
+function AuthorDetail({ id, onOpeningRequired, consultationId, onVerified }: Props) {
   const queryClient = useQueryClient();
   const key = [ SIGNATURE_KEY, id ];
   const query = useQuery({ queryKey: key, queryFn: () => getSignature(id), gcTime: 0, staleTime: 0 });
@@ -93,7 +97,8 @@ function AuthorDetail({ id, onOpeningRequired }: Props) {
       const fresh = await verifySignature(id);
       queryClient.setQueryData(key, fresh);
       setMessage(`revalidada: ${verificationView(fresh.verification).label}`);
-      void queryClient.invalidateQueries({ queryKey: [ CONSULTATION_KEY ] });
+      onVerified?.(fresh);
+      void queryClient.invalidateQueries({ queryKey: consultationId ? [ CONSULTATION_KEY, consultationId ] : [ CONSULTATION_KEY ] });
     } catch (err) {
       fail(err);
     } finally {

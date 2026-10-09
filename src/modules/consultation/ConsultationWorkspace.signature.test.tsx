@@ -11,9 +11,13 @@ vi.mock("../../lib/api", async (importOriginal) => {
     startConsultation: vi.fn(), getConsultation: vi.fn() };
 });
 const MANUAL: SignatureBlock = { mode: "manual" };
+// O bloco que a finalização e o 201 do adendo devolvem: "manual" (sem
+// certificado/interruptor ou api antigo) ou já "pending" com pedido (o api cria
+// o pedido dentro da finalização quando a autora pode assinar).
+const blocks = vi.hoisted(() => ({ finalize: { mode: "manual" } as SignatureBlock, addendum: { mode: "manual" } as SignatureBlock }));
 vi.mock("./ConsultationEditor", () => ({
   ConsultationEditor: (p: { consultation: Consultation; onFinalized(c: Consultation): void }) => (
-    <button type="button" onClick={() => p.onFinalized({ ...p.consultation, status: "finalized", signature: { mode: "manual" } })}>
+    <button type="button" onClick={() => p.onFinalized({ ...p.consultation, status: "finalized", signature: blocks.finalize })}>
       finalizar (dublê)
     </button>
   )
@@ -26,7 +30,7 @@ vi.mock("./ConsultationView", () => ({
       <span>{`adendos: ${p.consultation.addenda.map((a) => `${a.id}=${mode(a.signature)}`).join(",")}`}</span>
       <button type="button" onClick={() => p.onAddendumAdded({ id: "ad9", author_name: "Dra. Helena Prado",
         created_at: "2026-10-07T11:00:00-03:00", reason: "correção do plano", text: "Retorno.", changes: null,
-        signature: { mode: "manual" } })}>adendo (dublê)</button>
+        signature: blocks.addendum })}>adendo (dublê)</button>
     </div>
   ),
   ConsultationLoader: () => null
@@ -55,7 +59,7 @@ async function finalize() {
   // O relógio falso entra só agora: o carregamento usou o real.
   vi.useFakeTimers({ toFake: [ "setTimeout", "clearTimeout" ] });
   fireEvent.click(button);
-  expect(screen.getByText("assinatura: manual")).not.toBeNull();
+  expect(screen.getByText(`assinatura: ${mode(blocks.finalize)}`)).not.toBeNull();
   return view;
 }
 
@@ -67,6 +71,50 @@ describe("ConsultationWorkspace — releitura da assinatura (19b)", () => {
     mocked(api.getAttendanceRecord).mockResolvedValue(record());
     mocked(api.getConsultationOptions).mockResolvedValue(options());
     mocked(api.startConsultation).mockResolvedValue(consultation());
+    blocks.finalize = MANUAL;
+    blocks.addendum = MANUAL;
+  });
+
+  it("finalizar já devolve pendente com pedido: mostra na hora e a releitura chega à digital", async () => {
+    blocks.finalize = { mode: "pending", request_id: "sr1" };
+    mocked(api.getConsultation).mockResolvedValue(finalized({ signature: signatureBlock() }));
+    await finalize();
+    expect(screen.getByText("assinatura: pending/sr1")).not.toBeNull();
+    expect(api.getConsultation).not.toHaveBeenCalled();
+    await tick(SIGNATURE_REREAD_MS);
+    expect(api.getConsultation).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("assinatura: digital/sr1")).not.toBeNull();
+    await steps(3);
+    expect(api.getConsultation).toHaveBeenCalledTimes(1);
+  });
+
+  it("o 201 do adendo já pendente: mostra na hora e a releitura chega à digital", async () => {
+    blocks.finalize = signatureBlock();
+    blocks.addendum = { mode: "pending", request_id: "sr9" };
+    mocked(api.getConsultation).mockResolvedValue(finalized({ signature: signatureBlock(), addenda: [ { id: "ad9",
+      author_name: "Dra. Helena Prado", created_at: "2026-10-07T11:00:00-03:00", reason: "correção do plano", text: "Retorno.",
+      changes: null, signature: signatureBlock({ request_id: "sr9", signature_id: "sg9" }) } ] }));
+    await finalize();
+    await steps(2);
+    expect(api.getConsultation).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "adendo (dublê)" }));
+    expect(screen.getByText("adendos: ad9=pending/sr9")).not.toBeNull();
+    await tick(SIGNATURE_REREAD_MS);
+    expect(api.getConsultation).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("adendos: ad9=digital/sr9")).not.toBeNull();
+  });
+
+  it("abrir uma consulta finalizada antiga que ficou à mão não relê", async () => {
+    mocked(api.startConsultation).mockResolvedValue(finalized({ signature: MANUAL }));
+    renderWithProviders(
+      <ConsultationWorkspace attendanceId="a1" unit={unit} units={[ unit ]} onClose={vi.fn()} onFinalized={vi.fn()} />);
+    const button = await screen.findByRole("button", { name: "Iniciar consulta" });
+    vi.useFakeTimers({ toFake: [ "setTimeout", "clearTimeout" ] });
+    fireEvent.click(button);
+    await tick(0);
+    expect(screen.getByText("assinatura: manual")).not.toBeNull();
+    await steps(4);
+    expect(api.getConsultation).not.toHaveBeenCalled();
   });
 
   it("3 s depois de finalizar relê e mostra o bloco que o job gravou", async () => {

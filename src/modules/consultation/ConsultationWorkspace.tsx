@@ -44,7 +44,8 @@ export function ConsultationWorkspace(props: Props) {
   const [ busy, setBusy ] = useState(false);
   const [ error, setError ] = useState<string | null>(null);
   const [ notice, setNotice ] = useState<string | null>(null);
-  const rereads = useRef(0);
+  // Armada só por finalizar/adendo: abrir uma consulta antiga que ficou à mão não relê.
+  const rereads = useRef(SIGNATURE_REREAD_LIMIT);
   const [ rereadTick, setRereadTick ] = useState(0);
   const signer = canSign(user);
   const settling = consultation?.status === "finalized" && signatureSettling(consultation);

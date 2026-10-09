@@ -1,6 +1,6 @@
 // src/modules/signature/SignatureDetail.test.tsx
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const real = await importOriginal<typeof import("../../lib/api")>();
@@ -10,6 +10,7 @@ vi.mock("../../lib/api", async (importOriginal) => {
 import * as api from "../../lib/api";
 import { ApiError } from "../../lib/api";
 import { SignatureDetail } from "./SignatureDetail";
+import { Tag } from "../../components/Tag";
 import { SIMULATED_NOTICE } from "../../lib/signature";
 import { signatureDetail, signer } from "../../test/signatureFixtures";
 import { renderWithProviders, sessionWith } from "../../test/campaignFixtures";
@@ -47,6 +48,26 @@ describe("SignatureDetail", () => {
     expect(within(section).getByLabelText("conteúdo assinado").textContent).toMatch(/"assessment": "Diabetes descompensado\."/);
     expect(within(section).queryByText(SIMULATED_NOTICE)).toBeNull();
     expect(api.getSignature).toHaveBeenCalledWith("sg1");
+  });
+
+  it("validação desconhecida (api mais novo): o valor cru aparece, nunca 'válida'", async () => {
+    mocked(api.getSignature).mockResolvedValue(signatureDetail({ verification: "revoked_later" as never }));
+    renderWithProviders(<SignatureDetail id="sg1" />);
+    const section = await screen.findByRole("region", { name: "O que foi assinado" });
+    const tag = within(section).getByText("revoked_later");
+    const { container } = render(<Tag tone="warn">referência</Tag>);
+    expect(tag.getAttribute("style")).toBe(container.firstElementChild?.getAttribute("style"));
+    expect(within(section).queryByText("válida")).toBeNull();
+  });
+
+  it("Revalidar avisa o marcador e invalida só a consulta dona", async () => {
+    mocked(api.verifySignature).mockResolvedValue(signatureDetail({ verification: "invalid" }));
+    const onVerified = vi.fn();
+    const { client } = renderWithProviders(<SignatureDetail id="sg1" consultationId="cs1" onVerified={onVerified} />);
+    const invalidate = vi.spyOn(client, "invalidateQueries");
+    fireEvent.click(await screen.findByRole("button", { name: "Revalidar" }));
+    await waitFor(() => expect(onVerified).toHaveBeenCalledWith(expect.objectContaining({ verification: "invalid" })));
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: [ "consultation", "cs1" ] });
   });
 
   it("assinatura simulada: o aviso aparece", async () => {
