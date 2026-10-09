@@ -6,7 +6,7 @@ import { useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   errorCode, getAdministrativeConsultation, getConsultationOptions, listProfessionalConsultations, listProfessionals,
-  type Consultation, type ConsultationListItem
+  type Consultation, type ConsultationListItem, type ConsultationOptions
 } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { hasFeature } from "../lib/features";
@@ -21,7 +21,7 @@ import { buttonStyle, inputStyle, secondaryButtonStyle } from "../components/for
 import { ConsultationView } from "./consultation/ConsultationView";
 
 type Result = { professional: { id: string; name: string }; consultations: ConsultationListItem[] };
-type Pending = { kind: "search" } | { kind: "open"; id: string; label: string };
+type Pending = { kind: "search" } | { kind: "open"; id: string; label: string; item: ConsultationListItem };
 
 const NOT_FOUND = "profissional não encontrado nesta cidade";
 const OWN = new Set([ "invalid_period", "missing_role", "feature_disabled" ]);
@@ -35,22 +35,32 @@ export function ProfessionalConsultations({ onGoToSecurity }: { onGoToSecurity?(
   const [ pending, setPending ] = useState<Pending | null>(null);
   const [ result, setResult ] = useState<Result | null>(null);
   const [ consultation, setConsultation ] = useState<Consultation | null>(null);
+  const [ opened, setOpened ] = useState<ConsultationListItem | null>(null);
   const got = useRef<Result | Consultation | null>(null);
   const allowed = !!user && !user.operator && hasFeature(user, "clinical_record")
     && user.memberships.some((m) => m.role === "municipal_admin");
   const professionals = useQuery({ queryKey: [ "professionals" ], queryFn: listProfessionals, enabled: allowed });
+  // /attendance/consultation_options recusa quem não é health_professional.
+  const alsoProfessional = allowed && user.memberships.some((m) => m.role === "health_professional");
   const options = useQuery({
-    queryKey: [ OPTIONS_KEY, user?.id ?? null ], queryFn: getConsultationOptions, staleTime: 5 * 60_000, enabled: allowed
+    queryKey: [ OPTIONS_KEY, user?.id ?? null ], queryFn: getConsultationOptions, staleTime: 5 * 60_000, enabled: alsoProfessional
   });
 
   if (!user) return null;
   if (!hasFeature(user, "clinical_record")) return <Frame><EmptyState title="o prontuário está desligado nesta cidade" /></Frame>;
   if (!allowed) return <Frame><EmptyState title="seu papel não permite ver consultas" /></Frame>;
 
+  // Sem as opções do atendimento, o tipo vem do item da lista; condutas ficam pelo código.
+  const viewOptions: ConsultationOptions | null = alsoProfessional ? (options.data ?? null)
+    : opened?.care_type && opened.care_type_label
+      ? { care_types: [ { code: opened.care_type, label: opened.care_type_label } ], conducts: [], cid10_allowed_for_cbo: false }
+      : null;
+
   function ask() {
     if (!userId) { setProblem("escolha o profissional"); return; }
     if (from && to && from > to) { setProblem("a data inicial precisa ser igual ou anterior à final"); return; }
     setProblem(null);
+    setResult(null);
     setPending({ kind: "search" });
   }
 
@@ -77,7 +87,7 @@ export function ProfessionalConsultations({ onGoToSecurity }: { onGoToSecurity?(
         }}
         onDone={() => {
           if (p.kind === "search") setResult(got.current as Result);
-          else setConsultation(got.current as Consultation);
+          else { setConsultation(got.current as Consultation); setOpened(p.item); }
           got.current = null;
           setPending(null);
         }}
@@ -93,8 +103,8 @@ export function ProfessionalConsultations({ onGoToSecurity }: { onGoToSecurity?(
       {consultation ? (
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           <p style={notice}>Leitura administrativa, só para consulta: fica registrada no relatório de aberturas.</p>
-          <ConsultationView consultation={consultation} options={options.data ?? null} patientProblems={[]} readOnly
-            onAddendumAdded={() => {}} onClose={() => setConsultation(null)} />
+          <ConsultationView consultation={consultation} options={viewOptions} patientProblems={[]} readOnly
+            onAddendumAdded={() => {}} onClose={() => { setConsultation(null); setOpened(null); }} />
         </div>
       ) : (
         <Panel title="Consultas finalizadas" sub="escolha o profissional e, se quiser, o período">
@@ -106,8 +116,8 @@ export function ProfessionalConsultations({ onGoToSecurity }: { onGoToSecurity?(
                   {(professionals.data ?? []).map((p) => <option key={p.user_id} value={p.user_id}>{p.professional_name}</option>)}
                 </select>
               </label>
-              <label style={labelStyle}>De<input type="date" value={from} style={inputStyle} onChange={(e) => setFrom(e.target.value)} /></label>
-              <label style={labelStyle}>Até<input type="date" value={to} style={inputStyle} onChange={(e) => setTo(e.target.value)} /></label>
+              <label style={labelStyle}>De<input type="date" value={from} style={inputStyle} onChange={(e) => { setFrom(e.target.value); setResult(null); }} /></label>
+              <label style={labelStyle}>Até<input type="date" value={to} style={inputStyle} onChange={(e) => { setTo(e.target.value); setResult(null); }} /></label>
               <button type="button" style={buttonStyle} onClick={ask}>Buscar</button>
             </div>
             {problem && <p role="alert" style={alert}>{problem}</p>}
@@ -125,7 +135,7 @@ export function ProfessionalConsultations({ onGoToSecurity }: { onGoToSecurity?(
                       { label: "Unidade", w: "1.2fr", render: (r) => r.health_unit.name },
                       { label: "", w: "1fr", render: (r) => (
                         <button type="button" style={secondaryButtonStyle} aria-label={`Abrir consulta de ${fmtDateTime(r.finalized_at)}`}
-                          onClick={() => setPending({ kind: "open", id: r.id, label: fmtDateTime(r.finalized_at) })}>Abrir</button>
+                          onClick={() => setPending({ kind: "open", id: r.id, label: fmtDateTime(r.finalized_at), item: r })}>Abrir</button>
                       ) }
                     ]}
                     rows={result.consultations}

@@ -82,11 +82,50 @@ describe("Consultas por profissional", () => {
     expect(await screen.findByText("o período informado não é válido")).not.toBeNull();
   });
 
+  it("admin puro: não lê opções do atendimento e o tipo vem do item da lista", async () => {
+    await search();
+    await screen.findByText("Joana Lima");
+    fireEvent.click(screen.getByRole("button", { name: /Abrir consulta de/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Abrir consulta" }));
+    await screen.findByRole("button", { name: "Fechar consulta" });
+    expect(screen.getAllByText(/Consulta no dia/).length).toBeGreaterThan(0);
+    expect(api.getConsultationOptions).not.toHaveBeenCalled();
+  });
+
+  it("admin que também é profissional: usa as opções do atendimento", async () => {
+    m(api.fetchCurrentSession).mockResolvedValue(
+      sessionWith([ "municipal_admin", "health_professional" ], { id: "ad1", features: [ "clinical_record" ] }));
+    renderWithProviders(<ProfessionalConsultations />);
+    await screen.findByRole("option", { name: "Dra. Helena Prado" });
+    await waitFor(() => expect(api.getConsultationOptions).toHaveBeenCalled());
+  });
+
+  it("mudar profissional ou período limpa a lista antiga; nova busca também", async () => {
+    await search();
+    await screen.findByText("Joana Lima");
+    fireEvent.change(screen.getByLabelText("De"), { target: { value: "2026-09-01" } });
+    expect(screen.queryByText("Joana Lima")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Buscar" }));
+    expect(screen.queryByText("Joana Lima")).toBeNull();
+  });
+
+  it("sem autenticador, o atalho para Segurança chega ao SensitiveAction", async () => {
+    m(api.fetchCurrentSession).mockResolvedValue(
+      sessionWith([ "municipal_admin" ], { id: "ad1", features: [ "clinical_record" ], mfa_enrolled: false }));
+    const go = vi.fn();
+    renderWithProviders(<ProfessionalConsultations onGoToSecurity={go} />);
+    await screen.findByRole("option", { name: "Dra. Helena Prado" });
+    fireEvent.change(screen.getByLabelText("Profissional"), { target: { value: "us1" } });
+    fireEvent.click(screen.getByRole("button", { name: "Buscar" }));
+    fireEvent.click(await screen.findByRole("button", { name: "cadastre seu autenticador" }));
+    expect(go).toHaveBeenCalled();
+  });
+
   it("nunca chama as rotas do atendimento nem do prontuário", async () => {
     await search();
     await screen.findByText("Joana Lima");
     await waitFor(() => expect(api.listProfessionalConsultations).toHaveBeenCalled());
-    for (const fn of [ api.getConsultation, api.getJustifiedRecord, api.getAttendanceRecord, api.listMyConsultations ]) {
+    for (const fn of [ api.getConsultation, api.getJustifiedRecord, api.getAttendanceRecord, api.listMyConsultations, api.getConsultationOptions ]) {
       expect(fn).not.toHaveBeenCalled();
     }
   });

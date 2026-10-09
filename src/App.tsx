@@ -92,7 +92,7 @@ function renderModule(active: ModuleId, setActive: (id: ModuleId) => void) {
     case "cnes":           return <Cnes onGoToSecurity={() => setActive("security")} />;
     case "production":     return <Production onGoToSecurity={() => setActive("security")} />;
     case "my-consultations": return <MyConsultations />;
-    case "professional-consultations": return <ProfessionalConsultations />;
+    case "professional-consultations": return <ProfessionalConsultations onGoToSecurity={() => setActive("security")} />;
     case "clinical-record": return <ClinicalRecord onGoToSecurity={() => setActive("security")} />;
     default:               return <Placeholder title={labelFor(active)} />;
   }
