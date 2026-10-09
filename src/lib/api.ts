@@ -1860,8 +1860,12 @@ export async function closeSignatureSession(): Promise<void> {
   await jsonFetch<void>(signaturePath("sessions", "current"), { method: "DELETE" });
 }
 
-export function completeSignatureOAuth(state: string, code: string): Promise<OAuthCallbackResult> {
-  return jsonFetch(signaturePath("oauth", "callback"), postProfessional({ state, code }));
+// Ruling R11 (contrato §13): a recusa do prestador também vai ao api, como
+// `{ state, error }` — ele consome o state e responde 403 authorization_denied
+// com o return_to no corpo. state/code/error só no corpo, nunca na URL.
+export function completeSignatureOAuth(state: string, answer: string | { error: string }): Promise<OAuthCallbackResult> {
+  const body = typeof answer === "string" ? { state, code: answer } : { state, error: answer.error };
+  return jsonFetch(signaturePath("oauth", "callback"), postProfessional(body));
 }
 
 export async function listPendingSignatures(): Promise<SignatureRequest[]> {

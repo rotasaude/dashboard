@@ -96,11 +96,44 @@ describe("SignatureCallback", () => {
     expect(onDone).toHaveBeenCalledWith("signature-pending");
   });
 
-  it("autorização negada no prestador: não chama o api e diz que nada mudou", async () => {
+  it("autorização negada no prestador: avisa o api com { state, error } e volta à tela de origem (R11)", async () => {
+    mocked(api.completeSignatureOAuth).mockRejectedValue(
+      new ApiError(403, { error: "authorization_denied", return_to: "/signature" }, "403"));
     renderWithProviders(<SignatureCallback params={{ state: "st1", code: null, error: "access_denied" }} onDone={onDone} clearUrl={clearUrl} />);
     expect((await screen.findByRole("alert")).textContent).toBe("a autorização foi negada no prestador — nada foi alterado");
-    expect(api.completeSignatureOAuth).not.toHaveBeenCalled();
+    expect(api.completeSignatureOAuth).toHaveBeenCalledTimes(1);
+    expect(api.completeSignatureOAuth).toHaveBeenCalledWith("st1", { error: "access_denied" });
     expect(clearUrl).toHaveBeenCalledTimes(1);
+    expect(clearUrl.mock.invocationCallOrder[0]).toBeLessThan(mocked(api.completeSignatureOAuth).mock.invocationCallOrder[0]);
+    fireEvent.click(screen.getByRole("button", { name: "Voltar a Assinatura digital" }));
+    expect(onDone).toHaveBeenCalledWith("signature");
+  });
+
+  it("autorização negada sob StrictMode: avisa o api uma vez só", async () => {
+    mocked(api.completeSignatureOAuth).mockRejectedValue(
+      new ApiError(403, { error: "authorization_denied", return_to: "/signature-pending" }, "403"));
+    renderWithProviders(<StrictMode>
+      <SignatureCallback params={{ state: "st1", code: null, error: "access_denied" }} onDone={onDone} clearUrl={clearUrl} />
+    </StrictMode>);
+    fireEvent.click(await screen.findByRole("button", { name: "Voltar a Pendentes de assinatura" }));
+    expect(api.completeSignatureOAuth).toHaveBeenCalledTimes(1);
+    expect(clearUrl).toHaveBeenCalledTimes(1);
+    expect(onDone).toHaveBeenCalledWith("signature-pending");
+  });
+
+  it("autorização negada sem return_to válido no corpo: volta à visão geral", async () => {
+    mocked(api.completeSignatureOAuth).mockRejectedValue(new ApiError(403, { error: "authorization_denied" }, "403"));
+    renderWithProviders(<SignatureCallback params={{ state: "st1", code: null, error: "server_error" }} onDone={onDone} clearUrl={clearUrl} />);
+    expect((await screen.findByRole("alert")).textContent).toBe("o prestador não concluiu a autorização — comece de novo");
+    fireEvent.click(screen.getByRole("button", { name: "Voltar ao painel" }));
+    expect(onDone).toHaveBeenCalledWith("overview");
+  });
+
+  it("erro do prestador sem state: não chama o api", async () => {
+    renderWithProviders(<SignatureCallback params={{ state: null, code: null, error: "access_denied" }} onDone={onDone} clearUrl={clearUrl} />);
+    expect((await screen.findByRole("alert")).textContent).toBe("a autorização foi negada no prestador — nada foi alterado");
+    expect(clearUrl).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(api.completeSignatureOAuth).not.toHaveBeenCalled());
     fireEvent.click(screen.getByRole("button", { name: "Voltar ao painel" }));
     expect(onDone).toHaveBeenCalledWith("overview");
   });
@@ -131,7 +164,7 @@ describe("SignatureCallback", () => {
       new ApiError(409, { error: "authorization_expired", return_to: "/signature-pending" }, "409"));
     renderWithProviders(<SignatureCallback params={OK} onDone={onDone} clearUrl={clearUrl} />);
     expect((await screen.findByRole("alert")).textContent).toBe("a autorização demorou demais e venceu — comece de novo");
-    fireEvent.click(screen.getByRole("button", { name: "Voltar ao painel" }));
+    fireEvent.click(screen.getByRole("button", { name: "Voltar a Pendentes de assinatura" }));
     expect(onDone).toHaveBeenCalledWith("signature-pending");
   });
 

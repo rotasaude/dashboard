@@ -82,6 +82,19 @@ describe("cliente da assinatura digital — sessão e retorno do prestador", () 
     expect(call(fn)[1].method).toBe("POST");
     expect(sent(fn)).toEqual({ state: "st-1", code: "code-1" });
   });
+
+  it("recusa do prestador: state e error vão no corpo, nunca na URL (R11)", async () => {
+    const fn = stub({ error: "authorization_denied", return_to: "/signature" }, 403);
+    const err = await completeSignatureOAuth("st-1", { error: "access_denied" }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect((err as ApiError).status).toBe(403);
+    expect((err as ApiError).body).toEqual({ error: "authorization_denied", return_to: "/signature" });
+    expect(call(fn)[0]).toBe("/signature/oauth/callback");
+    expect(call(fn)[0]).not.toContain("st-1");
+    expect(call(fn)[0]).not.toContain("access_denied");
+    expect(call(fn)[1].method).toBe("POST");
+    expect(sent(fn)).toEqual({ state: "st-1", error: "access_denied" });
+  });
 });
 
 describe("cliente da assinatura digital — pendentes e lote", () => {

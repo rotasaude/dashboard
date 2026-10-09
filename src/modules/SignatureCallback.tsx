@@ -15,7 +15,7 @@ import {
   clearSignatureCallbackFromUrl, isSimulatedProvider, oauthErrorPhrase, reasonLabel, signatureError, usesSimulatedPsc,
   type SignatureCallbackParams
 } from "../lib/signature";
-import { moduleFromPath, type ModuleId } from "../shell/modules";
+import { labelFor, moduleFromPath, type ModuleId } from "../shell/modules";
 import { buttonStyle } from "../components/formStyles";
 import { Tag } from "../components/Tag";
 
@@ -48,8 +48,21 @@ export function SignatureCallback({ params, onDone, clearUrl = clearSignatureCal
     started.current = true;
     clearUrl();
     const { state, code, error } = params;
-    // Erro do prestador (error=) não chama o api (plano, Task 8): o state
-    // fica sem uso e vence sozinho no api.
+    // Ruling R11 (contrato §13): erro do prestador COM state vai ao api como
+    // { state, error } — ele consome o state e devolve 403 authorization_denied
+    // com o return_to. Sem state não há o que avisar.
+    if (error && state) {
+      void (async () => {
+        let landing: ModuleId = "overview";
+        try {
+          landing = moduleFromPath(callbackLanding(await completeSignatureOAuth(state, { error }))) ?? "overview";
+        } catch (err) {
+          landing = landingFromError(err);
+        }
+        setView({ kind: "failed", text: oauthErrorPhrase(error), landing });
+      })();
+      return;
+    }
     if (error || !state || !code) {
       setView({ kind: "failed", text: oauthErrorPhrase(error), landing: "overview" });
       return;
@@ -94,7 +107,9 @@ export function SignatureCallback({ params, onDone, clearUrl = clearSignatureCal
         {view.kind === "failed" && (
           <>
             <p role="alert" style={alert}>{view.text}</p>
-            <div><button type="button" style={buttonStyle} onClick={() => onDone(view.landing)}>Voltar ao painel</button></div>
+            <div><button type="button" style={buttonStyle} onClick={() => onDone(view.landing)}>
+              {view.landing === "overview" ? "Voltar ao painel" : `Voltar a ${labelFor(view.landing)}`}
+            </button></div>
           </>
         )}
       </section>
