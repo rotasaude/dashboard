@@ -30,6 +30,8 @@ describe("features da sessão (contratos §1)", () => {
   it("rótulo conhecido em português; desconhecido sai como a chave", () => {
     expect(featureLabel("ledi_export")).toBe("Envio da produção ao e-SUS (LEDI)");
     expect(featureLabel("cadsus_lookup")).toBe("Consulta ao CADSUS na validação presencial");
+    expect(featureLabel("clinical_record")).toBe("Prontuário da atenção primária");
+    expect(hasFeature({ features: [ "clinical_record" ] }, "clinical_record")).toBe(true);
     expect(featureLabel("rnds_sync")).toBe("rnds_sync");
   });
 });

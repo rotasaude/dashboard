@@ -5,13 +5,14 @@
 // Só o maintenance liga e desliga; o dashboard nunca escreve interruptor.
 import { ApiError } from "./api";
 
-export type FeatureKey = "ledi_export" | "cadsus_lookup";
+export type FeatureKey = "ledi_export" | "cadsus_lookup" | "clinical_record";
 
 export const FEATURE_DISABLED_MESSAGE = "esta funcionalidade está desligada para a cidade";
 
 const FEATURE_LABEL: Record<string, string> = {
   ledi_export: "Envio da produção ao e-SUS (LEDI)",
-  cadsus_lookup: "Consulta ao CADSUS na validação presencial"
+  cadsus_lookup: "Consulta ao CADSUS na validação presencial",
+  clinical_record: "Prontuário da atenção primária"
 };
 
 export function sessionFeatures(user: { features?: unknown } | null | undefined): string[] {

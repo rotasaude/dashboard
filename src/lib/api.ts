@@ -369,6 +369,9 @@ export interface AttendanceCitizen {
   // Módulo 15 (contratos §4.4): o perfil declarado do par, para o atendente
   // confirmar ou corrigir. Opcional porque uma API anterior omite a chave.
   profile?: CitizenProfile | null;
+  // Módulo 19 (contratos §2): se o nome completo já foi conferido e o nome de
+  // exibição; nunca os três nomes. Opcional: api anterior não manda.
+  names?: CitizenNames;
 }
 // O que o atendente conferiu no documento (spec §5.4).
 export interface VerifiedProfile { birth_date: string; sex: Sex; gender_identity: GenderIdentity | null }
@@ -388,7 +391,7 @@ export async function lookupCitizen(cpf: string, code: string): Promise<{ citize
 export interface VerifyExtra { cadsus_confirmed?: boolean }
 
 export async function verifyCitizen(
-  cpf: string, code: string, profile: VerifiedProfile, extra: VerifyExtra = {}
+  cpf: string, code: string, profile: VerifiedProfile & Partial<CitizenNamesInput>, extra: VerifyExtra = {}
 ): Promise<void> {
   await jsonFetch<unknown>(`${ATTENDANCE_BASE}/verifications`, {
     method: "POST", body: JSON.stringify({ cpf, code, document_checked: true, ...profile, ...extra })
@@ -520,6 +523,9 @@ export async function setUnitActive(id: string, active: boolean): Promise<Health
 export interface CheckInCitizen {
   id: string; cpf_masked: string; phone_masked: string;
   verification_level: "declared" | "verified";
+  // Módulo 19, Divergência D2: nomes e a validação ativa do par validado, para
+  // a recepção completar os nomes no check-in. Opcionais: api sem a D2 não manda.
+  names?: CitizenNames; verification_id?: string | null;
 }
 export interface CheckInTriage { id: string; date: string; protocol_name: string; priority: number }
 export interface CheckInAppointment {
@@ -541,6 +547,9 @@ export interface QueueRow {
   // triagem deste atendimento (sem triagem, o bairro atual do cidadão).
   // Opcional: a API anterior ao módulo 11 não manda.
   reference_unit_ids?: string[];
+  // Módulo 19, Divergência D3: nome de exibição (social, senão completo) do
+  // paciente; a recepção vê só ele e a cor. Ausente em api sem a D3.
+  display_name?: string | null;
   // Módulo 18 (contrato §9): cor, destino e espera da escuta; null sem escuta.
   screening?: QueueScreening | null;
   // Módulo 18 (contrato §9): true enquanto a escuta ainda não terminou.
@@ -564,7 +573,7 @@ export async function lookupCheckIn(
 
 export async function checkIn(
   cpf: string, code: string, healthUnitId: string, documentChecked: boolean
-): Promise<{ attendance: Attendance; verified: boolean }> {
+): Promise<{ attendance: Attendance; verified: boolean; verification_id?: string | null }> {
   return jsonFetch(`${ATTENDANCE_BASE}/check_ins`, {
     method: "POST",
     body: JSON.stringify({ cpf, code, health_unit_id: healthUnitId, document_checked: documentChecked })
@@ -1555,4 +1564,154 @@ export async function listGenerationFailures(): Promise<GenerationFailure[]> {
 // Step-up: quem trata 401 mfa_required é o SensitiveAction.
 export function retryGenerationFailure(id: string): Promise<GenerationFailure> {
   return jsonFetch(`${PRODUCTION_BASE}/generation_failures/${encodeURIComponent(id)}/retry`, postProfessional({}));
+}
+
+// ─── Prontuário da APS (módulo 19a, ADR 0031; contratos do módulo 19) ──────
+// Texto clínico (S, O, A, P, adendo, motivo, nota da abertura) e nomes só em
+// corpo de POST/PATCH, nunca em URL: as rotas levam só ids, e o CPF da
+// abertura vai no corpo. A recepção não chama nada daqui.
+
+const CLINICAL_RECORD_BASE = import.meta.env.VITE_CLINICAL_RECORD_BASE || "/clinical_record";
+
+export type Terminology = "ciap2" | "cid10";
+export type ProblemStatus = "active" | "resolved";
+export type OnsetPrecision = "day" | "month" | "year";
+export type ProblemAction = "evaluate" | "add" | "resolve" | "correct_onset";
+export type RecordAccess = "in_context" | "justified";
+export type OpeningReason = "case_review" | "active_search" | "continuity_of_care" | "other";
+export type CareOutcome = Exclude<AttendanceOutcome, "left">;
+
+export interface CodedOption { code: string; label: string }
+export interface CitizenNames { full_name_set: boolean; display_name: string | null }
+export interface CitizenNamesInput { full_name: string; social_name?: string; mother_name?: string }
+
+export interface PatientProblem {
+  id: string; terminology: Terminology; code: string; label: string; status: ProblemStatus;
+  // O api omite os opcionais quando nulos: chave ausente = null.
+  onset_on?: string | null; onset_precision?: OnsetPrecision | null; resolved_on?: string | null;
+}
+export interface EvaluatedProblem {
+  problem_id: string | null; terminology: Terminology; code: string; label: string; action: ProblemAction;
+  onset_on?: string | null; onset_precision?: OnsetPrecision | null;
+}
+export interface ExamRequest { sigtap_code: string; label: string; cid10_justification?: string | null }
+// Divergência D4: `evaluated_problems` são eventos novos (mesma forma da
+// consulta); `conducts` e `exam_requests` são as listas finais.
+export interface AddendumChanges { evaluated_problems?: EvaluatedProblem[]; conducts?: string[]; exam_requests?: ExamRequest[] }
+export interface Addendum { id: string; author_name: string; created_at: string; reason: string; text: string; changes: AddendumChanges | null }
+
+export interface Consultation {
+  id: string; attendance_id: string; patient_id: string; status: "draft" | "finalized";
+  author: { id: string; name: string }; cbo_code: string;
+  subjective: string | null; objective: string | null; assessment: string | null; plan: string | null;
+  vitals: VitalSigns; care_type: string | null;
+  evaluated_problems: EvaluatedProblem[]; conducts: string[]; exam_requests: ExamRequest[];
+  started_at: string; finalized_at: string | null; addenda: Addendum[];
+}
+export interface ConsultationSummary {
+  id: string; finalized_at: string; author_name: string; cbo_label: string; care_type_label: string;
+  problems: EvaluatedProblem[]; addenda_count: number;
+}
+export interface RecordPatient {
+  id: string; display_name: string; full_name: string; social_name: string | null; age: number; sex: Sex; cpf_masked: string;
+}
+export interface ClinicalRecord {
+  patient: RecordPatient; access: RecordAccess; problems: PatientProblem[];
+  today_screening: Screening | null; consultations: ConsultationSummary[];
+}
+export interface ConsultationOptions { care_types: CodedOption[]; conducts: CodedOption[]; cid10_allowed_for_cbo: boolean }
+// Corpo do autosave (Divergência D5: todos os campos editáveis a cada PATCH).
+export interface ConsultationDraftInput {
+  subjective: string; objective: string; assessment: string; plan: string; vitals: VitalSigns; care_type: string | null;
+  evaluated_problems: EvaluatedProblem[]; conducts: string[]; exam_requests: ExamRequest[];
+}
+// O mesmo corpo do POST /attendance/attendances/:id/close.
+export interface OutcomeBody { outcome: CareOutcome; referral_unit_id?: string; referral_note?: string }
+export interface AddendumInput { reason: string; text: string; changes?: AddendumChanges; opening_id?: string }
+export interface OpeningInput { cpf: string; reason_code: OpeningReason; reason_note?: string }
+export interface Opening { opening_id: string; patient_id: string; expires_at: string }
+export interface OpeningRow {
+  id: string; user_name: string; cpf_masked: string; reason_code: OpeningReason; created_at: string; expires_at: string;
+}
+export interface OpeningsQuery { from: string; to: string; userId?: string }
+
+const attendancePath = (id: string, action: string) => `${ATTENDANCE_BASE}/attendances/${encodeURIComponent(id)}/${action}`;
+const consultationPath = (id: string, action?: string) =>
+  `${ATTENDANCE_BASE}/consultations/${encodeURIComponent(id)}${action ? `/${action}` : ""}`;
+
+// Ler gera a trilha `clinical_record.viewed` no api.
+export function getAttendanceRecord(attendanceId: string): Promise<ClinicalRecord> {
+  return jsonFetch(attendancePath(attendanceId, "record"));
+}
+
+export function getConsultationOptions(): Promise<ConsultationOptions> {
+  return jsonFetch(`${ATTENDANCE_BASE}/consultation_options`);
+}
+
+export function startConsultation(attendanceId: string): Promise<Consultation> {
+  return jsonFetch(attendancePath(attendanceId, "consultation"), postProfessional({}));
+}
+
+export function saveConsultationDraft(id: string, input: ConsultationDraftInput): Promise<Consultation> {
+  return jsonFetch(consultationPath(id), { method: "PATCH", body: JSON.stringify(input) });
+}
+
+export function finalizeConsultation(id: string, outcome: OutcomeBody): Promise<Consultation> {
+  return jsonFetch(consultationPath(id, "finalize"), postProfessional({ outcome }));
+}
+
+export function getConsultation(id: string): Promise<Consultation> {
+  return jsonFetch(consultationPath(id));
+}
+
+export function addAddendum(id: string, input: AddendumInput): Promise<Addendum> {
+  return jsonFetch(consultationPath(id, "addenda"), postProfessional(input));
+}
+
+// O PDF é gerado na hora (não gravado). Lido com fetch, e não por navegação,
+// para a tela mostrar o 409 (`patient_name_missing`, `not_finalized`) em vez
+// de uma página de erro na janela nova.
+export async function fetchConsultationPdf(id: string): Promise<Blob> {
+  const url = consultationPath(id, "print");
+  const res = await fetch(url, { credentials: "include", headers: { Accept: "application/pdf" } });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    let body: unknown = text;
+    if (text) { try { body = JSON.parse(text); } catch { /* deixa string */ } }
+    throw new ApiError(res.status, body, `${res.status} on ${url}`);
+  }
+  return res.blob();
+}
+
+// A rota de CIAP-2 do módulo 18, ampliada para CID-10 (contratos §5).
+export async function searchTerminology(q: string, terminology: Terminology): Promise<CodedOption[]> {
+  const payload = await jsonFetch<{ items: CodedOption[] }>(`${ATTENDANCE_BASE}/ciap2/search`, postProfessional({ q, terminology }));
+  return payload.items;
+}
+
+export async function searchSigtap(q: string): Promise<CodedOption[]> {
+  const payload = await jsonFetch<{ items: CodedOption[] }>(`${ATTENDANCE_BASE}/sigtap/search`, postProfessional({ q }));
+  return payload.items;
+}
+
+// Step-up: quem trata 401 mfa_required é o SensitiveAction.
+export function openClinicalRecord(input: OpeningInput): Promise<Opening> {
+  return jsonFetch(`${CLINICAL_RECORD_BASE}/openings`, postProfessional(input));
+}
+
+export function getJustifiedRecord(patientId: string): Promise<ClinicalRecord> {
+  return jsonFetch(`${CLINICAL_RECORD_BASE}/patients/${encodeURIComponent(patientId)}`);
+}
+
+// Só datas e o id do profissional na URL; o relatório já vem com CPF mascarado.
+export async function listOpenings(q: OpeningsQuery): Promise<OpeningRow[]> {
+  const params = new URLSearchParams({ from: q.from, to: q.to });
+  if (q.userId) params.set("user_id", q.userId);
+  const payload = await jsonFetch<{ items: OpeningRow[] }>(`${CLINICAL_RECORD_BASE}/openings?${params.toString()}`);
+  return payload.items;
+}
+
+// `:id` é a validação ativa do par (Divergência D2).
+export async function completeCitizenNames(verificationId: string, names: CitizenNamesInput): Promise<void> {
+  await jsonFetch<unknown>(`${ATTENDANCE_BASE}/verifications/${encodeURIComponent(verificationId)}/names`, postProfessional(names));
 }

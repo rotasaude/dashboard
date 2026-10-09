@@ -17,6 +17,7 @@ import react from "@vitejs/plugin-react";
 //   /campaigns  → campanhas (módulo 12; campaign_manager, e a chave de SMS também para municipal_admin).
 //   /triage_catalog → catálogo de triagens da cidade (módulo 15; leitura para papéis de protocolo, escrita do municipal_admin).
 //   /integrations, /cnes, /production → módulo 16 (credenciais, CNES e produção e-SUS).
+//   /clinical_record → prontuário fora do atendimento (módulo 19: abertura justificada e relatório).
 //
 // Plano 6: changeOrigin FICA FALSE. O Rails resolve a cidade pelo Host da
 // requisição (CityCatalog); com changeOrigin: true o proxy reescrevia o Host
@@ -49,7 +50,8 @@ export default defineConfig({
       "/triage_catalog": proxy(TARGET),
       "/integrations": proxy(TARGET),
       "/cnes": proxy(TARGET),
-      "/production": proxy(TARGET)
+      "/production": proxy(TARGET),
+      "/clinical_record": proxy(TARGET)
     }
   }
 });
