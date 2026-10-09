@@ -14,7 +14,7 @@ vi.mock("../lib/api", async (importOriginal) => {
     listUnitRequests: vi.fn(), bookAppointment: vi.fn(), getUnitAvailability: vi.fn(), dismissRequest: vi.fn(),
     getUnitAgenda: vi.fn(), listUnassignedRequests: vi.fn(),
     getMyProfessional: vi.fn(), listPendingErasures: vi.fn(), cadsusLookup: vi.fn(),
-    listScreeningQueue: vi.fn(), listAppointmentTypes: vi.fn()
+    listScreeningQueue: vi.fn(), listAppointmentTypes: vi.fn(), getAttendanceRecord: vi.fn()
   };
 });
 
@@ -576,5 +576,25 @@ describe("Attendance — CADSUS no balcão (módulo 16)", () => {
     fireEvent.click(await screen.findByLabelText("Gravar o CNS do CADSUS no cadastro"));
     fireEvent.click(screen.getByRole("button", { name: "Validar cadastro" }));
     expect(await screen.findByText("a consulta ao CADSUS venceu — consulte de novo ou desmarque a gravação do CNS")).not.toBeNull();
+  });
+
+  it("com clinical_record, o profissional com vínculo vê Consulta em quem está em atendimento", async () => {
+    const unit = { id: "un1", name: "UBS Centro", kind: "ubs" };
+    mocked(api.fetchCurrentSession).mockResolvedValue({ ...session("health_professional"), features: [ "clinical_record" ] });
+    localStorage.setItem(currentUnitKey("u1"), unit.id);
+    mocked(api.listActiveUnits).mockResolvedValue([ unit ]);
+    mocked(api.getMyProfessional).mockResolvedValue({
+      professional: {} as api.Professional, shifts: [],
+      links: [ { id: "l1", health_unit_id: "un1", unit_name: "UBS Centro", cbo_code: "225142", cbo_title: null,
+        started_at: "x", started_by: "a", ended_at: null, ended_by: null } ]
+    });
+    mocked(api.listUnitQueue).mockResolvedValue({ waiting: [], in_care: [ {
+      id: "a3", cpf_masked: "***.333.444-**", checked_in_at: "2026-10-07T09:20:00-03:00", protocol_name: null, priority: null,
+      source: "triage", appointment_time: null, called_at: "2026-10-07T09:50:00-03:00", called_by_name: "Dra. Helena",
+      screening: null, display_name: "Carlos Souza"
+    } ] });
+    renderAttendance();
+    expect(await screen.findByRole("button", { name: "Consulta" })).not.toBeNull();
+    expect(screen.getByText("Carlos Souza")).not.toBeNull();
   });
 });

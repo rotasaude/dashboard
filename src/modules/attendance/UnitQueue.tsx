@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   callAttendance, callNext, closeAttendance, errorCode, getScreening, listUnitQueue,
-  type AppointmentRequestSummary, type HealthUnit, type QueueRow, type Screening
+  type AppointmentRequestSummary, type HealthUnit, type QueueRow, type CallResult, type Screening
 } from "../../lib/api";
 import { ATTENDANCE_REFETCH_MS, attendanceError } from "../../lib/attendance";
 import { EMPTY_OUTCOME, outcomeBody, outcomeProblem, outcomeView, type OutcomeDraft } from "../../lib/outcome";
@@ -17,6 +17,7 @@ import { COLOR_LABEL, COLOR_TONE, screeningError, waitLabel, waitedMinutes } fro
 import { ScreeningDetail, ScreeningDetailLoader } from "./ScreeningDetail";
 import { ScreeningForm } from "./ScreeningForm";
 import { OutcomeFields } from "./OutcomeFields";
+import { ConsultationWorkspace } from "../consultation/ConsultationWorkspace";
 
 // UnitQueue (Task 7) — a fila da unidade atual (spec §6 "Fila"), em duas
 // partes: "Aguardando" (ordenada pela API — prioridade, depois chegada — esta
@@ -34,6 +35,8 @@ interface Props {
   careBlocked?: string | null;
   onClinicalRefused?(): void;
   now?(): Date;
+  // Módulo 19: `clinical_record` ligado na sessão (consulta e nome de exibição).
+  clinicalRecord?: boolean;
 }
 
 // Módulo 18: a escuta aberta no painel — a que veio na chamada, uma lida pelo
@@ -41,7 +44,9 @@ interface Props {
 type ScreeningPanel =
   | { kind: "called"; screening: Screening }
   | { kind: "view"; id: string }
-  | { kind: "reassess"; row: QueueRow; screening: Screening };
+  | { kind: "reassess"; row: QueueRow; screening: Screening }
+  // Módulo 19: a consulta do atendimento chamado (traz a escuta do dia no painel do paciente).
+  | { kind: "consultation"; attendanceId: string };
 
 // Vermelho no topo e destacado (spec §4); a ordem é do api.
 const redRow = (r: QueueRow) =>
@@ -57,7 +62,9 @@ function handleClinicalRefusal(code: string | undefined, reload: () => void, onC
   if (code === "missing_role") void reload();
 }
 
-export function UnitQueue({ unit, units, canCare, careBlocked, onClinicalRefused, now = () => new Date() }: Props) {
+export function UnitQueue({
+  unit, units, canCare, careBlocked, onClinicalRefused, now = () => new Date(), clinicalRecord = false
+}: Props) {
   const queryClient = useQueryClient();
   const auth = useAuth();
   const query = useQuery({ queryKey: [ "unitQueue", unit.id ], queryFn: () => listUnitQueue(unit.id),
@@ -74,13 +81,25 @@ export function UnitQueue({ unit, units, canCare, careBlocked, onClinicalRefused
     void queryClient.invalidateQueries({ queryKey: [ "unitQueue", unit.id ] });
   }
 
+  // Com o prontuário ligado, a chamada abre a consulta (a escuta do dia está
+  // no painel do paciente); sem ele, a escuta abre como no módulo 18.
+  function openCalled(result: CallResult) {
+    if (clinicalRecord) setPanel({ kind: "consultation", attendanceId: result.attendance.id });
+    else setPanel(result.attendance.screening ? { kind: "called", screening: result.attendance.screening } : null);
+  }
+
+  // Módulo 19 (Divergência D3): nome de exibição, também para a recepção.
+  const nameCol = clinicalRecord
+    ? [ { label: "Nome", w: "1.5fr" as const, render: (r: QueueRow) => r.display_name ?? "—" } ]
+    : [];
+
   async function onCallNext() {
     if (callingNext) return;
     setCallingNext(true); setActionError(null);
     try {
       const result = await callNext(unit.id);
       // Contrato §9: a escuta vem dentro de `attendance`.
-      setPanel(result.attendance.screening ? { kind: "called", screening: result.attendance.screening } : null);
+      openCalled(result);
       invalidate();
     } catch (err) {
       const code = errorCode(err);
@@ -107,7 +126,7 @@ export function UnitQueue({ unit, units, canCare, careBlocked, onClinicalRefused
     setRowBusy(row.id); setActionError(null);
     try {
       const result = await callAttendance(row.id, unit.id);
-      setPanel(result.attendance.screening ? { kind: "called", screening: result.attendance.screening } : null);
+      openCalled(result);
       invalidate();
     } catch (err) {
       const code = errorCode(err);
@@ -186,6 +205,7 @@ export function UnitQueue({ unit, units, canCare, careBlocked, onClinicalRefused
                   rowStyle={redRow}
                   cols={[
                     { label: "CPF", w: "1.5fr", render: (r) => r.cpf_masked },
+                    ...nameCol,
                     { label: "Cor", w: "0.8fr", render: (r) => colorTag(r) },
                     { label: "Chegada", w: "1fr", render: (r) => fmtDateTime(r.checked_in_at) },
                     { label: "Espera", w: "0.8fr", render: (r) =>
@@ -243,6 +263,7 @@ export function UnitQueue({ unit, units, canCare, careBlocked, onClinicalRefused
                 <DataTable<QueueRow>
                   cols={[
                     { label: "CPF", w: "1.5fr", render: (r) => r.cpf_masked },
+                    ...nameCol,
                     { label: "Cor", w: "0.8fr", render: (r) => colorTag(r) },
                     { label: "Protocolo", w: "1.5fr", render: (r) => r.protocol_name ?? "—" },
                     { label: "Prioridade", w: "1fr", render: (r) => String(r.priority ?? "—") },
@@ -250,6 +271,12 @@ export function UnitQueue({ unit, units, canCare, careBlocked, onClinicalRefused
                     ...(canCare ? [ {
                       label: "", w: "auto" as const, align: "right" as const, render: (r: QueueRow) => (
                         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                          {clinicalRecord && (
+                            <button type="button" style={secondaryButtonStyle}
+                              onClick={() => setPanel({ kind: "consultation", attendanceId: r.id })}>
+                              Consulta
+                            </button>
+                          )}
                           {r.screening?.id && (
                             <button type="button" style={secondaryButtonStyle}
                               onClick={() => setPanel({ kind: "view", id: r.screening!.id })}>
@@ -284,6 +311,22 @@ export function UnitQueue({ unit, units, canCare, careBlocked, onClinicalRefused
             onDone={() => { setPanel(null); invalidate(); setDone("Reavaliação registrada."); }}
             onClosed={(message) => { setPanel(null); invalidate(); setActionError(message); }}
             onCancel={() => setPanel(null)}
+          />
+        )}
+
+        {canCare && clinicalRecord && panel?.kind === "consultation" && (
+          <ConsultationWorkspace
+            key={panel.attendanceId}
+            attendanceId={panel.attendanceId}
+            referenceUnitIds={inCare.find((r) => r.id === panel.attendanceId)?.reference_unit_ids}
+            unit={unit}
+            units={units}
+            onClose={() => setPanel(null)}
+            onFinalized={() => {
+              invalidate();
+              void queryClient.invalidateQueries({ queryKey: [ "unitRequests" ] });
+              setDone("Consulta finalizada e atendimento encerrado.");
+            }}
           />
         )}
 

@@ -106,6 +106,7 @@ export function Attendance({ onNavigate }: { onNavigate(id: ModuleId): void }) {
           units={unitsQuery.data ?? []}
           canCare={canCare}
           careBlocked={careBlocked}
+          clinicalRecord={hasFeature(user, "clinical_record")}
           onClinicalRefused={() => void queryClient.invalidateQueries({ queryKey: [ "myProfessional", user.id ] })}
         />
       )}
