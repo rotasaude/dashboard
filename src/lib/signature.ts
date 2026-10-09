@@ -147,12 +147,25 @@ export function signatureMarker(block: SignatureBlock): Marker {
     if (block.verification === "indeterminate") {
       return { label: "assinatura digital indeterminada", tone: "warn", detail: who, simulated };
     }
-    return { label: "assinada digitalmente", tone: "ok", detail: who, simulated };
+    if (block.verification === "valid") return { label: "assinada digitalmente", tone: "ok", detail: who, simulated };
+    // Valor que este dashboard não conhece (api mais novo) ou ausente: nunca verde.
+    return { label: `assinatura digital: ${block.verification ?? "sem validação"}`, tone: "warn", detail: who, simulated };
   }
   if (block.mode === "pending") {
     return { label: "assinatura pendente", tone: "warn", detail: block.reason_code ? reasonLabel(block.reason_code) : "assinando…", simulated: false };
   }
   return { label: "assinatura à mão (papel)", tone: "neutral", detail: block.reason_code ? reasonLabel(block.reason_code) : null, simulated: false };
+}
+
+// Logo depois de finalizar (ou de um adendo), o api ainda não criou o pedido
+// (manual sem request_id) ou o job ainda está assinando (pending sem motivo):
+// a tela relê a consulta até o bloco assentar (Ruling R8).
+type WithBlocks = { signature?: SignatureBlock; addenda?: { signature?: SignatureBlock }[] };
+const settling = (b: SignatureBlock | undefined) =>
+  !!b && ((b.mode === "manual" && !b.request_id) || (b.mode === "pending" && !b.reason_code));
+
+export function signatureSettling(c: WithBlocks): boolean {
+  return settling(c.signature) || (c.addenda ?? []).some((a) => settling(a.signature));
 }
 
 // O api decide qual impresso sai (contrato §6): PDF assinado quando a consulta

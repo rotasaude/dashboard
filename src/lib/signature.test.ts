@@ -6,7 +6,7 @@ import {
   callbackSummary, canSeeSignatureOverview, canSign, certificateNotice, defaultOverviewPeriod, documentLabel,
   fmtDay, isPendingOverdue, isSimulatedProvider, oauthErrorPhrase, overviewSummary, printHint, providerLabel,
   readSignatureCallback, reasonLabel, returnToPaperProblem, sessionBadge, signatureError, signatureFileName,
-  signatureMarker, usesSimulatedPsc
+  signatureMarker, signatureSettling, usesSimulatedPsc
 } from "./signature";
 import { NOW19B, certificate, overview, signatureBlock } from "../test/signatureFixtures";
 
@@ -102,6 +102,23 @@ describe("marcador, motivos e impresso", () => {
     expect(signatureMarker(signatureBlock({ verification: "invalid" }))).toMatchObject({ label: "assinatura digital inválida", tone: "down" });
     expect(signatureMarker(signatureBlock({ verification: "indeterminate" }))).toMatchObject(
       { label: "assinatura digital indeterminada", tone: "warn" });
+  });
+
+  it("validação desconhecida (api mais novo) ou ausente: nunca verde, valor cru em alerta", () => {
+    const unknown = signatureMarker(signatureBlock({ verification: "revoked_later" as never }));
+    expect(unknown).toMatchObject({ label: "assinatura digital: revoked_later", tone: "warn" });
+    expect(signatureMarker(signatureBlock({ verification: undefined }))).toMatchObject(
+      { label: "assinatura digital: sem validação", tone: "warn" });
+  });
+
+  it("reler depois de finalizar: só enquanto há bloco sem pedido ou pendente sem motivo", () => {
+    expect(signatureSettling({ signature: { mode: "manual" }, addenda: [] })).toBe(true);
+    expect(signatureSettling({ signature: { mode: "pending", request_id: "sr1" }, addenda: [] })).toBe(true);
+    expect(signatureSettling({ signature: { mode: "manual", request_id: "sr1", reason_code: "user_request" }, addenda: [] })).toBe(false);
+    expect(signatureSettling({ signature: { mode: "pending", request_id: "sr1", reason_code: "no_session" }, addenda: [] })).toBe(false);
+    expect(signatureSettling({ signature: signatureBlock(), addenda: [] })).toBe(false);
+    expect(signatureSettling({ signature: signatureBlock(), addenda: [ { signature: { mode: "manual" } } ] })).toBe(true);
+    expect(signatureSettling({ addenda: [ {} ] })).toBe(false);
   });
 
   it("digital simulada: o marcador deixa a simulação visível; só digital+simulated", () => {

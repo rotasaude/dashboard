@@ -15,6 +15,8 @@ import { fmtDateTime } from "../../lib/format";
 import { buttonStyle, disabledButtonStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { VitalsList } from "./PatientPanel";
 import { AddendumForm } from "./AddendumForm";
+import { SignatureMarker } from "../signature/SignatureMarker";
+import { printHint } from "../../lib/signature";
 
 export interface ConsultationViewProps {
   consultation: Consultation;
@@ -27,6 +29,8 @@ export interface ConsultationViewProps {
   // (o api recusa a releitura da autora depois que o atendimento fechou).
   onAddendumAdded(addendum: Addendum): void;
   onClose(): void;
+  // Módulo 19b (Ruling R7): a abertura justificada venceu ao ler o que foi assinado.
+  onOpeningRequired?(): void;
 }
 
 const PDF_URL_TTL_MS = 60_000;
@@ -42,6 +46,8 @@ export function ConsultationView(props: ConsultationViewProps) {
   const [ printError, setPrintError ] = useState<string | null>(null);
   const conductLabel = (code: string) => codedLabel(options?.conducts, code);
   const addenda = [ ...(c.addenda ?? []) ].sort((a, b) => a.created_at.localeCompare(b.created_at));
+  // Módulo 19b: como sai o impresso (o api escolhe; contrato 19b §6).
+  const hint = printHint(c.signature, addenda.length > 0);
 
   async function print() {
     if (printing) return;
@@ -68,6 +74,11 @@ export function ConsultationView(props: ConsultationViewProps) {
         <strong>{`Consulta de ${fmtDateTime(c.finalized_at)}`}</strong>
         <span style={muted}>{`${c.author.name} · ${codedLabel(options?.care_types, c.care_type)}`}</span>
       </div>
+      {c.signature && (
+        <SignatureMarker label="assinatura da consulta" block={c.signature} readOnly={props.readOnly}
+          onOpeningRequired={props.onOpeningRequired} />
+      )}
+      {hint && <p style={muted}>{hint}</p>}
 
       {SOAP_FIELDS.map((f) => c[f.key] ? (
         <div key={f.key} style={block}>
@@ -101,6 +112,10 @@ export function ConsultationView(props: ConsultationViewProps) {
           {addenda.map((a) => (
             <li key={a.id} style={{ fontSize: 12.5 }}>
               <strong>{`Adendo de ${a.author_name} em ${fmtDateTime(a.created_at)}`}</strong>
+              {a.signature && (
+                <SignatureMarker label="assinatura do adendo" block={a.signature} readOnly={props.readOnly}
+                  onOpeningRequired={props.onOpeningRequired} />
+              )}
               <p style={textStyle}>{`Motivo: ${a.reason}`}</p>
               <p style={textStyle}>{a.text}</p>
               {changesLines(a.changes, conductLabel).map((line) => <p key={line} style={textStyle}>{line}</p>)}
@@ -136,7 +151,6 @@ type LoaderProps = Omit<ConsultationViewProps, "consultation" | "onAddendumAdded
   id: string;
   // Só a leitura justificada: sem a abertura, o api responde 403 out_of_context.
   endOnOutOfContext?: boolean;
-  onOpeningRequired?(): void;
   onAddendumAdded?(addendum: Addendum): void;
 };
 
@@ -156,7 +170,7 @@ export function ConsultationLoader({ id, onAddendumAdded, endOnOutOfContext, onO
   if (query.isPending) return <p className="mono" style={{ margin: 0, fontSize: 10.5, color: "var(--ink3)" }}>carregando a consulta…</p>;
   if (query.isError) return <p role="alert" style={alert}>{consultationError(query.error)}</p>;
   return (
-    <ConsultationView consultation={query.data}
+    <ConsultationView consultation={query.data} onOpeningRequired={onOpeningRequired}
       onAddendumAdded={(addendum) => {
         queryClient.setQueryData<Consultation>([ CONSULTATION_KEY, id ], (c) => (c ? withAddendum(c, addendum) : c));
         onAddendumAdded?.(addendum);
