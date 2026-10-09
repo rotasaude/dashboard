@@ -80,6 +80,23 @@ describe("useAutosave", () => {
     expect(save.mock.calls[1][0]).toEqual({ text: "abc" });
   });
 
+  it("depois de uma falha, voltar ao texto já salvo ainda manda de novo no flush", async () => {
+    const save = vi.fn().mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error("x")).mockResolvedValue(undefined);
+    render(<Harness save={save} delayMs={60_000} />);
+    const flushed = () => screen.getByTestId("flushed").textContent;
+    type("b");
+    fireEvent.click(screen.getByRole("button", { name: "flush" }));
+    await waitFor(() => expect(flushed()).toBe("true"));
+    type("bc");
+    fireEvent.click(screen.getByRole("button", { name: "flush" }));
+    await waitFor(() => expect(flushed()).toBe("false"));
+    type("b");
+    fireEvent.click(screen.getByRole("button", { name: "flush" }));
+    await waitFor(() => expect(flushed()).toBe("true"));
+    expect(save).toHaveBeenCalledTimes(3);
+    expect(save.mock.calls[2][0]).toEqual({ text: "b" });
+  });
+
   it("bloqueado não salva e diz o motivo", async () => {
     const save = vi.fn(async () => undefined);
     render(<Harness save={save} blocked="Plano (P) passa de 20.000 caracteres" />);

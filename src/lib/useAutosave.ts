@@ -36,7 +36,9 @@ export function useAutosave<T>(options: AutosaveOptions<T>): { status: SaveStatu
   latest.current = { key, value: options.value };
   const opts = useRef(options);
   opts.current = options;
-  const savedKey = useRef(options.initialKey);
+  // null depois de uma falha: o api pode ter gravado ou não, então nenhum
+  // valor conta como salvo até o próximo salvamento dar certo.
+  const savedKey = useRef<string | null>(options.initialKey);
   const running = useRef<Promise<boolean> | null>(null);
   const [ status, setStatus ] = useState<SaveStatus>({ kind: "idle" });
 
@@ -59,6 +61,7 @@ export function useAutosave<T>(options: AutosaveOptions<T>): { status: SaveStatu
           } catch (err) {
             setStatus({ kind: "error", message: describe(err) });
             onError?.(err);
+            savedKey.current = null;
             // Se digitaram mais durante o salvamento que falhou, o valor novo
             // ainda precisa de uma tentativa (o temporizador dele já disparou
             // e encontrou este salvamento em curso).
