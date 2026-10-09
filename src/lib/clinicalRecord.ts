@@ -38,6 +38,15 @@ export function openingBody(d: OpeningDraft): OpeningInput {
   return { cpf: d.cpf, reason_code: d.reason as OpeningReason, ...(note ? { reason_note: note } : {}) };
 }
 
+export const OPENING_VALID_MS = 30 * 60_000;
+
+// Prazo local da abertura: o relógio do servidor pode diferir do daqui, então
+// vale o menor entre `expires_at` e (recebida + 30 min no relógio local).
+export function deadlineMs(expiresAt: string, receivedAtMs: number): number {
+  const t = Date.parse(expiresAt);
+  return Number.isNaN(t) ? 0 : Math.min(t, receivedAtMs + OPENING_VALID_MS);
+}
+
 export function remainingMs(expiresAt: string, nowMs: number): number {
   const t = Date.parse(expiresAt);
   return Number.isNaN(t) ? 0 : Math.max(0, t - nowMs);

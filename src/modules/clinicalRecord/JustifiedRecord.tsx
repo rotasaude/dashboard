@@ -6,7 +6,7 @@ import { useCallback, useEffect, useState, type CSSProperties } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { errorCode, getConsultationOptions, getJustifiedRecord, type Opening } from "../../lib/api";
 import { CONSULTATION_KEY, JUSTIFIED_KEY, OPTIONS_KEY } from "../../lib/consultation";
-import { OPENING_ENDED, clinicalRecordError, countdownLabel, remainingMs } from "../../lib/clinicalRecord";
+import { OPENING_ENDED, clinicalRecordError, countdownLabel, deadlineMs } from "../../lib/clinicalRecord";
 import { useAuth } from "../../lib/auth";
 import { Panel } from "../../components/Panel";
 import { Tag } from "../../components/Tag";
@@ -19,29 +19,37 @@ interface Props { opening: Opening; onEnd(): void; searchDelayMs?: number }
 export function JustifiedRecord({ opening, onEnd, searchDelayMs }: Props) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const [ nowMs, setNowMs ] = useState(() => Date.now());
+  const [ receivedAt ] = useState(() => Date.now());
+  const [ nowMs, setNowMs ] = useState(receivedAt);
   const [ ended, setEnded ] = useState(false);
   const [ viewing, setViewing ] = useState<string | null>(null);
 
+  const deadline = deadlineMs(opening.expires_at, receivedAt);
+  const left = Math.max(0, deadline - nowMs);
+  const over = ended || left <= 0;
+
   useEffect(() => {
+    if (over) return;
     const id = setInterval(() => setNowMs(Date.now()), 1000);
     return () => clearInterval(id);
-  }, []);
+  }, [ over ]);
 
   const handleOpeningRequired = useCallback(() => setEnded(true), []);
-  const left = remainingMs(opening.expires_at, nowMs);
   const record = useQuery({
     queryKey: [ JUSTIFIED_KEY, opening.opening_id ], queryFn: () => getJustifiedRecord(opening.patient_id),
-    enabled: !ended && left > 0, gcTime: 0, staleTime: 0
+    enabled: !over, gcTime: 0, staleTime: 0, retry: false
   });
   const options = useQuery({ queryKey: [ OPTIONS_KEY, user?.id ?? null ], queryFn: getConsultationOptions, staleTime: 5 * 60_000 });
-  const over = ended || left <= 0 || (record.isError && errorCode(record.error) === "opening_required");
+  const refused = record.isError && errorCode(record.error) === "opening_required";
+
+  // Trava o fim no estado: sem isso a consulta apagada seria recriada.
+  useEffect(() => { if (refused) setEnded(true); }, [ refused ]);
 
   useEffect(() => {
     if (!over) return;
-    queryClient.removeQueries({ queryKey: [ JUSTIFIED_KEY, opening.opening_id ] });
+    queryClient.removeQueries({ queryKey: [ JUSTIFIED_KEY ] });
     queryClient.removeQueries({ queryKey: [ CONSULTATION_KEY ] });
-  }, [ over, queryClient, opening.opening_id ]);
+  }, [ over, queryClient ]);
 
   if (over) {
     return (

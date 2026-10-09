@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { ApiError } from "./api";
 import {
-  EMPTY_OPENING, clinicalRecordError, countdownLabel, openingBody, openingProblem, reasonLabel, remainingMs
+  EMPTY_OPENING, clinicalRecordError, deadlineMs, countdownLabel, openingBody, openingProblem, reasonLabel, remainingMs
 } from "./clinicalRecord";
 
 describe("abertura justificada", () => {
@@ -31,6 +31,13 @@ describe("abertura justificada", () => {
     expect(countdownLabel(30 * 60_000 - 1000)).toBe("29:59");
     expect(countdownLabel(59_500)).toBe("1:00");
     expect(countdownLabel(0)).toBe("0:00");
+  });
+
+  it("relógio local atrasado: vale recebida + 30 min, não o expires_at do servidor", () => {
+    const receivedAt = Date.parse("2026-10-07T09:50:00-03:00"); // local 10 min atrás do servidor
+    expect(deadlineMs("2026-10-07T10:30:00-03:00", receivedAt)).toBe(receivedAt + 30 * 60_000);
+    expect(deadlineMs("2026-10-07T10:10:00-03:00", receivedAt)).toBe(Date.parse("2026-10-07T10:10:00-03:00"));
+    expect(deadlineMs("lixo", receivedAt)).toBe(0);
   });
 
   it("rótulos e recusas", () => {

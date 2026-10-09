@@ -11,9 +11,9 @@ import * as api from "../lib/api";
 import { ApiError } from "../lib/api";
 import { ClinicalRecord } from "./ClinicalRecord";
 import { renderWithProviders, sessionWith } from "../test/campaignFixtures";
-import { opening, options, record } from "../test/consultationFixtures";
+import { NOW19, opening, options, record } from "../test/consultationFixtures";
 
-afterEach(cleanup);
+afterEach(() => { cleanup(); vi.useRealTimers(); });
 const m = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
 const pro = () => sessionWith([ "health_professional" ], { id: "us1", features: [ "clinical_record" ] });
 
@@ -22,7 +22,7 @@ describe("Prontuário fora do atendimento", () => {
     for (const fn of [ api.fetchCurrentSession, api.stepUpMfa, api.openClinicalRecord, api.getJustifiedRecord,
       api.getConsultationOptions, api.listOpenings, api.listMemberships ]) m(fn).mockReset();
     m(api.fetchCurrentSession).mockResolvedValue(pro());
-    m(api.openClinicalRecord).mockResolvedValue(opening({ expires_at: new Date(Date.now() + 30 * 60_000).toISOString() }));
+    m(api.openClinicalRecord).mockResolvedValue(opening({ expires_at: new Date(Date.parse(NOW19) + 30 * 60_000).toISOString() }));
     m(api.getJustifiedRecord).mockResolvedValue(record({ access: "justified" }));
     m(api.getConsultationOptions).mockResolvedValue(options());
     m(api.listOpenings).mockResolvedValue([]);
@@ -44,6 +44,8 @@ describe("Prontuário fora do atendimento", () => {
   });
 
   it("CPF, motivo e step-up abrem a leitura marcada como abertura justificada", async () => {
+    vi.useFakeTimers({ toFake: [ "Date" ] });
+    vi.setSystemTime(new Date(NOW19));
     renderWithProviders(<ClinicalRecord />);
     fireEvent.change(await screen.findByLabelText("CPF do paciente"), { target: { value: "52998224725" } });
     fireEvent.change(screen.getByLabelText("Motivo"), { target: { value: "active_search" } });
@@ -54,7 +56,7 @@ describe("Prontuário fora do atendimento", () => {
     await waitFor(() => expect(api.openClinicalRecord).toHaveBeenCalledWith({ cpf: "529.982.247-25", reason_code: "active_search" }));
     expect(await screen.findByText("Joana Lima")).not.toBeNull();
     expect(api.getJustifiedRecord).toHaveBeenCalledWith("pa1");
-    expect(screen.getByText(/^Abertura justificada · expira em (30:00|29:5\d)$/)).not.toBeNull();
+    expect(screen.getByText("Abertura justificada · expira em 30:00")).not.toBeNull();
   });
 
   it("'Outro motivo' sem descrição não continua", async () => {
