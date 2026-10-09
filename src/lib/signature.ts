@@ -169,13 +169,16 @@ export function signatureSettling(c: WithBlocks): boolean {
 }
 
 // O api decide qual impresso sai (contrato §6): PDF assinado quando a consulta
-// é digital e não tem adendo depois; o impresso do 19a nos demais casos.
+// é digital, com verificação válida e sem adendo depois; o impresso do 19a nos demais casos.
 export function printHint(block: SignatureBlock | undefined, hasAddenda: boolean): string | null {
   if (!block) return null;
-  if (block.mode === "digital" && !hasAddenda) return "o impresso é o PDF assinado digitalmente";
-  if (block.mode === "digital") {
+  if (block.mode === "digital" && block.verification === "valid" && !hasAddenda) {
+    return "o impresso é o PDF assinado digitalmente";
+  }
+  if (block.mode === "digital" && hasAddenda) {
     return "com adendo, o impresso é o do prontuário; os documentos assinados estão em “Ver o que foi assinado”";
   }
+  if (block.mode === "digital") return "o impresso sai com o estado da assinatura e espaço para assinatura à mão";
   return "o impresso sai com espaço para assinatura à mão";
 }
 
@@ -313,7 +316,7 @@ export function overviewSummary(o: SignatureOverview, nowMs: number) {
 }
 
 export function defaultOverviewPeriod(nowMs: number): { from: string; to: string } {
-  return { from: cityIsoDate(new Date(nowMs - 30 * 86_400_000)), to: cityIsoDate(new Date(nowMs)) };
+  return { from: cityIsoDate(new Date(nowMs - 29 * 86_400_000)), to: cityIsoDate(new Date(nowMs)) };
 }
 
 // ─── Navegador ────────────────────────────────────────────────────────────────

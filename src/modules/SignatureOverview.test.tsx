@@ -29,7 +29,7 @@ describe("SignatureOverview", () => {
 
   it("pede os últimos 30 dias e resume os profissionais", async () => {
     renderWithProviders(<SignatureOverview />);
-    await waitFor(() => expect(api.getSignatureOverview).toHaveBeenCalledWith({ from: "2026-09-08", to: "2026-10-08" }));
+    await waitFor(() => expect(api.getSignatureOverview).toHaveBeenCalledWith({ from: "2026-09-09", to: "2026-10-08" }));
     await screen.findByText("Com certificado");
     expect(valueOf("Com certificado")).toBe("2");
     expect(valueOf("Sem certificado")).toBe("1");

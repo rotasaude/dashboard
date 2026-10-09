@@ -164,6 +164,10 @@ describe("marcador, motivos e impresso", () => {
     expect(printHint(signatureBlock(), false)).toBe("o impresso é o PDF assinado digitalmente");
     expect(printHint(signatureBlock(), true))
       .toBe("com adendo, o impresso é o do prontuário; os documentos assinados estão em “Ver o que foi assinado”");
+    for (const verification of [ "invalid", "indeterminate", undefined ] as const) {
+      expect(printHint(signatureBlock({ verification }), false))
+        .toBe("o impresso sai com o estado da assinatura e espaço para assinatura à mão");
+    }
     expect(printHint({ mode: "pending" }, false)).toBe("o impresso sai com espaço para assinatura à mão");
     expect(printHint({ mode: "manual" }, true)).toBe("o impresso sai com espaço para assinatura à mão");
   });
@@ -268,9 +272,9 @@ describe("painel do admin", () => {
     expect(isPendingOverdue(null, NOW)).toBe(false);
   });
 
-  it("resumo e período padrão de 30 dias no fuso da cidade", () => {
+  it("resumo e período padrão de 30 dias corridos (hoje e 29 antes) no fuso da cidade", () => {
     expect(overviewSummary(overview(), NOW)).toEqual({ withCertificate: 2, withoutCertificate: 1, expiring: 1, pendingOverdue: 1 });
-    expect(defaultOverviewPeriod(NOW)).toEqual({ from: "2026-09-08", to: "2026-10-08" });
+    expect(defaultOverviewPeriod(NOW)).toEqual({ from: "2026-09-09", to: "2026-10-08" });
   });
 
   it("rótulos de estado", () => {

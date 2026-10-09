@@ -68,6 +68,12 @@ describe("ConsultationView com assinatura digital (19b)", () => {
     expect(screen.getByText("o impresso é o PDF assinado digitalmente")).not.toBeNull();
   });
 
+  it("consulta digital sem adendo mas não válida: o impresso é o do prontuário com o estado", () => {
+    view(finalized({ signature: signatureBlock({ verification: "invalid" }) }));
+    expect(screen.getByText("o impresso sai com o estado da assinatura e espaço para assinatura à mão")).not.toBeNull();
+    expect(screen.queryByText("o impresso é o PDF assinado digitalmente")).toBeNull();
+  });
+
   it("consulta simulada: o aviso aparece no marcador; não simulada, não", () => {
     view(finalized({ signature: signatureBlock({ simulated: true }) }));
     expect(within(screen.getByRole("group", { name: "assinatura da consulta" })).getByText(SIMULATED_NOTICE)).not.toBeNull();
