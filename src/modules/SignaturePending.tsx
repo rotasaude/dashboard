@@ -112,6 +112,7 @@ export function SignaturePending({ onNavigate, redirect = goToProvider }: Props)
           {pending.isSuccess && <DataTable cols={cols} rows={items} rowKey={(r) => r.id} empty={EMPTY} />}
           {paperFor && (
             <ReturnToPaperForm
+              key={paperFor.id}
               request={paperFor}
               onDone={() => {
                 setPaperFor(null); setNotice(RETURNED_TO_PAPER); refresh();

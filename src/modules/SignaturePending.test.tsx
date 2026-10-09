@@ -180,4 +180,32 @@ describe("SignaturePending", () => {
     await screen.findByText("Joana Lima");
     expect(screen.queryByText(SIMULATED_NOTICE)).toBeNull();
   });
+
+  it("trocar de linha com o formulário aberto zera o motivo e envia só o da nova linha", async () => {
+    mocked(api.returnToPaper).mockResolvedValue(pendingRequest({ id: "sr2", status: "returned_to_paper" }));
+    renderIt();
+    await screen.findByText("Joana Lima");
+    fireEvent.click(screen.getAllByRole("button", { name: "Voltar ao papel" })[0]);
+    fireEvent.change(screen.getByLabelText("Motivo para voltar ao papel"), { target: { value: "motivo da primeira linha" } });
+    fireEvent.click(screen.getAllByRole("button", { name: "Voltar ao papel" })[1]);
+    const field = screen.getByLabelText("Motivo para voltar ao papel") as HTMLTextAreaElement;
+    expect(field.value).toBe("");
+    fireEvent.change(field, { target: { value: "motivo da segunda linha" } });
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar volta ao papel" }));
+    await waitFor(() => expect(api.returnToPaper).toHaveBeenCalledWith("sr2", "motivo da segunda linha"));
+    expect(api.returnToPaper).toHaveBeenCalledTimes(1);
+  });
+
+  it("not_author fecha o formulário, diz e relê a lista", async () => {
+    mocked(api.returnToPaper).mockRejectedValue(new ApiError(403, { error: "not_author" }, "403"));
+    renderIt();
+    await screen.findByText("Joana Lima");
+    fireEvent.click(screen.getAllByRole("button", { name: "Voltar ao papel" })[0]);
+    fireEvent.change(screen.getByLabelText("Motivo para voltar ao papel"), { target: { value: "paciente pediu o papel" } });
+    const before = mocked(api.listPendingSignatures).mock.calls.length;
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar volta ao papel" }));
+    expect(await screen.findByText("só quem escreveu o documento pode assiná-lo ou voltá-lo ao papel")).not.toBeNull();
+    expect(screen.queryByRole("region", { name: "Voltar ao papel" })).toBeNull();
+    await waitFor(() => expect(mocked(api.listPendingSignatures).mock.calls.length).toBeGreaterThan(before));
+  });
 });
