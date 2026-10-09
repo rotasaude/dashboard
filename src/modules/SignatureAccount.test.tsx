@@ -111,7 +111,8 @@ describe("SignatureAccount", () => {
   it("desvincular pede confirmação com step-up e volta ao papel", async () => {
     mocked(api.getCurrentCertificate).mockResolvedValueOnce(certificate()).mockResolvedValue(null);
     mocked(api.unlinkCertificate).mockResolvedValue(undefined);
-    renderWithProviders(<SignatureAccount redirect={redirect} />);
+    const { client } = renderWithProviders(<SignatureAccount redirect={redirect} />);
+    const invalidate = vi.spyOn(client, "invalidateQueries");
 
     fireEvent.click(await screen.findByRole("button", { name: "Desvincular" }));
     const confirm = await screen.findByRole("region", { name: "Desvincular certificado" });
@@ -121,6 +122,8 @@ describe("SignatureAccount", () => {
     await waitFor(() => expect(api.unlinkCertificate).toHaveBeenCalledTimes(1));
     expect(await screen.findByText(PAPER)).not.toBeNull();
     expect(screen.getByText("certificado desvinculado")).not.toBeNull();
+    const keys = invalidate.mock.calls.map((c) => (c[0] as { queryKey: unknown[] }).queryKey[0]);
+    expect(keys).toEqual(expect.arrayContaining([ "signatureCertificate", "signatureSession", "signaturePending" ]));
   });
 
   it("interruptor desligado entre a sessão e a leitura: diz que a assinatura está desligada", async () => {

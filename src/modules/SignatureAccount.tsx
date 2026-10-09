@@ -12,7 +12,7 @@ import {
 import { useAuth } from "../lib/auth";
 import { hasFeature } from "../lib/features";
 import {
-  CERTIFICATE_HELP, CERTIFICATE_KEY, RETURN_TO, SIGNATURE_DISABLED, SIMULATED_NOTICE, canSign, certificateNotice, fmtDay,
+  CERTIFICATE_HELP, CERTIFICATE_KEY, PENDING_KEY, RETURN_TO, SESSION_KEY, SIGNATURE_DISABLED, SIMULATED_NOTICE, canSign, certificateNotice, fmtDay,
   goToProvider, isSimulatedProvider, providerLabel, signatureError, usesSimulatedPsc
 } from "../lib/signature";
 import { SensitiveAction } from "../components/SensitiveAction";
@@ -96,6 +96,9 @@ export function SignatureAccount({ onGoToSecurity, redirect = goToProvider }: Pr
                   onDone={() => {
                     setUnlinking(false); setUnlinked(true);
                     void queryClient.invalidateQueries({ queryKey: [ CERTIFICATE_KEY ] });
+                    // o api revoga a sessão ativa ao desvincular
+                    void queryClient.invalidateQueries({ queryKey: [ SESSION_KEY ] });
+                    void queryClient.invalidateQueries({ queryKey: [ PENDING_KEY ] });
                   }}
                   onCancel={() => setUnlinking(false)}
                   onGoToSecurity={onGoToSecurity}
