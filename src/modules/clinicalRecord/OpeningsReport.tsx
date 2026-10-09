@@ -5,7 +5,7 @@
 import { useState, type CSSProperties } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { listMemberships, listOpenings, type OpeningRow } from "../../lib/api";
-import { reasonLabel } from "../../lib/clinicalRecord";
+import { OPENINGS_REPORT_LIMIT, OPENING_KIND_LABEL, reasonLabel } from "../../lib/clinicalRecord";
 import { consultationError } from "../../lib/consultation";
 import { addDays, todayInCity } from "../../lib/campaigns";
 import { fmtDateTime, fmtHourMinute } from "../../lib/format";
@@ -56,17 +56,23 @@ export function OpeningsReport({ today = todayInCity() }: { today?: string }) {
         {problem && <p role="alert" style={alert}>{problem}</p>}
         {query.isError && <p role="alert" style={alert}>{consultationError(query.error)}</p>}
         {query.isPending && <p className="mono" style={{ margin: 0, fontSize: 10.5, color: "var(--ink3)" }}>carregando…</p>}
+        {query.isSuccess && query.data.length >= OPENINGS_REPORT_LIMIT && (
+          <p role="status" style={{ margin: 0, fontSize: 12.5, color: "var(--ink2)" }}>
+            mostrando as {OPENINGS_REPORT_LIMIT} mais recentes; refine o período
+          </p>
+        )}
         {query.isSuccess && (query.data.length === 0 ? <EmptyState title="nenhuma abertura no período" /> : (
           <DataTable<OpeningRow>
             cols={[
               { label: "Quando", w: "1fr", render: (r) => fmtDateTime(r.created_at) },
               { label: "Quem", w: "1.4fr", render: (r) => r.user_name },
               { label: "CPF", w: "1fr", render: (r) => <span className="mono">{r.cpf_masked}</span> },
+              { label: "Tipo", w: "1.2fr", render: (r) => OPENING_KIND_LABEL[r.kind] ?? r.kind },
               { label: "Motivo", w: "1.2fr", render: (r) => reasonLabel(r.reason_code) },
-              { label: "Válida até", w: "0.8fr", render: (r) => fmtHourMinute(r.expires_at) }
+              { label: "Válida até", w: "0.8fr", render: (r) => (r.expires_at ? fmtHourMinute(r.expires_at) : "—") }
             ]}
             rows={query.data}
-            rowKey={(r) => r.id}
+            rowKey={(r) => `${r.kind}:${r.id}`}
           />
         ))}
       </div>

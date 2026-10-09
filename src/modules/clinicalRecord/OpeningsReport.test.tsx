@@ -10,7 +10,7 @@ vi.mock("../../lib/api", async (importOriginal) => {
 
 import * as api from "../../lib/api";
 import { OpeningsReport } from "./OpeningsReport";
-import { TODAY19, openingRow } from "../../test/consultationFixtures";
+import { TODAY19, openingRow, adminReadRow } from "../../test/consultationFixtures";
 
 afterEach(cleanup);
 const m = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
@@ -66,5 +66,40 @@ describe("OpeningsReport", () => {
     m(api.listOpenings).mockResolvedValue([]);
     renderIt();
     expect(await screen.findByText("nenhuma abertura no período")).not.toBeNull();
+  });
+
+  it("mostra o tipo e traço no motivo e na validade da leitura administrativa", async () => {
+    m(api.listOpenings).mockResolvedValue([ openingRow(), adminReadRow() ]);
+    renderIt();
+    const table = await screen.findByRole("table");
+    expect(within(table).getByText("abertura justificada")).not.toBeNull();
+    expect(within(table).getByText("leitura administrativa")).not.toBeNull();
+    const row = within(table).getByText("Admin Curitiba").closest("[role=row]") ?? within(table).getByText("Admin Curitiba").parentElement!;
+    expect(within(row as HTMLElement).getAllByText("—")).toHaveLength(2);
+  });
+
+  it("ids iguais de tipos diferentes não colidem", async () => {
+    m(api.listOpenings).mockResolvedValue([ openingRow({ id: "x" }), adminReadRow({ id: "x" }) ]);
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    renderIt();
+    await screen.findByRole("table");
+    expect(spy.mock.calls.filter((c) => String(c[0]).includes("same key"))).toHaveLength(0);
+    spy.mockRestore();
+  });
+
+  const many = (n: number) => Array.from({ length: n }, (_, i) => openingRow({ id: `o${i}` }));
+
+  it("avisa quando chega a 500 linhas", async () => {
+    m(api.listOpenings).mockResolvedValue(many(500));
+    renderIt();
+    await screen.findByRole("table");
+    expect(screen.getByRole("status").textContent).toBe("mostrando as 500 mais recentes; refine o período");
+  });
+
+  it("não avisa com 499 linhas", async () => {
+    m(api.listOpenings).mockResolvedValue(many(499));
+    renderIt();
+    await screen.findByRole("table");
+    expect(screen.queryByRole("status")).toBeNull();
   });
 });

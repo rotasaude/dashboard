@@ -3,7 +3,7 @@
 // atendimento, a leitura pede CPF, motivo de lista (nota ≥ 10 em "Outro
 // motivo") e step-up, vale 30 minutos para aquele paciente e usuário e fica no
 // relatório. O CPF e a nota vão no corpo do POST.
-import { ApiError, type OpeningInput, type OpeningReason } from "./api";
+import { ApiError, type OpeningInput, type OpeningKind, type OpeningReason } from "./api";
 import { isValidCpf } from "./attendance";
 import { consultationError } from "./consultation";
 
@@ -15,6 +15,12 @@ export const OPENING_REASONS: { value: OpeningReason; label: string }[] = [
 ];
 export const OPENING_NOTE_MIN = 10;
 export const OPENING_ENDED = "A abertura de 30 minutos terminou. Para continuar, abra de novo com o motivo.";
+
+export const OPENING_KIND_LABEL: Record<OpeningKind, string> = {
+  justified_opening: "abertura justificada",
+  administrative_read: "leitura administrativa"
+};
+export const OPENINGS_REPORT_LIMIT = 500;
 
 export function reasonLabel(code: string | null): string {
   if (!code) return "—";
