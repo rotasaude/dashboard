@@ -13,7 +13,10 @@ import { useEffect, useRef, useState } from "react";
 import { NavDropdown } from "./NavDropdown";
 import { SegmentedControl } from "./SegmentedControl";
 import { NotificationCenter } from "./NotificationCenter";
-import { navGroupsFor, type ModuleId } from "./modules";
+import { navGroupsFor, withPendingCount, type ModuleId } from "./modules";
+import { SignatureSessionBadge } from "./SignatureSessionBadge";
+import { usePendingSignatures } from "../hooks/usePendingSignatures";
+import { canSign } from "../lib/signature";
 import { PERIOD_OPTIONS, useScope } from "../lib/scope";
 import type { Alert } from "../lib/alerts";
 import { useAuth } from "../lib/auth";
@@ -30,6 +33,8 @@ export function AppHeader({ active, onSelect, alerts }: Props) {
   const auth = useAuth();
   const [ openGroup, setOpenGroup ] = useState<string | null>(null);
   const navRef = useRef<HTMLElement | null>(null);
+  // Módulo 19b: a mesma consulta da página Pendentes (uma por minuto).
+  const pending = usePendingSignatures(canSign(auth.user));
 
   // Click-fora + Esc fecham qualquer dropdown de nav aberto.
   useEffect(() => {
@@ -82,7 +87,7 @@ export function AppHeader({ active, onSelect, alerts }: Props) {
             minWidth: 0
           }}
         >
-          {navGroupsFor(auth.user).map((g) => {
+          {withPendingCount(navGroupsFor(auth.user), pending.data?.length ?? 0).map((g) => {
             // Dashboard's NavItem has no `visible` field — render all items.
             const items = g.items;
             if (items.length === 0) return null;
@@ -109,6 +114,7 @@ export function AppHeader({ active, onSelect, alerts }: Props) {
             flexShrink: 0
           }}
         >
+          <SignatureSessionBadge active={active} onSelect={onSelect} />
           <TenantChip user={auth.user} />
           <SegmentedControl
             options={PERIOD_OPTIONS}

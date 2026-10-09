@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { NAV_GROUPS, labelFor, navGroupsFor } from "./modules";
+import { NAV_GROUPS, labelFor, navGroupsFor, withPendingCount } from "./modules";
 
 describe("modules", () => {
   it("Segurança fica no grupo Conta", () => {
@@ -249,5 +249,14 @@ describe("assinatura digital no menu (módulo 19b)", () => {
     expect(ids(u([ "health_professional" ], []))).not.toContain("signature-pending");
     expect(ids(u([ "citizen_verifier" ]))).not.toContain("signature-pending");
     expect(ids(u([ "municipal_admin" ]))).not.toContain("signature-pending");
+  });
+
+  it("contador de pendentes no item do menu", () => {
+    const groups = navGroupsFor(u([ "health_professional" ]));
+    const label = (gs: typeof groups) => gs.flatMap((g) => g.items).find((i) => i.id === "signature-pending")?.label;
+    expect(label(withPendingCount(groups, 0))).toBe("Pendentes de assinatura");
+    expect(label(withPendingCount(groups, 3))).toBe("Pendentes de assinatura (3)");
+    expect(label(withPendingCount(groups, 200))).toBe("Pendentes de assinatura (200+)");
+    expect(groups.flatMap((g) => g.items).find((i) => i.id === "signature-pending")?.label).toBe("Pendentes de assinatura");
   });
 });

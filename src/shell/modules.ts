@@ -132,3 +132,15 @@ export function navGroupsFor(
     })
   })).filter((group) => group.items.length > 0);
 }
+
+// Módulo 19b: contador de pendentes de assinatura no item do menu (a lista
+// vem até 200 itens; dali em diante, "200+"). Só o rótulo muda; o NavDropdown
+// continua o mesmo.
+export function withPendingCount(groups: NavGroupDef[], count: number): NavGroupDef[] {
+  if (count <= 0) return groups;
+  const shown = count >= 200 ? "200+" : String(count);
+  return groups.map((group) => ({
+    ...group,
+    items: group.items.map((item) => item.id === "signature-pending" ? { ...item, label: `${item.label} (${shown})` } : item)
+  }));
+}
