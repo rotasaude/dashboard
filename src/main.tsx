@@ -7,15 +7,22 @@ import { App } from "./App";
 import { Login } from "./modules/Login";
 import { ResetPassword } from "./modules/ResetPassword";
 import { AcceptInvitation } from "./modules/AcceptInvitation";
+import { SignatureCallback } from "./modules/SignatureCallback";
 import { AuthProvider, useAuth } from "./lib/auth";
 import { useSessionQueryClient } from "./lib/sessionQueryClient";
 import { clearEntryFromUrl, readEntryFromUrl, type Entry } from "./lib/entry";
 import { useGrantEntry } from "./lib/use_grant_entry";
+import { readSignatureCallback, type SignatureCallbackParams } from "./lib/signature";
+import type { ModuleId } from "./shell/modules";
 import "./theme/global.css";
 
 function AppRoot() {
   const auth = useAuth();
   const [ entry, setEntry ] = useState<Entry | null>(() => readEntryFromUrl());
+  // Módulo 19b: retorno do prestador de assinatura. Lido uma vez (puro); a
+  // tela de retorno limpa a URL e troca o código depois do login.
+  const [ signatureReturn, setSignatureReturn ] = useState<SignatureCallbackParams | null>(() => readSignatureCallback());
+  const [ landing, setLanding ] = useState<ModuleId | undefined>(undefined);
   const queryClient = useSessionQueryClient(
     auth.state.kind === "authenticated" ? auth.state.user.id : null,
     () => { void auth.reload(); }
@@ -40,7 +47,9 @@ function AppRoot() {
   if (auth.state.kind === "anonymous") return <Login expiredGrant={grantError} />;
   return (
     <QueryClientProvider client={queryClient}>
-      <App />
+      {signatureReturn
+        ? <SignatureCallback params={signatureReturn} onDone={(next) => { setSignatureReturn(null); setLanding(next); }} />
+        : <App initialModule={landing} />}
     </QueryClientProvider>
   );
 }

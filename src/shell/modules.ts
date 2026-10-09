@@ -73,6 +73,17 @@ export function labelFor(id: ModuleId): string {
   return NAV_GROUPS.flatMap(g => g.items).find(i => i.id === id)?.label ?? id;
 }
 
+// Módulo 19b (Divergência D3): o `return_to` que o dashboard manda ao api é
+// "/<id do módulo>" — a navegação é por estado, não por URL. Só vale o
+// caminho EXATO de um módulo do catálogo (sem subcaminho, query nem fragmento);
+// qualquer outra coisa é null, e quem chama cai na visão geral.
+export function moduleFromPath(path: string | null | undefined): ModuleId | null {
+  const match = typeof path === "string" ? /^\/([a-z][a-z-]*)$/.exec(path) : null;
+  if (!match) return null;
+  const item = NAV_GROUPS.flatMap((g) => g.items).find((i) => i.id === match[1]);
+  return item ? item.id : null;
+}
+
 // D6: "Conta" (autenticador, senha) é de usuário de cidade — um operador
 // entra por grant e não tem essas telas no servidor. Sem sessão ainda,
 // mostra tudo: filtrar cedo demais esconderia o grupo por um instante para

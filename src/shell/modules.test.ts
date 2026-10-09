@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { NAV_GROUPS, labelFor, navGroupsFor, withPendingCount } from "./modules";
+import { NAV_GROUPS, labelFor, moduleFromPath, navGroupsFor, withPendingCount } from "./modules";
 
 describe("modules", () => {
   it("Segurança fica no grupo Conta", () => {
@@ -267,5 +267,30 @@ describe("assinatura digital no menu (módulo 19b)", () => {
     expect(label(withPendingCount(groups, 3))).toBe("Pendentes de assinatura (3)");
     expect(label(withPendingCount(groups, 200))).toBe("Pendentes de assinatura (200+)");
     expect(groups.flatMap((g) => g.items).find((i) => i.id === "signature-pending")?.label).toBe("Pendentes de assinatura");
+  });
+  it("moduleFromPath: só /<id> exato de módulo do catálogo", () => {
+    expect(moduleFromPath("/signature")).toBe("signature");
+    expect(moduleFromPath("/signature-pending")).toBe("signature-pending");
+    expect(moduleFromPath("/attendance")).toBe("attendance");
+    expect(moduleFromPath("/overview")).toBe("overview");
+  });
+
+  it("moduleFromPath: qualquer outra coisa é null (quem chama cai na visão geral)", () => {
+    expect(moduleFromPath("/nao-existe")).toBeNull();
+    expect(moduleFromPath("/a/b")).toBeNull();
+    expect(moduleFromPath("/signature/b")).toBeNull();
+    expect(moduleFromPath("/x?y=1")).toBeNull();
+    expect(moduleFromPath("/attendance?x=1")).toBeNull();
+    expect(moduleFromPath("/attendance#x")).toBeNull();
+    expect(moduleFromPath("//evil")).toBeNull();
+    expect(moduleFromPath("//evil.example/signature")).toBeNull();
+    expect(moduleFromPath("/\\evil")).toBeNull();
+    expect(moduleFromPath("https://evil.example/signature")).toBeNull();
+    expect(moduleFromPath("signature")).toBeNull();
+    expect(moduleFromPath("/")).toBeNull();
+    expect(moduleFromPath("")).toBeNull();
+    expect(moduleFromPath(null)).toBeNull();
+    expect(moduleFromPath(undefined)).toBeNull();
+    expect(moduleFromPath("/constructor")).toBeNull();
   });
 });

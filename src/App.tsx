@@ -36,9 +36,11 @@ import { SignatureAccount } from "./modules/SignatureAccount";
 import { SignaturePending } from "./modules/SignaturePending";
 import { SignatureOverview } from "./modules/SignatureOverview";
 
-export function App() {
+// `initialModule`: a tela de onde a pessoa saiu para o prestador de
+// assinatura (módulo 19b), devolvida pelo retorno do OAuth.
+export function App({ initialModule }: { initialModule?: ModuleId } = {}) {
   const [ period, setPeriod ] = useState<PeriodKey>("7d");
-  const [ active, setActive ] = useState<ModuleId>("overview");
+  const [ active, setActive ] = useState<ModuleId>(initialModule ?? "overview");
   const { citySlug } = useAuth();
 
   return (
