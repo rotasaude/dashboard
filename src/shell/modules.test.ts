@@ -204,5 +204,14 @@ describe("modules", () => {
       expect(ids(user([ "municipal_admin" ], [ "clinical_record" ], true))).not.toContain("clinical-record");
       expect(labelFor("clinical-record")).toBe("Prontuário");
     });
+
+    it("Minhas consultas: só profissional com clinical_record, nunca operador", () => {
+      expect(ids(user([ "health_professional" ], [ "clinical_record" ]))).toContain("my-consultations");
+      expect(ids(user([ "health_professional" ]))).not.toContain("my-consultations");
+      expect(ids(user([ "citizen_verifier" ], [ "clinical_record" ]))).not.toContain("my-consultations");
+      expect(ids(user([ "municipal_admin" ], [ "clinical_record" ]))).not.toContain("my-consultations");
+      expect(ids(user([ "health_professional" ], [ "clinical_record" ], true))).not.toContain("my-consultations");
+      expect(labelFor("my-consultations")).toBe("Minhas consultas");
+    });
   });
 });

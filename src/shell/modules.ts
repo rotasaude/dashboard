@@ -7,7 +7,7 @@ export type ModuleId =
   | "triages" | "classification" | "reports" | "protocols" | "events"
   | "queues" | "health" | "protocol-editor" | "security" | "team" | "attendance"
   | "professionals" | "my-profile" | "territory" | "campaigns" | "analytics"
-  | "integrations" | "cnes" | "production" | "my-agenda" | "clinical-record";
+  | "integrations" | "cnes" | "production" | "my-agenda" | "clinical-record" | "my-consultations";
 
 export interface NavItem { id: ModuleId; label: string; icon: string; }
 export interface NavGroupDef { label: string; items: NavItem[]; }
@@ -39,7 +39,8 @@ export const NAV_GROUPS: NavGroupDef[] = [
   { label: "Atendimento", items: [
     { id: "attendance", label: "Atendimento", icon: "☑" },
     { id: "my-agenda", label: "Minha agenda", icon: "◷" },
-    { id: "clinical-record", label: "Prontuário", icon: "⚕" }
+    { id: "clinical-record", label: "Prontuário", icon: "⚕" },
+    { id: "my-consultations", label: "Minhas consultas", icon: "☰" }
   ]},
   { label: "Comunicação", items: [
     { id: "campaigns", label: "Campanhas", icon: "✉" }
@@ -113,6 +114,8 @@ export function navGroupsFor(
       // Módulo 17: "Minha agenda" idem (GET /me/agenda responde 403/404 a quem não é).
       if (item.id === "my-agenda") return isProfessional;
       if (item.id === "clinical-record") return canClinicalRecord;
+      // Task 17: leitura das próprias consultas, só do profissional.
+      if (item.id === "my-consultations") return !user?.operator && isProfessional && hasFeature(user, "clinical_record");
       if (item.id === "integrations" || item.id === "cnes") return canIntegrations;
       if (item.id === "production") return canProduction;
       return true;

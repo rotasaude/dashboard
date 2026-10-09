@@ -14,6 +14,7 @@ export const RECORD_KEY = "attendanceRecord";
 export const CONSULTATION_KEY = "consultation";
 export const OPTIONS_KEY = "consultationOptions";
 export const JUSTIFIED_KEY = "justifiedRecord";
+export const MY_CONSULTATIONS_KEY = "myConsultations";
 
 export const TEXT_MAX = 20_000;
 export const TEXT_MAX_LABEL = "20.000";
@@ -301,6 +302,8 @@ const MESSAGES: Record<string, string> = {
   invalid_reason: `o motivo do adendo precisa de pelo menos ${ADDENDUM_REASON_MIN} caracteres`,
   ciap2_required_for_cbo: "avalie ao menos um problema em CIAP-2 — a ficha de quem não é médico não leva CID-10",
   consultation_in_progress: "há uma consulta em andamento neste atendimento — finalize-a pela Consulta para encerrar",
+  invalid_period: "o período informado não é válido",
+  missing_role: "seu papel não permite ver consultas",
   terminology_unavailable: "a terminologia não está disponível agora — tente de novo em instantes"
 };
 
