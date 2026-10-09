@@ -77,6 +77,7 @@ const MESSAGES: Record<string, string> = {
   invalid_unit: "unidade inválida ou desativada — escolha outra",
   referral_required: "informe a unidade de destino ou a descrição do encaminhamento",
   already_closed: "este atendimento já foi encerrado",
+  consultation_in_progress: "há uma consulta em andamento neste atendimento — finalize-a pela Consulta para encerrar",
   unit_name_taken: "já existe uma unidade com este nome",
   // Vem da criação de unidade e do kind da marcação (módulo 17): texto neutro.
   invalid_kind: "tipo inválido — escolha uma das opções",

@@ -2,20 +2,21 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   callAttendance, callNext, closeAttendance, errorCode, getScreening, listUnitQueue,
-  type AppointmentRequestSummary, type AttendanceOutcome, type HealthUnit, type QueueRow, type Screening
+  type AppointmentRequestSummary, type HealthUnit, type QueueRow, type Screening
 } from "../../lib/api";
-import { ATTENDANCE_REFETCH_MS, attendanceError, splitReferenceUnits } from "../../lib/attendance";
+import { ATTENDANCE_REFETCH_MS, attendanceError } from "../../lib/attendance";
+import { EMPTY_OUTCOME, outcomeBody, outcomeProblem, outcomeView, type OutcomeDraft } from "../../lib/outcome";
 import { fmtDateTime, fmtHourMinute } from "../../lib/format";
 import { useAuth } from "../../lib/auth";
 import { Panel } from "../../components/Panel";
 import { DataTable } from "../../components/DataTable";
 import { EmptyState } from "../../components/EmptyState";
-import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
-import { FrozenTextNotice } from "../../components/FrozenTextNotice";
+import { buttonStyle, disabledButtonStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { Tag } from "../../components/Tag";
 import { COLOR_LABEL, COLOR_TONE, screeningError, waitLabel, waitedMinutes } from "../../lib/screening";
 import { ScreeningDetail, ScreeningDetailLoader } from "./ScreeningDetail";
 import { ScreeningForm } from "./ScreeningForm";
+import { OutcomeFields } from "./OutcomeFields";
 
 // UnitQueue (Task 7) — a fila da unidade atual (spec §6 "Fila"), em duas
 // partes: "Aguardando" (ordenada pela API — prioridade, depois chegada — esta
@@ -45,14 +46,6 @@ type ScreeningPanel =
 // Vermelho no topo e destacado (spec §4); a ordem é do api.
 const redRow = (r: QueueRow) =>
   r.screening?.color === "red" ? { background: "var(--down-bg)", boxShadow: "inset 3px 0 0 var(--down)" } : undefined;
-
-// Só o acolhimento escreve "agendado/orientado pelo acolhimento"; "left" é a recepção.
-type CloseFormOutcome = Exclude<AttendanceOutcome, "left" | "scheduled_from_screening" | "oriented">;
-const OUTCOME_LABEL: Record<CloseFormOutcome, string> = {
-  discharged: "Atendido e liberado",
-  referred: "Encaminhado",
-  return: "Retorno"
-};
 
 // missing_role (o papel health_professional foi revogado) precisa recarregar
 // a sessão além de invalidar o vínculo: canCareRole vem de user.memberships
@@ -328,30 +321,20 @@ function ClosePanel(
   }
 ) {
   const auth = useAuth();
-  const [ outcome, setOutcome ] = useState<CloseFormOutcome>("discharged");
-  // Módulo 11 (D4): a primeira unidade de referência, por nome, já vem
-  // escolhida; o profissional troca ou volta para "—". null = ainda não
-  // mexeu, e aí vale a sugestão (que pode chegar depois, com `units`).
-  const [ referralChoice, setReferralChoice ] = useState<string | null>(null);
-  const { referenceUnits, otherUnits } = splitReferenceUnits(units, row.reference_unit_ids, unit.id);
-  const referralUnitId = referralChoice ?? referenceUnits[0]?.id ?? "";
-  const [ note, setNote ] = useState("");
+  // Campos e regras em OutcomeFields/outcome.ts (módulo 19: a finalização da
+  // consulta usa os mesmos). A primeira unidade de referência vem escolhida.
+  const [ draft, setDraft ] = useState<OutcomeDraft>(EMPTY_OUTCOME);
   const [ busy, setBusy ] = useState(false);
   const [ error, setError ] = useState<string | null>(null);
-
-  const referralIncomplete = outcome === "referred" && !referralUnitId && !note.trim();
-  const disabled = busy || referralIncomplete;
-
-  const targetUnitName = outcome === "return"
-    ? unit.name
-    : (outcome === "referred" && referralUnitId ? units.find((u) => u.id === referralUnitId)?.name : undefined);
+  const { referralUnitId } = outcomeView(draft, row.reference_unit_ids, unit, units);
+  const disabled = busy || outcomeProblem(draft, referralUnitId) !== null;
 
   async function confirm() {
     if (disabled) return;
     setBusy(true); setError(null);
     try {
-      const result = await closeAttendance(row.id, outcome,
-        outcome === "referred" ? referralUnitId || undefined : undefined, note || undefined);
+      const body = outcomeBody(draft, referralUnitId);
+      const result = await closeAttendance(row.id, body.outcome, body.referral_unit_id, body.referral_note);
       onDone(result.appointmentRequest);
     } catch (err) {
       const code = errorCode(err);
@@ -371,50 +354,7 @@ function ClosePanel(
       </p>
       {error && <p role="alert" style={{ margin: 0, fontSize: 12.5, color: "var(--down)" }}>{error}</p>}
 
-      <label style={labelStyle}>
-        Desfecho
-        <select value={outcome} onChange={(e) => setOutcome(e.target.value as CloseFormOutcome)} style={inputStyle}>
-          {(Object.keys(OUTCOME_LABEL) as (CloseFormOutcome)[]).map((o) => (
-            <option key={o} value={o}>{OUTCOME_LABEL[o]}</option>
-          ))}
-        </select>
-      </label>
-
-      {outcome === "referred" && (
-        <>
-          <label style={labelStyle}>
-            Unidade de destino
-            <select value={referralUnitId} onChange={(e) => setReferralChoice(e.target.value)} style={inputStyle}>
-              <option value="">—</option>
-              {referenceUnits.map((u) => <option key={u.id} value={u.id}>{`${u.name} · referência`}</option>)}
-              {otherUnits.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-            </select>
-          </label>
-          <label style={labelStyle}>
-            Descrição
-            <input value={note} onChange={(e) => setNote(e.target.value)} style={inputStyle}
-              aria-describedby="referral-note-notice" />
-          </label>
-          <FrozenTextNotice id="referral-note-notice" />
-        </>
-      )}
-
-      {outcome === "return" && (
-        <>
-          <label style={labelStyle}>
-            Nota (opcional)
-            <input value={note} onChange={(e) => setNote(e.target.value)} style={inputStyle}
-              aria-describedby="return-note-notice" />
-          </label>
-          <FrozenTextNotice id="return-note-notice" />
-        </>
-      )}
-
-      {targetUnitName && (
-        <p className="mono" style={{ margin: 0, fontSize: 11, color: "var(--ink3)" }}>
-          Gera pedido de agendamento na {targetUnitName}
-        </p>
-      )}
+      <OutcomeFields value={draft} onChange={setDraft} referenceIds={row.reference_unit_ids} unit={unit} units={units} />
 
       <div style={{ display: "flex", gap: 8 }}>
         <button type="button" disabled={disabled} onClick={() => void confirm()} style={disabled ? disabledButtonStyle : buttonStyle}>
@@ -427,8 +367,6 @@ function ClosePanel(
     </section>
   );
 }
-
-const labelStyle = { display: "flex", flexDirection: "column" as const, gap: 4, fontSize: 12, color: "var(--ink2)" };
 
 // Cor da escuta; "aguardando acolhimento" é só um marcador neutro (não é dado
 // clínico), por isso a recepção também o vê (contrato §9). A recepção vê só a

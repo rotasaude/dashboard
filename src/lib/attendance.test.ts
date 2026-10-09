@@ -9,6 +9,11 @@ describe("attendance helpers", () => {
     expect(isValidCpf("111.111.111-11")).toBe(false);
   });
 
+  it("encerrar com consulta em rascunho manda finalizar pela consulta", () => {
+    expect(attendanceError(new ApiError(409, { error: "consultation_in_progress" }, "x")))
+      .toBe("há uma consulta em andamento neste atendimento — finalize-a pela Consulta para encerrar");
+  });
+
   it("traduz os erros do balcão sem confundir com o código do autenticador", () => {
     expect(attendanceError(new ApiError(422, { error: "invalid_code" }, "x")))
       .toBe("código não confere — confira com o cidadão");

@@ -1579,7 +1579,8 @@ export type OnsetPrecision = "day" | "month" | "year";
 export type ProblemAction = "evaluate" | "add" | "resolve" | "correct_onset";
 export type RecordAccess = "in_context" | "justified";
 export type OpeningReason = "case_review" | "active_search" | "continuity_of_care" | "other";
-export type CareOutcome = Exclude<AttendanceOutcome, "left">;
+// Os desfechos do formulário (o api recusa os do acolhimento no close; "left" é da recepção).
+export type CareOutcome = Exclude<AttendanceOutcome, "left" | "scheduled_from_screening" | "oriented">;
 
 export interface CodedOption { code: string; label: string }
 export interface CitizenNames { full_name_set: boolean; display_name: string | null }
