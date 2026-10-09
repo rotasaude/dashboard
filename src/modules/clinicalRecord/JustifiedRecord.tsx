@@ -75,7 +75,8 @@ export function JustifiedRecord({ opening, onEnd, searchDelayMs }: Props) {
             {viewing && (
               <ConsultationLoader key={viewing} id={viewing} canAddendum={() => true} openingId={opening.opening_id}
                 options={options.data ?? null} patientProblems={record.data.problems} searchDelayMs={searchDelayMs}
-                onClose={() => setViewing(null)} onOpeningRequired={handleOpeningRequired} />
+                onClose={() => setViewing(null)} onOpeningRequired={handleOpeningRequired}
+                onAddendumAdded={() => void queryClient.invalidateQueries({ queryKey: [ JUSTIFIED_KEY, opening.opening_id ] })} />
             )}
           </>
         )}

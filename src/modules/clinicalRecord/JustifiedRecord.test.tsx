@@ -6,10 +6,13 @@ vi.mock("../../lib/api", async (importOriginal) => {
   return { ...real, fetchCurrentSession: vi.fn(), getJustifiedRecord: vi.fn(), getConsultationOptions: vi.fn() };
 });
 vi.mock("../consultation/ConsultationView", () => ({
-  ConsultationLoader: (p: { id: string; openingId?: string; canAddendum(c: unknown): boolean; onOpeningRequired?(): void }) => (
+  ConsultationLoader: (p: {
+    id: string; openingId?: string; canAddendum(c: unknown): boolean; onOpeningRequired?(): void; onAddendumAdded?(a: unknown): void;
+  }) => (
     <div>
       <span>{`consulta ${p.id} · abertura ${p.openingId} · adendo ${p.canAddendum({}) ? "sim" : "não"}`}</span>
       <button type="button" onClick={() => p.onOpeningRequired?.()}>abertura acabou (dublê)</button>
+      <button type="button" onClick={() => p.onAddendumAdded?.({ id: "ad9" })}>adendo (dublê)</button>
     </div>
   )
 }));
@@ -61,6 +64,16 @@ describe("JustifiedRecord", () => {
     await act(async () => { await Promise.resolve(); });
     expect(api.getJustifiedRecord).toHaveBeenCalledTimes(1);
     expect(screen.getByText(OPENING_ENDED)).not.toBeNull();
+  });
+
+  it("adendo registrado relê a lista de problemas da abertura", async () => {
+    renderWithProviders(<JustifiedRecord opening={opening()} onEnd={vi.fn()} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Abrir consulta de 10/09/2026, 14:30" }));
+    expect(api.getJustifiedRecord).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "adendo (dublê)" }));
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(api.getJustifiedRecord).toHaveBeenCalledTimes(2);
+    expect(api.getJustifiedRecord).toHaveBeenLastCalledWith("pa1");
   });
 
   it("consulta anterior com a abertura (adendo permitido) e fim da abertura vindo dela", async () => {

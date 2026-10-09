@@ -4,9 +4,9 @@
 // uma abertura justificada (opening_id).
 import { useState, type CSSProperties } from "react";
 import {
-  addAddendum, errorCode, type Consultation, type ConsultationOptions, type EvaluatedProblem, type ExamRequest, type PatientProblem
+  addAddendum, errorCode, type Addendum, type Consultation, type ConsultationOptions, type EvaluatedProblem, type ExamRequest, type PatientProblem
 } from "../../lib/api";
-import { addendumChanges, addendumProblem, consultationError, examsProblem } from "../../lib/consultation";
+import { addendumChanges, addendumProblem, consultationError, examsProblem, problemsWithConsultationAdds } from "../../lib/consultation";
 import { todayInCity } from "../../lib/campaigns";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { ProblemsEditor } from "./ProblemsEditor";
@@ -19,7 +19,7 @@ interface Props {
   patientProblems: PatientProblem[];
   openingId?: string;
   searchDelayMs?: number;
-  onDone(): void;
+  onDone(addendum: Addendum): void;
   onCancel(): void;
   onOpeningRequired?(): void;
 }
@@ -43,12 +43,12 @@ export function AddendumForm({ consultation, options, patientProblems, openingId
     setBusy(true); setError(null);
     try {
       const changes = withChanges ? addendumChanges(consultation, { problems, conducts, exams }) : undefined;
-      await addAddendum(consultation.id, {
+      const addendum = await addAddendum(consultation.id, {
         reason: reason.trim(), text,
         ...(changes ? { changes } : {}),
         ...(openingId ? { opening_id: openingId } : {})
       });
-      onDone();
+      onDone(addendum);
     } catch (err) {
       if (errorCode(err) === "opening_required") onOpeningRequired?.();
       setError(consultationError(err));
@@ -75,7 +75,7 @@ export function AddendumForm({ consultation, options, patientProblems, openingId
       </label>
       {withChanges && (
         <>
-          <ProblemsEditor patientProblems={patientProblems} items={problems} onChange={setProblems}
+          <ProblemsEditor patientProblems={problemsWithConsultationAdds(patientProblems, consultation)} items={problems} onChange={setProblems}
             cid10Allowed={options?.cid10_allowed_for_cbo ?? false} today={todayInCity()} searchDelayMs={searchDelayMs} />
           <ConductsField options={options?.conducts ?? []} value={conducts} onChange={setConducts} />
           <ExamRequestsField value={exams} onChange={setExams} cid10Allowed={options?.cid10_allowed_for_cbo ?? false}

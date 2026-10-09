@@ -69,6 +69,35 @@ describe("AddendumForm", () => {
     });
   });
 
+  it("devolve o adendo criado a quem mostra a consulta", async () => {
+    const { onDone } = renderForm();
+    text("Motivo do adendo", "correção do plano");
+    text("Texto do adendo", "Retorno em 15 dias.");
+    fireEvent.click(screen.getByRole("button", { name: "Registrar adendo" }));
+    await waitFor(() => expect(onDone).toHaveBeenCalledWith({ id: "ad1" }));
+  });
+
+  it("Incluir o que a própria consulta incluiu vira avaliado (lista do paciente lida antes)", async () => {
+    mocked(api.searchTerminology).mockResolvedValue([ { code: "K86", label: "Hipertensão sem complicações" } ]);
+    const base = finalized({ evaluated_problems: [
+      { problem_id: "pp9", terminology: "ciap2", code: "K86", label: "Hipertensão sem complicações", action: "add" }
+    ] });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={client}><AddendumForm consultation={base} options={options()}
+      patientProblems={[ problem() ]} searchDelayMs={0} onDone={vi.fn()} onCancel={vi.fn()} /></QueryClientProvider>);
+    text("Motivo do adendo", "correção do plano");
+    text("Texto do adendo", "Hipertensão reavaliada.");
+    fireEvent.click(screen.getByLabelText("Mudar problemas, condutas ou exames"));
+    fireEvent.change(screen.getByLabelText("Incluir problema (CIAP-2)"), { target: { value: "hipertensão" } });
+    fireEvent.click(await screen.findByRole("button", { name: "K86 — Hipertensão sem complicações" }));
+    expect(screen.getByRole("status").textContent).toBe("K86 já está na lista do paciente — marcado como avaliado");
+    fireEvent.click(screen.getByRole("button", { name: "Registrar adendo" }));
+    await waitFor(() => expect(api.addAddendum).toHaveBeenCalled());
+    expect(mocked(api.addAddendum).mock.calls[0][1].changes.evaluated_problems).toEqual([
+      { problem_id: "pp9", terminology: "ciap2", code: "K86", label: "Hipertensão sem complicações", action: "evaluate" }
+    ]);
+  });
+
   it("403 opening_required avisa quem abriu a leitura", async () => {
     mocked(api.addAddendum).mockRejectedValue(new ApiError(403, { error: "opening_required" }, "403"));
     const { onOpeningRequired } = renderForm("op1");

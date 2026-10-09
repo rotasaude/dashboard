@@ -7,9 +7,9 @@ import { useEffect, useState, type CSSProperties } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   errorCode, fetchConsultationPdf, getConsultation,
-  type Consultation, type ConsultationOptions, type PatientProblem
+  type Addendum, type Consultation, type ConsultationOptions, type PatientProblem
 } from "../../lib/api";
-import { ACTION_LABEL, CONSULTATION_KEY, SOAP_FIELDS, changesLines, codedLabel, consultationError } from "../../lib/consultation";
+import { ACTION_LABEL, CONSULTATION_KEY, SOAP_FIELDS, changesLines, codedLabel, consultationError, withAddendum } from "../../lib/consultation";
 import { fmtDateTime } from "../../lib/format";
 import { buttonStyle, disabledButtonStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { VitalsList } from "./PatientPanel";
@@ -22,7 +22,9 @@ export interface ConsultationViewProps {
   canAddendum: boolean;
   openingId?: string;
   searchDelayMs?: number;
-  onAddendumAdded(): void;
+  // O 201 devolve o adendo: quem mostra a consulta o acrescenta sem reler
+  // (o api recusa a releitura da autora depois que o atendimento fechou).
+  onAddendumAdded(addendum: Addendum): void;
   onClose(): void;
   onOpeningRequired?(): void;
 }
@@ -119,7 +121,7 @@ export function ConsultationView(props: ConsultationViewProps) {
       {adding && (
         <AddendumForm consultation={c} options={options} patientProblems={props.patientProblems} openingId={props.openingId}
           searchDelayMs={props.searchDelayMs}
-          onDone={() => { setAdding(false); props.onAddendumAdded(); }}
+          onDone={(addendum) => { setAdding(false); props.onAddendumAdded(addendum); }}
           onCancel={() => setAdding(false)} onOpeningRequired={props.onOpeningRequired} />
       )}
     </section>
@@ -129,11 +131,15 @@ export function ConsultationView(props: ConsultationViewProps) {
 type LoaderProps = Omit<ConsultationViewProps, "consultation" | "canAddendum" | "onAddendumAdded"> & {
   id: string;
   canAddendum(c: Consultation): boolean;
+  onAddendumAdded?(addendum: Addendum): void;
 };
 
-export function ConsultationLoader({ id, canAddendum, ...rest }: LoaderProps) {
+export function ConsultationLoader({ id, canAddendum, onAddendumAdded, ...rest }: LoaderProps) {
   const queryClient = useQueryClient();
-  const query = useQuery({ queryKey: [ CONSULTATION_KEY, id ], queryFn: () => getConsultation(id), gcTime: 0, staleTime: 0 });
+  // Sem nova tentativa: um 403 opening_required encerra a abertura na hora.
+  const query = useQuery({
+    queryKey: [ CONSULTATION_KEY, id ], queryFn: () => getConsultation(id), gcTime: 0, staleTime: 0, retry: false
+  });
   const openingGone = query.isError && errorCode(query.error) === "opening_required";
   const { onOpeningRequired } = rest;
 
@@ -145,7 +151,10 @@ export function ConsultationLoader({ id, canAddendum, ...rest }: LoaderProps) {
   if (query.isError) return <p role="alert" style={alert}>{consultationError(query.error)}</p>;
   return (
     <ConsultationView consultation={query.data} canAddendum={canAddendum(query.data)}
-      onAddendumAdded={() => void queryClient.invalidateQueries({ queryKey: [ CONSULTATION_KEY, id ] })} {...rest} />
+      onAddendumAdded={(addendum) => {
+        queryClient.setQueryData<Consultation>([ CONSULTATION_KEY, id ], (c) => (c ? withAddendum(c, addendum) : c));
+        onAddendumAdded?.(addendum);
+      }} {...rest} />
   );
 }
 

@@ -131,7 +131,7 @@ describe("ConsultationEditor", () => {
     fireEvent.click(screen.getByRole("button", { name: "Finalizar consulta" }));
     fireEvent.click(screen.getByRole("button", { name: "Confirmar finalização" }));
     expect((await screen.findByRole("alert")).textContent)
-      .toBe("Avalie ao menos um problema em CIAP-2 para finalizar: a ficha de quem não é médico não leva CID-10.");
+      .toBe("avalie ao menos um problema em CIAP-2 — a ficha de quem não é médico não leva CID-10");
     expect(onFinalized).not.toHaveBeenCalled();
     expect(onLocked).not.toHaveBeenCalled();
     expect((screen.getByLabelText("Plano (P)") as HTMLTextAreaElement).disabled).toBe(false);

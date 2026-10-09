@@ -3,7 +3,8 @@ import { ApiError, type EvaluatedProblem, type PatientProblem } from "./api";
 import {
   addExam, addProblem, addendumChanges, addendumProblem, ageLabel, blockedReason, changesLines, checkDraft, cid10Problem,
   codedLabel, consultationError, correctOnset, draftFrom, examsProblem, existingConsultationId, finalizeProblems, markProblem,
-  normalizeCid10, onsetInputValue, onsetLabel, parseOnset, problemKey, removeItem, setItemOnset, setJustification
+  normalizeCid10, onsetInputValue, onsetLabel, parseOnset, problemKey, problemsWithConsultationAdds, removeItem, setItemOnset,
+  setJustification, withAddendum
 } from "./consultation";
 import { consultation, finalized, options, problem } from "../test/consultationFixtures";
 
@@ -173,6 +174,31 @@ describe("exames", () => {
 });
 
 describe("adendo", () => {
+  it("o adendo devolvido pelo 201 entra na consulta, uma vez só", () => {
+    const ad = { id: "ad9", author_name: "Enf. Lúcia Prado", created_at: "2026-10-07T11:00:00-03:00", reason: "correção do plano",
+      text: "Retorno.", changes: null };
+    const once = withAddendum(finalized(), ad);
+    expect(once.addenda.map((a) => a.id)).toEqual([ "ad9" ]);
+    expect(withAddendum(once, ad)).toBe(once);
+  });
+
+  it("o que a consulta incluiu entra como ativo na lista do adendo (Incluir de novo vira avaliado)", () => {
+    const T90 = problem();
+    const c = finalized({ evaluated_problems: [
+      { problem_id: "pp1", terminology: "ciap2", code: "T90", label: T90.label, action: "evaluate" },
+      { problem_id: "pp9", terminology: "ciap2", code: "K86", label: "Hipertensão sem complicações", action: "add" }
+    ] });
+    const list = problemsWithConsultationAdds([ T90 ], c);
+    expect(list.map((p) => [ p.id, p.code, p.status ])).toEqual([ [ "pp1", "T90", "active" ], [ "pp9", "K86", "active" ] ]);
+    const out = addProblem([], list, "ciap2", { code: "K86", label: "Hipertensão sem complicações" });
+    expect(out.items.map((i) => [ i.problem_id, i.action ])).toEqual([ [ "pp9", "evaluate" ] ]);
+    expect(out.notice).toBe("K86 já está na lista do paciente — marcado como avaliado");
+    // Já na lista lida (ou sem id): nada muda.
+    const fresh = [ T90, problem({ id: "pp9", code: "K86", label: "Hipertensão sem complicações" }) ];
+    expect(problemsWithConsultationAdds(fresh, c)).toBe(fresh);
+    expect(problemsWithConsultationAdds([ T90 ], finalized())).toEqual([ T90 ]);
+  });
+
   it("motivo com 10 caracteres e texto obrigatório", () => {
     expect(addendumProblem("curto", "texto")).toBe("o motivo do adendo precisa de pelo menos 10 caracteres");
     expect(addendumProblem("correção do plano", "  ")).toBe("escreva o texto do adendo");
@@ -231,8 +257,8 @@ describe("rótulos e recusas", () => {
     [ 422, { error: "implausible_vital", field: "systolic" }, "Pressão sistólica: valor fora do plausível — confira" ],
     [ 403, { error: "opening_required" }, "a abertura justificada terminou ou não existe — abra o prontuário de novo com o motivo" ],
     [ 503, { error: "terminology_unavailable" }, "a terminologia não está disponível agora — tente de novo em instantes" ],
-    [ 422, { error: "ciap2_required_for_cbo" }, "Avalie ao menos um problema em CIAP-2 para finalizar: a ficha de quem não é médico não leva CID-10." ],
-    [ 409, { error: "consultation_in_progress" }, "Há uma consulta em andamento neste atendimento: finalize-a pela Consulta para encerrar." ],
+    [ 422, { error: "ciap2_required_for_cbo" }, "avalie ao menos um problema em CIAP-2 — a ficha de quem não é médico não leva CID-10" ],
+    [ 409, { error: "consultation_in_progress" }, "há uma consulta em andamento neste atendimento — finalize-a pela Consulta para encerrar" ],
     [ 422, { error: "referral_required" }, "informe a unidade de destino ou a descrição do encaminhamento" ],
     [ 500, "boom", "não foi possível concluir — tente de novo" ]
   ])("%s %j → frase", (status, body, phrase) => {

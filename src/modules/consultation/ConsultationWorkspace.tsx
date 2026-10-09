@@ -8,7 +8,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   getAttendanceRecord, getConsultation, getConsultationOptions, startConsultation, type Consultation, type HealthUnit
 } from "../../lib/api";
-import { OPTIONS_KEY, RECORD_KEY, consultationError, existingConsultationId } from "../../lib/consultation";
+import { OPTIONS_KEY, RECORD_KEY, consultationError, existingConsultationId, withAddendum } from "../../lib/consultation";
 import { useAuth } from "../../lib/auth";
 import { buttonStyle, disabledButtonStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { PatientPanel } from "./PatientPanel";
@@ -98,7 +98,7 @@ export function ConsultationWorkspace(props: Props) {
           {consultation?.status === "finalized" && (
             <ConsultationView consultation={consultation} options={options.data ?? null} patientProblems={record.data.problems}
               canAddendum={isMine(consultation)} searchDelayMs={props.searchDelayMs}
-              onAddendumAdded={() => void reload()} onClose={props.onClose} />
+              onAddendumAdded={(addendum) => setConsultation((c) => (c ? withAddendum(c, addendum) : c))} onClose={props.onClose} />
           )}
         </>
       )}

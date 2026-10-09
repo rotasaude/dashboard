@@ -4,7 +4,7 @@
 // início com precisão, exames, adendo e as frases das recusas. Nenhuma frase
 // repete texto clínico: só códigos e rótulos.
 import {
-  ApiError, type AddendumChanges, type CodedOption, type Consultation, type ConsultationDraftInput,
+  ApiError, type Addendum, type AddendumChanges, type CodedOption, type Consultation, type ConsultationDraftInput,
   type EvaluatedProblem, type ExamRequest, type OnsetPrecision, type PatientProblem, type ProblemAction, type Terminology
 } from "./api";
 import { fmtDay } from "./audiencePhrase";
@@ -247,6 +247,27 @@ export function addendumChanges(base: Consultation, edit: AddendumEdit): Addendu
   return Object.keys(changes).length > 0 ? changes : undefined;
 }
 
+// O adendo devolvido pelo 201 entra na consulta mostrada (sem reler pelo GET).
+export function withAddendum(c: Consultation, addendum: Addendum): Consultation {
+  const addenda = c.addenda ?? [];
+  if (addenda.some((a) => a.id === addendum.id)) return c;
+  return { ...c, addenda: [ ...addenda, addendum ] };
+}
+
+// A lista do paciente lida antes pode não ter o que esta consulta incluiu: o
+// item "add" finalizado traz o id do problema criado, que entra como ativo
+// para "Incluir" no adendo virar "avaliado" (nunca um add duplicado).
+export function problemsWithConsultationAdds(patientProblems: PatientProblem[], c: Consultation): PatientProblem[] {
+  const extra: PatientProblem[] = [];
+  for (const i of c.evaluated_problems ?? []) {
+    if (i.action !== "add" || !i.problem_id) continue;
+    const known = [ ...patientProblems, ...extra ].some((p) =>
+      p.id === i.problem_id || (p.status === "active" && p.terminology === i.terminology && p.code === i.code));
+    if (!known) extra.push({ id: i.problem_id, terminology: i.terminology, code: i.code, label: i.label, status: "active" });
+  }
+  return extra.length > 0 ? [ ...patientProblems, ...extra ] : patientProblems;
+}
+
 export function changesLines(changes: AddendumChanges | null | undefined, conductLabel: (code: string) => string): string[] {
   if (!changes) return [];
   const lines: string[] = [];
@@ -278,8 +299,8 @@ const MESSAGES: Record<string, string> = {
   not_finalized: "a consulta ainda não foi finalizada",
   opening_required: "a abertura justificada terminou ou não existe — abra o prontuário de novo com o motivo",
   invalid_reason: `o motivo do adendo precisa de pelo menos ${ADDENDUM_REASON_MIN} caracteres`,
-  ciap2_required_for_cbo: "Avalie ao menos um problema em CIAP-2 para finalizar: a ficha de quem não é médico não leva CID-10.",
-  consultation_in_progress: "Há uma consulta em andamento neste atendimento: finalize-a pela Consulta para encerrar.",
+  ciap2_required_for_cbo: "avalie ao menos um problema em CIAP-2 — a ficha de quem não é médico não leva CID-10",
+  consultation_in_progress: "há uma consulta em andamento neste atendimento — finalize-a pela Consulta para encerrar",
   terminology_unavailable: "a terminologia não está disponível agora — tente de novo em instantes"
 };
 

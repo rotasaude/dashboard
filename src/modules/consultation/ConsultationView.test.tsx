@@ -78,6 +78,33 @@ describe("ConsultationView", () => {
     expect(win.close).toHaveBeenCalled();
   });
 
+  it("o loader mostra o adendo devolvido pelo 201 sem reler a consulta", async () => {
+    mocked(api.getConsultation).mockResolvedValue(finalized());
+    mocked(api.addAddendum).mockResolvedValue(addendum);
+    const onAddendumAdded = vi.fn();
+    wrap(<ConsultationLoader id="cs1" canAddendum={() => true} options={options()} patientProblems={[]} onClose={vi.fn()}
+      onAddendumAdded={onAddendumAdded} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Adendo" }));
+    fireEvent.change(screen.getByLabelText("Motivo do adendo"), { target: { value: "correção do plano" } });
+    fireEvent.change(screen.getByLabelText("Texto do adendo"), { target: { value: "Retorno em 15 dias." } });
+    fireEvent.click(screen.getByRole("button", { name: "Registrar adendo" }));
+    const list = await screen.findByRole("list", { name: "adendos" });
+    expect(within(list).getByText("Retorno em 15 dias.")).not.toBeNull();
+    expect(onAddendumAdded).toHaveBeenCalledWith(addendum);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(api.getConsultation).toHaveBeenCalledTimes(1);
+  });
+
+  it("o loader não tenta de novo: 403 opening_required encerra na primeira resposta", async () => {
+    mocked(api.getConsultation).mockRejectedValue(new ApiError(403, { error: "opening_required" }, "403"));
+    const onOpeningRequired = vi.fn();
+    const client = new QueryClient({ defaultOptions: { queries: { retry: 3, retryDelay: 0 } } });
+    render(<QueryClientProvider client={client}><ConsultationLoader id="cs1" canAddendum={() => true} options={options()}
+      patientProblems={[]} onClose={vi.fn()} onOpeningRequired={onOpeningRequired} /></QueryClientProvider>);
+    await waitFor(() => expect(onOpeningRequired).toHaveBeenCalled());
+    expect(api.getConsultation).toHaveBeenCalledTimes(1);
+  });
+
   it("o loader lê pelo id e avisa quando a abertura acabou", async () => {
     mocked(api.getConsultation).mockRejectedValue(new ApiError(403, { error: "opening_required" }, "403"));
     const onOpeningRequired = vi.fn();

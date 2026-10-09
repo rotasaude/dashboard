@@ -18,8 +18,14 @@ vi.mock("./ConsultationEditor", () => ({
   )
 }));
 vi.mock("./ConsultationView", () => ({
-  ConsultationView: (p: { consultation: Consultation; canAddendum: boolean }) =>
-    <span>{`consulta finalizada ${p.consultation.id} · adendo ${p.canAddendum ? "sim" : "não"}`}</span>,
+  ConsultationView: (p: { consultation: Consultation; canAddendum: boolean; onAddendumAdded(a: unknown): void }) => (
+    <div>
+      <span>{`consulta finalizada ${p.consultation.id} · adendo ${p.canAddendum ? "sim" : "não"}`}</span>
+      <span>{`adendos: ${p.consultation.addenda.map((a) => a.id).join(",")}`}</span>
+      <button type="button" onClick={() => p.onAddendumAdded({ id: "ad9", author_name: "Enf. Lúcia Prado",
+        created_at: "2026-10-07T11:00:00-03:00", reason: "correção do plano", text: "Retorno.", changes: null })}>adendo (dublê)</button>
+    </div>
+  ),
   ConsultationLoader: (p: { id: string }) => <span>{`consulta anterior ${p.id}`}</span>
 }));
 
@@ -83,6 +89,16 @@ describe("ConsultationWorkspace", () => {
     fireEvent.click(await screen.findByRole("button", { name: "finalizar (dublê)" }));
     expect(await screen.findByText("consulta finalizada cs1 · adendo sim")).not.toBeNull();
     expect(onFinalized).toHaveBeenCalled();
+  });
+
+  it("adendo registrado entra na consulta sem relê-la (o api recusa a releitura depois do atendimento)", async () => {
+    renderIt();
+    fireEvent.click(await screen.findByRole("button", { name: "Iniciar consulta" }));
+    fireEvent.click(await screen.findByRole("button", { name: "finalizar (dublê)" }));
+    fireEvent.click(await screen.findByRole("button", { name: "adendo (dublê)" }));
+    expect(await screen.findByText("adendos: ad9")).not.toBeNull();
+    expect(api.getConsultation).not.toHaveBeenCalled();
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 
   it("travou (outra aba finalizou): relê a consulta e avisa", async () => {
