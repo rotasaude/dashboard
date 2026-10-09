@@ -16,7 +16,8 @@ export const OPENING_REASONS: { value: OpeningReason; label: string }[] = [
 export const OPENING_NOTE_MIN = 10;
 export const OPENING_ENDED = "A abertura de 30 minutos terminou. Para continuar, abra de novo com o motivo.";
 
-export function reasonLabel(code: string): string {
+export function reasonLabel(code: string | null): string {
+  if (!code) return "—";
   return OPENING_REASONS.find((r) => r.value === code)?.label ?? code;
 }
 

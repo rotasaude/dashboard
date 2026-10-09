@@ -1630,12 +1630,19 @@ export interface ConsultationDraftInput {
 }
 // O mesmo corpo do POST /attendance/attendances/:id/close.
 export interface OutcomeBody { outcome: CareOutcome; referral_unit_id?: string; referral_note?: string }
-export interface AddendumInput { reason: string; text: string; changes?: AddendumChanges; opening_id?: string }
+export interface AddendumInput { reason: string; text: string; changes?: AddendumChanges }
 export interface OpeningInput { cpf: string; reason_code: OpeningReason; reason_note?: string }
 export interface Opening { opening_id: string; patient_id: string; expires_at: string }
+export type OpeningKind = "justified_opening" | "administrative_read";
 export interface OpeningRow {
-  id: string; user_name: string; cpf_masked: string; reason_code: OpeningReason; created_at: string; expires_at: string;
+  kind: OpeningKind; id: string; user_name: string; cpf_masked: string; reason_code: OpeningReason | null;
+  consultation_id: string | null; created_at: string; expires_at: string | null;
 }
+export interface ConsultationListItem {
+  id: string; finalized_at: string; patient: { id: string; display_name: string };
+  care_type: string | null; care_type_label: string | null; health_unit: { id: string; name: string };
+}
+export interface ConsultationPeriod { from?: string; to?: string }
 export interface OpeningsQuery { from: string; to: string; userId?: string }
 
 const attendancePath = (id: string, action: string) => `${ATTENDANCE_BASE}/attendances/${encodeURIComponent(id)}/${action}`;
@@ -1667,8 +1674,35 @@ export function getConsultation(id: string): Promise<Consultation> {
   return jsonFetch(consultationPath(id));
 }
 
+function periodQuery(q: ConsultationPeriod): string {
+  const params = new URLSearchParams();
+  if (q.from) params.set("from", q.from);
+  if (q.to) params.set("to", q.to);
+  const qs = params.toString();
+  return qs ? `?${qs}` : "";
+}
+
+// Só datas na URL; a autora lê as próprias finalizadas (sem trilha).
+export async function listMyConsultations(q: ConsultationPeriod): Promise<ConsultationListItem[]> {
+  const payload = await jsonFetch<{ consultations: ConsultationListItem[] }>(`${ATTENDANCE_BASE}/consultations/mine${periodQuery(q)}`);
+  return payload.consultations;
+}
+
+// Municipal_admin, com step-up (quem trata 401 mfa_required é o SensitiveAction).
+export function listProfessionalConsultations(userId: string, q: ConsultationPeriod):
+  Promise<{ professional: { id: string; name: string }; consultations: ConsultationListItem[] }> {
+  return jsonFetch(`${CLINICAL_RECORD_BASE}/professionals/${encodeURIComponent(userId)}/consultations${periodQuery(q)}`);
+}
+
+// Leitura administrativa (só leitura, com step-up); fica no relatório de aberturas.
+export function getAdministrativeConsultation(id: string): Promise<Consultation> {
+  return jsonFetch(`${CLINICAL_RECORD_BASE}/consultations/${encodeURIComponent(id)}`);
+}
+
 export function addAddendum(id: string, input: AddendumInput): Promise<Addendum> {
-  return jsonFetch(consultationPath(id, "addenda"), postProfessional(input));
+  // O api ignora `opening_id`; o cliente nunca o envia, nem se vier de um chamador sem tipo.
+  const { reason, text, changes } = input;
+  return jsonFetch(consultationPath(id, "addenda"), postProfessional({ reason, text, ...(changes ? { changes } : {}) }));
 }
 
 // O PDF é gerado na hora (não gravado). Lido com fetch, e não por navegação,

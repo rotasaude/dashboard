@@ -2,10 +2,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   ApiError, addAddendum, completeCitizenNames, fetchConsultationPdf, finalizeConsultation, getAttendanceRecord,
-  getConsultation, getConsultationOptions, getJustifiedRecord, listOpenings, openClinicalRecord, saveConsultationDraft,
+  getAdministrativeConsultation, getConsultation, getConsultationOptions, getJustifiedRecord, listMyConsultations,
+  listOpenings, listProfessionalConsultations, openClinicalRecord, saveConsultationDraft,
   searchSigtap, searchTerminology, startConsultation, verifyCitizen
 } from "./api";
-import { consultation, finalized, opening, openingRow, options, record } from "../test/consultationFixtures";
+import { adminReadRow, consultation, consultationListItem, finalized, opening, openingRow, options, record } from "../test/consultationFixtures";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -58,14 +59,15 @@ describe("cliente do módulo 19 — prontuário e consulta", () => {
     expect(sent(fn)).toEqual({ outcome: { outcome: "referred", referral_unit_id: "u2" } });
   });
 
-  it("adendo manda motivo, texto, mudanças e a abertura no corpo", async () => {
+  it("adendo manda motivo, texto e mudanças, nunca opening_id", async () => {
     const fn = stub({ id: "ad1", author_name: "Enf. Lúcia Prado", created_at: "2026-10-07T10:40:00-03:00",
       reason: "correção do plano", text: "Retorno em 15 dias.", changes: { conducts: [ "12" ] } }, 201);
     const out = await addAddendum("cs1", { reason: "correção do plano", text: "Retorno em 15 dias.",
-      changes: { conducts: [ "12" ] }, opening_id: "op1" });
+      changes: { conducts: [ "12" ] }, ...({ opening_id: "op1" } as object) });
     expect(out.id).toBe("ad1");
     expect(call(fn)[0]).toBe("/attendance/consultations/cs1/addenda");
-    expect(sent(fn)).toEqual({ reason: "correção do plano", text: "Retorno em 15 dias.", changes: { conducts: [ "12" ] }, opening_id: "op1" });
+    expect(sent(fn)).toEqual({ reason: "correção do plano", text: "Retorno em 15 dias.", changes: { conducts: [ "12" ] } });
+    expect(sent(fn)).not.toHaveProperty("opening_id");
   });
 
   it("impresso: pede PDF com a sessão e devolve o arquivo; 409 vira ApiError com o código", async () => {
@@ -122,6 +124,50 @@ describe("cliente do módulo 19 — abertura justificada e relatório", () => {
     fn = stub({ items: [] });
     await listOpenings({ from: "2026-09-07", to: "2026-10-07", userId: "us9" });
     expect(call(fn)[0]).toBe("/clinical_record/openings?from=2026-09-07&to=2026-10-07&user_id=us9");
+  });
+});
+
+describe("cliente do módulo 19 — leitura da consulta (rodada 2)", () => {
+  it("minhas consultas: sem período não há ?; com período vão só from e to", async () => {
+    let fn = stub({ consultations: [ consultationListItem() ] });
+    const out = await listMyConsultations({});
+    expect(out).toHaveLength(1);
+    expect(call(fn)[0]).toBe("/attendance/consultations/mine");
+    expect(call(fn)[1].method).toBeUndefined();
+    expect(call(fn)[1].body).toBeUndefined();
+
+    fn = stub({ consultations: [] });
+    await listMyConsultations({ from: "2026-09-01", to: "2026-09-30" });
+    expect(call(fn)[0]).toBe("/attendance/consultations/mine?from=2026-09-01&to=2026-09-30");
+
+    fn = stub({ consultations: [] });
+    await listMyConsultations({ from: "2026-09-01" });
+    expect(call(fn)[0]).toBe("/attendance/consultations/mine?from=2026-09-01");
+  });
+
+  it("consultas de um profissional: id codificado, só datas na URL, devolve profissional e lista", async () => {
+    let fn = stub({ professional: { id: "u/1", name: "Enf. Lúcia" }, consultations: [ consultationListItem() ] });
+    const out = await listProfessionalConsultations("u/1", {});
+    expect(out.professional.name).toBe("Enf. Lúcia");
+    expect(out.consultations).toHaveLength(1);
+    expect(call(fn)[0]).toBe("/clinical_record/professionals/u%2F1/consultations");
+    expect(call(fn)[1].method).toBeUndefined();
+
+    fn = stub({ professional: { id: "u1", name: "x" }, consultations: [] });
+    await listProfessionalConsultations("u1", { from: "2026-09-01", to: "2026-09-30" });
+    expect(call(fn)[0]).toBe("/clinical_record/professionals/u1/consultations?from=2026-09-01&to=2026-09-30");
+  });
+
+  it("leitura administrativa: GET com o id codificado na rota do prontuário", async () => {
+    const fn = stub(finalized());
+    await getAdministrativeConsultation("c/9");
+    expect(call(fn)[0]).toBe("/clinical_record/consultations/c%2F9");
+    expect(call(fn)[1].method).toBeUndefined();
+  });
+
+  it("fixtures: abertura justificada e leitura administrativa", () => {
+    expect(openingRow()).toMatchObject({ kind: "justified_opening", consultation_id: null });
+    expect(adminReadRow()).toMatchObject({ kind: "administrative_read", reason_code: null, expires_at: null, consultation_id: "c9" });
   });
 });
 

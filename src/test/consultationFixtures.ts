@@ -3,7 +3,7 @@
 // atendimento e de conduta são ilustrativos: os reais vêm do api
 // (consultation_options, fixados pela Task 1 do plano do api).
 import type {
-  ClinicalRecord, Consultation, ConsultationOptions, ConsultationSummary, Opening, OpeningRow, PatientProblem
+  ClinicalRecord, Consultation, ConsultationListItem, ConsultationOptions, ConsultationSummary, Opening, OpeningRow, PatientProblem
 } from "../lib/api";
 import { revision, screening } from "./screeningFixtures";
 
@@ -74,7 +74,21 @@ export function opening(over: Partial<Opening> = {}): Opening {
 
 export function openingRow(over: Partial<OpeningRow> = {}): OpeningRow {
   return {
-    id: "op1", user_name: "Enf. Lúcia Prado", cpf_masked: "***.982.247-**", reason_code: "case_review",
-    created_at: "2026-10-06T15:10:00-03:00", expires_at: "2026-10-06T15:40:00-03:00", ...over
+    kind: "justified_opening", id: "op1", user_name: "Enf. Lúcia Prado", cpf_masked: "***.982.247-**", reason_code: "case_review",
+    consultation_id: null, created_at: "2026-10-06T15:10:00-03:00", expires_at: "2026-10-06T15:40:00-03:00", ...over
+  };
+}
+
+export function adminReadRow(over: Partial<OpeningRow> = {}): OpeningRow {
+  return openingRow({
+    kind: "administrative_read", id: "ev1", user_name: "Admin Curitiba", reason_code: null, expires_at: null,
+    consultation_id: "c9", created_at: "2026-10-06T16:00:00-03:00", ...over
+  });
+}
+
+export function consultationListItem(over: Partial<ConsultationListItem> = {}): ConsultationListItem {
+  return {
+    id: "c1", finalized_at: "2026-10-06T14:30:00-03:00", patient: { id: "pa1", display_name: "Joana Lima" },
+    care_type: "5", care_type_label: "Consulta no dia", health_unit: { id: "u1", name: "UBS Centro" }, ...over
   };
 }
