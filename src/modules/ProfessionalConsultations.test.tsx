@@ -82,14 +82,27 @@ describe("Consultas por profissional", () => {
     expect(await screen.findByText("o período informado não é válido")).not.toBeNull();
   });
 
-  it("admin puro: não lê opções do atendimento e o tipo vem do item da lista", async () => {
+  async function openFirst() {
     await search();
     await screen.findByText("Joana Lima");
     fireEvent.click(screen.getByRole("button", { name: /Abrir consulta de/ }));
     fireEvent.click(await screen.findByRole("button", { name: "Abrir consulta" }));
     await screen.findByRole("button", { name: "Fechar consulta" });
+  }
+
+  it("admin puro com opções 200: o rótulo da conduta aparece na consulta aberta", async () => {
+    await openFirst();
+    expect(api.getConsultationOptions).toHaveBeenCalled();
+    expect(screen.getByText(/Retorno para consulta agendada/)).not.toBeNull();
+  });
+
+  it("admin puro com opções 403: tipo vem do item, conduta em código, sem alerta e sem nova tentativa", async () => {
+    m(api.getConsultationOptions).mockRejectedValue(new ApiError(403, { error: "missing_role" }, "403"));
+    await openFirst();
     expect(screen.getAllByText(/Consulta no dia/).length).toBeGreaterThan(0);
-    expect(api.getConsultationOptions).not.toHaveBeenCalled();
+    expect(screen.getByText(/Condutas: 9/)).not.toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(api.getConsultationOptions).toHaveBeenCalledTimes(1);
   });
 
   it("admin que também é profissional: usa as opções do atendimento", async () => {
@@ -125,7 +138,7 @@ describe("Consultas por profissional", () => {
     await search();
     await screen.findByText("Joana Lima");
     await waitFor(() => expect(api.listProfessionalConsultations).toHaveBeenCalled());
-    for (const fn of [ api.getConsultation, api.getJustifiedRecord, api.getAttendanceRecord, api.listMyConsultations, api.getConsultationOptions ]) {
+    for (const fn of [ api.getConsultation, api.getJustifiedRecord, api.getAttendanceRecord, api.listMyConsultations ]) {
       expect(fn).not.toHaveBeenCalled();
     }
   });

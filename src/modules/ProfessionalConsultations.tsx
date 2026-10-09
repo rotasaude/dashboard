@@ -40,21 +40,22 @@ export function ProfessionalConsultations({ onGoToSecurity }: { onGoToSecurity?(
   const allowed = !!user && !user.operator && hasFeature(user, "clinical_record")
     && user.memberships.some((m) => m.role === "municipal_admin");
   const professionals = useQuery({ queryKey: [ "professionals" ], queryFn: listProfessionals, enabled: allowed });
-  // /attendance/consultation_options recusa quem não é health_professional.
-  const alsoProfessional = allowed && user.memberships.some((m) => m.role === "health_professional");
+  // Catálogo não clínico: o api responde 200 também ao admin puro; um api antigo
+  // responde 403 e a tela cai no fallback local, sem erro e sem nova tentativa.
   const options = useQuery({
-    queryKey: [ OPTIONS_KEY, user?.id ?? null ], queryFn: getConsultationOptions, staleTime: 5 * 60_000, enabled: alsoProfessional
+    queryKey: [ OPTIONS_KEY, user?.id ?? null ], queryFn: getConsultationOptions, staleTime: 5 * 60_000,
+    enabled: allowed, retry: false
   });
 
   if (!user) return null;
   if (!hasFeature(user, "clinical_record")) return <Frame><EmptyState title="o prontuário está desligado nesta cidade" /></Frame>;
   if (!allowed) return <Frame><EmptyState title="seu papel não permite ver consultas" /></Frame>;
 
-  // Sem as opções do atendimento, o tipo vem do item da lista; condutas ficam pelo código.
-  const viewOptions: ConsultationOptions | null = alsoProfessional ? (options.data ?? null)
-    : opened?.care_type && opened.care_type_label
+  // Sem as opções do api, o tipo vem do item da lista; condutas ficam pelo código.
+  const viewOptions: ConsultationOptions | null = options.data
+    ?? (opened?.care_type && opened.care_type_label
       ? { care_types: [ { code: opened.care_type, label: opened.care_type_label } ], conducts: [], cid10_allowed_for_cbo: false }
-      : null;
+      : null);
 
   function ask() {
     if (!userId) { setProblem("escolha o profissional"); return; }
