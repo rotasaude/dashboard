@@ -12,6 +12,7 @@ import * as api from "../lib/api";
 import { ApiError } from "../lib/api";
 import { renderWithProviders, sessionWith } from "../test/campaignFixtures";
 import { ficha, productionFixture } from "../test/recordModeFixtures";
+import { CORRECTION_PENDING_NOTE } from "../lib/production";
 import { Production } from "./Production";
 
 afterEach(cleanup);
@@ -144,6 +145,29 @@ describe("Produção e-SUS (módulo 16)", () => {
     expect(await screen.findByText("unidade sem CNES, profissional sem equipe (INE)")).not.toBeNull();
     expect(screen.getByText("escuta inicial")).not.toBeNull();
     expect(screen.queryByRole("button", { name: "Gerar de novo g1" })).toBeNull();
+  });
+
+  it("módulo 19: falha de geração de consulta mostra a origem 'consulta'", async () => {
+    m(api.listGenerationFailures).mockResolvedValue([ failure({ source_type: "Consultation" }) ]);
+    renderWithProviders(<Production />);
+    expect(await screen.findByText("consulta")).not.toBeNull();
+  });
+
+  it("ficha com correção pendente: situação, aviso e sem Reenviar", async () => {
+    m(api.getProduction).mockResolvedValue(productionFixture({
+      fichas: [ ficha({ id: "f9", ficha_type: "atendimento_individual", status: "correction_pending", accepted_at: null }) ],
+      fichas_total: 1
+    }));
+    renderWithProviders(<Production />);
+    expect(await screen.findByText("correção pendente — não enviada")).not.toBeNull();
+    expect(screen.getByText(CORRECTION_PENDING_NOTE)).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Reenviar ficha f9" })).toBeNull();
+  });
+
+  it("sem correção pendente na página, sem o aviso", async () => {
+    renderWithProviders(<Production />);
+    await screen.findByText("recusada");
+    expect(screen.queryByText(CORRECTION_PENDING_NOTE)).toBeNull();
   });
 
   it("módulo 18: municipal_admin gera de novo com step-up; ainda faltando, diz o quê", async () => {

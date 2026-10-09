@@ -1258,7 +1258,9 @@ export async function applyCnesProposals(proposalIds: string[]): Promise<CnesApp
 }
 
 export type CompetenceAlert = "none" | "attention" | "critical";
-export type FichaStatus = "pending" | "sending" | "accepted" | "rejected" | "failed";
+// `correction_pending` (módulo 19, contratos §6): correção de ficha já aceita,
+// guardada e não enviada até o reenvio depois do aceite ser confirmado (api#41).
+export type FichaStatus = "pending" | "sending" | "accepted" | "rejected" | "failed" | "correction_pending";
 export interface LediErrorCode { field: string; code: string }
 export interface LediRejection extends LediErrorCode { count: number }
 export interface LediFicha {

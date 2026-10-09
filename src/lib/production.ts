@@ -21,8 +21,13 @@ export const FICHA_STATUS: Record<string, { label: string; tone: "neutral" | "in
   sending: { label: "enviando", tone: "info" },
   accepted: { label: "aceita", tone: "ok" },
   rejected: { label: "recusada", tone: "down" },
-  failed: { label: "falhou — sem novas tentativas", tone: "down" }
+  failed: { label: "falhou — sem novas tentativas", tone: "down" },
+  correction_pending: { label: "correção pendente — não enviada", tone: "info" }
 };
+
+// Módulo 19 (spec §6): adendo depois do aceite gera a correção, que fica parada.
+export const CORRECTION_PENDING_NOTE =
+  "Correções de fichas já aceitas ficam guardadas e não são enviadas enquanto o reenvio depois do aceite não for confirmado com o PEC. Não contam como pendentes.";
 
 export const ALREADY_RESOLVED = "esta ficha já foi gerada — a lista foi atualizada";
 export const RESEND_GENERATION_FAILED =
@@ -46,7 +51,7 @@ export const GENERATION_REASON: Record<string, string> = {
   citizen_without_sex: "cidadão sem sexo no cadastro",
   unknown_ciap2: "CIAP-2 fora da terminologia ativa"
 };
-export const SOURCE_LABEL: Record<string, string> = { Screening: "escuta inicial" };
+export const SOURCE_LABEL: Record<string, string> = { Screening: "escuta inicial", Consultation: "consulta" };
 
 export function reasonsLabel(codes: string[]): string {
   return codes.map((c) => GENERATION_REASON[c] ?? c).join(", ");

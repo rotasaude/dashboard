@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { ApiError } from "./api";
 import {
-  FICHA_STATUS, alertBanner, canReadProduction, canResend, canRetryGeneration, deadlinePhrase, errorCodesLabel, hasNextPage,
+  CORRECTION_PENDING_NOTE, FICHA_STATUS, SOURCE_LABEL, alertBanner, canReadProduction, canResend, canRetryGeneration, deadlinePhrase, errorCodesLabel, hasNextPage,
   productionError, productionErrorCode, reasonsLabel, replacedIds, retryOutcome
 } from "./production";
 import { ficha } from "../test/recordModeFixtures";
@@ -39,6 +39,16 @@ describe("Produção — papéis e paginação", () => {
     expect(canResend([ "municipal_admin" ], ficha({ status: "rejected" }))).toBe(true);
     expect(canResend([ "municipal_admin" ], ficha({ status: "failed" }))).toBe(false);
     expect(canResend([ "analyst" ], ficha({ status: "rejected" }))).toBe(false);
+  });
+
+  it("correção pendente (módulo 19) tem rótulo e nunca se reenvia", () => {
+    expect(FICHA_STATUS.correction_pending).toEqual({ label: "correção pendente — não enviada", tone: "info" });
+    expect(canResend([ "municipal_admin" ], ficha({ status: "correction_pending" }))).toBe(false);
+    expect(CORRECTION_PENDING_NOTE.length).toBeGreaterThan(0);
+  });
+
+  it("origem Consultation (módulo 19) tem rótulo", () => {
+    expect(SOURCE_LABEL.Consultation).toBe("consulta");
   });
 
   it("há próxima página só quando o total passa da página atual", () => {

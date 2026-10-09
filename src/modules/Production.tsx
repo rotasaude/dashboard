@@ -14,7 +14,7 @@ import { competenceLabel, competenceOptions } from "../lib/competence";
 import { todayInCity } from "../lib/campaigns";
 import { fmtDateTime, fmtNumber } from "../lib/format";
 import {
-  FICHA_STATUS, PRODUCTION_KEY, RESEND_STALE, alertBanner, canReadProduction, canResend, deadlinePhrase, errorCodeLabel,
+  CORRECTION_PENDING_NOTE, FICHA_STATUS, PRODUCTION_KEY, RESEND_STALE, alertBanner, canReadProduction, canResend, deadlinePhrase, errorCodeLabel,
   errorCodesLabel, hasNextPage, productionError, productionErrorCode, replacedIds
 } from "../lib/production";
 import { GENERATION_FAILURES_KEY, GenerationFailures } from "./production/GenerationFailures";
@@ -168,6 +168,9 @@ export function Production({ onGoToSecurity }: { onGoToSecurity?(): void }) {
 
           <Panel title="Fichas" sub={`competência ${competenceLabel(data.competence)} · página ${page}`}>
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {data.fichas.some((f) => f.status === "correction_pending") && (
+                <p role="status" style={deadlineStyle}>{CORRECTION_PENDING_NOTE}</p>
+              )}
               <DataTable<LediFicha> cols={cols} rows={data.fichas} rowKey={(f) => f.id} empty="nenhuma ficha nesta página" />
               <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
                 <button type="button" disabled={page === 1} style={page === 1 ? disabledButtonStyle : secondaryButtonStyle}
