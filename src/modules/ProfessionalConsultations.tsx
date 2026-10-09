@@ -24,7 +24,8 @@ type Result = { professional: { id: string; name: string }; consultations: Consu
 type Pending = { kind: "search" } | { kind: "open"; id: string; label: string; item: ConsultationListItem };
 
 const NOT_FOUND = "profissional não encontrado nesta cidade";
-const OWN = new Set([ "invalid_period", "missing_role", "feature_disabled" ]);
+const OWN = new Set([ "invalid_period", "feature_disabled" ]);
+const NO_ROLE = "seu papel não permite ver consultas";
 
 export function ProfessionalConsultations({ onGoToSecurity }: { onGoToSecurity?(): void }) {
   const { user } = useAuth();
@@ -68,6 +69,7 @@ export function ProfessionalConsultations({ onGoToSecurity }: { onGoToSecurity?(
   function translate(err: unknown): string | null {
     const code = errorCode(err) ?? "";
     if (code === "not_found") return pending?.kind === "open" ? "consulta não encontrada" : NOT_FOUND;
+    if (code === "missing_role") return NO_ROLE;
     return OWN.has(code) ? consultationError(err) : null;
   }
 
@@ -112,17 +114,17 @@ export function ProfessionalConsultations({ onGoToSecurity }: { onGoToSecurity?(
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <div style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap" }}>
               <label style={labelStyle}>Profissional
-                <select value={userId} style={inputStyle} onChange={(e) => { setUserId(e.target.value); setResult(null); }}>
+                <select value={userId} style={inputStyle} disabled={!!pending} onChange={(e) => { setUserId(e.target.value); setResult(null); }}>
                   <option value="">—</option>
                   {(professionals.data ?? []).map((p) => <option key={p.user_id} value={p.user_id}>{p.professional_name}</option>)}
                 </select>
               </label>
-              <label style={labelStyle}>De<input type="date" value={from} style={inputStyle} onChange={(e) => { setFrom(e.target.value); setResult(null); }} /></label>
-              <label style={labelStyle}>Até<input type="date" value={to} style={inputStyle} onChange={(e) => { setTo(e.target.value); setResult(null); }} /></label>
+              <label style={labelStyle}>De<input type="date" value={from} style={inputStyle} disabled={!!pending} onChange={(e) => { setFrom(e.target.value); setResult(null); }} /></label>
+              <label style={labelStyle}>Até<input type="date" value={to} style={inputStyle} disabled={!!pending} onChange={(e) => { setTo(e.target.value); setResult(null); }} /></label>
               <button type="button" style={buttonStyle} onClick={ask}>Buscar</button>
             </div>
             {problem && <p role="alert" style={alert}>{problem}</p>}
-            {professionals.isError && <p role="alert" style={alert}>{consultationError(professionals.error)}</p>}
+            {professionals.isError && <p role="alert" style={alert}>{errorCode(professionals.error) === "missing_role" ? NO_ROLE : consultationError(professionals.error)}</p>}
             {pending && sensitive(pending)}
             {result && !pending && (
               <>

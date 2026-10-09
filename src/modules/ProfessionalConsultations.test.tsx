@@ -5,7 +5,8 @@ vi.mock("../lib/api", async (importOriginal) => {
   const real = await importOriginal<typeof import("../lib/api")>();
   return { ...real, fetchCurrentSession: vi.fn(), listProfessionals: vi.fn(), listProfessionalConsultations: vi.fn(),
     getAdministrativeConsultation: vi.fn(), getConsultation: vi.fn(), getConsultationOptions: vi.fn(),
-    getJustifiedRecord: vi.fn(), getAttendanceRecord: vi.fn(), listMyConsultations: vi.fn() };
+    getJustifiedRecord: vi.fn(), getAttendanceRecord: vi.fn(), listMyConsultations: vi.fn(),
+    fetchConsultationPdf: vi.fn(), addAddendum: vi.fn() };
 });
 
 import * as api from "../lib/api";
@@ -33,7 +34,7 @@ describe("Consultas por profissional", () => {
   beforeEach(() => {
     for (const fn of [ api.fetchCurrentSession, api.listProfessionals, api.listProfessionalConsultations,
       api.getAdministrativeConsultation, api.getConsultation, api.getConsultationOptions, api.getJustifiedRecord,
-      api.getAttendanceRecord, api.listMyConsultations ]) m(fn).mockReset();
+      api.getAttendanceRecord, api.listMyConsultations, api.fetchConsultationPdf, api.addAddendum ]) m(fn).mockReset();
     m(api.fetchCurrentSession).mockResolvedValue(admin());
     m(api.listProfessionals).mockResolvedValue(pros);
     m(api.listProfessionalConsultations).mockResolvedValue({
@@ -74,6 +75,30 @@ describe("Consultas por profissional", () => {
     m(api.listProfessionalConsultations).mockRejectedValue(new ApiError(404, { error: "not_found" }, "404"));
     await search();
     expect(await screen.findByText("profissional não encontrado nesta cidade")).not.toBeNull();
+  });
+
+  it("403 missing_role na busca: frase local de consultas", async () => {
+    m(api.listProfessionalConsultations).mockRejectedValue(new ApiError(403, { error: "missing_role" }, "403"));
+    await search();
+    expect(await screen.findByText("seu papel não permite ver consultas")).not.toBeNull();
+  });
+
+  it("403 missing_role ao listar profissionais: frase local de consultas", async () => {
+    m(api.listProfessionals).mockRejectedValue(new ApiError(403, { error: "missing_role" }, "403"));
+    renderWithProviders(<ProfessionalConsultations />);
+    expect(await screen.findByText("seu papel não permite ver consultas")).not.toBeNull();
+  });
+
+  it("enquanto a busca está pendente, profissional e período ficam desabilitados", async () => {
+    renderWithProviders(<ProfessionalConsultations />);
+    await screen.findByRole("option", { name: "Dra. Helena Prado" });
+    fireEvent.change(screen.getByLabelText("Profissional"), { target: { value: "us1" } });
+    fireEvent.click(screen.getByRole("button", { name: "Buscar" }));
+    await screen.findByRole("button", { name: "Buscar consultas" });
+    for (const label of [ "Profissional", "De", "Até" ]) expect((screen.getByLabelText(label) as HTMLInputElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+    await waitFor(() => expect((screen.getByLabelText("De") as HTMLInputElement).disabled).toBe(false));
+    expect((screen.getByLabelText("Profissional") as HTMLSelectElement).disabled).toBe(false);
   });
 
   it("422 invalid_period vira frase", async () => {
@@ -138,7 +163,8 @@ describe("Consultas por profissional", () => {
     await search();
     await screen.findByText("Joana Lima");
     await waitFor(() => expect(api.listProfessionalConsultations).toHaveBeenCalled());
-    for (const fn of [ api.getConsultation, api.getJustifiedRecord, api.getAttendanceRecord, api.listMyConsultations ]) {
+    for (const fn of [ api.getConsultation, api.getJustifiedRecord, api.getAttendanceRecord, api.listMyConsultations,
+      api.fetchConsultationPdf, api.addAddendum ]) {
       expect(fn).not.toHaveBeenCalled();
     }
   });
