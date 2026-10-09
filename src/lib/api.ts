@@ -1845,7 +1845,7 @@ export function linkCertificate(provider: SignatureProvider, returnTo: string): 
 }
 
 export async function unlinkCertificate(): Promise<void> {
-  await jsonFetch<void>(signaturePath("certificates", "current"), { method: "DELETE" });
+  await jsonFetch<void>(signaturePath("certificates", "current"), { ...postProfessional({}), method: "DELETE" });
 }
 
 export function openSignatureSession(returnTo: string): Promise<AuthorizeRedirect> {
@@ -1857,7 +1857,7 @@ export function getSignatureSession(): Promise<SignatureSessionState> {
 }
 
 export async function closeSignatureSession(): Promise<void> {
-  await jsonFetch<void>(signaturePath("sessions", "current"), { method: "DELETE" });
+  await jsonFetch<void>(signaturePath("sessions", "current"), { ...postProfessional({}), method: "DELETE" });
 }
 
 // Ruling R11 (contrato §13): a recusa do prestador também vai ao api, como

@@ -15,7 +15,14 @@ function stub(body: unknown, status = 200) {
   return fn;
 }
 const call = (fn: ReturnType<typeof stub>, i = 0) => fn.mock.calls[i] as [ string, RequestInit ];
-const sent = (fn: ReturnType<typeof stub>, i = 0) => JSON.parse(call(fn, i)[1].body as string);
+const json = (fn: ReturnType<typeof stub>, i = 0) =>
+  (call(fn, i)[1].headers as Record<string, string>)["Content-Type"];
+// Toda escrita por cookie exige JSON (CSRF do api): método, header e corpo.
+function expectJsonWrite(fn: ReturnType<typeof stub>, method: string, body: unknown, i = 0) {
+  expect(call(fn, i)[1].method).toBe(method);
+  expect(json(fn, i)).toBe("application/json");
+  expect(JSON.parse(call(fn, i)[1].body as string)).toEqual(body);
+}
 
 function stubFile(body: string, headers: Record<string, string>) {
   const fn = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(body, { status: 200, headers }));
@@ -42,17 +49,17 @@ describe("cliente da assinatura digital — certificado", () => {
     let fn = stub({ providers: [ { provider: "vidaas", found: true } ], unavailable: [] });
     expect((await discoverCertificates()).providers[0].found).toBe(true);
     expect(call(fn)[0]).toBe("/signature/certificates/discover");
-    expect(call(fn)[1].method).toBe("POST");
+    expectJsonWrite(fn, "POST", {});
 
     fn = stub({ authorize_url: "https://psc.example/authorize?x=1" });
     expect((await linkCertificate("vidaas", "/signature")).authorize_url).toBe("https://psc.example/authorize?x=1");
     expect(call(fn)[0]).toBe("/signature/certificates/link");
-    expect(sent(fn)).toEqual({ provider: "vidaas", return_to: "/signature" });
+    expectJsonWrite(fn, "POST", { provider: "vidaas", return_to: "/signature" });
 
     fn = stub(undefined, 204);
     await unlinkCertificate();
     expect(call(fn)[0]).toBe("/signature/certificates/current");
-    expect(call(fn)[1].method).toBe("DELETE");
+    expectJsonWrite(fn, "DELETE", {});
   });
 });
 
@@ -61,7 +68,7 @@ describe("cliente da assinatura digital — sessão e retorno do prestador", () 
     let fn = stub({ authorize_url: "https://psc.example/authorize?s=1" });
     expect((await openSignatureSession("/attendance")).authorize_url).toBe("https://psc.example/authorize?s=1");
     expect(call(fn)[0]).toBe("/signature/sessions");
-    expect(sent(fn)).toEqual({ return_to: "/attendance" });
+    expectJsonWrite(fn, "POST", { return_to: "/attendance" });
 
     fn = stub({ active: true, expires_at: "2026-10-08T22:00:00-03:00", provider: "vidaas" });
     expect((await getSignatureSession()).active).toBe(true);
@@ -70,7 +77,7 @@ describe("cliente da assinatura digital — sessão e retorno do prestador", () 
     fn = stub(undefined, 204);
     await closeSignatureSession();
     expect(call(fn)[0]).toBe("/signature/sessions/current");
-    expect(call(fn)[1].method).toBe("DELETE");
+    expectJsonWrite(fn, "DELETE", {});
   });
 
   it("state e code vão no corpo, nunca na URL", async () => {
@@ -79,8 +86,7 @@ describe("cliente da assinatura digital — sessão e retorno do prestador", () 
     expect(out.purpose).toBe("session");
     expect(out.return_to).toBe("/attendance");
     expect(call(fn)[0]).toBe("/signature/oauth/callback");
-    expect(call(fn)[1].method).toBe("POST");
-    expect(sent(fn)).toEqual({ state: "st-1", code: "code-1" });
+    expectJsonWrite(fn, "POST", { state: "st-1", code: "code-1" });
   });
 
   it("recusa do prestador: state e error vão no corpo, nunca na URL (R11)", async () => {
@@ -92,8 +98,7 @@ describe("cliente da assinatura digital — sessão e retorno do prestador", () 
     expect(call(fn)[0]).toBe("/signature/oauth/callback");
     expect(call(fn)[0]).not.toContain("st-1");
     expect(call(fn)[0]).not.toContain("access_denied");
-    expect(call(fn)[1].method).toBe("POST");
-    expect(sent(fn)).toEqual({ state: "st-1", error: "access_denied" });
+    expectJsonWrite(fn, "POST", { state: "st-1", error: "access_denied" });
   });
 });
 
@@ -106,18 +111,18 @@ describe("cliente da assinatura digital — pendentes e lote", () => {
     fn = stub(pendingRequest({ status: "returned_to_paper", reason_code: "user_request" }));
     expect((await returnToPaper("sr/1", "paciente pediu o papel")).status).toBe("returned_to_paper");
     expect(call(fn)[0]).toBe("/signature/requests/sr%2F1/return_to_paper");
-    expect(sent(fn)).toEqual({ reason: "paciente pediu o papel" });
+    expectJsonWrite(fn, "POST", { reason: "paciente pediu o papel" });
   });
 
   it("lote: sem ids manda só o return_to; com ids, os dois", async () => {
     let fn = stub({ authorize_url: "https://psc.example/authorize?b=1", count: 3 });
     expect((await startSignatureBatch("/signature-pending")).count).toBe(3);
     expect(call(fn)[0]).toBe("/signature/batches");
-    expect(sent(fn)).toEqual({ return_to: "/signature-pending" });
+    expectJsonWrite(fn, "POST", { return_to: "/signature-pending" });
 
     fn = stub({ authorize_url: "https://psc.example/authorize?b=2", count: 1 });
     await startSignatureBatch("/signature-pending", [ "sr1" ]);
-    expect(sent(fn)).toEqual({ request_ids: [ "sr1" ], return_to: "/signature-pending" });
+    expectJsonWrite(fn, "POST", { request_ids: [ "sr1" ], return_to: "/signature-pending" });
   });
 });
 
@@ -130,8 +135,7 @@ describe("cliente da assinatura digital — assinatura e painel", () => {
     fn = stub(signatureDetail({ verification: "indeterminate" }));
     expect((await verifySignature("sg1")).verification).toBe("indeterminate");
     expect(call(fn)[0]).toBe("/signature/signatures/sg1/verify");
-    expect(call(fn)[1].method).toBe("POST");
-    expect((call(fn)[1].headers as Record<string, string>)["Content-Type"]).toBe("application/json");
+    expectJsonWrite(fn, "POST", {});
     expect(call(fn)[1].body).toBe("{}");
   });
 
