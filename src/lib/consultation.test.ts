@@ -261,6 +261,7 @@ describe("rótulos e recusas", () => {
     [ 422, { error: "ciap2_required_for_cbo" }, "avalie ao menos um problema em CIAP-2 — a ficha de quem não é médico não leva CID-10" ],
     [ 409, { error: "consultation_in_progress" }, "há uma consulta em andamento neste atendimento — finalize-a pela Consulta para encerrar" ],
     [ 422, { error: "referral_required" }, "informe a unidade de destino ou a descrição do encaminhamento" ],
+    [ 403, { error: "missing_role" }, "seu papel não permite esta ação" ],
     [ 500, "boom", "não foi possível concluir — tente de novo" ]
   ])("%s %j → frase", (status, body, phrase) => {
     expect(consultationError(err(status, body))).toBe(phrase);

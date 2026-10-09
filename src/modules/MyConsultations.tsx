@@ -4,7 +4,7 @@
 // a leitura clínica não fica em cache (gcTime 0).
 import { useState, type CSSProperties, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { getConsultationOptions, listMyConsultations, type ConsultationListItem } from "../lib/api";
+import { ApiError, errorCode, getConsultationOptions, listMyConsultations, type ConsultationListItem } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { hasFeature } from "../lib/features";
 import { MY_CONSULTATIONS_KEY, OPTIONS_KEY, consultationError } from "../lib/consultation";
@@ -15,6 +15,9 @@ import { DataTable } from "../components/DataTable";
 import { EmptyState } from "../components/EmptyState";
 import { buttonStyle, inputStyle, secondaryButtonStyle } from "../components/formStyles";
 import { ConsultationLoader } from "./consultation/ConsultationView";
+
+const NO_ROLE = "seu papel não permite ver consultas";
+const listError = (err: unknown) => (err instanceof ApiError && errorCode(err) === "missing_role" ? NO_ROLE : consultationError(err));
 
 export function MyConsultations() {
   const { user } = useAuth();
@@ -58,7 +61,7 @@ export function MyConsultations() {
               <button type="button" style={buttonStyle} onClick={apply}>Buscar</button>
             </div>
             {problem && <p role="alert" style={alert}>{problem}</p>}
-            {query.isError && <p role="alert" style={alert}>{consultationError(query.error)}</p>}
+            {query.isError && <p role="alert" style={alert}>{listError(query.error)}</p>}
             {query.isPending && <p className="mono" style={{ margin: 0, fontSize: 10.5, color: "var(--ink3)" }}>carregando…</p>}
             {query.isSuccess && (query.data.length === 0 ? <EmptyState title="nenhuma consulta finalizada no período" /> : (
               <DataTable<ConsultationListItem>

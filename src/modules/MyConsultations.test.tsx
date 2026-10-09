@@ -79,6 +79,12 @@ describe("Minhas consultas", () => {
     expect(await screen.findByText("o período informado não é válido")).not.toBeNull();
   });
 
+  it("403 missing_role na lista: frase local de consultas", async () => {
+    m(api.listMyConsultations).mockRejectedValue(new ApiError(403, { error: "missing_role" }, "403"));
+    renderWithProviders(<MyConsultations />);
+    expect(await screen.findByText("seu papel não permite ver consultas")).not.toBeNull();
+  });
+
   it("Abrir mostra a consulta com Imprimir e Adendo para a autora; Fechar volta à lista", async () => {
     renderWithProviders(<MyConsultations />);
     await screen.findByText("Joana Lima");

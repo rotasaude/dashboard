@@ -303,7 +303,6 @@ const MESSAGES: Record<string, string> = {
   ciap2_required_for_cbo: "avalie ao menos um problema em CIAP-2 — a ficha de quem não é médico não leva CID-10",
   consultation_in_progress: "há uma consulta em andamento neste atendimento — finalize-a pela Consulta para encerrar",
   invalid_period: "o período informado não é válido",
-  missing_role: "seu papel não permite ver consultas",
   terminology_unavailable: "a terminologia não está disponível agora — tente de novo em instantes"
 };
 
