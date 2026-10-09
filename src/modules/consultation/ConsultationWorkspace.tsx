@@ -3,13 +3,14 @@
 // prontuário em contexto (o api confere chamador, CBO e par validado e grava a
 // trilha), o rascunho da consulta e a leitura da finalizada. "Iniciar consulta"
 // também retoma: o 409 already_exists traz o id do rascunho (Divergência D1).
-import { useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   getAttendanceRecord, getConsultation, getConsultationOptions, startConsultation, type Consultation, type HealthUnit
 } from "../../lib/api";
 import { OPTIONS_KEY, RECORD_KEY, consultationError, existingConsultationId, withAddendum } from "../../lib/consultation";
 import { useAuth } from "../../lib/auth";
+import { canSign, signatureSettling } from "../../lib/signature";
 import { buttonStyle, disabledButtonStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { PatientPanel } from "./PatientPanel";
 import { ConsultationEditor } from "./ConsultationEditor";
@@ -26,6 +27,12 @@ interface Props {
   onFinalized(): void;
 }
 
+// Módulo 19b (Ruling R8): logo depois de finalizar ou de um adendo, o bloco
+// de assinatura vem "manual sem pedido" até o job rodar; quem pode assinar
+// relê a consulta a cada 3 s, até 3 vezes, parando quando o bloco assenta.
+export const SIGNATURE_REREAD_MS = 3000;
+export const SIGNATURE_REREAD_LIMIT = 3;
+
 export function ConsultationWorkspace(props: Props) {
   const { user } = useAuth();
   const record = useQuery({
@@ -37,6 +44,34 @@ export function ConsultationWorkspace(props: Props) {
   const [ busy, setBusy ] = useState(false);
   const [ error, setError ] = useState<string | null>(null);
   const [ notice, setNotice ] = useState<string | null>(null);
+  const rereads = useRef(0);
+  const [ rereadTick, setRereadTick ] = useState(0);
+  const signer = canSign(user);
+  const settling = consultation?.status === "finalized" && signatureSettling(consultation);
+  const consultationId = consultation?.id ?? null;
+
+  useEffect(() => {
+    if (!signer || !settling || !consultationId || rereads.current >= SIGNATURE_REREAD_LIMIT) return;
+    let live = true;
+    const timer = setTimeout(async () => {
+      rereads.current += 1;
+      try {
+        const fresh = await getConsultation(consultationId);
+        // Um adendo criado enquanto a releitura voava continua na tela.
+        if (live) setConsultation((c) => (c?.id === fresh.id ? (c.addenda ?? []).reduce(withAddendum, fresh) : c));
+      } catch {
+        // Silencioso: fica o que estava (a releitura é só conveniência).
+      } finally {
+        if (live) setRereadTick((t) => t + 1);
+      }
+    }, SIGNATURE_REREAD_MS);
+    return () => { live = false; clearTimeout(timer); };
+  }, [ signer, settling, consultationId, rereadTick ]);
+
+  function restartRereads() {
+    rereads.current = 0;
+    setRereadTick((t) => t + 1);
+  }
 
   async function open() {
     if (busy) return;
@@ -90,14 +125,15 @@ export function ConsultationWorkspace(props: Props) {
             <ConsultationEditor key={consultation.id} consultation={consultation} record={record.data} options={options.data}
               referenceUnitIds={props.referenceUnitIds} unit={props.unit} units={props.units}
               autosaveDelayMs={props.autosaveDelayMs} searchDelayMs={props.searchDelayMs}
-              onFinalized={(c) => { setConsultation(c); props.onFinalized(); }}
+              onFinalized={(c) => { setConsultation(c); restartRereads(); props.onFinalized(); }}
               onLocked={(message) => void reload(message)} />
           )}
 
           {consultation?.status === "finalized" && (
             <ConsultationView consultation={consultation} options={options.data ?? null} patientProblems={record.data.problems}
               searchDelayMs={props.searchDelayMs}
-              onAddendumAdded={(addendum) => setConsultation((c) => (c ? withAddendum(c, addendum) : c))} onClose={props.onClose} />
+              onAddendumAdded={(addendum) => { setConsultation((c) => (c ? withAddendum(c, addendum) : c)); restartRereads(); }}
+              onClose={props.onClose} />
           )}
         </>
       )}
