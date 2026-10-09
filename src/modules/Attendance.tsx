@@ -28,6 +28,8 @@ import { Units } from "./attendance/Units";
 import { ErasureRequest } from "./attendance/ErasureRequest";
 import { ErasureRequests } from "./attendance/ErasureRequests";
 import { CadsusCheck } from "./attendance/CadsusCheck";
+import { NamesFields } from "./attendance/NamesFields";
+import { EMPTY_NAMES, namesBody, namesProblem, type NamesDraft } from "../lib/citizenNames";
 import { hasFeature } from "../lib/features";
 
 // Atendimento (spec 2026-09-24-citizen-presencial-verification, Task 6, e
@@ -130,6 +132,7 @@ function Counter({ cadsusOn }: { cadsusOn: boolean }) {
   const [ code, setCode ] = useState("");
   const [ checked, setChecked ] = useState(false);
   const [ profile, setProfile ] = useState<ProfileCheckValue>(() => initialProfileCheck(null));
+  const [ names, setNames ] = useState<NamesDraft>(EMPTY_NAMES);
   const [ found, setFound ] = useState<Found | null>(null);
   const [ busy, setBusy ] = useState(false);
   const [ error, setError ] = useState<string | null>(null);
@@ -137,6 +140,7 @@ function Counter({ cadsusOn }: { cadsusOn: boolean }) {
   function reset() {
     setState("form"); setCpf(""); setCode(""); setChecked(false); setFound(null); setError(null);
     setProfile(initialProfileCheck(null));
+    setNames(EMPTY_NAMES);
     setCadsusConfirmed(false);
   }
 
@@ -161,15 +165,19 @@ function Counter({ cadsusOn }: { cadsusOn: boolean }) {
 
   // "Hoje" no fuso da cidade: às 23h30 de São Paulo, amanhã ainda é futuro.
   const profileProblem = profileCheckProblem(profile, todayInCity());
+  // Módulo 19: nome completo obrigatório; social e mãe opcionais.
+  const namesIssue = namesProblem(names);
+  const blocked = !checked || busy || profileProblem !== null || namesIssue !== null;
 
   async function validate() {
-    if (busy || !checked || profileProblem) return;
+    if (blocked) return;
     setError(null);
     if (!/^\d{6}$/.test(code)) { setError("informe o código de 6 dígitos"); return; }
     setBusy(true);
     try {
       const profileBody = {
-        birth_date: profile.birthDate, sex: profile.sex as Sex, gender_identity: profile.genderIdentity || null
+        birth_date: profile.birthDate, sex: profile.sex as Sex, gender_identity: profile.genderIdentity || null,
+        ...namesBody(names)
       };
       if (cadsusOn) await verifyCitizen(cpf, code, profileBody, { cadsus_confirmed: cadsusConfirmed });
       else await verifyCitizen(cpf, code, profileBody);
@@ -235,6 +243,7 @@ function Counter({ cadsusOn }: { cadsusOn: boolean }) {
             />
 
             <ProfileCheck declared={found.citizen.profile ?? null} value={profile} today={todayInCity()} onChange={setProfile} />
+            <NamesFields value={names} onChange={setNames} problem={namesIssue} />
             {cadsusOn && (
               <CadsusCheck cpf={cpf} code={code} confirmed={cadsusConfirmed} onConfirmedChange={setCadsusConfirmed} />
             )}
@@ -246,9 +255,9 @@ function Counter({ cadsusOn }: { cadsusOn: boolean }) {
             <div style={{ display: "flex", gap: 8 }}>
               <button
                 type="button"
-                disabled={!checked || busy || profileProblem !== null}
+                disabled={blocked}
                 onClick={() => void validate()}
-                style={(!checked || busy || profileProblem !== null) ? disabledButtonStyle : buttonStyle}
+                style={blocked ? disabledButtonStyle : buttonStyle}
               >
                 Validar cadastro
               </button>

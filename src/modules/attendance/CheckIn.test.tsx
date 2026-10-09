@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const real = await importOriginal<typeof import("../../lib/api")>();
   return {
-    ...real, lookupCheckIn: vi.fn(), checkIn: vi.fn(), searchCheckIn: vi.fn(), checkInByException: vi.fn()
+    ...real, lookupCheckIn: vi.fn(), checkIn: vi.fn(), searchCheckIn: vi.fn(), checkInByException: vi.fn(), completeCitizenNames: vi.fn()
   };
 });
 
@@ -51,7 +51,7 @@ const foundAppointment = {
 
 describe("CheckIn", () => {
   beforeEach(() => {
-    for (const fn of [ api.lookupCheckIn, api.checkIn, api.searchCheckIn, api.checkInByException ]) mocked(fn).mockReset();
+    for (const fn of [ api.lookupCheckIn, api.checkIn, api.searchCheckIn, api.checkInByException, api.completeCitizenNames ]) mocked(fn).mockReset();
   });
 
   it("busca exige CPF válido e código de 6 dígitos", async () => {
@@ -344,5 +344,34 @@ describe("CheckIn", () => {
     fireEvent.change(screen.getByLabelText("Motivo"), { target: { value: "documento perdido" } });
     fireEvent.click(screen.getByRole("button", { name: "Iniciar atendimento" }));
     expect(await screen.findByText(/já está em atendimento em UBS Norte desde/)).not.toBeNull();
+  });
+
+  it("par validado sem nome completo: completar nomes no check-in", async () => {
+    mocked(api.lookupCheckIn).mockResolvedValue({ ...foundVerified,
+      citizen: { ...foundVerified.citizen, names: { full_name_set: false, display_name: null }, verification_id: "v1" } });
+    mocked(api.completeCitizenNames).mockResolvedValue(undefined);
+    renderCheckIn();
+    fireEvent.change(screen.getByLabelText("CPF do cidadão (check-in)"), { target: { value: "52998224725" } });
+    fireEvent.change(screen.getByLabelText("Código de check-in"), { target: { value: "123456" } });
+    fireEvent.click(screen.getByRole("button", { name: "Buscar check-in" }));
+    const box = await screen.findByRole("region", { name: "Completar nomes do cadastro" });
+    fireEvent.change(within(box).getByLabelText("Nome completo (documento)"), { target: { value: "João Carlos Lima" } });
+    fireEvent.change(within(box).getByLabelText("Nome social (opcional)"), { target: { value: "Joana Lima" } });
+    fireEvent.click(within(box).getByRole("button", { name: "Salvar nomes" }));
+    await waitFor(() => expect(api.completeCitizenNames).toHaveBeenCalledWith("v1", { full_name: "João Carlos Lima", social_name: "Joana Lima" }));
+    expect(await screen.findByText("Nomes registrados no cadastro")).not.toBeNull();
+  });
+
+  it("check-in que validou agora oferece completar os nomes; com nome, nada aparece", async () => {
+    mocked(api.lookupCheckIn).mockResolvedValue(foundDeclared);
+    mocked(api.checkIn).mockResolvedValue({ attendance: { id: "a1" }, verified: true, verification_id: "v2" });
+    renderCheckIn();
+    fireEvent.change(screen.getByLabelText("CPF do cidadão (check-in)"), { target: { value: "52998224725" } });
+    fireEvent.change(screen.getByLabelText("Código de check-in"), { target: { value: "123456" } });
+    fireEvent.click(screen.getByRole("button", { name: "Buscar check-in" }));
+    expect(screen.queryByRole("region", { name: "Completar nomes do cadastro" })).toBeNull();
+    fireEvent.click(await screen.findByLabelText("Conferi o documento com foto e o CPF confere"));
+    fireEvent.click(screen.getByRole("button", { name: "Iniciar atendimento" }));
+    expect(await screen.findByRole("region", { name: "Completar nomes do cadastro" })).not.toBeNull();
   });
 });

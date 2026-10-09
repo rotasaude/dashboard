@@ -139,7 +139,11 @@ const MESSAGES: Record<string, string> = {
   not_reassessable: "esta escuta não pode mais ser reavaliada — a fila foi atualizada",
   invalid_screening_scope: "escolha uma das opções de acolhimento",
   note_too_long: "o texto passa de 500 caracteres",
-  terminology_unavailable: "a CIAP-2 não está disponível agora — tente de novo em instantes"
+  terminology_unavailable: "a CIAP-2 não está disponível agora — tente de novo em instantes",
+  // Módulo 19 (contratos §2): nomes conferidos no documento.
+  invalid_full_name: "confira o nome completo no documento (3 a 200 caracteres)",
+  invalid_social_name: "o nome social pode ter até 200 caracteres",
+  invalid_mother_name: "o nome da mãe pode ter até 200 caracteres"
 };
 
 export function attendanceError(err: unknown): string {

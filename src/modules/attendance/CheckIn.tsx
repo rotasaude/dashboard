@@ -13,6 +13,7 @@ import { Tag } from "../../components/Tag";
 import { EmptyState } from "../../components/EmptyState";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { FrozenTextNotice } from "../../components/FrozenTextNotice";
+import { CompleteNames } from "./CompleteNames";
 
 // CheckIn (Task 7) — check-in por código (spec §5 "Check-in") e exceção por
 // CPF ("Cidadão sem o código"), dentro da unidade escolhida (UnitPicker,
@@ -91,11 +92,14 @@ function CodeFlow({ unit, onUnitInvalid }: Props) {
     { citizen: CheckInCitizen; triage: CheckInTriage | null; appointment: CheckInAppointment | null } | null
   >(null);
   const [ verified, setVerified ] = useState(false);
+  // Módulo 19 (Divergência D2): validação ativa criada agora pelo check-in, para completar os nomes.
+  const [ newVerificationId, setNewVerificationId ] = useState<string | null>(null);
   const [ busy, setBusy ] = useState(false);
   const [ error, setError ] = useState<string | null>(null);
 
   function reset() {
     setState("form"); setCpf(""); setCode(""); setChecked(false); setFound(null); setVerified(false); setError(null);
+    setNewVerificationId(null);
   }
 
   async function search() {
@@ -122,6 +126,7 @@ function CodeFlow({ unit, onUnitInvalid }: Props) {
     try {
       const result = await checkIn(cpf, code, unit.id, checked);
       setVerified(result.verified);
+      setNewVerificationId(result.verified ? result.verification_id ?? null : null);
       setState("done");
       invalidateAfterCheckIn(queryClient, unit.id, !!found.appointment);
     } catch (err) {
@@ -191,6 +196,11 @@ function CodeFlow({ unit, onUnitInvalid }: Props) {
             </label>
           )}
 
+          {found.citizen.verification_level === "verified" && found.citizen.names?.full_name_set === false
+            && found.citizen.verification_id && (
+            <CompleteNames verificationId={found.citizen.verification_id} />
+          )}
+
           <div style={{ display: "flex", gap: 8 }}>
             <button type="button" disabled={busy} onClick={() => void start()} style={busy ? disabledButtonStyle : buttonStyle}>
               Iniciar atendimento
@@ -206,6 +216,7 @@ function CodeFlow({ unit, onUnitInvalid }: Props) {
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           <p role="status" style={{ margin: 0, fontSize: 13, fontWeight: 600 }}>Atendimento iniciado</p>
           {verified && <p role="status" style={{ margin: 0, fontSize: 13, fontWeight: 600 }}>cadastro validado</p>}
+          {newVerificationId && <CompleteNames verificationId={newVerificationId} />}
           <div>
             <button type="button" onClick={reset} style={buttonStyle}>Próximo atendimento</button>
           </div>

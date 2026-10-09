@@ -104,10 +104,13 @@ describe("Attendance", () => {
     expect(validate.disabled).toBe(true);
     fireEvent.change(screen.getByLabelText("Data de nascimento (documento)"), { target: { value: "1990-05-10" } });
     fireEvent.change(screen.getByLabelText("Sexo (documento)"), { target: { value: "male" } });
+    expect(validate.disabled).toBe(true);
+    expect(screen.getByText("informe o nome completo como no documento")).not.toBeNull();
+    fireEvent.change(screen.getByLabelText("Nome completo (documento)"), { target: { value: "Carlos Souza" } });
     expect(validate.disabled).toBe(false);
     fireEvent.click(validate);
     await waitFor(() => expect(api.verifyCitizen).toHaveBeenCalledWith("529.982.247-25", "123456",
-      { birth_date: "1990-05-10", sex: "male", gender_identity: null }));
+      { birth_date: "1990-05-10", sex: "male", gender_identity: null, full_name: "Carlos Souza" }));
     expect(await screen.findByText("Cadastro validado")).not.toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Próximo atendimento" }));
     expect((screen.getByLabelText("CPF do cidadão (validação)") as HTMLInputElement).value).toBe("");
@@ -451,6 +454,7 @@ describe("Attendance — perfil conferido no documento", () => {
     fireEvent.click(screen.getByRole("button", { name: "Buscar validação" }));
     await screen.findByText("(**) *****-5432");
     fireEvent.click(screen.getByLabelText("Conferi o documento com foto e o CPF confere"));
+    fireEvent.change(screen.getByLabelText("Nome completo (documento)"), { target: { value: "Maria Aparecida Souza" } });
     return screen.getByRole("button", { name: "Validar cadastro" }) as HTMLButtonElement;
   }
 
@@ -461,7 +465,7 @@ describe("Attendance — perfil conferido no documento", () => {
     expect((screen.getByLabelText("Data de nascimento (documento)") as HTMLInputElement).value).toBe("1963-04-02");
     fireEvent.click(validate);
     await waitFor(() => expect(api.verifyCitizen).toHaveBeenCalledWith("529.982.247-25", "123456",
-      { birth_date: "1963-04-02", sex: "female", gender_identity: "cis_woman" }));
+      { birth_date: "1963-04-02", sex: "female", gender_identity: "cis_woman", full_name: "Maria Aparecida Souza" }));
   });
 
   it("o atendente corrige o sexo e tira a identidade", async () => {
@@ -470,7 +474,7 @@ describe("Attendance — perfil conferido no documento", () => {
     fireEvent.change(screen.getByLabelText("Identidade de gênero (opcional)"), { target: { value: "" } });
     fireEvent.click(validate);
     await waitFor(() => expect(api.verifyCitizen).toHaveBeenCalledWith("529.982.247-25", "123456",
-      { birth_date: "1963-04-02", sex: "male", gender_identity: null }));
+      { birth_date: "1963-04-02", sex: "male", gender_identity: null, full_name: "Maria Aparecida Souza" }));
   });
 
   it("sem perfil declarado: diz isso e só valida com data e sexo", async () => {
@@ -499,7 +503,7 @@ describe("Attendance — perfil conferido no documento", () => {
 
 describe("Attendance — CADSUS no balcão (módulo 16)", () => {
   const withCadsus = (): api.SessionUser => ({ ...session("citizen_verifier"), features: [ "cadsus_lookup" ] });
-  const profileBody = { birth_date: "1963-04-02", sex: "female", gender_identity: null };
+  const profileBody = { birth_date: "1963-04-02", sex: "female", gender_identity: null, full_name: "Maria Aparecida Souza" };
 
   beforeEach(() => {
     for (const fn of [ api.fetchCurrentSession, api.lookupCitizen, api.verifyCitizen, api.cadsusLookup, api.listActiveUnits, api.getMyProfessional ]) {
@@ -519,6 +523,7 @@ describe("Attendance — CADSUS no balcão (módulo 16)", () => {
     await screen.findByText("(**) *****-5432");
     fireEvent.change(screen.getByLabelText("Data de nascimento (documento)"), { target: { value: "1963-04-02" } });
     fireEvent.change(screen.getByLabelText("Sexo (documento)"), { target: { value: "female" } });
+    fireEvent.change(screen.getByLabelText("Nome completo (documento)"), { target: { value: "Maria Aparecida Souza" } });
     fireEvent.click(screen.getByLabelText("Conferi o documento com foto e o CPF confere"));
   }
 
@@ -596,5 +601,49 @@ describe("Attendance — CADSUS no balcão (módulo 16)", () => {
     renderAttendance();
     expect(await screen.findByRole("button", { name: "Consulta" })).not.toBeNull();
     expect(screen.getByText("Carlos Souza")).not.toBeNull();
+  });
+});
+
+describe("Attendance — nomes no balcão (módulo 19)", () => {
+  beforeEach(() => {
+    for (const fn of [ api.fetchCurrentSession, api.lookupCitizen, api.verifyCitizen, api.listActiveUnits, api.getMyProfessional ]) {
+      mocked(fn).mockReset();
+    }
+    mocked(api.fetchCurrentSession).mockResolvedValue(session("citizen_verifier"));
+    mocked(api.listActiveUnits).mockResolvedValue([]);
+    mocked(api.getMyProfessional).mockResolvedValue(null);
+    mocked(api.lookupCitizen).mockResolvedValue(found);
+    mocked(api.verifyCitizen).mockResolvedValue(undefined);
+  });
+
+  async function openForm() {
+    renderAttendance();
+    fireEvent.change(await screen.findByLabelText("CPF do cidadão (validação)"), { target: { value: "52998224725" } });
+    fireEvent.change(screen.getByLabelText("Código de validação"), { target: { value: "123456" } });
+    fireEvent.click(screen.getByRole("button", { name: "Buscar validação" }));
+    await screen.findByText("(**) *****-5432");
+    fireEvent.change(screen.getByLabelText("Data de nascimento (documento)"), { target: { value: "1970-01-02" } });
+    fireEvent.change(screen.getByLabelText("Sexo (documento)"), { target: { value: "female" } });
+    fireEvent.click(screen.getByLabelText("Conferi o documento com foto e o CPF confere"));
+  }
+
+  it("social e mãe vão quando preenchidos", async () => {
+    await openForm();
+    fireEvent.change(screen.getByLabelText("Nome completo (documento)"), { target: { value: "João Carlos Lima" } });
+    fireEvent.change(screen.getByLabelText("Nome social (opcional)"), { target: { value: "Joana Lima" } });
+    fireEvent.change(screen.getByLabelText("Nome da mãe (opcional)"), { target: { value: "Maria Lima" } });
+    fireEvent.click(screen.getByRole("button", { name: "Validar cadastro" }));
+    await waitFor(() => expect(api.verifyCitizen).toHaveBeenCalledWith("529.982.247-25", "123456", {
+      birth_date: "1970-01-02", sex: "female", gender_identity: null,
+      full_name: "João Carlos Lima", social_name: "Joana Lima", mother_name: "Maria Lima"
+    }));
+  });
+
+  it("recusa do nome pelo api é traduzida", async () => {
+    mocked(api.verifyCitizen).mockRejectedValue(new ApiError(422, { error: "invalid_full_name" }, "422"));
+    await openForm();
+    fireEvent.change(screen.getByLabelText("Nome completo (documento)"), { target: { value: "João Carlos Lima" } });
+    fireEvent.click(screen.getByRole("button", { name: "Validar cadastro" }));
+    expect(await screen.findByText("confira o nome completo no documento (3 a 200 caracteres)")).not.toBeNull();
   });
 });
