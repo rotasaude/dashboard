@@ -90,4 +90,47 @@ describe("AddendumForm", () => {
     await waitFor(() => expect(api.addAddendum).toHaveBeenCalled());
     expect(mocked(api.addAddendum).mock.calls[0][1].changes).toEqual({ conducts: [ "9", "12" ] });
   });
+
+  it("não médico: sem CID-10 novo nem justificativa nova; resolve o CID-10 existente e mantém a justificativa do exame", async () => {
+    const e11 = problem({ id: "pp2", terminology: "cid10", code: "E11", label: "Diabetes mellitus tipo 2" });
+    const base = finalized({ exam_requests: [ { sigtap_code: "0202010503", label: "DOSAGEM DE HEMOGLOBINA GLICOSILADA", cid10_justification: "E11" } ] });
+    mocked(api.searchSigtap).mockResolvedValue([ { code: "0202010207", label: "DOSAGEM DE COLESTEROL TOTAL" } ]);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={client}><AddendumForm consultation={base} options={options({ cid10_allowed_for_cbo: false })}
+      patientProblems={[ e11 ]} searchDelayMs={0} onDone={vi.fn()} onCancel={vi.fn()} /></QueryClientProvider>);
+    text("Motivo do adendo", "correção do plano");
+    text("Texto do adendo", "Diabetes resolvido; exame extra.");
+    fireEvent.click(screen.getByLabelText("Mudar problemas, condutas ou exames"));
+    expect(screen.queryByRole("option", { name: "CID-10" })).toBeNull();
+    expect(screen.queryByLabelText(/CID-10 de justificativa/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Resolver E11" }));
+    fireEvent.change(screen.getByLabelText("Solicitar exame (SIGTAP)"), { target: { value: "colesterol" } });
+    fireEvent.click(await screen.findByRole("button", { name: "0202010207 — DOSAGEM DE COLESTEROL TOTAL" }));
+    fireEvent.click(screen.getByRole("button", { name: "Registrar adendo" }));
+    await waitFor(() => expect(api.addAddendum).toHaveBeenCalled());
+    expect(mocked(api.addAddendum).mock.calls[0][1].changes).toEqual({
+      evaluated_problems: [ { problem_id: "pp2", terminology: "cid10", code: "E11", label: "Diabetes mellitus tipo 2", action: "resolve" } ],
+      exam_requests: [
+        { sigtap_code: "0202010503", label: "DOSAGEM DE HEMOGLOBINA GLICOSILADA", cid10_justification: "E11" },
+        { sigtap_code: "0202010207", label: "DOSAGEM DE COLESTEROL TOTAL" }
+      ]
+    });
+  });
+
+  it("não médico: sem mexer nos exames, exam_requests não vai (a justificativa fica como está)", async () => {
+    const e11 = problem({ id: "pp2", terminology: "cid10", code: "E11", label: "Diabetes mellitus tipo 2" });
+    const base = finalized({ exam_requests: [ { sigtap_code: "0202010503", label: "X", cid10_justification: "E11" } ] });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={client}><AddendumForm consultation={base} options={options({ cid10_allowed_for_cbo: false })}
+      patientProblems={[ e11 ]} searchDelayMs={0} onDone={vi.fn()} onCancel={vi.fn()} /></QueryClientProvider>);
+    text("Motivo do adendo", "correção do plano");
+    text("Texto do adendo", "Avaliado.");
+    fireEvent.click(screen.getByLabelText("Mudar problemas, condutas ou exames"));
+    fireEvent.click(screen.getByRole("button", { name: "Avaliar E11" }));
+    fireEvent.click(screen.getByRole("button", { name: "Registrar adendo" }));
+    await waitFor(() => expect(api.addAddendum).toHaveBeenCalled());
+    const changes = mocked(api.addAddendum).mock.calls[0][1].changes;
+    expect(changes.evaluated_problems[0]).toMatchObject({ code: "E11", action: "evaluate" });
+    expect(changes.exam_requests).toBeUndefined();
+  });
 });

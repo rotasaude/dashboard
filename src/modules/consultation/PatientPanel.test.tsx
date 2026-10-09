@@ -32,7 +32,7 @@ describe("PatientPanel", () => {
 });
 
 describe("PatientPanel sem chaves opcionais (o api omite os nulos)", () => {
-  it("problema sem início e escuta sem queixa nem alertas", () => {
+  it("problema sem onset_on/onset_precision mostra \"início não informado\"", () => {
     const bare = { id: "pp2", terminology: "ciap2", code: "K86", label: "Hipertensão", status: "active" } as PatientProblem;
     render(<PatientPanel record={record({ problems: [ bare ] })} onOpenConsultation={vi.fn()} />);
     expect(screen.getByText(/Hipertensão · início não informado/)).not.toBeNull();
