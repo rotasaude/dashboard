@@ -24,9 +24,9 @@ function renderEditor(autosaveDelayMs = 0) {
   const onLocked = vi.fn();
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>;
-  render(<ConsultationEditor consultation={consultation()} record={record()} options={options()} unit={unit} units={units}
+  const { unmount } = render(<ConsultationEditor consultation={consultation()} record={record()} options={options()} unit={unit} units={units}
     autosaveDelayMs={autosaveDelayMs} searchDelayMs={0} onFinalized={onFinalized} onLocked={onLocked} />, { wrapper });
-  return { onFinalized, onLocked };
+  return { onFinalized, onLocked, unmount };
 }
 const text = (label: string, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
 function fillMinimum() {
@@ -135,6 +135,38 @@ describe("ConsultationEditor", () => {
     expect(onFinalized).not.toHaveBeenCalled();
     expect(onLocked).not.toHaveBeenCalled();
     expect((screen.getByLabelText("Plano (P)") as HTMLTextAreaElement).disabled).toBe(false);
+  });
+
+  it("falha ao salvar: Confirmar mostra a frase e não chama finalize", async () => {
+    mocked(api.saveConsultationDraft).mockRejectedValue(new ApiError(500, { error: "boom" }, "500"));
+    renderEditor(60_000);
+    fillMinimum();
+    fireEvent.click(screen.getByRole("button", { name: "Finalizar consulta" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar finalização" }));
+    expect((await screen.findByRole("alert")).textContent)
+      .toBe("o rascunho não foi salvo — veja o aviso no topo da consulta e tente de novo");
+    expect(api.finalizeConsultation).not.toHaveBeenCalled();
+  });
+
+  it("durante a finalização o editor fica selado; depois de finalizar, desmontar não salva nem avisa", async () => {
+    let resolveFinalize: (c: ReturnType<typeof finalized>) => void = () => {};
+    mocked(api.finalizeConsultation).mockImplementation(() => new Promise((r) => { resolveFinalize = r; }));
+    const { onFinalized, onLocked, unmount } = renderEditor(0);
+    fillMinimum();
+    fireEvent.click(screen.getByRole("button", { name: "Finalizar consulta" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar finalização" }));
+    await waitFor(() => expect(api.finalizeConsultation).toHaveBeenCalled());
+    const saves = mocked(api.saveConsultationDraft).mock.calls.length;
+    expect((screen.getByLabelText("Plano (P)") as HTMLTextAreaElement).disabled).toBe(true);
+    text("Plano (P)", "digitado durante a finalização");
+    await new Promise((r) => setTimeout(r, 20));
+    expect(mocked(api.saveConsultationDraft).mock.calls.length).toBe(saves);
+    resolveFinalize(finalized());
+    await waitFor(() => expect(onFinalized).toHaveBeenCalled());
+    unmount();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(mocked(api.saveConsultationDraft).mock.calls.length).toBe(saves);
+    expect(onLocked).not.toHaveBeenCalled();
   });
 
   it("texto acima de 20.000 não é salvo e diz qual campo", async () => {

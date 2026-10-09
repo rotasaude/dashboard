@@ -4,7 +4,7 @@
 // problemas, condutas e exames estruturados. O rascunho se salva sozinho e só
 // a autora o vê. "Finalizar" pede o desfecho com a mesma tela do "Encerrar",
 // espera o salvamento em curso e manda; a consulta finalizada não muda mais.
-import { useState, type CSSProperties } from "react";
+import { useRef, useState, type CSSProperties } from "react";
 import {
   errorCode, finalizeConsultation, saveConsultationDraft,
   type ClinicalRecord, type Consultation, type ConsultationOptions, type HealthUnit
@@ -45,6 +45,9 @@ export function ConsultationEditor(props: ConsultationEditorProps) {
   // Mesma forma (e ordem de chaves) do `value` do autosave: abrir o rascunho não dispara PATCH.
   const [ initialKey ] = useState(() => JSON.stringify(checkDraft(draftFrom(consultation)).input));
   const [ locked, setLocked ] = useState(false);
+  const lockedRef = useRef(false);
+  // Selado: o rascunho já foi salvo e a finalização está a caminho; nada mais se edita nem se salva.
+  const [ sealing, setSealing ] = useState(false);
   const [ finalizing, setFinalizing ] = useState(false);
   const [ outcome, setOutcome ] = useState<OutcomeDraft>(EMPTY_OUTCOME);
   const [ busy, setBusy ] = useState(false);
@@ -53,6 +56,7 @@ export function ConsultationEditor(props: ConsultationEditorProps) {
   function lock(err: unknown): boolean {
     const code = errorCode(err);
     if (!code || !LOCKING.has(code)) return false;
+    lockedRef.current = true;
     setLocked(true);
     props.onLocked(consultationError(err));
     return true;
@@ -61,7 +65,7 @@ export function ConsultationEditor(props: ConsultationEditorProps) {
   const check = checkDraft(draft);
   const blocked = blockedReason(check);
   const autosave = useAutosave({
-    value: check.input, initialKey, blockedReason: blocked, enabled: !locked, delayMs: props.autosaveDelayMs ?? 1500,
+    value: check.input, initialKey, blockedReason: blocked, enabled: !locked && !sealing, delayMs: props.autosaveDelayMs ?? 1500,
     save: (input) => saveConsultationDraft(consultation.id, input),
     describe: consultationError,
     onError: (err) => { lock(err); }
@@ -78,18 +82,19 @@ export function ConsultationEditor(props: ConsultationEditorProps) {
     setBusy(true); setError(null);
     try {
       if (!(await autosave.flush())) {
-        setError("o rascunho não foi salvo — veja o aviso no topo da consulta e tente de novo");
+        if (!lockedRef.current) setError("o rascunho não foi salvo — veja o aviso no topo da consulta e tente de novo");
         return;
       }
+      setSealing(true);
       props.onFinalized(await finalizeConsultation(consultation.id, outcomeBody(outcome, referralUnitId)));
     } catch (err) {
-      if (!lock(err)) setError(consultationError(err));
+      if (!lock(err)) { setError(consultationError(err)); setSealing(false); }
     } finally {
       setBusy(false);
     }
   }
 
-  const blockedFinal = busy || locked || missing.length > 0;
+  const blockedFinal = busy || locked || sealing || missing.length > 0;
 
   return (
     <section aria-label="Consulta" style={panel}>
@@ -101,10 +106,11 @@ export function ConsultationEditor(props: ConsultationEditorProps) {
         O rascunho é salvo sozinho e só você o vê. Finalizada, a consulta não muda mais: correção é por adendo.
       </p>
 
+      <fieldset disabled={locked || sealing} style={fieldset}>
       {SOAP_FIELDS.map((f) => (
         <label key={f.key} style={labelStyle}>
           {f.label}
-          <textarea value={draft.soap[f.key]} rows={3} disabled={locked} style={inputStyle}
+          <textarea value={draft.soap[f.key]} rows={3} disabled={locked || sealing} style={inputStyle}
             onChange={(e) => { const v = e.target.value; setDraft((d) => ({ ...d, soap: { ...d.soap, [f.key]: v } })); }} />
           {check.tooLong.includes(f.key) && (
             <small style={alert}>{`${f.label} passa de ${TEXT_MAX_LABEL} caracteres`}</small>
@@ -160,11 +166,13 @@ export function ConsultationEditor(props: ConsultationEditorProps) {
           </div>
         </section>
       )}
+      </fieldset>
     </section>
   );
 }
 
 const panel: CSSProperties = { display: "flex", flexDirection: "column", gap: 12, padding: 16, border: "1px solid var(--rule)", borderRadius: 8 };
+const fieldset: CSSProperties = { display: "flex", flexDirection: "column", gap: 12, border: 0, padding: 0, margin: 0, minWidth: 0 };
 const box: CSSProperties = { display: "flex", flexDirection: "column", gap: 10, padding: 12, border: "1px solid var(--rule2)", borderRadius: 8 };
 const labelStyle: CSSProperties = { display: "flex", flexDirection: "column", gap: 4, fontSize: 12, color: "var(--ink2)" };
 const muted: CSSProperties = { margin: 0, fontSize: 12, color: "var(--ink3)" };
