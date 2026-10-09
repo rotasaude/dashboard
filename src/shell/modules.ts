@@ -9,7 +9,7 @@ export type ModuleId =
   | "queues" | "health" | "protocol-editor" | "security" | "team" | "attendance"
   | "professionals" | "my-profile" | "territory" | "campaigns" | "analytics"
   | "integrations" | "cnes" | "production" | "my-agenda" | "clinical-record" | "my-consultations" | "professional-consultations"
-  | "signature";
+  | "signature" | "signature-pending";
 
 export interface NavItem { id: ModuleId; label: string; icon: string; }
 export interface NavGroupDef { label: string; items: NavItem[]; }
@@ -41,6 +41,7 @@ export const NAV_GROUPS: NavGroupDef[] = [
   { label: "Atendimento", items: [
     { id: "attendance", label: "Atendimento", icon: "☑" },
     { id: "my-agenda", label: "Minha agenda", icon: "◷" },
+    { id: "signature-pending", label: "Pendentes de assinatura", icon: "⧗" },
     { id: "clinical-record", label: "Prontuário", icon: "⚕" },
     { id: "my-consultations", label: "Minhas consultas", icon: "☰" },
     { id: "professional-consultations", label: "Consultas por profissional", icon: "☷" }
@@ -124,7 +125,7 @@ export function navGroupsFor(
       if (item.id === "professional-consultations") return !user?.operator && isAdmin && hasFeature(user, "clinical_record");
       // Módulo 19b: certificado e sessão de assinatura são do profissional,
       // só com `digital_signature` ligado (o api recusaria com 403).
-      if (item.id === "signature") return canSign(user);
+      if (item.id === "signature" || item.id === "signature-pending") return canSign(user);
       if (item.id === "integrations" || item.id === "cnes") return canIntegrations;
       if (item.id === "production") return canProduction;
       return true;

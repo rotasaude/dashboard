@@ -240,4 +240,14 @@ describe("assinatura digital no menu (módulo 19b)", () => {
     expect(ids(u([ "health_professional" ], [ "digital_signature" ], true))).not.toContain("signature");
     expect(ids(null)).not.toContain("signature");
   });
+
+  it("Atendimento → Pendentes de assinatura: só profissional com digital_signature", () => {
+    const atendimento = NAV_GROUPS.find((g) => g.label === "Atendimento");
+    expect(atendimento?.items.map((i) => i.id)).toContain("signature-pending");
+    expect(labelFor("signature-pending")).toBe("Pendentes de assinatura");
+    expect(ids(u([ "health_professional" ]))).toContain("signature-pending");
+    expect(ids(u([ "health_professional" ], []))).not.toContain("signature-pending");
+    expect(ids(u([ "citizen_verifier" ]))).not.toContain("signature-pending");
+    expect(ids(u([ "municipal_admin" ]))).not.toContain("signature-pending");
+  });
 });

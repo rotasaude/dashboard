@@ -33,6 +33,7 @@ import { ClinicalRecord } from "./modules/ClinicalRecord";
 import { MyConsultations } from "./modules/MyConsultations";
 import { ProfessionalConsultations } from "./modules/ProfessionalConsultations";
 import { SignatureAccount } from "./modules/SignatureAccount";
+import { SignaturePending } from "./modules/SignaturePending";
 
 export function App() {
   const [ period, setPeriod ] = useState<PeriodKey>("7d");
@@ -96,6 +97,7 @@ function renderModule(active: ModuleId, setActive: (id: ModuleId) => void) {
     case "professional-consultations": return <ProfessionalConsultations onGoToSecurity={() => setActive("security")} />;
     case "clinical-record": return <ClinicalRecord onGoToSecurity={() => setActive("security")} />;
     case "signature":      return <SignatureAccount onGoToSecurity={() => setActive("security")} />;
+    case "signature-pending": return <SignaturePending onNavigate={setActive} />;
     default:               return <Placeholder title={labelFor(active)} />;
   }
 }
