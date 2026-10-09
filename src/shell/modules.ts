@@ -7,7 +7,7 @@ export type ModuleId =
   | "triages" | "classification" | "reports" | "protocols" | "events"
   | "queues" | "health" | "protocol-editor" | "security" | "team" | "attendance"
   | "professionals" | "my-profile" | "territory" | "campaigns" | "analytics"
-  | "integrations" | "cnes" | "production" | "my-agenda";
+  | "integrations" | "cnes" | "production" | "my-agenda" | "clinical-record";
 
 export interface NavItem { id: ModuleId; label: string; icon: string; }
 export interface NavGroupDef { label: string; items: NavItem[]; }
@@ -38,7 +38,8 @@ export const NAV_GROUPS: NavGroupDef[] = [
   ]},
   { label: "Atendimento", items: [
     { id: "attendance", label: "Atendimento", icon: "☑" },
-    { id: "my-agenda", label: "Minha agenda", icon: "◷" }
+    { id: "my-agenda", label: "Minha agenda", icon: "◷" },
+    { id: "clinical-record", label: "Prontuário", icon: "⚕" }
   ]},
   { label: "Comunicação", items: [
     { id: "campaigns", label: "Campanhas", icon: "✉" }
@@ -91,6 +92,9 @@ export function navGroupsFor(
   // `ledi_export` ligado na sessão. O operador nunca vê o grupo.
   const canIntegrations = !user?.operator && isAdmin;
   const canProduction = !user?.operator && (isAdmin || roles.includes("analyst")) && hasFeature(user, "ledi_export");
+  // Módulo 19 (ADR 0031): abertura justificada do profissional e relatório do
+  // municipal_admin, só com `clinical_record` ligado; a recepção nunca.
+  const canClinicalRecord = !user?.operator && (isProfessional || isAdmin) && hasFeature(user, "clinical_record");
   return NAV_GROUPS.filter((group) => {
     if (group.label === "Conta") return !user?.operator;
     if (group.label === "Equipe") return isAdmin;
@@ -108,6 +112,7 @@ export function navGroupsFor(
       if (item.id === "my-profile") return isProfessional;
       // Módulo 17: "Minha agenda" idem (GET /me/agenda responde 403/404 a quem não é).
       if (item.id === "my-agenda") return isProfessional;
+      if (item.id === "clinical-record") return canClinicalRecord;
       if (item.id === "integrations" || item.id === "cnes") return canIntegrations;
       if (item.id === "production") return canProduction;
       return true;

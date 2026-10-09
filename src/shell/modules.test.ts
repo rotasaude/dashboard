@@ -191,4 +191,18 @@ describe("modules", () => {
       expect(ids(user([ "municipal_admin" ], null))).toContain("integrations");
     });
   });
+  describe("módulo 19 na navegação", () => {
+    const user = (roles: string[], features: string[] = [], operator = false) =>
+      ({ operator, memberships: roles.map((role) => ({ role })), features });
+    const ids = (u: Parameters<typeof navGroupsFor>[0]) => navGroupsFor(u).flatMap((g) => g.items.map((i) => i.id));
+
+    it("Prontuário no menu: só profissional ou admin, só com clinical_record, nunca operador", () => {
+      expect(ids(user([ "health_professional" ], [ "clinical_record" ]))).toContain("clinical-record");
+      expect(ids(user([ "municipal_admin" ], [ "clinical_record" ]))).toContain("clinical-record");
+      expect(ids(user([ "health_professional" ]))).not.toContain("clinical-record");
+      expect(ids(user([ "citizen_verifier" ], [ "clinical_record" ]))).not.toContain("clinical-record");
+      expect(ids(user([ "municipal_admin" ], [ "clinical_record" ], true))).not.toContain("clinical-record");
+      expect(labelFor("clinical-record")).toBe("Prontuário");
+    });
+  });
 });
