@@ -26,6 +26,7 @@ export function SignatureOverview() {
   const allowed = canSeeSignatureOverview(user);
   const [ period, setPeriod ] = useState(() => defaultOverviewPeriod(Date.now()));
   const inverted = !!period.from && !!period.to && period.from > period.to;
+  const missing = !period.from || !period.to;
   const query = useQuery({
     queryKey: [ OVERVIEW_KEY, period.from, period.to ],
     queryFn: () => getSignatureOverview({ from: period.from, to: period.to }),
@@ -110,7 +111,8 @@ export function SignatureOverview() {
       {usesSimulatedPsc(user) && <div><Tag tone="warn" mono={false}>{SIMULATED_NOTICE}</Tag></div>}
       {inverted && <p role="alert" style={alert}>a data inicial vem depois da final</p>}
       {query.isError && <p role="alert" style={alert}>{signatureError(query.error)}</p>}
-      {query.isPending && !inverted && <p style={muted}>carregando…</p>}
+      {missing && <p role="alert" style={alert}>informe as duas datas</p>}
+      {query.isPending && !inverted && !missing && <p style={muted}>carregando…</p>}
 
       {data && summary && (
         <>

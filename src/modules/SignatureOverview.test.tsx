@@ -91,6 +91,27 @@ describe("SignatureOverview", () => {
     expect(api.getSignatureOverview).not.toHaveBeenCalled();
   });
 
+  it("profissional (mesmo com a funcionalidade) e operador: não consultam e dizem o motivo", async () => {
+    mocked(api.fetchCurrentSession).mockResolvedValue(signer([ "health_professional" ]));
+    renderWithProviders(<SignatureOverview />);
+    expect(await screen.findByText("só o administrador municipal vê este painel")).not.toBeNull();
+    expect(api.getSignatureOverview).not.toHaveBeenCalled();
+    cleanup();
+    mocked(api.fetchCurrentSession).mockResolvedValue(signer([ "municipal_admin" ], { operator: true }));
+    renderWithProviders(<SignatureOverview />);
+    expect(await screen.findByText("só o administrador municipal vê este painel")).not.toBeNull();
+    expect(api.getSignatureOverview).not.toHaveBeenCalled();
+  });
+
+  it("data apagada: pede as duas datas, sem carregando e sem consultar", async () => {
+    renderWithProviders(<SignatureOverview />);
+    await waitFor(() => expect(api.getSignatureOverview).toHaveBeenCalledTimes(1));
+    fireEvent.change(screen.getByLabelText("De"), { target: { value: "" } });
+    expect(await screen.findByText("informe as duas datas")).not.toBeNull();
+    expect(screen.queryByText("carregando…")).toBeNull();
+    expect(api.getSignatureOverview).toHaveBeenCalledTimes(1);
+  });
+
   it("api omite not_after, oldest_pending_at e expires_in_days: mostra — e os dias quando vêm", async () => {
     mocked(api.getSignatureOverview).mockResolvedValue(overview({
       professionals: [
