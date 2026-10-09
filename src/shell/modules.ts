@@ -2,14 +2,14 @@
 // admin — sem o grupo Setup (cross-tenant) nem ScopePicker. Inclui `health`
 // porque o Overview navega para queues/health.
 import { hasFeature } from "../lib/features";
-import { canSign } from "../lib/signature";
+import { canSeeSignatureOverview, canSign } from "../lib/signature";
 export type ModuleId =
   | "overview" | "ingestion" | "conversations" | "consent"
   | "triages" | "classification" | "reports" | "protocols" | "events"
   | "queues" | "health" | "protocol-editor" | "security" | "team" | "attendance"
   | "professionals" | "my-profile" | "territory" | "campaigns" | "analytics"
   | "integrations" | "cnes" | "production" | "my-agenda" | "clinical-record" | "my-consultations" | "professional-consultations"
-  | "signature" | "signature-pending";
+  | "signature" | "signature-pending" | "signature-overview";
 
 export interface NavItem { id: ModuleId; label: string; icon: string; }
 export interface NavGroupDef { label: string; items: NavItem[]; }
@@ -51,7 +51,8 @@ export const NAV_GROUPS: NavGroupDef[] = [
   ]},
   { label: "Equipe", items: [
     { id: "team", label: "Equipe", icon: "☷" },
-    { id: "professionals", label: "Profissionais", icon: "✚" }
+    { id: "professionals", label: "Profissionais", icon: "✚" },
+    { id: "signature-overview", label: "Painel de assinatura", icon: "✍" }
   ]},
   { label: "Cidade", items: [
     { id: "territory", label: "Território", icon: "⌖" }
@@ -126,6 +127,8 @@ export function navGroupsFor(
       // Módulo 19b: certificado e sessão de assinatura são do profissional,
       // só com `digital_signature` ligado (o api recusaria com 403).
       if (item.id === "signature" || item.id === "signature-pending") return canSign(user);
+      // F-19.14: painel só leitura do municipal_admin, com digital_signature.
+      if (item.id === "signature-overview") return canSeeSignatureOverview(user);
       if (item.id === "integrations" || item.id === "cnes") return canIntegrations;
       if (item.id === "production") return canProduction;
       return true;

@@ -230,6 +230,15 @@ describe("assinatura digital no menu (módulo 19b)", () => {
     ({ operator, memberships: roles.map((role) => ({ role })), features });
   const ids = (user: ReturnType<typeof u> | null) => navGroupsFor(user).flatMap((g) => g.items.map((i) => i.id));
 
+  it("Equipe → Painel de assinatura: só municipal_admin com digital_signature", () => {
+    const equipe = NAV_GROUPS.find((g) => g.label === "Equipe");
+    expect(equipe?.items.map((i) => i.id)).toContain("signature-overview");
+    expect(labelFor("signature-overview")).toBe("Painel de assinatura");
+    expect(ids(u([ "municipal_admin" ]))).toContain("signature-overview");
+    expect(ids(u([ "municipal_admin" ], []))).not.toContain("signature-overview");
+    expect(ids(u([ "health_professional" ]))).not.toContain("signature-overview");
+  });
+
   it("Conta → Assinatura digital: só profissional com digital_signature, nunca operador", () => {
     const conta = NAV_GROUPS.find((g) => g.label === "Conta");
     expect(conta?.items.map((i) => i.id)).toContain("signature");

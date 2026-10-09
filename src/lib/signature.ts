@@ -209,6 +209,7 @@ const ERRORS: Record<string, string> = {
   invalid_reason: `descreva o motivo com pelo menos ${RETURN_REASON_MIN} caracteres`,
   out_of_context: "fora do atendimento, abra o prontuário com motivo para ver o que foi assinado",
   opening_required: "a abertura justificada terminou — abra o prontuário de novo",
+  invalid_period: "o período informado não é válido",
   missing_role: "seu papel não permite esta ação"
 };
 
