@@ -1601,7 +1601,11 @@ export interface ExamRequest { sigtap_code: string; label: string; cid10_justifi
 // Divergência D4: `evaluated_problems` são eventos novos (mesma forma da
 // consulta); `conducts` e `exam_requests` são as listas finais.
 export interface AddendumChanges { evaluated_problems?: EvaluatedProblem[]; conducts?: string[]; exam_requests?: ExamRequest[] }
-export interface Addendum { id: string; author_name: string; created_at: string; reason: string; text: string; changes: AddendumChanges | null }
+export interface Addendum {
+  id: string; author_name: string; created_at: string; reason: string; text: string; changes: AddendumChanges | null;
+  // Módulo 19b (contrato 2026-10-08 §2): calculado pelo api; ausente em api sem o 19b.
+  signature?: SignatureBlock;
+}
 
 export interface Consultation {
   id: string; attendance_id: string; patient_id: string; status: "draft" | "finalized";
@@ -1610,6 +1614,8 @@ export interface Consultation {
   vitals: VitalSigns; care_type: string | null;
   evaluated_problems: EvaluatedProblem[]; conducts: string[]; exam_requests: ExamRequest[];
   started_at: string; finalized_at: string | null; addenda: Addendum[];
+  // Módulo 19b (contrato 2026-10-08 §2): só na finalizada; o rascunho não tem.
+  signature?: SignatureBlock;
 }
 export interface ConsultationSummary {
   id: string; finalized_at: string; author_name: string; cbo_label: string; care_type_label: string;
@@ -1751,4 +1757,170 @@ export async function listOpenings(q: OpeningsQuery): Promise<OpeningRow[]> {
 // `:id` é a validação ativa do par (Divergência D2).
 export async function completeCitizenNames(verificationId: string, names: CitizenNamesInput): Promise<void> {
   await jsonFetch<unknown>(`${ATTENDANCE_BASE}/verifications/${encodeURIComponent(verificationId)}/names`, postProfessional(names));
+}
+
+// ─── Assinatura digital (módulo 19b, ADR 0032; contrato 2026-10-08 §1–§7) ───
+// As rotas levam só ids; `state`, `code`, motivo e `return_to` vão no corpo.
+// O token do prestador e o code_verifier nunca passam pelo navegador: o api
+// guarda os dois; o dashboard só segue o authorize_url e devolve state+code.
+
+const SIGNATURE_BASE = import.meta.env.VITE_SIGNATURE_BASE || "/signature";
+
+// "simulated" é o PSC falso de dev/staging (interruptor signature_psc_mock).
+export type SignatureProvider = "vidaas" | "birdid" | "safeid" | "neoid" | "remoteid" | "simulated";
+export type SignatureMode = "digital" | "manual" | "pending";
+export type SignatureRequestStatus = "pending" | "signed" | "failed" | "returned_to_paper";
+export type SignatureVerification = "valid" | "invalid" | "indeterminate";
+export type SignatureReason =
+  | "no_session" | "session_expired" | "provider_unavailable" | "provider_rejected" | "signer_unavailable"
+  | "verification_failed" | "certificate_expired" | "certificate_revoked" | "certificate_cpf_mismatch"
+  | "feature_disabled" | "user_request";
+export type SignatureDocumentType = "consultation" | "consultation_addendum";
+export type CertificateStatus = "active" | "replaced" | "unlinked" | "revoked" | "expired";
+export type SignatureFileKind = "pdf" | "package";
+
+export interface SignatureBlock {
+  mode: SignatureMode; request_id?: string; signature_id?: string; signed_at?: string; signer_name?: string;
+  verification?: SignatureVerification; reason_code?: SignatureReason; simulated?: boolean;
+}
+export interface SignerCertificate {
+  id: string; provider: SignatureProvider; issuer: string; serial_number: string; not_after: string;
+  status: CertificateStatus; expires_in_days: number;
+}
+export interface CertificateDiscovery {
+  providers: { provider: SignatureProvider; found: boolean }[]; unavailable: SignatureProvider[];
+}
+export interface AuthorizeRedirect { authorize_url: string }
+export interface SignatureSessionState { active: boolean; expires_at?: string; provider?: SignatureProvider }
+export interface BatchResult { signed: number; failed: { request_id: string; reason_code: SignatureReason }[] }
+// `return_to`: Divergência D2 (o api devolve o caminho que guardou com o state).
+export type OAuthCallbackResult =
+  | { purpose: "link"; result: SignerCertificate; return_to?: string }
+  | { purpose: "session"; result: { expires_at: string }; return_to?: string }
+  | { purpose: "batch"; result: BatchResult; return_to?: string };
+export interface SignatureRequest {
+  id: string; document_type: SignatureDocumentType; document_id: string; consultation_id: string;
+  patient_display_name: string | null; finalized_at: string | null; status: SignatureRequestStatus;
+  reason_code?: SignatureReason | null; attempts: number;
+}
+export interface SignatureDetail {
+  id: string; document_type: SignatureDocumentType; document_id: string; signed_at: string; signer_name: string;
+  signer_cpf_masked: string; policy: string; provider: SignatureProvider | string; simulated: boolean;
+  verification: SignatureVerification; verification_reasons: string[];
+  verified_at: string; content: Record<string, unknown>;
+}
+// O api omite not_after/expires_in_days/oldest_pending_at quando são nulos.
+export interface OverviewProfessional {
+  user_id: string; name: string; certificate_status: "active" | "none" | "expiring";
+  not_after?: string | null; expires_in_days?: number | null; pending_count: number; oldest_pending_at?: string | null;
+}
+export interface OverviewSignatureRow {
+  signature_id: string; document_type: SignatureDocumentType; signer_name: string;
+  verification: SignatureVerification; verified_at: string; simulated?: boolean;
+}
+export interface SignatureOverview {
+  professionals: OverviewProfessional[];
+  documents_by_mode: Record<SignatureMode, number>;
+  invalid_or_indeterminate: OverviewSignatureRow[];
+}
+
+const signaturePath = (...parts: string[]) => [ SIGNATURE_BASE, ...parts.map(encodeURIComponent) ].join("/");
+
+export async function getCurrentCertificate(): Promise<SignerCertificate | null> {
+  try {
+    return await jsonFetch<SignerCertificate>(signaturePath("certificates", "current"));
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404 && errorCode(err) === "certificate_not_linked") return null;
+    throw err;
+  }
+}
+
+export function discoverCertificates(): Promise<CertificateDiscovery> {
+  return jsonFetch(signaturePath("certificates", "discover"), postProfessional({}));
+}
+
+// Step-up: quem trata 401 mfa_required é o SensitiveAction.
+export function linkCertificate(provider: SignatureProvider, returnTo: string): Promise<AuthorizeRedirect> {
+  return jsonFetch(signaturePath("certificates", "link"), postProfessional({ provider, return_to: returnTo }));
+}
+
+export async function unlinkCertificate(): Promise<void> {
+  await jsonFetch<void>(signaturePath("certificates", "current"), { method: "DELETE" });
+}
+
+export function openSignatureSession(returnTo: string): Promise<AuthorizeRedirect> {
+  return jsonFetch(signaturePath("sessions"), postProfessional({ return_to: returnTo }));
+}
+
+export function getSignatureSession(): Promise<SignatureSessionState> {
+  return jsonFetch(signaturePath("sessions", "current"));
+}
+
+export async function closeSignatureSession(): Promise<void> {
+  await jsonFetch<void>(signaturePath("sessions", "current"), { method: "DELETE" });
+}
+
+export function completeSignatureOAuth(state: string, code: string): Promise<OAuthCallbackResult> {
+  return jsonFetch(signaturePath("oauth", "callback"), postProfessional({ state, code }));
+}
+
+export async function listPendingSignatures(): Promise<SignatureRequest[]> {
+  const payload = await jsonFetch<{ items: SignatureRequest[] }>(`${signaturePath("requests")}?status=pending`);
+  return payload.items;
+}
+
+export function returnToPaper(id: string, reason: string): Promise<SignatureRequest> {
+  return jsonFetch(signaturePath("requests", id, "return_to_paper"), postProfessional({ reason }));
+}
+
+export function startSignatureBatch(returnTo: string, requestIds?: string[]): Promise<AuthorizeRedirect & { count: number }> {
+  const body = requestIds ? { request_ids: requestIds, return_to: returnTo } : { return_to: returnTo };
+  return jsonFetch(signaturePath("batches"), postProfessional(body));
+}
+
+// Ler gera a trilha `clinical_record.viewed` no api.
+export function getSignature(id: string): Promise<SignatureDetail> {
+  return jsonFetch(signaturePath("signatures", id));
+}
+
+// Content-Type JSON e corpo `{}` são obrigatórios: sem eles o api responde 415.
+export function verifySignature(id: string): Promise<SignatureDetail> {
+  return jsonFetch(signaturePath("signatures", id, "verify"), postProfessional({}));
+}
+
+export interface SignatureFile { blob: Blob; filename: string | null }
+
+// Nome sugerido pelo api (Content-Disposition), aceito só se for seguro
+// (sem dado pessoal nem separadores); senão null e a tela usa um nome por id.
+const SAFE_FILENAME = /^[A-Za-z0-9._-]+$/;
+function filenameFromDisposition(header: string | null): string | null {
+  if (!header) return null;
+  const star = /filename\*\s*=\s*(?:UTF-8|utf-8)?'[^']*'([^;]+)/.exec(header);
+  const plain = /filename\s*=\s*(?:"([^"]*)"|([^;\s]+))/.exec(header);
+  let raw = star ? star[1].trim() : plain ? (plain[1] ?? plain[2]) : null;
+  if (raw === null) return null;
+  if (star) { try { raw = decodeURIComponent(raw); } catch { return null; } }
+  return SAFE_FILENAME.test(raw) ? raw : null;
+}
+
+// PDF e pacote lidos com fetch (e não por navegação) para a tela mostrar a
+// recusa (403 out_of_context/opening_required) em vez de uma página de erro.
+async function binaryFetch(url: string, accept: string): Promise<SignatureFile> {
+  const res = await fetch(url, { credentials: "include", headers: { Accept: accept } });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    let body: unknown = text;
+    if (text) { try { body = JSON.parse(text); } catch { /* deixa string */ } }
+    throw new ApiError(res.status, body, `${res.status} on ${url}`);
+  }
+  return { blob: await res.blob(), filename: filenameFromDisposition(res.headers.get("Content-Disposition")) };
+}
+
+export function fetchSignatureFile(id: string, kind: SignatureFileKind): Promise<SignatureFile> {
+  return binaryFetch(signaturePath("signatures", id, kind), kind === "pdf" ? "application/pdf" : "application/zip");
+}
+
+export function getSignatureOverview(q: { from: string; to: string }): Promise<SignatureOverview> {
+  const params = new URLSearchParams({ from: q.from, to: q.to });
+  return jsonFetch(`${signaturePath("admin", "overview")}?${params.toString()}`);
 }

@@ -32,6 +32,8 @@ describe("features da sessão (contratos §1)", () => {
     expect(featureLabel("cadsus_lookup")).toBe("Consulta ao CADSUS na validação presencial");
     expect(featureLabel("clinical_record")).toBe("Prontuário da atenção primária");
     expect(hasFeature({ features: [ "clinical_record" ] }, "clinical_record")).toBe(true);
+    expect(featureLabel("digital_signature")).toBe("Assinatura digital");
+    expect(hasFeature({ features: [ "digital_signature" ] }, "digital_signature")).toBe(true);
     expect(featureLabel("rnds_sync")).toBe("rnds_sync");
   });
 });

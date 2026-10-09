@@ -105,9 +105,15 @@ npm run dev        # porta 5173; o compose publica em 5175
 
 O Vite proxa `/up`, `/admin/api`, `/authoring`, `/session`, `/passwords`,
 `/auth`, `/setup`, `/protocols`, `/mfa`, `/attendance`, `/professionals`, `/territory`, `/campaigns`, `/triage_catalog`,
-`/integrations`, `/cnes`, `/production` e `/clinical_record` para
+`/integrations`, `/cnes`, `/production`, `/clinical_record` e `/signature` para
 `VITE_API_PROXY_TARGET` com `changeOrigin: false`. **Não troque para `true`**:
 o proxy reescreveria o Host para o alvo e nenhuma cidade chegaria ao Rails.
+
+O retorno do prestador de assinatura (módulo 19b) chega em
+`/dashboard/signature/callback?state=…&code=…`, servido pelo próprio Vite (a
+base é `/dashboard/`); a tela limpa a URL e troca o código no api por
+`POST /signature/oauth/callback`. O `redirect_uri` cadastrado no prestador
+(e no PSC falso de dev) é esse endereço no host da cidade.
 
 | Var | Default | Uso |
 |---|---|---|
