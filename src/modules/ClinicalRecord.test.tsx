@@ -78,4 +78,18 @@ describe("Prontuário fora do atendimento", () => {
     expect(await screen.findByText("nenhum prontuário para este CPF — o prontuário nasce na primeira consulta de um cadastro validado"))
       .not.toBeNull();
   });
+
+  it("o municipal_admin vê o relatório, sem o formulário de abertura", async () => {
+    m(api.fetchCurrentSession).mockResolvedValue(sessionWith([ "municipal_admin" ], { features: [ "clinical_record" ] }));
+    renderWithProviders(<ClinicalRecord />);
+    expect(await screen.findByRole("region", { name: "Aberturas fora de contexto" })).not.toBeNull();
+    expect(screen.queryByLabelText("CPF do paciente")).toBeNull();
+  });
+
+  it("o profissional não vê o relatório", async () => {
+    renderWithProviders(<ClinicalRecord />);
+    await screen.findByLabelText("CPF do paciente");
+    expect(screen.queryByRole("region", { name: "Aberturas fora de contexto" })).toBeNull();
+    expect(api.listOpenings).not.toHaveBeenCalled();
+  });
 });

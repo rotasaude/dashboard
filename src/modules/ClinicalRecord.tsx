@@ -10,6 +10,7 @@ import { PageHeader } from "../components/PageHeader";
 import { EmptyState } from "../components/EmptyState";
 import { OpeningForm } from "./clinicalRecord/OpeningForm";
 import { JustifiedRecord } from "./clinicalRecord/JustifiedRecord";
+import { OpeningsReport } from "./clinicalRecord/OpeningsReport";
 
 export function ClinicalRecord({ onGoToSecurity }: { onGoToSecurity?(): void }) {
   const { user } = useAuth();
@@ -29,6 +30,7 @@ export function ClinicalRecord({ onGoToSecurity }: { onGoToSecurity?(): void }) 
       {isProfessional && (opening
         ? <JustifiedRecord key={opening.opening_id} opening={opening} onEnd={() => setOpening(null)} />
         : <OpeningForm onOpened={setOpening} onGoToSecurity={onGoToSecurity} />)}
+      {isAdmin && <OpeningsReport />}
     </Frame>
   );
 }
