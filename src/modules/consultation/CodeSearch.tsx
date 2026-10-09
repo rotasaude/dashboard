@@ -25,7 +25,9 @@ export function CodeSearch({ label, placeholder, queryKey, search, onPick, error
   const typed = text.trim();
   const term = useDebouncedValue(typed, delayMs);
   const enabled = term.length >= CODE_SEARCH_MIN_CHARS;
-  const query = useQuery({ queryKey: [ queryKey, term ], queryFn: () => search(term), enabled, staleTime: 5 * 60_000 });
+  // gcTime: 0 — o termo pode descrever a queixa; o cache (termo e resultados)
+  // sai da memória quando a tela fecha, como as leituras clínicas (LGPD, ADR 0031).
+  const query = useQuery({ queryKey: [ queryKey, term ], queryFn: () => search(term), enabled, gcTime: 0 });
   // Depois de escolher, o campo limpa na hora; o termo "atrasado" não pode
   // manter a lista velha na tela.
   const show = enabled && typed.length >= CODE_SEARCH_MIN_CHARS;
