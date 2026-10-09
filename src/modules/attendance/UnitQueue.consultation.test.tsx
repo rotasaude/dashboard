@@ -10,13 +10,17 @@ vi.mock("../../lib/api", async (importOriginal) => {
   return { ...real, fetchCurrentSession: vi.fn(), listUnitQueue: vi.fn(), callAttendance: vi.fn(), callNext: vi.fn(),
     closeAttendance: vi.fn(), getScreening: vi.fn(), getAttendanceRecord: vi.fn() };
 });
+const workspaceRender = vi.hoisted(() => vi.fn());
 vi.mock("../consultation/ConsultationWorkspace", () => ({
-  ConsultationWorkspace: (p: { attendanceId: string; onFinalized(): void; onClose(): void }) => (
+  ConsultationWorkspace: (p: { attendanceId: string; onFinalized(): void; onClose(): void }) => {
+    workspaceRender(p.attendanceId);
+    return (
     <div>
       <span>{`consulta de ${p.attendanceId}`}</span>
       <button type="button" onClick={p.onFinalized}>finalizar (dublê)</button>
     </div>
-  )
+    );
+  }
 }));
 
 import * as api from "../../lib/api";
@@ -51,6 +55,7 @@ const section = async (title: string) => (await screen.findByText(title)).parent
 
 describe("UnitQueue — consulta (módulo 19)", () => {
   beforeEach(() => {
+    workspaceRender.mockClear();
     for (const fn of [ api.fetchCurrentSession, api.listUnitQueue, api.callAttendance, api.callNext, api.closeAttendance,
       api.getScreening, api.getAttendanceRecord ]) {
       mocked(fn).mockReset();
@@ -67,13 +72,23 @@ describe("UnitQueue — consulta (módulo 19)", () => {
   });
 
   it("Chamar abre a consulta do atendimento chamado, no lugar da escuta solta", async () => {
-    mocked(api.callAttendance).mockResolvedValue({ attendance: { id: "a1" },
-      screening: screening({ status: "completed", destination: "same_day", current_revision: revision(), revisions_count: 1 }) });
+    mocked(api.callAttendance).mockResolvedValue({ attendance: { id: "a1",
+      screening: screening({ status: "completed", destination: "same_day", current_revision: revision(), revisions_count: 1 }) } } as never);
     renderQueue(true);
     const waiting = await section("Aguardando");
     fireEvent.click(await within(waiting).findByRole("button", { name: "Chamar" }));
     expect(await screen.findByText("consulta de a1")).not.toBeNull();
     expect(screen.queryByRole("region", { name: "Escuta inicial do atendimento" })).toBeNull();
+  });
+
+  it("sem o interruptor, Chamar abre a escuta como no módulo 18", async () => {
+    mocked(api.callAttendance).mockResolvedValue({ attendance: { id: "a1",
+      screening: screening({ status: "completed", destination: "same_day", current_revision: revision(), revisions_count: 1 }) } } as never);
+    renderQueue(true, false);
+    const waiting = await section("Aguardando");
+    fireEvent.click(await within(waiting).findByRole("button", { name: "Chamar" }));
+    expect(await screen.findByRole("region", { name: "Escuta inicial do atendimento" })).not.toBeNull();
+    expect(workspaceRender).not.toHaveBeenCalled();
   });
 
   it("recepção vê nome e cor, sem Consulta e sem ler o prontuário", async () => {
@@ -84,7 +99,7 @@ describe("UnitQueue — consulta (módulo 19)", () => {
     expect(within(waiting).getByText("vermelho")).not.toBeNull();
     expect(screen.queryByRole("button", { name: "Consulta" })).toBeNull();
     expect(screen.queryByText(/consulta de/)).toBeNull();
-    expect(api.getAttendanceRecord).not.toHaveBeenCalled();
+    expect(workspaceRender).not.toHaveBeenCalled();
   });
 
   it("sem o interruptor: nem Consulta nem coluna Nome", async () => {
