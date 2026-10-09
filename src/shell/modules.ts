@@ -7,7 +7,7 @@ export type ModuleId =
   | "triages" | "classification" | "reports" | "protocols" | "events"
   | "queues" | "health" | "protocol-editor" | "security" | "team" | "attendance"
   | "professionals" | "my-profile" | "territory" | "campaigns" | "analytics"
-  | "integrations" | "cnes" | "production" | "my-agenda" | "clinical-record" | "my-consultations";
+  | "integrations" | "cnes" | "production" | "my-agenda" | "clinical-record" | "my-consultations" | "professional-consultations";
 
 export interface NavItem { id: ModuleId; label: string; icon: string; }
 export interface NavGroupDef { label: string; items: NavItem[]; }
@@ -40,7 +40,8 @@ export const NAV_GROUPS: NavGroupDef[] = [
     { id: "attendance", label: "Atendimento", icon: "☑" },
     { id: "my-agenda", label: "Minha agenda", icon: "◷" },
     { id: "clinical-record", label: "Prontuário", icon: "⚕" },
-    { id: "my-consultations", label: "Minhas consultas", icon: "☰" }
+    { id: "my-consultations", label: "Minhas consultas", icon: "☰" },
+    { id: "professional-consultations", label: "Consultas por profissional", icon: "☷" }
   ]},
   { label: "Comunicação", items: [
     { id: "campaigns", label: "Campanhas", icon: "✉" }
@@ -116,6 +117,8 @@ export function navGroupsFor(
       if (item.id === "clinical-record") return canClinicalRecord;
       // Task 17: leitura das próprias consultas, só do profissional.
       if (item.id === "my-consultations") return !user?.operator && isProfessional && hasFeature(user, "clinical_record");
+      // Task 18: leitura administrativa, só do municipal_admin (não exige health_professional).
+      if (item.id === "professional-consultations") return !user?.operator && isAdmin && hasFeature(user, "clinical_record");
       if (item.id === "integrations" || item.id === "cnes") return canIntegrations;
       if (item.id === "production") return canProduction;
       return true;

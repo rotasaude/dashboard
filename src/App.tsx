@@ -31,6 +31,7 @@ import { Cnes } from "./modules/Cnes";
 import { Production } from "./modules/Production";
 import { ClinicalRecord } from "./modules/ClinicalRecord";
 import { MyConsultations } from "./modules/MyConsultations";
+import { ProfessionalConsultations } from "./modules/ProfessionalConsultations";
 
 export function App() {
   const [ period, setPeriod ] = useState<PeriodKey>("7d");
@@ -91,6 +92,7 @@ function renderModule(active: ModuleId, setActive: (id: ModuleId) => void) {
     case "cnes":           return <Cnes onGoToSecurity={() => setActive("security")} />;
     case "production":     return <Production onGoToSecurity={() => setActive("security")} />;
     case "my-consultations": return <MyConsultations />;
+    case "professional-consultations": return <ProfessionalConsultations />;
     case "clinical-record": return <ClinicalRecord onGoToSecurity={() => setActive("security")} />;
     default:               return <Placeholder title={labelFor(active)} />;
   }
