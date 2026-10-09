@@ -50,7 +50,7 @@ describe("AddendumForm", () => {
     expect(api.addAddendum).toHaveBeenCalledWith("cs1", { reason: "correção do plano", text: "Retorno em 15 dias." });
   });
 
-  it("com mudanças: só vai o que mudou, e a abertura quando há", async () => {
+  it("com mudanças: só vai o que mudou (problemas e condutas)", async () => {
     renderForm();
     text("Motivo do adendo", "correção do plano");
     text("Texto do adendo", "Problema resolvido; alta.");
