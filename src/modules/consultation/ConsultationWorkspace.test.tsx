@@ -18,9 +18,9 @@ vi.mock("./ConsultationEditor", () => ({
   )
 }));
 vi.mock("./ConsultationView", () => ({
-  ConsultationView: (p: { consultation: Consultation; canAddendum: boolean; onAddendumAdded(a: unknown): void }) => (
+  ConsultationView: (p: { consultation: Consultation; canAddendum?: unknown; onAddendumAdded(a: unknown): void }) => (
     <div>
-      <span>{`consulta finalizada ${p.consultation.id} · adendo ${p.canAddendum ? "sim" : "não"}`}</span>
+      <span>{`consulta finalizada ${p.consultation.id} · adendo ${p.canAddendum === undefined ? "pela sessão" : "pela prop"}`}</span>
       <span>{`adendos: ${p.consultation.addenda.map((a) => a.id).join(",")}`}</span>
       <button type="button" onClick={() => p.onAddendumAdded({ id: "ad9", author_name: "Enf. Lúcia Prado",
         created_at: "2026-10-07T11:00:00-03:00", reason: "correção do plano", text: "Retorno.", changes: null })}>adendo (dublê)</button>
@@ -83,11 +83,11 @@ describe("ConsultationWorkspace", () => {
     expect(screen.queryByRole("button", { name: "Iniciar consulta" })).toBeNull();
   });
 
-  it("finalizada: leitura com adendo da autora, e avisa a fila", async () => {
+  it("finalizada: leitura (Imprimir e Adendo pela sessão), e avisa a fila", async () => {
     const { onFinalized } = renderIt();
     fireEvent.click(await screen.findByRole("button", { name: "Iniciar consulta" }));
     fireEvent.click(await screen.findByRole("button", { name: "finalizar (dublê)" }));
-    expect(await screen.findByText("consulta finalizada cs1 · adendo sim")).not.toBeNull();
+    expect(await screen.findByText("consulta finalizada cs1 · adendo pela sessão")).not.toBeNull();
     expect(onFinalized).toHaveBeenCalled();
   });
 
@@ -106,7 +106,7 @@ describe("ConsultationWorkspace", () => {
     renderIt();
     fireEvent.click(await screen.findByRole("button", { name: "Iniciar consulta" }));
     fireEvent.click(await screen.findByRole("button", { name: "travar (dublê)" }));
-    expect(await screen.findByText("consulta finalizada cs1 · adendo sim")).not.toBeNull();
+    expect(await screen.findByText("consulta finalizada cs1 · adendo pela sessão")).not.toBeNull();
     expect(screen.getByRole("status").textContent).toBe("esta consulta já foi finalizada — a tela foi atualizada");
   });
 

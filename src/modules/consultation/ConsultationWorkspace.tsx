@@ -37,7 +37,6 @@ export function ConsultationWorkspace(props: Props) {
   const [ busy, setBusy ] = useState(false);
   const [ error, setError ] = useState<string | null>(null);
   const [ notice, setNotice ] = useState<string | null>(null);
-  const isMine = (c: Consultation) => c.author.id === user?.id;
 
   async function open() {
     if (busy) return;
@@ -74,7 +73,7 @@ export function ConsultationWorkspace(props: Props) {
         <>
           <PatientPanel record={record.data} onOpenConsultation={setViewing} />
           {viewing && (
-            <ConsultationLoader key={viewing} id={viewing} canAddendum={isMine} options={options.data ?? null}
+            <ConsultationLoader key={viewing} id={viewing} options={options.data ?? null}
               patientProblems={record.data.problems} searchDelayMs={props.searchDelayMs} onClose={() => setViewing(null)} />
           )}
 
@@ -97,7 +96,7 @@ export function ConsultationWorkspace(props: Props) {
 
           {consultation?.status === "finalized" && (
             <ConsultationView consultation={consultation} options={options.data ?? null} patientProblems={record.data.problems}
-              canAddendum={isMine(consultation)} searchDelayMs={props.searchDelayMs}
+              searchDelayMs={props.searchDelayMs}
               onAddendumAdded={(addendum) => setConsultation((c) => (c ? withAddendum(c, addendum) : c))} onClose={props.onClose} />
           )}
         </>

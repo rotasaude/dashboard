@@ -250,6 +250,7 @@ describe("rótulos e recusas", () => {
     [ 403, { error: "cbo_not_allowed" }, "sua ocupação (CBO) não registra consulta" ],
     [ 403, { error: "feature_disabled", feature: "clinical_record" }, "o prontuário está desligado nesta cidade" ],
     [ 403, { error: "out_of_context" }, "este atendimento não está com você — para ler o prontuário fora do atendimento, use Prontuário com o motivo" ],
+    [ 403, { error: "not_author" }, "só quem escreveu a consulta pode editá-la, imprimi-la ou fazer adendo" ],
     [ 409, { error: "not_draft" }, "esta consulta já foi finalizada — a tela foi atualizada" ],
     [ 422, { error: "patient_name_missing" }, "falta o nome completo do paciente — peça à recepção para completar os nomes no check-in e tente de novo" ],
     [ 422, { error: "cid10_not_allowed_for_cbo" }, "sua ocupação não pode usar CID-10 — troque o problema por um código CIAP-2" ],

@@ -5,6 +5,7 @@
 // conteúdo passa pela URL da aplicação).
 import { useEffect, useState, type CSSProperties } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useAuth } from "../../lib/auth";
 import {
   errorCode, fetchConsultationPdf, getConsultation,
   type Addendum, type Consultation, type ConsultationOptions, type PatientProblem
@@ -19,14 +20,13 @@ export interface ConsultationViewProps {
   consultation: Consultation;
   options: ConsultationOptions | null;
   patientProblems: PatientProblem[];
-  canAddendum: boolean;
-  openingId?: string;
+  // Administrador: leitura sem Imprimir e sem Adendo, mesmo que o id coincida.
+  readOnly?: boolean;
   searchDelayMs?: number;
   // O 201 devolve o adendo: quem mostra a consulta o acrescenta sem reler
   // (o api recusa a releitura da autora depois que o atendimento fechou).
   onAddendumAdded(addendum: Addendum): void;
   onClose(): void;
-  onOpeningRequired?(): void;
 }
 
 const PDF_URL_TTL_MS = 60_000;
@@ -34,6 +34,9 @@ const POPUP_BLOCKED = "o navegador bloqueou a janela nova — permita janelas de
 
 export function ConsultationView(props: ConsultationViewProps) {
   const { consultation: c, options } = props;
+  const { user } = useAuth();
+  // Imprimir e Adendo são só da autora (decide a sessão, não o chamador).
+  const isAuthor = !props.readOnly && !!user && user.id === c.author.id;
   const [ adding, setAdding ] = useState(false);
   const [ printing, setPrinting ] = useState(false);
   const [ printError, setPrintError ] = useState<string | null>(null);
@@ -53,7 +56,6 @@ export function ConsultationView(props: ConsultationViewProps) {
       setTimeout(() => URL.revokeObjectURL(url), PDF_URL_TTL_MS);
     } catch (err) {
       win?.close();
-      if (errorCode(err) === "opening_required") props.onOpeningRequired?.();
       setPrintError(consultationError(err));
     } finally {
       setPrinting(false);
@@ -109,39 +111,43 @@ export function ConsultationView(props: ConsultationViewProps) {
 
       {printError && <p role="alert" style={alert}>{printError}</p>}
       <div style={{ display: "flex", gap: 8 }}>
-        <button type="button" disabled={printing} style={printing ? disabledButtonStyle : buttonStyle} onClick={() => void print()}>
-          Imprimir
-        </button>
-        {props.canAddendum && !adding && (
+        {isAuthor && (
+          <button type="button" disabled={printing} style={printing ? disabledButtonStyle : buttonStyle} onClick={() => void print()}>
+            Imprimir
+          </button>
+        )}
+        {isAuthor && !adding && (
           <button type="button" style={secondaryButtonStyle} onClick={() => setAdding(true)}>Adendo</button>
         )}
         <button type="button" style={secondaryButtonStyle} onClick={props.onClose}>Fechar consulta</button>
       </div>
 
       {adding && (
-        <AddendumForm consultation={c} options={options} patientProblems={props.patientProblems} openingId={props.openingId}
+        <AddendumForm consultation={c} options={options} patientProblems={props.patientProblems}
           searchDelayMs={props.searchDelayMs}
           onDone={(addendum) => { setAdding(false); props.onAddendumAdded(addendum); }}
-          onCancel={() => setAdding(false)} onOpeningRequired={props.onOpeningRequired} />
+          onCancel={() => setAdding(false)} />
       )}
     </section>
   );
 }
 
-type LoaderProps = Omit<ConsultationViewProps, "consultation" | "canAddendum" | "onAddendumAdded"> & {
+type LoaderProps = Omit<ConsultationViewProps, "consultation" | "onAddendumAdded"> & {
   id: string;
-  canAddendum(c: Consultation): boolean;
+  // Só a leitura justificada: sem a abertura, o api responde 403 out_of_context.
+  endOnOutOfContext?: boolean;
+  onOpeningRequired?(): void;
   onAddendumAdded?(addendum: Addendum): void;
 };
 
-export function ConsultationLoader({ id, canAddendum, onAddendumAdded, ...rest }: LoaderProps) {
+export function ConsultationLoader({ id, onAddendumAdded, endOnOutOfContext, onOpeningRequired, ...rest }: LoaderProps) {
   const queryClient = useQueryClient();
   // Sem nova tentativa: um 403 opening_required encerra a abertura na hora.
   const query = useQuery({
     queryKey: [ CONSULTATION_KEY, id ], queryFn: () => getConsultation(id), gcTime: 0, staleTime: 0, retry: false
   });
-  const openingGone = query.isError && errorCode(query.error) === "opening_required";
-  const { onOpeningRequired } = rest;
+  const code = query.isError ? errorCode(query.error) : null;
+  const openingGone = code === "opening_required" || (!!endOnOutOfContext && code === "out_of_context");
 
   useEffect(() => {
     if (openingGone) onOpeningRequired?.();
@@ -150,7 +156,7 @@ export function ConsultationLoader({ id, canAddendum, onAddendumAdded, ...rest }
   if (query.isPending) return <p className="mono" style={{ margin: 0, fontSize: 10.5, color: "var(--ink3)" }}>carregando a consulta…</p>;
   if (query.isError) return <p role="alert" style={alert}>{consultationError(query.error)}</p>;
   return (
-    <ConsultationView consultation={query.data} canAddendum={canAddendum(query.data)}
+    <ConsultationView consultation={query.data}
       onAddendumAdded={(addendum) => {
         queryClient.setQueryData<Consultation>([ CONSULTATION_KEY, id ], (c) => (c ? withAddendum(c, addendum) : c));
         onAddendumAdded?.(addendum);

@@ -17,14 +17,13 @@ import { finalized, options, problem } from "../../test/consultationFixtures";
 afterEach(cleanup);
 const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
 
-function renderForm(openingId?: string) {
+function renderForm() {
   const onDone = vi.fn();
-  const onOpeningRequired = vi.fn();
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>;
-  render(<AddendumForm consultation={finalized()} options={options()} patientProblems={[ problem() ]} openingId={openingId}
-    searchDelayMs={0} onDone={onDone} onCancel={vi.fn()} onOpeningRequired={onOpeningRequired} />, { wrapper });
-  return { onDone, onOpeningRequired };
+  render(<AddendumForm consultation={finalized()} options={options()} patientProblems={[ problem() ]}
+    searchDelayMs={0} onDone={onDone} onCancel={vi.fn()} />, { wrapper });
+  return { onDone };
 }
 const text = (label: string, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
 
@@ -52,7 +51,7 @@ describe("AddendumForm", () => {
   });
 
   it("com mudanças: só vai o que mudou, e a abertura quando há", async () => {
-    renderForm("op1");
+    renderForm();
     text("Motivo do adendo", "correção do plano");
     text("Texto do adendo", "Problema resolvido; alta.");
     fireEvent.click(screen.getByLabelText("Mudar problemas, condutas ou exames"));
@@ -61,7 +60,7 @@ describe("AddendumForm", () => {
     fireEvent.click(screen.getByRole("button", { name: "Registrar adendo" }));
     await waitFor(() => expect(api.addAddendum).toHaveBeenCalled());
     expect(mocked(api.addAddendum).mock.calls[0][1]).toEqual({
-      reason: "correção do plano", text: "Problema resolvido; alta.", opening_id: "op1",
+      reason: "correção do plano", text: "Problema resolvido; alta.",
       changes: {
         evaluated_problems: [ { problem_id: "pp1", terminology: "ciap2", code: "T90", label: problem().label, action: "resolve" } ],
         conducts: [ "9", "12" ]
@@ -98,15 +97,14 @@ describe("AddendumForm", () => {
     ]);
   });
 
-  it("403 opening_required avisa quem abriu a leitura", async () => {
-    mocked(api.addAddendum).mockRejectedValue(new ApiError(403, { error: "opening_required" }, "403"));
-    const { onOpeningRequired } = renderForm("op1");
+  it("403 not_author mostra a frase", async () => {
+    mocked(api.addAddendum).mockRejectedValue(new ApiError(403, { error: "not_author" }, "403"));
+    renderForm();
     text("Motivo do adendo", "correção do plano");
     text("Texto do adendo", "Retorno em 15 dias.");
     fireEvent.click(screen.getByRole("button", { name: "Registrar adendo" }));
     expect((await screen.findByRole("alert")).textContent)
-      .toBe("a abertura justificada terminou ou não existe — abra o prontuário de novo com o motivo");
-    expect(onOpeningRequired).toHaveBeenCalled();
+      .toBe("só quem escreveu a consulta pode editá-la, imprimi-la ou fazer adendo");
   });
 
   it("mudar só condutas não tira a justificativa CID-10 existente do exame", async () => {

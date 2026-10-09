@@ -7,10 +7,10 @@ vi.mock("../../lib/api", async (importOriginal) => {
 });
 vi.mock("../consultation/ConsultationView", () => ({
   ConsultationLoader: (p: {
-    id: string; openingId?: string; canAddendum(c: unknown): boolean; onOpeningRequired?(): void; onAddendumAdded?(a: unknown): void;
+    id: string; canAddendum?: unknown; endOnOutOfContext?: boolean; onOpeningRequired?(): void; onAddendumAdded?(a: unknown): void;
   }) => (
     <div>
-      <span>{`consulta ${p.id} · abertura ${p.openingId} · adendo ${p.canAddendum({}) ? "sim" : "não"}`}</span>
+      <span>{`consulta ${p.id} · adendo ${p.canAddendum === undefined ? "pela sessão" : "pela prop"} · fim em out_of_context ${p.endOnOutOfContext ? "sim" : "não"}`}</span>
       <button type="button" onClick={() => p.onOpeningRequired?.()}>abertura acabou (dublê)</button>
       <button type="button" onClick={() => p.onAddendumAdded?.({ id: "ad9" })}>adendo (dublê)</button>
     </div>
@@ -76,10 +76,10 @@ describe("JustifiedRecord", () => {
     expect(api.getJustifiedRecord).toHaveBeenLastCalledWith("pa1");
   });
 
-  it("consulta anterior com a abertura (adendo permitido) e fim da abertura vindo dela", async () => {
+  it("consulta anterior pela abertura (sem prop de adendo, fim em out_of_context) e fim da abertura vindo dela", async () => {
     renderWithProviders(<JustifiedRecord opening={opening()} onEnd={vi.fn()} />);
     fireEvent.click(await screen.findByRole("button", { name: "Abrir consulta de 10/09/2026, 14:30" }));
-    expect(screen.getByText("consulta cs0 · abertura op1 · adendo sim")).not.toBeNull();
+    expect(screen.getByText("consulta cs0 · adendo pela sessão · fim em out_of_context sim")).not.toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "abertura acabou (dublê)" }));
     expect(screen.getByText(OPENING_ENDED)).not.toBeNull();
   });

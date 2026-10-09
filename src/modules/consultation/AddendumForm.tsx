@@ -1,10 +1,9 @@
 // src/modules/consultation/AddendumForm.tsx
 // Adendo (módulo 19; spec §4; ADR 0031): só acréscimo, com motivo, podendo
-// mudar problemas, condutas e exames. Quem não é a autora só chega aqui com
-// uma abertura justificada (opening_id).
+// mudar problemas, condutas e exames. Só a autora faz adendo.
 import { useState, type CSSProperties } from "react";
 import {
-  addAddendum, errorCode, type Addendum, type Consultation, type ConsultationOptions, type EvaluatedProblem, type ExamRequest, type PatientProblem
+  addAddendum, type Addendum, type Consultation, type ConsultationOptions, type EvaluatedProblem, type ExamRequest, type PatientProblem
 } from "../../lib/api";
 import { addendumChanges, addendumProblem, consultationError, examsProblem, problemsWithConsultationAdds } from "../../lib/consultation";
 import { todayInCity } from "../../lib/campaigns";
@@ -17,14 +16,12 @@ interface Props {
   consultation: Consultation;
   options: ConsultationOptions | null;
   patientProblems: PatientProblem[];
-  openingId?: string;
   searchDelayMs?: number;
   onDone(addendum: Addendum): void;
   onCancel(): void;
-  onOpeningRequired?(): void;
 }
 
-export function AddendumForm({ consultation, options, patientProblems, openingId, searchDelayMs, onDone, onCancel, onOpeningRequired }: Props) {
+export function AddendumForm({ consultation, options, patientProblems, searchDelayMs, onDone, onCancel }: Props) {
   const [ reason, setReason ] = useState("");
   const [ text, setText ] = useState("");
   const [ withChanges, setWithChanges ] = useState(false);
@@ -45,12 +42,10 @@ export function AddendumForm({ consultation, options, patientProblems, openingId
       const changes = withChanges ? addendumChanges(consultation, { problems, conducts, exams }) : undefined;
       const addendum = await addAddendum(consultation.id, {
         reason: reason.trim(), text,
-        ...(changes ? { changes } : {}),
-        ...(openingId ? { opening_id: openingId } : {})
+        ...(changes ? { changes } : {})
       });
       onDone(addendum);
     } catch (err) {
-      if (errorCode(err) === "opening_required") onOpeningRequired?.();
       setError(consultationError(err));
     } finally {
       setBusy(false);

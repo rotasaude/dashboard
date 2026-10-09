@@ -290,7 +290,7 @@ const MESSAGES: Record<string, string> = {
   feature_disabled: "o prontuário está desligado nesta cidade",
   out_of_context: "este atendimento não está com você — para ler o prontuário fora do atendimento, use Prontuário com o motivo",
   not_draft: "esta consulta já foi finalizada — a tela foi atualizada",
-  not_author: "só quem escreveu a consulta pode editá-la",
+  not_author: "só quem escreveu a consulta pode editá-la, imprimi-la ou fazer adendo",
   no_problem_evaluated: "avalie, inclua ou resolva ao menos um problema",
   no_conduct: "marque ao menos uma conduta",
   assessment_or_plan_required: "escreva a avaliação (A) ou o plano (P)",
