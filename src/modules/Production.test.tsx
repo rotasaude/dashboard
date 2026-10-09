@@ -164,6 +164,19 @@ describe("Produção e-SUS (módulo 16)", () => {
     expect(screen.queryByRole("button", { name: "Reenviar ficha f9" })).toBeNull();
   });
 
+  it("ficha aceita com correção pendente não aparece como substituída", async () => {
+    m(api.getProduction).mockResolvedValue(productionFixture({
+      fichas: [
+        ficha({ id: "f8", ficha_type: "atendimento_individual", status: "accepted" }),
+        ficha({ id: "f9", ficha_type: "atendimento_individual", status: "correction_pending", accepted_at: null, replaces_outbox_id: "f8" })
+      ],
+      fichas_total: 2
+    }));
+    renderWithProviders(<Production />);
+    await screen.findByText("correção pendente — não enviada");
+    expect(screen.queryByText("substituída")).toBeNull();
+  });
+
   it("sem correção pendente na página, sem o aviso", async () => {
     renderWithProviders(<Production />);
     await screen.findByText("recusada");

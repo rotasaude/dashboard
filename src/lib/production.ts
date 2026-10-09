@@ -69,8 +69,11 @@ export function canRetryGeneration(roles: string[]): boolean {
 }
 
 // Ficha recusada que já foi regenerada: outra linha da página aponta para ela.
+// A correção pendente (correction_pending) ainda não substitui a ficha aceita:
+// só depois de enviada.
 export function replacedIds(fichas: LediFicha[]): Set<string> {
-  return new Set(fichas.map((f) => f.replaces_outbox_id).filter((id): id is string => !!id));
+  return new Set(fichas.filter((f) => f.status !== "correction_pending")
+    .map((f) => f.replaces_outbox_id).filter((id): id is string => !!id));
 }
 
 export function canReadProduction(roles: string[]): boolean {

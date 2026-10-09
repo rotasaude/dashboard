@@ -94,6 +94,13 @@ describe("Produção — códigos e fichas não geradas (módulo 18)", () => {
     expect(set.has("a")).toBe(true);
     expect(set.has("b")).toBe(false);
   });
+
+  it("correção pendente não substitui a ficha aceita (só depois de enviada)", () => {
+    const set = replacedIds([
+      ficha({ id: "a", status: "accepted" }), ficha({ id: "c", status: "correction_pending", replaces_outbox_id: "a" })
+    ]);
+    expect(set.has("a")).toBe(false);
+  });
 });
 
 describe("Produção — erros", () => {
