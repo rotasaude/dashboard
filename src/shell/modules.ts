@@ -2,12 +2,14 @@
 // admin — sem o grupo Setup (cross-tenant) nem ScopePicker. Inclui `health`
 // porque o Overview navega para queues/health.
 import { hasFeature } from "../lib/features";
+import { canSign } from "../lib/signature";
 export type ModuleId =
   | "overview" | "ingestion" | "conversations" | "consent"
   | "triages" | "classification" | "reports" | "protocols" | "events"
   | "queues" | "health" | "protocol-editor" | "security" | "team" | "attendance"
   | "professionals" | "my-profile" | "territory" | "campaigns" | "analytics"
-  | "integrations" | "cnes" | "production" | "my-agenda" | "clinical-record" | "my-consultations" | "professional-consultations";
+  | "integrations" | "cnes" | "production" | "my-agenda" | "clinical-record" | "my-consultations" | "professional-consultations"
+  | "signature";
 
 export interface NavItem { id: ModuleId; label: string; icon: string; }
 export interface NavGroupDef { label: string; items: NavItem[]; }
@@ -60,7 +62,8 @@ export const NAV_GROUPS: NavGroupDef[] = [
   ]},
   { label: "Conta", items: [
     { id: "security", label: "Segurança", icon: "⚿" },
-    { id: "my-profile", label: "Meu perfil", icon: "☺" }
+    { id: "my-profile", label: "Meu perfil", icon: "☺" },
+    { id: "signature", label: "Assinatura digital", icon: "✍" }
   ]}
 ];
 
@@ -119,6 +122,9 @@ export function navGroupsFor(
       if (item.id === "my-consultations") return !user?.operator && isProfessional && hasFeature(user, "clinical_record");
       // Task 18: leitura administrativa, só do municipal_admin (não exige health_professional).
       if (item.id === "professional-consultations") return !user?.operator && isAdmin && hasFeature(user, "clinical_record");
+      // Módulo 19b: certificado e sessão de assinatura são do profissional,
+      // só com `digital_signature` ligado (o api recusaria com 403).
+      if (item.id === "signature") return canSign(user);
       if (item.id === "integrations" || item.id === "cnes") return canIntegrations;
       if (item.id === "production") return canProduction;
       return true;

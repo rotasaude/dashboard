@@ -224,3 +224,20 @@ describe("modules", () => {
     });
   });
 });
+
+describe("assinatura digital no menu (módulo 19b)", () => {
+  const u = (roles: string[], features: string[] = [ "digital_signature" ], operator = false) =>
+    ({ operator, memberships: roles.map((role) => ({ role })), features });
+  const ids = (user: ReturnType<typeof u> | null) => navGroupsFor(user).flatMap((g) => g.items.map((i) => i.id));
+
+  it("Conta → Assinatura digital: só profissional com digital_signature, nunca operador", () => {
+    const conta = NAV_GROUPS.find((g) => g.label === "Conta");
+    expect(conta?.items.map((i) => i.id)).toContain("signature");
+    expect(labelFor("signature")).toBe("Assinatura digital");
+    expect(ids(u([ "health_professional" ]))).toContain("signature");
+    expect(ids(u([ "health_professional" ], [ "clinical_record" ]))).not.toContain("signature");
+    expect(ids(u([ "municipal_admin" ]))).not.toContain("signature");
+    expect(ids(u([ "health_professional" ], [ "digital_signature" ], true))).not.toContain("signature");
+    expect(ids(null)).not.toContain("signature");
+  });
+});
