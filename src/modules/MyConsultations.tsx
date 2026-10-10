@@ -14,7 +14,9 @@ import { Panel } from "../components/Panel";
 import { DataTable } from "../components/DataTable";
 import { EmptyState } from "../components/EmptyState";
 import { buttonStyle, inputStyle, secondaryButtonStyle } from "../components/formStyles";
+import { canUseDocuments } from "../lib/clinicalDocuments";
 import { ConsultationLoader } from "./consultation/ConsultationView";
+import { ConsultationDocuments } from "./documents/ConsultationDocuments";
 
 const NO_ROLE = "seu papel não permite ver consultas";
 const listError = (err: unknown) => (err instanceof ApiError && errorCode(err) === "missing_role" ? NO_ROLE : consultationError(err));
@@ -50,8 +52,12 @@ export function MyConsultations() {
   return (
     <Frame>
       {viewing ? (
-        <ConsultationLoader key={viewing} id={viewing} options={options.data ?? null} patientProblems={[]}
-          onClose={() => setViewing(null)} />
+        <>
+          <ConsultationLoader key={viewing} id={viewing} options={options.data ?? null} patientProblems={[]}
+            onClose={() => setViewing(null)} />
+          {/* Módulo 19c: reimprimir e cancelar os documentos desta consulta. */}
+          {canUseDocuments(user) && <ConsultationDocuments key={`documents:${viewing}`} consultationId={viewing} />}
+        </>
       ) : (
         <Panel title="Consultas finalizadas" sub="as que você escreveu">
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
