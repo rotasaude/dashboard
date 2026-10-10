@@ -12,15 +12,16 @@ export const POPUP_BLOCKED = "o navegador bloqueou a janela nova — permita jan
 
 export async function printDocument(id: string, errorText: (err: unknown) => string): Promise<string | null> {
   const win = window.open("", "_blank");
+  // Janela bloqueada: nem lê o PDF (a leitura gera trilha no api à toa).
+  if (!win) return POPUP_BLOCKED;
   try {
     const { blob } = await fetchDocumentPdf(id);
-    if (!win) return POPUP_BLOCKED;
     const url = URL.createObjectURL(blob);
     win.location.href = url;
     setTimeout(() => URL.revokeObjectURL(url), PDF_URL_TTL_MS);
     return null;
   } catch (err) {
-    win?.close();
+    win.close();
     return errorText(err);
   }
 }

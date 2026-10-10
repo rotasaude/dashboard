@@ -72,6 +72,7 @@ export function ConsultationDocuments({ consultationId, issue, searchDelayMs, on
   const [ issuing, setIssuing ] = useState(false);
   const issuingRef = useRef(false);
   const [ printing, setPrinting ] = useState<string | null>(null);
+  const printingRef = useRef(false);
   const today = todayInCity();
   const kinds = issue ? kindsFor(issue.cboCode) : [];
   const canRenew = !!issue && kinds.includes("prescription") && professionalKind(issue.cboCode) !== "nurse";
@@ -125,12 +126,22 @@ export function ConsultationDocuments({ consultationId, issue, searchDelayMs, on
     }
   }
 
+  // Uma leitura por vez: a ref barra o duplo clique rápido e os outros
+  // Imprimir ficam desligados enquanto ela voa.
   async function print(doc: ClinicalDocument) {
-    if (printing) return;
+    if (printingRef.current) return;
+    printingRef.current = true;
     setPrinting(doc.id); setError(null);
-    const problem = await printDocument(doc.id, documentError);
+    let stale = false;
+    const problem = await printDocument(doc.id, (err) => {
+      stale = errorCode(err) === "already_cancelled";
+      return documentError(err);
+    });
+    printingRef.current = false;
     setPrinting(null);
     if (problem) setError(problem);
+    // Outra aba cancelou: a frase diz "a lista foi atualizada" — então relê.
+    if (stale) void queryClient.invalidateQueries({ queryKey: key });
   }
 
   function askCancel(doc: ClinicalDocument, reissue: boolean) {
@@ -151,8 +162,10 @@ export function ConsultationDocuments({ consultationId, issue, searchDelayMs, on
     { label: "", w: "auto", align: "right", render: (d) => (
       <span style={actions}>
         {d.status === "issued" && (
-          <button type="button" aria-label={`Imprimir ${what(d)}`} disabled={printing === d.id}
-            style={printing === d.id ? disabledButtonStyle : secondaryButtonStyle} onClick={() => void print(d)}>Imprimir</button>
+          <button type="button" aria-label={`Imprimir ${what(d)}`} disabled={printing !== null}
+            style={printing !== null ? disabledButtonStyle : secondaryButtonStyle} onClick={() => void print(d)}>
+            {printing === d.id ? "Abrindo…" : "Imprimir"}
+          </button>
         )}
         {canCancel(d, user?.id) && (
           <button type="button" aria-label={`Cancelar ${what(d)}`} style={secondaryButtonStyle} onClick={() => askCancel(d, false)}>Cancelar</button>

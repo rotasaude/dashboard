@@ -234,6 +234,34 @@ describe("ConsultationDocuments", () => {
     expect(win.close).toHaveBeenCalled();
   });
 
+  it("Imprimir um documento que outra aba cancelou (409 already_cancelled): diz e relê a lista", async () => {
+    mocked(api.fetchDocumentPdf).mockRejectedValue(new ApiError(409, { error: "already_cancelled" }, "409"));
+    const { client } = renderIt();
+    const invalidate = vi.spyOn(client, "invalidateQueries");
+    fireEvent.click(await screen.findByRole("button", { name: `Imprimir ${SICK}` }));
+    expect((await screen.findByRole("alert")).textContent).toBe("este documento já estava cancelado — a lista foi atualizada");
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: [ DOCUMENTS_KEY, "cs1" ] });
+    await waitFor(() => expect(mocked(api.listConsultationDocuments).mock.calls.length).toBeGreaterThanOrEqual(2));
+  });
+
+  it("Imprimir: duplo clique lê UM PDF e os outros Imprimir ficam desligados em voo", async () => {
+    mocked(api.listConsultationDocuments).mockResolvedValue([ sickNoteDoc(), prescriptionDoc() ]);
+    const pending = deferred<{ blob: Blob; filename: string | null }>();
+    mocked(api.fetchDocumentPdf).mockReturnValue(pending.promise);
+    renderIt();
+    const first = await screen.findByRole("button", { name: `Imprimir ${SICK}` });
+    fireEvent.click(first);
+    fireEvent.click(first);
+    const other = screen.getByRole("button", { name: "Imprimir Receita de 09/10/2026, 09:40" }) as HTMLButtonElement;
+    expect(other.disabled).toBe(true);
+    fireEvent.click(other);
+    expect(api.fetchDocumentPdf).toHaveBeenCalledTimes(1);
+    expect(window.open).toHaveBeenCalledTimes(1);
+    await act(async () => { pending.resolve({ blob: new Blob([ "%PDF" ], { type: "application/pdf" }), filename: null }); });
+    await waitFor(() => expect(other.disabled).toBe(false));
+    expect(win.location.href).toBe("blob:doc1");
+  });
+
   it("Cancelar pede o motivo (10 ou mais, espaços internos juntados) com step-up e a lista mostra cancelado", async () => {
     mocked(api.cancelDocument).mockResolvedValue(cancelled());
     renderIt();
