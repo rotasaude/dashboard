@@ -3,7 +3,7 @@
 // digital (válida, inválida, indeterminada), pendente (com o motivo) ou à mão.
 // Só a assinatura digital tem conteúdo para abrir; a simulada avisa (R10).
 import { useState, type CSSProperties } from "react";
-import type { SignatureBlock, SignatureVerification } from "../../lib/api";
+import type { SignatureBlock, SignatureDetail as Detail, SignatureVerification } from "../../lib/api";
 import { SIMULATED_NOTICE, signatureMarker } from "../../lib/signature";
 import { Tag } from "../../components/Tag";
 import { SignatureDetail } from "./SignatureDetail";
@@ -15,9 +15,12 @@ interface Props {
   readOnly?: boolean;
   consultationId?: string;
   onOpeningRequired?(): void;
+  // Revalidar terminou: quem lista o documento fora da consulta (ex.: a lista
+  // de documentos clínicos) relê a própria leitura.
+  onVerified?(detail: Detail): void;
 }
 
-export function SignatureMarker({ label, block, readOnly, consultationId, onOpeningRequired }: Props) {
+export function SignatureMarker({ label, block, readOnly, consultationId, onOpeningRequired, onVerified }: Props) {
   const [ open, setOpen ] = useState(false);
   // Revalidar devolve a validação nova antes de a consulta ser relida; vale
   // enquanto o bloco que veio do api não mudar (a releitura prevalece).
@@ -40,7 +43,7 @@ export function SignatureMarker({ label, block, readOnly, consultationId, onOpen
       </div>
       {open && block.signature_id && (
         <SignatureDetail id={block.signature_id} readOnly={readOnly} onOpeningRequired={onOpeningRequired}
-          consultationId={consultationId} onVerified={(d) => setVerified({ from: block.verification, to: d.verification })} onClose={() => setOpen(false)} />
+          consultationId={consultationId} onVerified={(d) => { setVerified({ from: block.verification, to: d.verification }); onVerified?.(d); }} onClose={() => setOpen(false)} />
       )}
     </div>
   );

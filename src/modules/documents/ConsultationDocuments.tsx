@@ -83,6 +83,7 @@ export function ConsultationDocuments({ consultationId, issue, searchDelayMs, on
   }
 
   function start(kind: DocumentKind) {
+    if (issuingRef.current) return;
     if (kind === "sick_note") open({ kind, draft: emptySickNote(today) });
     else if (kind === "attendance_declaration") open({ kind, draft: emptyDeclaration(today) });
     else if (kind === "prescription") open({ kind, draft: { items: [], protocolVersionId: "" } });
@@ -90,7 +91,7 @@ export function ConsultationDocuments({ consultationId, issue, searchDelayMs, on
   }
 
   async function renew() {
-    if (renewing) return;
+    if (renewing || issuingRef.current) return;
     setRenewing(true); setNotice(null); setError(null);
     try {
       const items = await getPrescriptionRenewal(consultationId);
@@ -145,6 +146,7 @@ export function ConsultationDocuments({ consultationId, issue, searchDelayMs, on
   }
 
   function askCancel(doc: ClinicalDocument, reissue: boolean) {
+    if (issuingRef.current) return;
     setForm(null); setNotice(null); setError(null);
     setCancelling({ doc, reissue });
   }
@@ -155,7 +157,8 @@ export function ConsultationDocuments({ consultationId, issue, searchDelayMs, on
     { label: "Emitido em", w: "1fr", render: (d) => fmtDateTime(d.issued_at) },
     { label: "Modo", w: "0.6fr", render: (d) => issueModeLabel(d.issue_mode) },
     { label: "Assinatura", w: "1.6fr", render: (d) => d.signature
-      ? <SignatureMarker label={`assinatura: ${kindLabel(d.kind)}`} block={d.signature} consultationId={consultationId} />
+      ? <SignatureMarker label={`assinatura: ${kindLabel(d.kind)}`} block={d.signature} consultationId={consultationId}
+        onVerified={() => void queryClient.invalidateQueries({ queryKey: key })} />
       : "—" },
     { label: "Situação", w: "1fr", render: (d) => documentSituation(d) },
     { label: "Código", w: "1fr", render: (d) => <span className="mono">{d.short_code}</span> },
@@ -168,11 +171,12 @@ export function ConsultationDocuments({ consultationId, issue, searchDelayMs, on
           </button>
         )}
         {canCancel(d, user?.id) && (
-          <button type="button" aria-label={`Cancelar ${what(d)}`} style={secondaryButtonStyle} onClick={() => askCancel(d, false)}>Cancelar</button>
+          <button type="button" aria-label={`Cancelar ${what(d)}`} disabled={issuing}
+            style={issuing ? disabledButtonStyle : secondaryButtonStyle} onClick={() => askCancel(d, false)}>Cancelar</button>
         )}
         {issue && canCancel(d, user?.id) && (
-          <button type="button" aria-label={`Cancelar e emitir outro: ${what(d)}`} style={secondaryButtonStyle}
-            onClick={() => askCancel(d, true)}>Cancelar e emitir outro</button>
+          <button type="button" aria-label={`Cancelar e emitir outro: ${what(d)}`} disabled={issuing}
+            style={issuing ? disabledButtonStyle : secondaryButtonStyle} onClick={() => askCancel(d, true)}>Cancelar e emitir outro</button>
         )}
       </span>
     ) }
@@ -184,10 +188,12 @@ export function ConsultationDocuments({ consultationId, issue, searchDelayMs, on
       {issue && (
         <div role="group" aria-label="emitir documento" style={row}>
           {kinds.map((k) => (
-            <button key={k} type="button" style={secondaryButtonStyle} onClick={() => start(k)}>{START_LABEL[k]}</button>
+            <button key={k} type="button" disabled={issuing} style={issuing ? disabledButtonStyle : secondaryButtonStyle}
+              onClick={() => start(k)}>{START_LABEL[k]}</button>
           ))}
           {canRenew && (
-            <button type="button" disabled={renewing} style={renewing ? disabledButtonStyle : buttonStyle} onClick={() => void renew()}>
+            <button type="button" disabled={renewing || issuing} style={renewing || issuing ? disabledButtonStyle : buttonStyle}
+              onClick={() => void renew()}>
               Renovar receita
             </button>
           )}

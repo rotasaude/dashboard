@@ -6,7 +6,7 @@ vi.mock("../../lib/api", async (importOriginal) => {
   const real = await importOriginal<typeof import("../../lib/api")>();
   return { ...real, fetchCurrentSession: vi.fn(), listConsultationDocuments: vi.fn(), issueDocument: vi.fn(), cancelDocument: vi.fn(),
     getPrescriptionRenewal: vi.fn(), fetchDocumentPdf: vi.fn(), searchMedications: vi.fn(), searchTerminology: vi.fn(),
-    listNursingProtocols: vi.fn() };
+    listNursingProtocols: vi.fn(), getSignature: vi.fn(), verifySignature: vi.fn() };
 });
 
 import * as api from "../../lib/api";
@@ -15,6 +15,7 @@ import { CANCEL_WARNING, DOCUMENTS_DISABLED, DOCUMENTS_KEY } from "../../lib/cli
 import { SIMULATED_NOTICE } from "../../lib/signature";
 import { ConsultationDocuments } from "./ConsultationDocuments";
 import { renderWithProviders } from "../../test/campaignFixtures";
+import { signatureDetail } from "../../test/signatureFixtures";
 import {
   NOW19C, TODAY19C, declarationDoc, docUser, prescriptionDoc, prescriptionItem, renewalItem, sickNoteDoc
 } from "../../test/documentFixtures";
@@ -45,7 +46,8 @@ describe("ConsultationDocuments", () => {
     vi.useFakeTimers({ toFake: [ "Date" ] });
     vi.setSystemTime(new Date(NOW19C));
     for (const fn of [ api.fetchCurrentSession, api.listConsultationDocuments, api.issueDocument, api.cancelDocument,
-      api.getPrescriptionRenewal, api.fetchDocumentPdf, api.searchMedications, api.searchTerminology, api.listNursingProtocols ]) {
+      api.getPrescriptionRenewal, api.fetchDocumentPdf, api.searchMedications, api.searchTerminology, api.listNursingProtocols,
+      api.getSignature, api.verifySignature ]) {
       mocked(fn).mockReset();
     }
     mocked(api.fetchCurrentSession).mockResolvedValue(docUser());
@@ -174,6 +176,44 @@ describe("ConsultationDocuments", () => {
     await act(async () => { pending.resolve(sickNoteDoc({ id: "doc7" })); });
     expect(await screen.findByRole("status")).not.toBeNull();
     expect(api.issueDocument).toHaveBeenCalledTimes(1);
+  });
+
+  it("emissão em voo: os botões de tipo, Renovar e os Cancelar das linhas ficam travados (trocar o formulário perderia a recusa)", async () => {
+    const pending = deferred<api.ClinicalDocument>();
+    mocked(api.issueDocument).mockReturnValue(pending.promise);
+    renderIt();
+    fireEvent.click(await screen.findByRole("button", { name: "Atestado" }));
+    fireEvent.change(screen.getByLabelText("Dias de afastamento"), { target: { value: "3" } });
+    await screen.findAllByRole("row");
+    fireEvent.click(screen.getByRole("button", { name: "Emitir atestado" }));
+    const group = screen.getByRole("group", { name: "emitir documento" });
+    await waitFor(() => expect((within(group).getByRole("button", { name: "Receita" }) as HTMLButtonElement).disabled).toBe(true));
+    for (const b of within(group).getAllByRole("button")) expect((b as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: `Cancelar ${SICK}` }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: `Cancelar e emitir outro: ${SICK}` }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(within(group).getByRole("button", { name: "Receita" }));
+    fireEvent.click(screen.getByRole("button", { name: `Cancelar ${SICK}` }));
+    expect(screen.getByRole("form", { name: "Atestado" })).not.toBeNull();
+    expect(screen.queryByRole("form", { name: "Receita" })).toBeNull();
+    expect(api.getPrescriptionRenewal).not.toHaveBeenCalled();
+    await act(async () => { pending.resolve(sickNoteDoc({ id: "doc7" })); });
+    expect(await screen.findByRole("status")).not.toBeNull();
+    expect((within(group).getByRole("button", { name: "Receita" }) as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.getAllByRole("button", { name: `Cancelar ${SICK}` }).every((b) => !(b as HTMLButtonElement).disabled)).toBe(true);
+  });
+
+  it("Revalidar a assinatura de um documento da lista relê a lista de documentos", async () => {
+    mocked(api.listConsultationDocuments).mockResolvedValue([
+      sickNoteDoc({ issue_mode: "digital", signature: { mode: "digital", signature_id: "sg1", verification: "valid", simulated: false } })
+    ]);
+    mocked(api.getSignature).mockResolvedValue(signatureDetail());
+    mocked(api.verifySignature).mockResolvedValue(signatureDetail({ verification: "invalid" }));
+    const { client } = renderIt();
+    const invalidate = vi.spyOn(client, "invalidateQueries");
+    fireEvent.click(await screen.findByRole("button", { name: "Ver o que foi assinado" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Revalidar" }));
+    await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: [ DOCUMENTS_KEY, "cs1" ] }));
+    await waitFor(() => expect(mocked(api.listConsultationDocuments).mock.calls.length).toBeGreaterThanOrEqual(2));
   });
 
   it("Renovar receita: preenche com os contínuos (itens parciais), emite e manda reler os medicamentos em uso", async () => {
