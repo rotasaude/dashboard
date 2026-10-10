@@ -18,6 +18,7 @@ import { ScreeningDetail, ScreeningDetailLoader } from "./ScreeningDetail";
 import { ScreeningForm } from "./ScreeningForm";
 import { OutcomeFields } from "./OutcomeFields";
 import { ConsultationWorkspace } from "../consultation/ConsultationWorkspace";
+import { DeclarationPanel } from "./DeclarationPanel";
 
 // UnitQueue (Task 7) — a fila da unidade atual (spec §6 "Fila"), em duas
 // partes: "Aguardando" (ordenada pela API — prioridade, depois chegada — esta
@@ -38,6 +39,10 @@ interface Props {
   // Módulo 19: `clinical_record` ligado na sessão (consulta e nome de exibição).
   clinicalRecord?: boolean;
   onGoToSecurity?(): void;
+  // Módulo 19c: `clinical_documents` ligado na sessão (declaração de comparecimento).
+  clinicalDocuments?: boolean;
+  // Tem o papel de profissional (vínculo ou não): emite com o próprio CBO, sem matrícula.
+  professional?: boolean;
 }
 
 // Módulo 18: a escuta aberta no painel — a que veio na chamada, uma lida pelo
@@ -64,7 +69,8 @@ function handleClinicalRefusal(code: string | undefined, reload: () => void, onC
 }
 
 export function UnitQueue({
-  unit, units, canCare, careBlocked, onClinicalRefused, now = () => new Date(), clinicalRecord = false, onGoToSecurity
+  unit, units, canCare, careBlocked, onClinicalRefused, now = () => new Date(), clinicalRecord = false, onGoToSecurity,
+  clinicalDocuments = false, professional = false
 }: Props) {
   const queryClient = useQueryClient();
   const auth = useAuth();
@@ -77,6 +83,11 @@ export function UnitQueue({
   const [ callingNext, setCallingNext ] = useState(false);
   const [ rowBusy, setRowBusy ] = useState<string | null>(null);
   const [ panel, setPanel ] = useState<ScreeningPanel | null>(null);
+  // Módulo 19c: a linha guardada aqui segura o painel mesmo que a pessoa saia da fila.
+  const [ declaring, setDeclaring ] = useState<QueueRow | null>(null);
+  const declarationButton = (r: QueueRow) => clinicalDocuments && (
+    <button type="button" style={secondaryButtonStyle} onClick={() => setDeclaring(r)}>Declaração</button>
+  );
 
   function invalidate() {
     void queryClient.invalidateQueries({ queryKey: [ "unitQueue", unit.id ] });
@@ -236,6 +247,7 @@ export function UnitQueue({
                               Chamar
                             </button>
                           )}
+                          {declarationButton(r)}
                           <button
                             type="button"
                             disabled={rowBusy === r.id}
@@ -269,22 +281,23 @@ export function UnitQueue({
                     { label: "Protocolo", w: "1.5fr", render: (r) => r.protocol_name ?? "—" },
                     { label: "Prioridade", w: "1fr", render: (r) => String(r.priority ?? "—") },
                     { label: "Chamada", w: "2fr", render: (r) => `chamado por ${r.called_by_name} às ${fmtHourMinute(r.called_at)}` },
-                    ...(canCare ? [ {
+                    ...(canCare || clinicalDocuments ? [ {
                       label: "", w: "auto" as const, align: "right" as const, render: (r: QueueRow) => (
                         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-                          {clinicalRecord && (
+                          {declarationButton(r)}
+                          {canCare && clinicalRecord && (
                             <button type="button" style={secondaryButtonStyle}
                               onClick={() => setPanel({ kind: "consultation", attendanceId: r.id })}>
                               Consulta
                             </button>
                           )}
-                          {r.screening?.id && (
+                          {canCare && r.screening?.id && (
                             <button type="button" style={secondaryButtonStyle}
                               onClick={() => setPanel({ kind: "view", id: r.screening!.id })}>
                               Ver escuta
                             </button>
                           )}
-                          <button type="button" style={secondaryButtonStyle} onClick={() => setClosing(r)}>Encerrar</button>
+                          {canCare && <button type="button" style={secondaryButtonStyle} onClick={() => setClosing(r)}>Encerrar</button>}
                         </div>
                       )
                     } ] : [])
@@ -330,6 +343,10 @@ export function UnitQueue({
               setDone("Consulta finalizada e atendimento encerrado.");
             }}
           />
+        )}
+
+        {clinicalDocuments && declaring && (
+          <DeclarationPanel key={declaring.id} row={declaring} professional={professional} onClose={() => setDeclaring(null)} />
         )}
 
         {closing && (
