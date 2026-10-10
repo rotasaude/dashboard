@@ -104,7 +104,7 @@ export function remumeEntry(over: Partial<RemumeEntry> = {}): RemumeEntry {
 export function nursingProtocol(over: Partial<NursingProtocol> = {}): NursingProtocol {
   return {
     id: "np1", title: "Protocolo de enfermagem na atenção primária", number: "007/2025", year: 2025,
-    current_version: { id: "npv1", version: 1, valid_from: "2025-03-01", valid_until: null, items: [ { catalog_item: DIPYRONE_REF, max_dose: { quantity: 2, unit: "frasco" } } ] },
+    current_version: { id: "npv1", version: 1, valid_from: "2025-03-01", valid_until: null, items: [ { catalog_item: { ...DIPYRONE_REF, antimicrobial: false, controlled: false }, max_dose: { quantity: 2, unit: "frasco" } } ] },
     ...over
   };
 }

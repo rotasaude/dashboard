@@ -2024,9 +2024,11 @@ export type MedicationChange =
 export interface MedicationSearchItem extends CatalogItemRef { antimicrobial: boolean; controlled: boolean; in_network: boolean }
 
 export interface CityDocumentsProfile { name: string; cnpj: string | null }
-export interface RemumeEntry { catalog_item: CatalogItemRef & { antimicrobial: boolean; controlled: boolean }; unit_ids: string[] }
+export interface RemumeEntry { catalog_item: CatalogItem; unit_ids: string[] }
 export interface MaxDose { quantity: number; unit: string }
-export interface ProtocolItem { catalog_item: CatalogItemRef; max_dose?: MaxDose | null }
+// Item do catálogo completo (api 248ecbf): leva as marcas, sem `in_network`.
+export type CatalogItem = CatalogItemRef & { antimicrobial: boolean; controlled: boolean };
+export interface ProtocolItem { catalog_item: CatalogItem; max_dose?: MaxDose | null }
 export interface NursingProtocolVersion { id: string; version: number; valid_from: string; valid_until: string | null; items: ProtocolItem[] }
 export interface NursingProtocol { id: string; title: string; number: string; year: number; current_version: NursingProtocolVersion | null }
 export interface ProtocolVersionInput { valid_from: string; valid_until?: string; items: { catalog_item_id: string; max_dose?: MaxDose }[] }

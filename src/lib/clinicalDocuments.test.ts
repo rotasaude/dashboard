@@ -4,7 +4,7 @@ import { ApiError, issueDocument } from "./api";
 import {
   ANTIMICROBIAL_NOTE, CANCEL_REASON_MAX, CONTROLLED_BLOCKED, DOCUMENTS_DISABLED, EMPTY_EXTERNAL, PENDING_REFETCH_MS, addProtocolItem, canCancel,
   canUseDocuments, cancelReasonProblem, declarationInput, declarationProblem, documentError, documentSituation, documentsRefetchInterval,
-  emptyDeclaration, emptyItem, emptyProtocol, emptySickNote, externalChange, externalProblem, formatCnpj, hasAntimicrobial, isValidCnpj,
+  emptyDeclaration, emptyItem, itemFromProtocolItem, emptyProtocol, emptySickNote, externalChange, externalProblem, formatCnpj, hasAntimicrobial, isValidCnpj,
   issueModeLabel, issuedNotice, itemFromMedication, itemFromPrescription, kindLabel, kindsFor, medicationLine, prescriptionInput,
   prescriptionProblems, professionalKind, protocolDraftFrom, protocolInput, protocolLabel, protocolProblem, protocolVersionInput,
   reissueDraft, sickNoteInput, sickNoteProblem, sortMedications, vigentProtocols, withDocument, type ItemDraft
@@ -282,6 +282,23 @@ describe("receita", () => {
     expect([ freeText.medication, freeText.freeText ]).toEqual([ null, "Soro" ]);
   });
 
+  it("item de protocolo antimicrobiano avisa antes de emitir; controlado vem marcado", () => {
+    const protocol = nursingProtocol({ current_version: {
+      id: "npv1", version: 1, valid_from: "2025-03-01", valid_until: null,
+      items: [ { catalog_item: { ...AMOXICILLIN, antimicrobial: true, controlled: false }, max_dose: { quantity: 21, unit: "cápsula" } },
+        { catalog_item: { ...DIPYRONE_REF, antimicrobial: false, controlled: false }, max_dose: null },
+        { catalog_item: { ...DIPYRONE_REF, id: "ci9", antimicrobial: false, controlled: true } } ]
+    } });
+    const [ amox, dipy, controlled ] = protocol.current_version!.items.map(itemFromProtocolItem);
+    expect(hasAntimicrobial({ items: [ amox ], protocolVersionId: "npv1" })).toBe(true);
+    expect(hasAntimicrobial({ items: [ dipy ], protocolVersionId: "npv1" })).toBe(false);
+    expect(amox.medication?.max_dose).toEqual({ quantity: 21, unit: "cápsula" });
+    expect(amox.quantityUnit).toBe("cápsula");
+    expect(controlled.medication?.controlled).toBe(true);
+    expect(prescriptionProblems({ items: [ { ...controlled, quantity: "1", route: "oral", dosage: "1 cp" } ], protocolVersionId: "npv1" }, true))
+      .toEqual([ `item 1: ${CONTROLLED_BLOCKED}` ]);
+  });
+
   it("dosage_form null não quebra o item nem a validação", () => {
     const m = searchItem({ dosage_form: null });
     const item = itemFromMedication(m);
@@ -375,7 +392,7 @@ describe("protocolos de enfermagem", () => {
 
   it("dose máxima com casas: a nova versão de um protocolo com 2,5 reabre válida e manda número", () => {
     const protocol = nursingProtocol({ current_version: {
-      id: "npv1", version: 1, valid_from: "2025-03-01", valid_until: null, items: [ { catalog_item: DIPYRONE_REF, max_dose: { quantity: 2.5, unit: "frasco" } } ]
+      id: "npv1", version: 1, valid_from: "2025-03-01", valid_until: null, items: [ { catalog_item: { ...DIPYRONE_REF, antimicrobial: false, controlled: false }, max_dose: { quantity: 2.5, unit: "frasco" } } ]
     } });
     const next = protocolDraftFrom(protocol, TODAY19C);
     expect(next.items[0].maxDose).toBe("2.5");

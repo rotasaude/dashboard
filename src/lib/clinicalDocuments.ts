@@ -9,7 +9,7 @@ import {
   ApiError, errorCode, type CatalogItemRef, type ClinicalDocument, type CodedOption, type CompanionReason, type DeclarationContent,
   type DeclarationInput, type DeclarationPeriod, type DocumentKind, type ExamRequisitionContent, type MaxDose, type MedicationChange,
   type MedicationRoute, type NursingProtocol, type NursingProtocolInput, type PatientMedication, type PrescriptionContent,
-  type PrescriptionInput, type PrescriptionItem, type ProtocolVersionInput, type RenewalItem, type SickNoteContent, type SickNoteInput, type SickNoteType
+  type PrescriptionInput, type ProtocolItem, type PrescriptionItem, type ProtocolVersionInput, type RenewalItem, type SickNoteContent, type SickNoteInput, type SickNoteType
 } from "./api";
 import { describeActionError } from "./actionErrors";
 import { featureDisabledKey, hasFeature } from "./features";
@@ -251,6 +251,13 @@ export function emptyItem(): ItemDraft {
 
 export function itemFromMedication(m: ItemMedication): ItemDraft {
   return { ...emptyItem(), medication: m, quantityUnit: m.dosage_form ?? "" };
+}
+
+// Item de protocolo vigente → rascunho da receita (enfermagem). O item do
+// protocolo já traz antimicrobial/controlled, então o aviso de antimicrobiano
+// aparece antes de emitir; a dose máxima viaja junto para a validação.
+export function itemFromProtocolItem(pi: ProtocolItem): ItemDraft {
+  return itemFromMedication({ ...pi.catalog_item, max_dose: pi.max_dose ?? null });
 }
 
 // Aceita o item de uma receita emitida e o da renovação, que o api monta sem as
