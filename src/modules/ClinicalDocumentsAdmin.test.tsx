@@ -260,6 +260,39 @@ describe("ClinicalDocumentsAdmin", () => {
     expect(api.addRemumeItem).not.toHaveBeenCalled();
   });
 
+  it("REMUME: sem as unidades lidas (carregando ou com erro) não oferece Incluir/Trocar, para não gravar \"todas\" sem a admin ver", async () => {
+    const pendingUnits = deferred<typeof UNITS>();
+    mocked(api.listActiveUnits).mockReturnValue(pendingUnits.promise);
+    const { unmount } = renderIt();
+    const panel = await screen.findByRole("region", { name: "REMUME" });
+    await within(panel).findAllByRole("row");
+    fireEvent.change(within(panel).getByLabelText("Incluir na REMUME"), { target: { value: "amox" } });
+    fireEvent.click(await within(panel).findByRole("button", { name: "Amoxicilina 500 mg, cápsula" }));
+    const add = within(panel).getByRole("region", { name: "Incluir: Amoxicilina 500 mg, cápsula" });
+    expect(within(add).getByText("carregando unidades…")).not.toBeNull();
+    expect(within(add).queryByRole("button", { name: "Incluir" })).toBeNull();
+    expect(within(add).queryByText("Unidades (nenhuma marcada = todas as unidades da rede)")).toBeNull();
+    pendingUnits.resolve(UNITS);
+    expect(await within(add).findByRole("button", { name: "Incluir" })).not.toBeNull();
+    expect(within(add).getByLabelText("UBS Centro")).not.toBeNull();
+    unmount();
+
+    mocked(api.listActiveUnits).mockReset();
+    mocked(api.listActiveUnits).mockRejectedValue(new api.ApiError(500, { error: "boom" }, "x"));
+    renderIt();
+    const failed = await screen.findByRole("region", { name: "REMUME" });
+    await within(failed).findAllByRole("row");
+    fireEvent.change(within(failed).getByLabelText("Incluir na REMUME"), { target: { value: "metf" } });
+    fireEvent.click(await within(failed).findByRole("button", { name: "Metformina, cloridrato 850 mg, comprimido" }));
+    const swapBox = within(failed).getByRole("region", { name: "Incluir: Metformina, cloridrato 850 mg, comprimido" });
+    expect((await within(swapBox).findByRole("alert")).textContent).not.toBe("");
+    expect(within(swapBox).queryByRole("button", { name: "Trocar unidades" })).toBeNull();
+    expect(within(swapBox).queryByRole("button", { name: "Incluir" })).toBeNull();
+    expect(within(swapBox).queryAllByRole("checkbox")).toHaveLength(0);
+    expect(within(swapBox).getByRole("button", { name: "Cancelar" })).not.toBeNull();
+    expect(api.addRemumeItem).not.toHaveBeenCalled();
+  });
+
   it("REMUME: Tirar fica travado enquanto há inclusão ou retirada em andamento", async () => {
     renderIt();
     const panel = await screen.findByRole("region", { name: "REMUME" });

@@ -22,7 +22,7 @@ type Confirming =
 export function RemumePanel({ onGoToSecurity, searchDelayMs }: { onGoToSecurity?(): void; searchDelayMs?: number }) {
   const queryClient = useQueryClient();
   const query = useQuery({ queryKey: [ REMUME_KEY ], queryFn: listRemume, retry: false });
-  const units = useQuery({ queryKey: [ "activeUnits" ], queryFn: listActiveUnits });
+  const units = useQuery({ queryKey: [ "activeUnits" ], queryFn: listActiveUnits, retry: false });
   const [ picked, setPicked ] = useState<MedicationSearchItem | null>(null);
   const [ unitIds, setUnitIds ] = useState<string[]>([]);
   const [ confirming, setConfirming ] = useState<Confirming | null>(null);
@@ -69,19 +69,28 @@ export function RemumePanel({ onGoToSecurity, searchDelayMs }: { onGoToSecurity?
           <section aria-label={`Incluir: ${picked.label}`} style={box}>
             <strong>{picked.label}</strong>
             {swap && <p style={muted}>este medicamento já está na REMUME — você pode trocar as unidades</p>}
-            <p style={muted}>Unidades (nenhuma marcada = todas as unidades da rede)</p>
+            {/* Só com as unidades lidas: sem elas as caixas sairiam vazias e a confirmação gravaria "todas" sem a admin ver. */}
+            {units.isPending && <p className="mono" style={muted}>carregando unidades…</p>}
+            {units.isError && <p role="alert" style={alert}>{documentError(units.error)}</p>}
+            {units.isSuccess && (
+              <>
+                <p style={muted}>Unidades (nenhuma marcada = todas as unidades da rede)</p>
+                <div style={row}>
+                  {units.data.map((u) => (
+                    <label key={u.id} style={checkLabel}>
+                      <input type="checkbox" checked={unitIds.includes(u.id)} onChange={(e) => toggleUnit(u.id, e.target.checked)} />
+                      {u.name}
+                    </label>
+                  ))}
+                </div>
+              </>
+            )}
             <div style={row}>
-              {(units.data ?? []).map((u) => (
-                <label key={u.id} style={checkLabel}>
-                  <input type="checkbox" checked={unitIds.includes(u.id)} onChange={(e) => toggleUnit(u.id, e.target.checked)} />
-                  {u.name}
-                </label>
-              ))}
-            </div>
-            <div style={row}>
-              <button type="button" style={buttonStyle} onClick={() => setConfirming({ kind: "add", item: picked, unitIds, swap })}>
-                {swap ? "Trocar unidades" : "Incluir"}
-              </button>
+              {units.isSuccess && (
+                <button type="button" style={buttonStyle} onClick={() => setConfirming({ kind: "add", item: picked, unitIds, swap })}>
+                  {swap ? "Trocar unidades" : "Incluir"}
+                </button>
+              )}
               <button type="button" style={secondaryButtonStyle} onClick={() => setPicked(null)}>Cancelar</button>
             </div>
           </section>
