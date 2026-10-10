@@ -56,8 +56,11 @@ export function ConsultationWorkspace(props: Props) {
   // Módulo 19c: documentos clínicos e medicamentos em uso, com o interruptor ligado.
   const documentsOn = canUseDocuments(user);
   // Aba Documentos: o editor continua montado (escondido) para o autosave não
-  // perder o que foi digitado; os documentos só montam quando a aba abre.
+  // perder o que foi digitado; os documentos só montam na primeira abertura da
+  // aba e depois ficam montados (escondidos), para a volta à Consulta não perder
+  // um formulário aberto (ex.: o substituto de "Cancelar e emitir outro").
   const [ tab, setTab ] = useState<"consultation" | "documents">("consultation");
+  const [ documentsOpened, setDocumentsOpened ] = useState(false);
   const showTabs = documentsOn && !!consultation;
   const onDocuments = showTabs && tab === "documents";
   const settling = consultation?.status === "finalized" && signatureSettling(consultation);
@@ -139,7 +142,7 @@ export function ConsultationWorkspace(props: Props) {
           {showTabs && (
             <SegmentedControl
               options={[ { key: "consultation", label: "Consulta" }, { key: "documents", label: "Documentos" } ]}
-              value={tab} onChange={setTab} />
+              value={tab} onChange={(key) => { setTab(key); if (key === "documents") setDocumentsOpened(true); }} />
           )}
 
           {/* display: contents não mexe no gap do painel; só vale com a aba Consulta
@@ -162,10 +165,12 @@ export function ConsultationWorkspace(props: Props) {
             )}
           </div>
 
-          {onDocuments && consultation && (
-            <ConsultationDocuments consultationId={consultation.id} searchDelayMs={props.searchDelayMs}
-              onGoToSecurity={props.onGoToSecurity}
-              issue={user?.id === consultation.author.id ? { cboCode: consultation.cbo_code, unitId: props.unit.id } : undefined} />
+          {showTabs && documentsOpened && consultation && (
+            <div hidden={!onDocuments} style={onDocuments ? { display: "contents" } : undefined}>
+              <ConsultationDocuments consultationId={consultation.id} searchDelayMs={props.searchDelayMs}
+                onGoToSecurity={props.onGoToSecurity}
+                issue={user?.id === consultation.author.id ? { cboCode: consultation.cbo_code, unitId: props.unit.id } : undefined} />
+            </div>
           )}
         </>
       )}

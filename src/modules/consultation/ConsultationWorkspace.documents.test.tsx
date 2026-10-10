@@ -9,6 +9,8 @@ import type { Consultation } from "../../lib/api";
 
 // Montagens do editor: trocar de aba não pode remontá-lo (o autosave perderia o digitado).
 const editorMounts = vi.hoisted(() => ({ n: 0 }));
+// Montagens dos documentos: só na primeira abertura da aba, e depois não remonta.
+const documentsMounts = vi.hoisted(() => ({ n: 0 }));
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const real = await importOriginal<typeof import("../../lib/api")>();
@@ -29,9 +31,16 @@ vi.mock("./ConsultationEditor", () => ({
   }
 }));
 vi.mock("../documents/ConsultationDocuments", () => ({
-  ConsultationDocuments: (p: { consultationId: string; issue?: { cboCode: string; unitId?: string } }) => (
-    <span>{`documentos ${p.consultationId} · ${p.issue ? `emissão ${p.issue.cboCode} ${p.issue.unitId}` : "só lista"}`}</span>
-  )
+  ConsultationDocuments: function DocumentsDouble(p: { consultationId: string; issue?: { cboCode: string; unitId?: string } }) {
+    useState(() => { documentsMounts.n += 1; return 0; });
+    const [ draft, setDraft ] = useState("");
+    return (
+      <div>
+        <span>{`documentos ${p.consultationId} · ${p.issue ? `emissão ${p.issue.cboCode} ${p.issue.unitId}` : "só lista"}`}</span>
+        <label>Receita (dublê)<input value={draft} onChange={(e) => setDraft(e.target.value)} /></label>
+      </div>
+    );
+  }
 }));
 vi.mock("./ConsultationView", () => ({
   ConsultationView: (p: { consultation: Consultation }) => <span>{`consulta finalizada ${p.consultation.id}`}</span>,
@@ -96,9 +105,26 @@ describe("ConsultationWorkspace — documentos clínicos (19c)", () => {
     expect(screen.getByText("editor cs1").closest("[hidden]")).not.toBeNull();
     fireEvent.click(screen.getByRole("tab", { name: "Consulta" }));
     expect(screen.getByText("editor cs1").closest("[hidden]")).toBeNull();
-    expect(screen.queryByText(/^documentos cs1/)).toBeNull();
+    expect(screen.getByText(/^documentos cs1/).closest("[hidden]")).not.toBeNull();
     expect((screen.getByLabelText("Anotação (dublê)") as HTMLInputElement).value).toBe("dor lombar há 3 dias");
     expect(editorMounts.n).toBe(1);
+  });
+
+  it("documentos só montam na primeira abertura da aba e depois ficam montados: o formulário aberto sobrevive à ida à Consulta", async () => {
+    documentsMounts.n = 0;
+    renderIt();
+    fireEvent.click(await screen.findByRole("button", { name: "Iniciar consulta" }));
+    expect(await screen.findByText("editor cs1")).not.toBeNull();
+    expect(screen.queryByText(/^documentos cs1/)).toBeNull();
+    expect(documentsMounts.n).toBe(0);
+    fireEvent.click(screen.getByRole("tab", { name: "Documentos" }));
+    fireEvent.change(screen.getByLabelText("Receita (dublê)"), { target: { value: "amoxicilina 500 mg" } });
+    fireEvent.click(screen.getByRole("tab", { name: "Consulta" }));
+    expect(screen.getByText(/^documentos cs1/).closest("[hidden]")).not.toBeNull();
+    fireEvent.click(screen.getByRole("tab", { name: "Documentos" }));
+    expect(screen.getByText(/^documentos cs1/).closest("[hidden]")).toBeNull();
+    expect((screen.getByLabelText("Receita (dublê)") as HTMLInputElement).value).toBe("amoxicilina 500 mg");
+    expect(documentsMounts.n).toBe(1);
   });
 
   it("consulta de outra autora: Documentos só com a lista", async () => {
