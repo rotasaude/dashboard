@@ -43,8 +43,8 @@ export function ExamRequisitionForm({ initialNote = "", onSubmit, onCancel, busy
       <strong>Requisição de exames</strong>
       {replacing && <p style={mutedStyle}>Substitui o documento cancelado.</p>}
       <p style={mutedStyle}>
-        A requisição sai com os exames pedidos na consulta (o que já está salvo). Para mudar a lista, edite a consulta — ou faça um
-        adendo, se ela já foi finalizada.
+        A requisição sai com os exames pedidos na consulta FINALIZADA (e nos adendos). O que está só no rascunho ainda não conta:
+        finalize a consulta, ou faça um adendo se ela já foi finalizada.
       </p>
       <label style={labelStyle}>
         Observação (opcional)

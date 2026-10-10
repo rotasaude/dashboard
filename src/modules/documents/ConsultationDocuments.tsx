@@ -16,7 +16,7 @@ import { useAuth } from "../../lib/auth";
 import { todayInCity } from "../../lib/campaigns";
 import { fmtDateTime } from "../../lib/format";
 import {
-  DOCUMENTS_KEY, MEDICATIONS_KEY, canCancel, documentError, documentSituation, documentsRefetchInterval, emptyDeclaration, emptySickNote,
+  DOCUMENTS_KEY, MEDICATIONS_KEY, NO_EXAM_REQUESTS, canCancel, documentError, documentSituation, documentsRefetchInterval, emptyDeclaration, emptySickNote,
   issueModeLabel, issuedNotice, itemFromPrescription, kindLabel, kindsFor, professionalKind, reissueDraft, withDocument, type ReissueDraft
 } from "../../lib/clinicalDocuments";
 import { SIMULATED_NOTICE, usesSimulatedPsc } from "../../lib/signature";
@@ -37,6 +37,8 @@ interface Props {
   consultationId: string;
   // Sem `issue`: só a lista (Minhas consultas) — Imprimir e Cancelar.
   issue?: IssueContext;
+  // Consulta ainda em rascunho: a requisição de exames só lê os exames da consulta finalizada (ou de adendos).
+  draft?: boolean;
   searchDelayMs?: number;
   onGoToSecurity?(): void;
 }
@@ -55,7 +57,7 @@ function isStaleReplacement(err: unknown): boolean {
     && (err.body as { field?: unknown } | null)?.field === "replaces_document_id";
 }
 
-export function ConsultationDocuments({ consultationId, issue, searchDelayMs, onGoToSecurity }: Props) {
+export function ConsultationDocuments({ consultationId, issue, draft, searchDelayMs, onGoToSecurity }: Props) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const key = [ DOCUMENTS_KEY, consultationId ];
@@ -187,10 +189,13 @@ export function ConsultationDocuments({ consultationId, issue, searchDelayMs, on
       {usesSimulatedPsc(user) && <div><Tag tone="warn" mono={false}>{SIMULATED_NOTICE}</Tag></div>}
       {issue && (
         <div role="group" aria-label="emitir documento" style={row}>
-          {kinds.map((k) => (
-            <button key={k} type="button" disabled={issuing} style={issuing ? disabledButtonStyle : secondaryButtonStyle}
-              onClick={() => start(k)}>{START_LABEL[k]}</button>
-          ))}
+          {kinds.map((k) => {
+            const off = issuing || (draft && k === "exam_requisition");
+            return (
+              <button key={k} type="button" disabled={off} style={off ? disabledButtonStyle : secondaryButtonStyle}
+                onClick={() => start(k)}>{START_LABEL[k]}</button>
+            );
+          })}
           {canRenew && (
             <button type="button" disabled={renewing || issuing} style={renewing || issuing ? disabledButtonStyle : buttonStyle}
               onClick={() => void renew()}>
@@ -199,6 +204,7 @@ export function ConsultationDocuments({ consultationId, issue, searchDelayMs, on
           )}
         </div>
       )}
+      {issue && draft && kinds.includes("exam_requisition") && <p style={mutedStyle}>{NO_EXAM_REQUESTS}</p>}
       {notice && <p role="status" style={statusStyle}>{notice}</p>}
       {error && <p role="alert" style={alert}>{error}</p>}
 
@@ -255,6 +261,7 @@ export function ConsultationDocuments({ consultationId, issue, searchDelayMs, on
 const panel: CSSProperties = { display: "flex", flexDirection: "column", gap: 10 };
 const row: CSSProperties = { display: "flex", gap: 8, flexWrap: "wrap" };
 const actions: CSSProperties = { display: "flex", gap: 6, justifyContent: "flex-end", flexWrap: "wrap" };
+const mutedStyle: CSSProperties = { margin: 0, fontSize: 12.5, opacity: 0.8 };
 const statusStyle: CSSProperties = { margin: 0, fontSize: 12.5, fontWeight: 600 };
 const muted: CSSProperties = { margin: 0, fontSize: 10.5, color: "var(--ink3)" };
 const alert: CSSProperties = { margin: 0, fontSize: 12.5, color: "var(--down)" };

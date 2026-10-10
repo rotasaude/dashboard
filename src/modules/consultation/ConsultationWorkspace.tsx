@@ -168,7 +168,7 @@ export function ConsultationWorkspace(props: Props) {
           {showTabs && documentsOpened && consultation && (
             <div hidden={!onDocuments} style={onDocuments ? { display: "contents" } : undefined}>
               <ConsultationDocuments consultationId={consultation.id} searchDelayMs={props.searchDelayMs}
-                onGoToSecurity={props.onGoToSecurity}
+                onGoToSecurity={props.onGoToSecurity} draft={consultation.status === "draft"}
                 issue={user?.id === consultation.author.id ? { cboCode: consultation.cbo_code, unitId: props.unit.id } : undefined} />
             </div>
           )}

@@ -31,12 +31,12 @@ vi.mock("./ConsultationEditor", () => ({
   }
 }));
 vi.mock("../documents/ConsultationDocuments", () => ({
-  ConsultationDocuments: function DocumentsDouble(p: { consultationId: string; issue?: { cboCode: string; unitId?: string } }) {
+  ConsultationDocuments: function DocumentsDouble(p: { consultationId: string; issue?: { cboCode: string; unitId?: string }; draft?: boolean }) {
     useState(() => { documentsMounts.n += 1; return 0; });
     const [ draft, setDraft ] = useState("");
     return (
       <div>
-        <span>{`documentos ${p.consultationId} · ${p.issue ? `emissão ${p.issue.cboCode} ${p.issue.unitId}` : "só lista"}`}</span>
+        <span>{`documentos ${p.consultationId} · ${p.issue ? `emissão ${p.issue.cboCode} ${p.issue.unitId}` : "só lista"} · ${p.draft ? "rascunho" : "finalizada"}`}</span>
         <label>Receita (dublê)<input value={draft} onChange={(e) => setDraft(e.target.value)} /></label>
       </div>
     );
@@ -101,7 +101,7 @@ describe("ConsultationWorkspace — documentos clínicos (19c)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Iniciar consulta" }));
     fireEvent.change(await screen.findByLabelText("Anotação (dublê)"), { target: { value: "dor lombar há 3 dias" } });
     fireEvent.click(screen.getByRole("tab", { name: "Documentos" }));
-    expect(screen.getByText("documentos cs1 · emissão 225142 u1")).not.toBeNull();
+    expect(screen.getByText("documentos cs1 · emissão 225142 u1 · rascunho")).not.toBeNull();
     expect(screen.getByText("editor cs1").closest("[hidden]")).not.toBeNull();
     fireEvent.click(screen.getByRole("tab", { name: "Consulta" }));
     expect(screen.getByText("editor cs1").closest("[hidden]")).toBeNull();
@@ -127,12 +127,23 @@ describe("ConsultationWorkspace — documentos clínicos (19c)", () => {
     expect(documentsMounts.n).toBe(1);
   });
 
+  it("repassa draft aos documentos: rascunho enquanto edita, finalizada depois de finalizar", async () => {
+    renderIt();
+    fireEvent.click(await screen.findByRole("button", { name: "Iniciar consulta" }));
+    fireEvent.click(await screen.findByRole("tab", { name: "Documentos" }));
+    expect(screen.getByText("documentos cs1 · emissão 225142 u1 · rascunho")).not.toBeNull();
+    fireEvent.click(screen.getByRole("tab", { name: "Consulta" }));
+    fireEvent.click(screen.getByRole("button", { name: "finalizar (dublê)" }));
+    fireEvent.click(await screen.findByRole("tab", { name: "Documentos" }));
+    expect(await screen.findByText("documentos cs1 · emissão 225142 u1 · finalizada")).not.toBeNull();
+  });
+
   it("consulta de outra autora: Documentos só com a lista", async () => {
     mocked(api.startConsultation).mockResolvedValue(consultation({ author: { id: "us9", name: "Dr. Outro" } }));
     renderIt();
     fireEvent.click(await screen.findByRole("button", { name: "Iniciar consulta" }));
     fireEvent.click(await screen.findByRole("tab", { name: "Documentos" }));
-    expect(screen.getByText("documentos cs1 · só lista")).not.toBeNull();
+    expect(screen.getByText("documentos cs1 · só lista · rascunho")).not.toBeNull();
   });
 
   it("sem clinical_documents: sem abas", async () => {

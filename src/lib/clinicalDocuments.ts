@@ -26,6 +26,8 @@ export const CANCEL_REASON_MIN = 10;
 export const CANCEL_REASON_MAX = 500;
 export const PENDING_REFETCH_MS = 15_000;
 
+// Requisição de exames: o api só lê os exames da consulta finalizada (ou de adendos).
+export const NO_EXAM_REQUESTS = "esta consulta não tem exames pedidos — finalize a consulta com os exames pedidos (ou inclua-os num adendo) antes de emitir a requisição";
 export const DOCUMENTS_DISABLED = "os documentos clínicos estão desligados nesta cidade";
 export const CANCEL_WARNING = "cancelar não desfaz medicamento já entregue ao paciente";
 export const ANTIMICROBIAL_NOTE =
@@ -533,7 +535,7 @@ const ERRORS: Record<string, string> = {
   above_protocol_max_dose: "a quantidade passa da dose máxima do protocolo",
   free_text_not_allowed: "a enfermagem só prescreve itens do protocolo — sem texto livre",
   city_cnpj_missing: "a cidade ainda não cadastrou o CNPJ — sem ele a receita de enfermagem não sai; avise o administrador da cidade",
-  no_exam_requests: "esta consulta não tem exames pedidos — inclua os exames na consulta (ou num adendo) antes",
+  no_exam_requests: NO_EXAM_REQUESTS,
   attendance_not_found_or_closed_long_ago: "atendimento não encontrado ou encerrado há mais de 30 dias — a declaração não sai mais por aqui",
   invalid_reason: `descreva o motivo com ${CANCEL_REASON_MIN} a ${CANCEL_REASON_MAX} caracteres`,
   already_cancelled: "este documento já estava cancelado — a lista foi atualizada",

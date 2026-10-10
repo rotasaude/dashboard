@@ -11,7 +11,7 @@ vi.mock("../../lib/api", async (importOriginal) => {
 
 import * as api from "../../lib/api";
 import { ApiError } from "../../lib/api";
-import { CANCEL_WARNING, DOCUMENTS_DISABLED, DOCUMENTS_KEY } from "../../lib/clinicalDocuments";
+import { CANCEL_WARNING, DOCUMENTS_DISABLED, DOCUMENTS_KEY, NO_EXAM_REQUESTS } from "../../lib/clinicalDocuments";
 import { SIMULATED_NOTICE } from "../../lib/signature";
 import { ConsultationDocuments } from "./ConsultationDocuments";
 import { renderWithProviders } from "../../test/campaignFixtures";
@@ -31,8 +31,8 @@ const SICK = "Atestado de 09/10/2026, 09:40";
 const cancelled = (over = {}) => sickNoteDoc({ status: "cancelled", cancelled_at: "2026-10-09T10:05:00-03:00", cancel_reason: "dias errados no atestado", ...over });
 
 // `null` = sem emissão (Minhas consultas).
-function renderIt(issue: typeof ISSUE | null = ISSUE) {
-  return renderWithProviders(<ConsultationDocuments consultationId="cs1" issue={issue ?? undefined} searchDelayMs={0} />);
+function renderIt(issue: typeof ISSUE | null = ISSUE, draft?: boolean) {
+  return renderWithProviders(<ConsultationDocuments consultationId="cs1" issue={issue ?? undefined} draft={draft} searchDelayMs={0} />);
 }
 
 function deferred<T>() {
@@ -145,6 +145,21 @@ describe("ConsultationDocuments", () => {
     const nurse = await screen.findByRole("group", { name: "emitir documento" });
     expect(within(nurse).getAllByRole("button").map((b) => b.textContent))
       .toEqual([ "Declaração", "Receita", "Requisição de exames" ]);
+  });
+
+  it("consulta em rascunho: Requisição de exames desabilitada com a frase; os outros tipos seguem", async () => {
+    renderIt(ISSUE, true);
+    const group = await screen.findByRole("group", { name: "emitir documento" });
+    expect((within(group).getByRole("button", { name: "Requisição de exames" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((within(group).getByRole("button", { name: "Atestado" }) as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.getByText(NO_EXAM_REQUESTS)).not.toBeNull();
+  });
+
+  it("consulta finalizada: Requisição de exames habilitada e sem a frase", async () => {
+    renderIt(ISSUE, false);
+    const group = await screen.findByRole("group", { name: "emitir documento" });
+    expect((within(group).getByRole("button", { name: "Requisição de exames" }) as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.queryByText(NO_EXAM_REQUESTS)).toBeNull();
   });
 
   it("emite um atestado com o hoje da cidade: a lista ganha o documento e a tela diz como ele sai", async () => {

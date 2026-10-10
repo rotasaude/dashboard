@@ -11,10 +11,10 @@ describe("ExamRequisitionForm", () => {
       .mockRejectedValueOnce(new ApiError(422, { error: "no_exam_requests" }, "422"))
       .mockResolvedValueOnce(undefined);
     render(<ExamRequisitionForm onSubmit={onSubmit} onCancel={vi.fn()} />);
-    expect(screen.getByText(/os exames pedidos na consulta/)).not.toBeNull();
+    expect(screen.getByText(/exames pedidos na consulta FINALIZADA \(e nos adendos\)/)).not.toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Emitir requisição" }));
     expect((await screen.findByRole("alert")).textContent)
-      .toBe("esta consulta não tem exames pedidos — inclua os exames na consulta (ou num adendo) antes");
+      .toBe("esta consulta não tem exames pedidos — finalize a consulta com os exames pedidos (ou inclua-os num adendo) antes de emitir a requisição");
     expect(onSubmit).toHaveBeenLastCalledWith({});
     fireEvent.change(screen.getByLabelText("Observação (opcional)"), { target: { value: "jejum de 8 h" } });
     fireEvent.click(screen.getByRole("button", { name: "Emitir requisição" }));
