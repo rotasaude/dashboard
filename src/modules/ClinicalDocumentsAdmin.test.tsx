@@ -283,4 +283,10 @@ describe("ClinicalDocumentsAdmin", () => {
     fireEvent.click(screen.getByRole("button", { name: "cadastre seu autenticador" }));
     expect(goToSecurity).toHaveBeenCalledTimes(1);
   });
+
+  it("mostra também os protocolos de enfermagem", async () => {
+    renderIt();
+    expect(await screen.findByRole("region", { name: "Protocolos de enfermagem" })).not.toBeNull();
+    expect(await screen.findByText("nenhum protocolo cadastrado")).not.toBeNull();
+  });
 });

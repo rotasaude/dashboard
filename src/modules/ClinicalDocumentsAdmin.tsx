@@ -9,6 +9,7 @@ import { PageHeader } from "../components/PageHeader";
 import { EmptyState } from "../components/EmptyState";
 import { CnpjPanel } from "./clinicalDocumentsAdmin/CnpjPanel";
 import { RemumePanel } from "./clinicalDocumentsAdmin/RemumePanel";
+import { NursingProtocolsPanel } from "./clinicalDocumentsAdmin/NursingProtocolsPanel";
 
 export function ClinicalDocumentsAdmin({ onGoToSecurity, searchDelayMs }: { onGoToSecurity?(): void; searchDelayMs?: number }) {
   const { user } = useAuth();
@@ -20,6 +21,7 @@ export function ClinicalDocumentsAdmin({ onGoToSecurity, searchDelayMs }: { onGo
     <Frame>
       <CnpjPanel onGoToSecurity={onGoToSecurity} />
       <RemumePanel onGoToSecurity={onGoToSecurity} searchDelayMs={searchDelayMs} />
+      <NursingProtocolsPanel onGoToSecurity={onGoToSecurity} searchDelayMs={searchDelayMs} />
     </Frame>
   );
 }
