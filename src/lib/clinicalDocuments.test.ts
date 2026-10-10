@@ -96,6 +96,8 @@ describe("atestado", () => {
   it("backdateLimits: de hoje − 30 a hoje, atravessando mês e ano", () => {
     expect(backdateLimits("2026-10-09")).toEqual({ min: "2026-09-09", max: "2026-10-09" });
     expect(backdateLimits("2026-01-15")).toEqual({ min: "2025-12-16", max: "2026-01-15" });
+    // Mesma aritmética de dia do addDays de campaigns.ts (reaproveitado), inclusive no ano bissexto.
+    expect(backdateLimits("2028-03-10")).toEqual({ min: "2028-02-09", max: "2028-03-10" });
   });
 
   it("afastamento: dias inteiros e início; manda o código do CID só com autorização", () => {

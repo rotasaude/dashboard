@@ -14,6 +14,7 @@ import {
 import { describeActionError } from "./actionErrors";
 import { featureDisabledKey, hasFeature } from "./features";
 import { fmtDateTime } from "./format";
+import { addDays } from "./campaigns";
 
 export const DOCUMENTS_KEY = "consultationDocuments";
 export const MEDICATIONS_KEY = "patientMedications";
@@ -144,10 +145,6 @@ const positiveDecimal = (text: string): number | null => {
 
 const inRange = (text: string, min: number, max: number): boolean => squish(text).length >= min && squish(text).length <= max;
 
-function addDays(iso: string, days: number): string {
-  const [ y, m, d ] = iso.split("-").map(Number);
-  return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
-}
 const BACKDATE_DAYS = 30;
 // Janela das datas do atestado: de hoje − 30 a hoje (hoje = o da cidade).
 export const backdateLimits = (today: string): { min: string; max: string } => ({ min: addDays(today, -BACKDATE_DAYS), max: today });
