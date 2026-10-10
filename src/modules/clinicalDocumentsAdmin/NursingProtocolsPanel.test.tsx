@@ -171,12 +171,17 @@ describe("NursingProtocolsPanel", () => {
     renderWithProviders(<NursingProtocolsPanel searchDelayMs={0} />);
     fireEvent.click(await screen.findByRole("button", { name: "Novo protocolo" }));
     const form = screen.getByRole("form", { name: "Novo protocolo de enfermagem" });
-    fireEvent.keyDown(within(form).getByLabelText("Incluir medicamento no protocolo"), { key: "Enter" });
-    expect(within(form).queryByRole("alert")).toBeNull();
-    // Em navegador o Enter dispara submit implícito; o keydown cancelado o impede.
-    const ev = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true });
-    within(form).getByLabelText("Incluir medicamento no protocolo").dispatchEvent(ev);
-    expect(ev.defaultPrevented).toBe(true);
+    const input = within(form).getByLabelText("Incluir medicamento no protocolo");
+    // Em navegador o Enter no campo dispara submit implícito; o keydown cancelado o impede.
+    const inInput = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true });
+    input.dispatchEvent(inInput);
+    expect(inInput.defaultPrevented).toBe(true);
+    // Num botão de sugestão o Enter precisa seguir ativando o clique.
+    fireEvent.change(input, { target: { value: "dipi" } });
+    const suggestion = await within(form).findByRole("button", { name: "Dipirona sódica 500 mg/mL, solução oral" });
+    const onButton = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true });
+    suggestion.dispatchEvent(onButton);
+    expect(onButton.defaultPrevented).toBe(false);
   });
 
   it("fim de vigência já passado: avisa que a versão não aparece como vigente", async () => {
@@ -188,5 +193,7 @@ describe("NursingProtocolsPanel", () => {
     fireEvent.click(within(form).getByRole("button", { name: "Revisar e salvar" }));
     const dialog = screen.getByRole("region", { name: /Nova versão/ });
     expect(within(dialog).getByText(/não vai aparecer como vigente.*30\/06\/2026/)).not.toBeNull();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Salvar protocolo" }));
+    expect((await screen.findByRole("status")).textContent).toMatch(/^Protocolo salvo\. .*não vai aparecer como vigente.*30\/06\/2026/);
   });
 });

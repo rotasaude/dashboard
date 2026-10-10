@@ -54,10 +54,10 @@ export function ProtocolForm({ title, initial, withHeader, searchDelayMs, onRead
           <input type="date" value={d.validUntil} style={inputStyle} onChange={(e) => set({ validUntil: e.target.value })} />
         </label>
       </div>
-      {/* Enter na busca não envia o formulário. */}
-      <div onKeyDown={(e) => { if (e.key === "Enter") e.preventDefault(); }}>
-      <MedicationSearch label="Incluir medicamento no protocolo" blockControlled delayMs={searchDelayMs}
-        onPick={(item) => setD((prev) => addProtocolItem(prev, item))} />
+      {/* Enter no campo de busca não envia o formulário; nos botões de sugestão segue ativando o clique. */}
+      <div onKeyDown={(e) => { if (e.key === "Enter" && e.target instanceof HTMLInputElement) e.preventDefault(); }}>
+        <MedicationSearch label="Incluir medicamento no protocolo" blockControlled delayMs={searchDelayMs}
+          onPick={(item) => setD((prev) => addProtocolItem(prev, item))} />
       </div>
       {d.items.length === 0 ? <p style={muted}>nenhum medicamento no protocolo</p> : (
         <ul aria-label="medicamentos do protocolo" style={list}>
