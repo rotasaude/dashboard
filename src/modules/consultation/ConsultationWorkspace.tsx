@@ -11,8 +11,10 @@ import {
 import { OPTIONS_KEY, RECORD_KEY, consultationError, existingConsultationId, withAddendum } from "../../lib/consultation";
 import { useAuth } from "../../lib/auth";
 import { canSign, signatureSettling } from "../../lib/signature";
+import { canUseDocuments } from "../../lib/clinicalDocuments";
 import { buttonStyle, disabledButtonStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { PatientPanel } from "./PatientPanel";
+import { MedicationsBlock } from "./MedicationsBlock";
 import { ConsultationEditor } from "./ConsultationEditor";
 import { ConsultationLoader, ConsultationView } from "./ConsultationView";
 
@@ -48,6 +50,8 @@ export function ConsultationWorkspace(props: Props) {
   const rereads = useRef(SIGNATURE_REREAD_LIMIT);
   const [ rereadTick, setRereadTick ] = useState(0);
   const signer = canSign(user);
+  // Módulo 19c: documentos clínicos e medicamentos em uso, com o interruptor ligado.
+  const documentsOn = canUseDocuments(user);
   const settling = consultation?.status === "finalized" && signatureSettling(consultation);
   const consultationId = consultation?.id ?? null;
 
@@ -107,7 +111,10 @@ export function ConsultationWorkspace(props: Props) {
 
       {record.data && (
         <>
-          <PatientPanel record={record.data} onOpenConsultation={setViewing} />
+          <PatientPanel record={record.data} onOpenConsultation={setViewing} besideProblems={documentsOn ? (
+            <MedicationsBlock patientId={record.data.patient.id} unitId={props.unit.id} searchDelayMs={props.searchDelayMs}
+              draftConsultationId={consultation?.status === "draft" ? consultation.id : null} />
+          ) : undefined} />
           {viewing && (
             <ConsultationLoader key={viewing} id={viewing} options={options.data ?? null}
               patientProblems={record.data.problems} searchDelayMs={props.searchDelayMs} onClose={() => setViewing(null)} />

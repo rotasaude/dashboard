@@ -2,7 +2,7 @@
 // Painel do paciente no atendimento e na abertura justificada (módulo 19;
 // spec §7; contratos §3). Mostra só o nome de exibição (social, senão o
 // completo): o nome de registro não aparece aqui.
-import type { CSSProperties } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import type { ClinicalRecord, ConsultationSummary, VitalSigns } from "../../lib/api";
 import { ageLabel, onsetLabel } from "../../lib/consultation";
 import { COLOR_LABEL, COLOR_TONE, GLUCOSE_MOMENT_LABEL, VITALS, alertLabel } from "../../lib/screening";
@@ -27,7 +27,10 @@ export function VitalsList({ vitals, label }: { vitals: VitalSigns; label: strin
   );
 }
 
-export function PatientPanel({ record, onOpenConsultation }: { record: ClinicalRecord; onOpenConsultation(id: string): void }) {
+// Módulo 19c: `besideProblems` = os medicamentos em uso, logo depois dos problemas.
+export function PatientPanel({ record, onOpenConsultation, besideProblems }: {
+  record: ClinicalRecord; onOpenConsultation(id: string): void; besideProblems?: ReactNode;
+}) {
   const { patient, problems, consultations } = record;
   const active = problems.filter((p) => p.status === "active");
   const rev = record.today_screening?.current_revision ?? null;
@@ -51,6 +54,7 @@ export function PatientPanel({ record, onOpenConsultation }: { record: ClinicalR
           </ul>
         )}
       </div>
+      {besideProblems}
 
       <div style={block}>
         <strong style={sub}>Escuta de hoje</strong>
