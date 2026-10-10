@@ -13,12 +13,19 @@ import { todayInCity } from "../../lib/campaigns";
 import { Panel } from "../../components/Panel";
 import { DataTable, type Column } from "../../components/DataTable";
 import { SensitiveAction } from "../../components/SensitiveAction";
-import { buttonStyle, secondaryButtonStyle } from "../../components/formStyles";
+import { buttonStyle, disabledButtonStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { ProtocolForm } from "./ProtocolForm";
 
 type Editing = { mode: "new" } | { mode: "version"; protocol: NursingProtocol };
 
 const FUTURE_NOTE = "A lista só mostra esta versão depois que ela começar a valer";
+const PAST_NOTE = "Esta versão não vai aparecer como vigente, porque o fim da vigência já passou";
+function timingNotes(d: ProtocolDraft, today: string): string[] {
+  const out: string[] = [];
+  if (d.validFrom > today) out.push(`${FUTURE_NOTE} (a partir de ${day(d.validFrom)}).`);
+  if (d.validUntil && d.validUntil < today) out.push(`${PAST_NOTE} (${day(d.validUntil)}).`);
+  return out;
+}
 const day = (iso: string) => iso.split("-").reverse().join("/");
 
 function validity(p: NursingProtocol): string {
@@ -50,7 +57,8 @@ export function NursingProtocolsPanel({ onGoToSecurity, searchDelayMs }: { onGoT
     { label: "Vigência", w: "1.4fr", render: (p) => validity(p) },
     { label: "Itens", w: "0.5fr", align: "right", render: (p) => String(p.current_version?.items.length ?? 0) },
     { label: "", w: "auto", align: "right", render: (p) => (
-      <button type="button" aria-label={`Nova versão de ${p.title}`} style={secondaryButtonStyle}
+      <button type="button" aria-label={`Nova versão de ${p.title}`} disabled={editing !== null}
+        style={editing !== null ? disabledButtonStyle : secondaryButtonStyle}
         onClick={() => start({ mode: "version", protocol: p })}>Nova versão</button>
     ) }
   ];
@@ -78,9 +86,7 @@ export function NursingProtocolsPanel({ onGoToSecurity, searchDelayMs }: { onGoT
             description={(
               <>
                 <p style={muted}>Editar cria uma versão nova; as receitas já emitidas guardam a versão em que saíram.</p>
-                {ready.validFrom > today && (
-                  <p style={muted}>{`${FUTURE_NOTE} (a partir de ${day(ready.validFrom)}).`}</p>
-                )}
+                {timingNotes(ready, today).map((n) => <p key={n} style={muted}>{n}</p>)}
               </>
             )}
             requiresStepUp
@@ -92,7 +98,7 @@ export function NursingProtocolsPanel({ onGoToSecurity, searchDelayMs }: { onGoT
             onDone={() => {
               lastDraft.current = null;
               setEditing(null); setReady(null);
-              setNotice(ready.validFrom > today ? `Protocolo salvo. ${FUTURE_NOTE} (a partir de ${day(ready.validFrom)}).` : "Protocolo salvo.");
+              setNotice([ "Protocolo salvo.", ...timingNotes(ready, today) ].join(" "));
               void queryClient.invalidateQueries({ queryKey: [ PROTOCOLS_KEY ] });
             }}
             onCancel={() => setReady(null)}

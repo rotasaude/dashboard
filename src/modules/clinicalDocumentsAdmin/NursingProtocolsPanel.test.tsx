@@ -118,6 +118,10 @@ describe("NursingProtocolsPanel", () => {
     mocked(api.addNursingProtocolVersion).mockRejectedValueOnce(new api.ApiError(422, { error: "invalid_item", index: 0, field: "max_dose" }, "x"));
     fireEvent.click(screen.getByRole("button", { name: "Salvar protocolo" }));
     await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("dose máxima"));
+    // A recusa não perde o rascunho: cancelar o step-up volta ao formulário preenchido.
+    fireEvent.click(within(screen.getByRole("region", { name: /Nova versão/ })).getByRole("button", { name: "Cancelar" }));
+    const form = screen.getByRole("form", { name: "Nova versão: Protocolo de enfermagem na atenção primária" });
+    expect((within(form).getByLabelText("Dose máxima — Dipirona sódica 500 mg/mL, solução oral") as HTMLInputElement).value).toBe("2");
   });
 
   it("trava o salvar enquanto a requisição está em voo: duplo clique manda uma vez só", async () => {
@@ -135,5 +139,54 @@ describe("NursingProtocolsPanel", () => {
     expect(api.addNursingProtocolVersion).toHaveBeenCalledTimes(1);
     finish(nursingProtocol());
     expect((await screen.findByRole("status")).textContent).toBe("Protocolo salvo.");
+  });
+
+  it("botões de linha ficam desabilitados com formulário aberto e durante o voo", async () => {
+    let finish!: (p: Awaited<ReturnType<typeof api.addNursingProtocolVersion>>) => void;
+    mocked(api.addNursingProtocolVersion).mockReturnValue(new Promise((res) => { finish = res; }));
+    renderWithProviders(<NursingProtocolsPanel searchDelayMs={0} />);
+    const row = await screen.findByRole("button", { name: "Nova versão de Protocolo de enfermagem na atenção primária" });
+    expect((row as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(row);
+    expect((row as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Revisar e salvar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Salvar protocolo" }));
+    expect((row as HTMLButtonElement).disabled).toBe(true);
+    finish(nursingProtocol());
+    await screen.findByRole("status");
+    expect((row as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("nova versão de protocolo sem versão vigente abre sem itens e exige um medicamento", async () => {
+    mocked(api.listNursingProtocols).mockResolvedValue([ nursingProtocol({ current_version: null }) ]);
+    renderWithProviders(<NursingProtocolsPanel searchDelayMs={0} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Nova versão de Protocolo de enfermagem na atenção primária" }));
+    const form = screen.getByRole("form", { name: /Nova versão/ });
+    expect(within(form).getByText("nenhum medicamento no protocolo")).not.toBeNull();
+    fireEvent.click(within(form).getByRole("button", { name: "Revisar e salvar" }));
+    expect((await within(form).findByRole("alert")).textContent).toBe("inclua ao menos um medicamento no protocolo");
+  });
+
+  it("Enter na busca de medicamento não envia o formulário", async () => {
+    renderWithProviders(<NursingProtocolsPanel searchDelayMs={0} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Novo protocolo" }));
+    const form = screen.getByRole("form", { name: "Novo protocolo de enfermagem" });
+    fireEvent.keyDown(within(form).getByLabelText("Incluir medicamento no protocolo"), { key: "Enter" });
+    expect(within(form).queryByRole("alert")).toBeNull();
+    // Em navegador o Enter dispara submit implícito; o keydown cancelado o impede.
+    const ev = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true });
+    within(form).getByLabelText("Incluir medicamento no protocolo").dispatchEvent(ev);
+    expect(ev.defaultPrevented).toBe(true);
+  });
+
+  it("fim de vigência já passado: avisa que a versão não aparece como vigente", async () => {
+    renderWithProviders(<NursingProtocolsPanel searchDelayMs={0} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Nova versão de Protocolo de enfermagem na atenção primária" }));
+    const form = screen.getByRole("form", { name: /Nova versão/ });
+    fireEvent.change(within(form).getByLabelText("Vigência — de"), { target: { value: "2026-01-01" } });
+    fireEvent.change(within(form).getByLabelText("Vigência — até (opcional)"), { target: { value: "2026-06-30" } });
+    fireEvent.click(within(form).getByRole("button", { name: "Revisar e salvar" }));
+    const dialog = screen.getByRole("region", { name: /Nova versão/ });
+    expect(within(dialog).getByText(/não vai aparecer como vigente.*30\/06\/2026/)).not.toBeNull();
   });
 });
