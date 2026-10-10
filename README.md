@@ -33,6 +33,9 @@ A navegação (`src/shell/modules.ts`) é filtrada pelos papéis da sessão
 | Atendimento | Validação presencial, check-in, atendimentos abertos, unidades (ADR 0018) | `municipal_admin`, `citizen_verifier` |
 | Equipe | Convidar membros, conceder e revogar papéis | `municipal_admin` |
 | Cidade | Território: bairros, cobertura das unidades (ADR 0023) | `municipal_admin` |
+| Atendimento → consulta (módulo 19c) | Aba Documentos (atestado, declaração, receita, requisição de exames; imprimir e cancelar) e medicamentos em uso ao lado dos problemas | `health_professional` com `clinical_documents` |
+| Atendimento → fila (módulo 19c) | "Declaração" de comparecimento pelo atendimento | recepção e profissionais, com `clinical_documents` |
+| Cidade → Documentos clínicos (módulo 19c) | CNPJ da cidade, REMUME e protocolos de enfermagem (step-up nas escritas) | `municipal_admin` com `clinical_documents` |
 | Conta | Segurança: autenticador TOTP, recovery codes, senha | usuários da cidade (não o operador) |
 
 O que a API recusaria (403) fica fora do menu. Equipe e Atendimento só

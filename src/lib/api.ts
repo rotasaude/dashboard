@@ -1774,7 +1774,7 @@ export type SignatureVerification = "valid" | "invalid" | "indeterminate";
 export type SignatureReason =
   | "no_session" | "session_expired" | "provider_unavailable" | "provider_rejected" | "signer_unavailable"
   | "verification_failed" | "certificate_expired" | "certificate_revoked" | "certificate_cpf_mismatch"
-  | "feature_disabled" | "user_request";
+  | "feature_disabled" | "user_request" | "document_cancelled";
 export type SignatureDocumentType = "consultation" | "consultation_addendum";
 export type CertificateStatus = "active" | "replaced" | "unlinked" | "revoked" | "expired";
 export type SignatureFileKind = "pdf" | "package";
@@ -1927,4 +1927,189 @@ export function fetchSignatureFile(id: string, kind: SignatureFileKind): Promise
 export function getSignatureOverview(q: { from: string; to: string }): Promise<SignatureOverview> {
   const params = new URLSearchParams({ from: q.from, to: q.to });
   return jsonFetch(`${signaturePath("admin", "overview")}?${params.toString()}`);
+}
+
+// ─── Documentos clínicos (módulo 19c, ADR 0033; contrato 2026-10-09 §1–§7) ───
+// CID, medicamentos, posologia, motivo e nomes só no corpo de POST/PUT, nunca
+// em URL: as rotas levam só ids. Toda escrita por cookie leva JSON, inclusive
+// o DELETE (corpo `{}`). A recepção só chama a declaração. As formas de
+// entrada (`*Input`) são as da Divergência D1: o api deriva o resto
+// (descrição impressa, item do catálogo, antimicrobiano, vias, validade, CNPJ,
+// protocolo, rótulo do CID, nome da unidade e os exames da consulta).
+
+const CLINICAL_DOCUMENTS_BASE = import.meta.env.VITE_CLINICAL_DOCUMENTS_BASE || "/clinical_documents";
+
+export type DocumentKind = "sick_note" | "attendance_declaration" | "prescription" | "exam_requisition";
+export type IssueMode = "digital" | "paper";
+export type DocumentStatus = "issued" | "cancelled";
+export type SickNoteType = "leave" | "companion";
+export type CompanionReason = "clt_473_x" | "clt_473_xi" | "clt_473_xii" | "other";
+export type DeclarationPeriod = "morning" | "afternoon" | "full_day";
+export type MedicationRoute =
+  | "oral" | "sublingual" | "topical" | "ophthalmic" | "otic" | "nasal" | "inhalation" | "vaginal" | "rectal"
+  | "intramuscular" | "intravenous" | "subcutaneous" | "other";
+export type MedicationStatus = "active" | "suspended";
+export type MedicationOrigin = "prescription" | "external";
+
+export interface CatalogItemRef {
+  id: string; catmat_code: number; label: string; active_ingredient: string; strength: string; dosage_form: string | null;
+}
+export interface SickNoteContent {
+  type: SickNoteType; days?: number; start_on?: string; companion_name?: string; companion_kinship?: string;
+  companion_reason?: CompanionReason; cid10?: { code: string; label: string }; cid_authorized: boolean; note?: string | null;
+}
+export interface DeclarationContent {
+  date: string; arrived_at?: string; left_at?: string; period?: DeclarationPeriod; unit_name: string;
+  companion_name?: string; issuer_registration?: string;
+}
+export interface PrescriptionItem {
+  position: number; catalog_item?: CatalogItemRef; free_text?: string; printed_description: string; quantity: number;
+  quantity_unit: string; route: MedicationRoute; dosage_instructions: string; duration_days?: number; continuous: boolean;
+  antimicrobial: boolean; reason_problem_id?: string;
+}
+export interface PrescriptionContent {
+  items: PrescriptionItem[];
+  nursing_protocol?: { id: string; title: string; number: string; year: number; version_id: string };
+  city_cnpj?: string; antimicrobial: boolean; copies: 1 | 2; valid_until?: string;
+  catalog_release?: string | null;
+}
+export interface ExamRequisitionContent {
+  exams: { sigtap_code: string; label: string; competence: string; cid10_justification?: string }[]; note?: string | null;
+}
+export type DocumentContent = SickNoteContent | DeclarationContent | PrescriptionContent | ExamRequisitionContent;
+
+// Item da renovação: o api monta com `.compact`; só position, printed_description,
+// continuous e antimicrobial são garantidos, o resto é omitido (não vem null).
+export interface RenewalItem {
+  position: number; printed_description: string; continuous: true; antimicrobial: boolean;
+  catalog_item?: CatalogItemRef; free_text?: string; quantity?: number; quantity_unit?: string; route?: MedicationRoute;
+  dosage_instructions?: string; duration_days?: number; reason_problem_id?: string;
+}
+
+export interface DocumentAuthor { id: string; name: string; council: string | null; cbo_code: string | null }
+export interface ClinicalDocument {
+  id: string; kind: DocumentKind; status: DocumentStatus; issue_mode: IssueMode; issued_at: string;
+  cancelled_at: string | null; cancel_reason: string | null; author: DocumentAuthor;
+  patient: { id: string; display_name: string } | null; consultation_id: string | null; attendance_id: string;
+  short_code: string; verification_url: string; replaces_document_id: string | null;
+  content: DocumentContent; signature: SignatureBlock | null;
+}
+
+export interface SickNoteInput {
+  type: SickNoteType; days?: number; start_on?: string; companion_name?: string; companion_kinship?: string;
+  companion_reason?: CompanionReason; cid10?: { code: string }; cid_authorized: boolean; note?: string;
+}
+export interface DeclarationInput {
+  period?: DeclarationPeriod; arrived_at?: string; left_at?: string; companion_name?: string; issuer_registration?: string;
+}
+export interface PrescriptionItemInput {
+  catalog_item?: { id: string }; free_text?: string; quantity: number; quantity_unit: string; route: MedicationRoute;
+  dosage_instructions: string; duration_days?: number; continuous: boolean; reason_problem_id?: string;
+}
+export interface PrescriptionInput { items: PrescriptionItemInput[]; nursing_protocol?: { version_id: string } }
+export interface ExamRequisitionInput { note?: string }
+export type DocumentInput =
+  | { kind: "sick_note"; content: SickNoteInput }
+  | { kind: "attendance_declaration"; content: DeclarationInput }
+  | { kind: "prescription"; content: PrescriptionInput }
+  | { kind: "exam_requisition"; content: ExamRequisitionInput };
+
+export interface PatientMedication {
+  id: string; catalog_item?: CatalogItemRef | null; free_text?: string | null; label: string; dosage_summary: string | null;
+  continuous: boolean; status: MedicationStatus; origin: MedicationOrigin; started_on?: string | null; updated_at: string;
+}
+export type MedicationChange =
+  | { action: "add_external"; catalog_item_id?: string; free_text?: string; dosage_summary?: string; continuous: boolean }
+  | { action: "suspend" | "reactivate"; medication_id: string };
+export interface MedicationSearchItem extends CatalogItemRef { antimicrobial: boolean; controlled: boolean; in_network: boolean }
+
+export interface CityDocumentsProfile { name: string; cnpj: string | null }
+export interface RemumeEntry { catalog_item: CatalogItemRef & { antimicrobial: boolean; controlled: boolean }; unit_ids: string[] }
+export interface MaxDose { quantity: number; unit: string }
+export interface ProtocolItem { catalog_item: CatalogItemRef; max_dose?: MaxDose | null }
+export interface NursingProtocolVersion { id: string; version: number; valid_from: string; valid_until: string | null; items: ProtocolItem[] }
+export interface NursingProtocol { id: string; title: string; number: string; year: number; current_version: NursingProtocolVersion | null }
+export interface ProtocolVersionInput { valid_from: string; valid_until?: string; items: { catalog_item_id: string; max_dose?: MaxDose }[] }
+export interface NursingProtocolInput extends ProtocolVersionInput { title: string; number: string; year: number }
+
+const attendanceDocPath = (...parts: string[]) => [ ATTENDANCE_BASE, ...parts.map(encodeURIComponent) ].join("/");
+const cityDocPath = (...parts: string[]) => [ CLINICAL_DOCUMENTS_BASE, ...parts.map(encodeURIComponent) ].join("/");
+
+// Ler gera a trilha no api (regras de leitura do 19a).
+export async function listConsultationDocuments(consultationId: string): Promise<ClinicalDocument[]> {
+  return (await jsonFetch<{ items: ClinicalDocument[] }>(attendanceDocPath("consultations", consultationId, "documents"))).items;
+}
+
+export function issueDocument(consultationId: string, input: DocumentInput, replacesDocumentId?: string): Promise<ClinicalDocument> {
+  return jsonFetch(attendanceDocPath("consultations", consultationId, "documents"), postProfessional({
+    kind: input.kind, content: input.content, ...(replacesDocumentId ? { replaces_document_id: replacesDocumentId } : {})
+  }));
+}
+
+export function issueAttendanceDeclaration(attendanceId: string, content: DeclarationInput): Promise<ClinicalDocument> {
+  return jsonFetch(attendanceDocPath("attendances", attendanceId, "declarations"), postProfessional({ content }));
+}
+
+export function getClinicalDocument(id: string): Promise<ClinicalDocument> {
+  return jsonFetch(attendanceDocPath("documents", id));
+}
+
+// PDF lido com fetch (e não por navegação) para a tela mostrar a recusa.
+export function fetchDocumentPdf(id: string): Promise<SignatureFile> {
+  return binaryFetch(attendanceDocPath("documents", id, "print"), "application/pdf");
+}
+
+// Step-up: quem trata 401 mfa_required é o SensitiveAction.
+export function cancelDocument(id: string, reason: string): Promise<ClinicalDocument> {
+  return jsonFetch(attendanceDocPath("documents", id, "cancel"), postProfessional({ reason }));
+}
+
+export async function listPatientMedications(patientId: string): Promise<PatientMedication[]> {
+  return (await jsonFetch<{ items: PatientMedication[] }>(attendanceDocPath("patients", patientId, "medications"))).items;
+}
+
+export function changeMedication(consultationId: string, change: MedicationChange): Promise<PatientMedication> {
+  return jsonFetch(attendanceDocPath("consultations", consultationId, "medications"), postProfessional(change));
+}
+
+export async function getPrescriptionRenewal(consultationId: string): Promise<RenewalItem[]> {
+  return (await jsonFetch<{ items: RenewalItem[] }>(attendanceDocPath("consultations", consultationId, "renewal"))).items;
+}
+
+export async function searchMedications(q: string, unitId?: string): Promise<MedicationSearchItem[]> {
+  const body = unitId ? { q, unit_id: unitId } : { q };
+  return (await jsonFetch<{ items: MedicationSearchItem[] }>(attendanceDocPath("medications", "search"), postProfessional(body))).items;
+}
+
+export function getCityDocumentsProfile(): Promise<CityDocumentsProfile> {
+  return jsonFetch(cityDocPath("city_profile"));
+}
+
+export function setCityCnpj(cnpj: string): Promise<CityDocumentsProfile> {
+  return jsonFetch(cityDocPath("city_profile"), { method: "PUT", body: JSON.stringify({ cnpj }) });
+}
+
+export async function listRemume(): Promise<RemumeEntry[]> {
+  return (await jsonFetch<{ items: RemumeEntry[] }>(cityDocPath("remume"))).items;
+}
+
+export function addRemumeItem(catalogItemId: string, unitIds?: string[]): Promise<RemumeEntry> {
+  const body = unitIds && unitIds.length > 0 ? { catalog_item_id: catalogItemId, unit_ids: unitIds } : { catalog_item_id: catalogItemId };
+  return jsonFetch(cityDocPath("remume"), postProfessional(body));
+}
+
+export async function removeRemumeItem(catalogItemId: string): Promise<void> {
+  await jsonFetch<void>(cityDocPath("remume", catalogItemId), { ...postProfessional({}), method: "DELETE" });
+}
+
+export async function listNursingProtocols(): Promise<NursingProtocol[]> {
+  return (await jsonFetch<{ items: NursingProtocol[] }>(cityDocPath("nursing_protocols"))).items;
+}
+
+export function createNursingProtocol(input: NursingProtocolInput): Promise<NursingProtocol> {
+  return jsonFetch(cityDocPath("nursing_protocols"), postProfessional(input));
+}
+
+export function addNursingProtocolVersion(id: string, input: ProtocolVersionInput): Promise<NursingProtocol> {
+  return jsonFetch(cityDocPath("nursing_protocols", id, "versions"), postProfessional(input));
 }

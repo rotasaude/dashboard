@@ -21,6 +21,10 @@ import react from "@vitejs/plugin-react";
 //   /signature  → assinatura digital (módulo 19b). O prestador devolve a pessoa a
 //                 /dashboard/signature/callback (base do Vite), que NÃO casa com este
 //                 prefixo: o retorno é do dashboard, e só o POST /signature/oauth/callback vai ao api.
+//   /clinical_documents → documentos clínicos da cidade (módulo 19c: CNPJ, REMUME e protocolos de enfermagem; municipal_admin).
+//   ^/v(/|$)    → página pública de conferência do documento (módulo 19c), servida pelo api no host da cidade
+//                 (GET /v, POST /v/lookup, /v/:token); em dev, só para a prova do QR code pela porta do Vite
+//                 (regex: não casa /vite nem /viacep).
 //
 // Plano 6: changeOrigin FICA FALSE. O Rails resolve a cidade pelo Host da
 // requisição (CityCatalog); com changeOrigin: true o proxy reescrevia o Host
@@ -55,7 +59,9 @@ export default defineConfig({
       "/cnes": proxy(TARGET),
       "/production": proxy(TARGET),
       "/clinical_record": proxy(TARGET),
-      "/signature": proxy(TARGET)
+      "/signature": proxy(TARGET),
+      "/clinical_documents": proxy(TARGET),
+      "^/v(/|$)": proxy(TARGET)
     }
   }
 });

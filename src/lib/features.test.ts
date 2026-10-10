@@ -34,6 +34,8 @@ describe("features da sessão (contratos §1)", () => {
     expect(hasFeature({ features: [ "clinical_record" ] }, "clinical_record")).toBe(true);
     expect(featureLabel("digital_signature")).toBe("Assinatura digital");
     expect(hasFeature({ features: [ "digital_signature" ] }, "digital_signature")).toBe(true);
+    expect(featureLabel("clinical_documents")).toBe("Documentos clínicos");
+    expect(hasFeature({ features: [ "clinical_documents" ] }, "clinical_documents")).toBe(true);
     expect(featureLabel("rnds_sync")).toBe("rnds_sync");
   });
 });
