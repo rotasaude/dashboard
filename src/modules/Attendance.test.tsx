@@ -343,6 +343,46 @@ describe("Attendance", () => {
     expect(screen.queryByRole("button", { name: "Chamar próximo" })).toBeNull();
   });
 
+  it("declaração (19c): papel duplo sem vínculo na unidade emite como recepção e pede a matrícula; com vínculo, não pede", async () => {
+    const unit = { id: "h1", name: "UBS Centro", kind: "ubs" };
+    mocked(api.fetchCurrentSession).mockResolvedValue({
+      ...session("citizen_verifier"),
+      features: [ "clinical_documents" ],
+      memberships: [
+        ...session("citizen_verifier").memberships,
+        { city_slug: "m1", city_name: "Curitiba", city_uf: "PR", role: "health_professional" }
+      ]
+    });
+    localStorage.setItem(currentUnitKey("u1"), unit.id);
+    mocked(api.listActiveUnits).mockResolvedValue([ unit ]);
+    mocked(api.listUnitQueue).mockResolvedValue({
+      waiting: [ {
+        id: "a1", cpf_masked: "***.982.247-**", checked_in_at: "2026-09-25T09:00:00Z",
+        protocol_name: null, priority: 1, source: "triage" as const,
+        appointment_time: null, called_at: null, called_by_name: null
+      } ],
+      in_care: []
+    });
+    const link = (unitId: string) => ({
+      professional: {} as api.Professional, shifts: [],
+      links: [ { id: "l1", health_unit_id: unitId, unit_name: "UBS", cbo_code: "225125", cbo_title: null,
+        started_at: "x", started_by: "a", ended_at: null, ended_by: null } ]
+    });
+    mocked(api.getMyProfessional).mockResolvedValue(link("outra"));
+    renderAttendance();
+    expect(await screen.findByText("Você não tem vínculo com esta unidade")).toBeTruthy();
+    fireEvent.click(await screen.findByRole("button", { name: "Declaração" }));
+    expect(screen.getByLabelText("Sua matrícula (sai no papel)")).not.toBeNull();
+    cleanup();
+
+    mocked(api.getMyProfessional).mockResolvedValue(link("h1"));
+    renderAttendance();
+    expect(await screen.findByRole("button", { name: "Chamar próximo" })).not.toBeNull();
+    fireEvent.click(await screen.findByRole("button", { name: "Declaração" }));
+    expect(screen.getByRole("button", { name: "Emitir declaração" })).not.toBeNull();
+    expect(screen.queryByLabelText("Sua matrícula (sai no papel)")).toBeNull();
+  });
+
   it("recepção (canVerify) vê Pedidos e Agenda do dia; profissional sem esse papel não vê", async () => {
     const unit = { id: "un1", name: "UBS Centro", kind: "ubs" };
     localStorage.setItem(currentUnitKey("u1"), unit.id);
