@@ -1775,7 +1775,7 @@ export type SignatureReason =
   | "no_session" | "session_expired" | "provider_unavailable" | "provider_rejected" | "signer_unavailable"
   | "verification_failed" | "certificate_expired" | "certificate_revoked" | "certificate_cpf_mismatch"
   | "feature_disabled" | "user_request" | "document_cancelled";
-export type SignatureDocumentType = "consultation" | "consultation_addendum";
+export type SignatureDocumentType = "consultation" | "consultation_addendum" | "clinical_document";
 export type CertificateStatus = "active" | "replaced" | "unlinked" | "revoked" | "expired";
 export type SignatureFileKind = "pdf" | "package";
 

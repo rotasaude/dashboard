@@ -13,6 +13,8 @@ import { useAuth } from "../../lib/auth";
 import { canSign, signatureSettling } from "../../lib/signature";
 import { canUseDocuments } from "../../lib/clinicalDocuments";
 import { buttonStyle, disabledButtonStyle, secondaryButtonStyle } from "../../components/formStyles";
+import { SegmentedControl } from "../../shell/SegmentedControl";
+import { ConsultationDocuments } from "../documents/ConsultationDocuments";
 import { PatientPanel } from "./PatientPanel";
 import { MedicationsBlock } from "./MedicationsBlock";
 import { ConsultationEditor } from "./ConsultationEditor";
@@ -52,6 +54,11 @@ export function ConsultationWorkspace(props: Props) {
   const signer = canSign(user);
   // Módulo 19c: documentos clínicos e medicamentos em uso, com o interruptor ligado.
   const documentsOn = canUseDocuments(user);
+  // Aba Documentos: o editor continua montado (escondido) para o autosave não
+  // perder o que foi digitado; os documentos só montam quando a aba abre.
+  const [ tab, setTab ] = useState<"consultation" | "documents">("consultation");
+  const showTabs = documentsOn && !!consultation;
+  const onDocuments = showTabs && tab === "documents";
   const settling = consultation?.status === "finalized" && signatureSettling(consultation);
   const consultationId = consultation?.id ?? null;
 
@@ -128,20 +135,35 @@ export function ConsultationWorkspace(props: Props) {
             </div>
           )}
 
-          {consultation?.status === "draft" && options.isError && <p role="alert" style={alert}>{consultationError(options.error)}</p>}
-          {consultation?.status === "draft" && options.data && (
-            <ConsultationEditor key={consultation.id} consultation={consultation} record={record.data} options={options.data}
-              referenceUnitIds={props.referenceUnitIds} unit={props.unit} units={props.units}
-              autosaveDelayMs={props.autosaveDelayMs} searchDelayMs={props.searchDelayMs}
-              onFinalized={(c) => { setConsultation(c); restartRereads(); props.onFinalized(); }}
-              onLocked={(message) => void reload(message)} />
+          {showTabs && (
+            <SegmentedControl
+              options={[ { key: "consultation", label: "Consulta" }, { key: "documents", label: "Documentos" } ]}
+              value={tab} onChange={setTab} />
           )}
 
-          {consultation?.status === "finalized" && (
-            <ConsultationView consultation={consultation} options={options.data ?? null} patientProblems={record.data.problems}
-              searchDelayMs={props.searchDelayMs}
-              onAddendumAdded={(addendum) => { setConsultation((c) => (c ? withAddendum(c, addendum) : c)); restartRereads(); }}
-              onClose={props.onClose} />
+          {/* display: contents não mexe no gap do painel; só vale com a aba Consulta
+              aberta (um display no style venceria o hidden). */}
+          <div hidden={onDocuments} style={onDocuments ? undefined : { display: "contents" }}>
+            {consultation?.status === "draft" && options.isError && <p role="alert" style={alert}>{consultationError(options.error)}</p>}
+            {consultation?.status === "draft" && options.data && (
+              <ConsultationEditor key={consultation.id} consultation={consultation} record={record.data} options={options.data}
+                referenceUnitIds={props.referenceUnitIds} unit={props.unit} units={props.units}
+                autosaveDelayMs={props.autosaveDelayMs} searchDelayMs={props.searchDelayMs}
+                onFinalized={(c) => { setConsultation(c); restartRereads(); props.onFinalized(); }}
+                onLocked={(message) => void reload(message)} />
+            )}
+
+            {consultation?.status === "finalized" && (
+              <ConsultationView consultation={consultation} options={options.data ?? null} patientProblems={record.data.problems}
+                searchDelayMs={props.searchDelayMs}
+                onAddendumAdded={(addendum) => { setConsultation((c) => (c ? withAddendum(c, addendum) : c)); restartRereads(); }}
+                onClose={props.onClose} />
+            )}
+          </div>
+
+          {onDocuments && consultation && (
+            <ConsultationDocuments consultationId={consultation.id} searchDelayMs={props.searchDelayMs}
+              issue={user?.id === consultation.author.id ? { cboCode: consultation.cbo_code, unitId: props.unit.id } : undefined} />
           )}
         </>
       )}

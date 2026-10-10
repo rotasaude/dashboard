@@ -122,7 +122,9 @@ const REASON_LABEL: Record<string, string> = {
   certificate_untrusted: "a cadeia do certificado não é reconhecida (ICP-Brasil)",
   professional_cpf_missing: "seu cadastro está sem CPF — procure a administração da cidade",
   feature_disabled: "assinatura digital desligada na cidade",
-  user_request: "voltou ao papel a pedido do autor"
+  user_request: "voltou ao papel a pedido do autor",
+  // 19c: documento digital cancelado com a assinatura ainda na fila volta ao papel.
+  document_cancelled: "documento cancelado"
 };
 
 export function reasonLabel(code: string | null | undefined): string {
@@ -130,7 +132,9 @@ export function reasonLabel(code: string | null | undefined): string {
   return REASON_LABEL[code] ?? code;
 }
 
-const DOCUMENT_LABEL: Record<string, string> = { consultation: "consulta", consultation_addendum: "adendo" };
+const DOCUMENT_LABEL: Record<string, string> = {
+  consultation: "consulta", consultation_addendum: "adendo", clinical_document: "documento clínico"
+};
 
 export function documentLabel(type: string): string {
   return DOCUMENT_LABEL[type] ?? type;

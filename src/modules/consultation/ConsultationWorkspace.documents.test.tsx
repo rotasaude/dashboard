@@ -4,7 +4,11 @@
 // o comportamento deles tem teste próprio.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, screen } from "@testing-library/react";
+import { useState } from "react";
 import type { Consultation } from "../../lib/api";
+
+// Montagens do editor: trocar de aba não pode remontá-lo (o autosave perderia o digitado).
+const editorMounts = vi.hoisted(() => ({ n: 0 }));
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const real = await importOriginal<typeof import("../../lib/api")>();
@@ -12,11 +16,21 @@ vi.mock("../../lib/api", async (importOriginal) => {
     startConsultation: vi.fn(), getConsultation: vi.fn() };
 });
 vi.mock("./ConsultationEditor", () => ({
-  ConsultationEditor: (p: { consultation: Consultation; onFinalized(c: Consultation): void }) => (
-    <div>
-      <span>{`editor ${p.consultation.id}`}</span>
-      <button type="button" onClick={() => p.onFinalized({ ...p.consultation, status: "finalized" })}>finalizar (dublê)</button>
-    </div>
+  ConsultationEditor: function EditorDouble(p: { consultation: Consultation; onFinalized(c: Consultation): void }) {
+    useState(() => { editorMounts.n += 1; return 0; });
+    const [ text, setText ] = useState("");
+    return (
+      <div>
+        <span>{`editor ${p.consultation.id}`}</span>
+        <label>Anotação (dublê)<input value={text} onChange={(e) => setText(e.target.value)} /></label>
+        <button type="button" onClick={() => p.onFinalized({ ...p.consultation, status: "finalized" })}>finalizar (dublê)</button>
+      </div>
+    );
+  }
+}));
+vi.mock("../documents/ConsultationDocuments", () => ({
+  ConsultationDocuments: (p: { consultationId: string; issue?: { cboCode: string; unitId?: string } }) => (
+    <span>{`documentos ${p.consultationId} · ${p.issue ? `emissão ${p.issue.cboCode} ${p.issue.unitId}` : "só lista"}`}</span>
   )
 }));
 vi.mock("./ConsultationView", () => ({
@@ -68,5 +82,38 @@ describe("ConsultationWorkspace — documentos clínicos (19c)", () => {
     renderIt();
     expect(await screen.findByText("Joana Lima")).not.toBeNull();
     expect(screen.queryByText(/^medicamentos /)).toBeNull();
+  });
+
+  it("abas Consulta e Documentos depois de iniciar; o rascunho fica montado (e com o digitado) ao trocar de aba", async () => {
+    editorMounts.n = 0;
+    renderIt();
+    expect(await screen.findByText("Joana Lima")).not.toBeNull();
+    expect(screen.queryByRole("tab", { name: "Documentos" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Iniciar consulta" }));
+    fireEvent.change(await screen.findByLabelText("Anotação (dublê)"), { target: { value: "dor lombar há 3 dias" } });
+    fireEvent.click(screen.getByRole("tab", { name: "Documentos" }));
+    expect(screen.getByText("documentos cs1 · emissão 225142 u1")).not.toBeNull();
+    expect(screen.getByText("editor cs1").closest("[hidden]")).not.toBeNull();
+    fireEvent.click(screen.getByRole("tab", { name: "Consulta" }));
+    expect(screen.getByText("editor cs1").closest("[hidden]")).toBeNull();
+    expect(screen.queryByText(/^documentos cs1/)).toBeNull();
+    expect((screen.getByLabelText("Anotação (dublê)") as HTMLInputElement).value).toBe("dor lombar há 3 dias");
+    expect(editorMounts.n).toBe(1);
+  });
+
+  it("consulta de outra autora: Documentos só com a lista", async () => {
+    mocked(api.startConsultation).mockResolvedValue(consultation({ author: { id: "us9", name: "Dr. Outro" } }));
+    renderIt();
+    fireEvent.click(await screen.findByRole("button", { name: "Iniciar consulta" }));
+    fireEvent.click(await screen.findByRole("tab", { name: "Documentos" }));
+    expect(screen.getByText("documentos cs1 · só lista")).not.toBeNull();
+  });
+
+  it("sem clinical_documents: sem abas", async () => {
+    mocked(api.fetchCurrentSession).mockResolvedValue(docUser([ "health_professional" ], { features: [ "clinical_record" ] }));
+    renderIt();
+    fireEvent.click(await screen.findByRole("button", { name: "Iniciar consulta" }));
+    expect(await screen.findByText("editor cs1")).not.toBeNull();
+    expect(screen.queryByRole("tab")).toBeNull();
   });
 });

@@ -145,6 +145,11 @@ describe("marcador, motivos e impresso", () => {
     expect(reasonLabel(null)).toBe("—");
   });
 
+  it("documento clínico cancelado com a assinatura na fila (19c)", () => {
+    expect(reasonLabel("document_cancelled")).toBe("documento cancelado");
+    expect(signatureMarker({ mode: "manual", request_id: "sr1", reason_code: "document_cancelled" }).detail).toBe("documento cancelado");
+  });
+
   it("motivos do contrato real (R3)", () => {
     expect(reasonLabel("certificate_cpf_mismatch")).toBe("o certificado autorizado é de outro CPF");
     expect(reasonLabel("certificate_untrusted")).toBe("a cadeia do certificado não é reconhecida (ICP-Brasil)");
@@ -154,6 +159,7 @@ describe("marcador, motivos e impresso", () => {
   it("documento e nome do arquivo baixado (só o id)", () => {
     expect(documentLabel("consultation")).toBe("consulta");
     expect(documentLabel("consultation_addendum")).toBe("adendo");
+    expect(documentLabel("clinical_document")).toBe("documento clínico");
     expect(documentLabel("prescription")).toBe("prescription");
     expect(signatureFileName("sg1", "pdf")).toBe("assinatura-sg1.pdf");
     expect(signatureFileName("sg1", "package")).toBe("assinatura-sg1.zip");
