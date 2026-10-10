@@ -29,6 +29,7 @@ interface Props {
   searchDelayMs?: number;
   onClose(): void;
   onFinalized(): void;
+  onGoToSecurity?(): void;
 }
 
 // Módulo 19b (Ruling R8): logo depois de finalizar ou de um adendo, o bloco
@@ -163,6 +164,7 @@ export function ConsultationWorkspace(props: Props) {
 
           {onDocuments && consultation && (
             <ConsultationDocuments consultationId={consultation.id} searchDelayMs={props.searchDelayMs}
+              onGoToSecurity={props.onGoToSecurity}
               issue={user?.id === consultation.author.id ? { cboCode: consultation.cbo_code, unitId: props.unit.id } : undefined} />
           )}
         </>

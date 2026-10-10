@@ -96,7 +96,7 @@ function renderModule(active: ModuleId, setActive: (id: ModuleId) => void) {
     case "integrations":   return <Integrations onGoToSecurity={() => setActive("security")} />;
     case "cnes":           return <Cnes onGoToSecurity={() => setActive("security")} />;
     case "production":     return <Production onGoToSecurity={() => setActive("security")} />;
-    case "my-consultations": return <MyConsultations />;
+    case "my-consultations": return <MyConsultations onGoToSecurity={() => setActive("security")} />;
     case "professional-consultations": return <ProfessionalConsultations onGoToSecurity={() => setActive("security")} />;
     case "clinical-record": return <ClinicalRecord onGoToSecurity={() => setActive("security")} />;
     case "signature":      return <SignatureAccount onGoToSecurity={() => setActive("security")} />;

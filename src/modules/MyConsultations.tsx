@@ -21,7 +21,7 @@ import { ConsultationDocuments } from "./documents/ConsultationDocuments";
 const NO_ROLE = "seu papel não permite ver consultas";
 const listError = (err: unknown) => (err instanceof ApiError && errorCode(err) === "missing_role" ? NO_ROLE : consultationError(err));
 
-export function MyConsultations() {
+export function MyConsultations({ onGoToSecurity }: { onGoToSecurity?(): void }) {
   const { user } = useAuth();
   const [ from, setFrom ] = useState("");
   const [ to, setTo ] = useState("");
@@ -56,7 +56,7 @@ export function MyConsultations() {
           <ConsultationLoader key={viewing} id={viewing} options={options.data ?? null} patientProblems={[]}
             onClose={() => setViewing(null)} />
           {/* Módulo 19c: reimprimir e cancelar os documentos desta consulta. */}
-          {canUseDocuments(user) && <ConsultationDocuments key={`documents:${viewing}`} consultationId={viewing} />}
+          {canUseDocuments(user) && <ConsultationDocuments key={`documents:${viewing}`} consultationId={viewing} onGoToSecurity={onGoToSecurity} />}
         </>
       ) : (
         <Panel title="Consultas finalizadas" sub="as que você escreveu">

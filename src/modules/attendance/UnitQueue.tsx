@@ -37,6 +37,7 @@ interface Props {
   now?(): Date;
   // Módulo 19: `clinical_record` ligado na sessão (consulta e nome de exibição).
   clinicalRecord?: boolean;
+  onGoToSecurity?(): void;
 }
 
 // Módulo 18: a escuta aberta no painel — a que veio na chamada, uma lida pelo
@@ -63,7 +64,7 @@ function handleClinicalRefusal(code: string | undefined, reload: () => void, onC
 }
 
 export function UnitQueue({
-  unit, units, canCare, careBlocked, onClinicalRefused, now = () => new Date(), clinicalRecord = false
+  unit, units, canCare, careBlocked, onClinicalRefused, now = () => new Date(), clinicalRecord = false, onGoToSecurity
 }: Props) {
   const queryClient = useQueryClient();
   const auth = useAuth();
@@ -321,6 +322,7 @@ export function UnitQueue({
             referenceUnitIds={inCare.find((r) => r.id === panel.attendanceId)?.reference_unit_ids}
             unit={unit}
             units={units}
+            onGoToSecurity={onGoToSecurity}
             onClose={() => setPanel(null)}
             onFinalized={() => {
               invalidate();

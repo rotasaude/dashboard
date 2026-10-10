@@ -11,8 +11,11 @@ vi.mock("./consultation/ConsultationView", () => ({
   ConsultationLoader: (p: { id: string }) => <span>{`consulta ${p.id}`}</span>
 }));
 vi.mock("./documents/ConsultationDocuments", () => ({
-  ConsultationDocuments: (p: { consultationId: string; issue?: unknown }) => (
-    <span>{`documentos ${p.consultationId} · ${p.issue ? "com emissão" : "só lista"}`}</span>
+  ConsultationDocuments: (p: { consultationId: string; issue?: unknown; onGoToSecurity?(): void }) => (
+    <>
+      <span>{`documentos ${p.consultationId} · ${p.issue ? "com emissão" : "só lista"}`}</span>
+      <button type="button" onClick={p.onGoToSecurity}>ir para segurança</button>
+    </>
   )
 }));
 
@@ -46,5 +49,20 @@ describe("Minhas consultas — documentos (19c)", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Abrir consulta de 06/10/2026, 14:30" }));
     expect(screen.getByText("consulta c1")).not.toBeNull();
     expect(screen.queryByText(/^documentos /)).toBeNull();
+  });
+
+  it("operador: papel não permite e nenhum documento", async () => {
+    m(api.fetchCurrentSession).mockResolvedValue(docUser([ "health_professional" ], { operator: true }));
+    renderWithProviders(<MyConsultations />);
+    expect(await screen.findByText("seu papel não permite ver consultas")).not.toBeNull();
+    expect(screen.queryByText(/^documentos /)).toBeNull();
+  });
+
+  it("onGoToSecurity chega aos documentos", async () => {
+    const go = vi.fn();
+    renderWithProviders(<MyConsultations onGoToSecurity={go} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Abrir consulta de 06/10/2026, 14:30" }));
+    fireEvent.click(screen.getByRole("button", { name: "ir para segurança" }));
+    expect(go).toHaveBeenCalledTimes(1);
   });
 });
