@@ -240,4 +240,47 @@ describe("ClinicalDocumentsAdmin", () => {
     inFlight.resolve(undefined);
     expect((await within(panel).findByRole("status")).textContent).toBe("Medicamento retirado da REMUME.");
   });
+
+  it("REMUME: sem a lista lida (carregando ou com erro) não dá para escolher item, para não regravar as unidades como \"todas\"", async () => {
+    const pending = deferred<api.RemumeEntry[]>();
+    mocked(api.listRemume).mockReturnValue(pending.promise);
+    const { unmount } = renderIt();
+    const panel = await screen.findByRole("region", { name: "REMUME" });
+    expect(within(panel).queryByLabelText("Incluir na REMUME")).toBeNull();
+    pending.resolve([ remumeEntry({ unit_ids: [ "u2" ] }) ]);
+    expect(await within(panel).findByLabelText("Incluir na REMUME")).not.toBeNull();
+    unmount();
+
+    mocked(api.listRemume).mockReset();
+    mocked(api.listRemume).mockRejectedValue(new api.ApiError(500, { error: "boom" }, "x"));
+    renderIt();
+    const failed = await screen.findByRole("region", { name: "REMUME" });
+    await within(failed).findByRole("alert");
+    expect(within(failed).queryByLabelText("Incluir na REMUME")).toBeNull();
+    expect(api.addRemumeItem).not.toHaveBeenCalled();
+  });
+
+  it("REMUME: Tirar fica travado enquanto há inclusão ou retirada em andamento", async () => {
+    renderIt();
+    const panel = await screen.findByRole("region", { name: "REMUME" });
+    await within(panel).findAllByRole("row");
+    const tirar = () => within(panel).getAllByRole("button", { name: /^Tirar / }) as HTMLButtonElement[];
+    expect(tirar().every((b) => !b.disabled)).toBe(true);
+    fireEvent.click(tirar()[0]);
+    expect(tirar().every((b) => b.disabled)).toBe(true);
+    fireEvent.click(tirar()[1]);
+    expect(screen.getByRole("region", { name: /^Tirar da REMUME: Metformina/ })).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+    expect(tirar().every((b) => !b.disabled)).toBe(true);
+  });
+
+  it("sem autenticador: \"cadastre seu autenticador\" leva à Segurança", async () => {
+    mocked(api.fetchCurrentSession).mockResolvedValue(docUser([ "municipal_admin" ], { mfa_enrolled: false }));
+    const goToSecurity = vi.fn();
+    renderWithProviders(<ClinicalDocumentsAdmin searchDelayMs={0} onGoToSecurity={goToSecurity} />);
+    const panel = await screen.findByRole("region", { name: "CNPJ da cidade" });
+    fireEvent.click(await within(panel).findByRole("button", { name: "Cadastrar CNPJ" }));
+    fireEvent.click(screen.getByRole("button", { name: "cadastre seu autenticador" }));
+    expect(goToSecurity).toHaveBeenCalledTimes(1);
+  });
 });

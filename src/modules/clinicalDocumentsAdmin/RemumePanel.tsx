@@ -12,7 +12,7 @@ import { REMUME_KEY, documentError } from "../../lib/clinicalDocuments";
 import { Panel } from "../../components/Panel";
 import { DataTable, type Column } from "../../components/DataTable";
 import { SensitiveAction } from "../../components/SensitiveAction";
-import { buttonStyle, secondaryButtonStyle } from "../../components/formStyles";
+import { buttonStyle, disabledButtonStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { MedicationSearch } from "../documents/MedicationSearch";
 
 type Confirming =
@@ -37,7 +37,8 @@ export function RemumePanel({ onGoToSecurity, searchDelayMs }: { onGoToSecurity?
     { label: "CATMAT", w: "0.8fr", render: (e) => <span className="mono">{e.catalog_item.catmat_code}</span> },
     { label: "Unidades", w: "1.6fr", render: (e) => (e.unit_ids.length === 0 ? "todas" : e.unit_ids.map(unitName).join(", ")) },
     { label: "", w: "auto", align: "right", render: (e) => (
-      <button type="button" aria-label={`Tirar ${e.catalog_item.label} da REMUME`} style={secondaryButtonStyle}
+      <button type="button" aria-label={`Tirar ${e.catalog_item.label} da REMUME`} disabled={confirming !== null}
+        style={confirming !== null ? disabledButtonStyle : secondaryButtonStyle}
         onClick={() => { setNotice(null); setConfirming({ kind: "remove", entry: e }); }}>Tirar</button>
     ) }
   ];
@@ -60,7 +61,8 @@ export function RemumePanel({ onGoToSecurity, searchDelayMs }: { onGoToSecurity?
         {query.isError && <p role="alert" style={alert}>{documentError(query.error)}</p>}
         {query.isSuccess && <DataTable cols={cols} rows={query.data} rowKey={(e) => e.catalog_item.id} empty="nenhum medicamento na REMUME" />}
 
-        {!picked && !confirming && (
+        {/* Só com a REMUME lida: sem ela não se sabe se o item já está lá, e o POST regravaria as unidades como "todas". */}
+        {query.isSuccess && !picked && !confirming && (
           <MedicationSearch label="Incluir na REMUME" blockControlled={false} delayMs={searchDelayMs} onPick={pick} />
         )}
         {picked && !confirming && (
