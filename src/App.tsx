@@ -35,6 +35,7 @@ import { ProfessionalConsultations } from "./modules/ProfessionalConsultations";
 import { SignatureAccount } from "./modules/SignatureAccount";
 import { SignaturePending } from "./modules/SignaturePending";
 import { SignatureOverview } from "./modules/SignatureOverview";
+import { ClinicalDocumentsAdmin } from "./modules/ClinicalDocumentsAdmin";
 
 // `initialModule`: a tela de onde a pessoa saiu para o prestador de
 // assinatura (módulo 19b), devolvida pelo retorno do OAuth.
@@ -102,6 +103,7 @@ function renderModule(active: ModuleId, setActive: (id: ModuleId) => void) {
     case "signature":      return <SignatureAccount onGoToSecurity={() => setActive("security")} />;
     case "signature-pending": return <SignaturePending onNavigate={setActive} />;
     case "signature-overview": return <SignatureOverview />;
+    case "clinical-documents-admin": return <ClinicalDocumentsAdmin onGoToSecurity={() => setActive("security")} />;
     default:               return <Placeholder title={labelFor(active)} />;
   }
 }

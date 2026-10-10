@@ -250,6 +250,17 @@ describe("assinatura digital no menu (módulo 19b)", () => {
     expect(ids(null)).not.toContain("signature");
   });
 
+  it("Cidade → Documentos clínicos: só municipal_admin com clinical_documents, nunca operador", () => {
+    const cidade = NAV_GROUPS.find((g) => g.label === "Cidade");
+    expect(cidade?.items.map((i) => i.id)).toContain("clinical-documents-admin");
+    expect(labelFor("clinical-documents-admin")).toBe("Documentos clínicos");
+    expect(ids(u([ "municipal_admin" ], [ "clinical_record", "clinical_documents" ]))).toContain("clinical-documents-admin");
+    expect(ids(u([ "municipal_admin" ], [ "clinical_record" ]))).not.toContain("clinical-documents-admin");
+    expect(ids(u([ "health_professional" ], [ "clinical_documents" ]))).not.toContain("clinical-documents-admin");
+    expect(ids(u([ "municipal_admin" ], [ "clinical_documents" ], true))).not.toContain("clinical-documents-admin");
+    expect(ids(null)).not.toContain("clinical-documents-admin");
+  });
+
   it("Atendimento → Pendentes de assinatura: só profissional com digital_signature", () => {
     const atendimento = NAV_GROUPS.find((g) => g.label === "Atendimento");
     expect(atendimento?.items.map((i) => i.id)).toContain("signature-pending");

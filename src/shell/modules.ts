@@ -9,7 +9,7 @@ export type ModuleId =
   | "queues" | "health" | "protocol-editor" | "security" | "team" | "attendance"
   | "professionals" | "my-profile" | "territory" | "campaigns" | "analytics"
   | "integrations" | "cnes" | "production" | "my-agenda" | "clinical-record" | "my-consultations" | "professional-consultations"
-  | "signature" | "signature-pending" | "signature-overview";
+  | "signature" | "signature-pending" | "signature-overview" | "clinical-documents-admin";
 
 export interface NavItem { id: ModuleId; label: string; icon: string; }
 export interface NavGroupDef { label: string; items: NavItem[]; }
@@ -55,7 +55,8 @@ export const NAV_GROUPS: NavGroupDef[] = [
     { id: "signature-overview", label: "Painel de assinatura", icon: "✍" }
   ]},
   { label: "Cidade", items: [
-    { id: "territory", label: "Território", icon: "⌖" }
+    { id: "territory", label: "Território", icon: "⌖" },
+    { id: "clinical-documents-admin", label: "Documentos clínicos", icon: "℞" }
   ]},
   { label: "e-SUS", items: [
     { id: "integrations", label: "Integrações", icon: "⇌" },
@@ -140,6 +141,8 @@ export function navGroupsFor(
       if (item.id === "signature" || item.id === "signature-pending") return canSign(user);
       // F-19.14: painel só leitura do municipal_admin, com digital_signature.
       if (item.id === "signature-overview") return canSeeSignatureOverview(user);
+      // Módulo 19c: CNPJ, REMUME e protocolos de enfermagem, só do municipal_admin, com clinical_documents.
+      if (item.id === "clinical-documents-admin") return !user?.operator && isAdmin && hasFeature(user, "clinical_documents");
       if (item.id === "integrations" || item.id === "cnes") return canIntegrations;
       if (item.id === "production") return canProduction;
       return true;
