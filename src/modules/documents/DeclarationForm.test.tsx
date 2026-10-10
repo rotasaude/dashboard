@@ -23,6 +23,7 @@ describe("DeclarationForm", () => {
     render(<DeclarationForm initial={emptyDeclaration(TODAY19C, "08:15")} onSubmit={onSubmit} onCancel={vi.fn()} />);
     expect((screen.getByLabelText("Chegada") as HTMLInputElement).value).toBe("08:15");
     expect(screen.getByText("em branco, sai a hora de encerramento do atendimento (se for no mesmo dia)")).not.toBeNull();
+    expect(screen.getByLabelText("Saída").getAttribute("aria-describedby")).toBe(screen.getByText(/em branco, sai a hora/).id);
     fireEvent.change(screen.getByLabelText("Saída"), { target: { value: "08:00" } });
     fireEvent.click(screen.getByRole("button", { name: "Emitir declaração" }));
     expect((await screen.findByRole("alert")).textContent).toBe("a saída não pode ser antes da chegada");

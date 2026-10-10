@@ -80,6 +80,9 @@ describe("SickNoteForm", () => {
     const sent = (onSubmit as ReturnType<typeof vi.fn>).mock.calls[0][0];
     expect("days" in sent).toBe(false);
     expect("cid10" in sent).toBe(false);
+    fireEvent.click(screen.getByLabelText("Afastamento"));
+    expect(screen.queryByText(/J069/)).toBeNull();
+    expect(screen.getByLabelText("CID-10 (opcional, só com autorização do paciente)")).not.toBeNull();
   });
 
   it("as datas aceitam de hoje − 30 a hoje (data da cidade) nos dois tipos", () => {
@@ -93,7 +96,7 @@ describe("SickNoteForm", () => {
     expect(day.max).toBe(TODAY19C);
   });
 
-  it("data fora da janela não emite (usa o today real)", async () => {
+  it("data fora da janela (hoje − 30) não emite", async () => {
     const onSubmit = renderIt();
     fireEvent.change(screen.getByLabelText("Dias de afastamento"), { target: { value: "3" } });
     fireEvent.change(screen.getByLabelText("Início"), { target: { value: "2026-09-01" } });

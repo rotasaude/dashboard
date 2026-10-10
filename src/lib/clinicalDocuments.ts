@@ -149,7 +149,12 @@ function addDays(iso: string, days: number): string {
   return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
 }
 const BACKDATE_DAYS = 30;
-const inBackdateWindow = (date: string, today: string): boolean => date >= addDays(today, -BACKDATE_DAYS) && date <= today;
+// Janela das datas do atestado: de hoje − 30 a hoje (hoje = o da cidade).
+export const backdateLimits = (today: string): { min: string; max: string } => ({ min: addDays(today, -BACKDATE_DAYS), max: today });
+const inBackdateWindow = (date: string, today: string): boolean => {
+  const { min, max } = backdateLimits(today);
+  return date >= min && date <= max;
+};
 
 // ─── Atestado ─────────────────────────────────────────────────────────────────
 

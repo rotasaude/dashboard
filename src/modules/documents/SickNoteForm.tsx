@@ -8,7 +8,7 @@
 import { useRef, useState, type FormEvent } from "react";
 import { searchTerminology, type CompanionReason, type SickNoteInput } from "../../lib/api";
 import {
-  COMPANION_REASON_LABEL, documentError, sickNoteInput, sickNoteProblem, type SickNoteDraft
+  COMPANION_REASON_LABEL, backdateLimits, documentError, sickNoteInput, sickNoteProblem, type SickNoteDraft
 } from "../../lib/clinicalDocuments";
 import { consultationError } from "../../lib/consultation";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
@@ -16,12 +16,6 @@ import { CodeSearch } from "../consultation/CodeSearch";
 import { alertStyle, checkLabel, formBox, labelStyle, linkButton, mutedStyle, rowStyle } from "./formStyles";
 
 const CID_LABEL = "CID-10 (opcional, só com autorização do paciente)";
-const BACKDATE_DAYS = 30;
-
-function minusDays(iso: string, days: number): string {
-  const [ y, m, d ] = iso.split("-").map(Number);
-  return new Date(Date.UTC(y, m - 1, d - days)).toISOString().slice(0, 10);
-}
 
 interface Props {
   initial: SickNoteDraft;
@@ -40,7 +34,7 @@ export function SickNoteForm({ initial, today, onSubmit, onCancel, busy: externa
   const [ problem, setProblem ] = useState<string | null>(null);
   const busy = ownBusy || externalBusy;
   const set = (patch: Partial<SickNoteDraft>) => setD((prev) => ({ ...prev, ...patch }));
-  const dateLimits = { min: minusDays(today, BACKDATE_DAYS), max: today };
+  const dateLimits = backdateLimits(today);
 
   async function submit(event: FormEvent) {
     event.preventDefault();

@@ -75,9 +75,9 @@ export function DeclarationForm({ initial, showIssuerRegistration, onSubmit, onC
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             <label style={labelStyle}>
               Saída
-              <input type="time" value={d.leftAt} style={inputStyle} onChange={(e) => set({ leftAt: e.target.value })} />
+              <input type="time" value={d.leftAt} aria-describedby="declaration-left-hint" style={inputStyle} onChange={(e) => set({ leftAt: e.target.value })} />
             </label>
-            <span style={mutedStyle}>em branco, sai a hora de encerramento do atendimento (se for no mesmo dia)</span>
+            <span id="declaration-left-hint" style={mutedStyle}>em branco, sai a hora de encerramento do atendimento (se for no mesmo dia)</span>
           </div>
         </div>
       )}

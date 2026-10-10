@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError, issueDocument } from "./api";
 import {
-  ANTIMICROBIAL_NOTE, CANCEL_REASON_MAX, CONTROLLED_BLOCKED, DOCUMENTS_DISABLED, EMPTY_EXTERNAL, PENDING_REFETCH_MS, addProtocolItem, canCancel,
+  ANTIMICROBIAL_NOTE, backdateLimits, CANCEL_REASON_MAX, CONTROLLED_BLOCKED, DOCUMENTS_DISABLED, EMPTY_EXTERNAL, PENDING_REFETCH_MS, addProtocolItem, canCancel,
   canUseDocuments, cancelReasonProblem, declarationInput, declarationProblem, documentError, documentSituation, documentsRefetchInterval,
   emptyDeclaration, emptyItem, itemFromProtocolItem, emptyProtocol, emptySickNote, externalChange, externalProblem, formatCnpj, hasAntimicrobial, isValidCnpj,
   issueModeLabel, issuedNotice, itemFromMedication, itemFromPrescription, kindLabel, kindsFor, medicationLine, prescriptionInput,
@@ -93,6 +93,11 @@ describe("quem emite o quê (espelho do api)", () => {
 });
 
 describe("atestado", () => {
+  it("backdateLimits: de hoje − 30 a hoje, atravessando mês e ano", () => {
+    expect(backdateLimits("2026-10-09")).toEqual({ min: "2026-09-09", max: "2026-10-09" });
+    expect(backdateLimits("2026-01-15")).toEqual({ min: "2025-12-16", max: "2026-01-15" });
+  });
+
   it("afastamento: dias inteiros e início; manda o código do CID só com autorização", () => {
     const d = { ...emptySickNote(TODAY19C), days: "3" };
     expect(d.startOn).toBe(TODAY19C);
