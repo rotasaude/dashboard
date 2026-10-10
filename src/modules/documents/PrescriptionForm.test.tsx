@@ -11,7 +11,7 @@ vi.mock("../../lib/api", async (importOriginal) => {
 
 import * as api from "../../lib/api";
 import { ApiError, type PrescriptionInput } from "../../lib/api";
-import { ANTIMICROBIAL_NOTE, NO_PROTOCOL, type PrescriptionDraft } from "../../lib/clinicalDocuments";
+import { ANTIMICROBIAL_NOTE, NO_PROTOCOL, itemFromProtocolItem, type PrescriptionDraft } from "../../lib/clinicalDocuments";
 import { PrescriptionForm } from "./PrescriptionForm";
 import { AMOXICILLIN, CLONAZEPAM, DIPYRONE_REF, TODAY19C, nursingProtocol, searchItem } from "../../test/documentFixtures";
 
@@ -19,10 +19,10 @@ afterEach(cleanup);
 const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
 const EMPTY: PrescriptionDraft = { items: [], protocolVersionId: "" };
 
-function renderIt(cboCode: string, onSubmit: (c: PrescriptionInput) => Promise<void> = vi.fn(async () => {})) {
+function renderIt(cboCode: string, onSubmit: (c: PrescriptionInput) => Promise<void> = vi.fn(async () => {}), initial: PrescriptionDraft = EMPTY) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>;
-  render(<PrescriptionForm cboCode={cboCode} unitId="u1" today={TODAY19C} initial={EMPTY} onSubmit={onSubmit} onCancel={vi.fn()}
+  render(<PrescriptionForm cboCode={cboCode} unitId="u1" today={TODAY19C} initial={initial} onSubmit={onSubmit} onCancel={vi.fn()}
     searchDelayMs={0} />, { wrapper });
   return onSubmit;
 }
@@ -120,6 +120,31 @@ describe("PrescriptionForm", () => {
       items: [ { catalog_item: { id: "ci4" }, quantity: 1, quantity_unit: "frasco", route: "oral", dosage_instructions: "20 gotas até de 6 em 6 horas", continuous: false } ],
       nursing_protocol: { version_id: "npv1" }
     }));
+  });
+
+  it("enfermeira reemitindo com versão de protocolo que não está mais vigente: zera a versão e os itens e não manda o id velho", async () => {
+    const protocolItem = nursingProtocol().current_version!.items[0];
+    const onSubmit = renderIt("223565", vi.fn(async () => {}), { items: [ itemFromProtocolItem(protocolItem) ], protocolVersionId: "npv0" });
+    expect(await screen.findByRole("status")).not.toBeNull();
+    expect(screen.getByRole("status").textContent)
+      .toBe("a versão do protocolo do documento anterior não está mais vigente — escolha o protocolo e os itens de novo");
+    expect((screen.getByLabelText("Protocolo de enfermagem") as HTMLSelectElement).value).toBe("");
+    expect(screen.getByText("nenhum medicamento na receita")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Emitir receita" }));
+    const problems = within(await screen.findByRole("alert")).getAllByRole("listitem").map((li) => li.textContent);
+    expect(problems).toContain("escolha o protocolo de enfermagem");
+    expect(onSubmit).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText("Protocolo de enfermagem"), { target: { value: "npv1" } });
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("enfermeira reemitindo com versão ainda vigente: mantém a versão e os itens", async () => {
+    const protocolItem = nursingProtocol().current_version!.items[0];
+    renderIt("223565", vi.fn(async () => {}), { items: [ itemFromProtocolItem(protocolItem) ], protocolVersionId: "npv1" });
+    await screen.findByRole("list", { name: "itens do protocolo" });
+    expect((screen.getByLabelText("Protocolo de enfermagem") as HTMLSelectElement).value).toBe("npv1");
+    expect(screen.getByRole("list", { name: "itens da receita" })).not.toBeNull();
+    expect(screen.queryByRole("status")).toBeNull();
   });
 
   it("enfermeira sem protocolo vigente: diz que não prescreve sem ele", async () => {

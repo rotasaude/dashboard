@@ -4,7 +4,7 @@
 // municipal vigente (COFEN 801/2026), sem texto livre e até a dose máxima; o
 // CNPJ da cidade e o Coren entram no documento pelo api. Antimicrobiano sai em
 // papel, 2 vias, válido por 10 dias (o api decide; a tela avisa antes).
-import { useRef, useState, type CSSProperties, type FormEvent } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { listNursingProtocols, type MedicationRoute, type PrescriptionInput } from "../../lib/api";
 import {
@@ -39,6 +39,17 @@ export function PrescriptionForm({ cboCode, unitId, today, initial, onSubmit, on
   const busy = ownBusy || externalBusy;
   const vigent = vigentProtocols(protocols.data ?? [], today);
   const chosen = vigent.find((p) => p.current_version?.id === d.protocolVersionId) ?? null;
+  const [ staleVersion, setStaleVersion ] = useState(false);
+  // Reemissão (initial herdado): se a versão do protocolo do documento original
+  // não está entre as vigentes, o select mostraria "escolha" mas enviaria o id
+  // velho. Zera a versão e os itens dela, com aviso.
+  const vigentIds = vigent.map((p) => p.current_version?.id).join(",");
+  useEffect(() => {
+    if (!nurse || !protocols.isSuccess || !d.protocolVersionId) return;
+    if (vigentIds.split(",").includes(d.protocolVersionId)) return;
+    setD({ items: [], protocolVersionId: "" });
+    setStaleVersion(true);
+  }, [ nurse, protocols.isSuccess, vigentIds, d.protocolVersionId ]);
 
   const addItem = (item: ItemDraft) => setD((prev) => ({ ...prev, items: [ ...prev.items, item ] }));
   const setItem = (key: string, patch: Partial<ItemDraft>) =>
@@ -72,11 +83,12 @@ export function PrescriptionForm({ cboCode, unitId, today, initial, onSubmit, on
           {protocols.isPending && <p className="mono" style={mutedStyle}>carregando os protocolos…</p>}
           {protocols.isError && <p role="alert" style={alertStyle}>{documentError(protocols.error)}</p>}
           {protocols.isSuccess && vigent.length === 0 && <p role="alert" style={alertStyle}>{NO_PROTOCOL}</p>}
+          {staleVersion && <p role="status" style={mutedStyle}>a versão do protocolo do documento anterior não está mais vigente — escolha o protocolo e os itens de novo</p>}
           {vigent.length > 0 && (
             <label style={labelStyle}>
               Protocolo de enfermagem
               <select value={d.protocolVersionId} style={inputStyle}
-                onChange={(e) => setD({ items: [], protocolVersionId: e.target.value })}>
+                onChange={(e) => { setStaleVersion(false); setD({ items: [], protocolVersionId: e.target.value }); }}>
                 <option value="">escolha</option>
                 {vigent.map((p) => <option key={p.id} value={p.current_version!.id}>{protocolLabel(p)}</option>)}
               </select>
