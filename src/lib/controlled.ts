@@ -98,7 +98,9 @@ export function prescribesControlled(cbo: string | null | undefined): boolean {
 // ─── Categoria e bloqueio por lista (Portaria 344) ────────────────────────────
 
 export type ItemClass = "common" | "special_control" | "antimicrobial" | "notification" | "unsupported" | "unclassified";
-type Classifiable = { antimicrobial?: boolean; controlled?: boolean; controlled_list?: string | null; anticonvulsant?: boolean };
+type Classifiable = {
+  antimicrobial?: boolean; controlled?: boolean; controlled_list?: string | null; anticonvulsant?: boolean; fromDocument?: boolean;
+};
 
 const NOTIFICATION_LISTS = [ "A1", "A2", "A3", "B1", "B2" ];
 // C4 (antirretrovirais) como C2/C3: plano do api, D8. Lista desconhecida também fica fora (o api falha fechado).
@@ -106,9 +108,10 @@ const UNSUPPORTED_LISTS = [ "C2", "C3", "C4" ];
 const SPECIAL_LISTS = [ "C1", "C5" ];
 
 // Item de documento emitido não traz as marcas da lista (o api grava o
-// catalog_item sem elas): a chave fica ausente, não null. Na reemissão de uma
-// receita de controle especial, esse item segue a categoria do documento.
-const fromIssuedDocument = (m: Classifiable) => m.controlled_list === undefined;
+// catalog_item sem elas); a origem vem marcada (itemFromIssuedDocument). Na
+// reemissão de uma receita de controle especial, esse item segue a categoria
+// do documento.
+const fromIssuedDocument = (m: Classifiable) => m.fromDocument === true;
 
 export function itemClass(m: Classifiable | null | undefined, hint?: PrescriptionCategory): ItemClass {
   const list = m?.controlled_list;
@@ -284,20 +287,29 @@ export function formatPhone(digits: string | null | undefined): string {
 
 // ─── Limites (espelho dos 422 do api, na ordem dele) ──────────────────────────
 
+export const NURSE_NO_SPECIAL_CONTROL = "a enfermagem não prescreve receita de controle especial";
+
 // `category`: a do documento reemitido (PrescriptionDraft.category).
-export function controlledProblems(d: { items: ItemDraft[]; category?: PrescriptionCategory }, identification: IdentificationDraft): string[] {
+// `nurse`: a enfermagem não prescreve controle especial (o api recusa com
+// cbo_not_allowed); a de antimicrobiano dela sai em papel.
+export function controlledProblems(
+  d: { items: ItemDraft[]; category?: PrescriptionCategory }, identification: IdentificationDraft, opts: { nurse?: boolean } = {}
+): string[] {
   // O api recusa o item bloqueado antes de classificar a receita.
   const blocked: string[] = [];
   d.items.forEach((it, i) => {
     const reason = it.medication ? controlledBlockReason(it.medication) : null;
     if (reason) blocked.push(`item ${i + 1}: ${reason}`);
+    else if (opts.nurse && isSpecial(it, d.category)) blocked.push(`item ${i + 1}: ${NURSE_NO_SPECIAL_CONTROL}`);
   });
   if (blocked.length > 0) return blocked;
   const mixed = mixedIndex(d.items, d.category);
   if (mixed !== null) return [ `item ${mixed + 1}: ${MIXED_CATEGORIES}` ];
   if (dominantCategory(d.items, d.category) !== "special_control") return [];
   const out: string[] = [];
-  // O api conta itens C1, não substâncias distintas.
+  // O api conta itens C1, não substâncias distintas. O item do documento
+  // reemitido não diz a lista (C1 ou C5): não conta aqui — se passar de 3, a
+  // recusa too_many_c1_substances do api aparece no formulário.
   if (d.items.filter((it) => it.medication?.controlled_list === "C1").length > SPECIAL_CONTROL_MAX_C1) {
     out.push(`no máximo ${SPECIAL_CONTROL_MAX_C1} substâncias da lista C1 por receita`);
   }

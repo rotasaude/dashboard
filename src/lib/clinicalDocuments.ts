@@ -247,8 +247,11 @@ export function declarationInput(d: DeclarationDraft): DeclarationInput {
 
 // ─── Receita ──────────────────────────────────────────────────────────────────
 
+// `fromDocument` (19d): item que veio de um documento emitido ("cancelar e
+// emitir outro"). O api grava o catalog_item do documento SEM as marcas da
+// lista; a origem fica marcada aqui em vez de inferida pela ausência da chave.
 export type ItemMedication = CatalogItemRef & {
-  antimicrobial?: boolean; controlled?: boolean; in_network?: boolean; max_dose?: MaxDose | null;
+  antimicrobial?: boolean; controlled?: boolean; in_network?: boolean; max_dose?: MaxDose | null; fromDocument?: true;
 };
 export interface ItemDraft {
   key: string; medication: ItemMedication | null; freeText: string; quantity: string; quantityUnit: string;
@@ -290,6 +293,12 @@ export function itemFromPrescription(item: PrescriptionItem | RenewalItem): Item
     route: item.route ?? "", dosage: item.dosage_instructions ?? "", durationDays: item.duration_days ? String(item.duration_days) : "",
     continuous: item.continuous
   };
+}
+
+// Item de documento emitido (reemissão): marca a origem explícita do medicamento.
+export function itemFromIssuedDocument(item: PrescriptionItem): ItemDraft {
+  const draft = itemFromPrescription(item);
+  return draft.medication ? { ...draft, medication: { ...draft.medication, fromDocument: true } } : draft;
 }
 
 const QUANTITY_HINT = "número maior que 0, com até 2 casas decimais";
@@ -375,7 +384,7 @@ export function reissueDraft(doc: ClinicalDocument): ReissueDraft | null {
     case "prescription": {
       const c = doc.content as PrescriptionContent;
       return { kind: "prescription", draft: {
-        items: c.items.map(itemFromPrescription), protocolVersionId: c.nursing_protocol?.version_id ?? "",
+        items: c.items.map(itemFromIssuedDocument), protocolVersionId: c.nursing_protocol?.version_id ?? "",
         identification: c.patient_identification ?? null, category: c.category ?? (c.antimicrobial ? "antimicrobial" : "common")
       } };
     }

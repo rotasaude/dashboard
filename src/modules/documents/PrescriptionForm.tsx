@@ -4,18 +4,40 @@
 // municipal vigente (COFEN 801/2026), sem texto livre e até a dose máxima; o
 // CNPJ da cidade e o Coren entram no documento pelo api. Antimicrobiano sai em
 // papel, 2 vias, válido por 10 dias (o api decide; a tela avisa antes).
+// Módulo 19d (com `controlled`): C1/C5 entram (receita de controle especial,
+// com identificação do paciente e contato do prescritor), A/B e C2/C3/C4 ficam
+// bloqueados com o motivo, a categoria é calculada pelos itens (espelho do api:
+// misturada não sai) e a tela prevê quando a receita vai sair em papel — só
+// aviso: o modo é o que o api devolve. Sem `controlled`, tudo como acima.
 import { useEffect, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { listNursingProtocols, type MedicationRoute, type PrescriptionInput } from "../../lib/api";
+import {
+  getCurrentCertificate, getLastPatientIdentification, getProfessionalContact, getSncrStock, listNursingProtocols,
+  type MedicationRoute, type PrescriptionInput
+} from "../../lib/api";
 import {
   ANTIMICROBIAL_NOTE, NO_PROTOCOL, PROTOCOLS_KEY, ROUTES, ROUTE_LABEL, documentError, emptyItem, hasAntimicrobial, itemFromMedication,
   itemFromProtocolItem, prescriptionInput, prescriptionProblems, professionalKind, protocolLabel, vigentProtocols,
   type ItemDraft, type PrescriptionDraft
 } from "../../lib/clinicalDocuments";
+import { CERTIFICATE_KEY } from "../../lib/signature";
+import {
+  CATEGORY_NOTE, CONTACT_KEY, PRESCRIBER_MISSING, SNCR_SIMULATED_NOTICE, SNCR_STOCK_KEY, addressLine, categoryLabel, controlledBlockReason,
+  controlledError, controlledProblems, controlledTagLabel, formatPhone, identificationDraftFrom, identificationInput, paperForecast,
+  paperReasonLabel, prescriptionCategory, type IdentificationDraft
+} from "../../lib/controlled";
 import { Tag } from "../../components/Tag";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { MedicationSearch } from "./MedicationSearch";
+import { PatientIdentificationFields } from "./PatientIdentificationFields";
 import { alertStyle, checkLabel, formBox, labelStyle, mutedStyle, rowStyle } from "./formStyles";
+
+// Módulo 19d: contexto da receita de controlado (sessão e paciente). Sem ele, a receita do 19c.
+export interface ControlledContext {
+  userId: string | null; simulated: boolean; signatureOn: boolean; consultationId?: string; patientCpfMasked?: string;
+}
+
+const NO_PREVIOUS_IDENTIFICATION = "nenhuma receita anterior deste paciente com identificação";
 
 interface Props {
   cboCode: string;
@@ -27,9 +49,12 @@ interface Props {
   busy?: boolean;
   searchDelayMs?: number;
   replacing?: boolean;
+  controlled?: ControlledContext;
 }
 
-export function PrescriptionForm({ cboCode, unitId, today, initial, onSubmit, onCancel, busy: externalBusy = false, searchDelayMs, replacing }: Props) {
+export function PrescriptionForm({
+  cboCode, unitId, today, initial, onSubmit, onCancel, busy: externalBusy = false, searchDelayMs, replacing, controlled
+}: Props) {
   const nurse = professionalKind(cboCode) === "nurse";
   const protocols = useQuery({ queryKey: [ PROTOCOLS_KEY ], queryFn: listNursingProtocols, enabled: nurse, retry: false });
   const [ d, setD ] = useState<PrescriptionDraft>(initial);
@@ -40,6 +65,43 @@ export function PrescriptionForm({ cboCode, unitId, today, initial, onSubmit, on
   const vigent = vigentProtocols(protocols.data ?? [], today);
   const chosen = vigent.find((p) => p.current_version?.id === d.protocolVersionId) ?? null;
   const [ staleVersion, setStaleVersion ] = useState(false);
+
+  // ─── Módulo 19d ───
+  // `d.category`: a do documento reemitido — os itens dele vêm sem a marca da lista.
+  const category = controlled ? prescriptionCategory(d.items, d.category) : "common";
+  // A enfermagem não prescreve controle especial (controlledProblems acusa); a de antimicrobiano dela sai em papel.
+  const special = !!controlled && category === "special_control" && !nurse;
+  const needsSncr = special || (!!controlled && category === "antimicrobial");
+  const onlyFreeText = !!controlled && d.items.length > 0 && d.items.every((it) => !it.medication);
+  const [ identification, setIdentification ] = useState<IdentificationDraft>(() => identificationDraftFrom(initial.identification));
+  const [ lastNote, setLastNote ] = useState<string | null>(null);
+  const userKey = controlled?.userId ?? null;
+  const contact = useQuery({ queryKey: [ CONTACT_KEY, userKey ], queryFn: getProfessionalContact, enabled: needsSncr, gcTime: 0, retry: false });
+  const stock = useQuery({ queryKey: [ SNCR_STOCK_KEY, userKey ], queryFn: getSncrStock, enabled: needsSncr && !nurse, retry: false });
+  const certificate = useQuery({ queryKey: [ CERTIFICATE_KEY, controlled?.userId ?? undefined ], queryFn: getCurrentCertificate,
+    enabled: needsSncr && !nurse && !!controlled?.signatureOn, retry: false });
+  const contactMissing = contact.isSuccess && (!contact.data.address || !contact.data.phone);
+  const forecast = controlled && needsSncr ? paperForecast({
+    category, cboCode, signatureOn: controlled.signatureOn, certificate: certificate.isSuccess ? certificate.data : undefined,
+    stock: stock.data
+  }) : null;
+  // Plano do api, D12: o contato é exigido na de controle especial e na de
+  // antimicrobiano que sairia digital.
+  const contactBlocks = contactMissing && (special || (category === "antimicrobial" && !forecast));
+  const simulated = !!controlled && needsSncr && !forecast && (controlled.simulated || stock.data?.simulated === true);
+
+  // 200 com null = nenhuma anterior; 404 (consulta não encontrada) e os demais erros são erro.
+  async function fillLastIdentification() {
+    if (!controlled?.consultationId) return;
+    setLastNote(null);
+    try {
+      const last = await getLastPatientIdentification(controlled.consultationId);
+      if (last) setIdentification(identificationDraftFrom(last));
+      else setLastNote(NO_PREVIOUS_IDENTIFICATION);
+    } catch (err) {
+      setLastNote(documentError(err, { controlled: true }));
+    }
+  }
   // Reemissão (initial herdado): se a versão do protocolo do documento original
   // não está entre as vigentes, o select mostraria "escolha" mas enviaria o id
   // velho. Zera a versão e os itens dela, com aviso.
@@ -59,14 +121,20 @@ export function PrescriptionForm({ cboCode, unitId, today, initial, onSubmit, on
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (inFlight.current || externalBusy) return;
-    const found = prescriptionProblems(d, nurse);
+    const found = [
+      ...prescriptionProblems(d, nurse, !!controlled),
+      ...(controlled ? controlledProblems(d, identification, { nurse }) : [])
+    ];
+    if (contactBlocks) found.push(PRESCRIBER_MISSING);
     if (found.length > 0) { setProblems(found); return; }
     inFlight.current = true;
     setOwnBusy(true); setProblems([]);
     try {
-      await onSubmit(prescriptionInput(d));
+      const content = prescriptionInput(d);
+      // O CPF nunca vai no corpo: só o endereço (o api usa o CPF do cadastro).
+      await onSubmit(special ? { ...content, patient_identification: identificationInput(identification) } : content);
     } catch (err) {
-      setProblems([ documentError(err) ]);
+      setProblems([ documentError(err, { controlled: !!controlled }) ]);
     } finally {
       inFlight.current = false;
       setOwnBusy(false);
@@ -110,21 +178,56 @@ export function PrescriptionForm({ cboCode, unitId, today, initial, onSubmit, on
       ) : (
         <>
           <MedicationSearch label="Buscar medicamento" unitId={unitId} blockControlled delayMs={searchDelayMs}
-            onPick={(m) => addItem(itemFromMedication(m))} />
+            blockReason={controlled ? controlledBlockReason : undefined} onPick={(m) => addItem(itemFromMedication(m))} />
           <div>
             <button type="button" style={secondaryButtonStyle} onClick={() => addItem(emptyItem())}>Incluir em texto livre</button>
           </div>
         </>
       )}
 
-      {hasAntimicrobial(d) && <p role="note" style={{ ...mutedStyle, fontWeight: 600, color: "var(--warn)" }}>{ANTIMICROBIAL_NOTE}</p>}
+      {!controlled && hasAntimicrobial(d) && <p role="note" style={{ ...mutedStyle, fontWeight: 600, color: "var(--warn)" }}>{ANTIMICROBIAL_NOTE}</p>}
+      {controlled && d.items.length > 0 && (
+        <p role="status" aria-label="categoria da receita" style={mutedStyle}>
+          {category === "mixed" ? "categoria: misturada — separe em duas receitas" : `categoria: ${categoryLabel(category)}`}
+        </p>
+      )}
+      {needsSncr && (category === "special_control" || category === "antimicrobial") && (
+        <p role="note" aria-label="regras da categoria" style={{ ...mutedStyle, fontWeight: 600 }}>{CATEGORY_NOTE[category]}</p>
+      )}
+      {onlyFreeText && (
+        <p role="note" aria-label="itens digitados à mão" style={{ ...mutedStyle, fontWeight: 600, color: "var(--warn)" }}>
+          {`Receita só com itens digitados à mão: se algum for antimicrobiano, ela sai em papel (${paperReasonLabel("free_text_items")}).`}
+        </p>
+      )}
+      {forecast && (
+        <p role="note" aria-label="vai sair em papel" style={{ ...mutedStyle, fontWeight: 600, color: "var(--warn)" }}>
+          {`Esta receita vai sair em papel: ${paperReasonLabel(forecast)}.`}
+        </p>
+      )}
+      {simulated && <div><Tag tone="warn" mono={false}>{SNCR_SIMULATED_NOTICE}</Tag></div>}
 
       {d.items.length === 0 ? <p style={mutedStyle}>nenhum medicamento na receita</p> : (
         <ol aria-label="itens da receita" style={{ ...list, gap: 10 }}>
           {d.items.map((it, i) => (
-            <ItemFields key={it.key} index={i} item={it} onChange={(patch) => setItem(it.key, patch)} onRemove={() => removeItem(it.key)} />
+            <ItemFields key={it.key} index={i} item={it} onChange={(patch) => setItem(it.key, patch)} onRemove={() => removeItem(it.key)}
+              listTag={controlled && it.medication ? controlledTagLabel(it.medication) : null} />
           ))}
         </ol>
+      )}
+
+      {special && (
+        <PatientIdentificationFields value={identification} onChange={setIdentification} cpfMasked={controlled?.patientCpfMasked}
+          onUseLast={controlled?.consultationId ? () => void fillLastIdentification() : undefined} lastNote={lastNote} />
+      )}
+      {needsSncr && (
+        <div role="group" aria-label="prescritor" style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+          <strong style={{ fontSize: 12 }}>Prescritor (endereço e telefone do seu perfil)</strong>
+          {contact.isError && <p style={alertStyle}>{controlledError(contact.error)}</p>}
+          {contact.isSuccess && !contactMissing && (
+            <p style={mutedStyle}>{`${addressLine(contact.data.address)} · ${formatPhone(contact.data.phone)}`}</p>
+          )}
+          {contactBlocks && <p style={{ ...mutedStyle, fontWeight: 600, color: "var(--warn)" }}>{PRESCRIBER_MISSING}</p>}
+        </div>
       )}
 
       {problems.length > 0 && (
@@ -140,8 +243,8 @@ export function PrescriptionForm({ cboCode, unitId, today, initial, onSubmit, on
   );
 }
 
-function ItemFields({ index, item, onChange, onRemove }: {
-  index: number; item: ItemDraft; onChange(patch: Partial<ItemDraft>): void; onRemove(): void;
+function ItemFields({ index, item, onChange, onRemove, listTag }: {
+  index: number; item: ItemDraft; onChange(patch: Partial<ItemDraft>): void; onRemove(): void; listTag?: string | null;
 }) {
   const n = index + 1;
   return (
@@ -155,6 +258,7 @@ function ItemFields({ index, item, onChange, onRemove }: {
         )}
         {item.medication?.in_network && <Tag tone="ok" mono={false}>na rede</Tag>}
         {item.medication?.antimicrobial && <Tag tone="warn" mono={false}>antimicrobiano</Tag>}
+        {listTag && <Tag tone="warn" mono={false}>{listTag}</Tag>}
         {item.medication?.max_dose && <span style={mutedStyle}>{`protocolo: até ${item.medication.max_dose.quantity} ${item.medication.max_dose.unit}`}</span>}
         <button type="button" aria-label={`Remover item ${n}`} style={secondaryButtonStyle} onClick={onRemove}>Remover</button>
       </div>

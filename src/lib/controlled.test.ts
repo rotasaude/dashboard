@@ -1,7 +1,9 @@
 // src/lib/controlled.test.ts
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError, type PrescriptionContent } from "./api";
-import { CONTROLLED_DISABLED, DOCUMENTS_DISABLED, itemFromMedication, itemFromPrescription, issuedNotice, type ItemDraft } from "./clinicalDocuments";
+import {
+  CONTROLLED_DISABLED, DOCUMENTS_DISABLED, itemFromIssuedDocument, itemFromMedication, itemFromPrescription, issuedNotice, type ItemDraft
+} from "./clinicalDocuments";
 import {
   CATEGORY_NOTE, EMPTY_IDENTIFICATION, MIXED_CATEGORIES, PRESCRIBER_MISSING, SNCR_SIMULATED_NOTICE, addressDraftFrom, addressInput,
   addressLine, addressProblem, canRequestSncr, canSeeSncrOverview, controlledBlockReason, controlledError, controlledIssuedNotice,
@@ -25,9 +27,10 @@ const item = (m: Parameters<typeof itemFromMedication>[0], over: Partial<ItemDra
   ({ ...itemFromMedication(m), quantity: "30", route: "oral", dosage: "1 comprimido ao dia", durationDays: "30", ...over });
 const free = (text: string, over: Partial<ItemDraft> = {}): ItemDraft =>
   ({ ...itemFromMedication(DIPYRONE), medication: null, freeText: text, quantity: "1", route: "oral", dosage: "1x ao dia", durationDays: "7", ...over });
-// Item de documento emitido: o api grava o catalog_item SEM as marcas da lista.
+// Item de documento emitido: o api grava o catalog_item SEM as marcas da lista;
+// a origem é marcada explicitamente (fromDocument), não inferida pela ausência da chave.
 const fromDoc = (over: Partial<ItemDraft> = {}): ItemDraft => ({
-  ...itemFromPrescription((rceDoc().content as PrescriptionContent).items[0]), ...over
+  ...itemFromIssuedDocument((rceDoc().content as PrescriptionContent).items[0]), ...over
 });
 const FILLED: IdentificationDraft = { address: addressDraftFrom(address()) };
 const MIXED_AT = (n: number) => `item ${n}: ${MIXED_CATEGORIES}`;
@@ -99,6 +102,12 @@ describe("categoria pelos itens (espelho do classify do api: RCE > RET > comum)"
     expect(itemClass(fromDoc().medication, "special_control")).toBe("special_control");
     // Item novo da busca (marca explícita) continua conferido.
     expect(prescriptionCategory([ fromDoc(), item(DIPYRONE_19D()) ], "special_control")).toBe("mixed");
+    // A origem é explícita: o mesmo item sem a chave da lista, mas fora de um documento
+    // (ex.: renovação de 19c sem as marcas), não vira controle especial pela dica.
+    const bare = itemFromPrescription((rceDoc().content as PrescriptionContent).items[0]);
+    expect(bare.medication).not.toHaveProperty("controlled_list");
+    expect(prescriptionCategory([ bare ], "special_control")).toBe("common");
+    expect(fromDoc().medication?.fromDocument).toBe(true);
   });
 
   it("A/B bloqueados com o caminho da Notificação; C2/C3/C4 e lista desconhecida fora; sem lista, bloqueado; C1 entra", () => {
@@ -159,6 +168,17 @@ describe("limites da receita de controle especial", () => {
       .toEqual([ "item 1: informe a duração em dias" ]);
     expect(controlledProblems({ items: [ fromDoc() ], category: "special_control" }, EMPTY_IDENTIFICATION))
       .toEqual([ "endereço do paciente: informe o logradouro" ]);
+  });
+
+  it("enfermagem: não prescreve controle especial (o api recusa com cbo_not_allowed); antimicrobiano dela passa", () => {
+    expect(controlledProblems({ items: [ item(SERTRALINE) ] }, FILLED, { nurse: true }))
+      .toEqual([ "item 1: a enfermagem não prescreve receita de controle especial" ]);
+    expect(controlledProblems({ items: [ item(AMOXICILLIN_19D, { durationDays: "7" }) ] }, EMPTY_IDENTIFICATION, { nurse: true })).toEqual([]);
+  });
+
+  it("reemissão: o teto de C1 não conta o item do documento (sem marca, pode ser C5) — o api confere", () => {
+    const docs = [ fromDoc(), fromDoc(), fromDoc() ];
+    expect(controlledProblems({ items: [ ...docs, item(SERTRALINE) ], category: "special_control" }, FILLED)).toEqual([]);
   });
 
   it("item bloqueado aparece com o motivo, sozinho (o api recusa antes de classificar)", () => {

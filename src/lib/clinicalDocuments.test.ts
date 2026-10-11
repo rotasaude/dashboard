@@ -636,6 +636,8 @@ describe("frases e regras do 19d nas regras do 19c", () => {
     const draft = next?.kind === "prescription" ? next.draft : null;
     expect(draft?.identification).toEqual(pi);
     expect(draft?.category).toBe("special_control");
+    // A origem do item fica marcada (não se infere pela ausência de controlled_list).
+    expect(draft?.items[0].medication?.fromDocument).toBe(true);
     // Receita do 19c (sem os campos do 19d): nada de "undefined".
     const old = reissueDraft(prescriptionDoc());
     const oldDraft = old?.kind === "prescription" ? old.draft : null;
