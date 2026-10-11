@@ -275,6 +275,20 @@ describe("ConsultationDocuments — controlado e SNCR (19d)", () => {
     await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: [ SNCR_STOCK_KEY ] }));
   });
 
+  it("cancelar RCE: dois envios num único act chamam cancelDocument uma vez (a ref, não só o botão desligado)", async () => {
+    let resolve: (d: ClinicalDocument) => void = () => {};
+    mocked(api.listConsultationDocuments).mockResolvedValue([ rceDoc() ]);
+    mocked(api.cancelDocument).mockImplementation(() => new Promise((r) => { resolve = r; }));
+    renderDocs();
+    fireEvent.click(await screen.findByRole("button", { name: /^Cancelar Receita de/ }));
+    fireEvent.change(await screen.findByLabelText("Motivo do cancelamento"), { target: { value: "dose errada na receita" } });
+    const form = screen.getByLabelText("Motivo do cancelamento").closest("form") as HTMLFormElement;
+    act(() => { fireEvent.submit(form); fireEvent.submit(form); });
+    await waitFor(() => expect(api.cancelDocument).toHaveBeenCalledTimes(1));
+    await act(async () => { resolve(rceDoc({ status: "cancelled", cancelled_at: "2026-10-10T10:00:00-03:00", cancel_reason: "dose errada na receita" })); });
+    expect(api.cancelDocument).toHaveBeenCalledTimes(1);
+  });
+
   it("cancelar receita comum: sem a nota do SNCR e sem reler o estoque", async () => {
     mocked(api.listConsultationDocuments).mockResolvedValue([ prescriptionDoc() ]);
     mocked(api.cancelDocument).mockResolvedValue(prescriptionDoc({ status: "cancelled", cancelled_at: "2026-10-10T10:00:00-03:00",
