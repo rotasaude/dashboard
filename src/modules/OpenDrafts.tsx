@@ -73,6 +73,7 @@ export function OpenDrafts({ onGoToSecurity }: { onGoToSecurity?(): void }) {
   function translate(err: unknown): string | null {
     if (err instanceof ReasonProblem) return err.message;
     if (STALE.has(errorCode(err) ?? "")) void drafts.refetch();
+    if (errorCode(err) === "invalid_professional") void candidates.refetch();
     return errorCode(err) ? draftAdminError(err) : null;
   }
 

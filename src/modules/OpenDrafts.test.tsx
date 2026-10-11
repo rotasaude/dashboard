@@ -1,7 +1,7 @@
 // src/modules/OpenDrafts.test.tsx
 // fix51 (api#51): rascunhos abertos do municipal_admin — descartar ou designar.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 
 vi.mock("../lib/api", async (importOriginal) => {
   const real = await importOriginal<typeof import("../lib/api")>();
@@ -190,5 +190,48 @@ describe("OpenDrafts", () => {
     fireEvent.click(within(await row("Dra. Helena Prado")).getByRole("button", { name: "Designar outro profissional" }));
     expect(await screen.findByText("nenhum profissional elegível nesta unidade")).not.toBeNull();
     expect(screen.queryByRole("radio")).toBeNull();
+  });
+  // Dois submits no MESMO tick (dentro de um único act): o `busy` do SensitiveAction
+  // ainda não re-renderizou, então só o ref em voo da tela impede a 2ª chamada.
+  it("trava por ref: dois submits no mesmo tick descartam uma vez só", async () => {
+    const d = deferred<{ consultation_id: string; status: "discarded" }>();
+    m(api.discardDraft).mockReturnValue(d.promise);
+    renderWithProviders(<OpenDrafts />);
+    fireEvent.click(within(await row("Dra. Helena Prado")).getByRole("button", { name: "Descartar" }));
+    const panel = screen.getByRole("region", { name: /Descartar rascunho/ });
+    typeReason(panel);
+    const form = panel.querySelector("form") as HTMLFormElement;
+    act(() => { fireEvent.submit(form); fireEvent.submit(form); });
+    expect(api.discardDraft).toHaveBeenCalledTimes(1);
+    d.resolve({ consultation_id: "c1", status: "discarded" });
+    expect(await screen.findByRole("status")).not.toBeNull();
+  });
+
+  it("trava por ref: dois submits no mesmo tick designam uma vez só", async () => {
+    const d = deferred<{ consultation_id: string; author: { user_id: string; name: string } }>();
+    m(api.reassignDraft).mockReturnValue(d.promise);
+    renderWithProviders(<OpenDrafts />);
+    fireEvent.click(within(await row("Dra. Helena Prado")).getByRole("button", { name: "Designar outro profissional" }));
+    fireEvent.click(await screen.findByRole("radio", { name: /Dr. Caio Mendes/ }));
+    const panel = screen.getByRole("region", { name: /Designar rascunho para/ });
+    typeReason(panel);
+    const form = panel.querySelector("form") as HTMLFormElement;
+    act(() => { fireEvent.submit(form); fireEvent.submit(form); });
+    expect(api.reassignDraft).toHaveBeenCalledTimes(1);
+    d.resolve({ consultation_id: "c1", author: { user_id: "us2", name: "Dr. Caio Mendes" } });
+    expect(await screen.findByRole("status")).not.toBeNull();
+  });
+
+  it("invalid_professional relê os candidatos", async () => {
+    m(api.reassignDraft).mockRejectedValue(new ApiError(422, { error: "invalid_professional" }, "422"));
+    renderWithProviders(<OpenDrafts />);
+    fireEvent.click(within(await row("Dra. Helena Prado")).getByRole("button", { name: "Designar outro profissional" }));
+    fireEvent.click(await screen.findByRole("radio", { name: /Dr. Caio Mendes/ }));
+    const panel = screen.getByRole("region", { name: /Designar rascunho para/ });
+    typeReason(panel);
+    expect(api.listDraftCandidates).toHaveBeenCalledTimes(1);
+    fireEvent.click(within(panel).getByRole("button", { name: "Designar" }));
+    await within(panel).findByRole("alert");
+    await waitFor(() => expect(api.listDraftCandidates).toHaveBeenCalledTimes(2));
   });
 });
