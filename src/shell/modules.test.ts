@@ -61,6 +61,18 @@ describe("modules", () => {
       const professional = { operator: false, memberships: [ { role: "health_professional" } ] };
       expect(navGroupsFor(professional).some((g) => g.label === "Atendimento")).toBe(true);
     });
+
+    it("Conta → SNCR: só profissional com controlled_prescriptions (e clinical_documents), nunca operador", () => {
+      const ids = (u: Parameters<typeof navGroupsFor>[0]) => navGroupsFor(u).flatMap((g) => g.items.map((i) => i.id));
+      const pro = { operator: false, memberships: [ { role: "health_professional" } ] };
+      expect(ids({ ...pro, features: [ "clinical_documents", "controlled_prescriptions" ] })).toContain("sncr");
+      expect(ids({ ...pro, features: [ "clinical_documents" ] })).not.toContain("sncr");
+      expect(ids({ operator: false, memberships: [ { role: "municipal_admin" } ], features: [ "clinical_documents", "controlled_prescriptions" ] }))
+        .not.toContain("sncr");
+      expect(ids({ ...pro, operator: true, features: [ "clinical_documents", "controlled_prescriptions" ] })).not.toContain("sncr");
+      expect(labelFor("sncr")).toBe("SNCR");
+      expect(moduleFromPath("/sncr")).toBe("sncr");
+    });
   });
 
   describe("módulo 10 na navegação", () => {

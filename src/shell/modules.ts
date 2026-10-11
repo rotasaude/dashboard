@@ -3,13 +3,14 @@
 // porque o Overview navega para queues/health.
 import { hasFeature } from "../lib/features";
 import { canSeeSignatureOverview, canSign } from "../lib/signature";
+import { canRequestSncr } from "../lib/controlled";
 export type ModuleId =
   | "overview" | "ingestion" | "conversations" | "consent"
   | "triages" | "classification" | "reports" | "protocols" | "events"
   | "queues" | "health" | "protocol-editor" | "security" | "team" | "attendance"
   | "professionals" | "my-profile" | "territory" | "campaigns" | "analytics"
   | "integrations" | "cnes" | "production" | "my-agenda" | "clinical-record" | "my-consultations" | "professional-consultations"
-  | "signature" | "signature-pending" | "signature-overview" | "clinical-documents-admin";
+  | "signature" | "signature-pending" | "signature-overview" | "clinical-documents-admin" | "sncr";
 
 export interface NavItem { id: ModuleId; label: string; icon: string; }
 export interface NavGroupDef { label: string; items: NavItem[]; }
@@ -66,7 +67,8 @@ export const NAV_GROUPS: NavGroupDef[] = [
   { label: "Conta", items: [
     { id: "security", label: "Segurança", icon: "⚿" },
     { id: "my-profile", label: "Meu perfil", icon: "☺" },
-    { id: "signature", label: "Assinatura digital", icon: "✍" }
+    { id: "signature", label: "Assinatura digital", icon: "✍" },
+    { id: "sncr", label: "SNCR", icon: "№" }
   ]}
 ];
 
@@ -141,6 +143,8 @@ export function navGroupsFor(
       if (item.id === "signature" || item.id === "signature-pending") return canSign(user);
       // F-19.14: painel só leitura do municipal_admin, com digital_signature.
       if (item.id === "signature-overview") return canSeeSignatureOverview(user);
+      // Módulo 19d: estoque de números do SNCR, do profissional, com controlled_prescriptions.
+      if (item.id === "sncr") return canRequestSncr(user);
       // Módulo 19c: CNPJ, REMUME e protocolos de enfermagem, só do municipal_admin, com clinical_documents.
       if (item.id === "clinical-documents-admin") return !user?.operator && isAdmin && hasFeature(user, "clinical_documents");
       if (item.id === "integrations" || item.id === "cnes") return canIntegrations;
