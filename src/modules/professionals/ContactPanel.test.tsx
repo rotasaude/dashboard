@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const real = await importOriginal<typeof import("../../lib/api")>();
@@ -107,8 +107,7 @@ describe("ContactPanel", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Cadastrar endereço e telefone" }));
     const form = fillForm();
     const save = within(form).getByRole("button", { name: "Salvar" });
-    fireEvent.click(save);
-    fireEvent.click(save);
+    act(() => { fireEvent.click(save); fireEvent.click(save); });
     expect(api.saveProfessionalContact).toHaveBeenCalledTimes(1);
     await waitFor(() => expect((save as HTMLButtonElement).disabled).toBe(true));
     expect((within(form).getByRole("button", { name: "Cancelar" }) as HTMLButtonElement).disabled).toBe(true);

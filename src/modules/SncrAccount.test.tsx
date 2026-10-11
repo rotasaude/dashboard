@@ -1,6 +1,6 @@
 // src/modules/SncrAccount.test.tsx
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 
 vi.mock("../lib/api", async (importOriginal) => {
   const real = await importOriginal<typeof import("../lib/api")>();
@@ -97,8 +97,7 @@ describe("SncrAccount", () => {
     mocked(api.requestSncrNumbers).mockResolvedValue({ authorize_url: "https://sncr-auth.example.br/x", state: "st1" });
     renderWithProviders(<SncrAccount redirect={redirect} />);
     const button = await screen.findByRole("button", { name: `Obter números do SNCR: ${RCE}` });
-    fireEvent.click(button);
-    fireEvent.click(button);
+    act(() => { fireEvent.click(button); fireEvent.click(button); });
     await waitFor(() => expect(redirect).toHaveBeenCalledTimes(1));
     expect(api.requestSncrNumbers).toHaveBeenCalledTimes(1);
     window.sessionStorage.clear();
@@ -120,5 +119,20 @@ describe("SncrAccount", () => {
     renderWithProviders(<SncrAccount redirect={redirect} />);
     fireEvent.click(await screen.findByRole("button", { name: `Obter números do SNCR: ${RCE}` }));
     expect((await screen.findByRole("alert")).textContent).toBe("pedido inválido — recarregue a página e tente de novo");
+  });
+
+  it("municipal_admin com os interruptores ligados: diz que só profissional pede, sem consultar", async () => {
+    mocked(api.fetchCurrentSession).mockResolvedValue(controlledUser([ "municipal_admin" ]));
+    renderWithProviders(<SncrAccount redirect={redirect} />);
+    expect(await screen.findByText("só profissionais de saúde pedem números do SNCR")).not.toBeNull();
+    expect(api.getSncrStock).not.toHaveBeenCalled();
+  });
+
+  it("sncr_mock ligado: faixa de simulado mesmo com o estoque real", async () => {
+    mocked(api.fetchCurrentSession).mockResolvedValue(controlledUser([ "health_professional" ], {
+      features: [ "clinical_documents", "controlled_prescriptions", "sncr_mock" ]
+    }));
+    renderWithProviders(<SncrAccount redirect={redirect} />);
+    expect(await screen.findByText(SNCR_SIMULATED_NOTICE)).not.toBeNull();
   });
 });
