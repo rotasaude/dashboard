@@ -234,4 +234,39 @@ describe("OpenDrafts", () => {
     await within(panel).findByRole("alert");
     await waitFor(() => expect(api.listDraftCandidates).toHaveBeenCalledTimes(2));
   });
+
+  // Revisão final (api#51): a autora com vínculo ativo pode estar escrevendo;
+  // a autosave dela passa a dar 404. Avisa sem bloquear.
+  const LINKED = /ainda tem vínculo ativo na unidade e pode estar escrevendo/;
+
+  it("descartar: aviso de vínculo ativo quando author_linked; ausente sem vínculo; não bloqueia", async () => {
+    renderWithProviders(<OpenDrafts />);
+    fireEvent.click(within(await row("Dra. Helena Prado")).getByRole("button", { name: "Descartar" }));
+    let panel = screen.getByRole("region", { name: /Descartar rascunho de J.L./ });
+    expect(within(panel).getByText(LINKED).textContent).toMatch(/Dra. Helena Prado.*texto em edição.*pode se perder/);
+    fireEvent.click(within(panel).getByRole("button", { name: "Cancelar" }));
+    fireEvent.click(within(await row("Dr. Paulo Rocha")).getByRole("button", { name: "Descartar" }));
+    panel = screen.getByRole("region", { name: /Descartar rascunho de M.S./ });
+    expect(within(panel).queryByText(LINKED)).toBeNull();
+    fireEvent.click(within(panel).getByRole("button", { name: "Cancelar" }));
+    fireEvent.click(within(await row("Dra. Helena Prado")).getByRole("button", { name: "Descartar" }));
+    panel = screen.getByRole("region", { name: /Descartar rascunho de J.L./ });
+    typeReason(panel);
+    fireEvent.click(within(panel).getByRole("button", { name: "Descartar rascunho" }));
+    await waitFor(() => expect(api.discardDraft).toHaveBeenCalledWith("c1", REASON));
+  });
+
+  it("designar: aviso de vínculo ativo quando author_linked; ausente sem vínculo", async () => {
+    renderWithProviders(<OpenDrafts />);
+    fireEvent.click(within(await row("Dra. Helena Prado")).getByRole("button", { name: "Designar outro profissional" }));
+    fireEvent.click(await screen.findByRole("radio", { name: /Dr. Caio Mendes/ }));
+    let panel = screen.getByRole("region", { name: /Designar rascunho para Dr. Caio Mendes/ });
+    expect(within(panel).getByText(LINKED).textContent).toMatch(/Dra. Helena Prado.*texto em edição.*pode se perder/);
+    expect((within(panel).getByRole("button", { name: "Designar" }) as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "Fechar" }));
+    fireEvent.click(within(await row("Dr. Paulo Rocha")).getByRole("button", { name: "Designar outro profissional" }));
+    fireEvent.click(await screen.findByRole("radio", { name: /Dr. Caio Mendes/ }));
+    panel = screen.getByRole("region", { name: /Designar rascunho para Dr. Caio Mendes/ });
+    expect(within(panel).queryByText(LINKED)).toBeNull();
+  });
 });

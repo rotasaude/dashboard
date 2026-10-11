@@ -89,6 +89,7 @@ export function OpenDrafts({ onGoToSecurity }: { onGoToSecurity?(): void }) {
               Documentos já emitidos não são tocados.
             </p>
             <p style={text}>O atendimento continua em atendimento e é encerrado pela fila da unidade, por um profissional com vínculo.</p>
+            <LinkedWarning draft={draft} />
           </>
         )}
         requiresStepUp
@@ -140,6 +141,7 @@ export function OpenDrafts({ onGoToSecurity }: { onGoToSecurity?(): void }) {
               <>
                 <p style={text}>O texto já escrito é mantido. Depois de designar, {picked.name} encontra o rascunho pelo atendimento, na fila da unidade.</p>
                 <p style={text}>As regras de CID-10 e CIAP-2 passam a valer pela ocupação (CBO) do novo profissional.</p>
+                <LinkedWarning draft={draft} />
               </>
             )}
             requiresStepUp
@@ -202,6 +204,18 @@ export function OpenDrafts({ onGoToSecurity }: { onGoToSecurity?(): void }) {
   );
 }
 
+// Revisão final (api#51): a autora ainda vinculada pode estar com o rascunho
+// aberto; depois de descartar ou designar, a autosave dela passa a dar 404.
+// Só avisa: a ação segue liberada.
+function LinkedWarning({ draft }: { draft: OpenDraft }) {
+  if (!draft.author_linked) return null;
+  return (
+    <p role="note" style={warn}>
+      {draft.author.name} ainda tem vínculo ativo na unidade e pode estar escrevendo neste rascunho agora: o texto em edição pode se perder.
+    </p>
+  );
+}
+
 function candidateLine(c: DraftCandidate): string {
   const cbo = c.cbo_code ? (c.cbo_title ? `${c.cbo_code} — ${c.cbo_title}` : c.cbo_code) : "ocupação não informada";
   const council = c.council
@@ -221,6 +235,7 @@ function Frame({ children }: { children: ReactNode }) {
 
 const text: CSSProperties = { margin: 0, fontSize: 12.5, color: "var(--ink2)" };
 const alert: CSSProperties = { margin: 0, fontSize: 12.5, color: "var(--down)" };
+const warn: CSSProperties = { margin: 0, fontSize: 12.5, color: "var(--warn)" };
 const status: CSSProperties = { margin: 0, fontSize: 12.5, color: "var(--ink)" };
 const box: CSSProperties = { display: "flex", flexDirection: "column", gap: 10, padding: 16,
   border: "1px solid var(--rule)", borderRadius: 8, background: "var(--panel)" };
