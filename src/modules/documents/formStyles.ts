@@ -11,3 +11,6 @@ export const mutedStyle: CSSProperties = { margin: 0, fontSize: 12, color: "var(
 export const linkButton: CSSProperties = {
   border: "none", background: "transparent", padding: 0, cursor: "pointer", fontSize: 12, color: "var(--accent)", textDecoration: "underline"
 };
+// Moldura de um grupo de campos (fieldset) e sua legenda — endereço do 19d.
+export const box: CSSProperties = { display: "flex", flexDirection: "column", gap: 8, margin: 0, padding: 10, border: "1px solid var(--rule)", borderRadius: 6 };
+export const legendStyle: CSSProperties = { fontSize: 12, color: "var(--ink2)", padding: "0 4px" };

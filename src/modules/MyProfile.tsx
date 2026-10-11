@@ -9,6 +9,8 @@ import { DataTable } from "../components/DataTable";
 import { KeyValue } from "../components/KeyValue";
 import { EmptyState } from "../components/EmptyState";
 import { ProfileForm } from "./professionals/ProfileForm";
+import { ContactPanel } from "./professionals/ContactPanel";
+import { CONTACT_KEY, controlledOn } from "../lib/controlled";
 
 // Meu perfil (módulo 10; emenda ao ADR 0021): o profissional lê conselho,
 // registro, CNS, vínculos e turnos e edita só nome e contato.
@@ -45,8 +47,12 @@ export function MyProfile() {
           await updateMyProfessional({ professional_name: fields.professional_name, phone: fields.phone ?? null,
             contact_email: fields.contact_email ?? null });
           void queryClient.invalidateQueries({ queryKey: [ "myProfessional", user?.id ?? null ] });
+          // O telefone do painel de 19d é o mesmo `professionals.phone`.
+          void queryClient.invalidateQueries({ queryKey: [ CONTACT_KEY, user?.id ?? null ] });
         }} />
       </Panel>
+      {/* Módulo 19d: endereço e telefone impressos na receita de controle especial. */}
+      {controlledOn(user) && <ContactPanel />}
       <Panel title="Vínculos ativos">
         <DataTable<ProfessionalLink>
           cols={[ { label: "Vínculo", w: "1fr", render: (l) => `${l.unit_name} · ${l.cbo_title ?? l.cbo_code}` } ]}
