@@ -19,7 +19,7 @@ import { NOW19C, docUser } from "../test/documentFixtures";
 const m = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
 const draft = (over: Partial<OpenDraft> = {}): OpenDraft => ({
   consultation_id: "c1", attendance_id: "a1", health_unit: { id: "u1", name: "UBS Centro" },
-  author: { user_id: "us1", name: "Dra. Helena Prado" }, author_linked: true, patient_initials: "J.L.",
+  author: { user_id: "us1", name: "Dra. Helena Prado" }, author_linked: true, patient_initials: "J.L.", issued_documents: 0,
   started_at: "2026-10-09T08:00:00-03:00", last_saved_at: "2026-10-09T08:40:00-03:00", ...over
 });
 const cand = (over: Partial<DraftCandidate> = {}): DraftCandidate => ({
@@ -254,6 +254,19 @@ describe("OpenDrafts", () => {
     typeReason(panel);
     fireEvent.click(within(panel).getByRole("button", { name: "Descartar rascunho" }));
     await waitFor(() => expect(api.discardDraft).toHaveBeenCalledWith("c1", REASON));
+  });
+
+  it("descartar: avisa quantos documentos emitidos continuam valendo; nada quando 0", async () => {
+    m(api.listOpenDrafts).mockResolvedValue([ draft({ issued_documents: 2 }),
+      draft({ consultation_id: "c2", attendance_id: "a2", author: { user_id: "us3", name: "Dr. Paulo Rocha" }, patient_initials: "M.S." }) ]);
+    renderWithProviders(<OpenDrafts />);
+    fireEvent.click(within(await row("Dra. Helena Prado")).getByRole("button", { name: "Descartar" }));
+    let panel = screen.getByRole("region", { name: /Descartar rascunho de J.L./ });
+    expect(within(panel).getByText("Este rascunho tem 2 documento(s) emitido(s); eles continuam valendo. Cancele pelo documento, se for o caso.")).toBeTruthy();
+    fireEvent.click(within(panel).getByRole("button", { name: "Cancelar" }));
+    fireEvent.click(within(await row("Dr. Paulo Rocha")).getByRole("button", { name: "Descartar" }));
+    panel = screen.getByRole("region", { name: /Descartar rascunho de M.S./ });
+    expect(within(panel).queryByText(/documento\(s\) emitido\(s\)/)).toBeNull();
   });
 
   it("designar: aviso de vínculo ativo quando author_linked; ausente sem vínculo", async () => {

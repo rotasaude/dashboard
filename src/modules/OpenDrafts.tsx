@@ -89,6 +89,7 @@ export function OpenDrafts({ onGoToSecurity }: { onGoToSecurity?(): void }) {
               Documentos já emitidos não são tocados.
             </p>
             <p style={text}>O atendimento continua em atendimento e é encerrado pela fila da unidade, por um profissional com vínculo.</p>
+            <IssuedDocumentsWarning draft={draft} />
             <LinkedWarning draft={draft} />
           </>
         )}
@@ -201,6 +202,16 @@ export function OpenDrafts({ onGoToSecurity }: { onGoToSecurity?(): void }) {
         </div>
       </Panel>
     </Frame>
+  );
+}
+
+// Documentos emitidos durante o rascunho seguem valendo após o descarte; só avisa.
+function IssuedDocumentsWarning({ draft }: { draft: OpenDraft }) {
+  if (draft.issued_documents <= 0) return null;
+  return (
+    <p role="note" style={warn}>
+      {`Este rascunho tem ${draft.issued_documents} documento(s) emitido(s); eles continuam valendo. Cancele pelo documento, se for o caso.`}
+    </p>
   );
 }
 

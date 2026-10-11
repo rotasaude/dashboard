@@ -12,6 +12,8 @@ export interface OpenDraft {
   author: { user_id: string; name: string };
   author_linked: boolean;
   patient_initials: string;
+  // Documentos clínicos emitidos (não cancelados) ligados ao rascunho: só o número.
+  issued_documents: number;
   started_at: string;
   last_saved_at: string;
 }

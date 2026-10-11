@@ -16,7 +16,7 @@ const call = (fn: ReturnType<typeof stub>) => fn.mock.calls[0] as [ string, Requ
 describe("cliente dos rascunhos abertos", () => {
   it("lista é GET sem corpo e devolve o array", async () => {
     const draft = { consultation_id: "c1", attendance_id: "a1", health_unit: { id: "u1", name: "UBS Centro" },
-      author: { user_id: "us1", name: "Dra. Helena" }, author_linked: true, patient_initials: "J.L.",
+      author: { user_id: "us1", name: "Dra. Helena" }, author_linked: true, patient_initials: "J.L.", issued_documents: 0,
       started_at: "2026-10-09T09:00:00Z", last_saved_at: "2026-10-09T09:30:00Z" };
     const fn = stub({ drafts: [ draft ] });
     expect(await listOpenDrafts()).toEqual([ draft ]);
