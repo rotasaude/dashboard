@@ -2,7 +2,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError, issueDocument } from "./api";
 import {
-  ANTIMICROBIAL_NOTE, backdateLimits, CANCEL_REASON_MAX, CONTROLLED_BLOCKED, DOCUMENTS_DISABLED, EMPTY_EXTERNAL, PENDING_REFETCH_MS, addProtocolItem, canCancel,
+  ANTIMICROBIAL_NOTE, backdateLimits, CANCEL_REASON_MAX, CONTROLLED_BLOCKED, CONTROLLED_DISABLED, DOCUMENTS_DISABLED, MIXED_CATEGORIES,
+  PRESCRIBER_MISSING, EMPTY_EXTERNAL, PENDING_REFETCH_MS, addProtocolItem, canCancel,
   canUseDocuments, cancelReasonProblem, declarationInput, declarationProblem, documentError, documentSituation, documentsRefetchInterval,
   emptyDeclaration, emptyItem, itemFromProtocolItem, emptyProtocol, emptySickNote, externalChange, externalProblem, formatCnpj, hasAntimicrobial, isValidCnpj,
   issueModeLabel, issuedNotice, itemFromMedication, itemFromPrescription, kindLabel, kindsFor, medicationLine, prescriptionInput,
@@ -547,5 +548,98 @@ describe("frases das recusas", () => {
     const thrown = await issueDocument("cs1", { kind: "exam_requisition", content: {} }).catch((e) => e);
     expect((thrown as ApiError).body).toEqual({ error: "invalid_item", index: 1, field: "route" });
     expect(documentError(thrown)).toBe("item 2: confira via");
+  });
+});
+
+describe("frases e regras do 19d nas regras do 19c", () => {
+  const err = (status: number, body: unknown) => new ApiError(status, body, String(status));
+
+  it("rótulo da Notificação e o interruptor do controlado", () => {
+    expect(kindLabel("controlled_notification_record")).toBe("Notificação de receita (papel)");
+    expect(documentError(err(403, { error: "feature_disabled", feature: "controlled_prescriptions" }))).toBe(CONTROLLED_DISABLED);
+    expect(CONTROLLED_DISABLED).toBe("a receita de controlado está desligada nesta cidade");
+    expect(documentError(err(403, { error: "feature_disabled", feature: "clinical_documents" }))).toBe(DOCUMENTS_DISABLED);
+  });
+
+  it("recusas novas da emissão, com a posição do item quando vem", () => {
+    expect(documentError(err(422, { error: "mixed_categories", index: 1 }))).toBe(`item 2: ${MIXED_CATEGORIES}`);
+    expect(MIXED_CATEGORIES).toBe(
+      "este item não pode ir nesta receita — separe em duas receitas (controle especial só com itens C1/C5 do catálogo; antimicrobiano só com antimicrobianos do catálogo; item comum e texto livre vão numa receita comum)");
+    expect(documentError(err(422, { error: "duration_exceeded", index: 1 })))
+      .toBe("item 2: duração acima do permitido (controle especial: 60 dias, 180 para anticonvulsivante; Notificação A: 30; B: 60)");
+    expect(documentError(err(422, { error: "duration_exceeded" })))
+      .toBe("duração acima do permitido (controle especial: 60 dias, 180 para anticonvulsivante; Notificação A: 30; B: 60)");
+    expect(documentError(err(422, { error: "requires_notification", index: 0 })))
+      .toBe("item 1: este medicamento é de Notificação (listas A/B): registre a Notificação de papel em vez da receita");
+    expect(documentError(err(422, { error: "not_supported", index: 2 })))
+      .toBe("item 3: medicamento das listas C2, C3 ou C4 (retinoide, talidomida, antirretroviral) não sai pelo Rota Saúde");
+    // Com o 19d ligado, só o texto livre é recusado assim; desligado, continua a frase do 19c.
+    expect(documentError(err(422, { error: "controlled_not_allowed", index: 0 }), { controlled: true }))
+      .toBe("item 1: medicamento controlado não entra em texto livre — escolha o item no catálogo");
+    expect(documentError(err(422, { error: "controlled_not_allowed", index: 0 })))
+      .toBe(`item 1: medicamento controlado não entra aqui (${CONTROLLED_BLOCKED})`);
+    expect(documentError(err(422, { error: "too_many_c1_substances" }))).toBe("no máximo 3 substâncias da lista C1 por receita");
+    expect(documentError(err(422, { error: "invalid_item", index: 0, field: "duration_days" }))).toBe("item 1: confira duração");
+    expect(documentError(err(422, { error: "prescriber_address_missing" }))).toBe(PRESCRIBER_MISSING);
+    expect(documentError(err(422, { error: "item_not_in_notification_list" }))).toBe("o medicamento não é de Notificação (listas A ou B)");
+    expect(documentError(err(422, { error: "notification_type_mismatch" }))).toBe("o tipo da Notificação não bate com a lista do medicamento");
+    expect(documentError(err(403, { error: "cbo_not_allowed" }))).toBe("o seu CBO não emite este tipo de documento");
+  });
+
+  it("identificação do paciente: os campos reais do api", () => {
+    const required = (field: string) => documentError(err(422, { error: "patient_identification_required", field }));
+    expect(required("patient_identification")).toBe("falta na identificação do paciente: endereço");
+    expect(required("patient_identification.address")).toBe("falta na identificação do paciente: endereço");
+    expect(required("patient_identification.cpf")).toBe("o paciente está sem CPF válido no cadastro — corrija o cadastro antes");
+    const invalid = (field: string) => documentError(err(422, { error: "invalid_content", field }));
+    expect(invalid("patient_identification.address.zip")).toBe("endereço do paciente: confira o CEP");
+    expect(invalid("patient_identification.address.street")).toBe("endereço do paciente: confira o logradouro");
+    expect(invalid("patient_identification.address")).toBe("endereço do paciente: confira o endereço");
+    expect(invalid("patient_identification")).toBe("identificação do paciente inválida");
+  });
+
+  it("campos da Notificação no invalid_content", () => {
+    const field = (name: string) => documentError(err(422, { error: "invalid_content", field: name }));
+    const labels: Record<string, string> = {
+      paper_number: "número do talão", numbering_uf: "UF da numeração", notification_type: "tipo da Notificação",
+      "item.catalog_item": "medicamento", "item.quantity": "quantidade", "item.quantity_unit": "unidade", "item.route": "via",
+      "item.dosage_instructions": "posologia", "item.duration_days": "duração em dias"
+    };
+    for (const [ name, label ] of Object.entries(labels)) expect(field(name)).toBe(`confira o campo: ${label}`);
+  });
+
+  it("nenhum código novo cai no genérico nem aparece cru", () => {
+    const codes = [
+      "mixed_categories", "requires_notification", "not_supported", "too_many_c1_substances", "duration_exceeded", "patient_identification_required",
+      "prescriber_address_missing", "controlled_not_allowed", "item_not_in_notification_list", "notification_type_mismatch"
+    ];
+    for (const code of codes) {
+      const phrase = documentError(err(422, { error: code }));
+      expect(phrase, code).not.toBe("não foi possível concluir — tente de novo");
+      expect(phrase, code).not.toBe("a API recusou a ação");
+      expect(phrase, code).not.toContain(code);
+    }
+  });
+
+  it("com o controlado liberado, a receita não acusa o controlado (quem confere é controlledProblems)", () => {
+    const sertraline = { ...itemFromMedication({ ...catalogItem({ id: "ci10" }), controlled: true, controlled_list: "C1" }),
+      quantity: "30", route: "oral" as const, dosage: "1 cp ao dia", durationDays: "60" };
+    expect(prescriptionProblems({ items: [ sertraline ], protocolVersionId: "" }, false)).toEqual([ `item 1: ${CONTROLLED_BLOCKED}` ]);
+    expect(prescriptionProblems({ items: [ sertraline ], protocolVersionId: "" }, false, true)).toEqual([]);
+  });
+
+  it("cancelar e emitir outro leva a categoria e a identificação do paciente da receita cancelada", () => {
+    const pi = { cpf: "39053344705", address: { street: "Rua A", number: "1", district: "Centro", city: "Curitiba", uf: "PR", zip: "80010010" } };
+    const doc = prescriptionDoc({ content: { items: [ prescriptionItem() ], antimicrobial: false, copies: 2, category: "special_control", patient_identification: pi } });
+    const next = reissueDraft(doc);
+    expect(next?.kind).toBe("prescription");
+    const draft = next?.kind === "prescription" ? next.draft : null;
+    expect(draft?.identification).toEqual(pi);
+    expect(draft?.category).toBe("special_control");
+    // Receita do 19c (sem os campos do 19d): nada de "undefined".
+    const old = reissueDraft(prescriptionDoc());
+    const oldDraft = old?.kind === "prescription" ? old.draft : null;
+    expect(oldDraft?.identification).toBeNull();
+    expect(oldDraft?.category).toBe("common");
   });
 });

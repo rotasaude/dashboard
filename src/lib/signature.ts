@@ -11,6 +11,7 @@ import {
 import { describeActionError } from "./actionErrors";
 import { featureDisabledKey, hasFeature, sessionFeatures } from "./features";
 import { cityDateFormat, cityIsoDate, fmtDateTime, fmtHourMinute } from "./format";
+import { readReturnParams, safeReturnTo } from "./oauthReturn";
 import type { Tone } from "../theme/tokens";
 
 export const CERTIFICATE_KEY = "signatureCertificate";
@@ -255,7 +256,7 @@ const DEFAULT_LANDING: Record<OAuthCallbackResult["purpose"], string> = {
 };
 
 export function callbackLanding(result: OAuthCallbackResult): string {
-  return result.return_to && /^\/[^/\\]/.test(result.return_to) ? result.return_to : DEFAULT_LANDING[result.purpose];
+  return safeReturnTo(result.return_to, DEFAULT_LANDING[result.purpose]);
 }
 
 export function oauthErrorPhrase(error: string | null): string {
@@ -275,13 +276,7 @@ export function readSignatureCallback(
   search: string = window.location.search,
   base: string = import.meta.env.BASE_URL
 ): SignatureCallbackParams | null {
-  if (pathname.replace(/\/+$/, "") !== `${base}${CALLBACK_PATH}`) return null;
-  const params = new URLSearchParams(search);
-  const read = (key: string) => {
-    const value = params.get(key);
-    return value && value.trim() !== "" ? value : null;
-  };
-  return { state: read("state"), code: read("code"), error: read("error") };
+  return readReturnParams(CALLBACK_PATH, [ "state", "code", "error" ], pathname, search, base);
 }
 
 // O `code` não pode ficar no histórico: troca a entrada pela base do dashboard.

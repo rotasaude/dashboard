@@ -9,7 +9,7 @@ import {
   ApiError, errorCode, type CatalogItemRef, type ClinicalDocument, type CodedOption, type CompanionReason, type DeclarationContent,
   type DeclarationInput, type DeclarationPeriod, type DocumentKind, type ExamRequisitionContent, type MaxDose, type MedicationChange,
   type MedicationRoute, type NursingProtocol, type NursingProtocolInput, type PatientMedication, type PrescriptionContent,
-  type PrescriptionInput, type ProtocolItem, type PrescriptionItem, type ProtocolVersionInput, type RenewalItem, type SickNoteContent, type SickNoteInput, type SickNoteType
+  type PrescriptionCategory, type PrescriptionInput, type PatientIdentification, type ProtocolItem, type PrescriptionItem, type ProtocolVersionInput, type RenewalItem, type SickNoteContent, type SickNoteInput, type SickNoteType
 } from "./api";
 import { describeActionError } from "./actionErrors";
 import { featureDisabledKey, hasFeature } from "./features";
@@ -34,13 +34,23 @@ export const ANTIMICROBIAL_NOTE =
   "antimicrobiano: a receita sai em papel, em 2 vias (1ª via — farmácia, 2ª via — paciente), válida por 10 dias";
 export const CONTROLLED_BLOCKED = "receita de controle especial — 19d";
 export const NO_PROTOCOL = "a cidade não tem protocolo de enfermagem vigente — sem ele a enfermagem não prescreve";
+// Módulo 19d (ADR 0034). Frases que a emissão (documentError) e as regras de
+// tela (controlled.ts) dividem: uma fonte só, aqui (controlled.ts importa daqui).
+export const CONTROLLED_DISABLED = "a receita de controlado está desligada nesta cidade";
+// Espelho do classify do api (RCE > RET > comum): o que não serve à categoria
+// dominante vira outra receita. Com o `index`, sai "item N: …".
+export const MIXED_CATEGORIES =
+  "este item não pode ir nesta receita — separe em duas receitas (controle especial só com itens C1/C5 do catálogo; antimicrobiano só com antimicrobianos do catálogo; item comum e texto livre vão numa receita comum)";
+// Na de controle especial, sempre; na de antimicrobiano, quando ela sairia digital (plano do api, D12).
+export const PRESCRIBER_MISSING = "falta o seu endereço e telefone — cadastre em Meu perfil antes de emitir esta receita";
+const PRONTUARIO_DISABLED = "o prontuário está desligado nesta cidade";
 const GENERIC = "não foi possível concluir — tente de novo";
 
 // ─── Rótulos ──────────────────────────────────────────────────────────────────
 
 const KIND_LABEL: Record<string, string> = {
   sick_note: "Atestado", attendance_declaration: "Declaração de comparecimento", prescription: "Receita",
-  exam_requisition: "Requisição de exames"
+  exam_requisition: "Requisição de exames", controlled_notification_record: "Notificação de receita (papel)"
 };
 export function kindLabel(kind: string): string {
   return KIND_LABEL[kind] ?? kind;
@@ -244,7 +254,13 @@ export interface ItemDraft {
   key: string; medication: ItemMedication | null; freeText: string; quantity: string; quantityUnit: string;
   route: MedicationRoute | ""; dosage: string; durationDays: string; continuous: boolean;
 }
-export interface PrescriptionDraft { items: ItemDraft[]; protocolVersionId: string }
+// Módulo 19d, preenchidos por "cancelar e emitir outro": `identification` é a
+// do documento cancelado (a tela converte) e `category` a dele — o api não
+// grava as marcas da lista nos itens do documento, então a categoria da RCE
+// reemitida vem daqui.
+export interface PrescriptionDraft {
+  items: ItemDraft[]; protocolVersionId: string; identification?: PatientIdentification | null; category?: PrescriptionCategory;
+}
 
 let itemSeq = 0;
 const nextKey = () => { itemSeq += 1; return `item-${itemSeq}`; };
@@ -279,7 +295,9 @@ export function itemFromPrescription(item: PrescriptionItem | RenewalItem): Item
 const QUANTITY_HINT = "número maior que 0, com até 2 casas decimais";
 const MAX_ITEMS = 20;
 
-export function prescriptionProblems(d: PrescriptionDraft, nurse: boolean): string[] {
+// `controlledAllowed` (19d ligado, médico ou dentista): o controlado não é
+// acusado aqui — quem confere listas e limites é controlledProblems.
+export function prescriptionProblems(d: PrescriptionDraft, nurse: boolean, controlledAllowed = false): string[] {
   const out: string[] = [];
   if (nurse && !d.protocolVersionId) out.push("escolha o protocolo de enfermagem");
   if (d.items.length === 0) out.push("inclua ao menos um medicamento");
@@ -290,7 +308,7 @@ export function prescriptionProblems(d: PrescriptionDraft, nurse: boolean): stri
     const free = squish(it.freeText);
     if (!it.medication && !free) out.push(`${n}: escolha um medicamento do catálogo ou escreva em texto livre`);
     if (!it.medication && free && !inRange(free, 3, 200)) out.push(`${n}: o texto livre precisa ter de 3 a 200 caracteres`);
-    if (it.medication?.controlled) out.push(`${n}: ${CONTROLLED_BLOCKED}`);
+    if (it.medication?.controlled && !controlledAllowed) out.push(`${n}: ${CONTROLLED_BLOCKED}`);
     if (nurse && !it.medication && free) out.push(`${n}: a enfermagem só prescreve itens do protocolo`);
     if (quantity === null) out.push(`${n}: informe a quantidade (${QUANTITY_HINT})`);
     const max = it.medication?.max_dose;
@@ -356,7 +374,10 @@ export function reissueDraft(doc: ClinicalDocument): ReissueDraft | null {
     }
     case "prescription": {
       const c = doc.content as PrescriptionContent;
-      return { kind: "prescription", draft: { items: c.items.map(itemFromPrescription), protocolVersionId: c.nursing_protocol?.version_id ?? "" } };
+      return { kind: "prescription", draft: {
+        items: c.items.map(itemFromPrescription), protocolVersionId: c.nursing_protocol?.version_id ?? "",
+        identification: c.patient_identification ?? null, category: c.category ?? (c.antimicrobial ? "antimicrobial" : "common")
+      } };
     }
     case "exam_requisition":
       return { kind: "exam_requisition", draft: { note: (doc.content as ExamRequisitionContent).note ?? "" } };
@@ -507,8 +528,19 @@ const FIELD_LABEL: Record<string, string> = {
   type: "tipo do atestado", cid10: "CID", cid_authorized: "autorização do CID", kind: "tipo de documento",
   valid_until: "fim da vigência", valid_from: "início da vigência", issuer_registration: "matrícula de quem emite",
   action: "ação", free_text: "nome do medicamento", dosage_summary: "posologia", continuous: "uso contínuo",
-  catalog_item_id: "medicamento do catálogo", title: "título", number: "número", year: "ano"
+  catalog_item_id: "medicamento do catálogo", title: "título", number: "número", year: "ano",
+  // Módulo 19d: registro da Notificação de papel (o api manda o caminho inteiro).
+  paper_number: "número do talão", numbering_uf: "UF da numeração", notification_type: "tipo da Notificação",
+  "item.catalog_item": "medicamento", "item.quantity": "quantidade", "item.quantity_unit": "unidade", "item.route": "via",
+  "item.dosage_instructions": "posologia", "item.duration_days": "duração em dias"
 };
+
+// Campo do endereço (identificação do paciente na receita; contato do prescritor).
+export const ADDRESS_FIELD_LABEL: Record<string, string> = {
+  street: "o logradouro", number: "o número", complement: "o complemento", district: "o bairro", city: "a cidade", uf: "a UF",
+  zip: "o CEP", address: "o endereço"
+};
+const PATIENT_ADDRESS = "patient_identification.address";
 
 // Campos próprios que pedem uma frase inteira, não "confira o campo".
 const FIELD_PHRASE: Record<string, string> = {
@@ -530,6 +562,7 @@ const ERRORS: Record<string, string> = {
   forbidden: "você não tem permissão para ver isto",
   cid_requires_authorization: "o CID só entra com a autorização do paciente",
   companion_cid_not_allowed: "atestado de acompanhante não leva CID",
+  // 19c (interruptor do controlado desligado): o api recusa qualquer controlado.
   controlled_not_allowed: `medicamento controlado não entra aqui (${CONTROLLED_BLOCKED})`,
   not_in_nursing_protocol: "este medicamento não está no protocolo de enfermagem vigente",
   above_protocol_max_dose: "a quantidade passa da dose máxima do protocolo",
@@ -552,24 +585,48 @@ const ERRORS: Record<string, string> = {
   invalid_cnpj: "CNPJ inválido — confira os 14 caracteres (números e, no CNPJ novo, letras)",
   // Sai em documento, renovação e lista de medicamentos: frase neutra.
   out_of_context: "fora do atendimento, abra o prontuário com motivo para ver isto",
-  opening_required: "a abertura justificada terminou — abra o prontuário de novo"
+  opening_required: "a abertura justificada terminou — abra o prontuário de novo",
+  // Módulo 19d (contrato §2–§3; relatório do api, "Contrato para o dashboard").
+  mixed_categories: MIXED_CATEGORIES,
+  requires_notification: "este medicamento é de Notificação (listas A/B): registre a Notificação de papel em vez da receita",
+  not_supported: "medicamento das listas C2, C3 ou C4 (retinoide, talidomida, antirretroviral) não sai pelo Rota Saúde",
+  too_many_c1_substances: "no máximo 3 substâncias da lista C1 por receita",
+  duration_exceeded: "duração acima do permitido (controle especial: 60 dias, 180 para anticonvulsivante; Notificação A: 30; B: 60)",
+  prescriber_address_missing: PRESCRIBER_MISSING,
+  item_not_in_notification_list: "o medicamento não é de Notificação (listas A ou B)",
+  notification_type_mismatch: "o tipo da Notificação não bate com a lista do medicamento",
+  patient_identification_required: "falta na identificação do paciente: endereço"
 };
 
-export function documentError(err: unknown): string {
+// Com o 19d ligado, o api só recusa como controlled_not_allowed o controlado
+// que reconheceu em TEXTO LIVRE (o do catálogo vai à receita de controle especial).
+const CONTROLLED_FREE_TEXT = "medicamento controlado não entra em texto livre — escolha o item no catálogo";
+
+// `controlled`: o interruptor `controlled_prescriptions` da sessão (controlledOn).
+export function documentError(err: unknown, opts: { controlled?: boolean } = {}): string {
   const feature = featureDisabledKey(err);
-  if (feature === "clinical_record") return "o prontuário está desligado nesta cidade";
+  if (feature === "clinical_record") return PRONTUARIO_DISABLED;
+  if (feature === "controlled_prescriptions") return CONTROLLED_DISABLED;
   if (feature !== null) return DOCUMENTS_DISABLED;
   const code = errorCode(err);
   const body = err instanceof ApiError && err.body && typeof err.body === "object" ? (err.body as { field?: unknown; index?: unknown }) : null;
   const field = typeof body?.field === "string" ? body.field : "";
   const at = typeof body?.index === "number" ? `item ${body.index + 1}: ` : "";
   if (code === "invalid_content") {
+    if (field === PATIENT_ADDRESS || field.startsWith(`${PATIENT_ADDRESS}.`)) {
+      return `endereço do paciente: confira ${ADDRESS_FIELD_LABEL[field.split(".").pop() ?? ""] ?? ADDRESS_FIELD_LABEL.address}`;
+    }
+    if (field === "patient_identification") return "identificação do paciente inválida";
     return FIELD_PHRASE[field] ?? `confira o campo: ${FIELD_LABEL[field] ?? (field || "do formulário")}`;
   }
   if (code === "invalid_item") {
     if (!at) return "um dos itens não foi aceito";
     return `${at}confira ${field ? (ITEM_FIELD_LABEL[field] ?? field) : "os dados do item"}`;
   }
+  if (code === "patient_identification_required" && field === "patient_identification.cpf") {
+    return "o paciente está sem CPF válido no cadastro — corrija o cadastro antes";
+  }
+  if (code === "controlled_not_allowed" && opts.controlled) return `${at}${CONTROLLED_FREE_TEXT}`;
   if (code && ERRORS[code]) return `${at}${ERRORS[code]}`;
   const described = describeActionError(err);
   return "message" in described ? described.message : GENERIC;

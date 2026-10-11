@@ -8,13 +8,14 @@
 // no corpo do POST: nada de console, storage ou URL.
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { ApiError, completeSignatureOAuth, type BatchResult } from "../lib/api";
+import { completeSignatureOAuth, type BatchResult } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import {
   CERTIFICATE_KEY, PENDING_KEY, SESSION_KEY, SIMULATED_NOTICE, callbackLanding, callbackSummary,
   clearSignatureCallbackFromUrl, isSimulatedProvider, oauthErrorPhrase, reasonLabel, signatureError, usesSimulatedPsc,
   type SignatureCallbackParams
 } from "../lib/signature";
+import { errorReturnTo } from "../lib/oauthReturn";
 import { labelFor, moduleFromPath, type ModuleId } from "../shell/modules";
 import { buttonStyle } from "../components/formStyles";
 import { Tag } from "../components/Tag";
@@ -30,11 +31,9 @@ interface Props {
   clearUrl?(): void;
 }
 
-// O api devolve o return_to guardado com o state também nas recusas depois de
-// achar o state do próprio usuário (ex.: 409 authorization_expired).
 function landingFromError(err: unknown): ModuleId {
-  const returnTo = err instanceof ApiError ? (err.body as { return_to?: unknown } | null | undefined)?.return_to : undefined;
-  return (typeof returnTo === "string" ? moduleFromPath(returnTo) : null) ?? "overview";
+  const returnTo = errorReturnTo(err);
+  return (returnTo ? moduleFromPath(returnTo) : null) ?? "overview";
 }
 
 export function SignatureCallback({ params, onDone, clearUrl = clearSignatureCallbackFromUrl }: Props) {
