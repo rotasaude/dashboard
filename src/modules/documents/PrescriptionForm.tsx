@@ -71,12 +71,14 @@ export function PrescriptionForm({
   const category = controlled ? prescriptionCategory(d.items, d.category) : "common";
   // A enfermagem não prescreve controle especial (controlledProblems acusa); a de antimicrobiano dela sai em papel.
   const special = !!controlled && category === "special_control" && !nurse;
+  // RET da enfermagem: sai sempre em papel — sem contato do prescritor nem nota de receita digital.
+  const nurseRet = !!controlled && nurse && category === "antimicrobial";
   const needsSncr = special || (!!controlled && category === "antimicrobial");
   const onlyFreeText = !!controlled && d.items.length > 0 && d.items.every((it) => !it.medication);
   const [ identification, setIdentification ] = useState<IdentificationDraft>(() => identificationDraftFrom(initial.identification));
   const [ lastNote, setLastNote ] = useState<string | null>(null);
   const userKey = controlled?.userId ?? null;
-  const contact = useQuery({ queryKey: [ CONTACT_KEY, userKey ], queryFn: getProfessionalContact, enabled: needsSncr, gcTime: 0, retry: false });
+  const contact = useQuery({ queryKey: [ CONTACT_KEY, userKey ], queryFn: getProfessionalContact, enabled: needsSncr && !nurseRet, gcTime: 0, retry: false });
   const stock = useQuery({ queryKey: [ SNCR_STOCK_KEY, userKey ], queryFn: getSncrStock, enabled: needsSncr && !nurse, retry: false });
   const certificate = useQuery({ queryKey: [ CERTIFICATE_KEY, controlled?.userId ?? undefined ], queryFn: getCurrentCertificate,
     enabled: needsSncr && !nurse && !!controlled?.signatureOn, retry: false });
@@ -191,7 +193,7 @@ export function PrescriptionForm({
           {category === "mixed" ? "categoria: misturada — separe em duas receitas" : `categoria: ${categoryLabel(category)}`}
         </p>
       )}
-      {needsSncr && (category === "special_control" || category === "antimicrobial") && (
+      {needsSncr && !nurseRet && (category === "special_control" || category === "antimicrobial") && (
         <p role="note" aria-label="regras da categoria" style={{ ...mutedStyle, fontWeight: 600 }}>{CATEGORY_NOTE[category]}</p>
       )}
       {onlyFreeText && (
@@ -219,7 +221,7 @@ export function PrescriptionForm({
         <PatientIdentificationFields value={identification} onChange={setIdentification} cpfMasked={controlled?.patientCpfMasked}
           onUseLast={controlled?.consultationId ? () => void fillLastIdentification() : undefined} lastNote={lastNote} />
       )}
-      {needsSncr && (
+      {needsSncr && !nurseRet && (
         <div role="group" aria-label="prescritor" style={{ display: "flex", flexDirection: "column", gap: 2 }}>
           <strong style={{ fontSize: 12 }}>Prescritor (endereço e telefone do seu perfil)</strong>
           {contact.isError && <p style={alertStyle}>{controlledError(contact.error)}</p>}

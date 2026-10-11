@@ -385,6 +385,10 @@ describe("PrescriptionForm — controlado e antimicrobiano (19d)", () => {
       .toBe("Esta receita vai sair em papel: a receita de antimicrobiano da enfermagem sai sempre em papel.");
     expect(api.getSncrStock).not.toHaveBeenCalled();
     expect(api.getCurrentCertificate).not.toHaveBeenCalled();
+    // RET da enfermagem sai sempre em papel: sem contato do prescritor e sem a nota da receita digital.
+    expect(api.getProfessionalContact).not.toHaveBeenCalled();
+    expect(screen.queryByRole("group", { name: "prescritor" })).toBeNull();
+    expect(screen.queryByRole("note", { name: "regras da categoria" })).toBeNull();
   });
 
   it("duplo clique no Emitir receita da de controle especial: manda uma vez só", async () => {
