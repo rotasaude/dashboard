@@ -36,6 +36,8 @@ describe("features da sessão (contratos §1)", () => {
     expect(hasFeature({ features: [ "digital_signature" ] }, "digital_signature")).toBe(true);
     expect(featureLabel("clinical_documents")).toBe("Documentos clínicos");
     expect(hasFeature({ features: [ "clinical_documents" ] }, "clinical_documents")).toBe(true);
+    expect(featureLabel("controlled_prescriptions")).toBe("Receita de controle especial e de antimicrobiano (SNCR)");
+    expect(hasFeature({ features: [ "controlled_prescriptions" ] }, "controlled_prescriptions")).toBe(true);
     expect(featureLabel("rnds_sync")).toBe("rnds_sync");
   });
 });

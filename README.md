@@ -36,6 +36,9 @@ A navegação (`src/shell/modules.ts`) é filtrada pelos papéis da sessão
 | Atendimento → consulta (módulo 19c) | Aba Documentos (atestado, declaração, receita, requisição de exames; imprimir e cancelar) e medicamentos em uso ao lado dos problemas | `health_professional` com `clinical_documents` |
 | Atendimento → fila (módulo 19c) | "Declaração" de comparecimento pelo atendimento | recepção e profissionais, com `clinical_documents` |
 | Cidade → Documentos clínicos (módulo 19c) | CNPJ da cidade, REMUME e protocolos de enfermagem (step-up nas escritas) | `municipal_admin` com `clinical_documents` |
+| Conta → SNCR (módulo 19d) | Saldo de números SNCR por tipo (RCE, RET), pedidos do mês, "Obter números do SNCR" pelo gov.br (retorno em `/dashboard/sncr/callback`) | `health_professional` (médico, dentista) com `controlled_prescriptions` |
+| Atendimento → consulta → Documentos (módulo 19d) | Receita de controle especial e de antimicrobiano (categoria, identificação do paciente, limites, aviso de papel, número SNCR) e "Notificação (papel)" | `health_professional` com `controlled_prescriptions` |
+| Equipe → Painel do SNCR (módulo 19d) | Saldo de números por prescritor e saldo baixo, só leitura | `municipal_admin` com `controlled_prescriptions` |
 | Conta | Segurança: autenticador TOTP, recovery codes, senha | usuários da cidade (não o operador) |
 
 O que a API recusaria (403) fica fora do menu. Equipe e Atendimento só

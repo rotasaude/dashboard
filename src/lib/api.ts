@@ -1953,6 +1953,8 @@ export type MedicationOrigin = "prescription" | "external";
 
 export interface CatalogItemRef {
   id: string; catmat_code: number; label: string; active_ingredient: string; strength: string; dosage_form: string | null;
+  // Módulo 19d: lista da Portaria 344 e marca de anticonvulsivante (busca, REMUME, protocolo; não nos itens de documento).
+  controlled_list?: ControlledList | string | null; anticonvulsant?: boolean;
 }
 export interface SickNoteContent {
   type: SickNoteType; days?: number; start_on?: string; companion_name?: string; companion_kinship?: string;
@@ -1972,11 +1974,15 @@ export interface PrescriptionContent {
   nursing_protocol?: { id: string; title: string; number: string; year: number; version_id: string };
   city_cnpj?: string; antimicrobial: boolean; copies: 1 | 2; valid_until?: string;
   catalog_release?: string | null;
+  // Módulo 19d (contrato §2): calculados pelo api; `sncr` só no modo digital.
+  category?: PrescriptionCategory; sncr?: SncrNumberRef | null;
+  patient_identification?: PatientIdentification | null; prescriber_contact?: PrescriberContact | null;
 }
 export interface ExamRequisitionContent {
   exams: { sigtap_code: string; label: string; competence: string; cid10_justification?: string }[]; note?: string | null;
 }
-export type DocumentContent = SickNoteContent | DeclarationContent | PrescriptionContent | ExamRequisitionContent;
+export type DocumentContent = SickNoteContent | DeclarationContent | PrescriptionContent | ExamRequisitionContent
+  | NotificationRecordContent;
 
 // Item da renovação: o api monta com `.compact`; só position, printed_description,
 // continuous e antimicrobial são garantidos, o resto é omitido (não vem null).
@@ -1988,11 +1994,14 @@ export interface RenewalItem {
 
 export interface DocumentAuthor { id: string; name: string; council: string | null; cbo_code: string | null }
 export interface ClinicalDocument {
-  id: string; kind: DocumentKind; status: DocumentStatus; issue_mode: IssueMode; issued_at: string;
+  id: string; kind: RecordedDocumentKind; status: DocumentStatus; issue_mode: IssueMode; issued_at: string;
   cancelled_at: string | null; cancel_reason: string | null; author: DocumentAuthor;
   patient: { id: string; display_name: string } | null; consultation_id: string | null; attendance_id: string;
-  short_code: string; verification_url: string; replaces_document_id: string | null;
+  // Nulos no registro da Notificação de papel (contrato do 19d §3).
+  short_code: string | null; verification_url: string | null; replaces_document_id: string | null;
   content: DocumentContent; signature: SignatureBlock | null;
+  // Módulo 19d: por que saiu em papel (null no digital e no que voltou ao papel).
+  paper_reason?: PaperReason | string | null;
 }
 
 export interface SickNoteInput {
@@ -2006,7 +2015,11 @@ export interface PrescriptionItemInput {
   catalog_item?: { id: string }; free_text?: string; quantity: number; quantity_unit: string; route: MedicationRoute;
   dosage_instructions: string; duration_days?: number; continuous: boolean; reason_problem_id?: string;
 }
-export interface PrescriptionInput { items: PrescriptionItemInput[]; nursing_protocol?: { version_id: string } }
+export interface PrescriptionInput {
+  items: PrescriptionItemInput[]; nursing_protocol?: { version_id: string };
+  // Módulo 19d: só na receita de controle especial (sem CPF; o api usa o do cadastro).
+  patient_identification?: PatientIdentificationInput;
+}
 export interface ExamRequisitionInput { note?: string }
 export type DocumentInput =
   | { kind: "sick_note"; content: SickNoteInput }
@@ -2114,4 +2127,102 @@ export function createNursingProtocol(input: NursingProtocolInput): Promise<Nurs
 
 export function addNursingProtocolVersion(id: string, input: ProtocolVersionInput): Promise<NursingProtocol> {
   return jsonFetch(cityDocPath("nursing_protocols", id, "versions"), postProfessional(input));
+}
+
+// ─── Receita de controlado e SNCR (módulo 19d, ADR 0034; contrato 2026-10-10 §1–§7) ───
+// CPF, endereço, telefone, número SNCR, `state` e `session_id` só no corpo de
+// POST/PUT, nunca em URL: as rotas levam só ids. O token do SNCR nunca passa
+// pelo navegador: o serviço de login da Anvisa faz o gov.br e devolve um
+// `session_id` de uso único, que o api troca pelo token. Toda escrita leva JSON
+// (o jsonFetch põe o Content-Type quando há corpo).
+
+const SNCR_BASE = import.meta.env.VITE_SNCR_BASE || "/sncr";
+
+export type PrescriptionCategory = "common" | "special_control" | "antimicrobial";
+export type SncrKind = "rce" | "ret";
+export type ControlledList = "A1" | "A2" | "A3" | "B1" | "B2" | "C1" | "C2" | "C3" | "C4" | "C5";
+export type NotificationType = "A" | "B" | "B2";
+export type PaperReason =
+  "no_certificate" | "signature_unavailable" | "no_sncr_number" | "nurse_antimicrobial" | "feature_disabled" | "free_text_items";
+export type RecordedDocumentKind = DocumentKind | "controlled_notification_record";
+
+export interface SncrAddress {
+  street: string; number: string; complement?: string | null; district: string; city: string; uf: string; zip: string;
+}
+export interface SncrNumberRef { kind: SncrKind; number: string; simulated: boolean }
+// O CPF vem do cadastro (mascarado ou nulo se o cadastro não tem CPF válido).
+export interface PatientIdentification { cpf: string | null; address: SncrAddress }
+// A entrada não leva o CPF: o api usa o do cadastro.
+export interface PatientIdentificationInput { address: SncrAddress }
+export interface PrescriberContact { address: SncrAddress; phone: string }
+// Sem perfil de profissional → 404; com perfil e sem endereço → `{ address: null, phone }` (phone também pode ser null).
+export interface ProfessionalContact { address: SncrAddress | null; phone: string | null }
+
+export interface NotificationRecordInput {
+  notification_type: NotificationType; paper_number: string; numbering_uf: string;
+  item: {
+    catalog_item: { id: string }; quantity: number; quantity_unit: string; route: MedicationRoute;
+    dosage_instructions: string; duration_days: number;
+  };
+}
+// Item do registro como o api devolve: sem position, continuous e antimicrobial; catalog_item sem marcas.
+export interface NotificationRecordItem {
+  catalog_item: CatalogItemRef; printed_description: string; quantity: number; quantity_unit: string; route: MedicationRoute;
+  dosage_instructions: string; duration_days: number;
+}
+export interface NotificationRecordContent {
+  notification_type: NotificationType; paper_number: string; numbering_uf: string; item: NotificationRecordItem;
+}
+
+export interface SncrStockKind { free: number; used: number; voided: number; requests_this_month: number }
+export interface SncrStock { rce: SncrStockKind; ret: SncrStockKind; low_threshold: number; simulated: boolean }
+// O `state` volta na resposta: a volta da Anvisa não o traz.
+export interface SncrAuthorizeRedirect { authorize_url: string; state: string }
+export interface SncrCallbackResult { kind: SncrKind; received: number; batch_id: string; return_to?: string }
+export interface SncrOverviewProfessional {
+  user_id: string; name: string; rce_free: number; ret_free: number; low: boolean; last_request_at: string | null;
+}
+export interface SncrOverview { professionals: SncrOverviewProfessional[]; simulated: boolean }
+
+const sncrPath = (...parts: string[]) => [ SNCR_BASE, ...parts.map(encodeURIComponent) ].join("/");
+const CONTACT_PATH = `${ATTENDANCE_BASE}/professional_profile/contact`;
+
+export function getSncrStock(): Promise<SncrStock> {
+  return jsonFetch(sncrPath("stock"));
+}
+
+// Vai ao login da Anvisa (gov.br do próprio prescritor); o api guarda o state.
+export function requestSncrNumbers(kind: SncrKind, returnTo: string): Promise<SncrAuthorizeRedirect> {
+  return jsonFetch(sncrPath("requests"), postProfessional({ kind, return_to: returnTo }));
+}
+
+// `answer` é o `session_id` da volta. A recusa também vai ao api, como `{ state, error }`.
+export function completeSncrOAuth(state: string, answer: string | { error: string }): Promise<SncrCallbackResult> {
+  const body = typeof answer === "string" ? { state, session_id: answer } : { state, error: answer.error };
+  return jsonFetch(sncrPath("oauth", "callback"), postProfessional(body));
+}
+
+export function getSncrOverview(): Promise<SncrOverview> {
+  return jsonFetch(sncrPath("admin", "overview"));
+}
+
+export function getProfessionalContact(): Promise<ProfessionalContact> {
+  return jsonFetch(CONTACT_PATH);
+}
+
+export function saveProfessionalContact(contact: { address: SncrAddress; phone: string }): Promise<ProfessionalContact> {
+  return jsonFetch(CONTACT_PATH, { method: "PUT", body: JSON.stringify(contact) });
+}
+
+export function recordNotification(consultationId: string, content: NotificationRecordInput): Promise<ClinicalDocument> {
+  return jsonFetch(attendanceDocPath("consultations", consultationId, "documents"),
+    postProfessional({ kind: "controlled_notification_record", content }));
+}
+
+// "Reaproveitar o último": a identificação da última receita do paciente, pela
+// consulta (autora). Nenhuma anterior = 200 com null; o 404 é "consulta não
+// encontrada" e, como o 403, sobe para a tela tratar.
+export async function getLastPatientIdentification(consultationId: string): Promise<PatientIdentification | null> {
+  return (await jsonFetch<{ patient_identification: PatientIdentification | null }>(
+    attendanceDocPath("consultations", consultationId, "patient_identification"))).patient_identification;
 }

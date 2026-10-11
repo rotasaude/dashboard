@@ -22,6 +22,9 @@ import react from "@vitejs/plugin-react";
 //                 /dashboard/signature/callback (base do Vite), que NÃO casa com este
 //                 prefixo: o retorno é do dashboard, e só o POST /signature/oauth/callback vai ao api.
 //   /clinical_documents → documentos clínicos da cidade (módulo 19c: CNPJ, REMUME e protocolos de enfermagem; municipal_admin).
+//   /sncr       → números do SNCR (módulo 19d: estoque, pedido pelo gov.br, retorno e painel do admin). O gov.br
+//                 devolve a pessoa a /dashboard/sncr/callback (base do Vite), que NÃO casa com este prefixo:
+//                 o retorno é do dashboard, e só o POST /sncr/oauth/callback vai ao api.
 //   ^/v(/|$)    → página pública de conferência do documento (módulo 19c), servida pelo api no host da cidade
 //                 (GET /v, POST /v/lookup, /v/:token); em dev, só para a prova do QR code pela porta do Vite
 //                 (regex: não casa /vite nem /viacep).
@@ -61,6 +64,7 @@ export default defineConfig({
       "/clinical_record": proxy(TARGET),
       "/signature": proxy(TARGET),
       "/clinical_documents": proxy(TARGET),
+      "/sncr": proxy(TARGET),
       "^/v(/|$)": proxy(TARGET)
     }
   }
