@@ -169,7 +169,10 @@ export function ConsultationWorkspace(props: Props) {
             <div hidden={!onDocuments} style={onDocuments ? { display: "contents" } : undefined}>
               <ConsultationDocuments consultationId={consultation.id} searchDelayMs={props.searchDelayMs}
                 onGoToSecurity={props.onGoToSecurity} draft={consultation.status === "draft"}
-                issue={user?.id === consultation.author.id ? { cboCode: consultation.cbo_code, unitId: props.unit.id } : undefined} />
+                issue={user?.id === consultation.author.id ? {
+                  // O CPF vai mascarado (do prontuário), nunca completo.
+                  cboCode: consultation.cbo_code, unitId: props.unit.id, patientCpfMasked: record.data.patient.cpf_masked
+                } : undefined} />
             </div>
           )}
         </>

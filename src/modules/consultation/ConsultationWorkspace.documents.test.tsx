@@ -31,13 +31,16 @@ vi.mock("./ConsultationEditor", () => ({
   }
 }));
 vi.mock("../documents/ConsultationDocuments", () => ({
-  ConsultationDocuments: function DocumentsDouble(p: { consultationId: string; issue?: { cboCode: string; unitId?: string }; draft?: boolean }) {
+  ConsultationDocuments: function DocumentsDouble(p: {
+    consultationId: string; issue?: { cboCode: string; unitId?: string; patientCpfMasked?: string }; draft?: boolean;
+  }) {
     useState(() => { documentsMounts.n += 1; return 0; });
     const [ draft, setDraft ] = useState("");
     return (
       <div>
         <span>{`documentos ${p.consultationId} · ${p.issue ? `emissão ${p.issue.cboCode} ${p.issue.unitId}` : "só lista"} · ${p.draft ? "rascunho" : "finalizada"}`}</span>
         <label>Receita (dublê)<input value={draft} onChange={(e) => setDraft(e.target.value)} /></label>
+        {p.issue && <span>{`cpf do paciente: ${p.issue.patientCpfMasked}`}</span>}
       </div>
     );
   }
@@ -108,6 +111,13 @@ describe("ConsultationWorkspace — documentos clínicos (19c)", () => {
     expect(screen.getByText(/^documentos cs1/).closest("[hidden]")).not.toBeNull();
     expect((screen.getByLabelText("Anotação (dublê)") as HTMLInputElement).value).toBe("dor lombar há 3 dias");
     expect(editorMounts.n).toBe(1);
+  });
+
+  it("19d: a emissão recebe o CPF mascarado do prontuário (nunca o completo)", async () => {
+    renderIt();
+    fireEvent.click(await screen.findByRole("button", { name: "Iniciar consulta" }));
+    fireEvent.click(await screen.findByRole("tab", { name: "Documentos" }));
+    expect(screen.getByText("cpf do paciente: ***.982.247-**")).not.toBeNull();
   });
 
   it("documentos só montam na primeira abertura da aba e depois ficam montados: o formulário aberto sobrevive à ida à Consulta", async () => {

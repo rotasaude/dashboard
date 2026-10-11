@@ -5,9 +5,12 @@
 // POST. O documento fica no histórico como cancelado e a página de conferência
 // passa a dizer "cancelado"; a assinatura pendente sai da fila no api.
 // 409 already_cancelled = outra aba já cancelou: quem chama relê e fecha.
+// Módulo 19d: receita com número SNCR avisa que o SNCR não cancela (o número
+// fica anulado); o registro da Notificação de papel também leva o aviso da receita.
 import { useRef } from "react";
 import { cancelDocument, errorCode, type ClinicalDocument } from "../../lib/api";
 import { CANCEL_WARNING, cancelReasonProblem, documentError, kindLabel } from "../../lib/clinicalDocuments";
+import { SNCR_NO_CANCEL_NOTE, documentSncr } from "../../lib/controlled";
 import { fmtDateTime } from "../../lib/format";
 import { SensitiveAction } from "../../components/SensitiveAction";
 
@@ -36,7 +39,10 @@ export function CancelDocument({ doc, reissue, onDone, onStale, onCancel, onGoTo
             O documento fica no histórico como cancelado e a página de conferência passa a dizer "cancelado". Se a assinatura digital
             ainda estiver na fila, ela sai da fila.
           </p>
-          {doc.kind === "prescription" && <p style={{ ...text, fontWeight: 600 }}>{CANCEL_WARNING}</p>}
+          {(doc.kind === "prescription" || doc.kind === "controlled_notification_record") && (
+            <p style={{ ...text, fontWeight: 600 }}>{CANCEL_WARNING}</p>
+          )}
+          {documentSncr(doc) && <p style={{ ...text, fontWeight: 600 }}>{SNCR_NO_CANCEL_NOTE}</p>}
           {reissue && <p style={text}>Depois do cancelamento, um documento novo abre preenchido com os mesmos dados, para você conferir e emitir.</p>}
         </>
       )}

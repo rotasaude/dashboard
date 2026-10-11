@@ -6,32 +6,45 @@
 // "Cancelar e emitir outro". Sem `issue` (Minhas consultas), só a lista.
 // Leitura com gcTime 0; com assinatura pendente, a lista relê a cada 15 s até
 // assentar. O modo (digital/papel) é o que o api devolve.
+// Módulo 19d (com `controlled_prescriptions`): "Notificação (papel)" para médico
+// e dentista; a receita de controle especial e a de antimicrobiano com número
+// SNCR; a frase depois de emitir diz o número ou por que saiu em papel (pelo que
+// o api devolveu, nunca pela previsão); emitir ou cancelar uma receita numerada
+// relê o estoque do SNCR. Sem o interruptor, a aba é a do 19c.
 import { useRef, useState, type CSSProperties } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  ApiError, errorCode, getPrescriptionRenewal, issueDocument, listConsultationDocuments, type ClinicalDocument, type DocumentInput,
-  type DocumentKind
+  ApiError, errorCode, getPrescriptionRenewal, issueDocument, listConsultationDocuments, recordNotification, type ClinicalDocument,
+  type DocumentInput, type DocumentKind, type NotificationRecordInput
 } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import { todayInCity } from "../../lib/campaigns";
 import { fmtDateTime } from "../../lib/format";
 import {
   DOCUMENTS_KEY, MEDICATIONS_KEY, NO_EXAM_REQUESTS, canCancel, documentError, documentSituation, documentsRefetchInterval, emptyDeclaration, emptySickNote,
-  issueModeLabel, issuedNotice, itemFromPrescription, kindLabel, kindsFor, professionalKind, reissueDraft, withDocument, type ReissueDraft
+  issueModeLabel, itemFromPrescription, kindLabel, kindsFor, professionalKind, reissueDraft, withDocument, type ReissueDraft
 } from "../../lib/clinicalDocuments";
 import { SIMULATED_NOTICE, usesSimulatedPsc } from "../../lib/signature";
+import { hasFeature } from "../../lib/features";
+import {
+  SNCR_SIMULATED_NOTICE, SNCR_STOCK_KEY, controlledIssuedNotice, controlledOn, documentCategory, documentSncr, documentTitle,
+  paperReasonLabel, prescribesControlled, sncrLabel, usesSimulatedSncr
+} from "../../lib/controlled";
 import { DataTable, type Column } from "../../components/DataTable";
 import { Tag } from "../../components/Tag";
 import { buttonStyle, disabledButtonStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { SignatureMarker } from "../signature/SignatureMarker";
 import { SickNoteForm } from "./SickNoteForm";
 import { DeclarationForm } from "./DeclarationForm";
-import { PrescriptionForm } from "./PrescriptionForm";
+import { PrescriptionForm, type ControlledContext } from "./PrescriptionForm";
+import { NotificationRecordForm } from "./NotificationRecordForm";
 import { ExamRequisitionForm } from "./ExamRequisitionForm";
 import { CancelDocument } from "./CancelDocument";
 import { printDocument } from "./printDocument";
 
-export interface IssueContext { cboCode: string; unitId?: string }
+// patientCpfMasked: módulo 19d (identificação do paciente na receita de
+// controle especial) — sempre o mascarado do prontuário, nunca o CPF completo.
+export interface IssueContext { cboCode: string; unitId?: string; patientCpfMasked?: string }
 
 interface Props {
   consultationId: string;
@@ -78,9 +91,20 @@ export function ConsultationDocuments({ consultationId, issue, draft, searchDela
   const today = todayInCity();
   const kinds = issue ? kindsFor(issue.cboCode) : [];
   const canRenew = !!issue && kinds.includes("prescription") && professionalKind(issue.cboCode) !== "nurse";
+  // Módulo 19d.
+  const controlled = controlledOn(user);
+  const canNotify = !!issue && controlled && prescribesControlled(issue.cboCode);
+  const [ notifying, setNotifying ] = useState(false);
+  const cityUf = user?.memberships?.find((m) => m.city_uf)?.city_uf ?? "";
+  const controlledContext: ControlledContext | undefined = issue && controlled ? {
+    userId: user?.id ?? null, simulated: usesSimulatedSncr(user), signatureOn: hasFeature(user, "digital_signature"),
+    consultationId, patientCpfMasked: issue.patientCpfMasked
+  } : undefined;
+  const refusal = (err: unknown) => documentError(err, { controlled });
 
   function open(next: ReissueDraft & { replaces?: string }) {
     seq.current += 1;
+    setNotifying(false);
     setNotice(null); setError(null); setCancelling(null); setForm({ ...next, seq: seq.current });
   }
 
@@ -100,7 +124,7 @@ export function ConsultationDocuments({ consultationId, issue, draft, searchDela
       if (items.length === 0) { setForm(null); setNotice("nenhum medicamento de uso contínuo ativo para renovar"); return; }
       open({ kind: "prescription", draft: { items: items.map(itemFromPrescription), protocolVersionId: "" } });
     } catch (err) {
-      setError(documentError(err));
+      setError(refusal(err));
     } finally {
       setRenewing(false);
     }
@@ -116,12 +140,14 @@ export function ConsultationDocuments({ consultationId, issue, draft, searchDela
       const doc = await issueDocument(consultationId, input, form?.replaces);
       queryClient.setQueryData<ClinicalDocument[]>(key, (list) => withDocument(list ?? [], doc));
       if (doc.kind === "prescription") void queryClient.invalidateQueries({ queryKey: [ MEDICATIONS_KEY ] });
+      // Receita de controle especial ou de antimicrobiano (com número ou não): o estoque pode ter mudado.
+      if (numbered(doc)) void queryClient.invalidateQueries({ queryKey: [ SNCR_STOCK_KEY ] });
       setForm(null);
-      setNotice(issuedNotice(doc));
+      setNotice(controlledIssuedNotice(doc));
     } catch (err) {
       if (!isStaleReplacement(err)) throw err;
       setForm(null);
-      setError(documentError(err));
+      setError(refusal(err));
       void queryClient.invalidateQueries({ queryKey: key });
     } finally {
       issuingRef.current = false;
@@ -149,24 +175,63 @@ export function ConsultationDocuments({ consultationId, issue, draft, searchDela
 
   function askCancel(doc: ClinicalDocument, reissue: boolean) {
     if (issuingRef.current) return;
+    setNotifying(false);
     setForm(null); setNotice(null); setError(null);
     setCancelling({ doc, reissue });
   }
 
+  function startNotification() {
+    if (issuingRef.current) return;
+    setNotice(null); setError(null); setCancelling(null); setForm(null); setNotifying(true);
+  }
+
+  // Mesma trava do emitir (estado + ref). A recusa sobe para o formulário, que
+  // a mostra e fica preenchido.
+  async function recordIt(content: NotificationRecordInput) {
+    if (issuingRef.current) return;
+    issuingRef.current = true;
+    setIssuing(true);
+    try {
+      const doc = await recordNotification(consultationId, content);
+      queryClient.setQueryData<ClinicalDocument[]>(key, (list) => withDocument(list ?? [], doc));
+      void queryClient.invalidateQueries({ queryKey: [ MEDICATIONS_KEY ] });
+      setNotifying(false);
+      setNotice(controlledIssuedNotice(doc));
+    } finally {
+      issuingRef.current = false;
+      setIssuing(false);
+    }
+  }
+
   const what = (d: ClinicalDocument) => `${kindLabel(d.kind)} de ${fmtDateTime(d.issued_at)}`;
   const cols: Column<ClinicalDocument>[] = [
-    { label: "Documento", w: "1.4fr", render: (d) => `${kindLabel(d.kind)}${d.replaces_document_id ? " · substitui um cancelado" : ""}` },
+    { label: "Documento", w: "1.4fr", render: (d) => {
+      const sncr = documentSncr(d);
+      return (
+        <span style={cell}>
+          <span>{`${documentTitle(d)}${d.replaces_document_id ? " · substitui um cancelado" : ""}`}</span>
+          {sncr && <span className="mono" style={muted}>{sncrLabel(sncr)}</span>}
+          {sncr?.simulated && <Tag tone="warn" mono={false}>{SNCR_SIMULATED_NOTICE}</Tag>}
+        </span>
+      );
+    } },
     { label: "Emitido em", w: "1fr", render: (d) => fmtDateTime(d.issued_at) },
-    { label: "Modo", w: "0.6fr", render: (d) => issueModeLabel(d.issue_mode) },
+    // Em papel com motivo, o motivo (de todo documento); voltou ao papel (motivo nulo): só "papel".
+    { label: "Modo", w: "0.6fr", render: (d) => d.issue_mode === "paper" && d.paper_reason ? (
+      <span style={cell}>
+        <span>{issueModeLabel(d.issue_mode)}</span>
+        <span style={muted}>{paperReasonLabel(d.paper_reason)}</span>
+      </span>
+    ) : issueModeLabel(d.issue_mode) },
     { label: "Assinatura", w: "1.6fr", render: (d) => d.signature
       ? <SignatureMarker label={`assinatura: ${kindLabel(d.kind)}`} block={d.signature} consultationId={consultationId}
         onVerified={() => void queryClient.invalidateQueries({ queryKey: key })} />
       : "—" },
     { label: "Situação", w: "1fr", render: (d) => documentSituation(d) },
-    { label: "Código", w: "1fr", render: (d) => <span className="mono">{d.short_code}</span> },
+    { label: "Código", w: "1fr", render: (d) => <span className="mono">{d.short_code ?? "—"}</span> },
     { label: "", w: "auto", align: "right", render: (d) => (
       <span style={actions}>
-        {d.status === "issued" && (
+        {d.status === "issued" && d.kind !== "controlled_notification_record" && (
           <button type="button" aria-label={`Imprimir ${what(d)}`} disabled={printing !== null}
             style={printing !== null ? disabledButtonStyle : secondaryButtonStyle} onClick={() => void print(d)}>
             {printing === d.id ? "Abrindo…" : "Imprimir"}
@@ -176,7 +241,7 @@ export function ConsultationDocuments({ consultationId, issue, draft, searchDela
           <button type="button" aria-label={`Cancelar ${what(d)}`} disabled={issuing}
             style={issuing ? disabledButtonStyle : secondaryButtonStyle} onClick={() => askCancel(d, false)}>Cancelar</button>
         )}
-        {issue && canCancel(d, user?.id) && (
+        {issue && canCancel(d, user?.id) && d.kind !== "controlled_notification_record" && (
           <button type="button" aria-label={`Cancelar e emitir outro: ${what(d)}`} disabled={issuing}
             style={issuing ? disabledButtonStyle : secondaryButtonStyle} onClick={() => askCancel(d, true)}>Cancelar e emitir outro</button>
         )}
@@ -202,6 +267,10 @@ export function ConsultationDocuments({ consultationId, issue, draft, searchDela
               Renovar receita
             </button>
           )}
+          {canNotify && (
+            <button type="button" disabled={issuing} style={issuing ? disabledButtonStyle : secondaryButtonStyle}
+              onClick={startNotification}>Notificação (papel)</button>
+          )}
         </div>
       )}
       {issue && draft && kinds.includes("exam_requisition") && <p style={mutedStyle}>{NO_EXAM_REQUESTS}</p>}
@@ -219,11 +288,16 @@ export function ConsultationDocuments({ consultationId, issue, draft, searchDela
       {issue && form?.kind === "prescription" && (
         <PrescriptionForm key={form.seq} cboCode={issue.cboCode} unitId={issue.unitId} today={today} initial={form.draft}
           replacing={!!form.replaces} busy={issuing} searchDelayMs={searchDelayMs} onCancel={() => setForm(null)}
+          controlled={controlledContext}
           onSubmit={(content) => issueIt({ kind: "prescription", content })} />
       )}
       {issue && form?.kind === "exam_requisition" && (
         <ExamRequisitionForm key={form.seq} initialNote={form.draft.note} replacing={!!form.replaces} busy={issuing}
           onCancel={() => setForm(null)} onSubmit={(content) => issueIt({ kind: "exam_requisition", content })} />
+      )}
+      {issue && notifying && (
+        <NotificationRecordForm unitId={issue.unitId} defaultUf={cityUf} searchDelayMs={searchDelayMs} busy={issuing}
+          onCancel={() => setNotifying(false)} onSubmit={recordIt} />
       )}
 
       {cancelling && (
@@ -234,6 +308,8 @@ export function ConsultationDocuments({ consultationId, issue, draft, searchDela
           onGoToSecurity={onGoToSecurity}
           onDone={(cancelledDoc) => {
             queryClient.setQueryData<ClinicalDocument[]>(key, (list) => withDocument(list ?? [], cancelledDoc));
+            // O número SNCR fica anulado (o SNCR não cancela): o estoque mudou.
+            if (documentSncr(cancelledDoc)) void queryClient.invalidateQueries({ queryKey: [ SNCR_STOCK_KEY ] });
             const next = cancelling.reissue ? reissueDraft(cancelledDoc) : null;
             setCancelling(null);
             if (next) open({ ...next, replaces: cancelledDoc.id });
@@ -258,6 +334,12 @@ export function ConsultationDocuments({ consultationId, issue, draft, searchDela
   );
 }
 
+// Receita de controle especial ou de antimicrobiano: emitir pode gastar um número do estoque.
+function numbered(doc: ClinicalDocument): boolean {
+  const category = documentCategory(doc);
+  return !!documentSncr(doc) || category === "special_control" || category === "antimicrobial";
+}
+
 const panel: CSSProperties = { display: "flex", flexDirection: "column", gap: 10 };
 const row: CSSProperties = { display: "flex", gap: 8, flexWrap: "wrap" };
 const actions: CSSProperties = { display: "flex", gap: 6, justifyContent: "flex-end", flexWrap: "wrap" };
@@ -265,3 +347,4 @@ const mutedStyle: CSSProperties = { margin: 0, fontSize: 12.5, opacity: 0.8 };
 const statusStyle: CSSProperties = { margin: 0, fontSize: 12.5, fontWeight: 600 };
 const muted: CSSProperties = { margin: 0, fontSize: 10.5, color: "var(--ink3)" };
 const alert: CSSProperties = { margin: 0, fontSize: 12.5, color: "var(--down)" };
+const cell: CSSProperties = { display: "flex", flexDirection: "column", gap: 2, alignItems: "flex-start" };
