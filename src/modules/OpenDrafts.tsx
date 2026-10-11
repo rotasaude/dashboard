@@ -153,7 +153,7 @@ export function OpenDrafts({ onGoToSecurity }: { onGoToSecurity?(): void }) {
               if (problem) throw new ReasonProblem(problem);
               await reassignDraft(draft.consultation_id, picked.user_id, values.reason.trim());
             })}
-            onDone={() => finished(`Rascunho designado a ${picked.name}. Ele o encontra pelo atendimento, na fila da unidade.`)}
+            onDone={() => finished(`Rascunho designado a ${picked.name}, que o encontra pelo atendimento, na fila da unidade.`)}
             onCancel={close}
             onGoToSecurity={onGoToSecurity}
             translateError={translate}
