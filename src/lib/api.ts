@@ -1,5 +1,6 @@
 // Cliente HTTP do dashboard. Read API /admin/api/* (envelope { data, as_of })
 // + sessão /session. credentials: "include" (cookie HttpOnly, ADR-0022).
+import type { DraftCandidate, OpenDraft } from "./consultationDrafts";
 const BASE = import.meta.env.VITE_ADMIN_API_BASE || "/admin/api";
 const SESSION_BASE = import.meta.env.VITE_SESSION_BASE || "/session";
 
@@ -2225,4 +2226,28 @@ export function recordNotification(consultationId: string, content: Notification
 export async function getLastPatientIdentification(consultationId: string): Promise<PatientIdentification | null> {
   return (await jsonFetch<{ patient_identification: PatientIdentification | null }>(
     attendanceDocPath("consultations", consultationId, "patient_identification"))).patient_identification;
+}
+
+// ─── Rascunhos de consulta abertos (fix51, api#51) ───────────────────────────
+// Só municipal_admin. Listagem e candidatos não têm conteúdo clínico (sem
+// step-up); descartar e designar exigem (quem trata 401 mfa_required é o
+// SensitiveAction). Motivo e user_id vão no corpo, nunca na URL.
+export async function listOpenDrafts(): Promise<OpenDraft[]> {
+  return (await jsonFetch<{ drafts: OpenDraft[] }>(`${CLINICAL_RECORD_BASE}/consultation_drafts`)).drafts;
+}
+
+export async function listDraftCandidates(id: string): Promise<DraftCandidate[]> {
+  return (await jsonFetch<{ candidates: DraftCandidate[] }>(
+    `${CLINICAL_RECORD_BASE}/consultation_drafts/${encodeURIComponent(id)}/candidates`)).candidates;
+}
+
+export function discardDraft(id: string, reason: string): Promise<{ consultation_id: string; status: "discarded" }> {
+  return jsonFetch(`${CLINICAL_RECORD_BASE}/consultation_drafts/${encodeURIComponent(id)}/discard`,
+    { method: "POST", body: JSON.stringify({ reason }) });
+}
+
+export function reassignDraft(id: string, userId: string, reason: string):
+  Promise<{ consultation_id: string; author: { user_id: string; name: string } }> {
+  return jsonFetch(`${CLINICAL_RECORD_BASE}/consultation_drafts/${encodeURIComponent(id)}/reassign`,
+    { method: "POST", body: JSON.stringify({ user_id: userId, reason }) });
 }
