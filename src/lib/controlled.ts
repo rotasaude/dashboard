@@ -59,6 +59,14 @@ const positiveInt = (text: string): number | null => {
   return /^\d+$/.test(t) && Number(t) >= 1 ? Number(t) : null;
 };
 
+// Quantidade da Notificação como o api aceita: decimal positivo, até 2 casas, até 9999.
+const quantityValue = (text: string): number | null => {
+  const t = text.trim().replace(",", ".");
+  if (!/^\d+(\.\d{1,2})?$/.test(t)) return null;
+  const n = Number(t);
+  return n > 0 && n <= 9999 ? n : null;
+};
+
 // ─── Quem pode ────────────────────────────────────────────────────────────────
 
 type SessionLike = { operator?: boolean; memberships?: { role: string }[]; features?: unknown } | null | undefined;
@@ -492,7 +500,7 @@ export function notificationProblems(d: NotificationDraft): string[] {
     if (!expected) out.push("o medicamento escolhido não é de Notificação (listas A ou B)");
     else if (d.type && expected !== d.type) out.push(`o medicamento é da lista ${d.medication.controlled_list}: a Notificação é ${expected}`);
   }
-  if (positiveInt(d.quantity) === null) out.push("informe a quantidade (número inteiro)");
+  if (quantityValue(d.quantity) === null) out.push("informe a quantidade (até 9999, com no máximo 2 casas decimais)");
   if (d.medication && !d.quantityUnit.trim()) out.push("informe a unidade da quantidade");
   if (!d.route) out.push("escolha a via");
   if (!d.dosage.trim()) out.push("escreva a posologia");
@@ -506,7 +514,7 @@ export function notificationInput(d: NotificationDraft): NotificationRecordInput
   return {
     notification_type: d.type as NotificationType, paper_number: d.paperNumber.trim(), numbering_uf: d.numberingUf,
     item: {
-      catalog_item: { id: d.medication!.id }, quantity: positiveInt(d.quantity) ?? 0, quantity_unit: d.quantityUnit.trim(),
+      catalog_item: { id: d.medication!.id }, quantity: quantityValue(d.quantity) ?? 0, quantity_unit: d.quantityUnit.trim(),
       route: d.route as MedicationRoute, dosage_instructions: d.dosage.trim(), duration_days: positiveInt(d.durationDays) ?? 0
     }
   };

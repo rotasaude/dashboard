@@ -356,7 +356,7 @@ describe("Notificação de papel", () => {
     expect(notificationProblems(filled())).toEqual([]);
     expect(notificationProblems(emptyNotification("PR"))).toEqual([
       "escolha o tipo da Notificação", "informe o número impresso no talão", "escolha o medicamento (listas A ou B)",
-      "informe a quantidade (número inteiro)", "escolha a via", "escreva a posologia", "informe a duração em dias"
+      "informe a quantidade (até 9999, com no máximo 2 casas decimais)", "escolha a via", "escreva a posologia", "informe a duração em dias"
     ]);
     expect(notificationProblems({ ...filled(), type: "A" })).toEqual([ "o medicamento é da lista B1: a Notificação é B" ]);
     expect(notificationProblems({ ...filled(), medication: SERTRALINE })).toEqual([ "o medicamento escolhido não é de Notificação (listas A ou B)" ]);
@@ -366,6 +366,17 @@ describe("Notificação de papel", () => {
     expect(notificationProblems({ ...filled(), numberingUf: "" })).toEqual([ "escolha a UF da numeração" ]);
     expect(notificationProblems({ ...filled(), paperNumber: "PR 001#" }))
       .toEqual([ "o número do talão aceita até 30 letras, números, ponto, barra ou hífen" ]);
+  });
+
+  it("quantidade decimal como o api: até 2 casas e 9999; vírgula vale", () => {
+    const bad = [ "informe a quantidade (até 9999, com no máximo 2 casas decimais)" ];
+    expect(notificationProblems({ ...filled(), quantity: "0,5" })).toEqual([]);
+    expect(notificationProblems({ ...filled(), quantity: "1.25" })).toEqual([]);
+    expect(notificationProblems({ ...filled(), quantity: "9999" })).toEqual([]);
+    expect(notificationProblems({ ...filled(), quantity: "10000" })).toEqual(bad);
+    expect(notificationProblems({ ...filled(), quantity: "1,234" })).toEqual(bad);
+    expect(notificationProblems({ ...filled(), quantity: "0" })).toEqual(bad);
+    expect(notificationInput({ ...filled(), quantity: "0,5" }).item.quantity).toBe(0.5);
   });
 
   it("corpo do POST", () => {

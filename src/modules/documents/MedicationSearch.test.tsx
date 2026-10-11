@@ -13,6 +13,7 @@ import * as api from "../../lib/api";
 import { ApiError } from "../../lib/api";
 import { MedicationSearch } from "./MedicationSearch";
 import { AMOXICILLIN, CLONAZEPAM, searchItem } from "../../test/documentFixtures";
+import { MORPHINE, SERTRALINE } from "../../test/controlledFixtures";
 
 afterEach(cleanup);
 const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
@@ -71,5 +72,32 @@ describe("MedicationSearch", () => {
     mocked(api.searchMedications).mockRejectedValue(new ApiError(503, { error: "catalog_unavailable" }, "503"));
     fireEvent.change(screen.getByLabelText("Buscar medicamento"), { target: { value: "metf" } });
     expect((await screen.findByRole("alert")).textContent).toBe("o catálogo de medicamentos está indisponível agora — a receita não sai; tente de novo em instantes");
+  });
+});
+
+describe("MedicationSearch — motivo de bloqueio por item (19d)", () => {
+  afterEach(cleanup);
+
+  function renderWithReason(onPick = vi.fn()) {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <MedicationSearch label="Buscar medicamento" blockControlled delayMs={0} onPick={onPick}
+          blockReason={(item) => (item.controlled_list === "A1" ? "registre a Notificação de papel" : null)} />
+      </QueryClientProvider>
+    );
+    return onPick;
+  }
+
+  it("o motivo decide: A1 bloqueado com o motivo; C1 liberado com a lista no selo", async () => {
+    mocked(api.searchMedications).mockResolvedValue([ MORPHINE, SERTRALINE ]);
+    const onPick = renderWithReason();
+    fireEvent.change(screen.getByLabelText("Buscar medicamento"), { target: { value: "mo" } });
+    const list = await screen.findByRole("list", { name: "resultados: Buscar medicamento" });
+    expect((within(list).getByRole("button", { name: MORPHINE.label }) as HTMLButtonElement).disabled).toBe(true);
+    expect(within(list).getByText("registre a Notificação de papel")).not.toBeNull();
+    expect(within(list).getByText("controlado · lista C1")).not.toBeNull();
+    fireEvent.click(within(list).getByRole("button", { name: SERTRALINE.label }));
+    expect(onPick).toHaveBeenCalledWith(SERTRALINE);
   });
 });

@@ -2,8 +2,9 @@
 // Busca no catálogo de medicamentos (módulo 19c; contrato §5): o termo vai no
 // corpo de um POST e só a partir de 2 caracteres; a REMUME da unidade vem
 // primeiro ("na rede"). Na receita, o controlado aparece (a médica precisa
-// saber que existe) mas não entra: receita de controle especial é do 19d.
-// Na lista de uso e na REMUME, entra.
+// saber que existe); sem o 19d, não entra; com o 19d (`blockReason`), entra o
+// C1/C5 e as listas A/B/C2/C3/C4 ficam bloqueadas com o motivo. Na lista de uso
+// e na REMUME, entra.
 import { useState, type CSSProperties } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { searchMedications, type MedicationSearchItem } from "../../lib/api";
@@ -20,9 +21,11 @@ interface Props {
   blockControlled: boolean;
   onPick(item: MedicationSearchItem): void;
   delayMs?: number;
+  // Módulo 19d: decide o bloqueio de cada item (motivo não nulo = bloqueado).
+  blockReason?(item: MedicationSearchItem): string | null;
 }
 
-export function MedicationSearch({ label, unitId, blockControlled, onPick, delayMs = 300 }: Props) {
+export function MedicationSearch({ label, unitId, blockControlled, onPick, delayMs = 300, blockReason }: Props) {
   const [ text, setText ] = useState("");
   const typed = text.trim();
   const term = useDebouncedValue(typed, delayMs);
@@ -48,7 +51,8 @@ export function MedicationSearch({ label, unitId, blockControlled, onPick, delay
       {show && query.isSuccess && query.data.length > 0 && (
         <ul aria-label={`resultados: ${label}`} style={list}>
           {query.data.map((item) => {
-            const blocked = blockControlled && item.controlled;
+            const reason = blockReason ? blockReason(item) : (blockControlled && item.controlled ? CONTROLLED_BLOCKED : null);
+            const blocked = reason !== null;
             return (
               <li key={item.id} style={row}>
                 <button type="button" disabled={blocked} aria-label={item.label}
@@ -58,7 +62,16 @@ export function MedicationSearch({ label, unitId, blockControlled, onPick, delay
                 </button>
                 {item.in_network && <Tag tone="ok" mono={false}>na rede</Tag>}
                 {item.antimicrobial && <Tag tone="warn" mono={false}>antimicrobiano</Tag>}
-                {item.controlled && <Tag tone="down" mono={false}>{blockControlled ? CONTROLLED_BLOCKED : "controlado"}</Tag>}
+                {blockReason ? (
+                  <>
+                    {reason !== null && <Tag tone="down" mono={false}>{reason}</Tag>}
+                    {reason === null && item.controlled && (
+                      <Tag tone="warn" mono={false}>{item.controlled_list ? `controlado · lista ${item.controlled_list}` : "controlado"}</Tag>
+                    )}
+                  </>
+                ) : (
+                  item.controlled && <Tag tone="down" mono={false}>{blockControlled ? CONTROLLED_BLOCKED : "controlado"}</Tag>
+                )}
               </li>
             );
           })}
