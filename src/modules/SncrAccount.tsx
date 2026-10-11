@@ -5,7 +5,7 @@
 // o gov.br do próprio prescritor. O token e o pedido ao SNCR são do api (30 s);
 // a tela guarda o `state` nesta aba (a volta não o traz; plano do api, D2) e
 // segue o authorize_url. Sem número, as receitas saem em papel.
-import { useRef, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { errorCode, getSncrStock, requestSncrNumbers, type SncrKind } from "../lib/api";
 import { useAuth } from "../lib/auth";
@@ -37,6 +37,17 @@ export function SncrAccount({ redirect = goToProvider }: Props) {
   const [ asking, setAsking ] = useState<SncrKind | null>(null);
   const [ error, setError ] = useState<string | null>(null);
   const askingRef = useRef(false);
+
+  // Voltar do login da Anvisa pelo bfcache restaura a página como estava (botões travados, sem remontar).
+  useEffect(() => {
+    const onPageShow = (event: PageTransitionEvent) => {
+      if (!event.persisted) return;
+      askingRef.current = false;
+      setAsking(null);
+    };
+    window.addEventListener("pageshow", onPageShow);
+    return () => window.removeEventListener("pageshow", onPageShow);
+  }, []);
 
   if (!allowed) {
     return (

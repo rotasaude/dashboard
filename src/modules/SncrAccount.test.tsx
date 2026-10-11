@@ -103,6 +103,24 @@ describe("SncrAccount", () => {
     window.sessionStorage.clear();
   });
 
+  it("volta pelo bfcache (pageshow persisted): a trava do pedido é limpa e o botão religa", async () => {
+    window.sessionStorage.clear();
+    mocked(api.requestSncrNumbers).mockResolvedValue({ authorize_url: "https://sncr-auth.example.br/x", state: "st1" });
+    renderWithProviders(<SncrAccount redirect={redirect} />);
+    const label = `Obter números do SNCR: ${RCE}`;
+    fireEvent.click(await screen.findByRole("button", { name: label }));
+    await waitFor(() => expect(redirect).toHaveBeenCalledTimes(1));
+    expect((screen.getByRole("button", { name: label }) as HTMLButtonElement).disabled).toBe(true);
+    // pageshow sem persisted (carga normal) não destrava.
+    act(() => { window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: false })); });
+    expect((screen.getByRole("button", { name: label }) as HTMLButtonElement).disabled).toBe(true);
+    act(() => { window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true })); });
+    expect((screen.getByRole("button", { name: label }) as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: label }));
+    await waitFor(() => expect(api.requestSncrNumbers).toHaveBeenCalledTimes(2));
+    window.sessionStorage.clear();
+  });
+
   it("SNCR fora do ar (503): diz, não guarda state e religa o botão", async () => {
     window.sessionStorage.clear();
     mocked(api.requestSncrNumbers).mockRejectedValue(new ApiError(503, { error: "sncr_unavailable" }, "503"));
