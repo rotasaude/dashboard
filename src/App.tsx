@@ -32,6 +32,7 @@ import { Production } from "./modules/Production";
 import { ClinicalRecord } from "./modules/ClinicalRecord";
 import { MyConsultations } from "./modules/MyConsultations";
 import { ProfessionalConsultations } from "./modules/ProfessionalConsultations";
+import { OpenDrafts } from "./modules/OpenDrafts";
 import { SignatureAccount } from "./modules/SignatureAccount";
 import { SignaturePending } from "./modules/SignaturePending";
 import { SignatureOverview } from "./modules/SignatureOverview";
@@ -101,6 +102,7 @@ function renderModule(active: ModuleId, setActive: (id: ModuleId) => void) {
     case "production":     return <Production onGoToSecurity={() => setActive("security")} />;
     case "my-consultations": return <MyConsultations onGoToSecurity={() => setActive("security")} />;
     case "professional-consultations": return <ProfessionalConsultations onGoToSecurity={() => setActive("security")} />;
+    case "open-drafts": return <OpenDrafts onGoToSecurity={() => setActive("security")} />;
     case "clinical-record": return <ClinicalRecord onGoToSecurity={() => setActive("security")} />;
     case "signature":      return <SignatureAccount onGoToSecurity={() => setActive("security")} />;
     case "signature-pending": return <SignaturePending onNavigate={setActive} />;

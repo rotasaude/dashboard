@@ -9,7 +9,7 @@ export type ModuleId =
   | "triages" | "classification" | "reports" | "protocols" | "events"
   | "queues" | "health" | "protocol-editor" | "security" | "team" | "attendance"
   | "professionals" | "my-profile" | "territory" | "campaigns" | "analytics"
-  | "integrations" | "cnes" | "production" | "my-agenda" | "clinical-record" | "my-consultations" | "professional-consultations"
+  | "integrations" | "cnes" | "production" | "my-agenda" | "clinical-record" | "my-consultations" | "professional-consultations" | "open-drafts"
   | "signature" | "signature-pending" | "signature-overview" | "clinical-documents-admin" | "sncr" | "sncr-overview";
 
 export interface NavItem { id: ModuleId; label: string; icon: string; }
@@ -45,7 +45,8 @@ export const NAV_GROUPS: NavGroupDef[] = [
     { id: "signature-pending", label: "Pendentes de assinatura", icon: "⧗" },
     { id: "clinical-record", label: "Prontuário", icon: "⚕" },
     { id: "my-consultations", label: "Minhas consultas", icon: "☰" },
-    { id: "professional-consultations", label: "Consultas por profissional", icon: "☷" }
+    { id: "professional-consultations", label: "Consultas por profissional", icon: "☷" },
+    { id: "open-drafts", label: "Rascunhos abertos", icon: "✎" }
   ]},
   { label: "Comunicação", items: [
     { id: "campaigns", label: "Campanhas", icon: "✉" }
@@ -139,6 +140,8 @@ export function navGroupsFor(
       if (item.id === "my-consultations") return !user?.operator && isProfessional && hasFeature(user, "clinical_record");
       // Task 18: leitura administrativa, só do municipal_admin (não exige health_professional).
       if (item.id === "professional-consultations") return !user?.operator && isAdmin && hasFeature(user, "clinical_record");
+      // fix51 (api#51): rascunhos abertos, só do municipal_admin.
+      if (item.id === "open-drafts") return !user?.operator && isAdmin && hasFeature(user, "clinical_record");
       // Módulo 19b: certificado e sessão de assinatura são do profissional,
       // só com `digital_signature` ligado (o api recusaria com 403).
       if (item.id === "signature" || item.id === "signature-pending") return canSign(user);

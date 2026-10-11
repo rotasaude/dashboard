@@ -245,6 +245,14 @@ describe("modules", () => {
       expect(ids(user([ "municipal_admin" ], [ "clinical_record" ], true))).not.toContain("professional-consultations");
       expect(labelFor("professional-consultations")).toBe("Consultas por profissional");
     });
+
+    it("Rascunhos abertos: só municipal_admin com clinical_record, nunca operador", () => {
+      expect(ids(user([ "municipal_admin" ], [ "clinical_record" ]))).toContain("open-drafts");
+      expect(ids(user([ "municipal_admin" ]))).not.toContain("open-drafts");
+      expect(ids(user([ "health_professional" ], [ "clinical_record" ]))).not.toContain("open-drafts");
+      expect(ids(user([ "municipal_admin" ], [ "clinical_record" ], true))).not.toContain("open-drafts");
+      expect(labelFor("open-drafts")).toBe("Rascunhos abertos");
+    });
   });
 });
 
