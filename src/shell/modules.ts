@@ -3,14 +3,14 @@
 // porque o Overview navega para queues/health.
 import { hasFeature } from "../lib/features";
 import { canSeeSignatureOverview, canSign } from "../lib/signature";
-import { canRequestSncr } from "../lib/controlled";
+import { canRequestSncr, canSeeSncrOverview } from "../lib/controlled";
 export type ModuleId =
   | "overview" | "ingestion" | "conversations" | "consent"
   | "triages" | "classification" | "reports" | "protocols" | "events"
   | "queues" | "health" | "protocol-editor" | "security" | "team" | "attendance"
   | "professionals" | "my-profile" | "territory" | "campaigns" | "analytics"
   | "integrations" | "cnes" | "production" | "my-agenda" | "clinical-record" | "my-consultations" | "professional-consultations"
-  | "signature" | "signature-pending" | "signature-overview" | "clinical-documents-admin" | "sncr";
+  | "signature" | "signature-pending" | "signature-overview" | "clinical-documents-admin" | "sncr" | "sncr-overview";
 
 export interface NavItem { id: ModuleId; label: string; icon: string; }
 export interface NavGroupDef { label: string; items: NavItem[]; }
@@ -53,7 +53,8 @@ export const NAV_GROUPS: NavGroupDef[] = [
   { label: "Equipe", items: [
     { id: "team", label: "Equipe", icon: "☷" },
     { id: "professionals", label: "Profissionais", icon: "✚" },
-    { id: "signature-overview", label: "Painel de assinatura", icon: "✍" }
+    { id: "signature-overview", label: "Painel de assinatura", icon: "✍" },
+    { id: "sncr-overview", label: "Painel do SNCR", icon: "№" }
   ]},
   { label: "Cidade", items: [
     { id: "territory", label: "Território", icon: "⌖" },
@@ -145,6 +146,8 @@ export function navGroupsFor(
       if (item.id === "signature-overview") return canSeeSignatureOverview(user);
       // Módulo 19d: estoque de números do SNCR, do profissional, com controlled_prescriptions.
       if (item.id === "sncr") return canRequestSncr(user);
+      // F-19.29: painel só leitura do municipal_admin, com controlled_prescriptions.
+      if (item.id === "sncr-overview") return canSeeSncrOverview(user);
       // Módulo 19c: CNPJ, REMUME e protocolos de enfermagem, só do municipal_admin, com clinical_documents.
       if (item.id === "clinical-documents-admin") return !user?.operator && isAdmin && hasFeature(user, "clinical_documents");
       if (item.id === "integrations" || item.id === "cnes") return canIntegrations;

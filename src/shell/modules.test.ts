@@ -73,6 +73,17 @@ describe("modules", () => {
       expect(labelFor("sncr")).toBe("SNCR");
       expect(moduleFromPath("/sncr")).toBe("sncr");
     });
+
+    it("Equipe → Painel do SNCR: só municipal_admin com controlled_prescriptions, nunca operador", () => {
+      const ids = (u: Parameters<typeof navGroupsFor>[0]) => navGroupsFor(u).flatMap((g) => g.items.map((i) => i.id));
+      const admin = { operator: false, memberships: [ { role: "municipal_admin" } ] };
+      expect(ids({ ...admin, features: [ "clinical_documents", "controlled_prescriptions" ] })).toContain("sncr-overview");
+      expect(ids({ ...admin, features: [ "clinical_documents" ] })).not.toContain("sncr-overview");
+      expect(ids({ operator: false, memberships: [ { role: "health_professional" } ], features: [ "clinical_documents", "controlled_prescriptions" ] }))
+        .not.toContain("sncr-overview");
+      expect(ids({ ...admin, operator: true, features: [ "clinical_documents", "controlled_prescriptions" ] })).not.toContain("sncr-overview");
+      expect(labelFor("sncr-overview")).toBe("Painel do SNCR");
+    });
   });
 
   describe("módulo 10 na navegação", () => {
