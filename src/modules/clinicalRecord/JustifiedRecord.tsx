@@ -8,6 +8,8 @@ import { errorCode, getConsultationOptions, getJustifiedRecord, type Opening } f
 import { CONSULTATION_KEY, JUSTIFIED_KEY, OPTIONS_KEY } from "../../lib/consultation";
 import { OPENING_ENDED, clinicalRecordError, countdownLabel, deadlineMs } from "../../lib/clinicalRecord";
 import { useAuth } from "../../lib/auth";
+import { hasFeature } from "../../lib/features";
+import { TIMELINE_KEY } from "../../lib/timeline";
 import { Panel } from "../../components/Panel";
 import { Tag } from "../../components/Tag";
 import { buttonStyle, secondaryButtonStyle } from "../../components/formStyles";
@@ -50,6 +52,7 @@ export function JustifiedRecord({ opening, onEnd, searchDelayMs }: Props) {
     if (!over) return;
     queryClient.removeQueries({ queryKey: [ JUSTIFIED_KEY ] });
     queryClient.removeQueries({ queryKey: [ CONSULTATION_KEY ] });
+    queryClient.removeQueries({ queryKey: [ TIMELINE_KEY ] });
   }, [ over, queryClient ]);
 
   if (over) {
@@ -72,7 +75,10 @@ export function JustifiedRecord({ opening, onEnd, searchDelayMs }: Props) {
         {record.isError && <p role="alert" style={{ margin: 0, fontSize: 12.5, color: "var(--down)" }}>{clinicalRecordError(record.error)}</p>}
         {record.data && (
           <>
-            <PatientPanel record={record.data} onOpenConsultation={setViewing} />
+            <PatientPanel record={record.data} onOpenConsultation={setViewing}
+              timeline={hasFeature(user, "patient_timeline") ? {
+                subject: { openingId: opening.opening_id }, endOnOutOfContext: true, onOpeningRequired: handleOpeningRequired, searchDelayMs
+              } : undefined} />
             {viewing && (
               <ConsultationLoader key={viewing} id={viewing} endOnOutOfContext
                 options={options.data ?? null} patientProblems={record.data.problems} searchDelayMs={searchDelayMs}

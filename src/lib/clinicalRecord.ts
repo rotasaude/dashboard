@@ -64,8 +64,13 @@ export function countdownLabel(ms: number): string {
   return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
 }
 
-export function clinicalRecordError(err: unknown): string {
+export const NO_VERIFIED_PAIR =
+  "nenhum cadastro validado com este CPF — a linha do tempo só existe para quem validou o cadastro na unidade";
+
+export function clinicalRecordError(err: unknown, opts: { timelineOnly?: boolean } = {}): string {
   const code = err instanceof ApiError ? (err.body as { error?: string } | null)?.error : undefined;
+  // Módulo 20: sem prontuário (modo integrated), patient_not_found quer dizer "sem par validado".
+  if (code === "patient_not_found" && opts.timelineOnly) return NO_VERIFIED_PAIR;
   if (code === "patient_not_found") return "nenhum prontuário para este CPF — o prontuário nasce na primeira consulta de um cadastro validado";
   if (code === "invalid_reason") return `escolha o motivo; em 'Outro motivo', descreva com pelo menos ${OPENING_NOTE_MIN} caracteres`;
   return consultationError(err);

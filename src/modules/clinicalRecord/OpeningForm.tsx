@@ -14,7 +14,11 @@ import { buttonStyle, inputStyle } from "../../components/formStyles";
 
 const OWN_REFUSALS = new Set([ "patient_not_found", "invalid_reason", "feature_disabled", "missing_role" ]);
 
-export function OpeningForm({ onOpened, onGoToSecurity }: { onOpened(o: Opening): void; onGoToSecurity?(): void }) {
+// Módulo 20: `timelineOnly` (modo integrated, só patient_timeline) — a abertura lê a linha do tempo.
+export function OpeningForm({ onOpened, onGoToSecurity, timelineOnly = false }: {
+  onOpened(o: Opening): void; onGoToSecurity?(): void; timelineOnly?: boolean;
+}) {
+  const what = timelineOnly ? "a linha do tempo" : "o prontuário";
   const [ draft, setDraft ] = useState<OpeningDraft>(EMPTY_OPENING);
   const [ problem, setProblem ] = useState<string | null>(null);
   const [ confirming, setConfirming ] = useState(false);
@@ -27,11 +31,10 @@ export function OpeningForm({ onOpened, onGoToSecurity }: { onOpened(o: Opening)
   }
 
   return (
-    <Panel title="Abrir prontuário fora do atendimento" sub="abertura justificada · válida por 30 minutos">
+    <Panel title={`Abrir ${timelineOnly ? "linha do tempo" : "prontuário"} fora do atendimento`} sub="abertura justificada · válida por 30 minutos">
       <div style={{ display: "flex", flexDirection: "column", gap: 10, maxWidth: 420 }}>
         <p style={muted}>
-          Use só quando precisar ler o prontuário de alguém que não está em atendimento com você. A abertura fica
-          registrada, com o motivo, e aparece no relatório da administração.
+          {`Use só quando precisar ler ${what} de alguém que não está em atendimento com você. A abertura fica registrada, com o motivo, e aparece no relatório da administração.`}
         </p>
         {!confirming ? (
           <>
@@ -63,12 +66,12 @@ export function OpeningForm({ onOpened, onGoToSecurity }: { onOpened(o: Opening)
             title="Confirmar abertura justificada"
             description={`CPF ${draft.cpf} · ${reasonLabel(draft.reason)}. A leitura vale por 30 minutos e fica no relatório da administração.`}
             requiresStepUp
-            confirmLabel="Abrir prontuário"
+            confirmLabel={timelineOnly ? "Abrir linha do tempo" : "Abrir prontuário"}
             run={async () => { opened.current = await openClinicalRecord(openingBody(draft)); }}
             onDone={() => { if (opened.current) onOpened(opened.current); }}
             onCancel={() => setConfirming(false)}
             onGoToSecurity={onGoToSecurity}
-            translateError={(err) => (OWN_REFUSALS.has(errorCode(err) ?? "") ? clinicalRecordError(err) : null)}
+            translateError={(err) => (OWN_REFUSALS.has(errorCode(err) ?? "") ? clinicalRecordError(err, { timelineOnly }) : null)}
           />
         )}
       </div>

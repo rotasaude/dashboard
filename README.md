@@ -56,6 +56,17 @@ reverter) aparecem conforme o estado da versão. A reversão mostra a versão-al
 ("deve voltar", que é uma previsão) e, depois, a versão que de fato passou a
 valer.
 
+**Linha do tempo do paciente (módulo 20).** Com `patient_timeline` ligado, o
+painel do paciente no atendimento chamado (modo `record`) e na abertura
+justificada ganha as abas **Resumo** e **Linha do tempo**: a lista cronológica
+da pessoa (triagens, atendimentos, escutas, agendamentos, consultas,
+documentos, Notificações e campanhas), com filtros por tipo e período,
+"Carregar mais" e o detalhe nas telas existentes. No modo `integrated` não há
+prontuário: o atendimento chamado tem o botão **Linha do tempo**, com o aviso de
+histórico parcial, e **Prontuário** abre só a linha do tempo pela abertura
+justificada. Toda leitura fica na trilha do api; nada vai para a URL além de
+ids, tipos, datas e o cursor.
+
 ## Entrada e autenticação
 
 Sessão por cookie HttpOnly, **host-only** (sem `domain:`), contra `User` no

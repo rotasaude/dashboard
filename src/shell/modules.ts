@@ -117,7 +117,12 @@ export function navGroupsFor(
   const canProduction = !user?.operator && (isAdmin || roles.includes("analyst")) && hasFeature(user, "ledi_export");
   // Módulo 19 (ADR 0031): abertura justificada do profissional e relatório do
   // municipal_admin, só com `clinical_record` ligado; a recepção nunca.
-  const canClinicalRecord = !user?.operator && (isProfessional || isAdmin) && hasFeature(user, "clinical_record");
+  // Módulo 20: com só `patient_timeline` (modo integrated), a abertura
+  // justificada da linha do tempo, só do profissional.
+  const canClinicalRecord = !user?.operator && (
+    ((isProfessional || isAdmin) && hasFeature(user, "clinical_record")) ||
+    (isProfessional && hasFeature(user, "patient_timeline"))
+  );
   return NAV_GROUPS.filter((group) => {
     if (group.label === "Conta") return !user?.operator;
     if (group.label === "Equipe") return isAdmin;
