@@ -5,8 +5,8 @@
 // existem. Toda leitura gera trilha no api; aqui nada fica guardado
 // (gcTime: 0). Pela abertura justificada, opening_required (e out_of_context)
 // encerra a leitura em quem chamou.
-import { useEffect, useState, type CSSProperties } from "react";
-import { useInfiniteQuery } from "@tanstack/react-query";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { getTimeline, type TimelineEntry, type TimelineFilters, type TimelineSubject } from "../../lib/api";
 import {
   ALL_FILTERS, EMPTY_DRAFT, PARTIAL_NOTICE, TIMELINE_EMPTY, TIMELINE_KEY, TIMELINE_KINDS, detailTarget, endsOpening, entryWhen,
@@ -17,6 +17,7 @@ import { DataTable } from "../../components/DataTable";
 import { Tag } from "../../components/Tag";
 import { disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { TimelineDetail } from "./TimelineDetail";
+import { TIMELINE_DOCUMENT_KEY } from "./DocumentDetail";
 
 interface Props {
   subject: TimelineSubject;
@@ -32,19 +33,38 @@ export function PatientTimeline({ subject, endOnOutOfContext = false, onOpeningR
   const [ open, setOpen ] = useState<DetailTarget | null>(null);
   // Pela abertura justificada (fora de contexto) só a consulta abre (contrato §9).
   const inContext = !("openingId" in subject);
+  const key = subjectKey(subject);
+  const queryClient = useQueryClient();
+  // Fim da abertura (403 opening_required, ou out_of_context pela abertura):
+  // a lista sai da tela e do cache, e quem chamou é avisado uma vez só.
+  const [ closedFor, setClosedFor ] = useState<string | null>(null);
+  const closed = closedFor === key;
+  const endedFor = useRef<string | null>(null);
 
+  const queryKey = [ TIMELINE_KEY, key, filters ];
   const query = useInfiniteQuery({
-    queryKey: [ TIMELINE_KEY, subjectKey(subject), filters ],
+    queryKey,
+    enabled: !closed,
     queryFn: ({ pageParam }) => getTimeline(subject, filters, pageParam),
     initialPageParam: null as string | null,
     getNextPageParam: (last) => last.next_before ?? undefined,
     gcTime: 0, staleTime: 0, retry: false
   });
 
-  const ended = query.isError && endsOpening(query.error, endOnOutOfContext);
-  useEffect(() => { if (ended) onOpeningRequired?.(); }, [ ended, onOpeningRequired ]);
+  function endOpening() {
+    if (endedFor.current === key) return;
+    endedFor.current = key;
+    setClosedFor(key);
+    setOpen(null);
+    queryClient.removeQueries({ queryKey: [ TIMELINE_KEY, key ] });
+    queryClient.removeQueries({ queryKey: [ TIMELINE_DOCUMENT_KEY ] });
+    onOpeningRequired?.();
+  }
 
-  const pages = query.data?.pages ?? [];
+  const ended = query.isError && endsOpening(query.error, endOnOutOfContext);
+  useEffect(() => { if (ended) endOpening(); });
+
+  const pages = closed || ended ? [] : query.data?.pages ?? [];
   const person = pages[0]?.person ?? null;
   const entries = mergePages(pages);
 
@@ -64,7 +84,7 @@ export function PatientTimeline({ subject, endOnOutOfContext = false, onOpeningR
     <section aria-label="Linha do tempo" style={panel}>
       <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
         <strong style={{ flex: 1 }}>{person ? `Linha do tempo de ${person.display_name}` : "Linha do tempo"}</strong>
-        <button type="button" style={secondaryButtonStyle} onClick={() => void query.refetch()}>Atualizar</button>
+        <button type="button" style={secondaryButtonStyle} onClick={() => void queryClient.resetQueries({ queryKey, exact: true })}>Atualizar</button>
       </div>
       {person?.partial && <p role="note" aria-label="histórico parcial" style={note}>{PARTIAL_NOTICE}</p>}
 
@@ -92,9 +112,10 @@ export function PatientTimeline({ subject, endOnOutOfContext = false, onOpeningR
         {problem && <p role="alert" style={alert}>{problem}</p>}
       </fieldset>
 
-      {query.isPending && <p className="mono" style={loading}>carregando a linha do tempo…</p>}
-      {query.isError && !ended && <p role="alert" style={alert}>{timelineError(query.error)}</p>}
-      {query.data && (
+      {closed && <p role="alert" style={alert}>{OPENING_ENDED}</p>}
+      {!closed && query.isPending && <p className="mono" style={loading}>carregando a linha do tempo…</p>}
+      {!closed && query.isError && !ended && <p role="alert" style={alert}>{timelineError(query.error)}</p>}
+      {!closed && !ended && query.data && (
         <DataTable<TimelineEntry>
           cols={[
             { label: "Quando", w: "1fr", render: (e) => entryWhen(e) },
@@ -125,7 +146,7 @@ export function PatientTimeline({ subject, endOnOutOfContext = false, onOpeningR
           empty={TIMELINE_EMPTY}
         />
       )}
-      {query.hasNextPage && (
+      {!closed && !ended && query.hasNextPage && (
         <div>
           <button type="button" disabled={query.isFetchingNextPage}
             style={query.isFetchingNextPage ? disabledButtonStyle : secondaryButtonStyle}
@@ -134,14 +155,15 @@ export function PatientTimeline({ subject, endOnOutOfContext = false, onOpeningR
           </button>
         </div>
       )}
-      {open && (
+      {!closed && open && (
         <TimelineDetail key={`${open.type}:${open.id}`} target={open} onClose={() => setOpen(null)}
-          endOnOutOfContext={endOnOutOfContext} onOpeningRequired={onOpeningRequired} searchDelayMs={searchDelayMs} />
+          endOnOutOfContext={endOnOutOfContext} onOpeningRequired={endOpening} searchDelayMs={searchDelayMs} />
       )}
     </section>
   );
 }
 
+const OPENING_ENDED = "a abertura justificada terminou — abra de novo com o motivo";
 const panel: CSSProperties = { display: "flex", flexDirection: "column", gap: 10 };
 const fieldset: CSSProperties = { display: "flex", flexDirection: "column", gap: 8, margin: 0, padding: 10, border: "1px solid var(--rule)", borderRadius: 8 };
 const check: CSSProperties = { display: "flex", gap: 4, alignItems: "center", fontSize: 12.5 };

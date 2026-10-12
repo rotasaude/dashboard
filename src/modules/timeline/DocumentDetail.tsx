@@ -2,8 +2,8 @@
 // Um documento clínico aberto pela linha do tempo (módulo 20): o resumo e o
 // Imprimir do 19c (`printDocument`). A Notificação de papel (19d) não tem PDF.
 // Sem texto do documento aqui: o conteúdo está no PDF.
-import { useEffect, useState, type CSSProperties } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getClinicalDocument } from "../../lib/api";
 import { documentError, documentSituation, issueModeLabel, kindLabel } from "../../lib/clinicalDocuments";
 import { endsOpening } from "../../lib/timeline";
@@ -17,13 +17,26 @@ export const TIMELINE_DOCUMENT_KEY = "timelineDocument";
 interface Props { id: string; onClose(): void; endOnOutOfContext?: boolean; onOpeningRequired?(): void }
 
 export function DocumentDetail({ id, onClose, endOnOutOfContext = false, onOpeningRequired }: Props) {
+  const queryClient = useQueryClient();
+  // Depois do fim da abertura a leitura não sai de novo (o cache é limpo).
+  const [ closed, setClosed ] = useState(false);
   const query = useQuery({
-    queryKey: [ TIMELINE_DOCUMENT_KEY, id ], queryFn: () => getClinicalDocument(id), gcTime: 0, staleTime: 0, retry: false
+    queryKey: [ TIMELINE_DOCUMENT_KEY, id ], queryFn: () => getClinicalDocument(id), gcTime: 0, staleTime: 0, retry: false,
+    enabled: !closed
   });
   const [ printing, setPrinting ] = useState(false);
   const [ printError, setPrintError ] = useState<string | null>(null);
   const ended = query.isError && endsOpening(query.error, endOnOutOfContext);
-  useEffect(() => { if (ended) onOpeningRequired?.(); }, [ ended, onOpeningRequired ]);
+  // Um aviso só por fim de abertura: o pai pode renderizar de novo com outra
+  // função, e o efeito não pode disparar outra vez.
+  const endedRef = useRef(false);
+  useEffect(() => {
+    if (!ended || endedRef.current) return;
+    endedRef.current = true;
+    setClosed(true);
+    queryClient.removeQueries({ queryKey: [ TIMELINE_DOCUMENT_KEY, id ] });
+    onOpeningRequired?.();
+  }, [ ended, id, onOpeningRequired, queryClient ]);
 
   async function print() {
     if (printing) return;
@@ -32,11 +45,11 @@ export function DocumentDetail({ id, onClose, endOnOutOfContext = false, onOpeni
     setPrinting(false);
   }
 
-  const d = query.data;
+  const d = closed ? undefined : query.data;
   return (
     <section aria-label="Documento" style={panel}>
       <strong>Documento</strong>
-      {query.isPending && <p className="mono" style={{ margin: 0, fontSize: 10.5, color: "var(--ink3)" }}>carregando o documento…</p>}
+      {!closed && query.isPending && <p className="mono" style={{ margin: 0, fontSize: 10.5, color: "var(--ink3)" }}>carregando o documento…</p>}
       {query.isError && !ended && <p role="alert" style={alert}>{documentError(query.error)}</p>}
       {printError && <p role="alert" style={alert}>{printError}</p>}
       {d && (

@@ -1,6 +1,7 @@
 // src/modules/timeline/TimelineDetail.test.tsx
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import { useState } from "react";
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const real = await importOriginal<typeof import("../../lib/api")>();
@@ -27,6 +28,11 @@ import { options } from "../../test/consultationFixtures";
 import { prescriptionDoc } from "../../test/documentFixtures";
 
 const m = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
+// Valor de um KeyValue: o rótulo e o valor são spans irmãos.
+function kv(region: HTMLElement, label: string): string | null {
+  const k = Array.from(region.querySelectorAll("span")).find((el) => el.textContent === label);
+  return k?.nextElementSibling?.textContent ?? null;
+}
 afterEach(cleanup);
 
 describe("TimelineDetail", () => {
@@ -54,10 +60,12 @@ describe("TimelineDetail", () => {
     expect(await screen.findByText("P3H8T-2LQ6R")).not.toBeNull();
     expect(api.getClinicalDocument).toHaveBeenCalledWith("doc2");
     const region = screen.getByRole("region", { name: "Documento" });
-    expect(region.textContent).toContain("Receita");
-    expect(region.textContent).toContain("emitido");
-    expect(region.textContent).toContain("papel");
-    expect(region.textContent).toContain("Dra. Helena Prado");
+    expect(kv(region, "Documento")).toBe("Receita");
+    expect(kv(region, "Situação")).toBe("emitido");
+    expect(kv(region, "Modo")).toBe("papel");
+    expect(kv(region, "Emitido em")).toBe("09/10/2026, 09:40");
+    expect(kv(region, "Profissional")).toBe("Dra. Helena Prado");
+    expect(kv(region, "Código")).toBe("P3H8T-2LQ6R");
     fireEvent.click(screen.getByRole("button", { name: "Imprimir" }));
     await waitFor(() => expect(printDocument).toHaveBeenCalledWith("doc2", expect.any(Function)));
     fireEvent.click(screen.getByRole("button", { name: "Fechar documento" }));
@@ -80,6 +88,26 @@ describe("TimelineDetail", () => {
     renderWithProviders(<TimelineDetail target={{ type: "clinical_document", id: "doc2" }} onClose={vi.fn()}
       onOpeningRequired={onOpeningRequired} endOnOutOfContext />);
     await waitFor(() => expect(onOpeningRequired).toHaveBeenCalled());
+  });
+
+  it("documento: o fim da abertura avisa uma vez só, mesmo com o pai trocando a função", async () => {
+    const spy = vi.fn();
+    m(api.getClinicalDocument).mockRejectedValue(new ApiError(403, { error: "opening_required" }, "403"));
+    function Host() {
+      const [ n, setN ] = useState(0);
+      return (
+        <div>
+          <span>{`renders ${n}`}</span>
+          <TimelineDetail target={{ type: "clinical_document", id: "doc2" }} onClose={vi.fn()} endOnOutOfContext
+            onOpeningRequired={() => { spy(); setN((x) => x + 1); }} />
+        </div>
+      );
+    }
+    renderWithProviders(<Host />);
+    await screen.findByText("renders 1");
+    await new Promise((r) => setTimeout(r, 30));
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(api.getClinicalDocument).toHaveBeenCalledTimes(1);
   });
 
   it("falha do Imprimir aparece como alerta", async () => {

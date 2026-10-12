@@ -1,16 +1,18 @@
 // src/modules/timeline/PatientTimeline.test.tsx
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import { useState } from "react";
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const real = await importOriginal<typeof import("../../lib/api")>();
   return { ...real, fetchCurrentSession: vi.fn(), getTimeline: vi.fn() };
 });
 vi.mock("./TimelineDetail", () => ({
-  TimelineDetail: (p: { target: { type: string; id: string }; onClose(): void }) => (
+  TimelineDetail: (p: { target: { type: string; id: string }; onClose(): void; onOpeningRequired?(): void }) => (
     <div>
       <span>{`detalhe ${p.target.type} ${p.target.id}`}</span>
       <button type="button" onClick={p.onClose}>fechar detalhe (dublê)</button>
+      <button type="button" onClick={() => { p.onOpeningRequired?.(); p.onOpeningRequired?.(); }}>encerrar abertura (dublê)</button>
     </div>
   )
 }));
@@ -18,7 +20,7 @@ vi.mock("./TimelineDetail", () => ({
 import * as api from "../../lib/api";
 import { ApiError } from "../../lib/api";
 import { PatientTimeline } from "./PatientTimeline";
-import { PARTIAL_NOTICE, TIMELINE_DISABLED, TIMELINE_EMPTY } from "../../lib/timeline";
+import { PARTIAL_NOTICE, TIMELINE_DISABLED, TIMELINE_EMPTY, TIMELINE_KEY } from "../../lib/timeline";
 import { renderWithProviders, sessionWith } from "../../test/campaignFixtures";
 import { APPOINTMENT, CONSULTATION, DOCUMENT, SCREENING, entry, page } from "../../test/timelineFixtures";
 
@@ -164,9 +166,72 @@ describe("PatientTimeline", () => {
     m(api.getTimeline)
       .mockResolvedValueOnce(page({ entries: [ APPOINTMENT ], next_before: "c1" }))
       .mockRejectedValueOnce(new ApiError(403, { error: "opening_required" }, "403"));
-    renderWithProviders(<PatientTimeline subject={{ openingId: "op1" }} endOnOutOfContext onOpeningRequired={onOpeningRequired} />);
-    fireEvent.click(await screen.findByRole("button", { name: "Carregar mais" }));
+    const { client } = renderWithProviders(
+      <PatientTimeline subject={{ openingId: "op1" }} endOnOutOfContext onOpeningRequired={onOpeningRequired} />);
+    expect(await screen.findByText("Retorno — Consulta de enfermagem")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Carregar mais" }));
     await waitFor(() => expect(onOpeningRequired).toHaveBeenCalled());
+    // Nunca uma lista velha com erro parado: a tela e o cache ficam sem a pessoa.
+    expect(screen.queryByText("Retorno — Consulta de enfermagem")).toBeNull();
+    expect(screen.queryByText("Linha do tempo de Joana Lima")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Carregar mais" })).toBeNull();
+    expect(screen.queryByRole("table")).toBeNull();
+    expect(screen.getByRole("alert").textContent).toBe("a abertura justificada terminou — abra de novo com o motivo");
+    expect(client.getQueryCache().findAll({ queryKey: [ TIMELINE_KEY ] }).filter((q) => q.state.data !== undefined)).toHaveLength(0);
+    expect(api.getTimeline).toHaveBeenCalledTimes(2);
+  });
+
+  it("fim da abertura avisa uma vez só, mesmo se o pai renderiza de novo com outra função", async () => {
+    const spy = vi.fn();
+    m(api.getTimeline)
+      .mockResolvedValueOnce(page({ entries: [ APPOINTMENT ], next_before: "c1" }))
+      .mockRejectedValueOnce(new ApiError(403, { error: "opening_required" }, "403"));
+    function Host() {
+      const [ n, setN ] = useState(0);
+      return (
+        <div>
+          <span>{`renders ${n}`}</span>
+          <PatientTimeline subject={{ openingId: "op1" }} endOnOutOfContext
+            onOpeningRequired={() => { spy(); setN((x) => x + 1); }} />
+        </div>
+      );
+    }
+    renderWithProviders(<Host />);
+    fireEvent.click(await screen.findByRole("button", { name: "Carregar mais" }));
+    await waitFor(() => expect(spy).toHaveBeenCalled());
+    await screen.findByText("renders 1");
+    await new Promise((r) => setTimeout(r, 30));
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(api.getTimeline).toHaveBeenCalledTimes(2);
+  });
+
+  it("consulta aberta pela abertura que volta opening_required encerra a lista também, uma vez", async () => {
+    const onOpeningRequired = vi.fn();
+    const { client } = renderWithProviders(
+      <PatientTimeline subject={{ openingId: "op1" }} endOnOutOfContext onOpeningRequired={onOpeningRequired} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Abrir consulta de 10/09/2026, 14:30" }));
+    fireEvent.click(screen.getByRole("button", { name: "encerrar abertura (dublê)" }));
+    expect(onOpeningRequired).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText("Consulta agendada")).toBeNull();
+    expect(screen.queryByText(/^detalhe /)).toBeNull();
+    expect(screen.queryByRole("table")).toBeNull();
+    expect(client.getQueryCache().findAll({ queryKey: [ TIMELINE_KEY ] }).filter((q) => q.state.data !== undefined)).toHaveLength(0);
+    expect(api.getTimeline).toHaveBeenCalledTimes(1);
+  });
+
+  it("Atualizar com duas páginas carregadas recomeça da primeira (uma leitura só)", async () => {
+    m(api.getTimeline)
+      .mockResolvedValueOnce(page({ entries: [ APPOINTMENT ], next_before: "c1" }))
+      .mockResolvedValueOnce(page({ entries: [ DOCUMENT ], next_before: "c2" }))
+      .mockResolvedValue(page({ entries: [ APPOINTMENT, SCREENING ], next_before: "c9" }));
+    renderWithProviders(<PatientTimeline subject={{ attendanceId: "a1" }} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Carregar mais" }));
+    expect(await screen.findByText("Receita")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Atualizar" }));
+    expect(await screen.findByText("Escuta inicial")).not.toBeNull();
+    expect(screen.queryByText("Receita")).toBeNull();
+    expect(api.getTimeline).toHaveBeenCalledTimes(3);
+    expect(m(api.getTimeline).mock.calls[2]).toEqual([ { attendanceId: "a1" }, ALL, null ]);
   });
 
   it("403 out_of_context em contexto (sem abertura): diz o caminho e não encerra nada", async () => {
