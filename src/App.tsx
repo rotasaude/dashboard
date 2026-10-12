@@ -1,9 +1,23 @@
-import { useState } from "react";
-import { ScopeContext, type PeriodKey } from "./lib/scope";
+import { useCallback, useMemo, useState } from "react";
+import { ScopeContext, PERIOD_OPTIONS, useScope, type PeriodKey } from "./lib/scope";
 import { useAuth } from "./lib/auth";
-import { AppHeader } from "./shell/AppHeader";
-import { labelFor, type ModuleId } from "./shell/modules";
+import { NAV_GROUPS, labelFor, navGroupsFor, type ModuleId, type NavGroupDef } from "./shell/modules";
 import { useAlerts } from "./hooks/useAlerts";
+import { usePendingSignatures } from "./hooks/usePendingSignatures";
+import { canSign } from "./lib/signature";
+import { Shell } from "./shell/Shell";
+import { ContextStrip } from "./shell/ContextStrip";
+import { TenantChip } from "./shell/TenantChip";
+import { LiveClock } from "./shell/LiveClock";
+import { ContaMenu } from "./shell/ContaMenu";
+import { HomeCards, GroupCards } from "./shell/Cards";
+import { A11yPage } from "./shell/A11yPage";
+import { SegmentedControl } from "./shell/SegmentedControl";
+import { NotificationCenter } from "./shell/NotificationCenter";
+import { SignatureSessionBadge } from "./shell/SignatureSessionBadge";
+import { CATALOG } from "./shell/catalog";
+import { slugOf, useHashRoute, type Route } from "./shell/router";
+import type { ShellGroup } from "./shell/types";
 import { Overview } from "./modules/Overview";
 import { Ingestion } from "./modules/Ingestion";
 import { Conversations } from "./modules/Conversations";
@@ -40,41 +54,98 @@ import { SncrAccount } from "./modules/SncrAccount";
 import { SncrOverview } from "./modules/SncrOverview";
 import { ClinicalDocumentsAdmin } from "./modules/ClinicalDocumentsAdmin";
 
+const ALL_IDS: ReadonlySet<string> = new Set(NAV_GROUPS.flatMap((g) => g.items.map((i) => i.id)));
+const ALL_SLUGS: ReadonlySet<string> = new Set(NAV_GROUPS.map((g) => slugOf(g.label)));
+
+// Grupos do shell a partir do filtro por papel de hoje. A contagem de
+// pendentes de assinatura vira selo (o rótulo fica sem o "(n)").
+export function shellGroups(groups: NavGroupDef[], pending: number): ShellGroup[] {
+  return groups.map((g) => ({
+    label: g.label,
+    slug: slugOf(g.label),
+    items: g.items.map((i) => (i.id === "signature-pending" && pending > 0
+      ? { id: i.id, label: i.label, count: pending }
+      : { id: i.id, label: i.label }))
+  }));
+}
+
 // `initialModule`: a tela de onde a pessoa saiu para o prestador de
-// assinatura (módulo 19b), devolvida pelo retorno do OAuth.
+// assinatura (módulo 19b) ou para o SNCR, devolvida pelo retorno do OAuth.
 export function App({ initialModule }: { initialModule?: ModuleId } = {}) {
   const [ period, setPeriod ] = useState<PeriodKey>("7d");
-  const [ active, setActive ] = useState<ModuleId>(initialModule ?? "overview");
   const { citySlug } = useAuth();
-
   return (
     <ScopeContext.Provider value={{ period, citySlug, setPeriod }}>
-      <ShellInner active={active} setActive={setActive} />
+      <ShellInner initialModule={initialModule} />
     </ScopeContext.Provider>
   );
 }
 
-// ShellInner é renderizado DENTRO do ScopeContext.Provider para que useAlerts
-// (via useHealth → useScope) possa consumir o contexto.
-function ShellInner({
-  active,
-  setActive
-}: {
-  active: ModuleId;
-  setActive: (id: ModuleId) => void;
-}) {
+// Dentro do Provider: useAlerts (via useHealth → useScope) consome o contexto.
+function ShellInner({ initialModule }: { initialModule?: ModuleId }) {
   const alerts = useAlerts();
+  const auth = useAuth();
+  const scope = useScope();
+  const pending = usePendingSignatures(canSign(auth.user));
+  const groups = useMemo(
+    () => shellGroups(navGroupsFor(auth.user), pending.data?.length ?? 0),
+    [ auth.user, pending.data?.length ]
+  );
+
+  const isAllowed = useCallback((r: Route<ModuleId>) => {
+    if (r.kind === "home" || r.kind === "a11y") return true;
+    if (r.kind === "group") return groups.some((g) => g.slug === r.slug);
+    return groups.some((g) => g.items.some((i) => i.id === r.id));
+  }, [ groups ]);
+
+  const { route, go } = useHashRoute<ModuleId>({
+    ids: ALL_IDS, slugs: ALL_SLUGS, isAllowed,
+    initial: initialModule ? { kind: "screen", id: initialModule } : undefined
+  });
+  const navigate = useCallback((id: ModuleId) => go({ kind: "screen", id }), [ go ]);
+  // As peças do shell só produzem ids vindos dos próprios grupos (ModuleId).
+  const goShell = go as (r: Route) => void;
+  // Fora de uma tela, a sessão de assinatura volta para a Visão geral (o
+  // return_to só aceita ids de tela).
+  const active: ModuleId = route.kind === "screen" ? route.id : "overview";
+
+  let content;
+  if (route.kind === "home") content = <HomeCards groups={groups} catalog={CATALOG} go={goShell} />;
+  else if (route.kind === "a11y") content = <A11yPage contact="Fale com o administrador da sua prefeitura." />;
+  else if (route.kind === "group") {
+    const group = groups.find((g) => g.slug === route.slug);
+    content = group ? <GroupCards group={group} catalog={CATALOG} go={goShell} /> : null;
+  } else content = renderModule(route.id, navigate);
+
   return (
-    <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
-      <AppHeader active={active} onSelect={setActive} alerts={alerts} />
-      <main style={{ padding: "22px 24px 48px", flex: 1, width: "100%" }}>
-        {renderModule(active, setActive)}
-      </main>
-    </div>
+    <Shell
+      product="Dashboard"
+      groups={groups}
+      catalog={CATALOG}
+      route={route}
+      go={goShell}
+      titleFor={(id) => labelFor(id as ModuleId)}
+      context={
+        <ContextStrip
+          left={<>
+            <TenantChip user={auth.user} />
+            <SegmentedControl options={PERIOD_OPTIONS} value={scope.period} onChange={scope.setPeriod} />
+          </>}
+          right={<>
+            <SignatureSessionBadge active={active} onSelect={navigate} />
+            <LiveClock />
+          </>}
+        />
+      }
+      notifications={<NotificationCenter active={alerts.active} limitations={alerts.limitations} onNavigate={navigate} />}
+      account={auth.user ? <ContaMenu email={auth.user.email_address} onLogout={() => { void auth.logout(); }} /> : null}
+    >
+      {content}
+    </Shell>
   );
 }
 
-function renderModule(active: ModuleId, setActive: (id: ModuleId) => void) {
+export function renderModule(active: ModuleId, setActive: (id: ModuleId) => void) {
   switch (active) {
     case "overview":       return <Overview onNavigate={setActive} />;
     case "ingestion":      return <Ingestion />;
