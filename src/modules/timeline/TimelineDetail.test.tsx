@@ -67,6 +67,20 @@ describe("TimelineDetail", () => {
     expect(onAddendumAdded).toHaveBeenCalledWith({ id: "ad9" });
   });
 
+  it("ao fechar, a escuta e o pedido abertos daqui saem do cache (dado de saúde)", () => {
+    const first = renderWithProviders(<TimelineDetail target={{ type: "screening", id: "sc1" }} onClose={vi.fn()} />);
+    first.client.setQueryData([ "screening", "sc1" ], { id: "sc1" });
+    first.client.setQueryData([ "screening", "outra" ], { id: "outra" });
+    first.unmount();
+    expect(first.client.getQueryData([ "screening", "sc1" ])).toBeUndefined();
+    expect(first.client.getQueryData([ "screening", "outra" ])).toEqual({ id: "outra" });
+
+    const second = renderWithProviders(<TimelineDetail target={{ type: "appointment_request", id: "rq1" }} onClose={vi.fn()} />);
+    second.client.setQueryData([ "requestDetail", "rq1" ], { id: "rq1" });
+    second.unmount();
+    expect(second.client.getQueryData([ "requestDetail", "rq1" ])).toBeUndefined();
+  });
+
   it("documento: tipo, situação, modo, código e Imprimir pela rotina do 19c", async () => {
     const onClose = vi.fn();
     renderWithProviders(<TimelineDetail target={{ type: "clinical_document", id: "doc2" }} onClose={onClose} />);
