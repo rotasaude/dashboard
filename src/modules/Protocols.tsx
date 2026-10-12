@@ -13,7 +13,7 @@ import {
 } from "../lib/api";
 import {
   actionsFor, awaitingMySignature,
-  type LifecycleAction, type LifecycleTarget, type Viewer
+  type LifecycleAction, type LifecycleKind, type LifecycleTarget, type Viewer
 } from "../lib/protocolLifecycle";
 import { SensitiveAction } from "../components/SensitiveAction";
 import { buttonStyle, disabledButtonStyle } from "../components/formStyles";
@@ -63,6 +63,18 @@ function doneMessage(
 // voltar", não "vai voltar": a leitura é sem lock, e a API decide no clique.
 // Sem alvo na leitura — nulo, ou a chave ausente numa API antiga —, cai na
 // frase sem número em vez de imprimir "null" ou "undefined".
+// O que cada ação faz, dito antes do Confirmar (spec 6a §3.5, PR-03/05).
+function consequence(kind: LifecycleKind, revertTarget: string | null): string {
+  switch (kind) {
+    case "submit":   return "A versão sai do rascunho e não pode mais ser editada. Os revisores passam a poder assinar a publicação.";
+    case "sign":     return "Sua assinatura conta para o próximo passo desta versão. Ela fica registrada com seu nome.";
+    case "publish":  return "A versão fica pronta para ativação, mas ainda não vale para a cidade.";
+    case "activate": return "A versão passa a valer para toda a cidade. A versão em uso deste protocolo sai de uso.";
+    case "retire":   return "A versão não pode mais ser ativada. Isso não pode ser desfeito.";
+    case "revert":   return revertDescription(revertTarget);
+  }
+}
+
 function revertDescription(targetVersion: string | null): string {
   const destino = targetVersion
     ? `a versão ${targetVersion}, que estava em uso antes desta`
@@ -254,7 +266,7 @@ function DetailDrawer({
         {pending && (
           <SensitiveAction
             title={`${pending.action.label} ${name} v${pending.version}`}
-            description={pending.action.kind === "revert" ? revertDescription(pending.revertTargetVersion) : undefined}
+            description={consequence(pending.action.kind, pending.revertTargetVersion)}
             requiresStepUp={pending.action.stepUp}
             fields={pending.action.needsReason ? [ { name: "reason", label: "Motivo", required: true } ] : []}
             run={async (values) => {

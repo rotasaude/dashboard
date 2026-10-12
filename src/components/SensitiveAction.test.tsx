@@ -38,7 +38,7 @@ function renderAction(props: Partial<Parameters<typeof SensitiveAction>[0]> = {}
   const run = (props.run ?? vi.fn().mockResolvedValue(undefined)) as ReturnType<typeof vi.fn>;
   const onDone = props.onDone ?? vi.fn();
   render(
-    <SensitiveAction title="Assinar publicação" requiresStepUp run={run} onDone={onDone} onCancel={vi.fn()} {...props} />,
+    <SensitiveAction title="Assinar publicação" description="Sua assinatura conta para o próximo passo." requiresStepUp run={run} onDone={onDone} onCancel={vi.fn()} {...props} />,
     { wrapper }
   );
   return { run, onDone };

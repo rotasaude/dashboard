@@ -632,3 +632,34 @@ describe("Protocols — abas", () => {
     expect(api.listTriageCatalog).not.toHaveBeenCalled();
   });
 });
+
+describe("confirmações dizem o que acontece (spec 6a §3.5)", () => {
+  beforeEach(() => {
+    for (const fn of [ api.fetchCurrentSession, api.adminFetch ]) mocked(fn).mockReset();
+  });
+
+  it("assinar explica que a assinatura conta para o próximo passo", async () => {
+    stubReads([ row() ]);
+    renderProtocols("protocol_reviewer");
+    fireEvent.click(await screen.findByText("dengue"));
+    fireEvent.click(await screen.findByRole("button", { name: "Assinar publicação" }));
+    expect(await screen.findByText(/Sua assinatura conta para o próximo passo/)).toBeTruthy();
+  });
+
+  it("aposentar avisa que não pode ser desfeito", async () => {
+    stubReads([ row({ status: "published" }) ], [ versionRow({ status: "published" }) ]);
+    renderProtocols("protocol_publisher");
+    fireEvent.click(await screen.findByText("dengue"));
+    fireEvent.click(await screen.findByRole("button", { name: "Aposentar" }));
+    expect(await screen.findByText(/não pode mais ser ativada/)).toBeTruthy();
+  });
+
+  it("ativar avisa que a versão em uso sai de uso", async () => {
+    const done = { publication: { signers: [], missing: 0 }, activation: { signers: [], missing: 0 } };
+    stubReads([ row({ status: "published", signatures: done }) ], [ versionRow({ status: "published", signatures: done }) ]);
+    renderProtocols("protocol_publisher");
+    fireEvent.click(await screen.findByText("dengue"));
+    fireEvent.click(await screen.findByRole("button", { name: "Ativar" }));
+    expect(await screen.findByText(/passa a valer para toda a cidade/)).toBeTruthy();
+  });
+});

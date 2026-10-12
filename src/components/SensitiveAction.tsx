@@ -17,7 +17,8 @@ export interface SensitiveField { name: string; label: string; required?: boolea
 
 export interface SensitiveActionProps {
   title: string;
-  description?: ReactNode;
+  // O que a ação faz, sempre dito antes do Confirmar (spec 6a §3.5).
+  description: ReactNode;
   requiresStepUp: boolean;
   fields?: SensitiveField[];
   confirmLabel?: string;
