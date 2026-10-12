@@ -40,4 +40,9 @@ describe("features da sessão (contratos §1)", () => {
     expect(hasFeature({ features: [ "controlled_prescriptions" ] }, "controlled_prescriptions")).toBe(true);
     expect(featureLabel("rnds_sync")).toBe("rnds_sync");
   });
+  it("patient_timeline (módulo 20) tem rótulo e é lida da sessão", () => {
+    expect(featureLabel("patient_timeline")).toBe("Linha do tempo do paciente");
+    expect(hasFeature({ features: [ "patient_timeline" ] }, "patient_timeline")).toBe(true);
+    expect(hasFeature({ features: [ "clinical_record" ] }, "patient_timeline")).toBe(false);
+  });
 });

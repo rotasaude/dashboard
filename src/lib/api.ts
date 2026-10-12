@@ -1639,7 +1639,9 @@ export interface ConsultationDraftInput {
 export interface OutcomeBody { outcome: CareOutcome; referral_unit_id?: string; referral_note?: string }
 export interface AddendumInput { reason: string; text: string; changes?: AddendumChanges }
 export interface OpeningInput { cpf: string; reason_code: OpeningReason; reason_note?: string }
-export interface Opening { opening_id: string; patient_id: string; expires_at: string }
+// Módulo 20 (Divergência D1): no modo integrated a abertura vale para a pessoa
+// (pares validados do CPF) e pode não ter paciente do 19a.
+export interface Opening { opening_id: string; patient_id: string | null; expires_at: string }
 export type OpeningKind = "justified_opening" | "administrative_read";
 export interface OpeningRow {
   kind: OpeningKind; id: string; user_name: string; cpf_masked: string; reason_code: OpeningReason | null;
@@ -2226,6 +2228,47 @@ export function recordNotification(consultationId: string, content: Notification
 export async function getLastPatientIdentification(consultationId: string): Promise<PatientIdentification | null> {
   return (await jsonFetch<{ patient_identification: PatientIdentification | null }>(
     attendanceDocPath("consultations", consultationId, "patient_identification"))).patient_identification;
+}
+
+// ─── Linha do tempo do paciente (módulo 20, ADR 0035; contrato 2026-10-11 §1–§3) ───
+// Só ids, tipos, datas e o cursor na URL — nunca CPF, nome ou texto. Ler gera
+// a trilha `clinical_record.viewed` com access "timeline" no api; quem lê e o
+// que entra na pessoa é do api (ClinicalRecord::Access generalizado).
+
+export type TimelineKind =
+  | "triage" | "attendance" | "screening" | "appointment" | "consultation"
+  | "clinical_document" | "controlled_notification" | "campaign";
+
+export interface TimelineDetailRef { type: string; id: string }
+export interface TimelineEntry {
+  id: string; kind: TimelineKind | string; occurred_at: string;
+  unit: { id: string; name: string } | null;
+  professional: { name: string; cbo_code: string | null } | null;
+  // title e summary em português, prontos; status é o código da origem
+  // (finalized, issued, confirmed…), traduzido na tela (Divergência D3).
+  title: string; summary: string | null; status: string | null;
+  // Divergência D2: nulo (ou tipo sem tela) = a entrada não abre detalhe.
+  detail_ref: TimelineDetailRef | null;
+}
+export interface TimelinePerson { display_name: string; partial: boolean; patient_id: string | null }
+export interface TimelinePage { person: TimelinePerson; entries: TimelineEntry[]; next_before: string | null }
+// Em contexto (atendimento), pela abertura justificada ou pelo paciente.
+export type TimelineSubject = { attendanceId: string } | { patientId: string } | { openingId: string };
+// `kinds` vazio = todos; datas AAAA-MM-DD ou "".
+export interface TimelineFilters { kinds: TimelineKind[]; from: string; to: string }
+export const TIMELINE_PAGE_SIZE = 50;
+
+export function getTimeline(subject: TimelineSubject, filters: TimelineFilters, before: string | null): Promise<TimelinePage> {
+  const params = new URLSearchParams();
+  if ("attendanceId" in subject) params.set("attendance_id", subject.attendanceId);
+  else if ("patientId" in subject) params.set("patient_id", subject.patientId);
+  else params.set("opening_id", subject.openingId);
+  for (const kind of filters.kinds) params.append("kinds[]", kind);
+  if (filters.from) params.set("from", filters.from);
+  if (filters.to) params.set("to", filters.to);
+  if (before) params.set("before", before);
+  params.set("limit", String(TIMELINE_PAGE_SIZE));
+  return jsonFetch(`${ATTENDANCE_BASE}/timeline?${params.toString()}`);
 }
 
 // ─── Rascunhos de consulta abertos (fix51, api#51) ───────────────────────────

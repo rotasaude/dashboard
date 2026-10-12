@@ -36,8 +36,9 @@ export function JustifiedRecord({ opening, onEnd, searchDelayMs }: Props) {
 
   const handleOpeningRequired = useCallback(() => setEnded(true), []);
   const record = useQuery({
-    queryKey: [ JUSTIFIED_KEY, opening.opening_id ], queryFn: () => getJustifiedRecord(opening.patient_id),
-    enabled: !over, gcTime: 0, staleTime: 0, retry: false
+    // Só monta com paciente (ClinicalRecord escolhe JustifiedTimeline sem ele).
+    queryKey: [ JUSTIFIED_KEY, opening.opening_id ], queryFn: () => getJustifiedRecord(opening.patient_id ?? ""),
+    enabled: !over && opening.patient_id !== null, gcTime: 0, staleTime: 0, retry: false
   });
   const options = useQuery({ queryKey: [ OPTIONS_KEY, user?.id ?? null ], queryFn: getConsultationOptions, staleTime: 5 * 60_000 });
   const refused = record.isError && errorCode(record.error) === "opening_required";
