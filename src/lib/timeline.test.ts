@@ -59,11 +59,13 @@ describe("mergePages: junta sem repetir, na ordem", () => {
 });
 
 describe("detalhe", () => {
-  it("em contexto abre as quatro telas que existem", () => {
+  it("em contexto abre as quatro telas que existem (o pedido, só com citizen_verifier)", () => {
     expect(detailTarget(CONSULTATION, true)).toEqual({ type: "consultation", id: "cs0" });
     expect(detailTarget(DOCUMENT, true)).toEqual({ type: "clinical_document", id: "doc2" });
     expect(detailTarget(SCREENING, true)).toEqual({ type: "screening", id: "sc1" });
-    expect(detailTarget(APPOINTMENT, true)).toEqual({ type: "appointment_request", id: "rq1" });
+    expect(detailTarget(APPOINTMENT, true, true)).toEqual({ type: "appointment_request", id: "rq1" });
+    expect(detailTarget(APPOINTMENT, true)).toBeNull();
+    expect(detailTarget(APPOINTMENT, true, false)).toBeNull();
     expect(detailTarget(TRIAGE, true)).toBeNull();
     expect(detailTarget(entry({ detail_ref: null }), true)).toBeNull();
     expect(detailTarget(entry({ kind: "vaccination", detail_ref: { type: "vaccination", id: "v1" } }), true)).toBeNull();
@@ -74,6 +76,7 @@ describe("detalhe", () => {
     expect(detailTarget(DOCUMENT, false)).toBeNull();
     expect(detailTarget(SCREENING, false)).toBeNull();
     expect(detailTarget(APPOINTMENT, false)).toBeNull();
+    expect(detailTarget(APPOINTMENT, false, true)).toBeNull();
     expect(detailTarget(TRIAGE, false)).toBeNull();
     expect(detailTarget(entry({ detail_ref: null }), false)).toBeNull();
   });

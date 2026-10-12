@@ -13,6 +13,8 @@ import {
   entryWhere, filterProblem, filtersFrom, mergePages, openLabel, statusLabel, subjectKey, timelineError, timelineKindLabel,
   toggleKind, type DetailTarget, type FilterDraft
 } from "../../lib/timeline";
+import { useAuth } from "../../lib/auth";
+import { VERIFIER_ROLE } from "../../lib/team";
 import { DataTable } from "../../components/DataTable";
 import { Tag } from "../../components/Tag";
 import { disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
@@ -33,6 +35,9 @@ export function PatientTimeline({ subject, endOnOutOfContext = false, onOpeningR
   const [ open, setOpen ] = useState<DetailTarget | null>(null);
   // Pela abertura justificada (fora de contexto) só a consulta abre (contrato §9).
   const inContext = !("openingId" in subject);
+  // O pedido de agendamento só abre para quem tem citizen_verifier (a rota exige o papel).
+  const { user } = useAuth();
+  const canOpenRequests = !!user?.memberships.some((m) => m.role === VERIFIER_ROLE);
   const key = subjectKey(subject);
   const queryClient = useQueryClient();
   // Fim da abertura (403 opening_required, ou out_of_context pela abertura):
@@ -132,7 +137,7 @@ export function PatientTimeline({ subject, endOnOutOfContext = false, onOpeningR
             { label: "Onde e quem", w: "1.6fr", render: (e) => entryWhere(e) },
             {
               label: "", w: "auto", align: "right", render: (e) => {
-                const target = detailTarget(e, inContext);
+                const target = detailTarget(e, inContext, canOpenRequests);
                 return target ? (
                   <button type="button" aria-label={openLabel(e)} style={secondaryButtonStyle} onClick={() => setOpen(target)}>
                     Abrir

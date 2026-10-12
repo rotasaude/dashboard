@@ -36,6 +36,9 @@ describe("PatientTimeline", () => {
   });
 
   it("lista na ordem do api, com tipo, onde e quem; abre o detalhe só do que tem tela", async () => {
+    m(api.fetchCurrentSession).mockResolvedValue(sessionWith([ "health_professional", "citizen_verifier" ], {
+      id: "us1", features: [ "patient_timeline" ]
+    }));
     renderWithProviders(<PatientTimeline subject={{ attendanceId: "a1" }} />);
     expect(await screen.findByText("Linha do tempo de Joana Lima")).not.toBeNull();
     expect(api.getTimeline).toHaveBeenCalledWith({ attendanceId: "a1" }, ALL, null);
@@ -131,7 +134,21 @@ describe("PatientTimeline", () => {
     expect(screen.getByText("detalhe clinical_document doc2")).not.toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Abrir escuta de 10/09/2026, 13:50" }));
     expect(screen.getByText("detalhe screening sc1")).not.toBeNull();
-    expect(screen.getAllByRole("button", { name: /^Abrir / })).toHaveLength(4);
+    expect(screen.getAllByRole("button", { name: /^Abrir / })).toHaveLength(3);
+  });
+
+  it("agendamento: sem citizen_verifier fica só o resumo; com o papel, Abrir leva ao pedido", async () => {
+    renderWithProviders(<PatientTimeline subject={{ attendanceId: "a1" }} />);
+    expect(await screen.findByText("Retorno — Consulta de enfermagem")).not.toBeNull();
+    await screen.findByRole("button", { name: "Abrir consulta de 10/09/2026, 14:30" });
+    expect(screen.queryByRole("button", { name: /^Abrir agendamento/ })).toBeNull();
+    cleanup();
+    m(api.fetchCurrentSession).mockResolvedValue(sessionWith([ "health_professional", "citizen_verifier" ], {
+      id: "us1", features: [ "patient_timeline" ]
+    }));
+    renderWithProviders(<PatientTimeline subject={{ attendanceId: "a1" }} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Abrir agendamento de 01/10/2026, 09:00" }));
+    expect(screen.getByText("detalhe appointment_request rq1")).not.toBeNull();
   });
 
   it("histórico parcial (modo integrado): o aviso", async () => {

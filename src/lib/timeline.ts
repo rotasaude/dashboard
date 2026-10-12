@@ -80,11 +80,14 @@ export interface DetailTarget { type: DetailType; id: string }
 const OPENABLE: ReadonlySet<string> = new Set<DetailType>([ "consultation", "clinical_document", "screening", "appointment_request" ]);
 
 // Pela abertura justificada (fora de contexto) só a consulta abre: as rotas de
-// documento, escuta e pedido não aceitam a abertura (contrato §9).
-export function detailTarget(entry: TimelineEntry, inContext: boolean): DetailTarget | null {
+// documento, escuta e pedido não aceitam a abertura (contrato §9). O pedido de
+// agendamento (GET /attendance/requests/:id) exige citizen_verifier: sem o
+// papel, a entrada fica só com o resumo.
+export function detailTarget(entry: TimelineEntry, inContext: boolean, canOpenRequests = false): DetailTarget | null {
   const ref = entry.detail_ref;
   if (!ref || !OPENABLE.has(ref.type) || !ref.id) return null;
   if (!inContext && ref.type !== "consultation") return null;
+  if (ref.type === "appointment_request" && !canOpenRequests) return null;
   return { type: ref.type as DetailType, id: ref.id };
 }
 
