@@ -300,6 +300,7 @@ function HealthSummaryPanel({ onNavigate }: { onNavigate?: (id: ModuleId) => voi
                       textOverflow: "ellipsis",
                       whiteSpace: "nowrap"
                     }}
+                    title={p.name}
                   >
                     {p.name}
                   </span>

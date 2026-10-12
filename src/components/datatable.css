@@ -1,6 +1,7 @@
 /* DataTable (spec do subprojeto 3, §3). Base: o que antes era estilo inline
    da célula, agora em classe para o modo cartão poder trocar sem !important. */
-.dt-cell { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Texto quebra linha em vez de ser cortado com reticências (spec 6a §3.7). */
+.dt-cell { min-width: 0; white-space: normal; overflow-wrap: anywhere; }
 .dt-cell[data-align="right"] { text-align: right; }
 .dt-cell[data-align="center"] { text-align: center; }
 
@@ -33,8 +34,7 @@
   /* Par rótulo/valor: duas por linha. */
   .dt-row .dt-cell {
     flex: 1 1 calc(50% - 8px);
-    white-space: normal; overflow: visible; text-overflow: clip; text-align: left;
-    overflow-wrap: anywhere;
+    text-align: left;
   }
   .dt-row .dt-cell::before {
     content: attr(data-label);
