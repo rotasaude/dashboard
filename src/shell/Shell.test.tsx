@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { StrictMode } from "react";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { IconUsers } from "@tabler/icons-react";
 import { Shell } from "./Shell";
@@ -45,6 +46,18 @@ describe("Shell", () => {
     );
     expect(document.title).toBe("Minha agenda · Rota Saúde");
     expect(document.activeElement?.textContent).toBe("Minha agenda");
+  });
+
+  it("no carregamento (inclusive em StrictMode) o foco não é movido", () => {
+    render(
+      <StrictMode>
+        <Shell product="Dashboard" groups={groups} catalog={catalog} route={{ kind: "screen", id: "my-agenda" }} go={vi.fn()}
+          titleFor={titleFor} context={null} notifications={null} account={null}>
+          <h1>Minha agenda</h1>
+        </Shell>
+      </StrictMode>
+    );
+    expect(document.activeElement).toBe(document.body);
   });
 
   it("botão Menu abre a gaveta", () => {

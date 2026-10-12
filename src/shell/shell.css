@@ -7,6 +7,9 @@
 .shell-main { flex: 1; min-width: 0; padding: 20px 24px 48px; }
 .shell-main:focus { outline: none; }
 .shell-main:focus-visible { outline: 3px solid var(--focus); outline-offset: -3px; }
+/* Título que recebe foco programático na troca de tela (anúncio ao leitor de
+   tela): não é alvo de interação, então não leva o contorno de foco. */
+.shell-main h1[tabindex="-1"]:focus { outline: none; }
 
 .shell-emag { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 6px 16px;
   padding: 4px 16px; font-size: 12px; background: var(--bg); border-bottom: 1px solid var(--rule); }

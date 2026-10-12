@@ -18,8 +18,10 @@ export function Shell({ product, groups, catalog, route, go, titleFor, context, 
   const [ menuOpen, setMenuOpen ] = useState(false);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const mainRef = useRef<HTMLElement>(null);
-  const first = useRef(true);
   const key = toHash(route);
+  // Rota já vista: o efeito roda de novo em StrictMode e na carga inicial,
+  // e o foco só deve mudar quando a rota de fato mudou.
+  const lastKey = useRef(key);
 
   const pageTitle =
     route.kind === "home" ? "Início" :
@@ -29,7 +31,8 @@ export function Shell({ product, groups, catalog, route, go, titleFor, context, 
 
   useEffect(() => {
     document.title = `${pageTitle} · Rota Saúde`;
-    if (first.current) { first.current = false; return; }
+    if (lastKey.current === key) return;
+    lastKey.current = key;
     const main = mainRef.current;
     if (!main) return;
     const target = main.querySelector<HTMLElement>("h1") ?? main;
