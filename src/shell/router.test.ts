@@ -102,3 +102,15 @@ describe("useHashRoute", () => {
     expect(window.location.search).toBe("?bairro=none");
   });
 });
+
+describe("go para o lugar atual (A-07)", () => {
+  it("não empilha histórico", () => {
+    setHash("#/team");
+    const { result } = renderHook(() => useHashRoute({ ids: IDS, slugs: SLUGS, isAllowed: () => true }));
+    const push = vi.spyOn(window.history, "pushState");
+    act(() => result.current.go({ kind: "screen", id: "team" }));
+    expect(push).not.toHaveBeenCalled();
+    act(() => result.current.go({ kind: "home" }));
+    expect(push).toHaveBeenCalledTimes(1);
+  });
+});

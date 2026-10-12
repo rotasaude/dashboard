@@ -82,6 +82,8 @@ export function useHashRoute<Id extends string>(opts: {
   }, [ resolve ]);
 
   const go = useCallback((r: Route<Id>) => {
+    // Clicar no lugar atual não empilha uma entrada repetida (A-07).
+    if (toHash(r) === window.location.hash) { setRoute(r); return; }
     writeHash(r, "push");
     setRoute(r);
   }, []);

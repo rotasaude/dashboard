@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { StrictMode } from "react";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { IconUsers } from "@tabler/icons-react";
 import { Shell } from "./Shell";
 import type { Route } from "./router";
@@ -64,5 +64,21 @@ describe("Shell", () => {
     renderShell({ kind: "home" });
     fireEvent.click(screen.getByRole("button", { name: "Menu" }));
     expect(screen.getByRole("dialog", { name: "Menu" })).toBeTruthy();
+  });
+});
+
+describe("gaveta e largura da janela (A-10)", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("a gaveta fecha quando a janela passa de 1024px", () => {
+    let listener: ((e: { matches: boolean }) => void) | null = null;
+    vi.stubGlobal("matchMedia", (q: string) => ({ matches: false, media: q,
+      addEventListener: (_: string, l: (e: { matches: boolean }) => void) => { listener = l; },
+      removeEventListener: () => { listener = null; } }));
+    renderShell({ kind: "home" });
+    fireEvent.click(screen.getByRole("button", { name: "Menu" }));
+    expect(screen.getByRole("dialog", { name: "Menu" })).toBeTruthy();
+    act(() => listener?.({ matches: true }));
+    expect(screen.queryByRole("dialog", { name: "Menu" })).toBeNull();
   });
 });

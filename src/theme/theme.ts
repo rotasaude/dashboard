@@ -23,9 +23,12 @@ function write(key: string, value: string): void {
 }
 
 export function getTheme(): PanelTheme {
+  // A escolha desta sessão vale primeiro: um armazenamento que lê mas não
+  // grava devolveria o valor antigo e desfaria a troca (A-06).
+  if (memory) return memory;
   const saved = read(THEME_KEY);
   if (isTheme(saved)) return saved;
-  return memory ?? "govbr";
+  return "govbr";
 }
 
 export function setTheme(theme: PanelTheme): void {

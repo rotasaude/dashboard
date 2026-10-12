@@ -47,3 +47,12 @@ describe("tema por pessoa", () => {
     expect(result.current).toBe("rota");
   });
 });
+
+describe("armazenamento que lê mas não grava (A-06)", () => {
+  it("a escolha da sessão vale sobre o valor antigo salvo", () => {
+    localStorage.setItem(THEME_KEY, "rota");
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("quota"); });
+    setTheme("alto-contraste");
+    expect(getTheme()).toBe("alto-contraste");
+  });
+});

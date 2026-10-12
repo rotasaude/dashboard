@@ -40,6 +40,15 @@ export function Shell({ product, groups, catalog, route, go, titleFor, context, 
     target.focus();
   }, [ key, pageTitle ]);
 
+  // Gaveta aberta e a janela alarga para o trilho: fecha (A-10).
+  useEffect(() => {
+    if (!menuOpen || typeof window.matchMedia !== "function") return;
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const onChange = (e: { matches: boolean }) => { if (e.matches) setMenuOpen(false); };
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, [ menuOpen ]);
+
   return (
     <div className="shell-root">
       <header className="shell-header">
