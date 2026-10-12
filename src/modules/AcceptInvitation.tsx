@@ -77,7 +77,7 @@ export function AcceptInvitation({ token, onDone }: { token: string; onDone: () 
         {error && <p role="alert" style={{ color: "var(--danger, #c0341d)", fontSize: 12, margin: 0 }}>{error}</p>}
         <button type="submit" disabled={busy}
           style={{ padding: "8px 12px", borderRadius: 6, border: "none", cursor: busy ? "default" : "pointer",
-            background: "var(--accent, #2b59ff)", color: "#fff", fontSize: 13 }}>
+            background: "var(--accent, #2b59ff)", color: "var(--on-accent, #fff)", fontSize: 13 }}>
           {busy ? "Salvando…" : "Entrar"}
         </button>
       </form>

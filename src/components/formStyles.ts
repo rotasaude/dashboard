@@ -8,7 +8,7 @@ export const inputStyle: CSSProperties = {
 };
 export const buttonStyle: CSSProperties = {
   padding: "8px 12px", borderRadius: 6, border: "none", cursor: "pointer",
-  background: "var(--accent, #2b59ff)", color: "#fff", fontSize: 13
+  background: "var(--accent, #2b59ff)", color: "var(--on-accent, #fff)", fontSize: 13
 };
 export const secondaryButtonStyle: CSSProperties = {
   ...buttonStyle, background: "var(--panel)", color: "var(--ink)", border: "1px solid var(--rule2)"

@@ -46,7 +46,7 @@ export function Login({ expiredGrant = false }: { expiredGrant?: boolean }) {
 
   const btnStyle = {
     padding: "8px 12px", borderRadius: 6, border: "none", cursor: "pointer",
-    background: "var(--accent, #2b59ff)", color: "#fff", fontSize: 13
+    background: "var(--accent, #2b59ff)", color: "var(--on-accent, #fff)", fontSize: 13
   } as const;
 
   if (mode === "forgot") {
@@ -106,7 +106,7 @@ export function Login({ expiredGrant = false }: { expiredGrant?: boolean }) {
         {error && <p role="alert" style={{ color: "var(--danger, #c0341d)", fontSize: 12, margin: 0 }}>{error}</p>}
         <button type="submit" disabled={busy}
           style={{ padding: "8px 12px", borderRadius: 6, border: "none", cursor: busy ? "default" : "pointer",
-            background: "var(--accent, #2b59ff)", color: "#fff", fontSize: 13 }}>
+            background: "var(--accent, #2b59ff)", color: "var(--on-accent, #fff)", fontSize: 13 }}>
           {busy ? "Entrando…" : "Entrar"}
         </button>
         <button type="button" onClick={() => setMode("forgot")}

@@ -66,4 +66,4 @@ export function ResetPassword({ token }: { token: string }) {
 }
 
 const btnStyle = { padding: "8px 12px", borderRadius: 6, border: "none", cursor: "pointer",
-  background: "var(--accent, #2b59ff)", color: "#fff", fontSize: 13 } as const;
+  background: "var(--accent, #2b59ff)", color: "var(--on-accent, #fff)", fontSize: 13 } as const;
