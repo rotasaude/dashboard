@@ -118,7 +118,7 @@ export function Team({ onNavigate }: { onNavigate(id: ModuleId): void }) {
                   { label: "E-mail", w: "2fr", render: (m) => (
                     <span className="mono">{m.email}{m.userId === user?.id ? " (você)" : ""}</span>
                   ) },
-                  { label: "Papéis", w: "2fr", render: (m) => (
+                  { label: "Papéis", w: "2fr", card: "pair", render: (m) => (
                     <span style={{ display: "inline-flex", gap: 4, flexWrap: "wrap" }}>
                       {m.roles.map((role) => <Tag key={role}>{role}</Tag>)}
                       {m.professionalStatus && m.professionalStatus !== "ok" && (

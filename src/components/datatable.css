@@ -26,6 +26,10 @@
     text-align: left;
   }
 
+  /* Quebra de linha invisível antes das ações (order 99), para elas não
+     dividirem a linha com o último par. */
+  .dt > .dt-row:not(.dt-head)::after { content: ""; flex-basis: 100%; order: 98; height: 0; }
+
   /* Par rótulo/valor: duas por linha. */
   .dt-row .dt-cell {
     flex: 1 1 calc(50% - 8px);

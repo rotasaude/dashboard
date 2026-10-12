@@ -9,8 +9,9 @@ export interface Column<T> {
   w?: string;
   align?: "left" | "right" | "center";
   render: (row: T) => ReactNode;
-  // Modo cartão (<1024px): papel da coluna quando a regra automática não serve.
-  card?: "title" | "actions" | "hide";
+  // Modo cartão (<1024px): papel da coluna quando a regra automática não serve
+  // ("pair" força rótulo/valor numa célula que contém controle).
+  card?: "title" | "actions" | "hide" | "pair";
 }
 
 interface Props<T> {
