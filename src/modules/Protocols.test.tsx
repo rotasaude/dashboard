@@ -173,7 +173,7 @@ describe("Protocols", () => {
     expect(button.disabled).toBe(true);
     expect(screen.getByText("falta 1 assinatura")).not.toBeNull();
     // D3 — um botão desabilitado precisa PARECER desabilitado.
-    expect(button.style.opacity).toBe("0.55");
+    expect(button.style.border).toContain("dashed");
     expect(button.style.cursor).toBe("not-allowed");
   });
 

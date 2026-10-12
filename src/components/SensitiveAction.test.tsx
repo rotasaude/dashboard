@@ -207,7 +207,7 @@ describe("SensitiveAction", () => {
     fireEvent.click(confirm());
 
     await waitFor(() => expect((confirm() as HTMLButtonElement).disabled).toBe(true));
-    expect((confirm() as HTMLButtonElement).style.opacity).toBe("0.55");
+    expect((confirm() as HTMLButtonElement).style.border).toContain("dashed");
     expect((confirm() as HTMLButtonElement).style.cursor).toBe("not-allowed");
 
     resolveRun();

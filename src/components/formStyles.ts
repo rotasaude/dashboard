@@ -15,7 +15,12 @@ export const secondaryButtonStyle: CSSProperties = {
 };
 // Um botão `disabled` some visualmente se só o atributo HTML fizer o
 // trabalho — aplique junto de `disabled` sempre que um botão puder estar
-// desabilitado (ação bloqueada, ou ação em voo).
+// desabilitado (ação bloqueada, ou ação em voo). Sem opacidade (spec 6a):
+// fundo rebaixado, texto secundário e borda tracejada.
 export const disabledButtonStyle: CSSProperties = {
-  ...buttonStyle, opacity: 0.55, cursor: "not-allowed"
+  ...buttonStyle, background: "var(--sunken)", color: "var(--ink2)", border: "2px dashed var(--rule2)", cursor: "not-allowed"
+};
+// Ação de perigo que não é a principal (aposentar, reverter, descartar).
+export const dangerButtonStyle: CSSProperties = {
+  ...buttonStyle, background: "var(--panel)", color: "var(--down)", border: "1px solid var(--down)"
 };
