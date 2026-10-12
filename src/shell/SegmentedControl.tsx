@@ -36,9 +36,9 @@ export function SegmentedControl<T extends string>({ options, value, onChange }:
               fontSize: 11,
               fontWeight: 600,
               letterSpacing: 0.3,
-              color: active ? "var(--ink)" : "var(--ink3)",
-              background: active ? "var(--panel)" : "transparent",
-              boxShadow: active ? "0 1px 2px rgba(0,0,0,.06)" : undefined
+              // Selecionado em accent/on-accent: distinguível em todo tema.
+              color: active ? "var(--on-accent)" : "var(--ink2)",
+              background: active ? "var(--accent)" : "transparent"
             }}
           >
             {opt.label}
