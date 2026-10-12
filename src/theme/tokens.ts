@@ -1,36 +1,26 @@
-// Design tokens do Admin Console.
-// Fonte: DESIGN_TOKENS.md + console-ui.jsx (objeto AT). Estética: console
-// técnico sóbrio, neutros frios (oklch). Valores expostos como CSS vars
-// em theme/global.css para uso runtime; este módulo é o ground truth tipado.
+// Tokens do painel. Os valores vivem no tema (src/theme/vendor/tokens.css,
+// copiado do contracts/design-tokens); aqui ficam os nomes tipados, que leem
+// as variáveis do tema ativo (<html data-theme>). Escalas de tamanho, raio,
+// sombra e espaço seguem as do console até o shell novo (subprojeto 2).
+
+const v = (role: string) => `var(--${role})`;
 
 export const tokens = {
   color: {
-    bg:      "oklch(98.4% 0.002 255)",
-    panel:   "oklch(100% 0 0)",
-    sunken:  "oklch(96.6% 0.003 255)",
-    sunken2: "oklch(94.6% 0.004 255)",
-    rule:    "oklch(91.5% 0.004 255)",
-    rule2:   "oklch(86% 0.005 255)",
-    ink:     "oklch(26% 0.01 260)",
-    ink2:    "oklch(46% 0.009 260)",
-    ink3:    "oklch(61% 0.007 260)",
-    ink4:    "oklch(72% 0.006 260)",
+    bg: v("bg"), panel: v("panel"), sunken: v("sunken"), sunken2: v("sunken2"),
+    rule: v("rule"), rule2: v("rule2"),
+    ink: v("ink"), ink2: v("ink2"), ink3: v("ink3"), ink4: v("ink4"),
 
-    accent:   "oklch(52% 0.14 264)",
-    accentBg: "oklch(95.5% 0.025 264)",
-    ok:       "oklch(56% 0.11 155)",
-    okBg:     "oklch(95% 0.04 155)",
-    warn:     "oklch(64% 0.13 65)",
-    warnBg:   "oklch(95.5% 0.045 75)",
-    down:     "oklch(55% 0.18 27)",
-    downBg:   "oklch(95.5% 0.05 27)",
-    info:     "oklch(55% 0.11 245)",
-    infoBg:   "oklch(95.5% 0.03 245)"
+    accent: v("accent"), accentBg: v("accent-bg"),
+    ok: v("ok"), okBg: v("ok-bg"),
+    warn: v("warn"), warnBg: v("warn-bg"),
+    down: v("down"), downBg: v("down-bg"),
+    info: v("info"), infoBg: v("info-bg")
   },
 
   font: {
-    sans: `"Geist Variable", "Geist", -apple-system, "Segoe UI", Roboto, sans-serif`,
-    mono: `"Geist Mono Variable", "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace`
+    sans: v("font-sans"),
+    mono: v("font-mono")
   },
 
   size: {
@@ -54,8 +44,8 @@ export const tokens = {
   },
 
   shadow: {
-    dropdown: "0 8px 28px -8px rgba(20,20,40,.22), 0 2px 6px rgba(20,20,40,.06)",
-    notif:    "0 14px 40px -10px rgba(20,20,40,.26), 0 3px 8px rgba(20,20,40,.07)"
+    dropdown: v("shadow-dropdown"),
+    notif: v("shadow-notif")
   },
 
   space: {
@@ -78,5 +68,19 @@ export const toneColor = (t: Tone | string | undefined): { fg: string; bg: strin
     case "info":    return { fg: tokens.color.info,   bg: tokens.color.infoBg };
     case "accent":  return { fg: tokens.color.accent, bg: tokens.color.accentBg };
     default:        return { fg: tokens.color.ink3,   bg: tokens.color.sunken };
+  }
+};
+
+// Nível também por forma (WCAG 1.4.1: cor nunca é o único sinal).
+// ■ alto/urgente · ▲ moderado · ● baixo/ok; demais tons não carregam nível.
+export type Shape = "square" | "triangle" | "circle";
+
+export const toneShape = (t: Tone | string | undefined): Shape | null => {
+  switch (t) {
+    case "down":
+    case "urgent": return "square";
+    case "warn":   return "triangle";
+    case "ok":     return "circle";
+    default:       return null;
   }
 };

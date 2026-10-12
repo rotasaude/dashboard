@@ -1,40 +1,7 @@
-/* Globals do Admin Console. Tokens espelham theme/tokens.ts. */
+@import "./vendor/tokens.css";
 
-:root {
-  /* neutros */
-  --bg:      oklch(98.4% 0.002 255);
-  --panel:   oklch(100% 0 0);
-  --sunken:  oklch(96.6% 0.003 255);
-  --sunken2: oklch(94.6% 0.004 255);
-  --rule:    oklch(91.5% 0.004 255);
-  --rule2:   oklch(86% 0.005 255);
-  --ink:     oklch(26% 0.01 260);
-  --ink2:    oklch(46% 0.009 260);
-  --ink3:    oklch(61% 0.007 260);
-  --ink4:    oklch(72% 0.006 260);
-
-  /* semânticas */
-  --accent:   oklch(52% 0.14 264);
-  --accent-bg:oklch(95.5% 0.025 264);
-  --ok:       oklch(56% 0.11 155);
-  --ok-bg:    oklch(95% 0.04 155);
-  --warn:     oklch(64% 0.13 65);
-  --warn-bg:  oklch(95.5% 0.045 75);
-  --down:     oklch(55% 0.18 27);
-  --down-bg:  oklch(95.5% 0.05 27);
-  --info:     oklch(55% 0.11 245);
-  --info-bg:  oklch(95.5% 0.03 245);
-
-  --font-sans: "Geist Variable", "Geist", -apple-system, "Segoe UI", Roboto, sans-serif;
-  --font-mono: "Geist Mono Variable", "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
-
-  --radius-panel: 10px;
-  --radius-menu: 12px;
-  --radius-chip: 6px;
-
-  --shadow-dropdown: 0 8px 28px -8px rgba(20,20,40,.22), 0 2px 6px rgba(20,20,40,.06);
-  --shadow-notif:    0 14px 40px -10px rgba(20,20,40,.26), 0 3px 8px rgba(20,20,40,.07);
-}
+/* Globals do painel. Papéis e temas vêm de vendor/tokens.css
+   (contracts/design-tokens); o tema ativo é o data-theme do <html>. */
 
 * { box-sizing: border-box; }
 
@@ -48,8 +15,8 @@ body {
   background: var(--bg);
   color: var(--ink);
   font-family: var(--font-sans);
-  font-size: 13px;
-  line-height: 1.4;
+  font-size: 14px;
+  line-height: 1.45;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
@@ -63,9 +30,9 @@ button {
   padding: 0;
 }
 
-button:focus-visible,
-a:focus-visible {
-  outline: 2px solid var(--accent);
+/* Foco visível em todo elemento focável (WCAG 2.4.7 / 2.4.11). */
+:focus-visible {
+  outline: 3px solid var(--focus);
   outline-offset: 2px;
 }
 
@@ -75,6 +42,13 @@ a {
 }
 
 .mono { font-family: var(--font-mono); }
+
+/* Forma do nível no Tag (toneShape), fora do textContent e com texto
+   alternativo vazio: o leitor de tela lê só o rótulo. */
+[data-glyph]::before { margin-right: 4px; }
+[data-glyph="square"]::before   { content: "■" / ""; }
+[data-glyph="triangle"]::before { content: "▲" / ""; }
+[data-glyph="circle"]::before   { content: "●" / ""; }
 
 @keyframes pulse-dot {
   0%, 100% { box-shadow: 0 0 0 0 currentColor; opacity: 1; }
