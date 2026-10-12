@@ -260,6 +260,22 @@ describe("PatientTimeline", () => {
     expect(onOpeningRequired).not.toHaveBeenCalled();
   });
 
+  it("403 out_of_context ao carregar mais em contexto: a lista some e fica só o alerta", async () => {
+    const onOpeningRequired = vi.fn();
+    m(api.getTimeline)
+      .mockResolvedValueOnce(page({ entries: [ APPOINTMENT ], next_before: "c1" }))
+      .mockRejectedValueOnce(new ApiError(403, { error: "out_of_context" }, "403"));
+    renderWithProviders(<PatientTimeline subject={{ attendanceId: "a1" }} onOpeningRequired={onOpeningRequired} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Carregar mais" }));
+    expect((await screen.findByRole("alert")).textContent)
+      .toBe("esta pessoa não está em atendimento com você — para ler, use a abertura justificada em Prontuário");
+    expect(screen.queryByText("Retorno — Consulta de enfermagem")).toBeNull();
+    expect(screen.queryByText("Linha do tempo de Joana Lima")).toBeNull();
+    expect(screen.queryByRole("table")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Carregar mais" })).toBeNull();
+    expect(onOpeningRequired).not.toHaveBeenCalled();
+  });
+
   it("422 invalid_cursor: diz para atualizar; Atualizar relê", async () => {
     m(api.getTimeline)
       .mockResolvedValueOnce(page({ entries: [ APPOINTMENT ], next_before: "c1" }))

@@ -7,7 +7,7 @@
 // encerra a leitura em quem chamou.
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
-import { getTimeline, type Addendum, type PatientProblem, type TimelineEntry, type TimelineFilters, type TimelineSubject } from "../../lib/api";
+import { errorCode, getTimeline, type Addendum, type PatientProblem, type TimelineEntry, type TimelineFilters, type TimelineSubject } from "../../lib/api";
 import {
   ALL_FILTERS, EMPTY_DRAFT, PARTIAL_NOTICE, TIMELINE_EMPTY, TIMELINE_KEY, TIMELINE_KINDS, detailTarget, endsOpening, entryWhen,
   entryWhere, filterProblem, filtersFrom, mergePages, openLabel, statusLabel, subjectKey, timelineError, timelineKindLabel,
@@ -74,7 +74,11 @@ export function PatientTimeline({
   const ended = query.isError && endsOpening(query.error, endOnOutOfContext);
   useEffect(() => { if (ended) endOpening(); });
 
-  const pages = closed || ended ? [] : query.data?.pages ?? [];
+  // Em contexto, out_of_context (ex.: no "Carregar mais", depois que o
+  // atendimento fechou) também tira a lista: fica só o alerta.
+  const refused = query.isError && errorCode(query.error) === "out_of_context";
+  const hidden = closed || ended || refused;
+  const pages = hidden ? [] : query.data?.pages ?? [];
   const person = pages[0]?.person ?? null;
   const entries = mergePages(pages);
 
@@ -125,7 +129,7 @@ export function PatientTimeline({
       {closed && <p role="alert" style={alert}>{OPENING_ENDED}</p>}
       {!closed && query.isPending && <p className="mono" style={loading}>carregando a linha do tempo…</p>}
       {!closed && query.isError && !ended && <p role="alert" style={alert}>{timelineError(query.error)}</p>}
-      {!closed && !ended && query.data && (
+      {!hidden && query.data && (
         <DataTable<TimelineEntry>
           cols={[
             { label: "Quando", w: "1fr", render: (e) => entryWhen(e) },
@@ -156,7 +160,7 @@ export function PatientTimeline({
           empty={TIMELINE_EMPTY}
         />
       )}
-      {!closed && !ended && query.hasNextPage && (
+      {!hidden && query.hasNextPage && (
         <div>
           <button type="button" disabled={query.isFetchingNextPage}
             style={query.isFetchingNextPage ? disabledButtonStyle : secondaryButtonStyle}
@@ -165,7 +169,7 @@ export function PatientTimeline({
           </button>
         </div>
       )}
-      {!closed && open && (
+      {!hidden && open && (
         <TimelineDetail key={`${open.type}:${open.id}`} target={open} onClose={() => setOpen(null)}
           endOnOutOfContext={endOnOutOfContext} onOpeningRequired={endOpening} searchDelayMs={searchDelayMs}
           patientProblems={patientProblems} onAddendumAdded={onAddendumAdded} />
