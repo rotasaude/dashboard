@@ -1,6 +1,14 @@
 /* Layouts largos abaixo de 1024px (spec do subprojeto 3, §4). As grades são
    inline nas telas; por isso grid-template-columns leva !important aqui. */
 @media (max-width: 1023px) {
+  /* alvos de toque */
+  button, [role="tab"], select, input:not([type="checkbox"]):not([type="radio"]) { min-height: 44px; }
+  input[type="checkbox"], input[type="radio"] { width: 24px; height: 24px; }
+  label:has(> input[type="checkbox"]), label:has(> input[type="radio"]) {
+    display: inline-flex; align-items: center; gap: 8px; min-height: 44px;
+  }
+  /* fim dos alvos */
+
   .kpi-grid { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)) !important; }
   .ov-split { grid-template-columns: minmax(0, 1fr) !important; }
   .ov-kv3 { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }

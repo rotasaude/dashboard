@@ -27,3 +27,13 @@ describe("reticências só com o texto inteiro em title", () => {
     expect(offenders).toEqual([]);
   });
 });
+
+describe("alvos de toque abaixo de 1024px", () => {
+  it("responsive.css dá 44px a botões, abas, selects e campos, e 24px a rádio e caixa", () => {
+    const css = readFileSync(join(src, "theme/responsive.css"), "utf8");
+    const block = /\/\* alvos de toque \*\/([\s\S]*?)\/\* fim dos alvos \*\//.exec(css)?.[1] ?? "";
+    expect(block).toMatch(/button,[\s\S]*\[role="tab"\][\s\S]*select[\s\S]*min-height:\s*44px/);
+    expect(block).toMatch(/input\[type="checkbox"\],\s*input\[type="radio"\]\s*\{[^}]*width:\s*24px[^}]*height:\s*24px/);
+    expect(block).toMatch(/label:has\(> input\[type="checkbox"\]\),\s*label:has\(> input\[type="radio"\]\)\s*\{[^}]*min-height:\s*44px/);
+  });
+});
