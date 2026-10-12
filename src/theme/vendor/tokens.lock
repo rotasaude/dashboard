@@ -1,0 +1,11 @@
+{
+  "ref": "tokens-v1.0.0",
+  "files": {
+    "fonts/OFL.txt": "737e786d03b00137e6d5555832db6e886a03a45a3bf8a59041c9add6eb15e725",
+    "fonts/rawline-400.woff2": "8e9d1aba37a102665016fffea61a124e6c385d6783d6cef869f9910c6115a401",
+    "fonts/rawline-600.woff2": "306d87c0767afb29674ac486d69662c98ca2022ffb265427f0347a63b0de5038",
+    "fonts/rawline-700.woff2": "ff634420069ce898e30ab4d72b61c67ece52f12718dc06818367726292d8da7f",
+    "tokens.css": "01ea63d97970ff6bf47ef5fa01dda3ebe9837a56e7960cc450a254057a7cb7a5",
+    "tokens.ts": "1b787511a16a4be9051ae4fccc3fac4fb305767729d490cb1c6ae7af9647c534"
+  }
+}

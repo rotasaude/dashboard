@@ -1,0 +1,153 @@
+/* Gerado por design-tokens/build.mjs a partir de src/. Não edite. */
+
+@font-face {
+  font-family: "Rawline";
+  src: url("./fonts/rawline-400.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Rawline";
+  src: url("./fonts/rawline-600.woff2") format("woff2");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Rawline";
+  src: url("./fonts/rawline-700.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  --radius-chip: 6px;
+  --radius-panel: 10px;
+  --radius-menu: 12px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 32px;
+  --space-8: 48px;
+  --shadow-dropdown: 0 8px 28px -8px rgba(20,20,40,.22), 0 2px 6px rgba(20,20,40,.06);
+  --shadow-notif: 0 14px 40px -10px rgba(20,20,40,.26), 0 3px 8px rgba(20,20,40,.07);
+  --line: var(--rule2);
+  --danger: var(--down);
+  --surface: var(--sunken);
+}
+
+:root:not([data-theme]),
+:root[data-theme="govbr"] {
+  --bg: #f8f8f8;
+  --panel: #ffffff;
+  --sunken: #f0f0f0;
+  --sunken2: #e6e6e6;
+  --rule: #dcdcdc;
+  --rule2: #888888;
+  --ink: #1b1b1b;
+  --ink2: #333333;
+  --ink3: #555555;
+  --ink4: #888888;
+  --accent: #1351b4;
+  --accent-bg: #dbe8fb;
+  --on-accent: #ffffff;
+  --ok: #0f6b1d;
+  --ok-bg: #e3f5e1;
+  --warn: #7a4b00;
+  --warn-bg: #fff5c2;
+  --down: #b31800;
+  --down-bg: #fde0db;
+  --info: #0c4ca3;
+  --info-bg: #d4e5ff;
+  --focus: #b35c00;
+  --font-sans: "Rawline", Verdana, system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+:root[data-theme="alto-contraste"] {
+  --bg: #000000;
+  --panel: #000000;
+  --sunken: #000000;
+  --sunken2: #111111;
+  --rule: #ffffff;
+  --rule2: #ffffff;
+  --ink: #ffffff;
+  --ink2: #ffffff;
+  --ink3: #ffffff;
+  --ink4: #cccccc;
+  --accent: #ffff00;
+  --accent-bg: #000000;
+  --on-accent: #000000;
+  --ok: #66ff99;
+  --ok-bg: #000000;
+  --warn: #ffd400;
+  --warn-bg: #000000;
+  --down: #ff8080;
+  --down-bg: #000000;
+  --info: #80bfff;
+  --info-bg: #000000;
+  --focus: #ffff00;
+  --font-sans: "Rawline", Verdana, system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+:root[data-theme="govbr-escuro"] {
+  --bg: #121212;
+  --panel: #1b1b1b;
+  --sunken: #242424;
+  --sunken2: #2e2e2e;
+  --rule: #3a3a3a;
+  --rule2: #8a8a8a;
+  --ink: #f2f2f2;
+  --ink2: #d6d6d6;
+  --ink3: #b8b8b8;
+  --ink4: #8a8a8a;
+  --accent: #8ab4ff;
+  --accent-bg: #0c326f;
+  --on-accent: #000000;
+  --ok: #6fdc8c;
+  --ok-bg: #0f2e18;
+  --warn: #ffcd07;
+  --warn-bg: #3a2d00;
+  --down: #ff8a75;
+  --down-bg: #3d0d06;
+  --info: #8ab4ff;
+  --info-bg: #0c2650;
+  --focus: #ffb54d;
+  --font-sans: "Rawline", Verdana, system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+:root[data-theme="rota"] {
+  --bg: #f6f4ef;
+  --panel: #ffffff;
+  --sunken: #eeeae1;
+  --sunken2: #e4ded2;
+  --rule: #ddd7cc;
+  --rule2: #857b6c;
+  --ink: #1d2a2a;
+  --ink2: #2f3d3d;
+  --ink3: #4c5a59;
+  --ink4: #857b6c;
+  --accent: #0d6363;
+  --accent-bg: #d7ecea;
+  --on-accent: #ffffff;
+  --ok: #1f6b35;
+  --ok-bg: #e1f2e5;
+  --warn: #7a4b00;
+  --warn-bg: #fbefd2;
+  --down: #a8321c;
+  --down-bg: #fbe1d8;
+  --info: #1d5486;
+  --info-bg: #dce9f5;
+  --focus: #b35c00;
+  --font-sans: "Figtree", system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
