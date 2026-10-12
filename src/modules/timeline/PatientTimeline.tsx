@@ -7,7 +7,7 @@
 // encerra a leitura em quem chamou.
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
-import { getTimeline, type TimelineEntry, type TimelineFilters, type TimelineSubject } from "../../lib/api";
+import { getTimeline, type Addendum, type PatientProblem, type TimelineEntry, type TimelineFilters, type TimelineSubject } from "../../lib/api";
 import {
   ALL_FILTERS, EMPTY_DRAFT, PARTIAL_NOTICE, TIMELINE_EMPTY, TIMELINE_KEY, TIMELINE_KINDS, detailTarget, endsOpening, entryWhen,
   entryWhere, filterProblem, filtersFrom, mergePages, openLabel, statusLabel, subjectKey, timelineError, timelineKindLabel,
@@ -26,9 +26,14 @@ interface Props {
   endOnOutOfContext?: boolean;
   onOpeningRequired?(): void;
   searchDelayMs?: number;
+  // A consulta aberta daqui: problemas do paciente (adendo) e o aviso do adendo.
+  patientProblems?: PatientProblem[];
+  onAddendumAdded?(addendum: Addendum): void;
 }
 
-export function PatientTimeline({ subject, endOnOutOfContext = false, onOpeningRequired, searchDelayMs }: Props) {
+export function PatientTimeline({
+  subject, endOnOutOfContext = false, onOpeningRequired, searchDelayMs, patientProblems, onAddendumAdded
+}: Props) {
   const [ draft, setDraft ] = useState<FilterDraft>(EMPTY_DRAFT);
   const [ filters, setFilters ] = useState<TimelineFilters>(ALL_FILTERS);
   const [ problem, setProblem ] = useState<string | null>(null);
@@ -162,7 +167,8 @@ export function PatientTimeline({ subject, endOnOutOfContext = false, onOpeningR
       )}
       {!closed && open && (
         <TimelineDetail key={`${open.type}:${open.id}`} target={open} onClose={() => setOpen(null)}
-          endOnOutOfContext={endOnOutOfContext} onOpeningRequired={endOpening} searchDelayMs={searchDelayMs} />
+          endOnOutOfContext={endOnOutOfContext} onOpeningRequired={endOpening} searchDelayMs={searchDelayMs}
+          patientProblems={patientProblems} onAddendumAdded={onAddendumAdded} />
       )}
     </section>
   );

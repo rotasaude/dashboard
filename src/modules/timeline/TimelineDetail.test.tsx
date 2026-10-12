@@ -9,8 +9,12 @@ vi.mock("../../lib/api", async (importOriginal) => {
 });
 vi.mock("../documents/printDocument", () => ({ printDocument: vi.fn(() => Promise.resolve(null)) }));
 vi.mock("../consultation/ConsultationView", () => ({
-  ConsultationLoader: (p: { id: string; endOnOutOfContext?: boolean; patientProblems: unknown[] }) =>
-    <span>{`consulta ${p.id} · fim em out_of_context ${p.endOnOutOfContext ? "sim" : "não"} · problemas ${p.patientProblems.length}`}</span>
+  ConsultationLoader: (p: { id: string; endOnOutOfContext?: boolean; patientProblems: unknown[]; onAddendumAdded?(a: unknown): void }) => (
+    <div>
+      <span>{`consulta ${p.id} · fim em out_of_context ${p.endOnOutOfContext ? "sim" : "não"} · problemas ${p.patientProblems.length}`}</span>
+      <button type="button" onClick={() => p.onAddendumAdded?.({ id: "ad9" })}>adendo (dublê)</button>
+    </div>
+  )
 }));
 vi.mock("../attendance/ScreeningDetail", () => ({
   ScreeningDetailLoader: (p: { id: string }) => <span>{`escuta ${p.id}`}</span>
@@ -24,7 +28,7 @@ import { ApiError } from "../../lib/api";
 import { printDocument } from "../documents/printDocument";
 import { TimelineDetail } from "./TimelineDetail";
 import { renderWithProviders, sessionWith } from "../../test/campaignFixtures";
-import { options } from "../../test/consultationFixtures";
+import { options, problem } from "../../test/consultationFixtures";
 import { prescriptionDoc } from "../../test/documentFixtures";
 
 const m = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
@@ -52,6 +56,15 @@ describe("TimelineDetail", () => {
     expect(screen.getByText("escuta sc1")).not.toBeNull();
     rerender(<TimelineDetail target={{ type: "appointment_request", id: "rq1" }} onClose={vi.fn()} />);
     expect(screen.getByText("pedido rq1")).not.toBeNull();
+  });
+
+  it("consulta: recebe os problemas do paciente e avisa o adendo a quem abriu", () => {
+    const onAddendumAdded = vi.fn();
+    renderWithProviders(<TimelineDetail target={{ type: "consultation", id: "cs0" }} onClose={vi.fn()}
+      patientProblems={[ problem() ]} onAddendumAdded={onAddendumAdded} />);
+    expect(screen.getByText("consulta cs0 · fim em out_of_context não · problemas 1")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "adendo (dublê)" }));
+    expect(onAddendumAdded).toHaveBeenCalledWith({ id: "ad9" });
   });
 
   it("documento: tipo, situação, modo, código e Imprimir pela rotina do 19c", async () => {

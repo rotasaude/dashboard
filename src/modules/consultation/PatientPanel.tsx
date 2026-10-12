@@ -3,7 +3,7 @@
 // spec §7; contratos §3). Mostra só o nome de exibição (social, senão o
 // completo): o nome de registro não aparece aqui.
 import { useState, type CSSProperties, type ReactNode } from "react";
-import type { ClinicalRecord, ConsultationSummary, VitalSigns } from "../../lib/api";
+import type { Addendum, ClinicalRecord, ConsultationSummary, VitalSigns } from "../../lib/api";
 import { ageLabel, onsetLabel } from "../../lib/consultation";
 import { COLOR_LABEL, COLOR_TONE, GLUCOSE_MOMENT_LABEL, VITALS, alertLabel } from "../../lib/screening";
 import { sexLabel } from "../../lib/profile";
@@ -17,8 +17,11 @@ import { SegmentedControl } from "../../shell/SegmentedControl";
 import { PatientTimeline } from "../timeline/PatientTimeline";
 
 // Módulo 20: a aba "Linha do tempo" (quem passa a prop decide a pessoa).
+// `onAddendumAdded`: o mesmo do Resumo, para a consulta aberta pela aba; os
+// problemas do paciente vêm do próprio prontuário (record.problems).
 export interface PatientTimelineProps {
   subject: TimelineSubject; endOnOutOfContext?: boolean; onOpeningRequired?(): void; searchDelayMs?: number;
+  onAddendumAdded?(addendum: Addendum): void;
 }
 
 export function VitalsList({ vitals, label }: { vitals: VitalSigns; label: string }) {
@@ -122,7 +125,7 @@ export function PatientPanel({ record, onOpenConsultation, besideProblems, timel
 
       {timeline && timelineOpened && (
         <div hidden={onSummary} style={onSummary ? undefined : { display: "contents" }}>
-          <PatientTimeline {...timeline} />
+          <PatientTimeline {...timeline} patientProblems={problems} />
         </div>
       )}
     </section>

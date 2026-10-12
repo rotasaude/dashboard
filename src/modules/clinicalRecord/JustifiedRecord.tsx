@@ -43,6 +43,9 @@ export function JustifiedRecord({ opening, onEnd, searchDelayMs }: Props) {
     enabled: !over && opening.patient_id !== null, gcTime: 0, staleTime: 0, retry: false
   });
   const options = useQuery({ queryKey: [ OPTIONS_KEY, user?.id ?? null ], queryFn: getConsultationOptions, staleTime: 5 * 60_000 });
+  // Adendo (pelo Resumo ou pela aba Linha do tempo): relê o prontuário da abertura.
+  const rereadRecord = useCallback(
+    () => void queryClient.invalidateQueries({ queryKey: [ JUSTIFIED_KEY, opening.opening_id ] }), [ queryClient, opening.opening_id ]);
   const refused = record.isError && errorCode(record.error) === "opening_required";
 
   // Trava o fim no estado: sem isso a consulta apagada seria recriada.
@@ -77,13 +80,14 @@ export function JustifiedRecord({ opening, onEnd, searchDelayMs }: Props) {
           <>
             <PatientPanel record={record.data} onOpenConsultation={setViewing}
               timeline={hasFeature(user, "patient_timeline") ? {
-                subject: { openingId: opening.opening_id }, endOnOutOfContext: true, onOpeningRequired: handleOpeningRequired, searchDelayMs
+                subject: { openingId: opening.opening_id }, endOnOutOfContext: true, onOpeningRequired: handleOpeningRequired, searchDelayMs,
+                onAddendumAdded: rereadRecord
               } : undefined} />
             {viewing && (
               <ConsultationLoader key={viewing} id={viewing} endOnOutOfContext
                 options={options.data ?? null} patientProblems={record.data.problems} searchDelayMs={searchDelayMs}
                 onClose={() => setViewing(null)} onOpeningRequired={handleOpeningRequired}
-                onAddendumAdded={() => void queryClient.invalidateQueries({ queryKey: [ JUSTIFIED_KEY, opening.opening_id ] })} />
+                onAddendumAdded={rereadRecord} />
             )}
           </>
         )}
