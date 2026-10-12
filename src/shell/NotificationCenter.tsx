@@ -233,7 +233,7 @@ function Badge({ count, level }: { count: number; level: Alert["severity"] | nul
         padding: "0 3px",
         borderRadius: 999,
         background: color,
-        color: "white",
+        color: "var(--on-tone)",
         fontSize: 9.5,
         fontWeight: 700,
         display: "inline-flex",
