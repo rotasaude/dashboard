@@ -23,12 +23,12 @@ export function ClinicalRecord({ onGoToSecurity }: { onGoToSecurity?(): void }) 
   const isProfessional = roles.includes("health_professional");
   const isAdmin = roles.includes("municipal_admin");
   // Módulo 20: no modo integrated não há prontuário, mas há linha do tempo
-  // (só do profissional; o relatório das aberturas segue do clinical_record).
+  // (a abertura é do profissional; o relatório das aberturas do admin vale com um ou outro).
   const recordOn = hasFeature(user, "clinical_record");
   const timelineOn = hasFeature(user, "patient_timeline");
 
   if (!recordOn && !timelineOn) return <Frame><EmptyState title="o prontuário está desligado nesta cidade" /></Frame>;
-  if (user.operator || (!isProfessional && !(isAdmin && recordOn))) {
+  if (user.operator || (!isProfessional && !isAdmin)) {
     return <Frame><EmptyState title="seu papel não permite abrir o prontuário" /></Frame>;
   }
 
@@ -39,7 +39,7 @@ export function ClinicalRecord({ onGoToSecurity }: { onGoToSecurity?(): void }) 
           ? <JustifiedRecord key={opening.opening_id} opening={opening} onEnd={() => setOpening(null)} />
           : <JustifiedTimeline key={opening.opening_id} opening={opening} onEnd={() => setOpening(null)} />)
         : <OpeningForm onOpened={setOpening} onGoToSecurity={onGoToSecurity} timelineOnly={!recordOn} timelineOn={timelineOn} />)}
-      {isAdmin && recordOn && <OpeningsReport />}
+      {isAdmin && <OpeningsReport />}
     </Frame>
   );
 }

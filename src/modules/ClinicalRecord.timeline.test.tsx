@@ -152,14 +152,15 @@ describe("Prontuário — linha do tempo pela abertura justificada (módulo 20)"
     expect(api.getJustifiedRecord).toHaveBeenCalledWith("pa1");
   });
 
-  it("sem nenhum dos dois interruptores, ou admin só com a linha do tempo: nada abre", async () => {
+  it("sem nenhum dos dois interruptores nada abre; admin só com a linha do tempo vê o relatório, sem abrir nada", async () => {
     m(api.fetchCurrentSession).mockResolvedValue(sessionWith([ "health_professional" ]));
     renderWithProviders(<ClinicalRecord />);
     expect(await screen.findByText("o prontuário está desligado nesta cidade")).not.toBeNull();
     cleanup();
     m(api.fetchCurrentSession).mockResolvedValue(sessionWith([ "municipal_admin" ], { features: [ "patient_timeline" ] }));
     renderWithProviders(<ClinicalRecord />);
-    expect(await screen.findByText("seu papel não permite abrir o prontuário")).not.toBeNull();
-    expect(api.listOpenings).not.toHaveBeenCalled();
+    expect(await screen.findByRole("region", { name: "Aberturas fora de contexto" })).not.toBeNull();
+    expect(screen.queryByLabelText("CPF do paciente")).toBeNull();
+    expect(api.listOpenings).toHaveBeenCalled();
   });
 });

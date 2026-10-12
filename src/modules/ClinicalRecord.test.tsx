@@ -86,6 +86,17 @@ describe("Prontuário fora do atendimento", () => {
     expect(screen.queryByLabelText("CPF do paciente")).toBeNull();
   });
 
+  it("o municipal_admin com só patient_timeline vê o relatório e as aberturas por par, sem o formulário", async () => {
+    m(api.fetchCurrentSession).mockResolvedValue(sessionWith([ "municipal_admin" ], { features: [ "patient_timeline" ] }));
+    m(api.listOpenings).mockResolvedValue([ {
+      kind: "justified_opening", id: "o1", user_name: "Dra. Ana", cpf_masked: "***.982.247-**", reason_code: null,
+      consultation_id: null, created_at: "2026-09-10T14:30:00-03:00", expires_at: null } ]);
+    renderWithProviders(<ClinicalRecord />);
+    expect(await screen.findByRole("region", { name: "Aberturas fora de contexto" })).not.toBeNull();
+    expect(await screen.findByText("***.982.247-**")).not.toBeNull();
+    expect(screen.queryByLabelText("CPF do paciente")).toBeNull();
+  });
+
   it("o profissional não vê o relatório", async () => {
     renderWithProviders(<ClinicalRecord />);
     await screen.findByLabelText("CPF do paciente");

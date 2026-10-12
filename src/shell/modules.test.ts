@@ -230,7 +230,9 @@ describe("modules", () => {
 
     it("Prontuário no menu também com só patient_timeline, para o profissional (módulo 20)", () => {
       expect(ids(user([ "health_professional" ], [ "patient_timeline" ]))).toContain("clinical-record");
-      expect(ids(user([ "municipal_admin" ], [ "patient_timeline" ]))).not.toContain("clinical-record");
+      expect(ids(user([ "municipal_admin" ], [ "patient_timeline" ]))).toContain("clinical-record");
+      expect(ids(user([ "municipal_admin" ], []))).not.toContain("clinical-record");
+      expect(ids(user([ "municipal_admin" ], [ "patient_timeline" ], true))).not.toContain("clinical-record");
       expect(ids(user([ "citizen_verifier" ], [ "patient_timeline" ]))).not.toContain("clinical-record");
       expect(ids(user([ "health_professional" ], [ "patient_timeline" ], true))).not.toContain("clinical-record");
       expect(ids(user([ "health_professional" ], [ "patient_timeline" ]))).not.toContain("my-consultations");
