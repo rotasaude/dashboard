@@ -62,8 +62,9 @@
   .dt-row > .dt-cell:not(:first-child):not([data-card]):has(button, input, a)::before,
   .dt-row:has(> [data-card="title"]) > .dt-cell:first-child:not([data-card]):has(button, input, a)::before,
   .dt-row > .dt-cell[data-card="actions"]::before { content: none; }
-  .dt-row > .dt-cell[data-card="actions"] button,
-  .dt-row > .dt-cell:has(button) button { min-height: 44px; }
+  .dt-row > .dt-cell:not(:first-child):not([data-card]):has(button, input, a) button,
+  .dt-row:has(> [data-card="title"]) > .dt-cell:first-child:not([data-card]):has(button, input, a) button,
+  .dt-row > .dt-cell[data-card="actions"] button { min-height: 44px; }
 
   .dt-row > .dt-cell[data-card="hide"] { display: none; }
 }
