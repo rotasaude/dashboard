@@ -12,6 +12,7 @@ import { OPTIONS_KEY, RECORD_KEY, consultationError, existingConsultationId, wit
 import { useAuth } from "../../lib/auth";
 import { canSign, signatureSettling } from "../../lib/signature";
 import { canUseDocuments } from "../../lib/clinicalDocuments";
+import { hasFeature } from "../../lib/features";
 import { buttonStyle, disabledButtonStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { SegmentedControl } from "../../shell/SegmentedControl";
 import { ConsultationDocuments } from "../documents/ConsultationDocuments";
@@ -55,6 +56,8 @@ export function ConsultationWorkspace(props: Props) {
   const signer = canSign(user);
   // Módulo 19c: documentos clínicos e medicamentos em uso, com o interruptor ligado.
   const documentsOn = canUseDocuments(user);
+  // Módulo 20: a aba "Linha do tempo" no painel do paciente, pelo atendimento (em contexto).
+  const timelineOn = hasFeature(user, "patient_timeline");
   // Aba Documentos: o editor continua montado (escondido) para o autosave não
   // perder o que foi digitado; os documentos só montam na primeira abertura da
   // aba e depois ficam montados (escondidos), para a volta à Consulta não perder
@@ -122,7 +125,9 @@ export function ConsultationWorkspace(props: Props) {
 
       {record.data && (
         <>
-          <PatientPanel record={record.data} onOpenConsultation={setViewing} besideProblems={documentsOn ? (
+          <PatientPanel record={record.data} onOpenConsultation={setViewing}
+            timeline={timelineOn ? { subject: { attendanceId: props.attendanceId }, searchDelayMs: props.searchDelayMs } : undefined}
+            besideProblems={documentsOn ? (
             <MedicationsBlock patientId={record.data.patient.id} unitId={props.unit.id} searchDelayMs={props.searchDelayMs}
               draftConsultationId={consultation?.status === "draft" ? consultation.id : null} />
           ) : undefined} />

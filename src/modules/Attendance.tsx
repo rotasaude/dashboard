@@ -110,6 +110,7 @@ export function Attendance({ onNavigate }: { onNavigate(id: ModuleId): void }) {
           careBlocked={careBlocked}
           onGoToSecurity={goToSecurity}
           clinicalRecord={hasFeature(user, "clinical_record")}
+          patientTimeline={hasFeature(user, "patient_timeline")}
           clinicalDocuments={hasFeature(user, "clinical_documents") && (canVerify || canCareRole)}
           professional={canCare}
           onClinicalRefused={() => void queryClient.invalidateQueries({ queryKey: [ "myProfessional", user.id ] })}

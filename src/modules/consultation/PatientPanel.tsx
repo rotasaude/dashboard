@@ -2,7 +2,7 @@
 // Painel do paciente no atendimento e na abertura justificada (módulo 19;
 // spec §7; contratos §3). Mostra só o nome de exibição (social, senão o
 // completo): o nome de registro não aparece aqui.
-import type { CSSProperties, ReactNode } from "react";
+import { useState, type CSSProperties, type ReactNode } from "react";
 import type { ClinicalRecord, ConsultationSummary, VitalSigns } from "../../lib/api";
 import { ageLabel, onsetLabel } from "../../lib/consultation";
 import { COLOR_LABEL, COLOR_TONE, GLUCOSE_MOMENT_LABEL, VITALS, alertLabel } from "../../lib/screening";
@@ -12,6 +12,14 @@ import { KeyValue } from "../../components/KeyValue";
 import { Tag } from "../../components/Tag";
 import { DataTable } from "../../components/DataTable";
 import { secondaryButtonStyle } from "../../components/formStyles";
+import type { TimelineSubject } from "../../lib/api";
+import { SegmentedControl } from "../../shell/SegmentedControl";
+import { PatientTimeline } from "../timeline/PatientTimeline";
+
+// Módulo 20: a aba "Linha do tempo" (quem passa a prop decide a pessoa).
+export interface PatientTimelineProps {
+  subject: TimelineSubject; endOnOutOfContext?: boolean; onOpeningRequired?(): void; searchDelayMs?: number;
+}
 
 export function VitalsList({ vitals, label }: { vitals: VitalSigns; label: string }) {
   const measured = VITALS.filter((v) => typeof vitals[v.key] === "number");
@@ -28,12 +36,18 @@ export function VitalsList({ vitals, label }: { vitals: VitalSigns; label: strin
 }
 
 // Módulo 19c: `besideProblems` = os medicamentos em uso, logo depois dos problemas.
-export function PatientPanel({ record, onOpenConsultation, besideProblems }: {
-  record: ClinicalRecord; onOpenConsultation(id: string): void; besideProblems?: ReactNode;
+// Módulo 20: `timeline` liga as abas "Resumo" e "Linha do tempo".
+export function PatientPanel({ record, onOpenConsultation, besideProblems, timeline }: {
+  record: ClinicalRecord; onOpenConsultation(id: string): void; besideProblems?: ReactNode; timeline?: PatientTimelineProps;
 }) {
   const { patient, problems, consultations } = record;
   const active = problems.filter((p) => p.status === "active");
   const rev = record.today_screening?.current_revision ?? null;
+  // A linha do tempo só lê na primeira abertura da aba e depois fica montada
+  // (escondida), para a volta ao Resumo não perder filtros nem páginas.
+  const [ tab, setTab ] = useState<"summary" | "timeline">("summary");
+  const [ timelineOpened, setTimelineOpened ] = useState(false);
+  const onSummary = !timeline || tab === "summary";
 
   return (
     <section aria-label="Paciente" style={panel}>
@@ -44,6 +58,14 @@ export function PatientPanel({ record, onOpenConsultation, besideProblems }: {
         <KeyValue k="CPF" v={patient.cpf_masked} />
       </div>
 
+      {timeline && (
+        <SegmentedControl
+          options={[ { key: "summary", label: "Resumo" }, { key: "timeline", label: "Linha do tempo" } ]}
+          value={tab} onChange={(key) => { setTab(key); if (key === "timeline") setTimelineOpened(true); }} />
+      )}
+
+      {/* display: contents não mexe no gap do painel; só vale com o Resumo aberto. */}
+      <div hidden={!onSummary} style={onSummary ? { display: "contents" } : undefined}>
       <div style={block}>
         <strong style={sub}>Problemas ativos</strong>
         {active.length === 0 ? <p style={muted}>nenhum problema ativo</p> : (
@@ -96,6 +118,13 @@ export function PatientPanel({ record, onOpenConsultation, besideProblems }: {
           empty="nenhuma consulta anterior"
         />
       </div>
+      </div>
+
+      {timeline && timelineOpened && (
+        <div hidden={onSummary} style={onSummary ? undefined : { display: "contents" }}>
+          <PatientTimeline {...timeline} />
+        </div>
+      )}
     </section>
   );
 }

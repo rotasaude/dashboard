@@ -19,6 +19,7 @@ import { ScreeningForm } from "./ScreeningForm";
 import { OutcomeFields } from "./OutcomeFields";
 import { ConsultationWorkspace } from "../consultation/ConsultationWorkspace";
 import { DeclarationPanel } from "./DeclarationPanel";
+import { PatientTimeline } from "../timeline/PatientTimeline";
 
 // UnitQueue (Task 7) — a fila da unidade atual (spec §6 "Fila"), em duas
 // partes: "Aguardando" (ordenada pela API — prioridade, depois chegada — esta
@@ -43,6 +44,9 @@ interface Props {
   clinicalDocuments?: boolean;
   // Tem o papel de profissional (vínculo ou não): emite com o próprio CBO, sem matrícula.
   professional?: boolean;
+  // Módulo 20: `patient_timeline` ligado na sessão. Sem o prontuário (modo
+  // integrated), a linha do tempo abre pelo atendimento chamado.
+  patientTimeline?: boolean;
 }
 
 // Módulo 18: a escuta aberta no painel — a que veio na chamada, uma lida pelo
@@ -52,7 +56,9 @@ type ScreeningPanel =
   | { kind: "view"; id: string }
   | { kind: "reassess"; row: QueueRow; screening: Screening }
   // Módulo 19: a consulta do atendimento chamado (traz a escuta do dia no painel do paciente).
-  | { kind: "consultation"; attendanceId: string };
+  | { kind: "consultation"; attendanceId: string }
+  // Módulo 20: a linha do tempo do atendimento chamado, quando não há prontuário.
+  | { kind: "timeline"; attendanceId: string };
 
 // Vermelho no topo e destacado (spec §4); a ordem é do api.
 const redRow = (r: QueueRow) =>
@@ -70,7 +76,7 @@ function handleClinicalRefusal(code: string | undefined, reload: () => void, onC
 
 export function UnitQueue({
   unit, units, canCare, careBlocked, onClinicalRefused, now = () => new Date(), clinicalRecord = false, onGoToSecurity,
-  clinicalDocuments = false, professional = false
+  clinicalDocuments = false, professional = false, patientTimeline = false
 }: Props) {
   const queryClient = useQueryClient();
   const auth = useAuth();
@@ -85,6 +91,7 @@ export function UnitQueue({
   const [ panel, setPanel ] = useState<ScreeningPanel | null>(null);
   // Módulo 19c: a linha guardada aqui segura o painel mesmo que a pessoa saia da fila.
   const [ declaring, setDeclaring ] = useState<QueueRow | null>(null);
+  const timelineButton = canCare && patientTimeline && !clinicalRecord;
   const declarationButton = (r: QueueRow) => clinicalDocuments && (
     <button type="button" style={secondaryButtonStyle} onClick={() => setDeclaring(r)}>Declaração</button>
   );
@@ -291,6 +298,12 @@ export function UnitQueue({
                               Consulta
                             </button>
                           )}
+                          {timelineButton && (
+                            <button type="button" style={secondaryButtonStyle}
+                              onClick={() => setPanel({ kind: "timeline", attendanceId: r.id })}>
+                              Linha do tempo
+                            </button>
+                          )}
                           {canCare && r.screening?.id && (
                             <button type="button" style={secondaryButtonStyle}
                               onClick={() => setPanel({ kind: "view", id: r.screening!.id })}>
@@ -343,6 +356,13 @@ export function UnitQueue({
               setDone("Consulta finalizada e atendimento encerrado.");
             }}
           />
+        )}
+
+        {timelineButton && panel?.kind === "timeline" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: 16, border: "1px solid var(--rule2)", borderRadius: 8 }}>
+            <PatientTimeline key={panel.attendanceId} subject={{ attendanceId: panel.attendanceId }} />
+            <div><button type="button" style={secondaryButtonStyle} onClick={() => setPanel(null)}>Fechar linha do tempo</button></div>
+          </div>
         )}
 
         {clinicalDocuments && declaring && (
