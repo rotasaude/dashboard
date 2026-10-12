@@ -1,6 +1,7 @@
-// Tag/Badge — pílula de status. tone semântico.
+// Tag/Badge — pílula de status. tone semântico; tom com nível também
+// mostra a forma (■ ▲ ●) via CSS, fora do texto (global.css [data-glyph]).
 import type { ReactNode } from "react";
-import { toneColor, type Tone } from "../theme/tokens";
+import { toneColor, toneShape, type Tone } from "../theme/tokens";
 
 interface Props {
   tone?: Tone | string;
@@ -10,9 +11,11 @@ interface Props {
 
 export function Tag({ tone, mono = true, children }: Props) {
   const { fg, bg } = toneColor(tone);
+  const shape = toneShape(tone);
   return (
     <span
       className={mono ? "mono" : ""}
+      data-glyph={shape ?? undefined}
       style={{
         display: "inline-flex",
         alignItems: "center",
