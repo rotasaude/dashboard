@@ -114,11 +114,11 @@ export function Cnes({ onGoToSecurity }: { onGoToSecurity?(): void }) {
               )}
               <DataTable<CnesProposal>
                 cols={[
-                  { label: "", w: "32px", render: (p) => (
+                  { label: "", w: "32px", card: "actions", render: (p) => (
                     <input type="checkbox" aria-label={`Selecionar: ${describeSide(p.cnes)}`} checked={selected.has(p.id)}
                       onChange={() => setSelected((current) => toggleOne(current, p.id))} />
                   ) },
-                  { label: "Tipo", w: "1fr", render: (p) => PROPOSAL_KIND_LABEL[p.kind] ?? p.kind },
+                  { label: "Tipo", w: "1fr", card: "title", render: (p) => PROPOSAL_KIND_LABEL[p.kind] ?? p.kind },
                   { label: "Ação", w: "1.2fr", render: (p) => PROPOSAL_ACTION_LABEL[p.action] ?? p.action },
                   { label: "No cadastro da cidade", w: "2fr", render: (p) => describeSide(p.local) },
                   { label: "No CNES", w: "2fr", render: (p) => describeSide(p.cnes) },
