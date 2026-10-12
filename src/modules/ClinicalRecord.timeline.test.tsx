@@ -10,7 +10,7 @@ vi.mock("../lib/api", async (importOriginal) => {
 import * as api from "../lib/api";
 import { ApiError } from "../lib/api";
 import { ClinicalRecord } from "./ClinicalRecord";
-import { OPENING_ENDED } from "../lib/clinicalRecord";
+import { NO_VERIFIED_PAIR, OPENING_ENDED } from "../lib/clinicalRecord";
 import { TIMELINE_KEY } from "../lib/timeline";
 import { CONSULTATION_KEY, JUSTIFIED_KEY } from "../lib/consultation";
 import { renderWithProviders, sessionWith } from "../test/campaignFixtures";
@@ -124,6 +124,18 @@ describe("Prontuário — linha do tempo pela abertura justificada (módulo 20)"
     fireEvent.click(screen.getByRole("button", { name: "Abrir linha do tempo" }));
     expect(await screen.findByText(
       "nenhum cadastro validado com este CPF — a linha do tempo só existe para quem validou o cadastro na unidade")).not.toBeNull();
+    expect(api.getTimeline).not.toHaveBeenCalled();
+  });
+
+  it("modo record com a linha do tempo ligada: patient_not_found também diz 'sem cadastro validado'", async () => {
+    m(api.fetchCurrentSession).mockResolvedValue(sessionWith([ "health_professional" ], {
+      id: "us1", features: [ "clinical_record", "patient_timeline" ]
+    }));
+    m(api.openClinicalRecord).mockRejectedValue(new ApiError(404, { error: "patient_not_found" }, "404"));
+    renderWithProviders(<ClinicalRecord />);
+    await openFor();
+    fireEvent.click(screen.getByRole("button", { name: "Abrir prontuário" }));
+    expect(await screen.findByText(NO_VERIFIED_PAIR)).not.toBeNull();
     expect(api.getTimeline).not.toHaveBeenCalled();
   });
 

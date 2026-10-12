@@ -5,6 +5,7 @@ import {
   ALL_FILTERS, EMPTY_DRAFT, TIMELINE_DISABLED, TIMELINE_KINDS, detailTarget, endsOpening, entryWhen, entryWhere,
   filterProblem, filtersFrom, mergePages, openLabel, statusLabel, subjectKey, timelineError, timelineKindLabel, toggleKind
 } from "./timeline";
+import { OPENING_ENDED } from "./clinicalRecord";
 import { APPOINTMENT, CONSULTATION, DOCUMENT, SCREENING, TRIAGE, entry, page } from "../test/timelineFixtures";
 
 const refusal = (status: number, error: string, extra: object = {}) => new ApiError(status, { error, ...extra }, String(status));
@@ -117,11 +118,13 @@ describe("recusas", () => {
     expect(timelineError(refusal(403, "feature_disabled", { feature: "patient_timeline" }))).toBe(TIMELINE_DISABLED);
     expect(timelineError(refusal(403, "out_of_context")))
       .toBe("esta pessoa não está em atendimento com você — para ler, use a abertura justificada em Prontuário");
-    expect(timelineError(refusal(403, "opening_required"))).toBe("a abertura justificada terminou — abra de novo com o motivo");
+    expect(timelineError(refusal(403, "opening_required"))).toBe(OPENING_ENDED);
     expect(timelineError(refusal(403, "missing_role"))).toBe("seu papel não permite ler a linha do tempo");
     expect(timelineError(refusal(422, "invalid_cursor"))).toBe("a lista mudou desde a última página — use Atualizar");
     expect(timelineError(refusal(422, "invalid_period"))).toBe("período inválido — confira as datas");
     expect(timelineError(refusal(404, "not_found"))).toBe("pessoa não encontrada — atualize a fila");
+    // Pela abertura não há fila: a frase é neutra.
+    expect(timelineError(refusal(404, "not_found"), { opening: true })).toBe("não há dados desta pessoa para mostrar");
     expect(timelineError(refusal(422, "invalid_kinds"))).toBe("tipo de registro inválido — use Limpar filtros");
     expect(timelineError(refusal(409, "citizen_not_verified")))
       .toBe("esta pessoa ainda não validou o cadastro na unidade — a linha do tempo só existe para cadastro validado");

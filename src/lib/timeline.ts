@@ -6,6 +6,7 @@
 import {
   ApiError, errorCode, type TimelineEntry, type TimelineFilters, type TimelineKind, type TimelinePage, type TimelineSubject
 } from "./api";
+import { OPENING_ENDED } from "./clinicalRecord";
 import { featureDisabledKey } from "./features";
 import { fmtDateTime } from "./format";
 
@@ -142,7 +143,7 @@ export function endsOpening(err: unknown, endOnOutOfContext: boolean): boolean {
 
 const ERRORS: Record<string, string> = {
   out_of_context: "esta pessoa não está em atendimento com você — para ler, use a abertura justificada em Prontuário",
-  opening_required: "a abertura justificada terminou — abra de novo com o motivo",
+  opening_required: OPENING_ENDED,
   missing_role: "seu papel não permite ler a linha do tempo",
   invalid_cursor: "a lista mudou desde a última página — use Atualizar",
   invalid_period: "período inválido — confira as datas",
@@ -151,9 +152,13 @@ const ERRORS: Record<string, string> = {
   citizen_not_verified: "esta pessoa ainda não validou o cadastro na unidade — a linha do tempo só existe para cadastro validado"
 };
 
-export function timelineError(err: unknown): string {
+// Pela abertura justificada não há fila: not_found ganha uma frase neutra.
+const NOT_FOUND_BY_OPENING = "não há dados desta pessoa para mostrar";
+
+export function timelineError(err: unknown, opts: { opening?: boolean } = {}): string {
   if (featureDisabledKey(err) !== null) return TIMELINE_DISABLED;
   const code = errorCode(err);
+  if (code === "not_found" && opts.opening) return NOT_FOUND_BY_OPENING;
   if (code && ERRORS[code]) return ERRORS[code];
   if (err instanceof ApiError) return `não foi possível ler a linha do tempo (${err.status}) — tente de novo`;
   return "sem conexão com o servidor — tente de novo";

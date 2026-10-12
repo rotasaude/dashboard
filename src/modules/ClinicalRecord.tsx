@@ -38,7 +38,7 @@ export function ClinicalRecord({ onGoToSecurity }: { onGoToSecurity?(): void }) 
         ? (recordOn && opening.patient_id !== null
           ? <JustifiedRecord key={opening.opening_id} opening={opening} onEnd={() => setOpening(null)} />
           : <JustifiedTimeline key={opening.opening_id} opening={opening} onEnd={() => setOpening(null)} />)
-        : <OpeningForm onOpened={setOpening} onGoToSecurity={onGoToSecurity} timelineOnly={!recordOn} />)}
+        : <OpeningForm onOpened={setOpening} onGoToSecurity={onGoToSecurity} timelineOnly={!recordOn} timelineOn={timelineOn} />)}
       {isAdmin && recordOn && <OpeningsReport />}
     </Frame>
   );

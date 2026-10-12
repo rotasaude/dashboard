@@ -14,6 +14,7 @@ import {
   toggleKind, type DetailTarget, type FilterDraft
 } from "../../lib/timeline";
 import { useAuth } from "../../lib/auth";
+import { OPENING_ENDED } from "../../lib/clinicalRecord";
 import { VERIFIER_ROLE } from "../../lib/team";
 import { DataTable } from "../../components/DataTable";
 import { Tag } from "../../components/Tag";
@@ -128,7 +129,7 @@ export function PatientTimeline({
 
       {closed && <p role="alert" style={alert}>{OPENING_ENDED}</p>}
       {!closed && query.isPending && <p className="mono" style={loading}>carregando a linha do tempo…</p>}
-      {!closed && query.isError && !ended && <p role="alert" style={alert}>{timelineError(query.error)}</p>}
+      {!closed && query.isError && !ended && <p role="alert" style={alert}>{timelineError(query.error, { opening: !inContext })}</p>}
       {!hidden && query.data && (
         <DataTable<TimelineEntry>
           cols={[
@@ -178,7 +179,6 @@ export function PatientTimeline({
   );
 }
 
-const OPENING_ENDED = "a abertura justificada terminou — abra de novo com o motivo";
 const panel: CSSProperties = { display: "flex", flexDirection: "column", gap: 10 };
 const fieldset: CSSProperties = { display: "flex", flexDirection: "column", gap: 8, margin: 0, padding: 10, border: "1px solid var(--rule)", borderRadius: 8 };
 const check: CSSProperties = { display: "flex", gap: 4, alignItems: "center", fontSize: 12.5 };

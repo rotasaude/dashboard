@@ -15,8 +15,9 @@ import { buttonStyle, inputStyle } from "../../components/formStyles";
 const OWN_REFUSALS = new Set([ "patient_not_found", "invalid_reason", "feature_disabled", "missing_role" ]);
 
 // Módulo 20: `timelineOnly` (modo integrated, só patient_timeline) — a abertura lê a linha do tempo.
-export function OpeningForm({ onOpened, onGoToSecurity, timelineOnly = false }: {
-  onOpened(o: Opening): void; onGoToSecurity?(): void; timelineOnly?: boolean;
+// `timelineOn` (patient_timeline ligado, em qualquer modo): patient_not_found = "sem cadastro validado".
+export function OpeningForm({ onOpened, onGoToSecurity, timelineOnly = false, timelineOn = timelineOnly }: {
+  onOpened(o: Opening): void; onGoToSecurity?(): void; timelineOnly?: boolean; timelineOn?: boolean;
 }) {
   const what = timelineOnly ? "a linha do tempo" : "o prontuário";
   const [ draft, setDraft ] = useState<OpeningDraft>(EMPTY_OPENING);
@@ -71,7 +72,7 @@ export function OpeningForm({ onOpened, onGoToSecurity, timelineOnly = false }: 
             onDone={() => { if (opened.current) onOpened(opened.current); }}
             onCancel={() => setConfirming(false)}
             onGoToSecurity={onGoToSecurity}
-            translateError={(err) => (OWN_REFUSALS.has(errorCode(err) ?? "") ? clinicalRecordError(err, { timelineOnly }) : null)}
+            translateError={(err) => (OWN_REFUSALS.has(errorCode(err) ?? "") ? clinicalRecordError(err, { timelineOn }) : null)}
           />
         )}
       </div>

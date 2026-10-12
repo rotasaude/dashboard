@@ -21,6 +21,7 @@ import * as api from "../../lib/api";
 import { ApiError } from "../../lib/api";
 import { PatientTimeline } from "./PatientTimeline";
 import { PARTIAL_NOTICE, TIMELINE_DISABLED, TIMELINE_EMPTY, TIMELINE_KEY } from "../../lib/timeline";
+import { OPENING_ENDED } from "../../lib/clinicalRecord";
 import { renderWithProviders, sessionWith } from "../../test/campaignFixtures";
 import { APPOINTMENT, CONSULTATION, DOCUMENT, SCREENING, entry, page } from "../../test/timelineFixtures";
 
@@ -193,7 +194,7 @@ describe("PatientTimeline", () => {
     expect(screen.queryByText("Linha do tempo de Joana Lima")).toBeNull();
     expect(screen.queryByRole("button", { name: "Carregar mais" })).toBeNull();
     expect(screen.queryByRole("table")).toBeNull();
-    expect(screen.getByRole("alert").textContent).toBe("a abertura justificada terminou — abra de novo com o motivo");
+    expect(screen.getByRole("alert").textContent).toBe(OPENING_ENDED);
     expect(client.getQueryCache().findAll({ queryKey: [ TIMELINE_KEY ] }).filter((q) => q.state.data !== undefined)).toHaveLength(0);
     expect(api.getTimeline).toHaveBeenCalledTimes(2);
   });
@@ -288,6 +289,12 @@ describe("PatientTimeline", () => {
     fireEvent.click(screen.getByRole("button", { name: "Atualizar" }));
     expect(await screen.findByText("Escuta inicial")).not.toBeNull();
     expect(m(api.getTimeline).mock.calls[2]).toEqual([ { attendanceId: "a1" }, ALL, null ]);
+  });
+
+  it("404 not_found pela abertura: frase neutra, sem falar de fila", async () => {
+    m(api.getTimeline).mockRejectedValue(new ApiError(404, { error: "not_found" }, "404"));
+    renderWithProviders(<PatientTimeline subject={{ openingId: "op1" }} endOnOutOfContext />);
+    expect((await screen.findByRole("alert")).textContent).toBe("não há dados desta pessoa para mostrar");
   });
 
   it("interruptor desligado no api: a frase", async () => {
