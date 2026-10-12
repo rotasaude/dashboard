@@ -21,6 +21,7 @@ export function KpiGrid({ children, min = 200, columns, asOf }: Props) {
         </div>
       )}
       <div
+        className={columns ? "kpi-grid" : undefined}
         style={{
           display: "grid",
           gridTemplateColumns: columns ? `repeat(${columns}, 1fr)` : `repeat(auto-fit, minmax(${min}px, 1fr))`,

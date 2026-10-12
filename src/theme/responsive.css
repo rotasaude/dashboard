@@ -1,0 +1,11 @@
+/* Layouts largos abaixo de 1024px (spec do subprojeto 3, §4). As grades são
+   inline nas telas; por isso grid-template-columns leva !important aqui. */
+@media (max-width: 1023px) {
+  .kpi-grid { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)) !important; }
+  .ov-split { grid-template-columns: minmax(0, 1fr) !important; }
+  .ov-kv3 { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  .ov-event { grid-template-columns: 60px minmax(0, 1fr) !important; }
+  .ov-event > :nth-child(3) { grid-column: 1 / -1; }
+  .pe-split { grid-template-columns: minmax(0, 1fr) !important; }
+  .form-2col { grid-template-columns: minmax(0, 1fr) !important; }
+}

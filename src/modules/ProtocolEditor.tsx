@@ -92,7 +92,7 @@ export function ProtocolEditor() {
   const protocolNames = [ ...new Set(opts.map((o) => o.name)) ].sort();
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+    <div className="pe-split" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
       <section>
         <h2 style={{ fontSize: 16, margin: "0 0 8px" }}>Definição (JSON)</h2>
         <select

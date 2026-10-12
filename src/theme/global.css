@@ -1,4 +1,5 @@
 @import "./vendor/tokens.css";
+@import "./responsive.css";
 
 /* Globals do painel. Papéis e temas vêm de vendor/tokens.css
    (contracts/design-tokens); o tema ativo é o data-theme do <html>. */
