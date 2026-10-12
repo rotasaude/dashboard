@@ -21,7 +21,7 @@ export function KeyValue({ k, v, vc, mono = true }: Props) {
           color: "var(--ink3)",
           textTransform: "uppercase",
           letterSpacing: 0.4,
-          overflowWrap: "anywhere"
+          overflowWrap: "break-word"
         }}
       >
         {k}
@@ -32,7 +32,7 @@ export function KeyValue({ k, v, vc, mono = true }: Props) {
           fontSize: 14,
           fontWeight: 600,
           color: vc || "var(--ink)",
-          overflowWrap: "anywhere"
+          overflowWrap: "break-word"
         }}
       >
         {v}

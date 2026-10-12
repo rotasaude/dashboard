@@ -30,13 +30,16 @@ export function DataTable<T>({ cols, rows, rowKey, onRowClick, empty, rowStyle: 
     return <div className="mono" style={{ fontSize: 10.5, color: "var(--ink3)" }}>{empty ?? "sem dados"}</div>;
   }
   return (
-    <div role="table" className="dt" style={{ width: "100%" }}>
+    // As colunas são da tabela; cabeçalho e linhas usam subgrid, para alinhar
+    // e respeitar o tamanho mínimo do conteúdo (spec 6a §3.7).
+    <div role="table" className="dt" style={{ width: "100%", display: "grid", gridTemplateColumns: gridCols, columnGap: 12 }}>
       <div
         role="row"
         className="mono dt-row dt-head"
         style={{
           display: "grid",
-          gridTemplateColumns: gridCols,
+          gridColumn: "1 / -1",
+          gridTemplateColumns: "subgrid",
           gap: 12,
           padding: "8px 10px",
           background: "var(--sunken)",
@@ -57,7 +60,8 @@ export function DataTable<T>({ cols, rows, rowKey, onRowClick, empty, rowStyle: 
       {rows.map((r, i) => {
         const rowStyle = {
           display: "grid",
-          gridTemplateColumns: gridCols,
+          gridColumn: "1 / -1",
+          gridTemplateColumns: "subgrid",
           gap: 12,
           width: "100%",
           padding: "10px 10px",

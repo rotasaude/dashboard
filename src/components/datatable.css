@@ -1,14 +1,17 @@
 /* DataTable (spec do subprojeto 3, §3). Base: o que antes era estilo inline
    da célula, agora em classe para o modo cartão poder trocar sem !important. */
 /* Texto quebra linha em vez de ser cortado com reticências (spec 6a §3.7). */
-.dt-cell { min-width: 0; white-space: normal; overflow-wrap: anywhere; }
+.dt-cell { white-space: normal; overflow-wrap: break-word; }
+.dt-cell button { overflow-wrap: normal; }
+/* Rede de segurança: tabela que não cabe nem quebrando linha rola para o lado. */
+.dt { overflow-x: auto; }
 .dt-cell[data-align="right"] { text-align: right; }
 .dt-cell[data-align="center"] { text-align: center; }
 
 /* Abaixo de 1024px cada linha vira um cartão: título, pares rótulo/valor e
    ações. Mesmo DOM (roles, filhas diretas, textContent); o rótulo é CSS. */
 @media (max-width: 1023px) {
-  .dt { display: grid; gap: 12px; }
+  .dt { display: grid; gap: 12px; grid-template-columns: 1fr !important; overflow-x: visible; }
 
   /* Cabeçalho fora da tela, mas lido pelo leitor de tela. */
   .dt > .dt-head {

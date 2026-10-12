@@ -71,3 +71,15 @@ describe("DataTable", () => {
     expect(screen.getByText("nada por aqui")).not.toBeNull();
   });
 });
+
+describe("colunas compartilhadas (spec 6a §3.7)", () => {
+  it("a tabela define as colunas e cabeçalho e linhas usam subgrid, para alinhar sem cortar", () => {
+    render(<DataTable<Row> cols={[ { label: "Nome", w: "2fr", render: (r) => r.label }, ...plainCols ]} rows={rows} rowKey={(r) => r.id} />);
+    const table = screen.getByRole("table");
+    expect(table.style.gridTemplateColumns).toBe("2fr 1fr");
+    for (const row of screen.getAllByRole("row")) {
+      expect(row.style.gridTemplateColumns).toBe("subgrid");
+      expect(row.style.gridColumn).toBe("1 / -1");
+    }
+  });
+});
