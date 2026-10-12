@@ -56,8 +56,6 @@
 .shell-card-icon { width: 44px; height: 44px; border-radius: 8px; display: inline-flex; align-items: center;
   justify-content: center; background: var(--accent-bg); color: var(--accent); flex-shrink: 0; }
 .shell-card-title { font-size: 16px; font-weight: 700; }
-.shell-card-count { display: inline-block; margin-left: 6px; padding: 0 7px; border-radius: 999px;
-  background: var(--down); color: var(--on-tone); font-size: 12px; }
 .shell-card-desc { font-size: 13px; color: var(--ink2); line-height: 1.45; }
 
 .shell-crumbs { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; font-size: 13px; color: var(--ink2); margin-bottom: 10px; }

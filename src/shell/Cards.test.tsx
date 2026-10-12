@@ -10,7 +10,7 @@ const groups: ShellGroup[] = [
   { label: "Visão geral", slug: "visao-geral", items: [ { id: "overview", label: "Visão geral" } ] },
   { label: "Atendimento", slug: "atendimento", items: [
     { id: "attendance", label: "Atendimento" },
-    { id: "signature-pending", label: "Pendentes de assinatura", count: 3 }
+    { id: "signature-pending", label: "Pendentes de assinatura (3)", count: 3 }
   ] }
 ];
 const meta = { icon: IconUsers, description: "descrição" };
@@ -39,11 +39,11 @@ describe("HomeCards", () => {
 });
 
 describe("GroupCards", () => {
-  it("um sub-card por tela, com selo de contagem", () => {
+  it("um sub-card por tela; a contagem vem só no rótulo, sem número duplicado", () => {
     render(<GroupCards group={groups[1]} catalog={catalog} go={vi.fn()} />);
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Atendimento");
-    const pending = screen.getByRole("link", { name: /Pendentes de assinatura/ });
+    const pending = screen.getByRole("link", { name: /Pendentes de assinatura \(3\)/ });
     expect(pending.getAttribute("href")).toBe("#/signature-pending");
-    expect(pending.textContent).toContain("3");
+    expect(pending.textContent?.match(/3/g)).toHaveLength(1);
   });
 });

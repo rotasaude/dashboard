@@ -33,12 +33,17 @@ describe("atalhos entre telas", () => {
 });
 
 describe("grupos do shell", () => {
-  it("slugs e itens vêm de NAV_GROUPS, com contagem só em Pendentes", () => {
+  it("slugs vêm de NAV_GROUPS e Pendentes leva a contagem no rótulo (withPendingCount)", () => {
     const gs = shellGroups(NAV_GROUPS, 3);
     expect(gs.map((g) => g.slug)).toContain("visao-geral");
     expect(gs.map((g) => g.slug)).toContain("e-sus");
     const pending = gs.flatMap((g) => g.items).find((i) => i.id === "signature-pending");
-    expect(pending).toEqual({ id: "signature-pending", label: "Pendentes de assinatura", count: 3 });
+    expect(pending).toEqual({ id: "signature-pending", label: "Pendentes de assinatura (3)", count: 3 });
+  });
+
+  it("200 ou mais pendentes aparece como 200+", () => {
+    const pending = shellGroups(NAV_GROUPS, 200).flatMap((g) => g.items).find((i) => i.id === "signature-pending");
+    expect(pending?.label).toBe("Pendentes de assinatura (200+)");
   });
 
   it("profissional de saúde não vê Equipe nem Cidade", () => {

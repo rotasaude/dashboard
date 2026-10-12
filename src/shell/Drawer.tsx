@@ -12,13 +12,19 @@ export function Drawer({ open, onClose, groups, route, go, returnFocusTo }: {
   returnFocusTo?: HTMLElement | null;
 }) {
   const ref = useRef<HTMLDivElement | null>(null);
+  // Por ref: um onClose novo a cada render do pai não pode reabrir o efeito
+  // (devolveria o foco ao botão Menu e depois ao primeiro link).
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  const returnRef = useRef(returnFocusTo);
+  returnRef.current = returnFocusTo;
 
   useEffect(() => {
     if (!open) return;
     const panel = ref.current;
     panel?.querySelector<HTMLElement>("a,button")?.focus();
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") { onClose(); return; }
+      if (e.key === "Escape") { onCloseRef.current(); return; }
       if (e.key !== "Tab" || !panel) return;
       const items = Array.from(panel.querySelectorAll<HTMLElement>("a,button"));
       if (items.length === 0) return;
@@ -28,8 +34,8 @@ export function Drawer({ open, onClose, groups, route, go, returnFocusTo }: {
       else if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
     }
     document.addEventListener("keydown", onKey);
-    return () => { document.removeEventListener("keydown", onKey); returnFocusTo?.focus(); };
-  }, [ open, onClose, returnFocusTo ]);
+    return () => { document.removeEventListener("keydown", onKey); returnRef.current?.focus(); };
+  }, [ open ]);
 
   if (!open) return null;
   const currentId = route.kind === "screen" ? route.id : null;

@@ -10,16 +10,13 @@ function greeting(now: Date): string {
   return h < 12 ? "Bom dia" : h < 18 ? "Boa tarde" : "Boa noite";
 }
 
-function Card({ route, go, icon: IconC, title, description, count }: {
-  route: Route; go: (r: Route) => void; icon?: Icon; title: string; description?: string; count?: number;
+function Card({ route, go, icon: IconC, title, description }: {
+  route: Route; go: (r: Route) => void; icon?: Icon; title: string; description?: string;
 }) {
   return (
     <RouteLink route={route} go={go} className="shell-card">
       <span className="shell-card-icon" aria-hidden="true">{IconC && <IconC size={24} stroke={1.75} />}</span>
-      <span className="shell-card-title">
-        {title}
-        {count ? <span className="shell-card-count"> {count > 200 ? "200+" : count}</span> : null}
-      </span>
+      <span className="shell-card-title">{title}</span>
       {description && <span className="shell-card-desc">{description}</span>}
     </RouteLink>
   );
@@ -57,7 +54,7 @@ export function GroupCards({ group, catalog, go }: { group: ShellGroup; catalog:
       <div className="shell-cards">
         {group.items.map((i) => (
           <Card key={i.id} route={{ kind: "screen", id: i.id }} go={go} icon={catalog.screens[i.id]?.icon}
-            title={i.label} description={catalog.screens[i.id]?.description} count={i.count} />
+            title={i.label} description={catalog.screens[i.id]?.description} />
         ))}
       </div>
     </section>

@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { ScopeContext, PERIOD_OPTIONS, useScope, type PeriodKey } from "./lib/scope";
 import { useAuth } from "./lib/auth";
-import { NAV_GROUPS, labelFor, navGroupsFor, type ModuleId, type NavGroupDef } from "./shell/modules";
+import { NAV_GROUPS, labelFor, navGroupsFor, withPendingCount, type ModuleId, type NavGroupDef } from "./shell/modules";
 import { useAlerts } from "./hooks/useAlerts";
 import { usePendingSignatures } from "./hooks/usePendingSignatures";
 import { canSign } from "./lib/signature";
@@ -57,10 +57,11 @@ import { ClinicalDocumentsAdmin } from "./modules/ClinicalDocumentsAdmin";
 const ALL_IDS: ReadonlySet<string> = new Set(NAV_GROUPS.flatMap((g) => g.items.map((i) => i.id)));
 const ALL_SLUGS: ReadonlySet<string> = new Set(NAV_GROUPS.map((g) => slugOf(g.label)));
 
-// Grupos do shell a partir do filtro por papel de hoje. A contagem de
-// pendentes de assinatura vira selo (o rótulo fica sem o "(n)").
+// Grupos do shell a partir do filtro por papel de hoje. O rótulo de
+// Pendentes leva a contagem de withPendingCount ("(3)", "(200+)"), como no
+// menu antigo; `count` só acende o ponto do trilho.
 export function shellGroups(groups: NavGroupDef[], pending: number): ShellGroup[] {
-  return groups.map((g) => ({
+  return withPendingCount(groups, pending).map((g) => ({
     label: g.label,
     slug: slugOf(g.label),
     items: g.items.map((i) => (i.id === "signature-pending" && pending > 0

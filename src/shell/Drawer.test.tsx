@@ -45,6 +45,16 @@ describe("Drawer", () => {
     expect(onClose).toHaveBeenCalled();
   });
 
+  it("re-render com outro onClose não tira o foco de onde está", () => {
+    const opener = document.createElement("button");
+    document.body.appendChild(opener);
+    const { rerender } = render(<Drawer open onClose={vi.fn()} groups={groups} route={{ kind: "home" }} go={vi.fn()} returnFocusTo={opener} />);
+    const link = screen.getByRole("link", { name: "Minha agenda" });
+    link.focus();
+    rerender(<Drawer open onClose={vi.fn()} groups={groups} route={{ kind: "home" }} go={vi.fn()} returnFocusTo={opener} />);
+    expect(document.activeElement).toBe(link);
+  });
+
   it("Tab no último volta ao primeiro (foco preso)", () => {
     setup();
     const focusables = screen.getByRole("dialog").querySelectorAll<HTMLElement>("a,button");
