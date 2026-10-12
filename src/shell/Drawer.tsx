@@ -1,9 +1,9 @@
 // Gaveta (<1024px): diálogo modal com todos os grupos e telas. Esc, clique
 // no fundo ou escolher uma tela fecham; foco preso dentro e devolvido ao
 // botão Menu ao fechar.
-import { useEffect, useRef } from "react";
 import { IconX } from "@tabler/icons-react";
 import { RouteLink } from "./RouteLink";
+import { useDialog } from "../lib/useDialog";
 import type { Route } from "./router";
 import type { ShellGroup } from "./types";
 
@@ -11,31 +11,7 @@ export function Drawer({ open, onClose, groups, route, go, returnFocusTo }: {
   open: boolean; onClose: () => void; groups: ShellGroup[]; route: Route; go: (r: Route) => void;
   returnFocusTo?: HTMLElement | null;
 }) {
-  const ref = useRef<HTMLDivElement | null>(null);
-  // Por ref: um onClose novo a cada render do pai não pode reabrir o efeito
-  // (devolveria o foco ao botão Menu e depois ao primeiro link).
-  const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
-  const returnRef = useRef(returnFocusTo);
-  returnRef.current = returnFocusTo;
-
-  useEffect(() => {
-    if (!open) return;
-    const panel = ref.current;
-    panel?.querySelector<HTMLElement>("a,button")?.focus();
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") { onCloseRef.current(); return; }
-      if (e.key !== "Tab" || !panel) return;
-      const items = Array.from(panel.querySelectorAll<HTMLElement>("a,button"));
-      if (items.length === 0) return;
-      const first = items[0];
-      const last = items[items.length - 1];
-      if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
-      else if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
-    }
-    document.addEventListener("keydown", onKey);
-    return () => { document.removeEventListener("keydown", onKey); returnRef.current?.focus(); };
-  }, [ open ]);
+  const ref = useDialog<HTMLDivElement>(open, onClose, returnFocusTo);
 
   if (!open) return null;
   const currentId = route.kind === "screen" ? route.id : null;
