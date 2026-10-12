@@ -29,3 +29,13 @@ describe("StatusDot", () => {
     expect(dot("down").getAttribute("aria-hidden")).toBe("true");
   });
 });
+
+describe("halo do triângulo (A-04)", () => {
+  it("triângulo pulsante tem o halo fora do recorte", () => {
+    const { container } = render(<StatusDot level="warn" pulse />);
+    const outer = container.firstElementChild as HTMLElement;
+    expect(outer.style.animation).toContain("pulse-dot");
+    expect(outer.style.clipPath).toBe("");
+    expect((outer.firstElementChild as HTMLElement).style.clipPath).toContain("polygon");
+  });
+});

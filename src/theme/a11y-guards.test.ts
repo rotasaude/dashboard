@@ -24,7 +24,7 @@ describe("foco visível", () => {
 });
 
 describe("texto legível fora do --ink4", () => {
-  it.each(["shell/TopBar.tsx", "shell/ContextStrip.tsx", "shell/LiveClock.tsx", "modules/Overview.tsx"])("%s", (file) => {
+  it.each(["shell/TopBar.tsx", "shell/ContextStrip.tsx", "shell/LiveClock.tsx", "modules/Overview.tsx", "shell/ContaMenu.tsx", "shell/TenantChip.tsx"])("%s", (file) => {
     expect(readFileSync(join(src, file), "utf8")).not.toMatch(/color: "var\(--ink4\)"/);
   });
 });
