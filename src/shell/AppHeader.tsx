@@ -382,7 +382,7 @@ function LiveClock() {
         }}
       />
       <span className="mono" style={{ fontSize: 11, color: "var(--ink3)", whiteSpace: "nowrap" }}>
-        {time} <span style={{ color: "var(--ink4)" }}>{cityOffsetLabel()}</span>
+        {time} <span style={{ color: "var(--ink3)" }}>{cityOffsetLabel()}</span>
       </span>
     </span>
   );

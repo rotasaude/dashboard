@@ -10,7 +10,8 @@ import { dirname, join, relative } from "node:path";
 const dir = join(dirname(fileURLToPath(import.meta.url)), "vendor");
 
 function listFiles(base: string): string[] {
-  return readdirSync(base).flatMap((name) => {
+  // .DS_Store: o Finder cria ao abrir a pasta; não é parte da cópia.
+  return readdirSync(base).filter((name) => name !== ".DS_Store").flatMap((name) => {
     const full = join(base, name);
     return statSync(full).isDirectory() ? listFiles(full) : [relative(dir, full)];
   });

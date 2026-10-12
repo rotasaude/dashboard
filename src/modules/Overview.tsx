@@ -351,7 +351,7 @@ function EventsSummaryPanel({ onNavigate }: { onNavigate?: (id: ModuleId) => voi
                 borderBottom: i === arr.length - 1 ? "none" : "1px solid var(--rule)"
               }}
             >
-              <span className="mono" style={{ fontSize: 11, color: "var(--ink4)" }}>
+              <span className="mono" style={{ fontSize: 11, color: "var(--ink3)" }}>
                 {fmtTime(e.at)}
               </span>
               <span
