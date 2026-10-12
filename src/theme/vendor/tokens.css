@@ -24,6 +24,30 @@
   font-display: swap;
 }
 
+@font-face {
+  font-family: "Figtree";
+  src: url("./fonts/figtree-400.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Figtree";
+  src: url("./fonts/figtree-600.woff2") format("woff2");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Figtree";
+  src: url("./fonts/figtree-700.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
   --radius-chip: 6px;
   --radius-panel: 10px;
@@ -58,6 +82,7 @@
   --accent: #1351b4;
   --accent-bg: #dbe8fb;
   --on-accent: #ffffff;
+  --on-tone: #ffffff;
   --ok: #0f6b1d;
   --ok-bg: #e3f5e1;
   --warn: #7a4b00;
@@ -85,6 +110,7 @@
   --accent: #ffff00;
   --accent-bg: #000000;
   --on-accent: #000000;
+  --on-tone: #000000;
   --ok: #66ff99;
   --ok-bg: #000000;
   --warn: #ffd400;
@@ -112,6 +138,7 @@
   --accent: #8ab4ff;
   --accent-bg: #0c326f;
   --on-accent: #000000;
+  --on-tone: #000000;
   --ok: #6fdc8c;
   --ok-bg: #0f2e18;
   --warn: #ffcd07;
@@ -139,6 +166,7 @@
   --accent: #0d6363;
   --accent-bg: #d7ecea;
   --on-accent: #ffffff;
+  --on-tone: #ffffff;
   --ok: #1f6b35;
   --ok-bg: #e1f2e5;
   --warn: #7a4b00;

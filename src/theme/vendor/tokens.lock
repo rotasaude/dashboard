@@ -1,11 +1,15 @@
 {
-  "ref": "tokens-v1.0.0",
+  "ref": "tokens-v1.1.0",
   "files": {
     "fonts/OFL.txt": "737e786d03b00137e6d5555832db6e886a03a45a3bf8a59041c9add6eb15e725",
+    "fonts/figtree-400.woff2": "8f98dd642986f1fa39c45b89665a57372897c235b36028e0e4a136e43dc5f8ab",
+    "fonts/figtree-600.woff2": "367d713287918784702563518f59239989da815c80d3c7337686b9816635a08b",
+    "fonts/figtree-700.woff2": "7ec4f08d09f91d349917dd6592f6aaae66d8fe1bbd58fa24707961e79236616e",
+    "fonts/figtree-OFL.txt": "ee23e6c84000126692e112ff067b456470493349f993ceaa8b4d3766dd6fad5d",
     "fonts/rawline-400.woff2": "8e9d1aba37a102665016fffea61a124e6c385d6783d6cef869f9910c6115a401",
     "fonts/rawline-600.woff2": "306d87c0767afb29674ac486d69662c98ca2022ffb265427f0347a63b0de5038",
     "fonts/rawline-700.woff2": "ff634420069ce898e30ab4d72b61c67ece52f12718dc06818367726292d8da7f",
-    "tokens.css": "01ea63d97970ff6bf47ef5fa01dda3ebe9837a56e7960cc450a254057a7cb7a5",
-    "tokens.ts": "1b787511a16a4be9051ae4fccc3fac4fb305767729d490cb1c6ae7af9647c534"
+    "tokens.css": "631aaf4ff970487f7e0edf076f9aa5519c019c2b1e547203e814d106ab7a72b7",
+    "tokens.ts": "e480be34e6f1964b9827142b0da08ce8b17fb01662e4c1e2b48f8b125627e16f"
   }
 }
