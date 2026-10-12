@@ -12,6 +12,11 @@ export function Breadcrumb({ groups, route, go, titleFor }: {
 }) {
   const [ open, setOpen ] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (open) menuRef.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus();
+  }, [ open ]);
   useEffect(() => {
     if (!open) return;
     const onDoc = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false); };
@@ -35,16 +40,25 @@ export function Breadcrumb({ groups, route, go, titleFor }: {
           <RouteLink route={{ kind: "group", slug: group.slug }} go={go}>{group.label}</RouteLink>
           <span aria-hidden="true">›</span>
           <div ref={ref} className="shell-crumb-switch">
-            <button type="button" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+            <button ref={buttonRef} type="button" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
               {title} <IconChevronDown size={14} aria-hidden="true" />
             </button>
             {open && (
-              <div role="menu" className="shell-menu">
+              <div ref={menuRef} role="menu" className="shell-menu" onKeyDown={(e) => {
+                const items = Array.from(menuRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? []);
+                const at = items.indexOf(document.activeElement as HTMLElement);
+                const move = (n: number) => { e.preventDefault(); items[(n + items.length) % items.length]?.focus(); };
+                if (e.key === "ArrowDown") move(at + 1);
+                else if (e.key === "ArrowUp") move(at - 1);
+                else if (e.key === "Home") move(0);
+                else if (e.key === "End") move(items.length - 1);
+                else if (e.key === "Escape") { e.stopPropagation(); setOpen(false); buttonRef.current?.focus(); }
+              }}>
                 {group.items.map((i) => (
-                  <button key={i.id} type="button" role="menuitem" aria-current={i.id === route.id ? "page" : undefined}
-                    onClick={() => { setOpen(false); go({ kind: "screen", id: i.id }); }}>
+                  <RouteLink key={i.id} role="menuitem" route={{ kind: "screen", id: i.id }} go={go}
+                    afterGo={() => setOpen(false)} aria-current={i.id === route.id ? "page" : undefined}>
                     {i.label}
-                  </button>
+                  </RouteLink>
                 ))}
               </div>
             )}
