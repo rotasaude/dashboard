@@ -1,0 +1,65 @@
+/* DataTable (spec do subprojeto 3, §3). Base: o que antes era estilo inline
+   da célula, agora em classe para o modo cartão poder trocar sem !important. */
+.dt-cell { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dt-cell[data-align="right"] { text-align: right; }
+.dt-cell[data-align="center"] { text-align: center; }
+
+/* Abaixo de 1024px cada linha vira um cartão: título, pares rótulo/valor e
+   ações. Mesmo DOM (roles, filhas diretas, textContent); o rótulo é CSS. */
+@media (max-width: 1023px) {
+  .dt { display: grid; gap: 12px; }
+
+  /* Cabeçalho fora da tela, mas lido pelo leitor de tela. */
+  .dt > .dt-head {
+    position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden;
+    clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; border: 0;
+  }
+
+  .dt > .dt-row:not(.dt-head) {
+    display: flex !important;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 10px 16px;
+    padding: 12px 14px;
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-panel);
+    text-align: left;
+  }
+
+  /* Par rótulo/valor: duas por linha. */
+  .dt-row .dt-cell {
+    flex: 1 1 calc(50% - 8px);
+    white-space: normal; overflow: visible; text-overflow: clip; text-align: left;
+    overflow-wrap: anywhere;
+  }
+  .dt-row .dt-cell::before {
+    content: attr(data-label);
+    display: block; margin-bottom: 2px;
+    font-family: var(--font-mono); font-size: 11px; letter-spacing: .04em;
+    text-transform: uppercase; color: var(--ink2);
+  }
+  .dt-row .dt-cell[data-label=""]::before { content: none; }
+
+  /* Título: a primeira célula, ou a coluna marcada com card="title". */
+  .dt-row:not(:has(> [data-card="title"])) > .dt-cell:first-child:not([data-card]),
+  .dt-row > .dt-cell[data-card="title"] {
+    flex-basis: 100%; font-size: 15px; font-weight: 700;
+  }
+  .dt-row:not(:has(> [data-card="title"])) > .dt-cell:first-child:not([data-card])::before,
+  .dt-row > .dt-cell[data-card="title"]::before { content: none; }
+
+  /* Ações: célula com controle (que não seja o título), ou card="actions".
+     Ficam no fim, lado a lado, quebrando linha. */
+  .dt-row > .dt-cell:not(:first-child):not([data-card]):has(button, input, a),
+  .dt-row:has(> [data-card="title"]) > .dt-cell:first-child:not([data-card]):has(button, input, a),
+  .dt-row > .dt-cell[data-card="actions"] {
+    flex: 0 0 auto; order: 99; display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  }
+  .dt-row > .dt-cell:not(:first-child):not([data-card]):has(button, input, a)::before,
+  .dt-row:has(> [data-card="title"]) > .dt-cell:first-child:not([data-card]):has(button, input, a)::before,
+  .dt-row > .dt-cell[data-card="actions"]::before { content: none; }
+  .dt-row > .dt-cell[data-card="actions"] button,
+  .dt-row > .dt-cell:has(button) button { min-height: 44px; }
+
+  .dt-row > .dt-cell[data-card="hide"] { display: none; }
+}

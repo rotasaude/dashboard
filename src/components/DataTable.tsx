@@ -2,12 +2,15 @@
 // `cols[*].w` aceita qualquer grid-template-columns value (fr, px, minmax).
 
 import type { CSSProperties, ReactNode } from "react";
+import "./datatable.css";
 
 export interface Column<T> {
   label: string;
   w?: string;
   align?: "left" | "right" | "center";
   render: (row: T) => ReactNode;
+  // Modo cartão (<1024px): papel da coluna quando a regra automática não serve.
+  card?: "title" | "actions" | "hide";
 }
 
 interface Props<T> {
@@ -26,10 +29,10 @@ export function DataTable<T>({ cols, rows, rowKey, onRowClick, empty, rowStyle: 
     return <div className="mono" style={{ fontSize: 10.5, color: "var(--ink3)" }}>{empty ?? "sem dados"}</div>;
   }
   return (
-    <div role="table" style={{ width: "100%" }}>
+    <div role="table" className="dt" style={{ width: "100%" }}>
       <div
         role="row"
-        className="mono"
+        className="mono dt-row dt-head"
         style={{
           display: "grid",
           gridTemplateColumns: gridCols,
@@ -67,7 +70,8 @@ export function DataTable<T>({ cols, rows, rowKey, onRowClick, empty, rowStyle: 
           ...(extraStyle?.(r) ?? {})
         };
         const cells = cols.map((c, ci) => (
-          <span key={ci} role="cell" style={{ textAlign: c.align || "left", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          <span key={ci} role="cell" className="dt-cell" data-label={c.label}
+            data-align={c.align && c.align !== "left" ? c.align : undefined} data-card={c.card}>
             {c.render(r)}
           </span>
         ));
@@ -77,11 +81,11 @@ export function DataTable<T>({ cols, rows, rowKey, onRowClick, empty, rowStyle: 
         // dentro de <button> é inválido e navegadores reais não despacham o
         // clique para o filho quando o pai é um form control desabilitado).
         return onRowClick ? (
-          <button key={rowKey(r, i)} role="row" onClick={() => onRowClick(r)} style={rowStyle}>
+          <button key={rowKey(r, i)} role="row" className="dt-row" onClick={() => onRowClick(r)} style={rowStyle}>
             {cells}
           </button>
         ) : (
-          <div key={rowKey(r, i)} role="row" style={rowStyle}>
+          <div key={rowKey(r, i)} role="row" className="dt-row" style={rowStyle}>
             {cells}
           </div>
         );
