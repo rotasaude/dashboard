@@ -4,7 +4,7 @@ import { act, cleanup, fireEvent, screen, waitFor } from "@testing-library/react
 vi.mock("../lib/api", async (importOriginal) => {
   const real = await importOriginal<typeof import("../lib/api")>();
   return { ...real, fetchCurrentSession: vi.fn(), stepUpMfa: vi.fn(), openClinicalRecord: vi.fn(), getJustifiedRecord: vi.fn(),
-    getConsultationOptions: vi.fn(), listOpenings: vi.fn(), getTimeline: vi.fn() };
+    getConsultationOptions: vi.fn(), listOpenings: vi.fn(), getTimeline: vi.fn(), getConsultation: vi.fn() };
 });
 
 import * as api from "../lib/api";
@@ -12,6 +12,7 @@ import { ApiError } from "../lib/api";
 import { ClinicalRecord } from "./ClinicalRecord";
 import { OPENING_ENDED } from "../lib/clinicalRecord";
 import { TIMELINE_KEY } from "../lib/timeline";
+import { CONSULTATION_KEY, JUSTIFIED_KEY } from "../lib/consultation";
 import { renderWithProviders, sessionWith } from "../test/campaignFixtures";
 import { NOW19, opening, options, record } from "../test/consultationFixtures";
 import { APPOINTMENT, page } from "../test/timelineFixtures";
@@ -31,7 +32,7 @@ describe("Prontuário — linha do tempo pela abertura justificada (módulo 20)"
     vi.useFakeTimers({ toFake: [ "Date", "setInterval", "clearInterval" ] });
     vi.setSystemTime(new Date(NOW19));
     for (const fn of [ api.fetchCurrentSession, api.stepUpMfa, api.openClinicalRecord, api.getJustifiedRecord,
-      api.getConsultationOptions, api.listOpenings, api.getTimeline ]) m(fn).mockReset();
+      api.getConsultationOptions, api.listOpenings, api.getTimeline, api.getConsultation ]) m(fn).mockReset();
     m(api.getConsultationOptions).mockResolvedValue(options());
     m(api.listOpenings).mockResolvedValue([]);
     m(api.getJustifiedRecord).mockResolvedValue(record({ access: "justified" }));
@@ -70,10 +71,49 @@ describe("Prontuário — linha do tempo pela abertura justificada (módulo 20)"
     m(api.fetchCurrentSession).mockResolvedValue(sessionWith([ "health_professional" ], { id: "us1", features: [ "patient_timeline" ] }));
     m(api.openClinicalRecord).mockResolvedValue(opening({ patient_id: null, expires_at: expiresAt() }));
     m(api.getTimeline).mockRejectedValue(new ApiError(403, { error: "opening_required" }, "403"));
-    renderWithProviders(<ClinicalRecord />);
+    const { client } = renderWithProviders(<ClinicalRecord />);
     await openFor();
     fireEvent.click(screen.getByRole("button", { name: "Abrir linha do tempo" }));
     expect(await screen.findByText(OPENING_ENDED)).not.toBeNull();
+    expect(client.getQueryCache().findAll({ queryKey: [ TIMELINE_KEY ] })).toHaveLength(0);
+    expect(client.getQueryCache().findAll({ queryKey: [ CONSULTATION_KEY ] })).toHaveLength(0);
+  });
+
+  async function recordModeWithTab() {
+    m(api.fetchCurrentSession).mockResolvedValue(sessionWith([ "health_professional" ], {
+      id: "us1", features: [ "clinical_record", "patient_timeline" ]
+    }));
+    m(api.openClinicalRecord).mockResolvedValue(opening({ expires_at: expiresAt() }));
+    const rendered = renderWithProviders(<ClinicalRecord />);
+    await openFor();
+    fireEvent.click(screen.getByRole("button", { name: "Abrir prontuário" }));
+    fireEvent.click(await screen.findByRole("tab", { name: "Linha do tempo" }));
+    return rendered;
+  }
+
+  function expectWholeScreenClosed(client: ReturnType<typeof renderWithProviders>["client"]) {
+    expect(screen.queryByRole("region", { name: "Paciente" })).toBeNull();
+    expect(screen.queryByText("Joana Lima")).toBeNull();
+    expect(screen.getByRole("button", { name: "Nova abertura" })).not.toBeNull();
+    for (const key of [ TIMELINE_KEY, CONSULTATION_KEY, JUSTIFIED_KEY ]) {
+      expect(client.getQueryCache().findAll({ queryKey: [ key ] })).toHaveLength(0);
+    }
+  }
+
+  it("modo record: 403 opening_required vindo da aba fecha a tela inteira e limpa o cache", async () => {
+    m(api.getTimeline).mockRejectedValue(new ApiError(403, { error: "opening_required" }, "403"));
+    const { client } = await recordModeWithTab();
+    expect(await screen.findByText(OPENING_ENDED)).not.toBeNull();
+    expectWholeScreenClosed(client);
+  });
+
+  it("modo record: 403 na consulta aberta pela aba fecha a tela inteira e limpa o cache", async () => {
+    m(api.getConsultation).mockRejectedValue(new ApiError(403, { error: "opening_required" }, "403"));
+    const { client } = await recordModeWithTab();
+    fireEvent.click(await screen.findByRole("button", { name: "Abrir consulta de 10/09/2026, 14:30" }));
+    expect(await screen.findByText(OPENING_ENDED)).not.toBeNull();
+    expect(api.getConsultation).toHaveBeenCalledWith("cs0");
+    expectWholeScreenClosed(client);
   });
 
   it("CPF sem par validado (patient_not_found no modo integrado): a frase da linha do tempo, sem abrir", async () => {
