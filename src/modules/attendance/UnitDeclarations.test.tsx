@@ -58,4 +58,20 @@ describe("UnitDeclarations (api#59)", () => {
     fireEvent(details, new Event("toggle"));
     expect(await screen.findByText("nenhuma declaração emitida hoje nesta unidade")).not.toBeNull();
   });
+
+  it("profissional (sem recepção) só tem os botões nas declarações que emitiu", async () => {
+    mocked(api.fetchCurrentSession).mockResolvedValue(docUser([ "health_professional" ], { id: "us1" }));
+    mocked(api.listUnitDeclarations).mockResolvedValue([
+      declRow({ id: "doc3", author: { id: "us7", name: "Marta Recepção" } }),
+      declRow({ id: "doc4", author: { id: "us1", name: "Dra. Helena" } })
+    ]);
+    renderIt();
+    const details = screen.getByText("Declarações de hoje").closest("details") as HTMLDetailsElement;
+    details.open = true;
+    fireEvent(details, new Event("toggle"));
+    await waitFor(() => expect(screen.getAllByRole("listitem")).toHaveLength(2));
+    const [ colleague, mine ] = screen.getAllByRole("listitem");
+    expect(within(colleague).queryByRole("button")).toBeNull();
+    expect(within(mine).getByRole("button", { name: "Cancelar" })).not.toBeNull();
+  });
 });

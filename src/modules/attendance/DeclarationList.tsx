@@ -1,10 +1,12 @@
 // Lista de declarações de comparecimento já emitidas (api#59): as de um
-// atendimento (no painel da declaração) ou as do dia na unidade. Só metadados
-// — o api não grava trilha na lista. A recepção da unidade reimprime (o api
+// atendimento (no painel da declaração) ou as do dia na unidade. Só metadados;
+// o api grava a leitura da lista (trilha declaration_list). A recepção da unidade reimprime (o api
 // grava a trilha unit_reception) e cancela com step-up, inclusive as de
 // colegas; a unidade vai junto em toda chamada. Cancelada fica sem botões.
 import { useRef, useState, type CSSProperties } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useAuth } from "../../lib/auth";
+import { VERIFIER_ROLE } from "../../lib/team";
 import type { DeclarationRow } from "../../lib/api";
 import { documentError } from "../../lib/clinicalDocuments";
 import { fmtHourMinute } from "../../lib/format";
@@ -27,6 +29,11 @@ interface Props {
 
 export function DeclarationList({ rows, unitId, label, showPatient = false, onGoToSecurity }: Props) {
   const queryClient = useQueryClient();
+  // A recepção age em qualquer declaração da unidade; o profissional, só nas
+  // que emitiu (o api recusa as de colegas).
+  const { user } = useAuth();
+  const reception = !!user?.memberships.some((m) => m.role === VERIFIER_ROLE);
+  const canAct = (row: DeclarationRow) => row.status === "issued" && (reception || row.author.id === user?.id);
   const [ cancelling, setCancelling ] = useState<DeclarationRow | null>(null);
   const [ problem, setProblem ] = useState<string | null>(null);
   const printingRef = useRef(false);
@@ -58,7 +65,7 @@ export function DeclarationList({ rows, unitId, label, showPatient = false, onGo
               {`${fmtHourMinute(row.issued_at)} · ${row.author.name} · ${STATUS_LABEL[row.status] ?? row.status}`}
               {row.short_code && <span className="mono" style={muted}>{` · ${row.short_code}`}</span>}
             </span>
-            {row.status === "issued" && (
+            {canAct(row) && (
               <span style={{ display: "flex", gap: 6 }}>
                 <button type="button" style={secondaryButtonStyle} onClick={() => void reprint(row)}>Reimprimir</button>
                 <button type="button" style={secondaryButtonStyle} onClick={() => setCancelling(row)}>Cancelar</button>
