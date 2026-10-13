@@ -52,6 +52,8 @@ export function Attendance({ onNavigate }: { onNavigate(id: ModuleId): void }) {
   // devolve invalid_unit — a unidade foi desativada entre a escolha e o
   // check-in (ou como destino de encaminhamento).
   const [ pickerKey, setPickerKey ] = useState(0);
+  // Enquanto escolhe outra unidade, as seções da unidade atual somem (AT-16).
+  const [ choosingUnit, setChoosingUnit ] = useState(false);
   const unitsQuery = useQuery({ queryKey: [ "activeUnits" ], queryFn: listActiveUnits, enabled: !!unit });
   const canCareRole = (user?.memberships.map((m) => m.role) ?? []).includes("health_professional");
   // Chave por usuário (F-10.5): o QueryClient é criado uma vez em main.tsx e
@@ -75,12 +77,17 @@ export function Attendance({ onNavigate }: { onNavigate(id: ModuleId): void }) {
   // escolhida. A API é quem garante; aqui só não se oferece o que ela recusaria.
   const linkedUnitIds = new Set((myProfessional.data?.links ?? []).filter((l) => !l.ended_at).map((l) => l.health_unit_id));
   const canCare = canCareRole && !!unit && linkedUnitIds.has(unit.id);
+  const shownUnit = choosingUnit ? null : unit;
   const careBlocked = canCareRole && unit
     ? (myProfessional.isError ? attendanceError(myProfessional.error)
       : (myProfessional.isSuccess && myProfessional.data === null
         ? "Seu cadastro profissional ainda não foi feito. Fale com a administração da cidade."
         : (myProfessional.isSuccess && !canCare ? "Você não tem vínculo com esta unidade" : null)))
     : null;
+
+  // Subtítulo pela tarefa de quem usa (AT-18).
+  const pageSub = canVerify && canCareRole ? "balcão e fila clínica"
+    : canCareRole ? "fila clínica · acolhimento e consulta" : "balcão · verificação presencial";
 
   if (!canVerify && !canCareRole && !isAdmin) {
     return (
@@ -99,17 +106,18 @@ export function Attendance({ onNavigate }: { onNavigate(id: ModuleId): void }) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <PageHeader title="Atendimento" sub="balcão · verificação presencial" />
-      {canVerify && unit && <PageIndex />}
-      {(canVerify || canCareRole) && <UnitPicker key={pickerKey} userId={user.id} onChange={setUnit} />}
-      {canVerify && unit && <div id="sec-checkin"><CheckIn unit={unit} onUnitInvalid={onUnitInvalid} /></div>}
+      <PageHeader title="Atendimento" sub={pageSub} />
+      {canVerify && shownUnit && <PageIndex />}
+      {(canVerify || canCareRole) && <UnitPicker key={pickerKey} userId={user.id} onChange={setUnit}
+        linkedUnitIds={linkedUnitIds} onChoosing={setChoosingUnit} />}
+      {canVerify && shownUnit && <div id="sec-checkin"><CheckIn unit={shownUnit} onUnitInvalid={onUnitInvalid} /></div>}
       {/* A validação presencial sobe para perto do check-in: é a tarefa mais comum do balcão (FC-10). */}
-      {canVerify && <div id="sec-balcao"><Counter cadsusOn={hasFeature(user, "cadsus_lookup")} /></div>}
-      {canCare && unit && <ScreeningQueue unit={unit} units={unitsQuery.data ?? []} />}
-      {(canVerify || canCareRole) && unit && (
+      {canVerify && !(choosingUnit && unit) && <div id="sec-balcao"><Counter cadsusOn={hasFeature(user, "cadsus_lookup")} /></div>}
+      {canCare && shownUnit && <ScreeningQueue unit={shownUnit} units={unitsQuery.data ?? []} />}
+      {(canVerify || canCareRole) && shownUnit && (
         <div id="sec-fila">
         <UnitQueue
-          unit={unit}
+          unit={shownUnit}
           units={unitsQuery.data ?? []}
           canCare={canCare}
           careBlocked={careBlocked}
@@ -122,8 +130,8 @@ export function Attendance({ onNavigate }: { onNavigate(id: ModuleId): void }) {
         />
         </div>
       )}
-      {canVerify && unit && <div id="sec-pedidos"><Requests unit={unit} /></div>}
-      {canVerify && unit && <div id="sec-agenda"><Agenda unit={unit} /></div>}
+      {canVerify && shownUnit && <div id="sec-pedidos"><Requests unit={shownUnit} /></div>}
+      {canVerify && shownUnit && <div id="sec-agenda"><Agenda unit={shownUnit} /></div>}
       {canVerify && <UnassignedRequests />}
       {canVerify && <ErasureRequest />}
       {isAdmin && <History />}

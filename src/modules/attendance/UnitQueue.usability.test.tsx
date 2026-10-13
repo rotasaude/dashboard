@@ -202,4 +202,13 @@ describe("UnitQueue — usabilidade (6b)", () => {
     expect(left.getAttribute("aria-disabled")).toBe("true");
     expect(document.getElementById(left.getAttribute("aria-describedby")!)?.textContent).toBe("aguarde a ação em andamento");
   });
+
+  it("AT-19: fila vazia deixa 'Chamar próximo' bloqueado com o motivo", async () => {
+    mocked(api.listUnitQueue).mockResolvedValue({ waiting: [], in_care: [] });
+    renderQueue({ canCare: true, clinicalRecord: true });
+    await screen.findByText("Ninguém aguardando");
+    const next = screen.getByRole("button", { name: "Chamar próximo" });
+    expect(next.getAttribute("aria-disabled")).toBe("true");
+    expect(document.getElementById(next.getAttribute("aria-describedby")!)?.textContent).toBe("ninguém aguardando");
+  });
 });

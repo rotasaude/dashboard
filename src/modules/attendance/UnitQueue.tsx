@@ -227,7 +227,8 @@ export function UnitQueue({
 
   return (
     <Panel title="Fila" right={canCare && (
-      <ActionButton busy={callingNext} onClick={onCallNext}>Chamar próximo</ActionButton>
+      <ActionButton busy={callingNext} onClick={onCallNext}
+        disabledReason={query.isSuccess && waiting.length === 0 ? "ninguém aguardando" : null}>Chamar próximo</ActionButton>
     )}>
       <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
         <ActionMessage message={msg.message && msg.message.text !== careBlocked ? msg.message : null} />

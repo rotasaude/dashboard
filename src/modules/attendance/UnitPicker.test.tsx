@@ -80,3 +80,26 @@ describe("UnitPicker — usabilidade (6b)", () => {
     expect(screen.getByRole("region", { name: "Unidade" })).not.toBeNull();
   });
 });
+
+describe("UnitPicker — vínculo, atual e cancelar (AT-16)", () => {
+  it("unidades com vínculo primeiro e marcadas; ao trocar, a atual aparece e Escape mantém", async () => {
+    localStorage.clear();
+    localStorage.setItem(currentUnitKey("u1"), "u1");
+    mocked(api.listActiveUnits).mockResolvedValue(units);
+    const onChange = vi.fn();
+    const onChoosing = vi.fn();
+    render(<UnitPicker userId="u1" onChange={onChange} linkedUnitIds={new Set([ "u2" ])} onChoosing={onChoosing} />);
+    fireEvent.click(await screen.findByRole("button", { name: "trocar" }));
+    expect(onChoosing).toHaveBeenLastCalledWith(true);
+    const options = screen.getAllByRole("button").filter((b) => /UBS Centro|UPA Norte/.test(b.textContent ?? "") && !/manter/.test(b.textContent ?? ""));
+    expect(options[0].textContent).toContain("UPA Norte");
+    expect(options[0].textContent).toContain("seu vínculo");
+    expect(options[1].getAttribute("aria-current")).toBe("true");
+    expect(screen.getByRole("button", { name: "manter UBS Centro" })).not.toBeNull();
+    fireEvent.keyDown(options[0], { key: "Escape" });
+    expect(screen.getByText("Unidade: UBS Centro")).not.toBeNull();
+    expect(onChoosing).toHaveBeenLastCalledWith(false);
+    expect(onChange).toHaveBeenCalledTimes(1);
+  });
+});
+

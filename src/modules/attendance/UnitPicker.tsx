@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { listActiveUnits, type HealthUnit } from "../../lib/api";
 import { attendanceError, currentUnitKey } from "../../lib/attendance";
 import { Panel } from "../../components/Panel";
 import { EmptyState } from "../../components/EmptyState";
 import { secondaryButtonStyle } from "../../components/formStyles";
+import { Tag } from "../../components/Tag";
 
 // UnitPicker (Task 6) — "Unidade: *nome* [trocar]" no topo do Atendimento. A
 // escolha persiste em localStorage por usuário (chave currentUnitKey); se a
@@ -13,6 +14,10 @@ import { secondaryButtonStyle } from "../../components/formStyles";
 interface Props {
   userId: string;
   onChange(unit: HealthUnit | null): void;
+  // AT-16: unidades com vínculo do profissional vêm primeiro e marcadas.
+  linkedUnitIds?: ReadonlySet<string>;
+  // AT-16: avisa quando a escolha abre e fecha (a página esconde as seções).
+  onChoosing?(open: boolean): void;
 }
 
 function readStored(userId: string): string | null {
@@ -32,11 +37,14 @@ function writeStored(userId: string, unitId: string | null) {
   }
 }
 
-export function UnitPicker({ userId, onChange }: Props) {
+export function UnitPicker({ userId, onChange, linkedUnitIds, onChoosing }: Props) {
   const [ units, setUnits ] = useState<HealthUnit[] | null>(null);
   const [ selected, setSelected ] = useState<HealthUnit | null>(null);
   const [ choosing, setChoosing ] = useState(false);
   const [ error, setError ] = useState<string | null>(null);
+  const onChoosingRef = useRef(onChoosing);
+  onChoosingRef.current = onChoosing;
+  useEffect(() => { onChoosingRef.current?.(choosing); }, [ choosing ]);
 
   useEffect(() => {
     let cancelled = false;
@@ -96,22 +104,33 @@ export function UnitPicker({ userId, onChange }: Props) {
 
   return (
     <Panel title="Escolha a unidade" sub="Escolha a unidade para ver o check-in e a fila">
+      <div onKeyDown={(e) => { if (e.key === "Escape" && selected) setChoosing(false); }}>
       {units.length === 0 ? (
         <EmptyState title="nenhuma unidade ativa" sub="peça ao administrador para cadastrar uma" />
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          {units.map((u) => (
+          {[ ...units ].sort((a, b) => Number(!!linkedUnitIds?.has(b.id)) - Number(!!linkedUnitIds?.has(a.id))).map((u) => (
             <button
               key={u.id}
               type="button"
-              style={{ ...secondaryButtonStyle, textAlign: "left" }}
+              aria-current={selected?.id === u.id ? "true" : undefined}
+              style={{ ...secondaryButtonStyle, textAlign: "left", display: "flex", alignItems: "center", gap: 8,
+                ...(selected?.id === u.id ? { borderColor: "var(--accent)", fontWeight: 600 } : {}) }}
               onClick={() => choose(u)}
             >
               {u.name}
+              {linkedUnitIds?.has(u.id) && <Tag tone="ok" mono={false}>seu vínculo</Tag>}
+              {selected?.id === u.id && <Tag mono={false}>atual</Tag>}
             </button>
           ))}
+          {selected && (
+            <button type="button" style={{ ...secondaryButtonStyle, alignSelf: "flex-start" }} onClick={() => setChoosing(false)}>
+              {`manter ${selected.name}`}
+            </button>
+          )}
         </div>
       )}
+      </div>
     </Panel>
   );
 }

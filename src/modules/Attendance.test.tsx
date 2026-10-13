@@ -432,6 +432,23 @@ describe("Attendance", () => {
     expect(scroll).toHaveBeenCalled();
   });
 
+  it("AT-18: o subtítulo diz a tarefa do papel", async () => {
+    mocked(api.fetchCurrentSession).mockResolvedValue(session("health_professional"));
+    renderAttendance();
+    expect(await screen.findByText("fila clínica · acolhimento e consulta")).not.toBeNull();
+  });
+
+  it("AT-16: enquanto escolhe outra unidade, as seções da unidade somem", async () => {
+    const unit = { id: "un1", name: "UBS Centro", kind: "ubs" };
+    localStorage.setItem(currentUnitKey("u1"), unit.id);
+    mocked(api.listActiveUnits).mockResolvedValue([ unit ]);
+    renderAttendance();
+    expect(await screen.findByLabelText("CPF do cidadão (check-in)")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "trocar" }));
+    expect(screen.queryByLabelText("CPF do cidadão (check-in)")).toBeNull();
+    expect(screen.queryByRole("region", { name: "Fila" })).toBeNull();
+  });
+
   it("recepção continua vendo check-in e balcão, além da fila", async () => {
     const unit = { id: "un1", name: "UBS Centro", kind: "ubs" };
     localStorage.setItem(currentUnitKey("u1"), unit.id);
