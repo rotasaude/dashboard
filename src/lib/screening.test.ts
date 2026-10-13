@@ -139,6 +139,8 @@ describe("espera e erros", () => {
     expect(waitedMinutes("2026-10-07T10:05:00-03:00", now)).toBe(0);
     expect(waitLabel(40)).toBe("40 min");
     expect(waitLabel(65)).toBe("1 h 05 min");
+    expect(waitLabel(1439)).toBe("23 h 59 min");
+    expect(waitLabel(4832)).toBe("3 d 8 h");
   });
 
   it("implausible_vital diz qual campo; o resto passa por attendanceError", () => {

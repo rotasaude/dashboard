@@ -221,6 +221,8 @@ export function waitedMinutes(sinceIso: string, now: Date = new Date()): number 
 
 export function waitLabel(minutes: number): string {
   if (minutes < 60) return `${minutes} min`;
+  // Espera de mais de um dia em dias e horas (FC-08): "80 h 32 min" não se lê.
+  if (minutes >= 1440) return `${Math.floor(minutes / 1440)} d ${Math.floor((minutes % 1440) / 60)} h`;
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
   return `${h} h ${String(m).padStart(2, "0")} min`;

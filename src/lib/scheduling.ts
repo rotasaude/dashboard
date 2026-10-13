@@ -195,8 +195,10 @@ export function dayLabel(iso: string): string {
   return `${WEEKDAYS[new Date(`${iso}T12:00:00Z`).getUTCDay()]} ${ddmm(iso)}`;
 }
 
-export function fmtDueOn(iso: string): string {
-  return `até ${ddmm(iso)}`;
+// Prazo de outro ano leva o ano (FC-10): "até 22/05" de um pedido atrasado há
+// meses parece o mês que vem.
+export function fmtDueOn(iso: string, today: string = cityIsoDate(new Date())): string {
+  return iso.slice(0, 4) === today.slice(0, 4) ? `até ${ddmm(iso)}` : `até ${ddmm(iso)}/${iso.slice(0, 4)}`;
 }
 
 export function slotsByDay(slots: AvailabilitySlot[]): Map<string, AvailabilitySlot[]> {

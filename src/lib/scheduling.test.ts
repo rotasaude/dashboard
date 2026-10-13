@@ -157,6 +157,11 @@ describe("datas no fuso da cidade", () => {
     expect(fmtDueOn("2026-10-20")).toBe("até 20/10");
   });
 
+  it("prazo de outro ano mostra o ano (FC-10)", () => {
+    expect(fmtDueOn("2026-11-11", "2026-10-12")).toBe("até 11/11");
+    expect(fmtDueOn("2025-05-22", "2026-10-12")).toBe("até 22/05/2025");
+  });
+
   it("aviso de confirmação: menos de 48h nasce confirmado; senão prazo = horário − 24h", () => {
     const now = new Date("2026-10-05T10:00:00-03:00");
     expect(confirmationWarning(new Date("2026-10-06T09:00:00-03:00"), now)).toBe("O horário nasce confirmado");
