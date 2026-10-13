@@ -61,7 +61,7 @@ describe("Ciap2Search", () => {
     mocked(api.searchCiap2).mockResolvedValueOnce([]);
     renderIt();
     fireEvent.change(screen.getByLabelText("Queixa (CIAP-2)"), { target: { value: "xyzw" } });
-    expect(await screen.findByText("nenhum código encontrado")).not.toBeNull();
+    expect(await screen.findByText("nenhum código encontrado — tente o código (ex.: K86) ou outro termo")).not.toBeNull();
     mocked(api.searchCiap2).mockRejectedValueOnce(new ApiError(503, { error: "terminology_unavailable" }, "x"));
     fireEvent.change(screen.getByLabelText("Queixa (CIAP-2)"), { target: { value: "febre" } });
     expect((await screen.findByRole("alert")).textContent).toBe("a CIAP-2 não está disponível agora — tente de novo em instantes");
@@ -72,5 +72,12 @@ describe("Ciap2Search", () => {
     fireEvent.click(screen.getByRole("button", { name: "trocar" }));
     expect(value()).toBeNull();
     await waitFor(() => expect(screen.getByLabelText("Queixa (CIAP-2)")).not.toBeNull());
+  });
+});
+
+describe("Ciap2Search — exemplo que existe (AT-05)", () => {
+  it("o exemplo do campo é um código que a busca encontra", () => {
+    renderIt();
+    expect(screen.getByLabelText("Queixa (CIAP-2)").getAttribute("placeholder")).toBe("código ou nome, ex.: K86");
   });
 });

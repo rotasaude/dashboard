@@ -236,3 +236,25 @@ describe("ScreeningForm — reavaliar", () => {
     await waitFor(() => expect(props.onClosed).toHaveBeenCalledWith("esta escuta não pode mais ser reavaliada — a fila foi atualizada"));
   });
 });
+
+describe("ScreeningForm — à vista e motivo ligado (AT-07/AT-12)", () => {
+  beforeEach(() => {
+    for (const fn of [ api.searchCiap2, api.suggestScreening ]) mocked(fn).mockReset();
+    mocked(api.searchCiap2).mockResolvedValue([ { code: "K86", label: "Hipertensão sem complicações" } ]);
+    mocked(api.suggestScreening).mockResolvedValue(suggestion());
+  });
+
+  it("abre rolando até o formulário, com o foco no título", () => {
+    const scroll = vi.fn(); Element.prototype.scrollIntoView = scroll;
+    renderForm();
+    expect(scroll).toHaveBeenCalled();
+    expect(document.activeElement).toBe(screen.getByRole("heading", { name: "Escuta inicial" }));
+  });
+
+  it("Concluir bloqueado aponta para o motivo", () => {
+    renderForm();
+    const id = conclude().getAttribute("aria-describedby")!;
+    expect(document.getElementById(id)?.textContent).toBe("escolha a queixa (CIAP-2)");
+  });
+});
+

@@ -23,6 +23,7 @@ import { Ciap2Search } from "./Ciap2Search";
 import { VitalSignsFields } from "./VitalSignsFields";
 import { ColorDecision, type SuggestionState } from "./ColorDecision";
 import { useLeaveGuard } from "../../lib/useLeaveGuard";
+import { useReveal } from "../../lib/useReveal";
 
 // Recusas que encerram o formulário: quem chamou recarrega a fila e mostra a frase.
 const CLOSING = new Set([ "not_in_progress", "attendance_not_waiting", "not_reassessable" ]);
@@ -139,13 +140,15 @@ export function ScreeningForm(props: ScreeningFormProps) {
     }
   }
 
+  // Abre à vista, com o foco no título (AT-07).
+  const ref = useReveal<HTMLElement>(true);
   const setD = (patch: Partial<DestinationDraft>) => setDest((d) => ({ ...d, ...patch }));
   const activeTypes = (types ?? []).filter((t) => t.active);
   const otherUnits = units.filter((u) => u.id !== unit.id);
 
   return (
-    <section aria-label={mode === "complete" ? "Escuta inicial" : "Reavaliação"} style={panel}>
-      <strong>{mode === "complete" ? "Escuta inicial" : "Reavaliar a escuta"}</strong>
+    <section ref={ref} aria-label={mode === "complete" ? "Escuta inicial" : "Reavaliação"} style={panel}>
+      <h3 style={{ margin: 0, fontSize: 14 }}>{mode === "complete" ? "Escuta inicial" : "Reavaliar a escuta"}</h3>
       <p className="mono" style={{ margin: 0, fontSize: 11, color: "var(--ink3)" }}>{citizenLabel}</p>
       {error && <p role="alert" style={alertStyle}>{error}</p>}
 
@@ -239,9 +242,9 @@ export function ScreeningForm(props: ScreeningFormProps) {
         </fieldset>
       )}
 
-      {problem && !busy && <small style={hint}>{problem}</small>}
+      {problem && !busy && <small id="screening-block" style={hint}>{problem}</small>}
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <button type="button" disabled={blocked} onClick={() => void submit()} style={blocked ? disabledButtonStyle : buttonStyle}>
+        <button type="button" disabled={blocked} aria-describedby={problem && !busy ? "screening-block" : undefined} onClick={() => void submit()} style={blocked ? disabledButtonStyle : buttonStyle}>
           {mode === "complete" ? "Concluir escuta" : "Salvar reavaliação"}
         </button>
         {mode === "complete" ? (

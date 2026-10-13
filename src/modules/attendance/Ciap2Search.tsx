@@ -34,13 +34,13 @@ export function Ciap2Search({ value, onChange, delayMs = 300 }: Props) {
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
       <label style={{ ...label, display: "flex", flexDirection: "column", gap: 4 }}>
         Queixa (CIAP-2)
-        <input value={text} placeholder="nome ou código, ex.: cefaleia, K86" style={inputStyle}
+        <input value={text} placeholder="código ou nome, ex.: K86" style={inputStyle}
           onChange={(e) => setText(e.target.value)} />
       </label>
       {text.trim().length > 0 && text.trim().length < CIAP2_MIN_CHARS && <small style={hint}>digite pelo menos {CIAP2_MIN_CHARS} caracteres</small>}
       {enabled && query.isPending && <small className="mono" style={hint}>buscando…</small>}
       {enabled && query.isError && <p role="alert" style={alert}>{screeningError(query.error)}</p>}
-      {enabled && query.isSuccess && query.data.length === 0 && <small style={hint}>nenhum código encontrado</small>}
+      {enabled && query.isSuccess && query.data.length === 0 && <small style={hint}>nenhum código encontrado — tente o código (ex.: K86) ou outro termo</small>}
       {enabled && query.isSuccess && query.data.length > 0 && (
         <ul aria-label="códigos CIAP-2" style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 4 }}>
           {query.data.map((item) => (

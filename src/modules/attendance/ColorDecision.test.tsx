@@ -55,3 +55,17 @@ describe("ColorDecision", () => {
     expect(screen.getByRole("status").textContent).toBe("não foi possível concluir — tente de novo");
   });
 });
+
+describe("ColorDecision — o que pesou e quanto falta (AT-11/AT-12)", () => {
+  it("diz os sinais fora da faixa desta escuta", () => {
+    renderIt({ kind: "ready", suggestion: suggestion() }, "red");
+    expect(screen.getByText("Nesta escuta: Pressão sistólica: acima da faixa de alerta, Pressão diastólica: acima da faixa de alerta")).not.toBeNull();
+  });
+  it("a justificativa diz quanto falta, ligada ao campo", () => {
+    renderIt({ kind: "ready", suggestion: suggestion() }, "yellow", "curto");
+    const field = screen.getByLabelText("Justificativa da mudança de cor");
+    const ids = field.getAttribute("aria-describedby")!.split(" ");
+    expect(ids.map((id) => document.getElementById(id)?.textContent)).toContain("mínimo de 10 caracteres — faltam 5");
+  });
+});
+

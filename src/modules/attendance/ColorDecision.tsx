@@ -4,7 +4,8 @@
 // decisão é de quem escuta. Cor final diferente da sugerida pede justificativa.
 import type { CSSProperties } from "react";
 import type { ScreeningColor, ScreeningSuggestion } from "../../lib/api";
-import { COLORS, COLOR_HINT, COLOR_LABEL, COLOR_TONE, needsColorReason } from "../../lib/screening";
+import { COLORS, COLOR_HINT, COLOR_LABEL, COLOR_TONE, alertLabel, needsColorReason } from "../../lib/screening";
+import { ReasonHint } from "../../components/ReasonHint";
 import { Tag } from "../../components/Tag";
 import { FrozenTextNotice } from "../../components/FrozenTextNotice";
 import { inputStyle } from "../../components/formStyles";
@@ -47,6 +48,11 @@ export function ColorDecision({ state, final, reason, forceReason = false, onFin
                 {state.suggestion.matched_rules.map((r) => <li key={r.index}>{r.text}</li>)}
               </ul>
             )}
+            {/* Quais sinais desta escuta estão fora da faixa (AT-11): a regra
+                inteira não diz qual critério pesou. */}
+            {state.suggestion.alerts.length > 0 && (
+              <span style={{ color: "var(--ink2)" }}>Nesta escuta: {state.suggestion.alerts.map(alertLabel).join(", ")}</span>
+            )}
           </>
         )}
       </div>
@@ -63,9 +69,10 @@ export function ColorDecision({ state, final, reason, forceReason = false, onFin
         <>
           <label style={label}>
             Justificativa da mudança de cor
-            <textarea value={reason} style={{ ...inputStyle, minHeight: 56 }} aria-describedby="color-reason-notice"
+            <textarea value={reason} style={{ ...inputStyle, minHeight: 56 }} aria-describedby="color-reason-notice color-reason-hint"
               onChange={(e) => onReason(e.target.value)} />
           </label>
+          <ReasonHint id="color-reason-hint" text={reason} />
           <FrozenTextNotice id="color-reason-notice" />
         </>
       )}
