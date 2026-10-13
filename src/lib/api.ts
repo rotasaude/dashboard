@@ -1683,6 +1683,13 @@ export function getConsultation(id: string): Promise<Consultation> {
   return jsonFetch(consultationPath(id));
 }
 
+// dashboard#12: a lista de problemas do paciente para o adendo da própria consulta
+// (só a autora; o api grava a trilha author).
+export async function getConsultationProblems(id: string): Promise<PatientProblem[]> {
+  const body = await jsonFetch<{ problems: PatientProblem[] }>(consultationPath(id, "problems"));
+  return body.problems;
+}
+
 function periodQuery(q: ConsultationPeriod): string {
   const params = new URLSearchParams();
   if (q.from) params.set("from", q.from);

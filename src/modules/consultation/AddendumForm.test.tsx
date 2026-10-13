@@ -17,12 +17,12 @@ import { finalized, options, problem } from "../../test/consultationFixtures";
 afterEach(cleanup);
 const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
 
-function renderForm() {
+function renderForm(extra: { loadPatientProblems?: () => Promise<import("../../lib/api").PatientProblem[]> } = {}) {
   const onDone = vi.fn();
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>;
   render(<AddendumForm consultation={finalized()} options={options()} patientProblems={[ problem() ]}
-    searchDelayMs={0} onDone={onDone} onCancel={vi.fn()} />, { wrapper });
+    searchDelayMs={0} onDone={onDone} onCancel={vi.fn()} {...extra} />, { wrapper });
   return { onDone };
 }
 const text = (label: string, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
@@ -160,4 +160,36 @@ describe("AddendumForm", () => {
     expect(changes.evaluated_problems[0]).toMatchObject({ code: "E11", action: "evaluate" });
     expect(changes.exam_requests).toBeUndefined();
   });
+
+  // ---- rodada especial do 19 (dashboard#12): lista completa no adendo de "Minhas consultas" ----
+
+  const old = problem({ id: "pp7", code: "L03", label: "Lombalgia" });
+  const openChanges = () => fireEvent.click(screen.getByLabelText("Mudar problemas, condutas ou exames"));
+
+  it("com a função de carregar, mostra também um problema antigo do paciente", async () => {
+    renderForm({ loadPatientProblems: async () => [ problem(), old ] });
+    openChanges();
+    expect(await screen.findByText(/L03/)).not.toBeNull();
+  });
+
+  it("sem a função, só os problemas da consulta, como antes", () => {
+    renderForm();
+    openChanges();
+    expect(screen.queryByText(/L03/)).toBeNull();
+  });
+
+  it("se carregar falhar, segue com os da consulta e avisa", async () => {
+    renderForm({ loadPatientProblems: async () => { throw new ApiError(500, {}, "500"); } });
+    openChanges();
+    expect(await screen.findByText("não foi possível carregar a lista completa de problemas; seguem os desta consulta")).not.toBeNull();
+    expect(screen.queryByText(/L03/)).toBeNull();
+  });
+
+  it("paciente sem problemas: abre sem erro", async () => {
+    renderForm({ loadPatientProblems: async () => [] });
+    openChanges();
+    await waitFor(() => expect(screen.queryByText(/não foi possível carregar/)).toBeNull());
+    expect(screen.getByLabelText("Motivo do adendo")).not.toBeNull();
+  });
 });
+

@@ -23,6 +23,8 @@ export interface ConsultationViewProps {
   consultation: Consultation;
   options: ConsultationOptions | null;
   patientProblems: PatientProblem[];
+  // "Minhas consultas" (dashboard#12): busca a lista completa ao abrir o adendo.
+  loadPatientProblems?: () => Promise<PatientProblem[]>;
   // Administrador: leitura sem Imprimir e sem Adendo, mesmo que o id coincida.
   readOnly?: boolean;
   searchDelayMs?: number;
@@ -142,6 +144,7 @@ export function ConsultationView(props: ConsultationViewProps) {
 
       {adding && (
         <AddendumForm consultation={c} options={options} patientProblems={props.patientProblems}
+          loadPatientProblems={props.loadPatientProblems}
           searchDelayMs={props.searchDelayMs}
           onDone={(addendum) => { setAdding(false); props.onAddendumAdded(addendum); }}
           onCancel={() => setAdding(false)} />

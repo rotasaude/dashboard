@@ -4,7 +4,7 @@
 // a leitura clínica não fica em cache (gcTime 0).
 import { useState, type CSSProperties, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ApiError, errorCode, getConsultationOptions, listMyConsultations, type ConsultationListItem } from "../lib/api";
+import { ApiError, errorCode, getConsultationOptions, getConsultationProblems, listMyConsultations, type ConsultationListItem } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { hasFeature } from "../lib/features";
 import { MY_CONSULTATIONS_KEY, OPTIONS_KEY, consultationError } from "../lib/consultation";
@@ -54,6 +54,7 @@ export function MyConsultations({ onGoToSecurity }: { onGoToSecurity?(): void })
       {viewing ? (
         <>
           <ConsultationLoader key={viewing} id={viewing} options={options.data ?? null} patientProblems={[]}
+            loadPatientProblems={() => getConsultationProblems(viewing)}
             onClose={() => setViewing(null)} />
           {/* Módulo 19c: reimprimir e cancelar os documentos desta consulta. */}
           {canUseDocuments(user) && <ConsultationDocuments key={`documents:${viewing}`} consultationId={viewing} onGoToSecurity={onGoToSecurity} />}

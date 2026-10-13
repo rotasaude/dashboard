@@ -2,6 +2,7 @@
 // Adendo (módulo 19; spec §4; ADR 0031): só acréscimo, com motivo, podendo
 // mudar problemas, condutas e exames. Só a autora faz adendo.
 import { useState, type CSSProperties } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   addAddendum, type Addendum, type Consultation, type ConsultationOptions, type EvaluatedProblem, type ExamRequest, type PatientProblem
 } from "../../lib/api";
@@ -16,12 +17,19 @@ interface Props {
   consultation: Consultation;
   options: ConsultationOptions | null;
   patientProblems: PatientProblem[];
+  // "Minhas consultas" (dashboard#12): a lista completa do paciente, buscada ao abrir o adendo.
+  loadPatientProblems?: () => Promise<PatientProblem[]>;
   searchDelayMs?: number;
   onDone(addendum: Addendum): void;
   onCancel(): void;
 }
 
-export function AddendumForm({ consultation, options, patientProblems, searchDelayMs, onDone, onCancel }: Props) {
+export function AddendumForm({ consultation, options, patientProblems, loadPatientProblems, searchDelayMs, onDone, onCancel }: Props) {
+  const full = useQuery({
+    queryKey: [ "consultationProblems", consultation.id ], queryFn: () => loadPatientProblems!(),
+    enabled: !!loadPatientProblems, gcTime: 0, staleTime: 0, retry: false
+  });
+  const baseProblems = full.data ?? patientProblems;
   const [ reason, setReason ] = useState("");
   const [ text, setText ] = useState("");
   const [ withChanges, setWithChanges ] = useState(false);
@@ -70,7 +78,8 @@ export function AddendumForm({ consultation, options, patientProblems, searchDel
       </label>
       {withChanges && (
         <>
-          <ProblemsEditor patientProblems={problemsWithConsultationAdds(patientProblems, consultation)} items={problems} onChange={setProblems}
+          {full.isError && <p role="status" style={muted}>não foi possível carregar a lista completa de problemas; seguem os desta consulta</p>}
+          <ProblemsEditor patientProblems={problemsWithConsultationAdds(baseProblems, consultation)} items={problems} onChange={setProblems}
             cid10Allowed={options?.cid10_allowed_for_cbo ?? false} today={todayInCity()} searchDelayMs={searchDelayMs} />
           <ConductsField options={options?.conducts ?? []} value={conducts} onChange={setConducts} />
           <ExamRequestsField value={exams} onChange={setExams} cid10Allowed={options?.cid10_allowed_for_cbo ?? false}

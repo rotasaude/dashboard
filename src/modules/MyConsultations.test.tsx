@@ -4,7 +4,7 @@ import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 vi.mock("../lib/api", async (importOriginal) => {
   const real = await importOriginal<typeof import("../lib/api")>();
   return { ...real, fetchCurrentSession: vi.fn(), listMyConsultations: vi.fn(), getConsultation: vi.fn(),
-    getConsultationOptions: vi.fn(), getJustifiedRecord: vi.fn(), getAttendanceRecord: vi.fn() };
+    getConsultationOptions: vi.fn(), getJustifiedRecord: vi.fn(), getAttendanceRecord: vi.fn(), getConsultationProblems: vi.fn() };
 });
 
 import * as api from "../lib/api";
@@ -19,7 +19,9 @@ const pro = () => sessionWith([ "health_professional" ], { id: "us1", features: 
 
 describe("Minhas consultas", () => {
   beforeEach(() => {
-    for (const fn of [ api.fetchCurrentSession, api.listMyConsultations, api.getConsultation, api.getConsultationOptions ]) m(fn).mockReset();
+    for (const fn of [ api.fetchCurrentSession, api.listMyConsultations, api.getConsultation, api.getConsultationOptions,
+      api.getConsultationProblems ]) m(fn).mockReset();
+    m(api.getConsultationProblems).mockResolvedValue([]);
     m(api.fetchCurrentSession).mockResolvedValue(pro());
     m(api.listMyConsultations).mockResolvedValue([ consultationListItem() ]);
     m(api.getConsultation).mockResolvedValue(finalized());
@@ -98,4 +100,21 @@ describe("Minhas consultas", () => {
     expect(await screen.findByText("Joana Lima")).not.toBeNull();
     expect(screen.queryByText("Imprimir")).toBeNull();
   });
+
+  it("o adendo busca a lista completa de problemas só quando é aberto (dashboard#12)", async () => {
+    renderWithProviders(<MyConsultations />);
+    await screen.findByText("Joana Lima");
+    fireEvent.click(screen.getByRole("button", { name: /^Abrir consulta de / }));
+    fireEvent.click(await screen.findByText("Adendo"));
+    await waitFor(() => expect(api.getConsultationProblems).toHaveBeenCalledWith("c1"));
+  });
+
+  it("só abrir a consulta não busca a lista de problemas", async () => {
+    renderWithProviders(<MyConsultations />);
+    await screen.findByText("Joana Lima");
+    fireEvent.click(screen.getByRole("button", { name: /^Abrir consulta de / }));
+    expect(await screen.findByText("Imprimir")).not.toBeNull();
+    expect(api.getConsultationProblems).not.toHaveBeenCalled();
+  });
 });
+

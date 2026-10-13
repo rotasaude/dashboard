@@ -2,11 +2,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   ApiError, addAddendum, completeCitizenNames, fetchConsultationPdf, finalizeConsultation, getAttendanceRecord,
-  getAdministrativeConsultation, getConsultation, getConsultationOptions, getJustifiedRecord, listMyConsultations,
+  getAdministrativeConsultation, getConsultation, getConsultationOptions, getConsultationProblems, getJustifiedRecord, listMyConsultations,
   listOpenings, listProfessionalConsultations, openClinicalRecord, saveConsultationDraft,
   searchSigtap, searchTerminology, startConsultation, verifyCitizen
 } from "./api";
-import { adminReadRow, consultation, consultationListItem, finalized, opening, openingRow, options, record } from "../test/consultationFixtures";
+import { adminReadRow, consultation, consultationListItem, finalized, opening, openingRow, options, problem, record } from "../test/consultationFixtures";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -24,6 +24,13 @@ const draftInput = {
 };
 
 describe("cliente do módulo 19 — prontuário e consulta", () => {
+  it("problemas do paciente para o adendo da autora: GET da consulta, devolve a lista (dashboard#12)", async () => {
+    const fn = stub({ problems: [ problem() ] });
+    expect(await getConsultationProblems("c/1")).toEqual([ problem() ]);
+    expect(call(fn)[0]).toBe("/attendance/consultations/c%2F1/problems");
+    expect(call(fn)[1].method).toBeUndefined();
+  });
+
   it("prontuário em contexto e opções da consulta são GET com só o id na URL", async () => {
     let fn = stub(record());
     expect((await getAttendanceRecord("a/1")).patient.display_name).toBe("Joana Lima");
