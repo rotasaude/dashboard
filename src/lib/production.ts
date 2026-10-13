@@ -49,7 +49,10 @@ export const GENERATION_REASON: Record<string, string> = {
   professional_without_cns: "profissional sem CNS",
   citizen_without_birth_date: "cidadão sem data de nascimento",
   citizen_without_sex: "cidadão sem sexo no cadastro",
-  unknown_ciap2: "CIAP-2 fora da terminologia ativa"
+  unknown_ciap2: "CIAP-2 fora da terminologia ativa",
+  // api#52: o adendo não chegou à ficha da consulta.
+  regeneration_refused: "o reenvio da ficha recusada não foi aceito",
+  still_sending: "a ficha seguia em envio; gere de novo"
 };
 export const SOURCE_LABEL: Record<string, string> = { Screening: "escuta inicial", Consultation: "consulta" };
 

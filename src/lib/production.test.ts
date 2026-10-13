@@ -115,4 +115,10 @@ describe("Produção — erros", () => {
     expect(productionError(new ApiError(403, { error: "missing_role" }, "403"))).toBe("seu papel não permite esta ação");
     expect(productionErrorCode(new Error("x"))).toBeNull();
   });
+
+  it("rótulos dos motivos novos da rodada do 19 (api#52)", () => {
+    expect(reasonsLabel([ "regeneration_refused", "still_sending" ]))
+      .toBe("o reenvio da ficha recusada não foi aceito, a ficha seguia em envio; gere de novo");
+  });
 });
+
