@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   callAttendance, callNext, closeAttendance, errorCode, getScreening, listUnitQueue,
@@ -11,8 +11,14 @@ import { useAuth } from "../../lib/auth";
 import { Panel } from "../../components/Panel";
 import { DataTable } from "../../components/DataTable";
 import { EmptyState } from "../../components/EmptyState";
-import { buttonStyle, disabledButtonStyle, secondaryButtonStyle } from "../../components/formStyles";
+import { secondaryButtonStyle } from "../../components/formStyles";
 import { Tag } from "../../components/Tag";
+import { ActionButton } from "../../components/ActionButton";
+import { ConfirmButton } from "../../components/ConfirmButton";
+import { ActionMessage } from "../../components/ActionMessage";
+import { useActionMessage } from "../../lib/useActionMessage";
+import { useReveal } from "../../lib/useReveal";
+import { personLabel } from "../../lib/queueLabels";
 import { COLOR_LABEL, COLOR_TONE, screeningError, waitLabel, waitedMinutes } from "../../lib/screening";
 import { ScreeningDetail, ScreeningDetailLoader } from "./ScreeningDetail";
 import { ScreeningForm } from "./ScreeningForm";
@@ -84,8 +90,10 @@ export function UnitQueue({
     refetchInterval: ATTENDANCE_REFETCH_MS
   });
   const [ closing, setClosing ] = useState<QueueRow | null>(null);
-  const [ done, setDone ] = useState<string | null>(null);
-  const [ actionError, setActionError ] = useState<string | null>(null);
+  // Uma mensagem por vez, junto das ações, limpa quando a próxima começa (FC-02).
+  const msg = useActionMessage();
+  // Botão "Encerrar" que abriu o painel, para devolver o foco ao cancelar (FC-13).
+  const closeOpener = useRef<HTMLElement | null>(null);
   const [ callingNext, setCallingNext ] = useState(false);
   const [ rowBusy, setRowBusy ] = useState<string | null>(null);
   const [ panel, setPanel ] = useState<ScreeningPanel | null>(null);
@@ -114,7 +122,7 @@ export function UnitQueue({
 
   async function onCallNext() {
     if (callingNext) return;
-    setCallingNext(true); setActionError(null);
+    setCallingNext(true); msg.start();
     try {
       const result = await callNext(unit.id);
       // Contrato §9: a escuta vem dentro de `attendance`.
@@ -134,7 +142,7 @@ export function UnitQueue({
       // recarrega em vez de mostrar erro parado (mesmo padrão de onCall).
       if (code === "already_called") { invalidate(); return; }
       handleClinicalRefusal(code, () => void auth.reload(), onClinicalRefused);
-      setActionError(attendanceError(err));
+      msg.fail(attendanceError(err));
     } finally {
       setCallingNext(false);
     }
@@ -142,7 +150,7 @@ export function UnitQueue({
 
   async function onCall(row: QueueRow) {
     if (rowBusy) return;
-    setRowBusy(row.id); setActionError(null);
+    setRowBusy(row.id); msg.start();
     try {
       const result = await callAttendance(row.id, unit.id);
       openCalled(result);
@@ -153,7 +161,7 @@ export function UnitQueue({
       // vez de mostrar erro parado.
       if (code === "already_called") { invalidate(); return; }
       handleClinicalRefusal(code, () => void auth.reload(), onClinicalRefused);
-      setActionError(attendanceError(err));
+      msg.fail(attendanceError(err));
     } finally {
       setRowBusy(null);
     }
@@ -161,13 +169,14 @@ export function UnitQueue({
 
   async function onLeft(row: QueueRow) {
     if (rowBusy) return;
-    setRowBusy(row.id); setActionError(null);
+    setRowBusy(row.id); msg.start();
     try {
       await closeAttendance(row.id, "left", undefined, undefined);
       invalidate();
+      msg.ok(`${personLabel(row).title} marcado como saiu sem atendimento`);
     } catch (err) {
       if (errorCode(err) === "already_closed") { invalidate(); return; }
-      setActionError(attendanceError(err));
+      msg.fail(attendanceError(err));
     } finally {
       setRowBusy(null);
     }
@@ -175,37 +184,38 @@ export function UnitQueue({
 
   async function onReassess(row: QueueRow) {
     if (rowBusy || !row.screening?.id) return;
-    setRowBusy(row.id); setActionError(null);
+    setRowBusy(row.id); msg.start();
     try {
       setPanel({ kind: "reassess", row, screening: await getScreening(row.screening.id) });
     } catch (err) {
       handleClinicalRefusal(errorCode(err), () => void auth.reload(), onClinicalRefused);
-      setActionError(screeningError(err));
+      msg.fail(screeningError(err));
     } finally {
       setRowBusy(null);
     }
   }
 
   const at = now();
-  const waiting = query.data?.waiting ?? [];
-  const inCare = query.data?.in_care ?? [];
+  // Uma pessoa por lista, e quem já está em atendimento sai de Aguardando
+  // (FC-19: a API pode devolver a mesma linha nas duas durante a chamada).
+  const uniq = (rows: QueueRow[]) => rows.filter((r, i) => rows.findIndex((x) => x.id === r.id) === i);
+  const inCare = uniq(query.data?.in_care ?? []);
+  const inCareIds = new Set(inCare.map((r) => r.id));
+  const waiting = uniq((query.data?.waiting ?? []).filter((r) => !inCareIds.has(r.id)));
+  const consultationRow = panel?.kind === "consultation" ? inCare.find((r) => r.id === panel.attendanceId) : undefined;
+  const consultationRef = useReveal<HTMLElement>(panel?.kind === "consultation");
+
+  // A consulta aberta fecha quando a pessoa dela sai de Em atendimento (FC-03).
+  useEffect(() => {
+    if (panel?.kind === "consultation" && query.isSuccess && !consultationRow) setPanel(null);
+  }, [ panel, query.isSuccess, consultationRow ]);
 
   return (
     <Panel title="Fila" right={canCare && (
-      <button
-        type="button"
-        disabled={callingNext}
-        onClick={() => void onCallNext()}
-        style={callingNext ? disabledButtonStyle : buttonStyle}
-      >
-        Chamar próximo
-      </button>
+      <ActionButton busy={callingNext} onClick={onCallNext}>Chamar próximo</ActionButton>
     )}>
       <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-        {done && <p role="status" style={{ margin: 0, fontSize: 12.5, fontWeight: 600 }}>{done}</p>}
-        {actionError && actionError !== careBlocked && (
-          <p role="alert" style={{ margin: 0, fontSize: 12.5, color: "var(--down)" }}>{actionError}</p>
-        )}
+        <ActionMessage message={msg.message && msg.message.text !== careBlocked ? msg.message : null} />
         {query.isError && (
           <p role="alert" style={{ margin: 0, fontSize: 12.5, color: "var(--down)" }}>{attendanceError(query.error)}</p>
         )}
@@ -239,30 +249,18 @@ export function UnitQueue({
                       label: "", w: "auto", align: "right", render: (r) => (
                         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
                           {canCare && r.screening?.id && r.screening.destination === "same_day" && (
-                            <button type="button" disabled={rowBusy === r.id} onClick={() => void onReassess(r)}
-                              style={rowBusy === r.id ? disabledButtonStyle : secondaryButtonStyle}>
-                              Reavaliar
-                            </button>
+                            <ActionButton variant="secondary" busy={rowBusy === r.id} onClick={() => onReassess(r)}>Reavaliar</ActionButton>
                           )}
                           {canCare && (
-                            <button
-                              type="button"
-                              disabled={rowBusy === r.id}
-                              onClick={() => void onCall(r)}
-                              style={rowBusy === r.id ? disabledButtonStyle : secondaryButtonStyle}
-                            >
-                              Chamar
-                            </button>
+                            <ActionButton variant="secondary" busy={rowBusy === r.id} onClick={() => onCall(r)}>Chamar</ActionButton>
                           )}
                           {declarationButton(r)}
-                          <button
-                            type="button"
-                            disabled={rowBusy === r.id}
-                            onClick={() => void onLeft(r)}
-                            style={rowBusy === r.id ? disabledButtonStyle : secondaryButtonStyle}
-                          >
-                            Saiu sem atendimento
-                          </button>
+                          {/* Irreversível: confirma nomeando a pessoa, afastado de Chamar (FC-01). */}
+                          <span style={{ marginLeft: 8 }}>
+                            <ConfirmButton label="Saiu sem atendimento" variant="danger"
+                              question={`Confirmar que ${personLabel(r).title} saiu sem atendimento?`}
+                              onConfirm={() => onLeft(r)} />
+                          </span>
                         </div>
                       )
                     }
@@ -310,7 +308,8 @@ export function UnitQueue({
                               Ver escuta
                             </button>
                           )}
-                          {canCare && <button type="button" style={secondaryButtonStyle} onClick={() => setClosing(r)}>Encerrar</button>}
+                          {canCare && <button type="button" style={secondaryButtonStyle}
+                            onClick={(e) => { closeOpener.current = e.currentTarget; setClosing(r); }}>Encerrar</button>}
                         </div>
                       )
                     } ] : [])
@@ -335,13 +334,19 @@ export function UnitQueue({
             unit={unit}
             units={units}
             types={null}
-            onDone={() => { setPanel(null); invalidate(); setDone("Reavaliação registrada."); }}
-            onClosed={(message) => { setPanel(null); invalidate(); setActionError(message); }}
+            onDone={() => { setPanel(null); invalidate(); msg.ok("Reavaliação registrada."); }}
+            onClosed={(message) => { setPanel(null); invalidate(); msg.fail(message); }}
             onCancel={() => setPanel(null)}
           />
         )}
 
         {canCare && clinicalRecord && panel?.kind === "consultation" && (
+          <section ref={consultationRef} aria-labelledby="consulta-titulo" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {consultationRow && (
+            <h3 id="consulta-titulo" style={{ margin: 0, fontSize: 14 }}>
+              {`Consulta de ${personLabel(consultationRow).title} · chamada às ${fmtHourMinute(consultationRow.called_at)}`}
+            </h3>
+          )}
           <ConsultationWorkspace
             key={panel.attendanceId}
             attendanceId={panel.attendanceId}
@@ -353,9 +358,10 @@ export function UnitQueue({
             onFinalized={() => {
               invalidate();
               void queryClient.invalidateQueries({ queryKey: [ "unitRequests" ] });
-              setDone("Consulta finalizada e atendimento encerrado.");
+              msg.ok("Consulta finalizada e atendimento encerrado.");
             }}
           />
+          </section>
         )}
 
         {timelineButton && panel?.kind === "timeline" && (
@@ -376,7 +382,7 @@ export function UnitQueue({
             unit={unit}
             units={units}
             onClinicalRefused={onClinicalRefused}
-            onCancel={() => setClosing(null)}
+            onCancel={() => { setClosing(null); queueMicrotask(() => closeOpener.current?.focus()); }}
             onDone={(appointmentRequest) => {
               setClosing(null);
               setPanel(null);
@@ -385,7 +391,7 @@ export function UnitQueue({
               // encaminhado) — invalida pelo prefixo para cobrir as duas.
               if (appointmentRequest) {
                 void queryClient.invalidateQueries({ queryKey: [ "unitRequests" ] });
-                setDone(`Pedido de agendamento criado na ${appointmentRequest.target_unit_name}`);
+                msg.ok(`Pedido de agendamento criado na ${appointmentRequest.target_unit_name}`);
               }
             }}
           />
@@ -409,7 +415,10 @@ function ClosePanel(
   const [ busy, setBusy ] = useState(false);
   const [ error, setError ] = useState<string | null>(null);
   const { referralUnitId } = outcomeView(draft, row.reference_unit_ids, unit, units);
-  const disabled = busy || outcomeProblem(draft, referralUnitId) !== null;
+  const problem = outcomeProblem(draft, referralUnitId);
+  const disabled = busy || problem !== null;
+  // Abre à vista, com o foco no título que nomeia a pessoa (FC-04).
+  const ref = useReveal<HTMLElement>(true);
 
   async function confirm() {
     if (disabled) return;
@@ -429,8 +438,9 @@ function ClosePanel(
   }
 
   return (
-    <section style={{ display: "flex", flexDirection: "column", gap: 10, padding: 16, border: "1px solid var(--rule)", borderRadius: 8 }}>
-      <strong>Encerrar atendimento</strong>
+    <section ref={ref} onKeyDown={(e: KeyboardEvent) => { if (e.key === "Escape" && !busy) onCancel(); }}
+      style={{ display: "flex", flexDirection: "column", gap: 10, padding: 16, border: "1px solid var(--rule)", borderRadius: 8 }}>
+      <h3 style={{ margin: 0, fontSize: 14 }}>Encerrar atendimento de {personLabel(row).title}</h3>
       <p className="mono" style={{ margin: 0, fontSize: 11, color: "var(--ink3)" }}>
         {row.cpf_masked} · {row.protocol_name ?? "—"} · chegou às {fmtDateTime(row.checked_in_at)}
       </p>
@@ -439,9 +449,7 @@ function ClosePanel(
       <OutcomeFields value={draft} onChange={setDraft} referenceIds={row.reference_unit_ids} unit={unit} units={units} />
 
       <div style={{ display: "flex", gap: 8 }}>
-        <button type="button" disabled={disabled} onClick={() => void confirm()} style={disabled ? disabledButtonStyle : buttonStyle}>
-          Confirmar encerramento
-        </button>
+        <ActionButton busy={busy} disabledReason={problem} onClick={confirm}>Confirmar encerramento</ActionButton>
         <button type="button" disabled={busy} onClick={onCancel} style={secondaryButtonStyle}>
           Cancelar
         </button>

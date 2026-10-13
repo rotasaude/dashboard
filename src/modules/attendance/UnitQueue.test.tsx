@@ -127,7 +127,7 @@ describe("UnitQueue", () => {
         fireEvent.change(screen.getByLabelText("Desfecho"), { target: { value: "referred" } });
         fireEvent.change(screen.getByLabelText("Unidade de destino"), { target: { value: "" } });
         expect((screen.getByLabelText("Unidade de destino") as HTMLSelectElement).value).toBe("");
-        expect((screen.getByRole("button", { name: "Confirmar encerramento" }) as HTMLButtonElement).disabled).toBe(true);
+        expect(screen.getByRole("button", { name: "Confirmar encerramento" }).getAttribute("aria-disabled")).toBe("true");
       });
 
       it("pré-seleção não vaza para outro desfecho", async () => {
@@ -222,9 +222,9 @@ describe("UnitQueue", () => {
       fireEvent.click(await screen.findByRole("button", { name: "Encerrar" }));
       fireEvent.change(screen.getByLabelText("Desfecho"), { target: { value: "referred" } });
       const confirm = screen.getByRole("button", { name: "Confirmar encerramento" }) as HTMLButtonElement;
-      expect(confirm.disabled).toBe(true);
+      expect(confirm.getAttribute("aria-disabled")).toBe("true");
       fireEvent.change(screen.getByLabelText("Descrição"), { target: { value: "encaminhado para avaliação" } });
-      expect((screen.getByRole("button", { name: "Confirmar encerramento" }) as HTMLButtonElement).disabled).toBe(false);
+      expect(screen.getByRole("button", { name: "Confirmar encerramento" }).getAttribute("aria-disabled")).toBeNull();
     });
 
     it("trocar de linha sem confirmar reseta as escolhas e troca o cabeçalho do painel", async () => {
@@ -338,6 +338,7 @@ describe("UnitQueue", () => {
     mocked(api.closeAttendance).mockResolvedValue({ attendance: { id: "a1" }, appointmentRequest: null });
     renderQueue({ canCare: true });
     fireEvent.click((await screen.findAllByRole("button", { name: "Saiu sem atendimento" }))[0]);
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
     await waitFor(() => expect(api.closeAttendance).toHaveBeenCalledWith("a1", "left", undefined, undefined));
   });
 
