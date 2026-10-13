@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   addNursingProtocolVersion, addRemumeItem, cancelDocument, changeMedication, createNursingProtocol, fetchDocumentPdf,
   getCityDocumentsProfile, getClinicalDocument, getPrescriptionRenewal, issueAttendanceDeclaration, issueDocument,
-  listConsultationDocuments, listNursingProtocols, listPatientMedications, listRemume, removeRemumeItem, searchMedications, setCityCnpj
+  listAttendanceDeclarations, listConsultationDocuments, listNursingProtocols, listUnitDeclarations, listPatientMedications, listRemume, removeRemumeItem, searchMedications, setCityCnpj
 } from "./api";
 import { medication, nursingProtocol, remumeEntry, renewalItem, searchItem, sickNoteDoc } from "../test/documentFixtures";
 
@@ -47,9 +47,29 @@ describe("cliente dos documentos clínicos — consulta", () => {
 
   it("declaração da recepção vai pelo atendimento", async () => {
     const fn = stub(sickNoteDoc(), 201);
-    await issueAttendanceDeclaration("a1", { period: "morning" });
+    await issueAttendanceDeclaration("a1", { period: "morning" }, "u1");
     expect(call(fn)[0]).toBe("/attendance/attendances/a1/declarations");
-    expectJsonWrite(fn, "POST", { content: { period: "morning" } });
+    expectJsonWrite(fn, "POST", { content: { period: "morning" }, health_unit_id: "u1" });
+  });
+
+  it("api#59: as listas de declarações levam a unidade na query", async () => {
+    let fn = stub({ items: [] });
+    expect(await listAttendanceDeclarations("a1", "u1")).toEqual([]);
+    expect(call(fn)[0]).toBe("/attendance/attendances/a1/declarations?health_unit_id=u1");
+    fn = stub({ items: [] });
+    await listUnitDeclarations("u1", "2026-10-09");
+    expect(call(fn)[0]).toBe("/attendance/declarations?health_unit_id=u1&date=2026-10-09");
+  });
+
+  it("api#59: cancelar e imprimir pela recepção levam a unidade", async () => {
+    let fn = stub(sickNoteDoc({ status: "cancelled" }));
+    await cancelDocument("doc1", "horário de chegada errado", "u1");
+    expectJsonWrite(fn, "POST", { reason: "horário de chegada errado", health_unit_id: "u1" });
+    fn = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      new Response("%PDF-1.7", { status: 200, headers: { "Content-Type": "application/pdf" } })) as unknown as ReturnType<typeof stub>;
+    vi.stubGlobal("fetch", fn);
+    await fetchDocumentPdf("doc1", "u1");
+    expect(call(fn)[0]).toBe("/attendance/documents/doc1/print?health_unit_id=u1");
   });
 
   it("lê um documento e cancela com o motivo no corpo", async () => {

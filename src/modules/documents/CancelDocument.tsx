@@ -14,8 +14,13 @@ import { SNCR_NO_CANCEL_NOTE, documentSncr } from "../../lib/controlled";
 import { fmtDateTime } from "../../lib/format";
 import { SensitiveAction } from "../../components/SensitiveAction";
 
+// A lista de declarações (api#59) só tem metadados: id, tipo e emissão bastam.
+type CancelTarget = Pick<ClinicalDocument, "id" | "kind" | "issued_at"> & Partial<ClinicalDocument>;
+
 interface Props {
-  doc: ClinicalDocument;
+  doc: CancelTarget;
+  // api#59: a recepção cancela declarações da unidade escolhida no seletor.
+  healthUnitId?: string;
   reissue: boolean;
   onDone(cancelled: ClinicalDocument): void;
   // Recebe a frase da recusa (o painel fecha; quem chama a mostra e relê).
@@ -27,7 +32,7 @@ interface Props {
 // Recusa local (motivo fora da faixa): nada vai ao servidor.
 class ReasonProblem extends Error {}
 
-export function CancelDocument({ doc, reissue, onDone, onStale, onCancel, onGoToSecurity }: Props) {
+export function CancelDocument({ doc, healthUnitId, reissue, onDone, onStale, onCancel, onGoToSecurity }: Props) {
   const result = useRef<ClinicalDocument | null>(null);
   const inFlight = useRef(false);
   return (
@@ -42,7 +47,7 @@ export function CancelDocument({ doc, reissue, onDone, onStale, onCancel, onGoTo
           {(doc.kind === "prescription" || doc.kind === "controlled_notification_record") && (
             <p style={{ ...text, fontWeight: 600 }}>{CANCEL_WARNING}</p>
           )}
-          {documentSncr(doc) && <p style={{ ...text, fontWeight: 600 }}>{SNCR_NO_CANCEL_NOTE}</p>}
+          {doc.content && documentSncr(doc as ClinicalDocument) && <p style={{ ...text, fontWeight: 600 }}>{SNCR_NO_CANCEL_NOTE}</p>}
           {reissue && <p style={text}>Depois do cancelamento, um documento novo abre preenchido com os mesmos dados, para você conferir e emitir.</p>}
         </>
       )}
@@ -56,7 +61,7 @@ export function CancelDocument({ doc, reissue, onDone, onStale, onCancel, onGoTo
         if (problem) throw new ReasonProblem(problem);
         inFlight.current = true;
         try {
-          result.current = await cancelDocument(doc.id, values.reason.trim());
+          result.current = await cancelDocument(doc.id, values.reason.trim(), ...(healthUnitId ? [ healthUnitId ] : []));
         } finally {
           inFlight.current = false;
         }

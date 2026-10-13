@@ -25,6 +25,7 @@ import { ScreeningForm } from "./ScreeningForm";
 import { OutcomeFields } from "./OutcomeFields";
 import { ConsultationWorkspace } from "../consultation/ConsultationWorkspace";
 import { DeclarationPanel } from "./DeclarationPanel";
+import { UnitDeclarations } from "./UnitDeclarations";
 import { PatientTimeline } from "../timeline/PatientTimeline";
 
 // UnitQueue (Task 7) — a fila da unidade atual (spec §6 "Fila"), em duas
@@ -398,7 +399,8 @@ export function UnitQueue({
         )}
 
         {clinicalDocuments && declaring && (
-          <DeclarationPanel key={declaring.id} row={declaring} professional={professional} onClose={() => setDeclaring(null)} />
+          <DeclarationPanel key={declaring.id} row={declaring} unitId={unit.id} professional={professional}
+            onGoToSecurity={onGoToSecurity} onClose={() => setDeclaring(null)} />
         )}
 
         {closing && (
@@ -422,6 +424,8 @@ export function UnitQueue({
             }}
           />
         )}
+
+        {clinicalDocuments && <UnitDeclarations key={unit.id} unitId={unit.id} onGoToSecurity={onGoToSecurity} />}
       </div>
     </Panel>
   );

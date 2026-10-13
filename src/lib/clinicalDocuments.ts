@@ -568,6 +568,7 @@ const ERRORS: Record<string, string> = {
   not_author: "só a autora da consulta emite e cancela os documentos dela",
   cbo_not_allowed: "o seu CBO não emite este tipo de documento",
   missing_role: "seu papel não permite esta ação",
+  attendance_outside_unit: "esta declaração é de um atendimento de outra unidade — troque a unidade no seletor",
   forbidden: "você não tem permissão para ver isto",
   cid_requires_authorization: "o CID só entra com a autorização do paciente",
   companion_cid_not_allowed: "atestado de acompanhante não leva CID",

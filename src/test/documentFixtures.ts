@@ -3,7 +3,7 @@
 // testes: sexta, 2026-10-09 10:00 em São Paulo (-03:00). A autora é `us1`,
 // a mesma das fixtures da consulta do 19a (CBO 225142, médica).
 import type {
-  CatalogItemRef, ClinicalDocument, MedicationSearchItem, NursingProtocol, PatientMedication, PrescriptionItem, RemumeEntry, RenewalItem, SessionUser
+  CatalogItemRef, ClinicalDocument, DeclarationRow, MedicationSearchItem, NursingProtocol, PatientMedication, PrescriptionItem, RemumeEntry, RenewalItem, SessionUser
 } from "../lib/api";
 import { sessionWith } from "./campaignFixtures";
 
@@ -116,4 +116,10 @@ export function renewalItem(over: Partial<RenewalItem> = {}): RenewalItem {
     position: 1, printed_description: "Cloridrato de metformina 850 mg — comprimido", continuous: true, antimicrobial: false,
     dosage_instructions: "1 cp/dia", ...over
   };
+}
+
+// api#59: linha das listas de declarações (só metadados).
+export function declRow(over: Partial<DeclarationRow> = {}): DeclarationRow {
+  return { id: "doc3", status: "issued", issued_at: "2026-10-09T09:40:00-03:00", cancelled_at: null, short_code: "D9W4N-7KC3M",
+    attendance_id: "a1", author: { id: "us7", name: "Marta Recepção" }, patient: { display_name: "Joana Lima" }, ...over };
 }

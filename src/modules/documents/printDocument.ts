@@ -10,12 +10,13 @@ import { fetchDocumentPdf } from "../../lib/api";
 const PDF_URL_TTL_MS = 60_000;
 export const POPUP_BLOCKED = "o navegador bloqueou a janela nova — permita janelas deste site para imprimir";
 
-export async function printDocument(id: string, errorText: (err: unknown) => string): Promise<string | null> {
+// healthUnitId: a recepção reimprime declarações da unidade dela (api#59).
+export async function printDocument(id: string, errorText: (err: unknown) => string, healthUnitId?: string): Promise<string | null> {
   const win = window.open("", "_blank");
   // Janela bloqueada: nem lê o PDF (a leitura gera trilha no api à toa).
   if (!win) return POPUP_BLOCKED;
   try {
-    const { blob } = await fetchDocumentPdf(id);
+    const { blob } = await fetchDocumentPdf(id, ...(healthUnitId ? [ healthUnitId ] : []));
     const url = URL.createObjectURL(blob);
     win.location.href = url;
     setTimeout(() => URL.revokeObjectURL(url), PDF_URL_TTL_MS);

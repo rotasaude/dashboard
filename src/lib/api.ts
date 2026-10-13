@@ -2071,8 +2071,26 @@ export function issueDocument(consultationId: string, input: DocumentInput, repl
   }));
 }
 
-export function issueAttendanceDeclaration(attendanceId: string, content: DeclarationInput): Promise<ClinicalDocument> {
-  return jsonFetch(attendanceDocPath("attendances", attendanceId, "declarations"), postProfessional({ content }));
+// api#59: a declaração é da unidade escolhida no seletor (health_unit_id).
+export function issueAttendanceDeclaration(attendanceId: string, content: DeclarationInput, healthUnitId: string): Promise<ClinicalDocument> {
+  return jsonFetch(attendanceDocPath("attendances", attendanceId, "declarations"), postProfessional({ content, health_unit_id: healthUnitId }));
+}
+
+// api#59: só metadados (sem conteúdo); o api não grava trilha nas listas.
+export interface DeclarationRow {
+  id: string; status: DocumentStatus; issued_at: string; cancelled_at: string | null; short_code: string | null;
+  attendance_id: string; author: { id: string; name: string }; patient: { display_name: string } | null;
+}
+
+const unitQuery = (healthUnitId?: string) => (healthUnitId ? `?${new URLSearchParams({ health_unit_id: healthUnitId })}` : "");
+
+export async function listAttendanceDeclarations(attendanceId: string, healthUnitId: string): Promise<DeclarationRow[]> {
+  return (await jsonFetch<{ items: DeclarationRow[] }>(attendanceDocPath("attendances", attendanceId, "declarations") + unitQuery(healthUnitId))).items;
+}
+
+export async function listUnitDeclarations(healthUnitId: string, date: string): Promise<DeclarationRow[]> {
+  const query = new URLSearchParams({ health_unit_id: healthUnitId, date });
+  return (await jsonFetch<{ items: DeclarationRow[] }>(`${attendanceDocPath("declarations")}?${query}`)).items;
 }
 
 export function getClinicalDocument(id: string): Promise<ClinicalDocument> {
@@ -2080,13 +2098,15 @@ export function getClinicalDocument(id: string): Promise<ClinicalDocument> {
 }
 
 // PDF lido com fetch (e não por navegação) para a tela mostrar a recusa.
-export function fetchDocumentPdf(id: string): Promise<SignatureFile> {
-  return binaryFetch(attendanceDocPath("documents", id, "print"), "application/pdf");
+// A recepção imprime declarações da unidade dela (api#59): manda a unidade.
+export function fetchDocumentPdf(id: string, healthUnitId?: string): Promise<SignatureFile> {
+  return binaryFetch(attendanceDocPath("documents", id, "print") + unitQuery(healthUnitId), "application/pdf");
 }
 
 // Step-up: quem trata 401 mfa_required é o SensitiveAction.
-export function cancelDocument(id: string, reason: string): Promise<ClinicalDocument> {
-  return jsonFetch(attendanceDocPath("documents", id, "cancel"), postProfessional({ reason }));
+export function cancelDocument(id: string, reason: string, healthUnitId?: string): Promise<ClinicalDocument> {
+  return jsonFetch(attendanceDocPath("documents", id, "cancel"),
+    postProfessional({ reason, ...(healthUnitId ? { health_unit_id: healthUnitId } : {}) }));
 }
 
 export async function listPatientMedications(patientId: string): Promise<PatientMedication[]> {

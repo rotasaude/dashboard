@@ -7,7 +7,8 @@ import type { ReactNode } from "react";
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const real = await importOriginal<typeof import("../../lib/api")>();
-  return { ...real, fetchCurrentSession: vi.fn(), listUnitQueue: vi.fn(), issueAttendanceDeclaration: vi.fn(), fetchDocumentPdf: vi.fn() };
+  return { ...real, fetchCurrentSession: vi.fn(), listUnitQueue: vi.fn(), issueAttendanceDeclaration: vi.fn(), fetchDocumentPdf: vi.fn(),
+    listAttendanceDeclarations: vi.fn(), listUnitDeclarations: vi.fn(), cancelDocument: vi.fn() };
 });
 vi.mock("../consultation/ConsultationWorkspace", () => ({ ConsultationWorkspace: () => null }));
 
@@ -15,7 +16,7 @@ import * as api from "../../lib/api";
 import { ApiError, type QueueRow } from "../../lib/api";
 import { AuthProvider } from "../../lib/auth";
 import { UnitQueue } from "./UnitQueue";
-import { NOW19C, declarationDoc, docUser } from "../../test/documentFixtures";
+import { NOW19C, declRow, declarationDoc, docUser } from "../../test/documentFixtures";
 
 const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
 const unit = { id: "u1", name: "UBS Centro", kind: "ubs" };
@@ -43,10 +44,13 @@ describe("UnitQueue — declaração de comparecimento (19c)", () => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: [ "Date" ] });
     vi.setSystemTime(new Date(NOW19C));
-    for (const fn of [ api.fetchCurrentSession, api.listUnitQueue, api.issueAttendanceDeclaration, api.fetchDocumentPdf ]) mocked(fn).mockReset();
+    for (const fn of [ api.fetchCurrentSession, api.listUnitQueue, api.issueAttendanceDeclaration, api.fetchDocumentPdf,
+      api.listAttendanceDeclarations, api.listUnitDeclarations, api.cancelDocument ]) mocked(fn).mockReset();
     mocked(api.fetchCurrentSession).mockResolvedValue(docUser([ "citizen_verifier" ], { id: "us5", email_address: "recepcao@curitiba.demo" }));
     mocked(api.listUnitQueue).mockResolvedValue({ waiting: [ waitingRow ], in_care: [ inCareRow ] });
     mocked(api.issueAttendanceDeclaration).mockResolvedValue(declarationDoc({ id: "doc3", consultation_id: null, attendance_id: "a1" }));
+    mocked(api.listAttendanceDeclarations).mockResolvedValue([]);
+    mocked(api.listUnitDeclarations).mockResolvedValue([]);
     mocked(api.fetchDocumentPdf).mockResolvedValue({ blob: new Blob([ "%PDF" ], { type: "application/pdf" }), filename: null });
     win = { location: { href: "" }, close: vi.fn() };
     vi.spyOn(window, "open").mockImplementation(() => win as unknown as Window);
@@ -67,13 +71,13 @@ describe("UnitQueue — declaração de comparecimento (19c)", () => {
     fireEvent.change(within(panel).getByLabelText("Sua matrícula (sai no papel)"), { target: { value: "4521" } });
     fireEvent.click(within(panel).getByRole("button", { name: "Emitir declaração" }));
     await waitFor(() => expect(api.issueAttendanceDeclaration).toHaveBeenCalledWith("a1",
-      { arrived_at: "09:20", issuer_registration: "4521" }));
+      { arrived_at: "09:20", issuer_registration: "4521" }, "u1"));
     expect((await within(panel).findByRole("status")).textContent)
       .toBe("Documento emitido (Declaração de comparecimento) em modo papel: imprima e assine à mão.");
     expect(within(panel).getByText("D9W4N-7KC3M")).not.toBeNull();
     fireEvent.click(within(panel).getByRole("button", { name: "Imprimir" }));
     await waitFor(() => expect(win.location.href).toBe("blob:doc3"));
-    expect(api.fetchDocumentPdf).toHaveBeenCalledWith("doc3");
+    expect(api.fetchDocumentPdf).toHaveBeenCalledWith("doc3", "u1");
   });
 
   it("a pessoa sai da fila enquanto a recepção preenche: o painel continua e emite", async () => {
@@ -84,7 +88,7 @@ describe("UnitQueue — declaração de comparecimento (19c)", () => {
     expect(await screen.findByText("Ninguém aguardando")).not.toBeNull();
     const panel = screen.getByRole("region", { name: "Declaração de comparecimento do atendimento" });
     fireEvent.click(within(panel).getByRole("button", { name: "Emitir declaração" }));
-    await waitFor(() => expect(api.issueAttendanceDeclaration).toHaveBeenCalledWith("a1", { arrived_at: "09:20" }));
+    await waitFor(() => expect(api.issueAttendanceDeclaration).toHaveBeenCalledWith("a1", { arrived_at: "09:20" }, "u1"));
   });
 
   it("atendimento de mais de 30 dias: a frase diz e o formulário fica", async () => {
@@ -111,7 +115,7 @@ describe("UnitQueue — declaração de comparecimento (19c)", () => {
     expect(screen.queryByLabelText("Sua matrícula (sai no papel)")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Emitir declaração" }));
     expect((await screen.findByRole("alert")).textContent).toBe("seu papel não permite esta ação");
-    expect(api.issueAttendanceDeclaration).toHaveBeenCalledWith("a1", { arrived_at: "09:20" });
+    expect(api.issueAttendanceDeclaration).toHaveBeenCalledWith("a1", { arrived_at: "09:20" }, "u1");
   });
 
   it("em voo: emitir e cancelar ficam travados e o duplo clique emite uma vez só", async () => {
@@ -139,5 +143,74 @@ describe("UnitQueue — declaração de comparecimento (19c)", () => {
     expect(scroll).toHaveBeenCalled();
     fireEvent.keyDown(panel, { key: "Escape" });
     expect(screen.queryByRole("region", { name: "Declaração de comparecimento do atendimento" })).toBeNull();
+  });
+
+  describe("api#59: declarações já emitidas do atendimento", () => {
+    const openPanel = async () => {
+      fireEvent.click(within(await section("Aguardando")).getByRole("button", { name: "Declaração" }));
+      return screen.getByRole("region", { name: "Declaração de comparecimento do atendimento" });
+    };
+
+    it("lista as do atendimento pela unidade: emitida com Reimprimir e Cancelar; cancelada sem botões", async () => {
+      mocked(api.listAttendanceDeclarations).mockResolvedValue([
+        declRow(), declRow({ id: "doc2", status: "cancelled", cancelled_at: "2026-10-09T09:35:00-03:00", short_code: "C4X7P-2MN8Q" })
+      ]);
+      renderQueue();
+      const panel = await openPanel();
+      const list = await within(panel).findByRole("list", { name: "Declarações deste atendimento" });
+      await waitFor(() => expect(api.listAttendanceDeclarations).toHaveBeenCalledWith("a1", "u1"));
+      const [ issued, cancelled ] = within(list).getAllByRole("listitem");
+      expect(issued.textContent).toContain("09:40 · Marta Recepção · emitida");
+      expect(within(issued).getByRole("button", { name: "Reimprimir" })).not.toBeNull();
+      expect(within(issued).getByRole("button", { name: "Cancelar" })).not.toBeNull();
+      expect(cancelled.textContent).toContain("cancelada");
+      expect(within(cancelled).queryByRole("button")).toBeNull();
+    });
+
+    it("Reimprimir chama a impressão com o id e a unidade", async () => {
+      mocked(api.listAttendanceDeclarations).mockResolvedValue([ declRow() ]);
+      renderQueue();
+      const panel = await openPanel();
+      fireEvent.click(await within(panel).findByRole("button", { name: "Reimprimir" }));
+      await waitFor(() => expect(api.fetchDocumentPdf).toHaveBeenCalledWith("doc3", "u1"));
+    });
+
+    it("Cancelar abre o motivo, cancela com a unidade e relê a lista", async () => {
+      mocked(api.listAttendanceDeclarations).mockResolvedValue([ declRow() ]);
+      mocked(api.cancelDocument).mockResolvedValue(declarationDoc({ status: "cancelled", cancelled_at: "2026-10-09T10:00:00-03:00" }));
+      renderQueue();
+      const panel = await openPanel();
+      const list = await within(panel).findByRole("list", { name: "Declarações deste atendimento" });
+      fireEvent.click(within(list).getByRole("button", { name: "Cancelar" }));
+      fireEvent.change(await screen.findByLabelText("Motivo do cancelamento"), { target: { value: "horário de chegada errado" } });
+      mocked(api.listAttendanceDeclarations).mockResolvedValue([ declRow({ status: "cancelled", cancelled_at: "2026-10-09T10:00:00-03:00" }) ]);
+      fireEvent.click(screen.getByRole("button", { name: "Confirmar cancelamento" }));
+      await waitFor(() => expect(api.cancelDocument).toHaveBeenCalledWith("doc3", "horário de chegada errado", "u1"));
+      await waitFor(() => expect(api.listAttendanceDeclarations).toHaveBeenCalledTimes(2));
+      expect((await within(panel).findAllByRole("listitem"))[0].textContent).toContain("cancelada");
+    });
+
+    it("emitir uma nova relê a lista", async () => {
+      renderQueue();
+      const panel = await openPanel();
+      await waitFor(() => expect(api.listAttendanceDeclarations).toHaveBeenCalledTimes(1));
+      fireEvent.click(within(panel).getByRole("button", { name: "Emitir declaração" }));
+      await within(panel).findByRole("status");
+      await waitFor(() => expect(api.listAttendanceDeclarations).toHaveBeenCalledTimes(2));
+    });
+
+    it("atendimento de outra unidade: a frase manda trocar o seletor", async () => {
+      mocked(api.issueAttendanceDeclaration).mockRejectedValue(new ApiError(422, { error: "attendance_outside_unit" }, "422"));
+      renderQueue();
+      const panel = await openPanel();
+      fireEvent.click(within(panel).getByRole("button", { name: "Emitir declaração" }));
+      expect((await within(panel).findByRole("alert")).textContent)
+        .toBe("esta declaração é de um atendimento de outra unidade — troque a unidade no seletor");
+    });
+  });
+
+  it("Declarações de hoje fica na fila quando os documentos estão ligados", async () => {
+    renderQueue();
+    expect(await screen.findByText("Declarações de hoje")).not.toBeNull();
   });
 });
