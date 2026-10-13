@@ -11,6 +11,10 @@ import { SchedulingPanel } from "./protocolEditor/SchedulingPanel";
 import { RiskRulesPanel } from "./protocolEditor/RiskRulesPanel";
 import { ScreeningSimulator } from "./protocolEditor/ScreeningSimulator";
 import { SCREENING_TEMPLATE, isScreeningDefinition } from "../lib/riskRules";
+import { gateErrorMessage, parseErrorMessage } from "../lib/editorMessages";
+import { statusLabel } from "../lib/protocolStatus";
+import { PageHeader } from "../components/PageHeader";
+import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../components/formStyles";
 
 export function ProtocolEditor() {
   const [ text, setText ] = useState<string>(TEMPLATE);
@@ -24,6 +28,8 @@ export function ProtocolEditor() {
 
   const [ opts, setOpts ] = useState<AuthorProtocolRow[]>([]);
   const [ loadErr, setLoadErr ] = useState<string | null>(null);
+  // Versão carregada que já saiu do rascunho: não se edita (PR-09).
+  const [ loaded, setLoaded ] = useState<{ name: string; status: string } | null>(null);
 
   useEffect(() => {
     listAuthorProtocols().then(setOpts).catch(() => setOpts([]));
@@ -44,9 +50,12 @@ export function ProtocolEditor() {
   function onPick(value: string) {
     setLoadErr(null);
     setOfferKey(k => k + 1); // remonta o painel: condições meio digitadas não sobrevivem à troca
+    setLoaded(null);
     if (value === "__new__") { setText(TEMPLATE); return; }
     if (value === "__new_screening__") { setText(SCREENING_TEMPLATE); return; }
     const [ name, version ] = value.split("@@");
+    const row = opts.find((o) => o.name === name && o.version === version);
+    if (row && row.status !== "draft") setLoaded({ name, status: row.status });
     loadProtocolDefinition(name, version).then(def => {
       if (def) setText(JSON.stringify(def, null, 2));
       else setLoadErr("definição não encontrada");
@@ -66,6 +75,19 @@ export function ProtocolEditor() {
   }, [ text ]);
 
   const valid = gate?.valid === true && !parseError;
+  // Salvar trava só com erro conhecido (PR-08); enquanto a checagem ao vivo
+  // ainda não respondeu, salvar continua possível (o api confere de novo).
+  const knownError = !!parseError || gate?.valid === false;
+
+  // Nova versão a partir da carregada: a maior daquele nome + 1 (PR-09).
+  function newVersionFromLoaded() {
+    if (!loaded) return;
+    const parsed = parseDefinition(text);
+    if (!parsed.ok) return;
+    const next = Math.max(0, ...opts.filter((o) => o.name === loaded.name).map((o) => Number(o.version))) + 1;
+    setText(JSON.stringify({ ...(parsed.value as Record<string, unknown>), version: next }, null, 2));
+    setLoaded(null);
+  }
 
   function runPreview() {
     const parsed = parseDefinition(text);
@@ -92,41 +114,55 @@ export function ProtocolEditor() {
   const protocolNames = [ ...new Set(opts.map((o) => o.name)) ].sort();
 
   return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+    <PageHeader title="Editor de protocolo" sub="autoria · rascunho" />
     <div className="pe-split" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
       <section>
         <h2 style={{ fontSize: 16, margin: "0 0 8px" }}>Definição (JSON)</h2>
+        <label style={labelStyle}>
+        Carregar versão
         <select
           onChange={e => onPick(e.target.value)}
           defaultValue="__new__"
-          style={{ display: "block", marginBottom: 8, fontSize: 13 }}
+          style={{ ...inputStyle, display: "block", marginBottom: 8 }}
         >
           <option value="__new__">Nova (template)</option>
           <option value="__new_screening__">Novo acolhimento (modelo)</option>
           {opts.map(o => (
             <option key={`${o.name}@@${o.version}`} value={`${o.name}@@${o.version}`}>
-              {o.name}@{o.version} ({o.status})
+              {o.name}@{o.version} ({statusLabel(o.status)})
             </option>
           ))}
         </select>
-        {loadErr && <p style={{ color: "var(--danger, #c00)", fontSize: 13 }}>{loadErr}</p>}
+        </label>
+        {loadErr && <p style={{ color: "var(--down)", fontSize: 13 }}>{loadErr}</p>}
+        {loaded && (
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", margin: "0 0 8px" }}>
+            <span style={{ fontSize: 13 }}>Esta versão não se edita: ela já saiu do rascunho.</span>
+            <button type="button" style={secondaryButtonStyle} onClick={newVersionFromLoaded}>Criar nova versão a partir desta</button>
+          </div>
+        )}
+        <label style={labelStyle}>
+        Definição JSON
         <textarea
           value={text}
           onChange={e => setText(e.target.value)}
           spellCheck={false}
           style={{ width: "100%", height: 360, fontFamily: "monospace", fontSize: 13 }}
         />
+        </label>
         <div style={{ marginTop: 8 }}>
-          {parseError && <p style={{ color: "var(--danger, #c00)" }}>JSON inválido: {parseError}</p>}
-          {!parseError && gate?.valid && <p style={{ color: "var(--ok, #2a7) " }}>válido ✓</p>}
+          {parseError && <p style={{ color: "var(--down)" }}>{parseErrorMessage(parseError)}</p>}
+          {!parseError && gate?.valid && <p style={{ color: "var(--ok)" }}>válido ✓</p>}
           {!parseError && gate && !gate.valid && (
-            <ul style={{ color: "var(--danger, #c00)", margin: 0, paddingLeft: 18 }}>
-              {(gate.errors ?? []).map((e, i) => <li key={i}>{e}</li>)}
+            <ul style={{ color: "var(--down)", margin: 0, paddingLeft: 18 }}>
+              {(gate.errors ?? []).map((e, i) => <li key={i}>{gateErrorMessage(e)}</li>)}
             </ul>
           )}
           {/* Avisos não bloqueiam (tipo inexistente/inativo do módulo 17, destino de
               sugestão do módulo 15); vêm do api como estão, em inglês. */}
           {!parseError && (gate?.warnings ?? []).length > 0 && (
-            <ul style={{ color: "var(--warn, #a60)", margin: 0, paddingLeft: 18 }}>
+            <ul style={{ color: "var(--warn)", margin: 0, paddingLeft: 18 }}>
               {(gate?.warnings ?? []).map((w, i) => <li key={i}>{`aviso: ${w}`}</li>)}
             </ul>
           )}
@@ -135,11 +171,17 @@ export function ProtocolEditor() {
           definition={current.ok ? current.value : null}
           onChange={(next) => setText(JSON.stringify(next, null, 2))}
         />
-        <button onClick={save} style={{ marginTop: 12 }}>Salvar rascunho</button>
+        <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-start" }}>
+          <button type="button" onClick={save} disabled={knownError} aria-describedby={knownError ? "editor-save-block" : undefined}
+            style={knownError ? disabledButtonStyle : buttonStyle}>Salvar rascunho</button>
+          {knownError && <small id="editor-save-block" style={{ fontSize: 12, color: "var(--ink2)" }}>corrija os erros antes de salvar</small>}
+        </div>
         {saved && (
           <p style={{ marginTop: 8 }}>
             {saved.status
-              ? `Salvo: ${saved.name}@${saved.version} (${saved.status})`
+              ? <>{`Salvo: ${saved.name}@${saved.version} (${saved.status})`}{" "}
+                  {/* Próximo passo: o ciclo de vida, já filtrado pelo nome (PR-10). */}
+                  <a href={`${window.location.pathname}?protocolo=${encodeURIComponent(saved.name ?? "")}#/protocols`}>Ver no ciclo de vida →</a></>
               : saved.error === "version_not_editable"
                 ? "Essa versão já foi publicada; suba a versão."
                 : saved.error === "forbidden"
@@ -183,10 +225,10 @@ export function ProtocolEditor() {
           spellCheck={false}
           style={{ width: "100%", height: 80, fontFamily: "monospace", fontSize: 13 }}
         />
-        <button onClick={runPreview} disabled={!valid} style={{ marginTop: 8 }}>Pré-visualizar</button>
-        {!valid && <p style={{ color: "var(--ink3, #888)", fontSize: 13 }}>Corrija os erros para pré-visualizar.</p>}
+        <button type="button" onClick={runPreview} disabled={!valid} style={{ ...(valid ? secondaryButtonStyle : disabledButtonStyle), marginTop: 8 }}>Pré-visualizar</button>
+        {!valid && <p style={{ color: "var(--ink2)", fontSize: 13 }}>Corrija os erros para pré-visualizar.</p>}
         {preview?.outcome && (
-          <pre style={{ marginTop: 8, fontSize: 12, background: "var(--surface, #f6f6f6)", padding: 8 }}>
+          <pre style={{ marginTop: 8, fontSize: 12, background: "var(--sunken)", padding: 8 }}>
             {JSON.stringify(preview.outcome, null, 2)}
           </pre>
         )}
@@ -195,5 +237,8 @@ export function ProtocolEditor() {
       </section>
       )}
     </div>
+    </div>
   );
 }
+
+const labelStyle = { display: "flex", flexDirection: "column" as const, gap: 4, fontSize: 12, color: "var(--ink2)", marginBottom: 8 };

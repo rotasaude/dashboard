@@ -279,3 +279,52 @@ describe("ProtocolEditor — Agendamento", () => {
     expect(screen.getByText("válido ✓")).not.toBeNull();
   });
 });
+
+describe("ProtocolEditor — usabilidade (6d)", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    mocked(api.listAuthorProtocols).mockResolvedValue([
+      { name: "arbovirose", version: "1", status: "active" },
+      { name: "arbovirose", version: "3", status: "draft" }
+    ]);
+    mocked(api.gateProtocol).mockResolvedValue({ valid: true });
+    mocked(api.listAppointmentTypes).mockResolvedValue([]);
+  });
+
+  it("PR-07: título, rótulos e botões de verdade", () => {
+    render(<ProtocolEditor />);
+    expect(screen.getByRole("heading", { level: 1, name: "Editor de protocolo" })).not.toBeNull();
+    expect(screen.getByLabelText("Carregar versão")).not.toBeNull();
+    expect(screen.getByLabelText("Definição JSON")).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Salvar rascunho" }).style.background).not.toBe("");
+  });
+
+  it("PR-08: JSON quebrado mostra linha e coluna em português e trava Salvar com o motivo", () => {
+    render(<ProtocolEditor />);
+    fireEvent.change(definitionBox(), { target: { value: '{\n  "name": "x"\n  "version": 1\n}' } });
+    expect(screen.getByText(/^linha 3, coluna 3:/)).not.toBeNull();
+    const save = screen.getByRole("button", { name: "Salvar rascunho" }) as HTMLButtonElement;
+    expect(save.disabled).toBe(true);
+    expect(document.getElementById(save.getAttribute("aria-describedby")!)?.textContent).toBe("corrija os erros antes de salvar");
+  });
+
+  it("PR-09: status em português; versão que não é rascunho avisa e cria a próxima", async () => {
+    mocked(api.loadProtocolDefinition).mockResolvedValue({ ...DEF, name: "arbovirose", version: 1 });
+    render(<ProtocolEditor />);
+    const pick = screen.getByLabelText("Carregar versão") as HTMLSelectElement;
+    expect(await within(pick).findByRole("option", { name: "arbovirose@1 (em uso)" })).not.toBeNull();
+    fireEvent.change(pick, { target: { value: "arbovirose@@1" } });
+    expect(await screen.findByText("Esta versão não se edita: ela já saiu do rascunho.")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Criar nova versão a partir desta" }));
+    expect(JSON.parse(definitionBox().value).version).toBe(4);
+  });
+
+  it("PR-10: depois de salvar, o link leva ao ciclo de vida filtrado", async () => {
+    mocked(api.saveProtocolDraft).mockResolvedValue({ name: "arbovirose", version: 3, status: "draft" });
+    render(<ProtocolEditor />);
+    typeDefinition(DEF);
+    fireEvent.click(screen.getByRole("button", { name: "Salvar rascunho" }));
+    const link = await screen.findByRole("link", { name: "Ver no ciclo de vida →" });
+    expect(link.getAttribute("href")).toMatch(/\?protocolo=arbovirose#\/protocols$/);
+  });
+});

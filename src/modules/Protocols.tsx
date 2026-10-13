@@ -18,6 +18,7 @@ import {
 import { SensitiveAction } from "../components/SensitiveAction";
 import { buttonStyle, dangerButtonStyle, disabledButtonStyle, inputStyle } from "../components/formStyles";
 import { useDialog } from "../lib/useDialog";
+import { statusLabel } from "../lib/protocolStatus";
 import { actorLabel, eventLabel, type EventPerson } from "../lib/protocolEvents";
 import { Panel } from "../components/Panel";
 import { PageHeader } from "../components/PageHeader";
@@ -487,18 +488,6 @@ function statusTone(s: string): string {
   if (s === "draft") return "info";
   if (s === "retired") return "neutral";
   return "neutral";
-}
-
-const STATUS_LABEL: Record<string, string> = {
-  draft: "rascunho",
-  in_review: "em revisão",
-  published: "publicada",
-  active: "em uso",
-  retired: "aposentada"
-};
-
-function statusLabel(s: string): string {
-  return STATUS_LABEL[s] ?? s;
 }
 
 function Wrap({ children }: { children: React.ReactNode }) {
