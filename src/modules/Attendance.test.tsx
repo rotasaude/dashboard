@@ -147,6 +147,29 @@ describe("Attendance", () => {
     expect(await screen.findByText("tentativas esgotadas — peça ao cidadão para gerar outro código")).not.toBeNull();
   });
 
+  it("FC-06: Enter envia a busca do balcão e o erro some ao editar", async () => {
+    mocked(api.lookupCitizen).mockRejectedValue(new ApiError(422, { error: "invalid_code" }, "x"));
+    renderAttendance();
+    fireEvent.change(await screen.findByLabelText("CPF do cidadão (validação)"), { target: { value: "52998224725" } });
+    fireEvent.change(screen.getByLabelText("Código de validação"), { target: { value: "123456" } });
+    fireEvent.submit(screen.getByLabelText("Código de validação").closest("form")!);
+    // FC-17: o código pode ser do outro painel.
+    expect((await screen.findByText(/pode ser de 'Cheguei na unidade'/))).not.toBeNull();
+    fireEvent.change(screen.getByLabelText("Código de validação"), { target: { value: "12345" } });
+    expect(screen.queryByText(/código não confere/)).toBeNull();
+  });
+
+  it("FC-12: validar bloqueado diz que falta conferir o documento", async () => {
+    mocked(api.lookupCitizen).mockResolvedValue(found);
+    renderAttendance();
+    fireEvent.change(await screen.findByLabelText("CPF do cidadão (validação)"), { target: { value: "52998224725" } });
+    fireEvent.change(screen.getByLabelText("Código de validação"), { target: { value: "123456" } });
+    fireEvent.click(screen.getByRole("button", { name: "Buscar validação" }));
+    const validate = await screen.findByRole("button", { name: "Validar cadastro" });
+    expect(document.getElementById(validate.getAttribute("aria-describedby")!)?.textContent)
+      .toBe("marque 'Conferi o documento' para validar");
+  });
+
   it("o histórico de validações só aparece para o admin, e desfazer exige motivo", async () => {
     mocked(api.fetchCurrentSession).mockResolvedValue(session("municipal_admin"));
     mocked(api.listVerifications).mockResolvedValue([

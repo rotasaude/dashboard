@@ -14,6 +14,13 @@ import { EmptyState } from "../../components/EmptyState";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { FrozenTextNotice } from "../../components/FrozenTextNotice";
 import { CompleteNames } from "./CompleteNames";
+import { ReasonHint } from "../../components/ReasonHint";
+
+// O código que não confere pode ser o do outro painel (FC-17): o cidadão tem
+// "Cheguei na unidade" (check-in) e "Validar no posto" (validação) no celular.
+export function suggestOther(message: string, other: string): string {
+  return message.startsWith("código não confere") ? `${message}. Este código pode ser de '${other}' — use o outro painel.` : message;
+}
 
 // CheckIn (Task 7) — check-in por código (spec §5 "Check-in") e exceção por
 // CPF ("Cidadão sem o código"), dentro da unidade escolhida (UnitPicker,
@@ -24,6 +31,12 @@ import { CompleteNames } from "./CompleteNames";
 interface Props {
   unit: HealthUnit;
   onUnitInvalid(): void;
+}
+
+// O CPF é do painel, não do modo: trocar para "sem o código" não apaga (FC-06).
+interface FlowProps extends Props {
+  cpf: string;
+  onCpf(cpf: string): void;
 }
 
 type Mode = "code" | "exception";
@@ -64,11 +77,12 @@ function invalidateAfterCheckIn(queryClient: QueryClient, unitId: string, isAppo
 
 export function CheckIn({ unit, onUnitInvalid }: Props) {
   const [ mode, setMode ] = useState<Mode>("code");
+  const [ cpf, setCpf ] = useState("");
 
   return (
     <Panel
-      title="Check-in"
-      sub={mode === "code" ? "código gerado em 'Cheguei na unidade'" : undefined}
+      title="Check-in de quem chegou"
+      sub={mode === "code" ? "código de 'Cheguei na unidade', no celular do cidadão" : undefined}
       right={
         <button type="button" style={secondaryButtonStyle} onClick={() => setMode(mode === "code" ? "exception" : "code")}>
           {mode === "code" ? "Cidadão sem o código" : "Cidadão com código"}
@@ -76,16 +90,15 @@ export function CheckIn({ unit, onUnitInvalid }: Props) {
       }
     >
       {mode === "code"
-        ? <CodeFlow unit={unit} onUnitInvalid={onUnitInvalid} />
-        : <ExceptionFlow unit={unit} onUnitInvalid={onUnitInvalid} />}
+        ? <CodeFlow unit={unit} onUnitInvalid={onUnitInvalid} cpf={cpf} onCpf={setCpf} />
+        : <ExceptionFlow unit={unit} onUnitInvalid={onUnitInvalid} cpf={cpf} onCpf={setCpf} />}
     </Panel>
   );
 }
 
-function CodeFlow({ unit, onUnitInvalid }: Props) {
+function CodeFlow({ unit, onUnitInvalid, cpf, onCpf: setCpf }: FlowProps) {
   const queryClient = useQueryClient();
   const [ state, setState ] = useState<"form" | "found" | "done">("form");
-  const [ cpf, setCpf ] = useState("");
   const [ code, setCode ] = useState("");
   const [ checked, setChecked ] = useState(false);
   const [ found, setFound ] = useState<
@@ -113,7 +126,7 @@ function CodeFlow({ unit, onUnitInvalid }: Props) {
       setFound(result);
       setState("found");
     } catch (err) {
-      setError(lookupErrorMessage(err) ?? attendanceError(err));
+      setError(suggestOther(lookupErrorMessage(err) ?? attendanceError(err), "Validar no posto"));
     } finally {
       setBusy(false);
     }
@@ -142,27 +155,28 @@ function CodeFlow({ unit, onUnitInvalid }: Props) {
       {error && <p role="alert" style={{ margin: 0, fontSize: 12.5, color: "var(--down)" }}>{error}</p>}
 
       {state === "form" && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 10, maxWidth: 320 }}>
+        <form onSubmit={(e) => { e.preventDefault(); void search(); }}
+          style={{ display: "flex", flexDirection: "column", gap: 10, maxWidth: 320 }}>
           <label style={labelStyle}>
             CPF do cidadão (check-in)
-            <input value={cpf} onChange={(e) => setCpf(maskCpf(e.target.value))} style={inputStyle} inputMode="numeric" />
+            <input value={cpf} onChange={(e) => { setError(null); setCpf(maskCpf(e.target.value)); }} style={inputStyle} inputMode="numeric" />
           </label>
           <label style={labelStyle}>
             Código de check-in
             <input
               value={code}
-              onChange={(e) => setCode(onlyDigits(e.target.value).slice(0, 6))}
+              onChange={(e) => { setError(null); setCode(onlyDigits(e.target.value).slice(0, 6)); }}
               style={inputStyle}
               inputMode="numeric"
               autoComplete="one-time-code"
             />
           </label>
           <div>
-            <button type="button" disabled={busy} onClick={() => void search()} style={busy ? disabledButtonStyle : buttonStyle}>
+            <button type="submit" aria-disabled={busy || undefined} style={busy ? disabledButtonStyle : buttonStyle}>
               Buscar check-in
             </button>
           </div>
-        </div>
+        </form>
       )}
 
       {state === "found" && found && (
@@ -230,9 +244,8 @@ type ExceptionRow =
   | { kind: "appointment"; row: CheckInAppointment }
   | { kind: "triage"; row: CheckInTriage };
 
-function ExceptionFlow({ unit, onUnitInvalid }: Props) {
+function ExceptionFlow({ unit, onUnitInvalid, cpf, onCpf: setCpf }: FlowProps) {
   const queryClient = useQueryClient();
-  const [ cpf, setCpf ] = useState("");
   const [ rows, setRows ] = useState<ExceptionRow[] | null>(null);
   const [ selected, setSelected ] = useState<ExceptionRow | null>(null);
   const [ reason, setReason ] = useState("");
@@ -298,15 +311,16 @@ function ExceptionFlow({ unit, onUnitInvalid }: Props) {
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       {error && <p role="alert" style={{ margin: 0, fontSize: 12.5, color: "var(--down)" }}>{error}</p>}
 
-      <div style={{ display: "flex", gap: 8, alignItems: "flex-end", maxWidth: 400 }}>
+      <form onSubmit={(e) => { e.preventDefault(); void search(); }}
+        style={{ display: "flex", gap: 8, alignItems: "flex-end", maxWidth: 400 }}>
         <label style={{ ...labelStyle, flex: 1 }}>
           CPF do cidadão (exceção)
-          <input value={cpf} onChange={(e) => setCpf(maskCpf(e.target.value))} style={inputStyle} inputMode="numeric" />
+          <input value={cpf} onChange={(e) => { setError(null); setCpf(maskCpf(e.target.value)); }} style={inputStyle} inputMode="numeric" />
         </label>
-        <button type="button" disabled={busy} onClick={() => void search()} style={busy ? disabledButtonStyle : buttonStyle}>
+        <button type="submit" aria-disabled={busy || undefined} style={busy ? disabledButtonStyle : buttonStyle}>
           Buscar triagens
         </button>
-      </div>
+      </form>
 
       {rows && (
         rows.length === 0 ? <EmptyState title="nenhum agendamento ou triagem elegível para este CPF" /> : (
@@ -335,9 +349,11 @@ function ExceptionFlow({ unit, onUnitInvalid }: Props) {
               aria-describedby="exception-reason-notice" />
           </label>
           <FrozenTextNotice id="exception-reason-notice" />
+          <ReasonHint id="exception-reason-hint" text={reason} />
           <div>
             <button
               type="button"
+              aria-describedby={reasonValid ? undefined : "exception-reason-hint"}
               disabled={busy || !reasonValid}
               onClick={() => void start()}
               style={(busy || !reasonValid) ? disabledButtonStyle : buttonStyle}

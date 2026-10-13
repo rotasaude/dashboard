@@ -375,3 +375,50 @@ describe("CheckIn", () => {
     expect(await screen.findByRole("region", { name: "Completar nomes do cadastro" })).not.toBeNull();
   });
 });
+
+describe("usabilidade do check-in (6b)", () => {
+  beforeEach(() => {
+    for (const fn of [ api.lookupCheckIn, api.checkIn, api.searchCheckIn, api.checkInByException ]) mocked(fn).mockReset();
+  });
+
+  it("FC-06: Enter no código envia a busca", async () => {
+    mocked(api.lookupCheckIn).mockRejectedValue(new ApiError(422, { error: "invalid_code" }, "x"));
+    renderCheckIn();
+    fireEvent.change(screen.getByLabelText("CPF do cidadão (check-in)"), { target: { value: "52998224725" } });
+    fireEvent.change(screen.getByLabelText("Código de check-in"), { target: { value: "123456" } });
+    fireEvent.submit(screen.getByLabelText("Código de check-in").closest("form")!);
+    await waitFor(() => expect(api.lookupCheckIn).toHaveBeenCalled());
+  });
+
+  it("FC-06: o erro some ao editar o CPF, e o CPF segue ao trocar de modo", () => {
+    renderCheckIn();
+    fireEvent.change(screen.getByLabelText("CPF do cidadão (check-in)"), { target: { value: "111" } });
+    fireEvent.click(screen.getByRole("button", { name: "Buscar check-in" }));
+    expect(screen.getByRole("alert").textContent).toBe("CPF inválido");
+    fireEvent.change(screen.getByLabelText("CPF do cidadão (check-in)"), { target: { value: "529982247" } });
+    expect(screen.queryByRole("alert")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Cidadão sem o código" }));
+    expect((screen.getByLabelText("CPF do cidadão (exceção)") as HTMLInputElement).value).toBe("529.982.247");
+  });
+
+  it("FC-17: código que não confere sugere o painel de validação", async () => {
+    mocked(api.lookupCheckIn).mockRejectedValue(new ApiError(422, { error: "invalid_code" }, "x"));
+    renderCheckIn();
+    fireEvent.change(screen.getByLabelText("CPF do cidadão (check-in)"), { target: { value: "52998224725" } });
+    fireEvent.change(screen.getByLabelText("Código de check-in"), { target: { value: "123456" } });
+    fireEvent.click(screen.getByRole("button", { name: "Buscar check-in" }));
+    expect((await screen.findByRole("alert")).textContent).toMatch(/pode ser de 'Validar no posto'/);
+  });
+
+  it("FC-12: o motivo da exceção diz quanto falta, ligado ao botão", async () => {
+    mocked(api.searchCheckIn).mockResolvedValue({ appointments: [], triages: [ foundDeclared.triage ] });
+    renderCheckIn();
+    fireEvent.click(screen.getByRole("button", { name: "Cidadão sem o código" }));
+    fireEvent.change(screen.getByLabelText("CPF do cidadão (exceção)"), { target: { value: "52998224725" } });
+    fireEvent.click(screen.getByRole("button", { name: "Buscar triagens" }));
+    fireEvent.click(await screen.findByText("triage-respiratoria"));
+    fireEvent.change(screen.getByLabelText("Motivo"), { target: { value: "curto" } });
+    const start = screen.getByRole("button", { name: "Iniciar atendimento" });
+    expect(document.getElementById(start.getAttribute("aria-describedby")!)?.textContent).toBe("mínimo de 10 caracteres — faltam 5");
+  });
+});

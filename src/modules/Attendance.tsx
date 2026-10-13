@@ -18,7 +18,8 @@ import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } fr
 import type { ModuleId } from "../shell/modules";
 import { ProfileCheck, initialProfileCheck, profileCheckProblem, type ProfileCheckValue } from "./attendance/ProfileCheck";
 import { UnitPicker } from "./attendance/UnitPicker";
-import { CheckIn } from "./attendance/CheckIn";
+import { CheckIn, suggestOther } from "./attendance/CheckIn";
+import { ReasonHint } from "../components/ReasonHint";
 import { UnitQueue } from "./attendance/UnitQueue";
 import { ScreeningQueue } from "./attendance/ScreeningQueue";
 import { Requests } from "./attendance/Requests";
@@ -161,7 +162,7 @@ function Counter({ cadsusOn }: { cadsusOn: boolean }) {
       setProfile(initialProfileCheck(result.citizen.profile ?? null));
       setState("found");
     } catch (err) {
-      setError(attendanceError(err));
+      setError(suggestOther(attendanceError(err), "Cheguei na unidade"));
     } finally {
       setBusy(false);
     }
@@ -194,17 +195,18 @@ function Counter({ cadsusOn }: { cadsusOn: boolean }) {
   }
 
   return (
-    <Panel title="Balcão" sub="código gerado em 'Validar no posto'">
+    <Panel title="Validar cadastro com documento" sub="código de 'Validar no posto', no celular do cidadão">
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         {error && <p role="alert" style={{ margin: 0, fontSize: 12.5, color: "var(--down)" }}>{error}</p>}
 
         {state === "form" && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 10, maxWidth: 320 }}>
+          <form onSubmit={(e) => { e.preventDefault(); void search(); }}
+            style={{ display: "flex", flexDirection: "column", gap: 10, maxWidth: 320 }}>
             <label style={labelStyle}>
               CPF do cidadão (validação)
               <input
                 value={cpf}
-                onChange={(e) => setCpf(maskCpf(e.target.value))}
+                onChange={(e) => { setError(null); setCpf(maskCpf(e.target.value)); }}
                 style={inputStyle}
                 inputMode="numeric"
               />
@@ -213,18 +215,18 @@ function Counter({ cadsusOn }: { cadsusOn: boolean }) {
               Código de validação
               <input
                 value={code}
-                onChange={(e) => setCode(onlyDigits(e.target.value).slice(0, 6))}
+                onChange={(e) => { setError(null); setCode(onlyDigits(e.target.value).slice(0, 6)); }}
                 style={inputStyle}
                 inputMode="numeric"
                 autoComplete="one-time-code"
               />
             </label>
             <div>
-              <button type="button" disabled={busy} onClick={() => void search()} style={busy ? disabledButtonStyle : buttonStyle}>
+              <button type="submit" aria-disabled={busy || undefined} style={busy ? disabledButtonStyle : buttonStyle}>
                 Buscar validação
               </button>
             </div>
-          </div>
+          </form>
         )}
 
         {state === "found" && found && (
@@ -256,9 +258,13 @@ function Counter({ cadsusOn }: { cadsusOn: boolean }) {
               Conferi o documento com foto e o CPF confere
             </label>
 
+            {!checked && (
+              <p id="counter-block" style={{ margin: 0, fontSize: 12, color: "var(--ink2)" }}>marque 'Conferi o documento' para validar</p>
+            )}
             <div style={{ display: "flex", gap: 8 }}>
               <button
                 type="button"
+                aria-describedby={checked ? undefined : "counter-block"}
                 disabled={blocked}
                 onClick={() => void validate()}
                 style={blocked ? disabledButtonStyle : buttonStyle}
@@ -387,9 +393,11 @@ function RevokePanel({ row, onCancel, onDone }: { row: VerificationRow; onCancel
         Motivo
         <textarea value={reason} onChange={(e) => setReason(e.target.value)} style={{ ...inputStyle, minHeight: 60 }} />
       </label>
+      <ReasonHint id="revoke-reason-hint" text={reason} />
       <div style={{ display: "flex", gap: 8 }}>
         <button
           type="button"
+          aria-describedby={valid ? undefined : "revoke-reason-hint"}
           disabled={!valid || busy}
           onClick={() => void confirm()}
           style={(!valid || busy) ? disabledButtonStyle : buttonStyle}
