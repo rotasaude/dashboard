@@ -77,7 +77,7 @@ export function Attendance({ onNavigate }: { onNavigate(id: ModuleId): void }) {
   // escolhida. A API é quem garante; aqui só não se oferece o que ela recusaria.
   const linkedUnitIds = new Set((myProfessional.data?.links ?? []).filter((l) => !l.ended_at).map((l) => l.health_unit_id));
   const canCare = canCareRole && !!unit && linkedUnitIds.has(unit.id);
-  const shownUnit = choosingUnit ? null : unit;
+  const switchingUnit = choosingUnit && !!unit;
   const careBlocked = canCareRole && unit
     ? (myProfessional.isError ? attendanceError(myProfessional.error)
       : (myProfessional.isSuccess && myProfessional.data === null
@@ -107,17 +107,20 @@ export function Attendance({ onNavigate }: { onNavigate(id: ModuleId): void }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <PageHeader title="Atendimento" sub={pageSub} />
-      {canVerify && shownUnit && <PageIndex />}
+      {canVerify && unit && !switchingUnit && <PageIndex />}
       {(canVerify || canCareRole) && <UnitPicker key={pickerKey} userId={user.id} onChange={setUnit}
         linkedUnitIds={linkedUnitIds} onChoosing={setChoosingUnit} />}
-      {canVerify && shownUnit && <div id="sec-checkin"><CheckIn unit={shownUnit} onUnitInvalid={onUnitInvalid} /></div>}
+      {/* Trocando de unidade, as seções da atual ficam escondidas, mas montadas:
+          cancelar a troca devolve a escuta, a consulta e o que foi digitado (AT-16, I1). */}
+      <div hidden={switchingUnit} style={switchingUnit ? undefined : { display: "contents" }}>
+      {canVerify && unit && <div id="sec-checkin"><CheckIn unit={unit} onUnitInvalid={onUnitInvalid} /></div>}
       {/* A validação presencial sobe para perto do check-in: é a tarefa mais comum do balcão (FC-10). */}
-      {canVerify && !(choosingUnit && unit) && <div id="sec-balcao"><Counter cadsusOn={hasFeature(user, "cadsus_lookup")} /></div>}
-      {canCare && shownUnit && <ScreeningQueue unit={shownUnit} units={unitsQuery.data ?? []} />}
-      {(canVerify || canCareRole) && shownUnit && (
+      {canVerify && <div id="sec-balcao"><Counter cadsusOn={hasFeature(user, "cadsus_lookup")} /></div>}
+      {canCare && unit && <ScreeningQueue unit={unit} units={unitsQuery.data ?? []} />}
+      {(canVerify || canCareRole) && unit && (
         <div id="sec-fila">
         <UnitQueue
-          unit={shownUnit}
+          unit={unit}
           units={unitsQuery.data ?? []}
           canCare={canCare}
           careBlocked={careBlocked}
@@ -130,8 +133,9 @@ export function Attendance({ onNavigate }: { onNavigate(id: ModuleId): void }) {
         />
         </div>
       )}
-      {canVerify && shownUnit && <div id="sec-pedidos"><Requests unit={shownUnit} /></div>}
-      {canVerify && shownUnit && <div id="sec-agenda"><Agenda unit={shownUnit} /></div>}
+      {canVerify && unit && <div id="sec-pedidos"><Requests unit={unit} /></div>}
+      {canVerify && unit && <div id="sec-agenda"><Agenda unit={unit} /></div>}
+      </div>
       {canVerify && <UnassignedRequests />}
       {canVerify && <ErasureRequest />}
       {isAdmin && <History />}

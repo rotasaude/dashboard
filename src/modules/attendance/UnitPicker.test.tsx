@@ -103,3 +103,17 @@ describe("UnitPicker — vínculo, atual e cancelar (AT-16)", () => {
   });
 });
 
+describe("UnitPicker — Escape logo depois de trocar (I4)", () => {
+  it("o foco vai para a unidade atual e Escape mantém", async () => {
+    localStorage.clear();
+    localStorage.setItem(currentUnitKey("u1"), "u1");
+    mocked(api.listActiveUnits).mockResolvedValue(units);
+    render(<UnitPicker userId="u1" onChange={vi.fn()} />);
+    fireEvent.click(await screen.findByRole("button", { name: "trocar" }));
+    const current = document.activeElement as HTMLElement;
+    expect(current.getAttribute("aria-current")).toBe("true");
+    fireEvent.keyDown(current, { key: "Escape" });
+    expect(screen.getByText("Unidade: UBS Centro")).not.toBeNull();
+  });
+});
+

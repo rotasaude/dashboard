@@ -190,6 +190,22 @@ describe("ConsultationDocuments", () => {
     expect(screen.queryByLabelText("Dias de afastamento")).toBeNull();
   });
 
+  it("I2: o mesmo tipo de novo e Renovar receita também perguntam antes de descartar", async () => {
+    mocked(api.getPrescriptionRenewal).mockResolvedValue([ prescriptionItem() ]);
+    renderIt();
+    fireEvent.click(await screen.findByRole("button", { name: "Atestado" }));
+    fireEvent.change(screen.getByLabelText("Dias de afastamento"), { target: { value: "3" } });
+    fireEvent.click(screen.getByRole("button", { name: "Atestado" }));
+    let ask = screen.getByRole("group", { name: "Descartar o formulário em edição?" });
+    fireEvent.click(within(ask).getByRole("button", { name: "Cancelar" }));
+    expect((screen.getByLabelText("Dias de afastamento") as HTMLInputElement).value).toBe("3");
+    fireEvent.click(screen.getByRole("button", { name: "Renovar receita" }));
+    ask = screen.getByRole("group", { name: "Descartar o formulário em edição?" });
+    expect(api.getPrescriptionRenewal).not.toHaveBeenCalled();
+    fireEvent.click(within(ask).getByRole("button", { name: "Cancelar" }));
+    expect((screen.getByLabelText("Dias de afastamento") as HTMLInputElement).value).toBe("3");
+  });
+
   it("AT-07: depois de emitir, o foco vai para o aviso", async () => {
     mocked(api.listConsultationDocuments).mockResolvedValue([]);
     mocked(api.issueDocument).mockResolvedValue(sickNoteDoc({ id: "doc8" }));

@@ -108,17 +108,20 @@ export function ConsultationDocuments({ consultationId, issue, draft, searchDela
     setNotice(null); setError(null); setCancelling(null); setForm({ ...next, seq: seq.current });
   }
 
-  // Trocar de tipo com um formulário aberto pergunta antes de descartar (AT-06):
-  // a tela não sabe se ele foi preenchido.
-  const [ switching, setSwitching ] = useState<DocumentKind | null>(null);
-  function start(kind: DocumentKind) {
+  // Toda ação que trocaria o formulário aberto pergunta antes de descartar
+  // (AT-06, I2): outro tipo, o mesmo tipo de novo, Renovar, Notificação e o
+  // Cancelar da linha. A tela não sabe se ele foi preenchido.
+  const [ switching, setSwitching ] = useState<(() => void) | null>(null);
+  function guarded(action: () => void) {
     if (issuingRef.current) return;
-    if (form && form.kind !== kind) { setSwitching(kind); return; }
-    openKind(kind);
+    if (form) { setSwitching(() => action); return; }
+    action();
+  }
+  function start(kind: DocumentKind) {
+    guarded(() => openKind(kind));
   }
 
   function openKind(kind: DocumentKind) {
-    setSwitching(null);
     if (kind === "sick_note") open({ kind, draft: emptySickNote(today) });
     else if (kind === "attendance_declaration") open({ kind, draft: emptyDeclaration(today) });
     else if (kind === "prescription") open({ kind, draft: { items: [], protocolVersionId: "" } });
@@ -248,15 +251,18 @@ export function ConsultationDocuments({ consultationId, issue, draft, searchDela
         )}
         {canCancel(d, user?.id) && (
           <button type="button" aria-label={`Cancelar ${what(d)}`} disabled={issuing}
-            style={issuing ? disabledButtonStyle : secondaryButtonStyle} onClick={() => askCancel(d, false)}>Cancelar</button>
+            style={issuing ? disabledButtonStyle : secondaryButtonStyle} onClick={() => guarded(() => askCancel(d, false))}>Cancelar</button>
         )}
         {issue && canCancel(d, user?.id) && d.kind !== "controlled_notification_record" && (
           <button type="button" aria-label={`Cancelar e emitir outro: ${what(d)}`} disabled={issuing}
-            style={issuing ? disabledButtonStyle : secondaryButtonStyle} onClick={() => askCancel(d, true)}>Cancelar e emitir outro</button>
+            style={issuing ? disabledButtonStyle : secondaryButtonStyle} onClick={() => guarded(() => askCancel(d, true))}>Cancelar e emitir outro</button>
         )}
       </span>
     ) }
   ];
+
+  // Sem formulário aberto, a pergunta de descartar não faz sentido.
+  useEffect(() => { if (!form) setSwitching(null); }, [ form ]);
 
   // O resultado da emissão recebe o foco, perto de onde se clicou (AT-07).
   const noticeRef = useRef<HTMLParagraphElement | null>(null);
@@ -278,13 +284,13 @@ export function ConsultationDocuments({ consultationId, issue, draft, searchDela
           })}
           {canRenew && (
             <button type="button" disabled={renewing || issuing} style={renewing || issuing ? disabledButtonStyle : buttonStyle}
-              onClick={() => void renew()}>
+              onClick={() => guarded(() => void renew())}>
               Renovar receita
             </button>
           )}
           {canNotify && (
             <button type="button" disabled={issuing} style={issuing ? disabledButtonStyle : secondaryButtonStyle}
-              onClick={startNotification}>Notificação (papel)</button>
+              onClick={() => guarded(startNotification)}>Notificação (papel)</button>
           )}
         </div>
       )}
@@ -292,7 +298,7 @@ export function ConsultationDocuments({ consultationId, issue, draft, searchDela
       {switching && (
         <div role="group" aria-label="Descartar o formulário em edição?" style={row}>
           <span>Descartar o formulário em edição?</span>
-          <button type="button" style={buttonStyle} onClick={() => openKind(switching)}>Descartar e abrir</button>
+          <button type="button" style={buttonStyle} onClick={() => { if (issuingRef.current) return; const run = switching; setSwitching(null); run(); }}>Descartar e abrir</button>
           <button type="button" style={secondaryButtonStyle} onClick={() => setSwitching(null)}>Cancelar</button>
         </div>
       )}

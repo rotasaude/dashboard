@@ -94,9 +94,12 @@ export function ScreeningForm(props: ScreeningFormProps) {
     (sendReason && reason.length > NOTE_MAX ? `a justificativa passa de ${NOTE_MAX} caracteres` : null) ??
     (mode === "complete" ? destinationProblem(dest) : null);
   const blocked = busy || stale || problem !== null;
-  // A escuta não tem rascunho: sair com algo preenchido pede confirmação (AT-03).
-  useLeaveGuard(!busy && (ciap !== null || note !== "" || reason !== ""
-    || JSON.stringify(vitalsForm) !== JSON.stringify(current ? vitalsFormFrom(current.vitals) : EMPTY_VITALS_FORM)));
+  // A escuta não tem rascunho: sair com algo mudado desde a abertura pede
+  // confirmação (AT-03). A base é o que o formulário abriu (reavaliação já
+  // vem preenchida).
+  const snapshot = JSON.stringify({ code: ciap?.code ?? null, note, vitalsForm, reason, finalChoice, dest });
+  const [ baseline ] = useState(snapshot);
+  useLeaveGuard(!busy && snapshot !== baseline);
 
   function revisionBody() {
     return {

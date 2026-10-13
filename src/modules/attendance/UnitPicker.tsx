@@ -45,6 +45,12 @@ export function UnitPicker({ userId, onChange, linkedUnitIds, onChoosing }: Prop
   const onChoosingRef = useRef(onChoosing);
   onChoosingRef.current = onChoosing;
   useEffect(() => { onChoosingRef.current?.(choosing); }, [ choosing ]);
+  // Ao abrir a troca, o foco vai para a unidade atual (o botão "trocar" some);
+  // assim Escape e as setas funcionam logo (I4).
+  const listRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (choosing && selected) listRef.current?.querySelector<HTMLElement>('[aria-current="true"]')?.focus();
+  }, [ choosing, selected ]);
 
   useEffect(() => {
     let cancelled = false;
@@ -104,7 +110,7 @@ export function UnitPicker({ userId, onChange, linkedUnitIds, onChoosing }: Prop
 
   return (
     <Panel title="Escolha a unidade" sub="Escolha a unidade para ver o check-in e a fila">
-      <div onKeyDown={(e) => { if (e.key === "Escape" && selected) setChoosing(false); }}>
+      <div ref={listRef} onKeyDown={(e) => { if (e.key === "Escape" && selected) setChoosing(false); }}>
       {units.length === 0 ? (
         <EmptyState title="nenhuma unidade ativa" sub="peça ao administrador para cadastrar uma" />
       ) : (

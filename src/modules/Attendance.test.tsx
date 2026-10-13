@@ -444,9 +444,13 @@ describe("Attendance", () => {
     mocked(api.listActiveUnits).mockResolvedValue([ unit ]);
     renderAttendance();
     expect(await screen.findByLabelText("CPF do cidadão (check-in)")).not.toBeNull();
+    fireEvent.change(screen.getByLabelText("CPF do cidadão (check-in)"), { target: { value: "52998224725" } });
     fireEvent.click(screen.getByRole("button", { name: "trocar" }));
-    expect(screen.queryByLabelText("CPF do cidadão (check-in)")).toBeNull();
+    expect(screen.getByLabelText("CPF do cidadão (check-in)").closest("[hidden]")).not.toBeNull();
     expect(screen.queryByRole("region", { name: "Fila" })).toBeNull();
+    // I1: manter a unidade devolve tudo como estava (nada foi desmontado).
+    fireEvent.click(screen.getByRole("button", { name: "manter UBS Centro" }));
+    expect((screen.getByLabelText("CPF do cidadão (check-in)") as HTMLInputElement).value).toBe("529.982.247-25");
   });
 
   it("recepção continua vendo check-in e balcão, além da fila", async () => {

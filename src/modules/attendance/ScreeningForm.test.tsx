@@ -210,6 +210,17 @@ describe("ScreeningForm — reavaliar", () => {
   });
   const completed = () => screening({ status: "completed", destination: "same_day", current_revision: revision(), revisions_count: 1 });
 
+  it("I3: reavaliação sem mudança não avisa ao sair; com mudança, avisa", () => {
+    renderForm({ mode: "reassess", screening: completed() });
+    const e = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(e);
+    expect(e.defaultPrevented).toBe(false);
+    fireEvent.change(screen.getByLabelText("Queixa em texto (opcional)"), { target: { value: "piorou" } });
+    const e2 = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(e2);
+    expect(e2.defaultPrevented).toBe(true);
+  });
+
   it("começa da revisão corrente, sem destino, e salva só a revisão", async () => {
     const props = renderForm({ mode: "reassess", screening: completed() });
     expect(screen.getByText("Hipertensão sem complicações")).not.toBeNull();
