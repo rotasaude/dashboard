@@ -94,7 +94,7 @@ describe("Minhas consultas", () => {
     expect(m(api.getConsultation).mock.calls[0][0]).toBe("c1");
     expect(api.getJustifiedRecord).not.toHaveBeenCalled();
     expect(api.getAttendanceRecord).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByText("Fechar consulta"));
+    fireEvent.click(screen.getByText("Fechar painel"));
     expect(await screen.findByText("Joana Lima")).not.toBeNull();
     expect(screen.queryByText("Imprimir")).toBeNull();
   });

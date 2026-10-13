@@ -17,6 +17,7 @@ import { VitalsList } from "./PatientPanel";
 import { AddendumForm } from "./AddendumForm";
 import { SignatureMarker } from "../signature/SignatureMarker";
 import { printHint } from "../../lib/signature";
+import { useReveal } from "../../lib/useReveal";
 
 export interface ConsultationViewProps {
   consultation: Consultation;
@@ -44,6 +45,8 @@ export function ConsultationView(props: ConsultationViewProps) {
   const [ adding, setAdding ] = useState(false);
   const [ printing, setPrinting ] = useState(false);
   const [ printError, setPrintError ] = useState<string | null>(null);
+  // Abre à vista, com o foco no título (AT-07).
+  const revealRef = useReveal<HTMLElement>(true);
   const conductLabel = (code: string) => codedLabel(options?.conducts, code);
   const addenda = [ ...(c.addenda ?? []) ].sort((a, b) => a.created_at.localeCompare(b.created_at));
   // Módulo 19b: como sai o impresso (o api escolhe; contrato 19b §6).
@@ -69,9 +72,9 @@ export function ConsultationView(props: ConsultationViewProps) {
   }
 
   return (
-    <section aria-label="Consulta finalizada" style={panel}>
+    <section ref={revealRef} aria-label="Consulta finalizada" style={panel}>
       <div style={{ display: "flex", gap: 12, alignItems: "baseline", flexWrap: "wrap" }}>
-        <strong>{`Consulta de ${fmtDateTime(c.finalized_at)}`}</strong>
+        <h3 style={{ margin: 0, fontSize: 14 }}>{`Consulta de ${fmtDateTime(c.finalized_at)}`}</h3>
         <span style={muted}>{`${c.author.name} · ${codedLabel(options?.care_types, c.care_type)}`}</span>
       </div>
       {c.signature && (
@@ -134,7 +137,7 @@ export function ConsultationView(props: ConsultationViewProps) {
         {isAuthor && !adding && (
           <button type="button" style={secondaryButtonStyle} onClick={() => setAdding(true)}>Adendo</button>
         )}
-        <button type="button" style={secondaryButtonStyle} onClick={props.onClose}>Fechar consulta</button>
+        <button type="button" style={secondaryButtonStyle} onClick={props.onClose}>Fechar painel</button>
       </div>
 
       {adding && (

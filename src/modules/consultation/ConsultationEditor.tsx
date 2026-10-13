@@ -17,6 +17,7 @@ import { bmiOf } from "../../lib/screening";
 import { todayInCity } from "../../lib/campaigns";
 import { saveStatusLabel, useAutosave } from "../../lib/useAutosave";
 import { useLeaveGuard } from "../../lib/useLeaveGuard";
+import { useReveal } from "../../lib/useReveal";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { VitalSignsFields } from "../attendance/VitalSignsFields";
 import { OutcomeFields } from "../attendance/OutcomeFields";
@@ -74,6 +75,8 @@ export function ConsultationEditor(props: ConsultationEditorProps) {
 
   // Sair com texto ainda não salvo pede confirmação do navegador (AT-04).
   useLeaveGuard(autosave.pending && !locked && !sealing);
+  // Abre à vista, com o foco no título (AT-07).
+  const revealRef = useReveal<HTMLElement>(true);
 
   const today = todayInCity();
   const { referralUnitId } = outcomeView(outcome, props.referenceUnitIds, unit, units);
@@ -101,9 +104,9 @@ export function ConsultationEditor(props: ConsultationEditorProps) {
   const blockedFinal = busy || locked || sealing || missing.length > 0;
 
   return (
-    <section aria-label="Consulta" style={panel}>
+    <section ref={revealRef} aria-label="Consulta" style={panel}>
       <div style={{ display: "flex", gap: 12, alignItems: "baseline", flexWrap: "wrap" }}>
-        <strong>Consulta — rascunho</strong>
+        <h3 style={{ margin: 0, fontSize: 14 }}>Consulta — rascunho</h3>
         <span role="status" style={muted}>{saveStatusLabel(autosave.status, blocked, autosave.pending)}</span>
       </div>
       <p style={muted}>

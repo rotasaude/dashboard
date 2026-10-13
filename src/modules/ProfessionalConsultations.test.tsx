@@ -62,12 +62,12 @@ describe("Consultas por profissional", () => {
     await screen.findByText("Joana Lima");
     fireEvent.click(screen.getByRole("button", { name: /Abrir consulta de/ }));
     fireEvent.click(await screen.findByRole("button", { name: "Abrir consulta" }));
-    expect(await screen.findByRole("button", { name: "Fechar consulta" })).not.toBeNull();
+    expect(await screen.findByRole("button", { name: "Fechar painel" })).not.toBeNull();
     expect(api.getAdministrativeConsultation).toHaveBeenCalledWith("c1");
     expect(screen.queryByRole("button", { name: /Imprimir/ })).toBeNull();
     expect(screen.queryByRole("button", { name: /Adendo/ })).toBeNull();
     expect(screen.getByText(/relatório de aberturas/)).not.toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Fechar consulta" }));
+    fireEvent.click(screen.getByRole("button", { name: "Fechar painel" }));
     expect(await screen.findByText("Joana Lima")).not.toBeNull();
   });
 
@@ -112,7 +112,7 @@ describe("Consultas por profissional", () => {
     await screen.findByText("Joana Lima");
     fireEvent.click(screen.getByRole("button", { name: /Abrir consulta de/ }));
     fireEvent.click(await screen.findByRole("button", { name: "Abrir consulta" }));
-    await screen.findByRole("button", { name: "Fechar consulta" });
+    await screen.findByRole("button", { name: "Fechar painel" });
   }
 
   it("admin puro com opções 200: o rótulo da conduta aparece na consulta aberta", async () => {

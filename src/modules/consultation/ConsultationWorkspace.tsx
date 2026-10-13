@@ -100,7 +100,9 @@ export function ConsultationWorkspace(props: Props) {
     } catch (err) {
       const existing = existingConsultationId(err);
       if (!existing) { setError(consultationError(err)); return; }
-      try { setConsultation(await getConsultation(existing)); } catch (again) { setError(consultationError(again)); }
+      // Retomar também é "Iniciar consulta" (o painel só sabe que há rascunho
+      // depois do clique): diz que retomou (AT-10).
+      try { setConsultation(await getConsultation(existing)); setNotice("Rascunho retomado."); } catch (again) { setError(consultationError(again)); }
     } finally {
       setBusy(false);
     }
@@ -141,6 +143,7 @@ export function ConsultationWorkspace(props: Props) {
               <button type="button" disabled={busy} style={busy ? disabledButtonStyle : buttonStyle} onClick={() => void open()}>
                 Iniciar consulta
               </button>
+              <p style={{ margin: "6px 0 0", fontSize: 12, color: "var(--ink3)" }}>Se você já começou esta consulta, o seu rascunho abre.</p>
             </div>
           )}
 

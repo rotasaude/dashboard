@@ -50,7 +50,7 @@ describe("ConsultationView", () => {
     const list = within(view).getByRole("list", { name: "adendos" });
     expect(within(list).getByText("Adendo de Enf. Lúcia Prado em 07/10/2026, 11:00")).not.toBeNull();
     expect(within(list).getByText("Condutas: Alta do episódio")).not.toBeNull();
-    expect(within(view).getByRole("button", { name: "Fechar consulta" })).not.toBeNull();
+    expect(within(view).getByRole("button", { name: "Fechar painel" })).not.toBeNull();
   });
 
   it("consulta e adendo sem chaves opcionais (changes null, sem justificativa)", () => {
@@ -86,12 +86,12 @@ describe("ConsultationView", () => {
     expect(screen.getByRole("button", { name: "Adendo" })).not.toBeNull();
   });
 
-  it("outro profissional vê o conteúdo e Fechar consulta, sem Imprimir nem Adendo", async () => {
+  it("outro profissional vê o conteúdo e Fechar painel, sem Imprimir nem Adendo", async () => {
     sessionAs("us9");
     wrap(<ConsultationView consultation={finalized()} options={options()} patientProblems={[]} onAddendumAdded={vi.fn()} onClose={vi.fn()} />);
     await settled();
     expect(screen.getByText("Diabetes descompensado.")).not.toBeNull();
-    expect(screen.getByRole("button", { name: "Fechar consulta" })).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Fechar painel" })).not.toBeNull();
     expect(screen.queryByRole("button", { name: "Imprimir" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Adendo" })).toBeNull();
   });
@@ -102,7 +102,7 @@ describe("ConsultationView", () => {
     expect(mocked(api.fetchCurrentSession)).toHaveBeenCalled();
     expect(screen.queryByRole("button", { name: "Imprimir" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Adendo" })).toBeNull();
-    expect(screen.getByRole("button", { name: "Fechar consulta" })).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Fechar painel" })).not.toBeNull();
   });
 
   it("403 not_author no impresso mostra a frase", async () => {
@@ -159,3 +159,14 @@ describe("ConsultationView", () => {
     expect(api.getConsultation).toHaveBeenCalledWith("cs1");
   });
 });
+
+describe("ConsultationView — à vista (AT-07)", () => {
+  it("abre rolando até a consulta, com o foco no título", () => {
+    const scroll = vi.fn(); Element.prototype.scrollIntoView = scroll;
+    wrap(<ConsultationView consultation={finalized()} options={options()} patientProblems={[ problem() ]}
+      onAddendumAdded={vi.fn()} onClose={vi.fn()} />);
+    expect(scroll).toHaveBeenCalled();
+    expect(document.activeElement).toBe(screen.getByRole("heading", { name: "Consulta de 07/10/2026, 10:20" }));
+  });
+});
+

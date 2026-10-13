@@ -177,3 +177,13 @@ describe("ConsultationEditor", () => {
     expect(api.saveConsultationDraft).not.toHaveBeenCalled();
   });
 });
+
+describe("ConsultationEditor — à vista (AT-07)", () => {
+  it("abre rolando até o editor, com o foco no título", () => {
+    const scroll = vi.fn(); Element.prototype.scrollIntoView = scroll;
+    renderEditor();
+    expect(scroll).toHaveBeenCalled();
+    expect(document.activeElement).toBe(screen.getByRole("heading", { name: "Consulta — rascunho" }));
+  });
+});
+

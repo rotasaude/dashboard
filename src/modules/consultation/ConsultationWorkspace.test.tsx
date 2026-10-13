@@ -75,6 +75,15 @@ describe("ConsultationWorkspace", () => {
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
+  it("AT-10: diz que o rascunho abre, e avisa quando retoma", async () => {
+    mocked(api.startConsultation).mockRejectedValue(new ApiError(409, { error: "already_exists", consultation_id: "cs1" }, "409"));
+    mocked(api.getConsultation).mockResolvedValue(consultation());
+    renderIt();
+    expect(await screen.findByText("Se você já começou esta consulta, o seu rascunho abre.")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Iniciar consulta" }));
+    expect((await screen.findByRole("status")).textContent).toBe("Rascunho retomado.");
+  });
+
   it("cadastro não validado: diz a frase e não oferece iniciar", async () => {
     mocked(api.getAttendanceRecord).mockRejectedValue(new ApiError(409, { error: "citizen_not_verified" }, "409"));
     renderIt();
