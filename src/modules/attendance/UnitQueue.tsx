@@ -213,9 +213,16 @@ export function UnitQueue({
   const consultationRow = panel?.kind === "consultation" ? inCare.find((r) => r.id === panel.attendanceId) : undefined;
   const consultationRef = useReveal<HTMLElement>(panel?.kind === "consultation");
 
-  // A consulta aberta fecha quando a pessoa dela sai de Em atendimento (FC-03).
+  // A consulta aberta fecha quando a pessoa dela SAI de Em atendimento (FC-03):
+  // só depois de ter sido vista lá (logo após Chamar a lista ainda é a de
+  // antes) e nunca depois de finalizar nesta tela (o painel mostra o resultado
+  // e os documentos).
+  const seenInCare = useRef<string | null>(null);
+  const finalizedHere = useRef<string | null>(null);
   useEffect(() => {
-    if (panel?.kind === "consultation" && query.isSuccess && !consultationRow) setPanel(null);
+    if (panel?.kind !== "consultation") return;
+    if (consultationRow) { seenInCare.current = panel.attendanceId; return; }
+    if (query.isSuccess && seenInCare.current === panel.attendanceId && finalizedHere.current !== panel.attendanceId) setPanel(null);
   }, [ panel, query.isSuccess, consultationRow ]);
 
   return (
@@ -275,6 +282,7 @@ export function UnitQueue({
                           <span style={{ marginLeft: 8 }}>
                             <ConfirmButton label="Saiu sem atendimento" variant="danger"
                               question={`Confirmar que ${personLabel(r).title} saiu sem atendimento?`}
+                              disabledReason={rowBusy ? "aguarde a ação em andamento" : null}
                               onConfirm={() => onLeft(r)} />
                           </span>
                         </div>
@@ -372,6 +380,7 @@ export function UnitQueue({
             onGoToSecurity={onGoToSecurity}
             onClose={() => setPanel(null)}
             onFinalized={() => {
+              finalizedHere.current = panel.attendanceId;
               invalidate();
               void queryClient.invalidateQueries({ queryKey: [ "unitRequests" ] });
               msg.ok("Consulta finalizada e atendimento encerrado.");

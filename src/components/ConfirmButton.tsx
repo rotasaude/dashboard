@@ -20,7 +20,11 @@ export function ConfirmButton({ label, question, onConfirm, variant = "secondary
 
   useEffect(() => {
     if (asking) questionRef.current?.focus();
-    else if (wasAsking.current) triggerRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
+    // Volta ao botão só se o foco se perdeu (Cancelar, Escape); se quem chamou
+    // já levou o foco a outro lugar (ex.: a mensagem do resultado), fica lá.
+    else if (wasAsking.current && (document.activeElement === document.body || document.activeElement === null)) {
+      triggerRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
+    }
     wasAsking.current = asking;
   }, [ asking ]);
 

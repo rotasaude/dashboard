@@ -10,7 +10,12 @@ vi.mock("../../lib/api", async (importOriginal) => {
     closeAttendance: vi.fn(), getScreening: vi.fn() };
 });
 vi.mock("../consultation/ConsultationWorkspace", () => ({
-  ConsultationWorkspace: (p: { attendanceId: string }) => <div>{`consulta de ${p.attendanceId}`}</div>
+  ConsultationWorkspace: (p: { attendanceId: string; onFinalized(): void }) => (
+    <div>
+      <span>{`consulta de ${p.attendanceId}`}</span>
+      <button type="button" onClick={p.onFinalized}>finalizar (dublê)</button>
+    </div>
+  )
 }));
 
 import * as api from "../../lib/api";
@@ -153,5 +158,48 @@ describe("UnitQueue — usabilidade (6b)", () => {
     const group = call.closest("[data-row-actions]") as HTMLElement;
     expect(group.style.flexWrap).toBe("wrap");
     expect(group.style.alignItems).toBe("center");
+  });
+
+  it("C1: Chamar abre a consulta e ela continua aberta enquanto a lista ainda não recarregou", async () => {
+    mocked(api.listUnitQueue).mockResolvedValueOnce({ waiting: [ w1 ], in_care: [] });
+    let release!: (v: unknown) => void;
+    mocked(api.listUnitQueue).mockReturnValueOnce(new Promise((r) => { release = r; }));
+    mocked(api.callAttendance).mockResolvedValue({ attendance: { id: "a1", screening: null } });
+    renderQueue({ canCare: true, clinicalRecord: true });
+    fireEvent.click(await screen.findByRole("button", { name: "Chamar" }));
+    expect(await screen.findByText("consulta de a1")).toBeTruthy();
+    await new Promise((r) => setTimeout(r, 50));
+    expect(screen.getByText("consulta de a1")).toBeTruthy();
+    await act(async () => { release({ waiting: [], in_care: [ { ...w1, called_at: "2026-10-12T13:00:00Z", called_by_name: "Dra." } ] }); });
+    expect(screen.getByText("consulta de a1")).toBeTruthy();
+  });
+
+  it("I1: depois de finalizar nesta tela, a consulta não some quando o atendimento sai da lista", async () => {
+    mocked(api.listUnitQueue).mockResolvedValue({ waiting: [], in_care: [ c1 ] });
+    const { client } = renderQueue({ canCare: true, clinicalRecord: true });
+    fireEvent.click(await screen.findByRole("button", { name: "Consulta" }));
+    mocked(api.listUnitQueue).mockResolvedValue({ waiting: [], in_care: [] });
+    fireEvent.click(screen.getByRole("button", { name: "finalizar (dublê)" }));
+    await act(async () => { await client.invalidateQueries({ queryKey: [ "unitQueue", "u1" ] }); });
+    await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
+    expect(screen.queryByText("Ninguém aguardando")).toBeTruthy();
+    expect(screen.getByText("consulta de c1")).toBeTruthy();
+  });
+
+  it("I2: depois de confirmar a saída, o foco fica na mensagem", async () => {
+    renderQueue({ canCare: false, clinicalRecord: true });
+    fireEvent.click((await screen.findAllByRole("button", { name: "Saiu sem atendimento" }))[0]);
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+    const status = await screen.findByRole("status");
+    await waitFor(() => expect(document.activeElement).toBe(status));
+  });
+
+  it("I3: com outra ação em andamento, 'Saiu sem atendimento' fica bloqueado com o motivo", async () => {
+    mocked(api.callAttendance).mockReturnValue(new Promise(() => {}));
+    renderQueue({ canCare: true, clinicalRecord: true });
+    fireEvent.click((await screen.findAllByRole("button", { name: "Chamar" }))[0]);
+    const left = screen.getAllByRole("button", { name: "Saiu sem atendimento" })[1];
+    expect(left.getAttribute("aria-disabled")).toBe("true");
+    expect(document.getElementById(left.getAttribute("aria-describedby")!)?.textContent).toBe("aguarde a ação em andamento");
   });
 });
