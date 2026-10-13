@@ -1,12 +1,12 @@
 // src/modules/consultation/ConsultationWorkspace.test.tsx
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, screen } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import type { Consultation } from "../../lib/api";
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const real = await importOriginal<typeof import("../../lib/api")>();
   return { ...real, fetchCurrentSession: vi.fn(), getAttendanceRecord: vi.fn(), getConsultationOptions: vi.fn(),
-    startConsultation: vi.fn(), getConsultation: vi.fn() };
+    startConsultation: vi.fn(), getConsultation: vi.fn(), getConsultationProblems: vi.fn() };
 });
 vi.mock("./ConsultationEditor", () => ({
   ConsultationEditor: (p: { consultation: Consultation; onFinalized(c: Consultation): void; onLocked(m: string): void }) => (
@@ -42,7 +42,7 @@ import * as api from "../../lib/api";
 import { ApiError } from "../../lib/api";
 import { ConsultationWorkspace } from "./ConsultationWorkspace";
 import { renderWithProviders, sessionWith } from "../../test/campaignFixtures";
-import { consultation, finalized, options, record } from "../../test/consultationFixtures";
+import { consultation, finalized, options, problem, record } from "../../test/consultationFixtures";
 
 afterEach(cleanup);
 const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
@@ -63,6 +63,8 @@ describe("ConsultationWorkspace", () => {
     mocked(api.getAttendanceRecord).mockResolvedValue(record());
     mocked(api.getConsultationOptions).mockResolvedValue(options());
     mocked(api.startConsultation).mockResolvedValue(consultation());
+    mocked(api.getConsultationProblems).mockReset();
+    mocked(api.getConsultationProblems).mockResolvedValue([ problem() ]);
   });
 
   it("mostra o paciente e inicia a consulta", async () => {
@@ -135,23 +137,33 @@ describe("ConsultationWorkspace", () => {
   });
 
   // dashboard#13: o atendimento fecha na finalização e o api recusa reler o prontuário por ele;
-  // o painel aplica o que a consulta e o adendo registraram, sem nova leitura.
-  it("depois de finalizar, o painel mostra o problema incluído sem reler o prontuário", async () => {
+  // o painel relê a lista de problemas pela rota da autora (/consultations/:id/problems).
+  it("depois de finalizar, o painel mostra o problema incluído (relido pela rota da autora)", async () => {
+    mocked(api.getConsultationProblems).mockResolvedValue([ problem(), problem({ id: "pp9", code: "K86", label: "Hipertensão" }) ]);
     renderIt();
     fireEvent.click(await screen.findByRole("button", { name: "Iniciar consulta" }));
     expect((await screen.findByRole("list", { name: "problemas ativos" })).textContent).not.toMatch(/K86/);
     fireEvent.click(await screen.findByRole("button", { name: /finalizar com K86/ }));
-    expect((await screen.findByRole("list", { name: "problemas ativos" })).textContent).toMatch(/K86/);
+    await waitFor(async () => expect((await screen.findByRole("list", { name: "problemas ativos" })).textContent).toMatch(/K86/));
+    expect(api.getConsultationProblems).toHaveBeenCalledWith("cs1");
     expect(api.getAttendanceRecord).toHaveBeenCalledTimes(1);
   });
 
-  it("depois de um adendo que resolve um problema, o painel o tira dos ativos", async () => {
+  it("depois de um adendo que inclui um problema novo (problem_id nulo no api), o painel o mostra", async () => {
     renderIt();
     fireEvent.click(await screen.findByRole("button", { name: "Iniciar consulta" }));
     fireEvent.click(await screen.findByRole("button", { name: "finalizar (dublê)" }));
-    expect((await screen.findByRole("list", { name: "problemas ativos" })).textContent).toMatch(/T90/);
+    mocked(api.getConsultationProblems).mockResolvedValue([ problem(), problem({ id: "pp8", code: "L03", label: "Lombalgia" }) ]);
     fireEvent.click(await screen.findByRole("button", { name: /adendo que resolve T90/ }));
-    expect(await screen.findByText("nenhum problema ativo")).not.toBeNull();
+    await waitFor(async () => expect((await screen.findByRole("list", { name: "problemas ativos" })).textContent).toMatch(/L03/));
+  });
+
+  it("se a releitura falhar, o painel fica como estava, sem erro", async () => {
+    mocked(api.getConsultationProblems).mockRejectedValue(new ApiError(500, {}, "500"));
+    renderIt();
+    fireEvent.click(await screen.findByRole("button", { name: "Iniciar consulta" }));
+    fireEvent.click(await screen.findByRole("button", { name: "finalizar (dublê)" }));
+    await waitFor(() => expect(api.getConsultationProblems).toHaveBeenCalled());
+    expect((await screen.findByRole("list", { name: "problemas ativos" })).textContent).toMatch(/T90/);
   });
 });
-

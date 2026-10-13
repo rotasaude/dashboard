@@ -6,11 +6,10 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  getAttendanceRecord, getConsultation, getConsultationOptions, startConsultation, type ClinicalRecord, type Consultation,
-  type EvaluatedProblem, type HealthUnit
+  getAttendanceRecord, getConsultation, getConsultationOptions, getConsultationProblems, startConsultation, type ClinicalRecord,
+  type Consultation, type HealthUnit
 } from "../../lib/api";
-import { OPTIONS_KEY, RECORD_KEY, applyEvaluatedProblems, consultationError, existingConsultationId, withAddendum } from "../../lib/consultation";
-import { todayInCity } from "../../lib/campaigns";
+import { OPTIONS_KEY, RECORD_KEY, consultationError, existingConsultationId, withAddendum } from "../../lib/consultation";
 import { useAuth } from "../../lib/auth";
 import { canSign, signatureSettling } from "../../lib/signature";
 import { canUseDocuments } from "../../lib/clinicalDocuments";
@@ -92,12 +91,16 @@ export function ConsultationWorkspace(props: Props) {
     return () => { live = false; clearTimeout(timer); };
   }, [ signer, settling, consultationId, rereadTick ]);
 
-  // dashboard#13: o atendimento fecha na finalização e o api recusa reler o prontuário
-  // por ele; o painel do paciente segue o que a consulta e o adendo registraram.
-  function applyToRecord(events: EvaluatedProblem[]) {
-    if (events.length === 0) return;
-    queryClient.setQueryData<ClinicalRecord>([ RECORD_KEY, props.attendanceId ], (current) =>
-      current ? { ...current, problems: applyEvaluatedProblems(current.problems, events, todayInCity()) } : current);
+  // dashboard#13: o atendimento fecha na finalização e o api recusa reler o prontuário por
+  // ele; a autora relê só a lista de problemas pela rota da consulta (o api aplica as
+  // regras de incluir, reativar, resolver e corrigir). Falhou: o painel fica como estava.
+  async function rereadProblems(consultationId: string) {
+    try {
+      const problems = await getConsultationProblems(consultationId);
+      queryClient.setQueryData<ClinicalRecord>([ RECORD_KEY, props.attendanceId ], (current) => (current ? { ...current, problems } : current));
+    } catch {
+      // Silencioso: é só conveniência; recarregar a tela relê tudo.
+    }
   }
 
   function restartRereads() {
@@ -174,7 +177,7 @@ export function ConsultationWorkspace(props: Props) {
               <ConsultationEditor key={consultation.id} consultation={consultation} record={record.data} options={options.data}
                 referenceUnitIds={props.referenceUnitIds} unit={props.unit} units={props.units}
                 autosaveDelayMs={props.autosaveDelayMs} searchDelayMs={props.searchDelayMs}
-                onFinalized={(c) => { setConsultation(c); restartRereads(); applyToRecord(c.evaluated_problems); props.onFinalized(); }}
+                onFinalized={(c) => { setConsultation(c); restartRereads(); void rereadProblems(c.id); props.onFinalized(); }}
                 onLocked={(message) => void reload(message)} />
             )}
 
@@ -184,7 +187,7 @@ export function ConsultationWorkspace(props: Props) {
                 searchDelayMs={props.searchDelayMs}
                 onAddendumAdded={(addendum) => {
                   setConsultation((c) => (c ? withAddendum(c, addendum) : c)); restartRereads();
-                  applyToRecord(addendum.changes?.evaluated_problems ?? []);
+                  void rereadProblems(consultation.id);
                 }}
                 onClose={props.onClose} />
             )}

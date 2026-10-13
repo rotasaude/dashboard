@@ -146,10 +146,11 @@ export function documentLabel(type: string): string {
 export interface Marker { label: string; tone: Tone; detail: string | null; simulated: boolean; link?: { href: string; label: string } }
 
 // dashboard#14: `settled` = ninguém mais relê a consulta (as releituras acabaram, ou a
-// tela nunca relê). Pendente sem motivo deixa de dizer "assinando…" e aponta Pendentes.
+// tela nunca relê): pendente sem motivo deixa de dizer "assinando…". `linkToPending` só
+// para quem assina este documento (a autora com canSign): Pendentes mostra as pendências dela.
 export const PENDING_LINK = { href: "#/signature-pending", label: "veja Pendentes" };
 
-export function signatureMarker(block: SignatureBlock, opts: { settled?: boolean } = {}): Marker {
+export function signatureMarker(block: SignatureBlock, opts: { settled?: boolean; linkToPending?: boolean } = {}): Marker {
   if (block.mode === "digital") {
     const who = [ block.signer_name, block.signed_at ? fmtDateTime(block.signed_at) : null ].filter(Boolean).join(" · ") || null;
     const simulated = block.simulated === true;
@@ -164,7 +165,8 @@ export function signatureMarker(block: SignatureBlock, opts: { settled?: boolean
   if (block.mode === "pending") {
     if (block.reason_code) return { label: "assinatura pendente", tone: "warn", detail: reasonLabel(block.reason_code), simulated: false };
     return opts.settled
-      ? { label: "assinatura pendente", tone: "warn", detail: "aguardando assinatura", simulated: false, link: PENDING_LINK }
+      ? { label: "assinatura pendente", tone: "warn", detail: "aguardando assinatura", simulated: false,
+          ...(opts.linkToPending ? { link: PENDING_LINK } : {}) }
       : { label: "assinatura pendente", tone: "warn", detail: "assinando…", simulated: false };
   }
   return { label: "assinatura à mão (papel)", tone: "neutral", detail: block.reason_code ? reasonLabel(block.reason_code) : null, simulated: false };

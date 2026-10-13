@@ -20,15 +20,17 @@ interface Props {
   onVerified?(detail: Detail): void;
   // dashboard#14: ninguém mais relê a consulta; pendente sem motivo aponta Pendentes.
   settled?: boolean;
+  // Só quem assina este documento segue para Pendentes (a lista é das pendências dela).
+  linkToPending?: boolean;
 }
 
-export function SignatureMarker({ label, block, readOnly, consultationId, onOpeningRequired, onVerified, settled }: Props) {
+export function SignatureMarker({ label, block, readOnly, consultationId, onOpeningRequired, onVerified, settled, linkToPending }: Props) {
   const [ open, setOpen ] = useState(false);
   // Revalidar devolve a validação nova antes de a consulta ser relida; vale
   // enquanto o bloco que veio do api não mudar (a releitura prevalece).
   const [ verified, setVerified ] = useState<{ from?: SignatureVerification; to: SignatureVerification } | null>(null);
   const current = verified && verified.from === block.verification ? { ...block, verification: verified.to } : block;
-  const marker = signatureMarker(current, { settled });
+  const marker = signatureMarker(current, { settled, linkToPending: linkToPending && !readOnly });
   const canOpen = block.mode === "digital" && !!block.signature_id;
 
   return (

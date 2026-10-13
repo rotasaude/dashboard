@@ -16,7 +16,7 @@ import { buttonStyle, disabledButtonStyle, secondaryButtonStyle } from "../../co
 import { VitalsList } from "./PatientPanel";
 import { AddendumForm } from "./AddendumForm";
 import { SignatureMarker } from "../signature/SignatureMarker";
-import { printHint } from "../../lib/signature";
+import { canSign, printHint } from "../../lib/signature";
 import { useReveal } from "../../lib/useReveal";
 
 export interface ConsultationViewProps {
@@ -46,6 +46,8 @@ export function ConsultationView(props: ConsultationViewProps) {
   const { user } = useAuth();
   // Imprimir e Adendo são só da autora (decide a sessão, não o chamador).
   const isAuthor = !props.readOnly && !!user && user.id === c.author.id;
+  // dashboard#14: "veja Pendentes" só para quem assina esta consulta (a autora com assinatura digital).
+  const linkToPending = isAuthor && canSign(user);
   const [ adding, setAdding ] = useState(false);
   const [ printing, setPrinting ] = useState(false);
   const [ printError, setPrintError ] = useState<string | null>(null);
@@ -82,7 +84,7 @@ export function ConsultationView(props: ConsultationViewProps) {
         <span style={muted}>{`${c.author.name} · ${codedLabel(options?.care_types, c.care_type)}`}</span>
       </div>
       {c.signature && (
-        <SignatureMarker label="assinatura da consulta" block={c.signature} settled={props.signatureSettled ?? true} readOnly={props.readOnly} consultationId={c.id}
+        <SignatureMarker label="assinatura da consulta" block={c.signature} settled={props.signatureSettled ?? true} linkToPending={linkToPending} readOnly={props.readOnly} consultationId={c.id}
           onOpeningRequired={props.onOpeningRequired} />
       )}
       {hint && <p style={muted}>{hint}</p>}
@@ -120,7 +122,7 @@ export function ConsultationView(props: ConsultationViewProps) {
             <li key={a.id} style={{ fontSize: 12.5 }}>
               <strong>{`Adendo de ${a.author_name} em ${fmtDateTime(a.created_at)}`}</strong>
               {a.signature && (
-                <SignatureMarker label="assinatura do adendo" block={a.signature} settled={props.signatureSettled ?? true} readOnly={props.readOnly} consultationId={c.id}
+                <SignatureMarker label="assinatura do adendo" block={a.signature} settled={props.signatureSettled ?? true} linkToPending={linkToPending} readOnly={props.readOnly} consultationId={c.id}
                   onOpeningRequired={props.onOpeningRequired} />
               )}
               <p style={textStyle}>{`Motivo: ${a.reason}`}</p>

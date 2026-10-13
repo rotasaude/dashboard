@@ -269,27 +269,6 @@ export function problemsWithConsultationAdds(patientProblems: PatientProblem[], 
   return extra.length > 0 ? [ ...patientProblems, ...extra ] : patientProblems;
 }
 
-// dashboard#13: aplica à lista de problemas do paciente o que a consulta (ou um adendo)
-// acabou de registrar. O atendimento fecha na finalização e o api recusa reler o
-// prontuário por ele, então o painel segue a resposta em vez de uma nova leitura.
-// `today` é a data (AAAA-MM-DD) para o resolvido; nada muda → a mesma lista.
-export function applyEvaluatedProblems(problems: PatientProblem[], events: EvaluatedProblem[], today: string): PatientProblem[] {
-  let out = problems;
-  for (const e of events) {
-    const index = out.findIndex((p) => (e.problem_id && p.id === e.problem_id) ||
-      (p.status === "active" && p.terminology === e.terminology && p.code === e.code));
-    if (e.action === "add") {
-      if (index < 0 && e.problem_id) out = [ ...out, { id: e.problem_id, terminology: e.terminology, code: e.code, label: e.label, status: "active",
-        onset_on: e.onset_on ?? null, onset_precision: e.onset_precision ?? null } ];
-    } else if (index >= 0 && e.action === "resolve") {
-      out = out.map((p, i) => (i === index ? { ...p, status: "resolved", resolved_on: today } : p));
-    } else if (index >= 0 && e.action === "correct_onset") {
-      out = out.map((p, i) => (i === index ? { ...p, onset_on: e.onset_on ?? null, onset_precision: e.onset_precision ?? null } : p));
-    }
-  }
-  return out;
-}
-
 export function changesLines(changes: AddendumChanges | null | undefined, conductLabel: (code: string) => string): string[] {
   if (!changes) return [];
   const lines: string[] = [];

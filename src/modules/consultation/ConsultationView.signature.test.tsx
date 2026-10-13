@@ -142,11 +142,12 @@ describe("ConsultationView com assinatura digital (19b)", () => {
     expect(api.getSignature).toHaveBeenCalledWith("sg2");
   });
 
-  it("dashboard#14: fora do atendimento (ninguém relê), pendente sem motivo já diz que espera, com link para Pendentes", () => {
+  it("dashboard#14: fora do atendimento (ninguém relê), pendente sem motivo já diz que espera, com link para Pendentes", async () => {
     view(finalized({ signature: { mode: "pending", request_id: "sr1" } }));
     const group = screen.getByRole("group", { name: "assinatura da consulta" });
     expect(within(group).getByText("aguardando assinatura")).not.toBeNull();
-    expect(within(group).getByRole("link", { name: "veja Pendentes" }).getAttribute("href")).toBe("#/signature-pending");
+    // O link depende da sessão (a autora que assina), que chega depois do primeiro render.
+    expect((await within(group).findByRole("link", { name: "veja Pendentes" })).getAttribute("href")).toBe("#/signature-pending");
     expect(within(group).queryByText("assinando…")).toBeNull();
   });
 
@@ -154,6 +155,20 @@ describe("ConsultationView com assinatura digital (19b)", () => {
     renderWithProviders(<ConsultationView consultation={finalized({ signature: { mode: "pending", request_id: "sr1" } })}
       options={options()} patientProblems={[]} signatureSettled={false} onAddendumAdded={vi.fn()} onClose={vi.fn()} />);
     expect(within(screen.getByRole("group", { name: "assinatura da consulta" })).getByText("assinando…")).not.toBeNull();
+  });
+
+  it("dashboard#14: quem não é a autora que assina vê 'aguardando assinatura', sem o link para Pendentes", async () => {
+    mocked(api.fetchCurrentSession).mockResolvedValue(sessionWith([ "health_professional" ], { id: "outro", features: [ "clinical_record", "digital_signature" ] }));
+    view(finalized({ signature: { mode: "pending", request_id: "sr1" } }));
+    await waitFor(() => expect(api.fetchCurrentSession).toHaveBeenCalled());
+    const group = screen.getByRole("group", { name: "assinatura da consulta" });
+    expect(within(group).getByText("aguardando assinatura")).not.toBeNull();
+    expect(within(group).queryByRole("link", { name: "veja Pendentes" })).toBeNull();
+  });
+
+  it("dashboard#14: na leitura administrativa, sem o link para Pendentes", () => {
+    view(finalized({ signature: { mode: "pending", request_id: "sr1" } }), { readOnly: true });
+    expect(within(screen.getByRole("group", { name: "assinatura da consulta" })).queryByRole("link", { name: "veja Pendentes" })).toBeNull();
   });
 });
 
