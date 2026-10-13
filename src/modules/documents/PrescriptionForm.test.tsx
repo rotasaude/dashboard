@@ -34,11 +34,11 @@ async function pick(term: string, name: string) {
 }
 
 function fill(n: number, values: { quantity?: string; unit?: string; route?: string; dosage?: string; duration?: string }) {
-  if (values.quantity !== undefined) fireEvent.change(screen.getByLabelText(`Quantidade ${n}`), { target: { value: values.quantity } });
-  if (values.unit !== undefined) fireEvent.change(screen.getByLabelText(`Unidade ${n}`), { target: { value: values.unit } });
-  if (values.route !== undefined) fireEvent.change(screen.getByLabelText(`Via ${n}`), { target: { value: values.route } });
-  if (values.dosage !== undefined) fireEvent.change(screen.getByLabelText(`Posologia ${n}`), { target: { value: values.dosage } });
-  if (values.duration !== undefined) fireEvent.change(screen.getByLabelText(`Duração em dias ${n}`), { target: { value: values.duration } });
+  if (values.quantity !== undefined) fireEvent.change(screen.getByLabelText(`Quantidade do item ${n}`), { target: { value: values.quantity } });
+  if (values.unit !== undefined) fireEvent.change(screen.getByLabelText(`Unidade do item ${n}`), { target: { value: values.unit } });
+  if (values.route !== undefined) fireEvent.change(screen.getByLabelText(`Via do item ${n}`), { target: { value: values.route } });
+  if (values.dosage !== undefined) fireEvent.change(screen.getByLabelText(`Posologia do item ${n}`), { target: { value: values.dosage } });
+  if (values.duration !== undefined) fireEvent.change(screen.getByLabelText(`Duração em dias do item ${n}`), { target: { value: values.duration } });
 }
 
 describe("PrescriptionForm", () => {
@@ -54,9 +54,9 @@ describe("PrescriptionForm", () => {
     await pick("metf", "Metformina, cloridrato 850 mg, comprimido");
     const first = screen.getByRole("listitem", { name: "item 1" });
     expect(within(first).getByText("na rede")).not.toBeNull();
-    expect((screen.getByLabelText("Unidade 1") as HTMLInputElement).value).toBe("comprimido");
+    expect((screen.getByLabelText("Unidade do item 1") as HTMLInputElement).value).toBe("comprimido");
     fill(1, { quantity: "60", route: "oral", dosage: "1 comprimido após o café e 1 após o jantar", duration: "30" });
-    fireEvent.click(screen.getByLabelText("Uso contínuo 1"));
+    fireEvent.click(screen.getByLabelText("Uso contínuo do item 1"));
     fireEvent.click(screen.getByRole("button", { name: "Incluir em texto livre" }));
     fireEvent.change(screen.getByLabelText("Medicamento 2 (texto livre)"), { target: { value: "Soro fisiológico 0,9%" } });
     fill(2, { quantity: "1", unit: "frasco", route: "nasal", dosage: "2 jatos em cada narina 3 vezes ao dia" });
@@ -77,7 +77,7 @@ describe("PrescriptionForm", () => {
     const list = await screen.findByRole("list", { name: "resultados: Buscar medicamento" });
     fireEvent.click(within(list).getByRole("button", { name: "Clonazepam 2 mg, comprimido" }));
     expect(screen.queryByRole("listitem", { name: "item 1" })).toBeNull();
-    expect(within(list).getByText("receita de controle especial — 19d")).not.toBeNull();
+    expect(screen.getByText("receita de controle especial — 19d")).not.toBeNull();
   });
 
   it("antimicrobiano: avisa papel, 2 vias e 10 dias antes de emitir", async () => {
@@ -164,7 +164,7 @@ describe("PrescriptionForm", () => {
     fireEvent.click(screen.getByRole("button", { name: "Emitir receita" }));
     expect((await screen.findByRole("alert")).textContent)
       .toBe("a cidade ainda não cadastrou o CNPJ — sem ele a receita de enfermagem não sai; avise o administrador da cidade");
-    expect((screen.getByLabelText("Quantidade 1") as HTMLInputElement).value).toBe("1");
+    expect((screen.getByLabelText("Quantidade do item 1") as HTMLInputElement).value).toBe("1");
   });
 
   it("enfermeira: item de protocolo antimicrobiano avisa papel, 2 vias e 10 dias antes de emitir", async () => {
@@ -199,7 +199,7 @@ describe("PrescriptionForm", () => {
     fill(1, { quantity: "60", route: "oral", dosage: "1 comprimido por dia" });
     fireEvent.click(screen.getByRole("button", { name: "Emitir receita" }));
     expect((await screen.findByRole("alert")).textContent).toBe("item 2: confira quantidade");
-    expect((screen.getByLabelText("Posologia 1") as HTMLTextAreaElement).value).toBe("1 comprimido por dia");
+    expect((screen.getByLabelText("Posologia do item 1") as HTMLTextAreaElement).value).toBe("1 comprimido por dia");
   });
 
   it("duplo clique: manda uma vez só e trava os botões enquanto a requisição está em voo", async () => {
@@ -231,3 +231,13 @@ describe("PrescriptionForm", () => {
     expect(onSubmit).not.toHaveBeenCalled();
   });
 });
+
+describe("PrescriptionForm — rótulos limpos (AT-20)", () => {
+  it("o texto visível não leva o número; o nome acessível leva", async () => {
+    renderIt("225125");
+    fireEvent.click(screen.getByRole("button", { name: /texto livre/i }));
+    const field = screen.getByLabelText("Quantidade do item 1");
+    expect(field.closest("label")?.firstElementChild?.textContent).toBe("Quantidade");
+  });
+});
+

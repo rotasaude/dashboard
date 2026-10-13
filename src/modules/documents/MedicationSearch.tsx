@@ -49,6 +49,11 @@ export function MedicationSearch({ label, unitId, blockControlled, onPick, delay
       {show && query.isError && <p role="alert" style={alert}>{documentError(query.error)}</p>}
       {show && query.isSuccess && query.data.length === 0 && <small style={hint}>nenhum medicamento encontrado</small>}
       {show && query.isSuccess && query.data.length > 0 && (
+        <>
+        {/* O aviso do controlado sai uma vez, acima da lista (AT-20). */}
+        {!blockReason && blockControlled && query.data.some((i) => i.controlled) && (
+          <small style={hint}>{CONTROLLED_BLOCKED}</small>
+        )}
         <ul aria-label={`resultados: ${label}`} style={list}>
           {query.data.map((item) => {
             const reason = blockReason ? blockReason(item) : (blockControlled && item.controlled ? CONTROLLED_BLOCKED : null);
@@ -70,12 +75,13 @@ export function MedicationSearch({ label, unitId, blockControlled, onPick, delay
                     )}
                   </>
                 ) : (
-                  item.controlled && <Tag tone="down" mono={false}>{blockControlled ? CONTROLLED_BLOCKED : "controlado"}</Tag>
+                  item.controlled && <Tag tone="down" mono={false}>controlado</Tag>
                 )}
               </li>
             );
           })}
         </ul>
+        </>
       )}
     </div>
   );

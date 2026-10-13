@@ -266,32 +266,32 @@ function ItemFields({ index, item, onChange, onRemove, listTag }: {
       </div>
       <div style={rowStyle}>
         <label style={labelStyle}>
-          {`Quantidade ${n}`}
-          <input inputMode="decimal" value={item.quantity} style={inputStyle} onChange={(e) => onChange({ quantity: e.target.value })} />
+          <span>Quantidade</span>
+          <input aria-label={`Quantidade do item ${n}`} inputMode="decimal" value={item.quantity} style={inputStyle} onChange={(e) => onChange({ quantity: e.target.value })} />
         </label>
         <label style={labelStyle}>
-          {`Unidade ${n}`}
-          <input value={item.quantityUnit} style={inputStyle} onChange={(e) => onChange({ quantityUnit: e.target.value })} />
+          <span>Unidade</span>
+          <input aria-label={`Unidade do item ${n}`} value={item.quantityUnit} style={inputStyle} onChange={(e) => onChange({ quantityUnit: e.target.value })} />
         </label>
         <label style={labelStyle}>
-          {`Via ${n}`}
-          <select value={item.route} style={inputStyle} onChange={(e) => onChange({ route: e.target.value as MedicationRoute | "" })}>
+          <span>Via</span>
+          <select aria-label={`Via do item ${n}`} value={item.route} style={inputStyle} onChange={(e) => onChange({ route: e.target.value as MedicationRoute | "" })}>
             <option value="">escolha</option>
             {ROUTES.map((r) => <option key={r} value={r}>{ROUTE_LABEL[r]}</option>)}
           </select>
         </label>
         <label style={labelStyle}>
-          {`Duração em dias ${n}`}
-          <input inputMode="numeric" value={item.durationDays} style={inputStyle} onChange={(e) => onChange({ durationDays: e.target.value })} />
+          <span>Duração em dias</span>
+          <input aria-label={`Duração em dias do item ${n}`} inputMode="numeric" value={item.durationDays} style={inputStyle} onChange={(e) => onChange({ durationDays: e.target.value })} />
         </label>
       </div>
       <label style={labelStyle}>
-        {`Posologia ${n}`}
-        <textarea value={item.dosage} rows={2} style={inputStyle} onChange={(e) => onChange({ dosage: e.target.value })} />
+        <span>Posologia</span>
+        <textarea aria-label={`Posologia do item ${n}`} value={item.dosage} rows={2} style={inputStyle} onChange={(e) => onChange({ dosage: e.target.value })} />
       </label>
       <label style={checkLabel}>
-        <input type="checkbox" checked={item.continuous} onChange={(e) => onChange({ continuous: e.target.checked })} />
-        {`Uso contínuo ${n}`}
+        <input type="checkbox" aria-label={`Uso contínuo do item ${n}`} checked={item.continuous} onChange={(e) => onChange({ continuous: e.target.checked })} />
+        <span>Uso contínuo</span>
       </label>
     </li>
   );

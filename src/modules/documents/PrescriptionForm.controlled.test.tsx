@@ -49,16 +49,16 @@ async function pick(med: MedicationSearchItem) {
 
 function fillItem(n: number, days: string) {
   const li = screen.getByRole("listitem", { name: `item ${n}` });
-  fireEvent.change(within(li).getByLabelText(`Quantidade ${n}`), { target: { value: "30" } });
-  fireEvent.change(within(li).getByLabelText(`Via ${n}`), { target: { value: "oral" } });
-  fireEvent.change(within(li).getByLabelText(`Duração em dias ${n}`), { target: { value: days } });
-  fireEvent.change(within(li).getByLabelText(`Posologia ${n}`), { target: { value: "1 comprimido ao dia" } });
+  fireEvent.change(within(li).getByLabelText(`Quantidade do item ${n}`), { target: { value: "30" } });
+  fireEvent.change(within(li).getByLabelText(`Via do item ${n}`), { target: { value: "oral" } });
+  fireEvent.change(within(li).getByLabelText(`Duração em dias do item ${n}`), { target: { value: days } });
+  fireEvent.change(within(li).getByLabelText(`Posologia do item ${n}`), { target: { value: "1 comprimido ao dia" } });
 }
 
 function addFreeText(n: number, text: string) {
   fireEvent.click(screen.getByRole("button", { name: "Incluir em texto livre" }));
   fireEvent.change(screen.getByLabelText(`Medicamento ${n} (texto livre)`), { target: { value: text } });
-  fireEvent.change(screen.getByLabelText(`Unidade ${n}`), { target: { value: "comprimido" } });
+  fireEvent.change(screen.getByLabelText(`Unidade do item ${n}`), { target: { value: "comprimido" } });
   fillItem(n, "7");
 }
 
@@ -339,7 +339,7 @@ describe("PrescriptionForm — controlado e antimicrobiano (19d)", () => {
     const id = screen.getByRole("group", { name: "Identificação do paciente" });
     expect((within(id).getByLabelText("Logradouro") as HTMLInputElement).value).toBe("Rua Marechal Deodoro");
     expect((within(id).getByLabelText("CEP") as HTMLInputElement).value).toBe("80010-010");
-    expect((screen.getByLabelText("Posologia 1") as HTMLTextAreaElement).value).toBe("1 comprimido ao dia");
+    expect((screen.getByLabelText("Posologia do item 1") as HTMLTextAreaElement).value).toBe("1 comprimido ao dia");
   });
 
   it("cancelar e emitir outro: item do documento SEM marcas segue RCE pela categoria do rascunho e leva a identificação", async () => {
@@ -413,7 +413,7 @@ describe("PrescriptionForm — controlado e antimicrobiano (19d)", () => {
     fireEvent.change(screen.getByLabelText("Buscar medicamento"), { target: { value: "se" } });
     const list = await screen.findByRole("list", { name: "resultados: Buscar medicamento" });
     expect((within(list).getByRole("button", { name: SERTRALINE.label }) as HTMLButtonElement).disabled).toBe(true);
-    expect(within(list).getByText(CONTROLLED_BLOCKED)).not.toBeNull();
+    expect(screen.getByText(CONTROLLED_BLOCKED)).not.toBeNull();
     expect(screen.queryByRole("status", { name: "categoria da receita" })).toBeNull();
     expect(api.getSncrStock).not.toHaveBeenCalled();
     expect(api.getProfessionalContact).not.toHaveBeenCalled();

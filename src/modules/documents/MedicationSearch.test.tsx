@@ -50,7 +50,9 @@ describe("MedicationSearch", () => {
     const list = await screen.findByRole("list", { name: "resultados: Buscar medicamento" });
     const blocked = within(list).getByRole("button", { name: "Clonazepam 2 mg, comprimido" }) as HTMLButtonElement;
     expect(blocked.disabled).toBe(true);
-    expect(within(list).getByText("receita de controle especial — 19d")).not.toBeNull();
+    // AT-20: o aviso sai uma vez, acima da lista; na linha, só "controlado".
+    expect(screen.getAllByText("receita de controle especial — 19d")).toHaveLength(1);
+    expect(within(list).getByText("controlado")).not.toBeNull();
     fireEvent.click(blocked);
     expect(onPick).not.toHaveBeenCalled();
   });

@@ -177,6 +177,30 @@ describe("ConsultationDocuments", () => {
     expect(screen.getAllByRole("row")).toHaveLength(2);
   });
 
+  it("AT-06: trocar de documento com um aberto pergunta antes; Cancelar mantém", async () => {
+    renderIt();
+    fireEvent.click(await screen.findByRole("button", { name: "Atestado" }));
+    fireEvent.change(screen.getByLabelText("Dias de afastamento"), { target: { value: "3" } });
+    fireEvent.click(screen.getByRole("button", { name: "Receita" }));
+    const ask = screen.getByRole("group", { name: "Descartar o formulário em edição?" });
+    fireEvent.click(within(ask).getByRole("button", { name: "Cancelar" }));
+    expect((screen.getByLabelText("Dias de afastamento") as HTMLInputElement).value).toBe("3");
+    fireEvent.click(screen.getByRole("button", { name: "Receita" }));
+    fireEvent.click(screen.getByRole("button", { name: "Descartar e abrir" }));
+    expect(screen.queryByLabelText("Dias de afastamento")).toBeNull();
+  });
+
+  it("AT-07: depois de emitir, o foco vai para o aviso", async () => {
+    mocked(api.listConsultationDocuments).mockResolvedValue([]);
+    mocked(api.issueDocument).mockResolvedValue(sickNoteDoc({ id: "doc8" }));
+    renderIt();
+    fireEvent.click(await screen.findByRole("button", { name: "Atestado" }));
+    fireEvent.change(screen.getByLabelText("Dias de afastamento"), { target: { value: "3" } });
+    fireEvent.click(screen.getByRole("button", { name: "Emitir atestado" }));
+    const status = await screen.findByRole("status");
+    await waitFor(() => expect(document.activeElement).toBe(status));
+  });
+
   it("emitir: duplo clique gera UMA chamada e o botão trava em voo", async () => {
     const pending = deferred<api.ClinicalDocument>();
     mocked(api.issueDocument).mockReturnValue(pending.promise);
@@ -237,12 +261,12 @@ describe("ConsultationDocuments", () => {
     const { client } = renderIt();
     const invalidate = vi.spyOn(client, "invalidateQueries");
     fireEvent.click(await screen.findByRole("button", { name: "Renovar receita" }));
-    expect((await screen.findByLabelText("Quantidade 1") as HTMLInputElement).value).toBe("60");
+    expect((await screen.findByLabelText("Quantidade do item 1") as HTMLInputElement).value).toBe("60");
     // Item parcial da renovação: o que falta vem vazio (nunca "undefined").
-    expect((screen.getByLabelText("Quantidade 2") as HTMLInputElement).value).toBe("");
-    fireEvent.change(screen.getByLabelText("Quantidade 2"), { target: { value: "30" } });
-    fireEvent.change(screen.getByLabelText("Unidade 2"), { target: { value: "comprimido" } });
-    fireEvent.change(screen.getByLabelText("Via 2"), { target: { value: "oral" } });
+    expect((screen.getByLabelText("Quantidade do item 2") as HTMLInputElement).value).toBe("");
+    fireEvent.change(screen.getByLabelText("Quantidade do item 2"), { target: { value: "30" } });
+    fireEvent.change(screen.getByLabelText("Unidade do item 2"), { target: { value: "comprimido" } });
+    fireEvent.change(screen.getByLabelText("Via do item 2"), { target: { value: "oral" } });
     fireEvent.click(screen.getByRole("button", { name: "Emitir receita" }));
     await waitFor(() => expect(api.issueDocument).toHaveBeenCalledWith("cs1", { kind: "prescription", content: { items: [
       { catalog_item: { id: "ci1" }, quantity: 60, quantity_unit: "comprimido", route: "oral",
@@ -260,7 +284,7 @@ describe("ConsultationDocuments", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Emitir receita" }));
     const form = screen.getByRole("form", { name: "Receita" });
     expect(await within(form).findByText("item 1: medicamento controlado não entra aqui (receita de controle especial — 19d)")).not.toBeNull();
-    expect((within(form).getByLabelText("Quantidade 1") as HTMLInputElement).value).toBe("60");
+    expect((within(form).getByLabelText("Quantidade do item 1") as HTMLInputElement).value).toBe("60");
   });
 
   it("Renovar sem contínuos ativos: diz que não há o que renovar", async () => {

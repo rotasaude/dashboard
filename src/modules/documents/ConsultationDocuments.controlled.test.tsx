@@ -166,12 +166,12 @@ describe("ConsultationDocuments — controlado e SNCR (19d)", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Receita" }));
     fireEvent.click(screen.getByRole("button", { name: "Incluir em texto livre" }));
     fireEvent.change(screen.getByLabelText("Medicamento 1 (texto livre)"), { target: { value: "amoxicilina 500 mg" } });
-    fireEvent.change(screen.getByLabelText("Unidade 1"), { target: { value: "cápsula" } });
+    fireEvent.change(screen.getByLabelText("Unidade do item 1"), { target: { value: "cápsula" } });
     const li = screen.getByRole("listitem", { name: "item 1" });
-    fireEvent.change(within(li).getByLabelText("Quantidade 1"), { target: { value: "21" } });
-    fireEvent.change(within(li).getByLabelText("Via 1"), { target: { value: "oral" } });
-    fireEvent.change(within(li).getByLabelText("Duração em dias 1"), { target: { value: "7" } });
-    fireEvent.change(within(li).getByLabelText("Posologia 1"), { target: { value: "1 cápsula de 8 em 8 horas" } });
+    fireEvent.change(within(li).getByLabelText("Quantidade do item 1"), { target: { value: "21" } });
+    fireEvent.change(within(li).getByLabelText("Via do item 1"), { target: { value: "oral" } });
+    fireEvent.change(within(li).getByLabelText("Duração em dias do item 1"), { target: { value: "7" } });
+    fireEvent.change(within(li).getByLabelText("Posologia do item 1"), { target: { value: "1 cápsula de 8 em 8 horas" } });
     fireEvent.click(screen.getByRole("button", { name: "Emitir receita" }));
     expect(await screen.findByText("Receita de antimicrobiano emitida em modo papel (itens digitados à mão — sai em papel): " +
       "imprima as 2 vias e assine à mão.")).not.toBeNull();

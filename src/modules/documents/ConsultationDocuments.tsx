@@ -11,7 +11,7 @@
 // SNCR; a frase depois de emitir diz o número ou por que saiu em papel (pelo que
 // o api devolveu, nunca pela previsão); emitir ou cancelar uma receita numerada
 // relê o estoque do SNCR. Sem o interruptor, a aba é a do 19c.
-import { useRef, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ApiError, errorCode, getPrescriptionRenewal, issueDocument, listConsultationDocuments, recordNotification, type ClinicalDocument,
@@ -108,8 +108,17 @@ export function ConsultationDocuments({ consultationId, issue, draft, searchDela
     setNotice(null); setError(null); setCancelling(null); setForm({ ...next, seq: seq.current });
   }
 
+  // Trocar de tipo com um formulário aberto pergunta antes de descartar (AT-06):
+  // a tela não sabe se ele foi preenchido.
+  const [ switching, setSwitching ] = useState<DocumentKind | null>(null);
   function start(kind: DocumentKind) {
     if (issuingRef.current) return;
+    if (form && form.kind !== kind) { setSwitching(kind); return; }
+    openKind(kind);
+  }
+
+  function openKind(kind: DocumentKind) {
+    setSwitching(null);
     if (kind === "sick_note") open({ kind, draft: emptySickNote(today) });
     else if (kind === "attendance_declaration") open({ kind, draft: emptyDeclaration(today) });
     else if (kind === "prescription") open({ kind, draft: { items: [], protocolVersionId: "" } });
@@ -249,6 +258,12 @@ export function ConsultationDocuments({ consultationId, issue, draft, searchDela
     ) }
   ];
 
+  // O resultado da emissão recebe o foco, perto de onde se clicou (AT-07).
+  const noticeRef = useRef<HTMLParagraphElement | null>(null);
+  const errorRef = useRef<HTMLParagraphElement | null>(null);
+  useEffect(() => { if (notice) noticeRef.current?.focus(); }, [ notice ]);
+  useEffect(() => { if (error) errorRef.current?.focus(); }, [ error ]);
+
   return (
     <section aria-label="Documentos da consulta" style={panel}>
       {usesSimulatedPsc(user) && <div><Tag tone="warn" mono={false}>{SIMULATED_NOTICE}</Tag></div>}
@@ -274,8 +289,15 @@ export function ConsultationDocuments({ consultationId, issue, draft, searchDela
         </div>
       )}
       {issue && draft && kinds.includes("exam_requisition") && <p style={mutedStyle}>{NO_EXAM_REQUESTS}</p>}
-      {notice && <p role="status" style={statusStyle}>{notice}</p>}
-      {error && <p role="alert" style={alert}>{error}</p>}
+      {switching && (
+        <div role="group" aria-label="Descartar o formulário em edição?" style={row}>
+          <span>Descartar o formulário em edição?</span>
+          <button type="button" style={buttonStyle} onClick={() => openKind(switching)}>Descartar e abrir</button>
+          <button type="button" style={secondaryButtonStyle} onClick={() => setSwitching(null)}>Cancelar</button>
+        </div>
+      )}
+      {notice && <p ref={noticeRef} tabIndex={-1} role="status" style={statusStyle}>{notice}</p>}
+      {error && <p ref={errorRef} tabIndex={-1} role="alert" style={alert}>{error}</p>}
 
       {issue && form?.kind === "sick_note" && (
         <SickNoteForm key={form.seq} initial={form.draft} today={today} replacing={!!form.replaces} busy={issuing}
