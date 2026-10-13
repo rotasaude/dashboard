@@ -22,6 +22,7 @@ import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } fr
 import { Ciap2Search } from "./Ciap2Search";
 import { VitalSignsFields } from "./VitalSignsFields";
 import { ColorDecision, type SuggestionState } from "./ColorDecision";
+import { useLeaveGuard } from "../../lib/useLeaveGuard";
 
 // Recusas que encerram o formulário: quem chamou recarrega a fila e mostra a frase.
 const CLOSING = new Set([ "not_in_progress", "attendance_not_waiting", "not_reassessable" ]);
@@ -92,6 +93,9 @@ export function ScreeningForm(props: ScreeningFormProps) {
     (sendReason && reason.length > NOTE_MAX ? `a justificativa passa de ${NOTE_MAX} caracteres` : null) ??
     (mode === "complete" ? destinationProblem(dest) : null);
   const blocked = busy || stale || problem !== null;
+  // A escuta não tem rascunho: sair com algo preenchido pede confirmação (AT-03).
+  useLeaveGuard(!busy && (ciap !== null || note !== "" || reason !== ""
+    || JSON.stringify(vitalsForm) !== JSON.stringify(current ? vitalsFormFrom(current.vitals) : EMPTY_VITALS_FORM)));
 
   function revisionBody() {
     return {

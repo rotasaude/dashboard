@@ -30,7 +30,7 @@ export interface AutosaveOptions<T> {
   now?(): Date;
 }
 
-export function useAutosave<T>(options: AutosaveOptions<T>): { status: SaveStatus; flush(): Promise<boolean> } {
+export function useAutosave<T>(options: AutosaveOptions<T>): { status: SaveStatus; pending: boolean; flush(): Promise<boolean> } {
   const key = JSON.stringify(options.value);
   const latest = useRef({ key, value: options.value });
   latest.current = { key, value: options.value };
@@ -88,12 +88,22 @@ export function useAutosave<T>(options: AutosaveOptions<T>): { status: SaveStatu
   // Fechar a tela (ou trocar de atendimento) não perde o que ficou pendente.
   useEffect(() => () => { void pump(); }, [ pump ]);
 
-  return { status, flush: pump };
+  // Aba oculta (troca de aba, celular bloqueado, fechar): salva na hora, sem
+  // esperar a pausa (spec 6c, AT-04).
+  useEffect(() => {
+    const onHide = () => { if (document.visibilityState === "hidden") void pump(); };
+    document.addEventListener("visibilitychange", onHide);
+    return () => document.removeEventListener("visibilitychange", onHide);
+  }, [ pump ]);
+
+  // Há algo digitado que o servidor ainda não tem.
+  return { status, pending: key !== savedKey.current, flush: pump };
 }
 
-export function saveStatusLabel(status: SaveStatus, blockedReason: string | null): string {
+export function saveStatusLabel(status: SaveStatus, blockedReason: string | null, pending = false): string {
   if (blockedReason) return `não salvo — ${blockedReason}`;
   if (status.kind === "saving") return "salvando…";
+  if (pending && status.kind !== "error") return "alterações não salvas";
   if (status.kind === "saved") return `salvo às ${fmtHourMinute(status.at.toISOString())}`;
   if (status.kind === "error") return `não salvo — ${status.message}`;
   return "rascunho";

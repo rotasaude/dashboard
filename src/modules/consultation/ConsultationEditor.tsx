@@ -16,6 +16,7 @@ import { EMPTY_OUTCOME, outcomeBody, outcomeProblem, outcomeView, type OutcomeDr
 import { bmiOf } from "../../lib/screening";
 import { todayInCity } from "../../lib/campaigns";
 import { saveStatusLabel, useAutosave } from "../../lib/useAutosave";
+import { useLeaveGuard } from "../../lib/useLeaveGuard";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { VitalSignsFields } from "../attendance/VitalSignsFields";
 import { OutcomeFields } from "../attendance/OutcomeFields";
@@ -71,6 +72,9 @@ export function ConsultationEditor(props: ConsultationEditorProps) {
     onError: (err) => { lock(err); }
   });
 
+  // Sair com texto ainda não salvo pede confirmação do navegador (AT-04).
+  useLeaveGuard(autosave.pending && !locked && !sealing);
+
   const today = todayInCity();
   const { referralUnitId } = outcomeView(outcome, props.referenceUnitIds, unit, units);
   const outcomeIssue = outcomeProblem(outcome, referralUnitId);
@@ -100,13 +104,13 @@ export function ConsultationEditor(props: ConsultationEditorProps) {
     <section aria-label="Consulta" style={panel}>
       <div style={{ display: "flex", gap: 12, alignItems: "baseline", flexWrap: "wrap" }}>
         <strong>Consulta — rascunho</strong>
-        <span role="status" style={muted}>{saveStatusLabel(autosave.status, blocked)}</span>
+        <span role="status" style={muted}>{saveStatusLabel(autosave.status, blocked, autosave.pending)}</span>
       </div>
       <p style={muted}>
         O rascunho é salvo sozinho e só você o vê. Finalizada, a consulta não muda mais: correção é por adendo.
       </p>
 
-      <fieldset disabled={locked || sealing} style={fieldset}>
+      <fieldset disabled={locked || sealing} style={fieldset} onBlur={() => void autosave.flush()}>
       {SOAP_FIELDS.map((f) => (
         <label key={f.key} style={labelStyle}>
           {f.label}

@@ -139,3 +139,41 @@ describe("useAutosave", () => {
     await waitFor(() => expect(status()).toBe("salvo às 10:00"));
   });
 });
+
+function PendingHarness({ save, delayMs }: { save(v: { text: string }): Promise<unknown>; delayMs: number }) {
+  const [ text, setText ] = useState("a");
+  const autosave = useAutosave({
+    value: { text }, initialKey: JSON.stringify({ text: "a" }), blockedReason: null, enabled: true, delayMs,
+    save, describe: () => "falhou", now: () => new Date(NOW19)
+  });
+  return (
+    <>
+      <input aria-label="texto" value={text} onChange={(e) => setText(e.target.value)} />
+      <span data-testid="pending">{String(autosave.pending)}</span>
+      <span data-testid="status">{saveStatusLabel(autosave.status, null, autosave.pending)}</span>
+    </>
+  );
+}
+
+describe("useAutosave — nada se perde ao sair (AT-04)", () => {
+  afterEach(() => { Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true }); });
+
+  it("pending e 'alterações não salvas' até salvar", async () => {
+    const save = vi.fn(async () => undefined);
+    render(<PendingHarness save={save} delayMs={0} />);
+    expect(screen.getByTestId("pending").textContent).toBe("false");
+    type("ab");
+    expect(screen.getByTestId("pending").textContent).toBe("true");
+    expect(status()).toBe("alterações não salvas");
+    await waitFor(() => expect(screen.getByTestId("pending").textContent).toBe("false"));
+  });
+
+  it("aba oculta salva na hora, sem esperar a pausa", async () => {
+    const save = vi.fn(async () => undefined);
+    render(<PendingHarness save={save} delayMs={10_000} />);
+    type("abc");
+    Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true });
+    document.dispatchEvent(new Event("visibilitychange"));
+    await waitFor(() => expect(save).toHaveBeenCalledWith({ text: "abc" }));
+  });
+});
