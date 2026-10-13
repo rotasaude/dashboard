@@ -100,7 +100,8 @@ describe("Protocols", () => {
 
     const table = within(await screen.findByRole("table"));
     expect(table.getByText("1/2")).not.toBeNull();
-    expect(table.getByText("0/2")).not.toBeNull();
+    // PR-01: em revisão, a ativação ainda não se aplica.
+    expect(table.getByText("—")).not.toBeNull();
     expect(screen.queryByText(/4-olhos/)).toBeNull();
   });
 
@@ -242,7 +243,10 @@ describe("Protocols", () => {
 
     fireEvent.click(await screen.findByText("dengue"));
 
-    expect((await screen.findAllByText("—")).length).toBe(2); // signatário + editor
+    // A lista agora também tem "—" (ativação de versão em revisão): conta dentro do painel.
+    const dialog = within(await screen.findByRole("dialog"));
+    // signatário + editor (e o "—" da etapa que ainda não se aplica, PR-01)
+    expect((await dialog.findAllByText("—")).length).toBeGreaterThanOrEqual(2);
     expect(screen.queryByText("u-no-email")).toBeNull();
     expect(screen.queryByText("u-editor-no-email")).toBeNull();
   });
@@ -316,7 +320,8 @@ describe("Protocols", () => {
     expect(table.getByText("rascunho")).not.toBeNull();
     expect(table.getByText("em revisão")).not.toBeNull();
     expect(table.getByText("publicada")).not.toBeNull();
-    expect(table.getByText("em uso")).not.toBeNull();
+    // "em uso" no status e na coluna Ativação (PR-01).
+    expect(table.getAllByText("em uso").length).toBe(2);
     expect(table.getByText("aposentada")).not.toBeNull();
     for (const raw of [ "draft", "in_review", "published", "active", "retired" ]) {
       expect(table.queryByText(raw)).toBeNull();
@@ -663,3 +668,67 @@ describe("confirmações dizem o que acontece (spec 6a §3.5)", () => {
     expect(await screen.findByText(/passa a valer para toda a cidade/)).toBeTruthy();
   });
 });
+
+describe("detalhe — usabilidade (6d)", () => {
+  beforeEach(() => {
+    for (const fn of [ api.fetchCurrentSession, api.adminFetch ]) mocked(fn).mockReset();
+  });
+  const done = { publication: { signers: [], missing: 0 }, activation: { signers: [], missing: 0 } };
+
+  it("PR-06: diálogo nomeado, foco dentro, Escape fecha e devolve o foco à linha", async () => {
+    stubReads([ row() ]);
+    renderProtocols();
+    const opener = (await screen.findByText("dengue")).closest("[role=row]") as HTMLElement;
+    opener.focus();
+    fireEvent.click(opener);
+    const dialog = await screen.findByRole("dialog", { name: "Detalhe do protocolo" });
+    await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true));
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(document.activeElement).toBe(opener);
+  });
+
+  it("PR-02: a confirmação abre junto da versão escolhida, e Eventos continua", async () => {
+    stubReads([ row() ]);
+    renderProtocols("protocol_reviewer");
+    fireEvent.click(await screen.findByText("dengue"));
+    fireEvent.click(await screen.findByRole("button", { name: "Assinar publicação" }));
+    const versions = screen.getByRole("region", { name: "Versões" });
+    expect(within(versions).getByRole("button", { name: "Confirmar" })).not.toBeNull();
+    expect(screen.getByRole("region", { name: "Eventos" })).not.toBeNull();
+  });
+
+  it("PR-03/05: Ativar nomeia a versão em uso que sai", async () => {
+    stubReads([ row({ status: "published", version: "2", signatures: done }) ], [
+      versionRow({ version: "2", status: "published", signatures: done }),
+      versionRow({ version: "1", status: "active" })
+    ]);
+    renderProtocols("protocol_publisher");
+    fireEvent.click(await screen.findByText("dengue"));
+    fireEvent.click(await screen.findByRole("button", { name: "Ativar" }));
+    expect(await screen.findByText(/A versão 1 \(em uso\) sai de uso/)).toBeTruthy();
+  });
+
+  it("PR-01/PR-16: versão em uso não diz 'falta 2'; sem anterior, explica por que não reverte", async () => {
+    stubReads([ row({ status: "active" }) ], [ versionRow({ status: "active", revertible: false }) ]);
+    renderProtocols("protocol_publisher");
+    const table = within(await screen.findByRole("table"));
+    expect(table.getAllByText("em uso").length).toBe(2);
+    fireEvent.click(screen.getByText("dengue"));
+    expect(await screen.findByText(/Ativação:/)).not.toBeNull();
+    expect(screen.getByText("concluída — versão em uso")).not.toBeNull();
+    expect(screen.queryByText(/falta 2/)).toBeNull();
+    expect(screen.getByText("sem versão anterior para reverter; aposentar não vale para a versão em uso")).not.toBeNull();
+  });
+
+  it("PR-12: Aposentar com estilo de perigo e por último", async () => {
+    stubReads([ row({ status: "published" }) ], [ versionRow({ status: "published" }) ]);
+    renderProtocols("protocol_publisher");
+    fireEvent.click(await screen.findByText("dengue"));
+    const retire = await screen.findByRole("button", { name: "Aposentar" });
+    expect(retire.style.color).toBe("var(--down)");
+    const buttons = within(retire.closest("[data-version-actions]") as HTMLElement).getAllByRole("button");
+    expect(buttons[buttons.length - 1]).toBe(retire);
+  });
+});
+

@@ -3,7 +3,7 @@
 // deriva do estado lido e do papel de quem está olhando; quem decide de
 // fato é o command na API, que trava a linha e reconfere.
 
-import { useMemo, useState, useRef } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useProtocols, useProtocolDetail } from "../hooks/useProtocols";
 import { useAuth } from "../lib/auth";
@@ -16,7 +16,8 @@ import {
   type LifecycleAction, type LifecycleKind, type LifecycleTarget, type Viewer
 } from "../lib/protocolLifecycle";
 import { SensitiveAction } from "../components/SensitiveAction";
-import { buttonStyle, disabledButtonStyle } from "../components/formStyles";
+import { buttonStyle, dangerButtonStyle, disabledButtonStyle } from "../components/formStyles";
+import { useDialog } from "../lib/useDialog";
 import { Panel } from "../components/Panel";
 import { PageHeader } from "../components/PageHeader";
 import { KpiGrid } from "../components/KpiGrid";
@@ -59,22 +60,25 @@ function doneMessage(
   return `${pending.action.label} concluído: a cidade está com ${name} v${revertedTo}.`;
 }
 
-// A frase nomeia a versão-alvo (spec 2026-09-23-revert-target §5). "deve
-// voltar", não "vai voltar": a leitura é sem lock, e a API decide no clique.
-// Sem alvo na leitura — nulo, ou a chave ausente numa API antiga —, cai na
-// frase sem número em vez de imprimir "null" ou "undefined".
 // O que cada ação faz, dito antes do Confirmar (spec 6a §3.5, PR-03/05).
-function consequence(kind: LifecycleKind, revertTarget: string | null): string {
+// Ativar nomeia a versão em uso que sai, quando há uma.
+function consequence(kind: LifecycleKind, revertTarget: string | null, inUse: string | null = null): string {
   switch (kind) {
     case "submit":   return "A versão sai do rascunho e não pode mais ser editada. Os revisores passam a poder assinar a publicação.";
     case "sign":     return "Sua assinatura conta para o próximo passo desta versão. Ela fica registrada com seu nome.";
     case "publish":  return "A versão fica pronta para ativação, mas ainda não vale para a cidade.";
-    case "activate": return "A versão passa a valer para toda a cidade. A versão em uso deste protocolo sai de uso.";
+    case "activate": return inUse
+      ? `A versão passa a valer para toda a cidade. A versão ${inUse} (em uso) sai de uso.`
+      : "A versão passa a valer para toda a cidade. A versão em uso deste protocolo sai de uso.";
     case "retire":   return "A versão não pode mais ser ativada. Isso não pode ser desfeito.";
     case "revert":   return revertDescription(revertTarget);
   }
 }
 
+// A frase nomeia a versão-alvo (spec 2026-09-23-revert-target §5). "deve
+// voltar", não "vai voltar": a leitura é sem lock, e a API decide no clique.
+// Sem alvo na leitura — nulo, ou a chave ausente numa API antiga —, cai na
+// frase sem número em vez de imprimir "null" ou "undefined".
 function revertDescription(targetVersion: string | null): string {
   const destino = targetVersion
     ? `a versão ${targetVersion}, que estava em uso antes desta`
@@ -107,6 +111,8 @@ export function Protocols({ onNavigate }: { onNavigate?: (id: ModuleId) => void 
 
 function ProtocolVersions({ onNavigate }: { onNavigate?: (id: ModuleId) => void }) {
   const [ openId, setOpenId ] = useState<string | null>(null);
+  // Quem abriu o painel recebe o foco de volta ao fechar (PR-06).
+  const [ opener, setOpener ] = useState<HTMLElement | null>(null);
   const { data, isLoading, isError, error, refetch } = useProtocols();
   const auth = useAuth();
   const viewer: Viewer = useMemo(
@@ -149,25 +155,25 @@ function ProtocolVersions({ onNavigate }: { onNavigate?: (id: ModuleId) => void 
             { label: "Versão", w: "1fr", render: (r) => <span className="mono">{r.version}</span> },
             { label: "Status", w: "1fr", render: (r) => <Tag tone={statusTone(r.status)}>{statusLabel(r.status)}</Tag> },
             { label: "Publicação", w: "1fr", render: (r) => <span className="mono">{r.signatures.publication.signers.length}/2</span> },
-            { label: "Ativação", w: "1fr", render: (r) => <span className="mono">{r.signatures.activation.signers.length}/2</span> },
+            { label: "Ativação", w: "1fr", render: (r) => <span className="mono">{activationCell(r.status, r.signatures.activation.signers.length)}</span> },
             { label: "Revisores", w: "1fr", render: (r) => <span className="mono">{r.eligibleReviewers}</span> },
             { label: "Detalhe", w: "auto", align: "right", render: () => <span className="mono" style={{ color: "var(--accent)" }}>ver →</span> }
           ]}
           rows={shown}
           rowKey={(r) => `${r.id}-${r.version}`}
-          onRowClick={(r) => setOpenId(r.id)}
+          onRowClick={(r) => { setOpener(document.activeElement as HTMLElement | null); setOpenId(r.id); }}
           empty={onlyMine ? "nenhuma versão aguardando sua assinatura" : "nenhum protocolo cadastrado"}
         />
       </Panel>
 
-      {openId && <DetailDrawer id={openId} viewer={viewer} onNavigate={onNavigate} onClose={() => setOpenId(null)} />}
+      {openId && <DetailDrawer id={openId} viewer={viewer} onNavigate={onNavigate} opener={opener} onClose={() => setOpenId(null)} />}
     </Stack>
   );
 }
 
 function DetailDrawer({
-  id, viewer, onNavigate, onClose
-}: { id: string; viewer: Viewer; onNavigate?: (id: ModuleId) => void; onClose: () => void }) {
+  id, viewer, onNavigate, opener, onClose
+}: { id: string; viewer: Viewer; onNavigate?: (id: ModuleId) => void; opener?: HTMLElement | null; onClose: () => void }) {
   const { data, isLoading, isError, error } = useProtocolDetail(id);
   const auth = useAuth();
   const queryClient = useQueryClient();
@@ -183,15 +189,21 @@ function DetailDrawer({
   // que uma ação nunca leia o resultado da anterior.
   const revertedToRef = useRef<string | null>(null);
   const name = data?.data.name ?? id;
+  // Diálogo de verdade (PR-06): foco dentro, Tab preso, Escape fecha (a
+  // confirmação aberta fecha primeiro) e o foco volta para a linha.
+  const pendingRef = useRef(false);
+  pendingRef.current = pending !== null;
+  const panelRef = useDialog<HTMLDivElement>(true, () => { if (pendingRef.current) setPending(null); else onClose(); }, opener);
+  const doneRef = useRef<HTMLParagraphElement | null>(null);
+  useEffect(() => { if (done) doneRef.current?.focus(); }, [ done ]);
+  const inUse = data?.data.versions.find((v) => v.status === "active")?.version ?? null;
 
   return (
     <div
-      role="dialog"
-      aria-modal="true"
       style={{
         position: "fixed",
         inset: 0,
-        background: "rgba(20,20,40,0.32)",
+        background: "color-mix(in srgb, var(--ink) 32%, transparent)",
         backdropFilter: "blur(2px)",
         display: "flex",
         justifyContent: "flex-end",
@@ -200,21 +212,25 @@ function DetailDrawer({
       onClick={onClose}
     >
       <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="protocol-detail-title"
         onClick={(e) => e.stopPropagation()}
         style={{
           width: "min(640px, 100%)",
           background: "var(--panel)",
           borderLeft: "1px solid var(--rule)",
           padding: 20,
-          overflowY: "auto",
-          display: "flex",
-          flexDirection: "column",
-          gap: 16
+          overflowY: "auto"
         }}
       >
+        {/* Conteúdo em bloco flex próprio: o contêiner rolável não espreme os
+            painéis quando a confirmação abre (PR-02). */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div>
-            <h2 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>Detalhe do protocolo</h2>
+            <h2 id="protocol-detail-title" style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>Detalhe do protocolo</h2>
             <span className="mono" style={{ fontSize: 10.5, color: "var(--ink3)" }}>{id}</span>
           </div>
           <button onClick={onClose} className="mono" style={{ fontSize: 11, color: "var(--ink2)", padding: "4px 10px", border: "1px solid var(--rule)", borderRadius: 6 }}>
@@ -226,14 +242,14 @@ function DetailDrawer({
         {isError && <ErrorState message={(error as Error)?.message || "Erro"} />}
         {data && (
           <>
-            {done && <p role="status" style={{ margin: 0, fontSize: 12.5 }}>{done}</p>}
+            {done && <p ref={doneRef} tabIndex={-1} role="status" style={{ margin: 0, fontSize: 12.5 }}>{done}</p>}
             {staleNotice && <p role="alert" style={{ margin: 0, fontSize: 12.5 }}>{staleNotice}</p>}
 
             <Panel title="Versões" sub="histórico" asOf={data.as_of}>
               <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
                 {data.data.versions.map((v) => (
+                  <div key={v.version} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                   <VersionDetail
-                    key={v.version}
                     version={v}
                     viewer={viewer}
                     onPick={(action) => {
@@ -243,6 +259,47 @@ function DetailDrawer({
                       setStaleNotice(null);
                     }}
                   />
+                  {/* A confirmação abre junto da versão escolhida (PR-02). */}
+                  {pending && pending.version === v.version && (
+                    <SensitiveAction
+                      title={`${pending.action.label} ${name} v${pending.version}`}
+                      description={consequence(pending.action.kind, pending.revertTargetVersion, inUse !== pending.version ? inUse : null)}
+                      requiresStepUp={pending.action.stepUp}
+                      fields={pending.action.needsReason ? [ { name: "reason", label: "Motivo", required: true } ] : []}
+                      run={async (values) => {
+                        try {
+                          revertedToRef.current = await runAction(name, pending.version, pending.action, values);
+                        } catch (err) {
+                          // Recusa por divergência: o SensitiveAction mostra a mensagem
+                          // (que nomeia a versão em uso agora), e aqui relemos a lista —
+                          // senão a tela segue exibindo o estado que a recusa acabou de
+                          // desmentir. Relança para o painel continuar tratando o erro.
+                          const described = describeActionError(err);
+                          if (described.kind === "rejected" && described.code === "current_version_changed") {
+                            // Relê a lista E fecha o painel: `pending` guarda a versão
+                            // antiga, então clicar Confirmar de novo mandaria o mesmo
+                            // token e levaria a mesma recusa, indefinidamente. O
+                            // próximo clique tem de partir da linha relida.
+                            void queryClient.invalidateQueries({ queryKey: [ "protocols" ] });
+                            void queryClient.invalidateQueries({ queryKey: [ "protocol-detail", id ] });
+                            setStaleNotice(described.message);
+                            setPending(null);
+                          }
+                          throw err;
+                        }
+                      }}
+                      onDone={() => {
+                        setDone(doneMessage(pending, name, revertedToRef.current));
+                        setPending(null);
+                        void queryClient.invalidateQueries({ queryKey: [ "protocols" ] });
+                        void queryClient.invalidateQueries({ queryKey: [ "protocol-detail", id ] });
+                        void auth.reload();
+                      }}
+                      onCancel={() => setPending(null)}
+                      onGoToSecurity={() => onNavigate?.("security")}
+                    />
+                  )}
+                  </div>
                 ))}
               </div>
             </Panel>
@@ -263,45 +320,7 @@ function DetailDrawer({
           </>
         )}
 
-        {pending && (
-          <SensitiveAction
-            title={`${pending.action.label} ${name} v${pending.version}`}
-            description={consequence(pending.action.kind, pending.revertTargetVersion)}
-            requiresStepUp={pending.action.stepUp}
-            fields={pending.action.needsReason ? [ { name: "reason", label: "Motivo", required: true } ] : []}
-            run={async (values) => {
-              try {
-                revertedToRef.current = await runAction(name, pending.version, pending.action, values);
-              } catch (err) {
-                // Recusa por divergência: o SensitiveAction mostra a mensagem
-                // (que nomeia a versão em uso agora), e aqui relemos a lista —
-                // senão a tela segue exibindo o estado que a recusa acabou de
-                // desmentir. Relança para o painel continuar tratando o erro.
-                const described = describeActionError(err);
-                if (described.kind === "rejected" && described.code === "current_version_changed") {
-                  // Relê a lista E fecha o painel: `pending` guarda a versão
-                  // antiga, então clicar Confirmar de novo mandaria o mesmo
-                  // token e levaria a mesma recusa, indefinidamente. O
-                  // próximo clique tem de partir da linha relida.
-                  void queryClient.invalidateQueries({ queryKey: [ "protocols" ] });
-                  void queryClient.invalidateQueries({ queryKey: [ "protocol-detail", id ] });
-                  setStaleNotice(described.message);
-                  setPending(null);
-                }
-                throw err;
-              }
-            }}
-            onDone={() => {
-              setDone(doneMessage(pending, name, revertedToRef.current));
-              setPending(null);
-              void queryClient.invalidateQueries({ queryKey: [ "protocols" ] });
-              void queryClient.invalidateQueries({ queryKey: [ "protocol-detail", id ] });
-              void auth.reload();
-            }}
-            onCancel={() => setPending(null)}
-            onGoToSecurity={() => onNavigate?.("security")}
-          />
-        )}
+        </div>
       </div>
     </div>
   );
@@ -325,8 +344,9 @@ function VersionDetail({
         <span className="mono" style={{ fontSize: 10.5, color: "var(--ink3)" }}>{fmtDateTime(version.at)}</span>
       </div>
 
-      <SignaturesSummary label="Publicação" block={version.signatures.publication} />
-      <SignaturesSummary label="Ativação" block={version.signatures.activation} />
+      <SignaturesSummary label="Publicação" block={version.signatures.publication} current={version.status === "in_review"} />
+      <SignaturesSummary label="Ativação" block={version.signatures.activation} current={version.status === "published"}
+        settled={version.status === "active" ? "concluída — versão em uso" : null} />
 
       <div style={{ fontSize: 12, color: "var(--ink2)" }}>
         <strong>Editores:</strong>{" "}
@@ -349,14 +369,21 @@ function VersionDetail({
   );
 }
 
-function SignaturesSummary({ label, block }: { label: string; block: LifecycleTarget["signatures"]["publication"] }) {
+// A assinatura só "falta" na etapa em curso (PR-01): publicação em revisão,
+// ativação na publicada. A de ativação se consome ao ativar, então a versão em
+// uso mostra a etapa concluída. Quem já assinou continua listado.
+function SignaturesSummary({ label, block, current, settled = null }: {
+  label: string; block: LifecycleTarget["signatures"]["publication"]; current: boolean; settled?: string | null;
+}) {
+  const signers = block.signers.length > 0
+    ? <span className="mono">{block.signers.map((s) => s.email ?? "—").join(", ")}</span>
+    : null;
   return (
     <div style={{ fontSize: 12, color: "var(--ink2)" }}>
       <strong>{label}:</strong>{" "}
-      {block.signers.length === 0 ? "ninguém assinou ainda" : (
-        <span className="mono">{block.signers.map((s) => s.email ?? "—").join(", ")}</span>
-      )}
-      {block.missing > 0 && <span style={{ color: "var(--ink3)" }}> · falta {block.missing}</span>}
+      {signers ?? (current ? "ninguém assinou ainda" : (settled ?? "—"))}
+      {current && block.missing > 0 && <span style={{ color: "var(--ink3)" }}> · falta {block.missing}</span>}
+      {!current && signers && settled && <span style={{ color: "var(--ink3)" }}> · {settled}</span>}
     </div>
   );
 }
@@ -364,16 +391,23 @@ function SignaturesSummary({ label, block }: { label: string; block: LifecycleTa
 function VersionActions({
   version, viewer, onPick
 }: { version: LifecycleTarget; viewer: Viewer; onPick(action: LifecycleAction): void }) {
-  const actions = actionsFor(version, viewer);
-  if (actions.length === 0) return null;
+  // Destrutivas por último e com estilo de perigo (PR-12).
+  const destructive = (k: string) => k === "retire" || k === "revert";
+  const actions = [ ...actionsFor(version, viewer) ].sort((a, b) => Number(destructive(a.kind)) - Number(destructive(b.kind)));
+  if (actions.length === 0) {
+    // Versão em uso sem anterior: diz por que não há Reverter (PR-16).
+    return version.status === "active" && !version.revertible
+      ? <small style={{ fontSize: 11, color: "var(--ink3)" }}>sem versão anterior para reverter; aposentar não vale para a versão em uso</small>
+      : null;
+  }
 
   return (
-    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+    <div data-version-actions style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
       {actions.map((action) => (
         <div key={`${action.kind}-${action.purpose ?? ""}`} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
           <button
             type="button"
-            style={action.disabledReason !== null ? disabledButtonStyle : buttonStyle}
+            style={action.disabledReason !== null ? disabledButtonStyle : destructive(action.kind) ? dangerButtonStyle : buttonStyle}
             disabled={action.disabledReason !== null}
             onClick={() => onPick(action)}
           >
@@ -407,6 +441,13 @@ async function runAction(
 
 // A versão active é a que está em uso agora (só ela reverte, R4 nunca
 // aposenta) — tom de destaque próprio, distinto do "ok" de published.
+// Coluna Ativação da lista (PR-01): só conta assinaturas onde a etapa pede.
+function activationCell(status: string, signed: number): string {
+  if (status === "active") return "em uso";
+  if (status === "published") return `${signed}/2`;
+  return "—";
+}
+
 function statusTone(s: string): string {
   if (s === "active") return "accent";
   if (s === "published") return "ok";
