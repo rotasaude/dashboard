@@ -269,3 +269,25 @@ describe("SensitiveAction", () => {
     await waitFor(() => expect(run).toHaveBeenCalledWith({ username: "integ", password: " a b " }));
   });
 });
+
+describe("SensitiveAction — código e motivo (PR-15/PR-17)", () => {
+  beforeEach(() => { fetchSession.mockReset(); stepUpMfa.mockReset(); });
+
+  // O campo aceita também o código de recuperação (letras): sem teclado numérico.
+  it("código com foco e as duas ajudas", async () => {
+    fetchSession.mockResolvedValue(session());
+    renderAction();
+    await waitFor(() => expect(codeField()).not.toBeNull());
+    expect(document.activeElement).toBe(codeField());
+    expect(screen.getByText("Se acabou de entrar, espere o próximo código.")).not.toBeNull();
+    expect(screen.getByText("Tentativas erradas contam para o bloqueio da conta.")).not.toBeNull();
+  });
+
+  it("campo multiline vira textarea com o exemplo", async () => {
+    fetchSession.mockResolvedValue(session({ mfa_verified_at: minutesAgo(1) }));
+    renderAction({ fields: [ { name: "reason", label: "Motivo", required: true, multiline: true, placeholder: "ex.: v2 classificou febre alta como baixa" } ] });
+    const field = await screen.findByLabelText("Motivo");
+    expect(field.tagName).toBe("TEXTAREA");
+    expect(field.getAttribute("placeholder")).toBe("ex.: v2 classificou febre alta como baixa");
+  });
+});

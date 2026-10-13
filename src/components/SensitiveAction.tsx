@@ -13,7 +13,11 @@ import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } fr
 // pede um código novo e repete a ação uma vez; a segunda vez para.
 // `type: "password"` (módulo 16, credencial de integração): o valor não
 // aparece na tela e o navegador não o autocompleta com a senha do usuário.
-export interface SensitiveField { name: string; label: string; required?: boolean; type?: "text" | "password"; }
+export interface SensitiveField {
+  name: string; label: string; required?: boolean; type?: "text" | "password";
+  // Texto longo (ex.: motivo da reversão, PR-17): várias linhas e um exemplo.
+  multiline?: boolean; placeholder?: string;
+}
 
 export interface SensitiveActionProps {
   title: string;
@@ -110,16 +114,29 @@ export function SensitiveAction({
       {description && <div style={text}>{description}</div>}
       <form onSubmit={submit} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         {error && <p role="alert" style={alert}>{error}</p>}
-        {fields.map((f) => (
+        {fields.map((f, i) => (
           <label key={f.name} style={label}>
             {f.label}
-            <input
-              type={f.type ?? "text"}
-              autoComplete={f.type === "password" ? "new-password" : undefined}
-              value={values[f.name] ?? ""}
-              onChange={(e) => setValues((prev) => ({ ...prev, [f.name]: e.target.value }))}
-              style={inputStyle}
-            />
+            {f.multiline ? (
+              <textarea
+                autoFocus={i === 0}
+                rows={3}
+                placeholder={f.placeholder}
+                value={values[f.name] ?? ""}
+                onChange={(e) => setValues((prev) => ({ ...prev, [f.name]: e.target.value }))}
+                style={inputStyle}
+              />
+            ) : (
+              <input
+                autoFocus={i === 0}
+                type={f.type ?? "text"}
+                placeholder={f.placeholder}
+                autoComplete={f.type === "password" ? "new-password" : undefined}
+                value={values[f.name] ?? ""}
+                onChange={(e) => setValues((prev) => ({ ...prev, [f.name]: e.target.value }))}
+                style={inputStyle}
+              />
+            )}
           </label>
         ))}
         {fieldError && <p role="alert" style={alert}>{fieldError}</p>}
@@ -132,12 +149,16 @@ export function SensitiveAction({
             <label style={label}>
               Código do autenticador
               <input
+                autoFocus={fields.length === 0}
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
                 autoComplete="one-time-code"
                 style={inputStyle}
               />
             </label>
+            {/* Mesma ajuda do console de manutenção (PR-15). */}
+            <p style={text}>Se acabou de entrar, espere o próximo código.</p>
+            <p style={text}>Tentativas erradas contam para o bloqueio da conta.</p>
             {codeError && <p role="alert" style={alert}>{codeError}</p>}
           </>
         )}

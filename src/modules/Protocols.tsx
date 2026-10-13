@@ -297,7 +297,8 @@ function DetailDrawer({
                       title={`${pending.action.label} ${name} v${pending.version}`}
                       description={consequence(pending.action.kind, pending.revertTargetVersion, inUse !== pending.version ? inUse : null)}
                       requiresStepUp={pending.action.stepUp}
-                      fields={pending.action.needsReason ? [ { name: "reason", label: "Motivo", required: true } ] : []}
+                      fields={pending.action.needsReason ? [ { name: "reason", label: "Motivo", required: true, multiline: true,
+                      placeholder: "ex.: v2 classificou febre alta como baixa prioridade" } ] : []}
                       run={async (values) => {
                         try {
                           revertedToRef.current = await runAction(name, pending.version, pending.action, values);
