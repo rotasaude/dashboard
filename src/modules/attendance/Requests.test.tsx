@@ -149,3 +149,32 @@ describe("Requests", () => {
     await waitFor(() => expect(api.listUnitRequests).toHaveBeenCalledTimes(2));
   });
 });
+
+describe("Requests — usabilidade (6b)", () => {
+  beforeEach(() => {
+    for (const fn of [ api.listUnitRequests, api.dismissRequest ]) mocked(fn).mockReset();
+  });
+
+  it("FC-10: com mais de 5 pedidos, mostra 5 e 'ver todos (N)'", async () => {
+    mocked(api.listUnitRequests).mockResolvedValue(Array.from({ length: 7 }, (_, i) => requestRow({ id: `r${i}` })));
+    renderRequests();
+    expect(await screen.findAllByRole("button", { name: "Marcar horário" })).toHaveLength(5);
+    fireEvent.click(screen.getByRole("button", { name: "ver todos (7)" }));
+    expect(screen.getAllByRole("button", { name: "Marcar horário" })).toHaveLength(7);
+  });
+
+  it("FC-10: a coluna Atendimento fica vazia quando repete o Pedido", async () => {
+    mocked(api.listUnitRequests).mockResolvedValue([ requestRow({ id: "rx", appointment_type_name: "Retorno" }) ]);
+    renderRequests();
+    const row = (await screen.findAllByRole("row")).find((r) => r.textContent?.includes("***.982.247-**"))!;
+    expect(row.querySelector('[data-label="Atendimento"]')?.textContent).toBe("");
+  });
+
+  it("FC-12: a justificativa do encerramento diz quanto falta", async () => {
+    mocked(api.listUnitRequests).mockResolvedValue([ requestRow({ id: "r1" }) ]);
+    renderRequests();
+    fireEvent.click(await screen.findByRole("button", { name: "Encerrar pedido" }));
+    fireEvent.change(screen.getByLabelText("Justificativa"), { target: { value: "curto" } });
+    expect(screen.getByText("mínimo de 10 caracteres — faltam 5")).not.toBeNull();
+  });
+});

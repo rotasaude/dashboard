@@ -100,10 +100,14 @@ export function Attendance({ onNavigate }: { onNavigate(id: ModuleId): void }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <PageHeader title="Atendimento" sub="balcão · verificação presencial" />
+      {canVerify && unit && <PageIndex />}
       {(canVerify || canCareRole) && <UnitPicker key={pickerKey} userId={user.id} onChange={setUnit} />}
-      {canVerify && unit && <CheckIn unit={unit} onUnitInvalid={onUnitInvalid} />}
+      {canVerify && unit && <div id="sec-checkin"><CheckIn unit={unit} onUnitInvalid={onUnitInvalid} /></div>}
+      {/* A validação presencial sobe para perto do check-in: é a tarefa mais comum do balcão (FC-10). */}
+      {canVerify && <div id="sec-balcao"><Counter cadsusOn={hasFeature(user, "cadsus_lookup")} /></div>}
       {canCare && unit && <ScreeningQueue unit={unit} units={unitsQuery.data ?? []} />}
       {(canVerify || canCareRole) && unit && (
+        <div id="sec-fila">
         <UnitQueue
           unit={unit}
           units={unitsQuery.data ?? []}
@@ -116,16 +120,39 @@ export function Attendance({ onNavigate }: { onNavigate(id: ModuleId): void }) {
           professional={canCare}
           onClinicalRefused={() => void queryClient.invalidateQueries({ queryKey: [ "myProfessional", user.id ] })}
         />
+        </div>
       )}
-      {canVerify && unit && <Requests unit={unit} />}
-      {canVerify && unit && <Agenda unit={unit} />}
+      {canVerify && unit && <div id="sec-pedidos"><Requests unit={unit} /></div>}
+      {canVerify && unit && <div id="sec-agenda"><Agenda unit={unit} /></div>}
       {canVerify && <UnassignedRequests />}
-      {canVerify && <Counter cadsusOn={hasFeature(user, "cadsus_lookup")} />}
       {canVerify && <ErasureRequest />}
       {isAdmin && <History />}
       {isAdmin && <ErasureRequests onGoToSecurity={goToSecurity} />}
       {isAdmin && <Units />}
     </div>
+  );
+}
+
+// Índice da página (FC-10): botões que rolam até a seção e põem o foco no
+// título. Nada de href="#…" — o hash é do roteador do painel.
+const PAGE_SECTIONS: [ string, string ][] = [
+  [ "Check-in", "sec-checkin" ], [ "Validar cadastro", "sec-balcao" ], [ "Fila", "sec-fila" ],
+  [ "Pedidos", "sec-pedidos" ], [ "Agenda", "sec-agenda" ]
+];
+
+function PageIndex() {
+  function goTo(id: string) {
+    const el = document.getElementById(id);
+    el?.scrollIntoView({ block: "start" });
+    const title = el?.querySelector<HTMLElement>("h2");
+    if (title) { title.tabIndex = -1; title.focus(); }
+  }
+  return (
+    <nav aria-label="Nesta página" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+      {PAGE_SECTIONS.map(([ label, id ]) => (
+        <button key={id} type="button" style={secondaryButtonStyle} onClick={() => goTo(id)}>{label}</button>
+      ))}
+    </nav>
   );
 }
 

@@ -11,6 +11,10 @@ import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } fr
 import { FrozenTextNotice } from "../../components/FrozenTextNotice";
 import { RequestDetailPanel } from "./RequestDetailPanel";
 import { BookPanel, availabilityKey } from "./BookPanel";
+import { ReasonHint } from "../../components/ReasonHint";
+
+// Lista recolhida (FC-10): a recepção chega ao resto da página sem rolar 24 pedidos.
+const COLLAPSED = 5;
 
 // Requests (Task 8) — pedidos de agendamento abertos da unidade (spec §6
 // "Pedidos de agendamento"). "Marcar horário" abre o BookPanel (vagas por dia e
@@ -33,6 +37,7 @@ export function Requests({ unit }: Props) {
   const [ scheduling, setScheduling ] = useState<RequestRow | null>(null);
   const [ dismissing, setDismissing ] = useState<RequestRow | null>(null);
   const [ detail, setDetail ] = useState<RequestRow | null>(null);
+  const [ all, setAll ] = useState(false);
 
   function invalidateRequests() {
     void queryClient.invalidateQueries({ queryKey: [ "unitRequests", unit.id ] });
@@ -44,6 +49,7 @@ export function Requests({ unit }: Props) {
   }
 
   const rows = query.data ?? [];
+  const shown = all ? rows : rows.slice(0, COLLAPSED);
 
   return (
     <Panel title="Pedidos de agendamento">
@@ -61,7 +67,8 @@ export function Requests({ unit }: Props) {
             <DataTable<RequestRow>
               cols={[
                 { label: "Pedido", w: "1.5fr", render: (r) => requestKindLabel(r) },
-                { label: "Atendimento", w: "1.5fr", render: (r) => r.appointment_type_name },
+                // Vazia quando só repete o Pedido ("Retorno · Retorno", FC-10).
+                { label: "Atendimento", w: "1.5fr", render: (r) => (r.appointment_type_name === requestKindLabel(r) ? null : r.appointment_type_name) },
                 { label: "CPF", w: "1.5fr", render: (r) => r.cpf_masked },
                 { label: "Prazo", w: "1fr", render: (r) => fmtDueOn(r.due_on) },
                 { label: "Prioridade", w: "1fr", render: (r) =>
@@ -92,10 +99,13 @@ export function Requests({ unit }: Props) {
                   )
                 }
               ]}
-              rows={rows}
+              rows={shown}
               rowKey={(r) => r.id}
             />
           )
+        )}
+        {!all && rows.length > COLLAPSED && (
+          <div><button type="button" style={secondaryButtonStyle} onClick={() => setAll(true)}>ver todos ({rows.length})</button></div>
         )}
 
         {detail && <RequestDetailPanel key={detail.id} requestId={detail.id} onClose={() => setDetail(null)} />}
@@ -157,9 +167,11 @@ function DismissPanel(
           aria-describedby="dismiss-reason-notice" />
       </label>
       <FrozenTextNotice id="dismiss-reason-notice" />
+      <ReasonHint id="dismiss-reason-hint" text={reason} />
       <div style={{ display: "flex", gap: 8 }}>
         <button
           type="button"
+          aria-describedby={valid ? undefined : "dismiss-reason-hint"}
           disabled={!valid || busy}
           onClick={() => void confirm()}
           style={(!valid || busy) ? disabledButtonStyle : buttonStyle}

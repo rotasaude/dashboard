@@ -63,3 +63,11 @@ describe("menu da trilha (A-08, A-09)", () => {
     expect(document.activeElement?.getAttribute("aria-haspopup")).toBe("menu");
   });
 });
+
+describe("trilha sem repetição (FC-16)", () => {
+  it("grupo com o mesmo nome da tela não aparece duas vezes", () => {
+    render(<Breadcrumb groups={groups} route={{ kind: "screen", id: "attendance" }} go={vi.fn()} titleFor={titleFor} />);
+    expect(screen.getByRole("navigation", { name: "Trilha" }).textContent).not.toContain("Atendimento›Atendimento");
+    expect(screen.getByRole("button", { name: /Atendimento/ })).toBeTruthy();
+  });
+});

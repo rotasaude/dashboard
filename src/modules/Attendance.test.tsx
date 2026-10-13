@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 
@@ -413,6 +413,23 @@ describe("Attendance", () => {
     renderAttendance();
     expect(await screen.findByText("Pedidos de agendamento")).not.toBeNull();
     expect(screen.getByText("Agenda do dia")).not.toBeNull();
+  });
+
+  it("FC-10: recepção vê o índice da página e a ordem check-in, validação, fila, pedidos, agenda", async () => {
+    const unit = { id: "un1", name: "UBS Centro", kind: "ubs" };
+    localStorage.setItem(currentUnitKey("u1"), unit.id);
+    mocked(api.listActiveUnits).mockResolvedValue([ unit ]);
+    const scroll = vi.fn(); Element.prototype.scrollIntoView = scroll;
+    renderAttendance();
+    const index = await screen.findByRole("navigation", { name: "Nesta página" });
+    await screen.findByRole("region", { name: "Pedidos de agendamento" });
+    const titles = screen.getAllByRole("region").map((r) => r.getAttribute("aria-label"));
+    const order = [ "Check-in de quem chegou", "Validar cadastro com documento", "Fila", "Pedidos de agendamento", "Agenda do dia" ]
+      .map((t) => titles.indexOf(t));
+    expect(order.every((i) => i >= 0)).toBe(true);
+    expect([ ...order ].sort((a, b) => a - b)).toEqual(order);
+    fireEvent.click(within(index).getByRole("button", { name: "Pedidos" }));
+    expect(scroll).toHaveBeenCalled();
   });
 
   it("recepção continua vendo check-in e balcão, além da fila", async () => {

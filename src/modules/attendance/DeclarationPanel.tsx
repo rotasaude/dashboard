@@ -13,6 +13,7 @@ import { fmtHourMinute } from "../../lib/format";
 import { buttonStyle, disabledButtonStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { DeclarationForm } from "../documents/DeclarationForm";
 import { printDocument } from "../documents/printDocument";
+import { useReveal } from "../../lib/useReveal";
 
 interface Props {
   row: QueueRow;
@@ -55,8 +56,12 @@ export function DeclarationPanel({ row, onClose, professional = false }: Props) 
     }
   }
 
+  // Abre à vista e fecha com Escape (FC-13).
+  const revealRef = useReveal<HTMLElement>(true);
+
   return (
-    <section aria-label="Declaração de comparecimento do atendimento" style={panel}>
+    <section ref={revealRef} aria-label="Declaração de comparecimento do atendimento" style={panel}
+      onKeyDown={(e) => { if (e.key === "Escape" && !issuing) onClose(); }}>
       <p className="mono" style={muted}>{`${row.display_name ?? row.cpf_masked} · chegou às ${fmtHourMinute(row.checked_in_at)}`}</p>
       {issued ? (
         <>

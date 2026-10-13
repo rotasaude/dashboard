@@ -129,4 +129,15 @@ describe("UnitQueue — declaração de comparecimento (19c)", () => {
     resolve(declarationDoc({ id: "doc3", consultation_id: null, attendance_id: "a1" }));
     expect(await within(panel).findByRole("status")).not.toBeNull();
   });
+
+  it("FC-13: o painel da declaração abre à vista e fecha com Escape", async () => {
+    const scroll = vi.fn(); Element.prototype.scrollIntoView = scroll;
+    renderQueue();
+    const waiting = await section("Aguardando");
+    fireEvent.click(within(waiting).getByRole("button", { name: "Declaração" }));
+    const panel = screen.getByRole("region", { name: "Declaração de comparecimento do atendimento" });
+    expect(scroll).toHaveBeenCalled();
+    fireEvent.keyDown(panel, { key: "Escape" });
+    expect(screen.queryByRole("region", { name: "Declaração de comparecimento do atendimento" })).toBeNull();
+  });
 });

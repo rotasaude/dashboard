@@ -47,8 +47,13 @@ export function ErasureRequest() {
           <input type="checkbox" checked={checked} onChange={(e) => setChecked(e.target.checked)} />
           Conferi o documento com foto
         </label>
+        {!valid && (
+          <p id="erasure-block" style={{ margin: 0, fontSize: 12, color: "var(--ink2)" }}>
+            {!isValidCpf(cpf) ? "informe o CPF do cidadão" : "marque 'Conferi o documento com foto'"}
+          </p>
+        )}
         <div>
-          <button type="button" disabled={!valid || busy} onClick={() => void submit()} style={(!valid || busy) ? disabledButtonStyle : buttonStyle}>
+          <button type="button" aria-describedby={valid ? undefined : "erasure-block"} disabled={!valid || busy} onClick={() => void submit()} style={(!valid || busy) ? disabledButtonStyle : buttonStyle}>
             Registrar pedido
           </button>
         </div>

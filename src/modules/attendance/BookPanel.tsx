@@ -18,6 +18,7 @@ import { cityIsoDate, fmtHourMinute, parseCityLocal } from "../../lib/format";
 import { AVAILABILITY_DAYS, addDaysIso, confirmationWarning, dayLabel, daysBetween, fmtDueOn, slotsByDay } from "../../lib/scheduling";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { FitInPanel } from "./FitInPanel";
+import { useReveal } from "../../lib/useReveal";
 
 interface Props { row: RequestRow; unit: HealthUnit; onCancel(): void; onDone(): void }
 
@@ -121,14 +122,17 @@ export function BookPanel({ row, unit, onCancel, onDone }: Props) {
   }
 
   const ready = !!picked || !!legacyAt;
+  // Abre à vista e diz para quem é (FC-11); Escape fecha (FC-13).
+  const ref = useReveal<HTMLElement>(true);
 
   if (fitIn && day) {
     return <FitInPanel row={row} unit={unit} date={day} onBack={() => setFitIn(false)} onDone={onDone} />;
   }
 
   return (
-    <section aria-label="Marcar horário" style={panel}>
-      <strong>{`Marcar horário — ${row.appointment_type_name} · prazo ${fmtDueOn(row.due_on)}`}</strong>
+    <section ref={ref} aria-label="Marcar horário" style={panel}
+      onKeyDown={(e) => { if (e.key === "Escape" && !busy) onCancel(); }}>
+      <h3 style={{ margin: 0, fontSize: 14 }}>{`Marcar horário para ${row.cpf_masked} — ${row.appointment_type_name} · prazo ${fmtDueOn(row.due_on)}`}</h3>
       {error && <p role="alert" style={alert}>{error}</p>}
       {notice && <p role="status" style={{ ...alert, color: "var(--warn)", fontWeight: 600 }}>{notice}</p>}
       <div style={{ display: "flex", gap: 8, alignItems: "center" }}>

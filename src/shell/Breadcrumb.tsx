@@ -37,8 +37,13 @@ export function Breadcrumb({ groups, route, go, titleFor }: {
       <span aria-hidden="true">›</span>
       {multi && (
         <>
-          <RouteLink route={{ kind: "group", slug: group.slug }} go={go}>{group.label}</RouteLink>
-          <span aria-hidden="true">›</span>
+          {/* Grupo com o mesmo nome da tela não se repete na trilha (FC-16). */}
+          {group.label !== title && (
+            <>
+              <RouteLink route={{ kind: "group", slug: group.slug }} go={go}>{group.label}</RouteLink>
+              <span aria-hidden="true">›</span>
+            </>
+          )}
           <div ref={ref} className="shell-crumb-switch">
             <button ref={buttonRef} type="button" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
               {title} <IconChevronDown size={14} aria-hidden="true" />

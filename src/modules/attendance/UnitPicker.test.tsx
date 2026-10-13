@@ -69,3 +69,14 @@ describe("UnitPicker", () => {
     expect(alert.textContent).toBe("não foi possível concluir — tente de novo");
   });
 });
+
+describe("UnitPicker — usabilidade (6b)", () => {
+  it("FC-16: a escolha explica o que libera, e a unidade escolhida fica no painel Unidade", async () => {
+    localStorage.clear();
+    mocked(api.listActiveUnits).mockResolvedValue(units);
+    render(<UnitPicker userId="u1" onChange={vi.fn()} />);
+    expect(await screen.findByText("Escolha a unidade para ver o check-in e a fila")).not.toBeNull();
+    fireEvent.click(screen.getByText("UBS Centro"));
+    expect(screen.getByRole("region", { name: "Unidade" })).not.toBeNull();
+  });
+});

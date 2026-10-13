@@ -66,7 +66,7 @@ export function UnitPicker({ userId, onChange }: Props) {
 
   if (error) {
     return (
-      <Panel title="Atendente">
+      <Panel title="Unidade">
         <p role="alert" style={{ margin: 0, fontSize: 12.5, color: "var(--down)" }}>{error}</p>
       </Panel>
     );
@@ -83,7 +83,7 @@ export function UnitPicker({ userId, onChange }: Props) {
 
   if (selected && !choosing) {
     return (
-      <Panel title="Atendente">
+      <Panel title="Unidade">
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <span>Unidade: {selected.name}</span>
           <button type="button" style={secondaryButtonStyle} onClick={() => setChoosing(true)}>
@@ -95,7 +95,7 @@ export function UnitPicker({ userId, onChange }: Props) {
   }
 
   return (
-    <Panel title="Escolha a unidade">
+    <Panel title="Escolha a unidade" sub="Escolha a unidade para ver o check-in e a fila">
       {units.length === 0 ? (
         <EmptyState title="nenhuma unidade ativa" sub="peça ao administrador para cadastrar uma" />
       ) : (

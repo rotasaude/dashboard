@@ -51,7 +51,7 @@ describe("BookPanel", () => {
   it("pede 14 dias do tipo do pedido, a partir de hoje na cidade", async () => {
     renderIt();
     await waitFor(() => expect(api.getUnitAvailability).toHaveBeenCalledWith("u1", "consulta_medica", "2026-10-05", "2026-10-18"));
-    expect(screen.getByText("Marcar horário — Consulta médica · prazo até 20/10")).not.toBeNull();
+    expect(screen.getByText("Marcar horário para ***.982.247-** — Consulta médica · prazo até 20/10")).not.toBeNull();
     const day = await screen.findByLabelText("Dia");
     expect(within(day).getByRole("option", { name: "ter 06/10 · 3 vagas" })).not.toBeNull();
     expect(within(day).getByRole("option", { name: "qua 07/10 · sem turno (marcação livre)" })).not.toBeNull();
@@ -302,5 +302,20 @@ describe("BookPanel", () => {
     expect(api.getUnitAgenda).toHaveBeenCalledWith("u1", "2026-10-06");
     fireEvent.click(screen.getByRole("button", { name: "Voltar às vagas" }));
     expect(screen.getByLabelText("Dia")).not.toBeNull();
+  });
+});
+
+describe("BookPanel — usabilidade (6b)", () => {
+  it("FC-11/FC-13: diz para quem é, rola até ele e fecha com Escape", () => {
+    const scroll = vi.fn(); Element.prototype.scrollIntoView = scroll;
+    const onCancel = vi.fn();
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={client}>
+      <BookPanel row={requestRow({ cpf_masked: "***.343.399-**" })} unit={unit} onCancel={onCancel} onDone={vi.fn()} />
+    </QueryClientProvider>);
+    const heading = screen.getByRole("heading", { name: /^Marcar horário para \*\*\*\.343\.399-\*\*/ });
+    expect(scroll).toHaveBeenCalled();
+    fireEvent.keyDown(heading, { key: "Escape" });
+    expect(onCancel).toHaveBeenCalled();
   });
 });
