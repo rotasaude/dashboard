@@ -150,7 +150,7 @@ describe("Protocols", () => {
     fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
 
     await waitFor(() => expect(api.signProtocol).toHaveBeenCalledWith("dengue", "1", "publication"));
-    expect((await screen.findByRole("status")).textContent).toBe("Assinar publicação concluído: dengue v1");
+    expect((await screen.findByRole("status")).textContent).toBe("Publicação assinada: dengue v1");
   });
 
   it("quem editou a versão vê a assinatura desabilitada com o motivo", async () => {
@@ -438,7 +438,7 @@ describe("Protocols", () => {
     // sua assinatura"); o valor mora num <div> irmão do <div> que tem o
     // rótulo, então subimos até o <div>-cartão (avô do rótulo) para ler o
     // valor só dentro do próprio cartão.
-    const kpi = (await screen.findByText("Publicados")).closest("div")!.parentElement!;
+    const kpi = (await screen.findByText("Publicados ou em uso")).closest("div")!.parentElement!;
     expect(within(kpi).getByText("2")).not.toBeNull();
   });
 
@@ -729,6 +729,54 @@ describe("detalhe — usabilidade (6d)", () => {
     expect(retire.style.color).toBe("var(--down)");
     const buttons = within(retire.closest("[data-version-actions]") as HTMLElement).getAllByRole("button");
     expect(buttons[buttons.length - 1]).toBe(retire);
+  });
+});
+
+describe("lista e eventos — usabilidade (6d)", () => {
+  beforeEach(() => {
+    for (const fn of [ api.fetchCurrentSession, api.adminFetch ]) mocked(fn).mockReset();
+    window.history.replaceState(null, "", "/dashboard/");
+  });
+
+  it("PR-13: por nome, versão decrescente, aposentadas no fim; filtro e busca", async () => {
+    stubReads([
+      row({ id: "zika", name: "zika", version: "1", status: "retired" }),
+      row({ id: "dengue", name: "dengue", version: "1", status: "active" }),
+      row({ id: "dengue", name: "dengue", version: "2", status: "draft" }),
+      row({ id: "aedes", name: "aedes", version: "1", status: "draft" })
+    ]);
+    renderProtocols();
+    const table = await screen.findByRole("table");
+    const ids = within(table).getAllByRole("row").slice(1).map((r) => r.textContent?.slice(0, 7));
+    expect(ids).toEqual([ "aedes1r", "dengue2", "dengue1", "zika1ap" ]);
+    fireEvent.click(screen.getByLabelText("esconder aposentadas"));
+    expect(within(table).queryByText("zika")).toBeNull();
+    fireEvent.change(screen.getByLabelText("Buscar por nome"), { target: { value: "deng" } });
+    expect(within(table).queryByText("aedes")).toBeNull();
+    expect(within(table).getAllByText("dengue").length).toBe(2);
+  });
+
+  it("PR-10: ?protocolo= no endereço já filtra a lista", async () => {
+    window.history.replaceState(null, "", "/dashboard/?protocolo=zika#/protocols");
+    stubReads([ row({ id: "zika", name: "zika" }), row({ id: "dengue", name: "dengue" }) ]);
+    renderProtocols();
+    expect((await screen.findByLabelText("Buscar por nome") as HTMLInputElement).value).toBe("zika");
+    expect(screen.queryByText("dengue")).toBeNull();
+  });
+
+  it("PR-11: eventos com frase em português e e-mail de quem agiu", async () => {
+    mocked(api.adminFetch).mockImplementation((path: string) => {
+      if (path === "/protocols") return Promise.resolve({ data: { list: [ row() ] }, as_of: "2026-09-22T00:00:00Z" });
+      return Promise.resolve({ data: { id: "dengue", name: "dengue",
+        versions: [ versionRow({ signatures: { publication: { signers: [ { id: "u-a", email: "ana@c.gov" } ], missing: 1 }, activation: { signers: [], missing: 2 } } }) ],
+        events: [ { at: "2026-10-12T19:47:00Z", name: "protocol.signed", actor: "u-a", ref: "version=1" } ] }, as_of: "2026-09-22T00:00:00Z" });
+    });
+    renderProtocols();
+    fireEvent.click(await screen.findByText("dengue"));
+    const events = within(await screen.findByRole("region", { name: "Eventos" }));
+    expect(events.getByText("assinatura registrada")).not.toBeNull();
+    expect(events.getByText("ana@c.gov")).not.toBeNull();
+    expect(events.queryByText("u-a")).toBeNull();
   });
 });
 

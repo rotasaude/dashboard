@@ -16,8 +16,9 @@ import {
   type LifecycleAction, type LifecycleKind, type LifecycleTarget, type Viewer
 } from "../lib/protocolLifecycle";
 import { SensitiveAction } from "../components/SensitiveAction";
-import { buttonStyle, dangerButtonStyle, disabledButtonStyle } from "../components/formStyles";
+import { buttonStyle, dangerButtonStyle, disabledButtonStyle, inputStyle } from "../components/formStyles";
 import { useDialog } from "../lib/useDialog";
+import { actorLabel, eventLabel, type EventPerson } from "../lib/protocolEvents";
 import { Panel } from "../components/Panel";
 import { PageHeader } from "../components/PageHeader";
 import { KpiGrid } from "../components/KpiGrid";
@@ -44,13 +45,19 @@ import { TriageCatalogTab } from "./protocols/TriageCatalogTab";
 // Divergir do previsto é fato, não alarme: significa que outra ativação comitou
 // entre a leitura e o clique e o servidor reresolveu sob lock, como deve. A
 // frase conta, com o mesmo peso do sucesso comum.
+// Resultado no particípio (PR-14), igual no maintenance.
+const DONE_LABEL: Record<string, string> = {
+  submit: "Enviada para revisão", "sign-publication": "Publicação assinada", "sign-activation": "Ativação assinada",
+  publish: "Publicada", activate: "Ativada", retire: "Aposentada"
+};
+
 function doneMessage(
   pending: { version: string; revertTargetVersion: string | null; action: LifecycleAction },
   name: string,
   revertedTo: string | null
 ): string {
   if (pending.action.kind !== "revert") {
-    return `${pending.action.label} concluído: ${name} v${pending.version}`;
+    return `${DONE_LABEL[pending.action.kind === "sign" ? `sign-${pending.action.purpose}` : pending.action.kind]}: ${name} v${pending.version}`;
   }
   if (revertedTo == null) return `${pending.action.label} concluído.`;
   if (pending.revertTargetVersion != null && pending.revertTargetVersion !== revertedTo) {
@@ -120,6 +127,10 @@ function ProtocolVersions({ onNavigate }: { onNavigate?: (id: ModuleId) => void 
     [ auth.user ]
   );
   const [ onlyMine, setOnlyMine ] = useState(false);
+  // Achar o que está em uso sem varrer tudo (PR-13); `?protocolo=` vem do
+  // link do editor (PR-10).
+  const [ hideRetired, setHideRetired ] = useState(false);
+  const [ search, setSearch ] = useState(() => new URLSearchParams(window.location.search).get("protocolo") ?? "");
 
   if (isLoading) return <Stack><KpiGrid><KpiSkeleton /><KpiSkeleton /><KpiSkeleton /></KpiGrid><Panel title="Lista"><Skeleton rows={5} /></Panel></Stack>;
   if (isError) return <Stack><ErrorState message={(error as Error)?.message || "Erro"} onRetry={() => refetch()} /></Stack>;
@@ -130,13 +141,19 @@ function ProtocolVersions({ onNavigate }: { onNavigate?: (id: ModuleId) => void 
   // (apenas publicada, ainda não ativada); as duas contam para este KPI.
   const published = list.filter((p) => p.status === "published" || p.status === "active").length;
   const awaiting = list.filter((r) => awaitingMySignature(r, viewer)).length;
-  const shown = onlyMine ? list.filter((r) => awaitingMySignature(r, viewer)) : list;
+  const term = search.trim().toLowerCase();
+  const shown = [ ...list ]
+    .filter((r) => !onlyMine || awaitingMySignature(r, viewer))
+    .filter((r) => !hideRetired || r.status !== "retired")
+    .filter((r) => !term || r.name.toLowerCase().includes(term))
+    .sort((a, b) => Number(a.status === "retired") - Number(b.status === "retired")
+      || a.name.localeCompare(b.name) || Number(b.version) - Number(a.version));
 
   return (
     <Stack>
       <KpiGrid asOf={data.as_of}>
         <StatTile label="Protocolos & versões" value={list.length} source="live" />
-        <StatTile label="Publicados" value={published} tone="ok" source="live" />
+        <StatTile label="Publicados ou em uso" value={published} tone="ok" source="live" />
         <button
           type="button"
           aria-pressed={onlyMine}
@@ -149,6 +166,16 @@ function ProtocolVersions({ onNavigate }: { onNavigate?: (id: ModuleId) => void 
       </KpiGrid>
 
       <Panel title="Protocolos & versões" sub="autoria · publicação · validação" asOf={data.as_of}>
+        <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "flex-end", marginBottom: 12 }}>
+          <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12, color: "var(--ink2)" }}>
+            Buscar por nome
+            <input value={search} onChange={(e) => setSearch(e.target.value)} style={inputStyle} />
+          </label>
+          <label style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 12.5 }}>
+            <input type="checkbox" checked={hideRetired} onChange={(e) => setHideRetired(e.target.checked)} />
+            esconder aposentadas
+          </label>
+        </div>
         <DataTable<ProtocolRow>
           cols={[
             { label: "ID", w: "2fr", render: (r) => <span className="mono">{r.id}</span> },
@@ -197,6 +224,11 @@ function DetailDrawer({
   const doneRef = useRef<HTMLParagraphElement | null>(null);
   useEffect(() => { if (done) doneRef.current?.focus(); }, [ done ]);
   const inUse = data?.data.versions.find((v) => v.status === "active")?.version ?? null;
+  // Quem aparece nos eventos: signatários e editores que o painel já conhece (PR-11).
+  const people: EventPerson[] = (data?.data.versions ?? []).flatMap((v) => [
+    ...v.signatures.publication.signers, ...v.signatures.activation.signers,
+    ...v.editors.map((e) => ({ id: e.id, email: e.email, kind: e.kind }))
+  ]);
 
   return (
     <div
@@ -308,8 +340,8 @@ function DetailDrawer({
               <DataTable
                 cols={[
                   { label: "Em", w: "1fr", render: (e) => <span className="mono">{fmtDateTime(e.at)}</span> },
-                  { label: "Evento", w: "2fr", render: (e) => <Tag>{e.name}</Tag> },
-                  { label: "Actor", w: "1fr", render: (e) => <span className="mono">{e.actor || "sistema"}</span> },
+                  { label: "Evento", w: "2fr", render: (e) => <Tag>{eventLabel(e.name)}</Tag> },
+                  { label: "Quem", w: "1fr", render: (e) => <span className="mono">{actorLabel(e.actor, people)}</span> },
                   { label: "Ref", w: "1fr", render: (e) => <span className="mono" style={{ color: "var(--ink3)" }}>{e.ref}</span> }
                 ]}
                 rows={data.data.events}
