@@ -2159,6 +2159,14 @@ export function addNursingProtocolVersion(id: string, input: ProtocolVersionInpu
   return jsonFetch(cityDocPath("nursing_protocols", id, "versions"), postProfessional(input));
 }
 
+// api#61: o histórico, da mais nova para a mais antiga, com a situação de hoje.
+export type ProtocolVersionSituation = "vigente" | "agendada" | "encerrada";
+export interface NursingProtocolVersionRow extends NursingProtocolVersion { situation: ProtocolVersionSituation }
+
+export async function listNursingProtocolVersions(id: string): Promise<NursingProtocolVersionRow[]> {
+  return (await jsonFetch<{ items: NursingProtocolVersionRow[] }>(cityDocPath("nursing_protocols", id, "versions"))).items;
+}
+
 // ─── Receita de controlado e SNCR (módulo 19d, ADR 0034; contrato 2026-10-10 §1–§7) ───
 // CPF, endereço, telefone, número SNCR, `state` e `session_id` só no corpo de
 // POST/PUT, nunca em URL: as rotas levam só ids. O token do SNCR nunca passa

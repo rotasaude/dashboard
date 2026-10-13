@@ -5,10 +5,11 @@ import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/re
 vi.mock("../../lib/api", async (importOriginal) => {
   const real = await importOriginal<typeof import("../../lib/api")>();
   return { ...real, fetchCurrentSession: vi.fn(), listNursingProtocols: vi.fn(), createNursingProtocol: vi.fn(),
-    addNursingProtocolVersion: vi.fn(), searchMedications: vi.fn() };
+    addNursingProtocolVersion: vi.fn(), searchMedications: vi.fn(), listNursingProtocolVersions: vi.fn() };
 });
 
 import * as api from "../../lib/api";
+import { ApiError, type NursingProtocolVersionRow } from "../../lib/api";
 import { NursingProtocolsPanel } from "./NursingProtocolsPanel";
 import { renderWithProviders } from "../../test/campaignFixtures";
 import { CLONAZEPAM, DIPYRONE, NOW19C, docUser, nursingProtocol } from "../../test/documentFixtures";
@@ -22,7 +23,7 @@ describe("NursingProtocolsPanel", () => {
     vi.useFakeTimers({ toFake: [ "Date" ] });
     vi.setSystemTime(new Date(NOW19C));
     for (const fn of [ api.fetchCurrentSession, api.listNursingProtocols, api.createNursingProtocol, api.addNursingProtocolVersion,
-      api.searchMedications ]) mocked(fn).mockReset();
+      api.searchMedications, api.listNursingProtocolVersions ]) mocked(fn).mockReset();
     mocked(api.fetchCurrentSession).mockResolvedValue(docUser([ "municipal_admin" ], { id: "ad1" }));
     mocked(api.listNursingProtocols).mockResolvedValue([ nursingProtocol() ]);
     mocked(api.createNursingProtocol).mockResolvedValue(nursingProtocol({ id: "np2" }));
@@ -195,5 +196,52 @@ describe("NursingProtocolsPanel", () => {
     expect(within(dialog).getByText(/não vai aparecer como vigente.*30\/06\/2026/)).not.toBeNull();
     fireEvent.click(within(dialog).getByRole("button", { name: "Salvar protocolo" }));
     expect((await screen.findByRole("status")).textContent).toMatch(/^Protocolo salvo\. .*não vai aparecer como vigente.*30\/06\/2026/);
+  });
+
+  describe("api#61: histórico de versões", () => {
+    const item = nursingProtocol().current_version!.items[0];
+    const version = (over: Partial<NursingProtocolVersionRow>): NursingProtocolVersionRow =>
+      ({ id: "npv1", version: 1, valid_from: "2025-03-01", valid_until: null, items: [ item ], situation: "vigente", ...over });
+
+    it("Ver versões lista número, vigência, situação e itens com dose máxima", async () => {
+      mocked(api.listNursingProtocolVersions).mockResolvedValue([
+        version({ id: "npv3", version: 3, valid_from: "2026-11-01", situation: "agendada" }),
+        version({ id: "npv2", version: 2, valid_from: "2026-01-01", situation: "vigente" }),
+        version({ id: "npv1", version: 1, valid_from: "2025-03-01", valid_until: "2025-12-31", situation: "encerrada" })
+      ]);
+      renderWithProviders(<NursingProtocolsPanel searchDelayMs={0} />);
+      fireEvent.click(await screen.findByRole("button", { name: "Ver versões de Protocolo de enfermagem na atenção primária" }));
+      const panel = await screen.findByRole("region", { name: "Versões: Protocolo de enfermagem na atenção primária" });
+      await waitFor(() => expect(api.listNursingProtocolVersions).toHaveBeenCalledWith("np1"));
+      const rows = await within(panel).findAllByRole("listitem", { name: /^Versão/ });
+      expect(rows.map((r) => r.getAttribute("aria-label"))).toEqual([ "Versão 3", "Versão 2", "Versão 1" ]);
+      expect(rows[0].textContent).toContain("a partir de 01/11/2026 · agendada a partir de 01/11/2026");
+      expect(rows[1].textContent).toContain("a partir de 01/01/2026 · vigente");
+      expect(rows[2].textContent).toContain("de 01/03/2025 a 31/12/2025 · encerrada");
+      expect(rows[2].textContent).toContain("Dipirona sódica 500 mg/mL, solução oral · dose máxima 2 frasco");
+      fireEvent.click(within(panel).getByRole("button", { name: "Fechar" }));
+      expect(screen.queryByRole("region", { name: "Versões: Protocolo de enfermagem na atenção primária" })).toBeNull();
+    });
+
+    it("sem vigente e com uma agendada: depois de Ver versões, a vigência diz a próxima", async () => {
+      mocked(api.listNursingProtocols).mockResolvedValue([ nursingProtocol({ current_version: null }) ]);
+      mocked(api.listNursingProtocolVersions).mockResolvedValue([
+        version({ id: "npv2", version: 2, valid_from: "2026-11-01", situation: "agendada" }),
+        version({ id: "npv1", version: 1, valid_until: "2026-09-30", situation: "encerrada" })
+      ]);
+      renderWithProviders(<NursingProtocolsPanel searchDelayMs={0} />);
+      expect(await screen.findByText("sem versão vigente hoje")).not.toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Ver versões de Protocolo de enfermagem na atenção primária" }));
+      expect(await screen.findByText("sem versão vigente hoje — próxima a partir de 01/11/2026")).not.toBeNull();
+    });
+
+    it("erro ao buscar mostra a frase de erro e a tabela continua", async () => {
+      mocked(api.listNursingProtocolVersions).mockRejectedValue(new ApiError(403, { error: "missing_role" }, "403"));
+      renderWithProviders(<NursingProtocolsPanel searchDelayMs={0} />);
+      fireEvent.click(await screen.findByRole("button", { name: "Ver versões de Protocolo de enfermagem na atenção primária" }));
+      const panel = await screen.findByRole("region", { name: "Versões: Protocolo de enfermagem na atenção primária" });
+      expect((await within(panel).findByRole("alert")).textContent).toBe("seu papel não permite esta ação");
+      expect(screen.getByText("nº 007/2025 · 2025")).not.toBeNull();
+    });
   });
 });
