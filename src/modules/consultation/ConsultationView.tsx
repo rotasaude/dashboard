@@ -25,6 +25,8 @@ export interface ConsultationViewProps {
   patientProblems: PatientProblem[];
   // "Minhas consultas" (dashboard#12): busca a lista completa ao abrir o adendo.
   loadPatientProblems?: () => Promise<PatientProblem[]>;
+  // dashboard#14: false enquanto o atendimento relê a assinatura; fora dele ninguém relê (padrão true).
+  signatureSettled?: boolean;
   // Administrador: leitura sem Imprimir e sem Adendo, mesmo que o id coincida.
   readOnly?: boolean;
   searchDelayMs?: number;
@@ -80,7 +82,7 @@ export function ConsultationView(props: ConsultationViewProps) {
         <span style={muted}>{`${c.author.name} · ${codedLabel(options?.care_types, c.care_type)}`}</span>
       </div>
       {c.signature && (
-        <SignatureMarker label="assinatura da consulta" block={c.signature} readOnly={props.readOnly} consultationId={c.id}
+        <SignatureMarker label="assinatura da consulta" block={c.signature} settled={props.signatureSettled ?? true} readOnly={props.readOnly} consultationId={c.id}
           onOpeningRequired={props.onOpeningRequired} />
       )}
       {hint && <p style={muted}>{hint}</p>}
@@ -118,7 +120,7 @@ export function ConsultationView(props: ConsultationViewProps) {
             <li key={a.id} style={{ fontSize: 12.5 }}>
               <strong>{`Adendo de ${a.author_name} em ${fmtDateTime(a.created_at)}`}</strong>
               {a.signature && (
-                <SignatureMarker label="assinatura do adendo" block={a.signature} readOnly={props.readOnly} consultationId={c.id}
+                <SignatureMarker label="assinatura do adendo" block={a.signature} settled={props.signatureSettled ?? true} readOnly={props.readOnly} consultationId={c.id}
                   onOpeningRequired={props.onOpeningRequired} />
               )}
               <p style={textStyle}>{`Motivo: ${a.reason}`}</p>

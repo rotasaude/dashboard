@@ -18,15 +18,17 @@ interface Props {
   // Revalidar terminou: quem lista o documento fora da consulta (ex.: a lista
   // de documentos clínicos) relê a própria leitura.
   onVerified?(detail: Detail): void;
+  // dashboard#14: ninguém mais relê a consulta; pendente sem motivo aponta Pendentes.
+  settled?: boolean;
 }
 
-export function SignatureMarker({ label, block, readOnly, consultationId, onOpeningRequired, onVerified }: Props) {
+export function SignatureMarker({ label, block, readOnly, consultationId, onOpeningRequired, onVerified, settled }: Props) {
   const [ open, setOpen ] = useState(false);
   // Revalidar devolve a validação nova antes de a consulta ser relida; vale
   // enquanto o bloco que veio do api não mudar (a releitura prevalece).
   const [ verified, setVerified ] = useState<{ from?: SignatureVerification; to: SignatureVerification } | null>(null);
   const current = verified && verified.from === block.verification ? { ...block, verification: verified.to } : block;
-  const marker = signatureMarker(current);
+  const marker = signatureMarker(current, { settled });
   const canOpen = block.mode === "digital" && !!block.signature_id;
 
   return (
@@ -35,6 +37,7 @@ export function SignatureMarker({ label, block, readOnly, consultationId, onOpen
         <Tag tone={marker.tone}>{marker.label}</Tag>
         {marker.simulated && <Tag tone="warn" mono={false}>{SIMULATED_NOTICE}</Tag>}
         {marker.detail && <span style={muted}>{marker.detail}</span>}
+        {marker.link && <a href={marker.link.href} style={linkButton}>{marker.link.label}</a>}
         {canOpen && (
           <button type="button" style={linkButton} onClick={() => setOpen((v) => !v)}>
             {open ? "Fechar o que foi assinado" : "Ver o que foi assinado"}

@@ -71,6 +71,8 @@ export function ConsultationWorkspace(props: Props) {
   const onDocuments = showTabs && tab === "documents";
   const settling = consultation?.status === "finalized" && signatureSettling(consultation);
   const consultationId = consultation?.id ?? null;
+  // dashboard#14: esgotadas as releituras (ou nunca armadas), o marcador para de dizer "assinando…".
+  const signatureSettled = !settling || rereads.current >= SIGNATURE_REREAD_LIMIT;
 
   useEffect(() => {
     if (!signer || !settling || !consultationId || rereads.current >= SIGNATURE_REREAD_LIMIT) return;
@@ -178,6 +180,7 @@ export function ConsultationWorkspace(props: Props) {
 
             {consultation?.status === "finalized" && (
               <ConsultationView consultation={consultation} options={options.data ?? null} patientProblems={record.data.problems}
+                signatureSettled={signatureSettled}
                 searchDelayMs={props.searchDelayMs}
                 onAddendumAdded={(addendum) => {
                   setConsultation((c) => (c ? withAddendum(c, addendum) : c)); restartRereads();

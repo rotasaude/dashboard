@@ -24,9 +24,10 @@ vi.mock("./ConsultationEditor", () => ({
 }));
 const mode = (b?: SignatureBlock) => (b ? `${b.mode}${b.request_id ? `/${b.request_id}` : ""}` : "sem bloco");
 vi.mock("./ConsultationView", () => ({
-  ConsultationView: (p: { consultation: Consultation; onAddendumAdded(a: unknown): void }) => (
+  ConsultationView: (p: { consultation: Consultation; signatureSettled?: boolean; onAddendumAdded(a: unknown): void }) => (
     <div>
       <span>{`assinatura: ${mode(p.consultation.signature)}`}</span>
+      <span>{`releituras: ${p.signatureSettled ? "acabaram" : "em curso"}`}</span>
       <span>{`adendos: ${p.consultation.addenda.map((a) => `${a.id}=${mode(a.signature)}`).join(",")}`}</span>
       <button type="button" onClick={() => p.onAddendumAdded({ id: "ad9", author_name: "Dra. Helena Prado",
         created_at: "2026-10-07T11:00:00-03:00", reason: "correção do plano", text: "Retorno.", changes: null,
@@ -148,6 +149,16 @@ describe("ConsultationWorkspace — releitura da assinatura (19b)", () => {
     await finalize();
     await steps(6);
     expect(api.getConsultation).toHaveBeenCalledTimes(3);
+  });
+
+  it("dashboard#14: enquanto relê, o marcador fica 'assinando'; esgotadas as releituras, avisa", async () => {
+    mocked(api.getConsultation).mockResolvedValue(finalized({ signature: { mode: "pending", request_id: "sr1" } }));
+    blocks.finalize = { mode: "pending", request_id: "sr1" };
+    await finalize();
+    expect(screen.getByText("releituras: em curso")).not.toBeNull();
+    await steps(4);
+    expect(api.getConsultation).toHaveBeenCalledTimes(3);
+    expect(screen.getByText("releituras: acabaram")).not.toBeNull();
   });
 
   it("erro na releitura é silencioso: fica o que estava e conta como tentativa", async () => {

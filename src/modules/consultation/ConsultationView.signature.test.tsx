@@ -22,7 +22,7 @@ afterEach(cleanup);
 
 const addendum = { id: "ad1", author_name: "Enf. Lúcia Prado", created_at: "2026-10-07T11:00:00-03:00",
   reason: "correção do plano", text: "Retorno em 15 dias.", changes: null };
-const view = (c: ReturnType<typeof finalized>, extra: { readOnly?: boolean; onOpeningRequired?(): void } = {}) =>
+const view = (c: ReturnType<typeof finalized>, extra: { readOnly?: boolean; onOpeningRequired?(): void; signatureSettled?: boolean } = {}) =>
   renderWithProviders(<ConsultationView consultation={c} options={options()} patientProblems={[]}
     onAddendumAdded={vi.fn()} onClose={vi.fn()} {...extra} />);
 
@@ -46,7 +46,8 @@ describe("ConsultationView com assinatura digital (19b)", () => {
   });
 
   it("pendente logo depois de finalizar (pedido criado, job assinando): diz que está assinando", () => {
-    view(finalized({ signature: { mode: "pending", request_id: "sr1" } }));
+    // Releituras em curso (o atendimento passa false); sem a prop, ninguém relê (dashboard#14).
+    view(finalized({ signature: { mode: "pending", request_id: "sr1" } }), { signatureSettled: false });
     const group = screen.getByRole("group", { name: "assinatura da consulta" });
     expect(within(group).getByText("assinatura pendente")).not.toBeNull();
     expect(within(group).getByText("assinando…")).not.toBeNull();
@@ -140,4 +141,19 @@ describe("ConsultationView com assinatura digital (19b)", () => {
     await waitFor(() => expect(onOpeningRequired).toHaveBeenCalled());
     expect(api.getSignature).toHaveBeenCalledWith("sg2");
   });
+
+  it("dashboard#14: fora do atendimento (ninguém relê), pendente sem motivo já diz que espera, com link para Pendentes", () => {
+    view(finalized({ signature: { mode: "pending", request_id: "sr1" } }));
+    const group = screen.getByRole("group", { name: "assinatura da consulta" });
+    expect(within(group).getByText("aguardando assinatura")).not.toBeNull();
+    expect(within(group).getByRole("link", { name: "veja Pendentes" }).getAttribute("href")).toBe("#/signature-pending");
+    expect(within(group).queryByText("assinando…")).toBeNull();
+  });
+
+  it("dashboard#14: com releituras em curso, segue 'assinando…'", () => {
+    renderWithProviders(<ConsultationView consultation={finalized({ signature: { mode: "pending", request_id: "sr1" } })}
+      options={options()} patientProblems={[]} signatureSettled={false} onAddendumAdded={vi.fn()} onClose={vi.fn()} />);
+    expect(within(screen.getByRole("group", { name: "assinatura da consulta" })).getByText("assinando…")).not.toBeNull();
+  });
 });
+

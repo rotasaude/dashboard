@@ -134,6 +134,12 @@ describe("marcador, motivos e impresso", () => {
     expect(signatureMarker({ mode: "pending", request_id: "sr1", reason_code: "no_session" })).toEqual(
       { label: "assinatura pendente", tone: "warn", detail: "sem sessão de assinatura aberta", simulated: false });
     expect(signatureMarker({ mode: "pending", request_id: "sr1" }).detail).toBe("assinando…");
+    // dashboard#14: esgotadas as releituras (ou fora do atendimento, onde ninguém relê).
+    expect(signatureMarker({ mode: "pending", request_id: "sr1" }, { settled: true })).toEqual({
+      label: "assinatura pendente", tone: "warn", detail: "aguardando assinatura", simulated: false,
+      link: { href: "#/signature-pending", label: "veja Pendentes" } });
+    expect(signatureMarker({ mode: "pending", request_id: "sr1", reason_code: "no_session" }, { settled: true }).detail)
+      .toBe("sem sessão de assinatura aberta");
     expect(signatureMarker({ mode: "manual", reason_code: "feature_disabled" })).toEqual(
       { label: "assinatura à mão (papel)", tone: "neutral", detail: "assinatura digital desligada na cidade", simulated: false });
     expect(signatureMarker({ mode: "manual" }).detail).toBeNull();
