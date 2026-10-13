@@ -13,6 +13,10 @@ vi.mock("./ConsultationEditor", () => ({
     <div>
       <span>{`editor ${p.consultation.id}`}</span>
       <button type="button" onClick={() => p.onFinalized({ ...p.consultation, status: "finalized" })}>finalizar (dublê)</button>
+      <button type="button" onClick={() => p.onFinalized({ ...p.consultation, status: "finalized", evaluated_problems: [
+        { problem_id: "pp9", terminology: "ciap2", code: "K86", label: "Hipertensão sem complicações", action: "add" } ] })}>
+        finalizar com K86 (dublê)
+      </button>
       <button type="button" onClick={() => p.onLocked("esta consulta já foi finalizada — a tela foi atualizada")}>travar (dublê)</button>
     </div>
   )
@@ -24,6 +28,11 @@ vi.mock("./ConsultationView", () => ({
       <span>{`adendos: ${p.consultation.addenda.map((a) => a.id).join(",")}`}</span>
       <button type="button" onClick={() => p.onAddendumAdded({ id: "ad9", author_name: "Enf. Lúcia Prado",
         created_at: "2026-10-07T11:00:00-03:00", reason: "correção do plano", text: "Retorno.", changes: null })}>adendo (dublê)</button>
+      <button type="button" onClick={() => p.onAddendumAdded({ id: "ad8", author_name: "Enf. Lúcia Prado",
+        created_at: "2026-10-07T11:00:00-03:00", reason: "resolvido", text: "", changes: { evaluated_problems: [
+          { problem_id: "pp1", terminology: "ciap2", code: "T90", label: "Diabetes não insulino-dependente", action: "resolve" } ] } })}>
+        adendo que resolve T90 (dublê)
+      </button>
     </div>
   ),
   ConsultationLoader: (p: { id: string }) => <span>{`consulta anterior ${p.id}`}</span>
@@ -124,4 +133,25 @@ describe("ConsultationWorkspace", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Abrir consulta de 10/09/2026, 14:30" }));
     expect(screen.getByText("consulta anterior cs0")).not.toBeNull();
   });
+
+  // dashboard#13: o atendimento fecha na finalização e o api recusa reler o prontuário por ele;
+  // o painel aplica o que a consulta e o adendo registraram, sem nova leitura.
+  it("depois de finalizar, o painel mostra o problema incluído sem reler o prontuário", async () => {
+    renderIt();
+    fireEvent.click(await screen.findByRole("button", { name: "Iniciar consulta" }));
+    expect((await screen.findByRole("list", { name: "problemas ativos" })).textContent).not.toMatch(/K86/);
+    fireEvent.click(await screen.findByRole("button", { name: /finalizar com K86/ }));
+    expect((await screen.findByRole("list", { name: "problemas ativos" })).textContent).toMatch(/K86/);
+    expect(api.getAttendanceRecord).toHaveBeenCalledTimes(1);
+  });
+
+  it("depois de um adendo que resolve um problema, o painel o tira dos ativos", async () => {
+    renderIt();
+    fireEvent.click(await screen.findByRole("button", { name: "Iniciar consulta" }));
+    fireEvent.click(await screen.findByRole("button", { name: "finalizar (dublê)" }));
+    expect((await screen.findByRole("list", { name: "problemas ativos" })).textContent).toMatch(/T90/);
+    fireEvent.click(await screen.findByRole("button", { name: /adendo que resolve T90/ }));
+    expect(await screen.findByText("nenhum problema ativo")).not.toBeNull();
+  });
 });
+

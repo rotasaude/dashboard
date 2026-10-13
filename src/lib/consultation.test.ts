@@ -4,7 +4,7 @@ import {
   addExam, addProblem, addendumChanges, addendumProblem, ageLabel, blockedReason, changesLines, checkDraft, cid10Problem,
   codedLabel, consultationError, correctOnset, draftFrom, examsProblem, existingConsultationId, finalizeProblems, markProblem,
   normalizeCid10, onsetInputValue, onsetLabel, parseOnset, problemKey, problemsWithConsultationAdds, removeItem, setItemOnset,
-  setJustification, withAddendum
+  setJustification, withAddendum, applyEvaluatedProblems
 } from "./consultation";
 import { consultation, finalized, options, problem } from "../test/consultationFixtures";
 
@@ -274,3 +274,33 @@ describe("rótulos e recusas", () => {
     expect(existingConsultationId(new Error("x"))).toBeNull();
   });
 });
+
+// dashboard#13: o painel do paciente segue o que a consulta (ou o adendo) acabou de registrar,
+// sem reler o prontuário (o atendimento fecha na finalização e o api recusa a releitura).
+describe("applyEvaluatedProblems", () => {
+  const base: PatientProblem[] = [ problem() ]; // T90 ativo, id pp1
+  const ev = (over: Partial<EvaluatedProblem>): EvaluatedProblem =>
+    ({ problem_id: "pp9", terminology: "ciap2", code: "K86", label: "Hipertensão sem complicações", action: "add", ...over });
+
+  it("inclui o problema novo como ativo", () => {
+    const out = applyEvaluatedProblems(base, [ ev({}) ], "2026-10-13");
+    expect(out.map((p) => [ p.code, p.status ])).toEqual([ [ "T90", "active" ], [ "K86", "active" ] ]);
+  });
+
+  it("não duplica um problema que já está na lista", () => {
+    expect(applyEvaluatedProblems(base, [ ev({ problem_id: "pp1", code: "T90" }) ], "2026-10-13")).toHaveLength(1);
+  });
+
+  it("resolve com a data do dia e corrige o início", () => {
+    const resolved = applyEvaluatedProblems(base, [ ev({ problem_id: "pp1", code: "T90", action: "resolve" }) ], "2026-10-13");
+    expect(resolved[0]).toMatchObject({ status: "resolved", resolved_on: "2026-10-13" });
+    const corrected = applyEvaluatedProblems(base,
+      [ ev({ problem_id: "pp1", code: "T90", action: "correct_onset", onset_on: "2024-01-01", onset_precision: "year" }) ], "2026-10-13");
+    expect(corrected[0]).toMatchObject({ onset_on: "2024-01-01", onset_precision: "year", status: "active" });
+  });
+
+  it("avaliar não muda nada e devolve a mesma lista", () => {
+    expect(applyEvaluatedProblems(base, [ ev({ problem_id: "pp1", code: "T90", action: "evaluate" }) ], "2026-10-13")).toBe(base);
+  });
+});
+

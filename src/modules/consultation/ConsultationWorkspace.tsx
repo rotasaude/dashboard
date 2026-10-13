@@ -4,11 +4,13 @@
 // trilha), o rascunho da consulta e a leitura da finalizada. "Iniciar consulta"
 // também retoma: o 409 already_exists traz o id do rascunho (Divergência D1).
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  getAttendanceRecord, getConsultation, getConsultationOptions, startConsultation, type Consultation, type HealthUnit
+  getAttendanceRecord, getConsultation, getConsultationOptions, startConsultation, type ClinicalRecord, type Consultation,
+  type EvaluatedProblem, type HealthUnit
 } from "../../lib/api";
-import { OPTIONS_KEY, RECORD_KEY, consultationError, existingConsultationId, withAddendum } from "../../lib/consultation";
+import { OPTIONS_KEY, RECORD_KEY, applyEvaluatedProblems, consultationError, existingConsultationId, withAddendum } from "../../lib/consultation";
+import { todayInCity } from "../../lib/campaigns";
 import { useAuth } from "../../lib/auth";
 import { canSign, signatureSettling } from "../../lib/signature";
 import { canUseDocuments } from "../../lib/clinicalDocuments";
@@ -41,6 +43,7 @@ export const SIGNATURE_REREAD_LIMIT = 3;
 
 export function ConsultationWorkspace(props: Props) {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const record = useQuery({
     queryKey: [ RECORD_KEY, props.attendanceId ], queryFn: () => getAttendanceRecord(props.attendanceId), gcTime: 0, staleTime: 0
   });
@@ -86,6 +89,14 @@ export function ConsultationWorkspace(props: Props) {
     }, SIGNATURE_REREAD_MS);
     return () => { live = false; clearTimeout(timer); };
   }, [ signer, settling, consultationId, rereadTick ]);
+
+  // dashboard#13: o atendimento fecha na finalização e o api recusa reler o prontuário
+  // por ele; o painel do paciente segue o que a consulta e o adendo registraram.
+  function applyToRecord(events: EvaluatedProblem[]) {
+    if (events.length === 0) return;
+    queryClient.setQueryData<ClinicalRecord>([ RECORD_KEY, props.attendanceId ], (current) =>
+      current ? { ...current, problems: applyEvaluatedProblems(current.problems, events, todayInCity()) } : current);
+  }
 
   function restartRereads() {
     rereads.current = 0;
@@ -161,14 +172,17 @@ export function ConsultationWorkspace(props: Props) {
               <ConsultationEditor key={consultation.id} consultation={consultation} record={record.data} options={options.data}
                 referenceUnitIds={props.referenceUnitIds} unit={props.unit} units={props.units}
                 autosaveDelayMs={props.autosaveDelayMs} searchDelayMs={props.searchDelayMs}
-                onFinalized={(c) => { setConsultation(c); restartRereads(); props.onFinalized(); }}
+                onFinalized={(c) => { setConsultation(c); restartRereads(); applyToRecord(c.evaluated_problems); props.onFinalized(); }}
                 onLocked={(message) => void reload(message)} />
             )}
 
             {consultation?.status === "finalized" && (
               <ConsultationView consultation={consultation} options={options.data ?? null} patientProblems={record.data.problems}
                 searchDelayMs={props.searchDelayMs}
-                onAddendumAdded={(addendum) => { setConsultation((c) => (c ? withAddendum(c, addendum) : c)); restartRereads(); }}
+                onAddendumAdded={(addendum) => {
+                  setConsultation((c) => (c ? withAddendum(c, addendum) : c)); restartRereads();
+                  applyToRecord(addendum.changes?.evaluated_problems ?? []);
+                }}
                 onClose={props.onClose} />
             )}
           </div>
