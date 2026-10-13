@@ -2,8 +2,7 @@
 // o id de quem agiu vira o e-mail que o painel já conhece. O que o api não manda
 // (quem ativou, motivo e alvo da reversão, finalidade da assinatura) é card.
 const EVENT_LABEL: Record<string, string> = {
-  "protocol.draft_saved": "rascunho salvo",
-  "protocol.submitted": "enviada para revisão",
+  "protocol.submitted_for_review": "enviada para revisão",
   "protocol.signed": "assinatura registrada",
   "protocol.published": "publicada",
   "protocol.activated": "ativada",

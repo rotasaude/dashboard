@@ -3,7 +3,7 @@ import { actorLabel, eventLabel } from "./protocolEvents";
 
 describe("eventos de protocolo em português (PR-11)", () => {
   it.each([
-    [ "protocol.draft_saved", "rascunho salvo" ], [ "protocol.submitted", "enviada para revisão" ],
+    [ "protocol.submitted_for_review", "enviada para revisão" ],
     [ "protocol.signed", "assinatura registrada" ], [ "protocol.published", "publicada" ],
     [ "protocol.activated", "ativada" ], [ "protocol.retired", "aposentada" ],
     [ "protocol.activation_reverted", "ativação revertida" ], [ "protocol.novo", "protocol.novo" ]

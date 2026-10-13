@@ -77,7 +77,7 @@ function consequence(kind: LifecycleKind, revertTarget: string | null, inUse: st
     case "publish":  return "A versão fica pronta para ativação, mas ainda não vale para a cidade.";
     case "activate": return inUse
       ? `A versão passa a valer para toda a cidade. A versão ${inUse} (em uso) sai de uso.`
-      : "A versão passa a valer para toda a cidade. A versão em uso deste protocolo sai de uso.";
+      : "A versão passa a valer para toda a cidade.";
     case "retire":   return "A versão não pode mais ser ativada. Isso não pode ser desfeito.";
     case "revert":   return revertDescription(revertTarget);
   }

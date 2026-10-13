@@ -780,3 +780,16 @@ describe("lista e eventos — usabilidade (6d)", () => {
   });
 });
 
+describe("ativar sem versão em uso (I2)", () => {
+  beforeEach(() => { for (const fn of [ api.fetchCurrentSession, api.adminFetch ]) mocked(fn).mockReset(); });
+  it("não inventa versão que sai de uso", async () => {
+    const done = { publication: { signers: [], missing: 0 }, activation: { signers: [], missing: 0 } };
+    stubReads([ row({ status: "published", signatures: done }) ], [ versionRow({ status: "published", signatures: done }) ]);
+    renderProtocols("protocol_publisher");
+    fireEvent.click(await screen.findByText("dengue"));
+    fireEvent.click(await screen.findByRole("button", { name: "Ativar" }));
+    expect(await screen.findByText("A versão passa a valer para toda a cidade.")).toBeTruthy();
+    expect(screen.queryByText(/sai de uso/)).toBeNull();
+  });
+});
+
