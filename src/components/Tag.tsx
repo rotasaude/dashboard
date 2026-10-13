@@ -27,7 +27,8 @@ export function Tag({ tone, mono = true, children }: Props) {
         border: `1px solid color-mix(in oklch, ${fg}, transparent 75%)`,
         textTransform: "lowercase",
         letterSpacing: 0.2,
-        whiteSpace: "nowrap"
+        maxWidth: "100%",
+        overflowWrap: "anywhere"
       }}
     >
       {children}

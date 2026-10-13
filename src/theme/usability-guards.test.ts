@@ -37,3 +37,15 @@ describe("alvos de toque abaixo de 1024px", () => {
     expect(block).toMatch(/label:has\(> input\[type="checkbox"\]\),\s*label:has\(> input\[type="radio"\]\)\s*\{[^}]*min-height:\s*44px/);
   });
 });
+
+describe("tabela: subgrid com reserva e texto que quebra", () => {
+  const css = readFileSync(join(src, "components/datatable.css"), "utf8");
+  it("linhas usam as colunas da tabela; subgrid só onde há suporte", () => {
+    expect(css).toMatch(/\.dt-row\s*\{[^}]*grid-template-columns:\s*var\(--dt-cols\)/);
+    expect(css).toMatch(/@supports \(grid-template-columns: subgrid\)\s*\{\s*\.dt > \.dt-row\s*\{\s*grid-template-columns:\s*subgrid/);
+  });
+  it("célula quebra qualquer token comprido; botão só entre palavras", () => {
+    expect(css).toMatch(/\.dt-cell\s*\{[^}]*overflow-wrap:\s*anywhere/);
+    expect(css).toMatch(/\.dt-cell button\s*\{[^}]*overflow-wrap:\s*normal/);
+  });
+});

@@ -23,3 +23,13 @@ describe("Tag", () => {
     expect(container.textContent).toBe("alto");
   });
 });
+
+describe("Tag em espaço estreito (spec 6a §3.7)", () => {
+  it("não passa da célula: limita à largura e quebra o texto", () => {
+    const { container } = render(<Tag>health_professional</Tag>);
+    const el = container.firstElementChild as HTMLElement;
+    expect(el.style.maxWidth).toBe("100%");
+    expect(el.style.overflowWrap).toBe("anywhere");
+    expect(el.style.whiteSpace).not.toBe("nowrap");
+  });
+});

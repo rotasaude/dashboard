@@ -1,8 +1,13 @@
 /* DataTable (spec do subprojeto 3, §3). Base: o que antes era estilo inline
    da célula, agora em classe para o modo cartão poder trocar sem !important. */
 /* Texto quebra linha em vez de ser cortado com reticências (spec 6a §3.7). */
-.dt-cell { white-space: normal; overflow-wrap: break-word; }
+.dt-cell { min-width: 0; white-space: normal; overflow-wrap: anywhere; }
 .dt-cell button { overflow-wrap: normal; }
+/* Linhas com as colunas da tabela; subgrid alinha pelo conteúdo de todas. */
+.dt-row { grid-template-columns: var(--dt-cols); }
+@supports (grid-template-columns: subgrid) {
+  .dt > .dt-row { grid-template-columns: subgrid; }
+}
 /* Rede de segurança: tabela que não cabe nem quebrando linha rola para o lado. */
 .dt { overflow-x: auto; }
 .dt-cell[data-align="right"] { text-align: right; }

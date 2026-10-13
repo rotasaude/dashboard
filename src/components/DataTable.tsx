@@ -25,21 +25,25 @@ interface Props<T> {
 }
 
 export function DataTable<T>({ cols, rows, rowKey, onRowClick, empty, rowStyle: extraStyle }: Props<T>) {
-  const gridCols = cols.map((c) => c.w || "1fr").join(" ");
+  // Frações ganham piso de 10ch: o texto quebra em qualquer ponto, e sem piso
+  // uma coluna de texto encolheria até uma letra por linha (spec 6a §3.7).
+  const gridCols = cols.map((c) => {
+    const w = c.w || "1fr";
+    return /^\d*\.?\d+fr$/.test(w) ? `minmax(min(10ch, 100%), ${w})` : w;
+  }).join(" ");
   if (rows.length === 0) {
     return <div className="mono" style={{ fontSize: 10.5, color: "var(--ink3)" }}>{empty ?? "sem dados"}</div>;
   }
   return (
-    // As colunas são da tabela; cabeçalho e linhas usam subgrid, para alinhar
-    // e respeitar o tamanho mínimo do conteúdo (spec 6a §3.7).
-    <div role="table" className="dt" style={{ width: "100%", display: "grid", gridTemplateColumns: gridCols, columnGap: 12 }}>
+    // As colunas são da tabela (--dt-cols); cabeçalho e linhas usam subgrid no
+    // CSS, com as mesmas colunas como reserva onde não há suporte (spec 6a §3.7).
+    <div role="table" className="dt" style={{ width: "100%", display: "grid", gridTemplateColumns: gridCols, columnGap: 12, ["--dt-cols" as string]: gridCols }}>
       <div
         role="row"
         className="mono dt-row dt-head"
         style={{
           display: "grid",
           gridColumn: "1 / -1",
-          gridTemplateColumns: "subgrid",
           gap: 12,
           padding: "8px 10px",
           background: "var(--sunken)",
@@ -61,7 +65,6 @@ export function DataTable<T>({ cols, rows, rowKey, onRowClick, empty, rowStyle: 
         const rowStyle = {
           display: "grid",
           gridColumn: "1 / -1",
-          gridTemplateColumns: "subgrid",
           gap: 12,
           width: "100%",
           padding: "10px 10px",
