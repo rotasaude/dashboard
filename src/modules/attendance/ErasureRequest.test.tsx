@@ -26,6 +26,14 @@ describe("ErasureRequest", () => {
     expect(screen.getByLabelText("CPF do cidadão (exclusão)").getAttribute("autocomplete")).toBe("off");
   });
 
+  it("FC-12: o botão bloqueado diz o que falta", () => {
+    render(<ErasureRequest />);
+    const reason = () => document.getElementById(submit().getAttribute("aria-describedby")!)?.textContent;
+    expect(reason()).toBe("informe o CPF do cidadão");
+    fireEvent.change(screen.getByLabelText("CPF do cidadão (exclusão)"), { target: { value: "52998224725" } });
+    expect(reason()).toBe("marque 'Conferi o documento com foto'");
+  });
+
   it("CPF inválido desabilita o botão", () => {
     render(<ErasureRequest />);
     fill("111.111.111-11");
