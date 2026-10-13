@@ -74,4 +74,15 @@ describe("UnitDeclarations (api#59)", () => {
     expect(within(colleague).queryByRole("button")).toBeNull();
     expect(within(mine).getByRole("button", { name: "Cancelar" })).not.toBeNull();
   });
+
+  it("cidadão sem nome no cadastro: diz isso, nunca \"null\"", async () => {
+    mocked(api.listUnitDeclarations).mockResolvedValue([ declRow({ patient: { display_name: null } }) ]);
+    renderIt();
+    const details = screen.getByText("Declarações de hoje").closest("details") as HTMLDetailsElement;
+    details.open = true;
+    fireEvent(details, new Event("toggle"));
+    const item = (await screen.findAllByRole("listitem"))[0];
+    expect(item.textContent).toContain("sem nome no cadastro · 09:40");
+    expect(item.textContent).not.toContain("null");
+  });
 });

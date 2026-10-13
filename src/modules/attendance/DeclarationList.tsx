@@ -61,7 +61,7 @@ export function DeclarationList({ rows, unitId, label, showPatient = false, onGo
         {rows.map((row) => (
           <li key={row.id} style={item}>
             <span style={{ fontSize: 12.5 }}>
-              {showPatient && row.patient && <strong>{`${row.patient.display_name} · `}</strong>}
+              {showPatient && <strong>{`${row.patient?.display_name || "sem nome no cadastro"} · `}</strong>}
               {`${fmtHourMinute(row.issued_at)} · ${row.author.name} · ${STATUS_LABEL[row.status] ?? row.status}`}
               {row.short_code && <span className="mono" style={muted}>{` · ${row.short_code}`}</span>}
             </span>

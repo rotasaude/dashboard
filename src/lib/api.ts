@@ -2079,7 +2079,7 @@ export function issueAttendanceDeclaration(attendanceId: string, content: Declar
 // api#59: só metadados (sem conteúdo); o api grava a leitura (declaration_list).
 export interface DeclarationRow {
   id: string; status: DocumentStatus; issued_at: string; cancelled_at: string | null; short_code: string | null;
-  attendance_id: string; author: { id: string; name: string }; patient: { display_name: string } | null;
+  attendance_id: string; author: { id: string; name: string }; patient: { display_name: string | null } | null;
 }
 
 const unitQuery = (healthUnitId?: string) => (healthUnitId ? `?${new URLSearchParams({ health_unit_id: healthUnitId })}` : "");
