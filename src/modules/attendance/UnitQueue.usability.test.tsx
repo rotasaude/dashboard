@@ -146,4 +146,12 @@ describe("UnitQueue — usabilidade (6b)", () => {
     renderQueue({ canCare: false });
     expect((await screen.findAllByText("prioridade 1")).length).toBe(2);
   });
+
+  it("ações da linha quebram linha e não esticam (não invadem as outras colunas em 1024)", async () => {
+    renderQueue({ canCare: true, clinicalRecord: true });
+    const call = (await screen.findAllByRole("button", { name: "Chamar" }))[0];
+    const group = call.closest("[data-row-actions]") as HTMLElement;
+    expect(group.style.flexWrap).toBe("wrap");
+    expect(group.style.alignItems).toBe("center");
+  });
 });

@@ -263,7 +263,7 @@ export function UnitQueue({
                     },
                     {
                       label: "", w: "auto", align: "right", render: (r) => (
-                        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                        <div data-row-actions style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, justifyContent: "flex-end" }}>
                           {canCare && r.screening?.id && r.screening.destination === "same_day" && (
                             <ActionButton variant="secondary" busy={rowBusy === r.id} onClick={() => onReassess(r)}>Reavaliar</ActionButton>
                           )}
@@ -304,7 +304,7 @@ export function UnitQueue({
                     { label: "Chamada", w: "2fr", render: (r) => `chamado por ${r.called_by_name} às ${fmtHourMinute(r.called_at)}` },
                     ...(canCare || clinicalDocuments ? [ {
                       label: "", w: "auto" as const, align: "right" as const, render: (r: QueueRow) => (
-                        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                        <div data-row-actions style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, justifyContent: "flex-end" }}>
                           {declarationButton(r)}
                           {canCare && clinicalRecord && (
                             <button type="button" style={secondaryButtonStyle}
