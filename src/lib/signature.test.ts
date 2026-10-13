@@ -140,7 +140,7 @@ describe("marcador, motivos e impresso", () => {
   });
 
   it("motivo desconhecido sai cru; ausente vira travessão", () => {
-    expect(reasonLabel("session_expired")).toBe("a sessão de assinatura venceu");
+    expect(reasonLabel("session_expired")).toBe("sessão de assinatura fechada — abra a sessão para assinar");
     expect(reasonLabel("quota_exceeded")).toBe("quota_exceeded");
     expect(reasonLabel(null)).toBe("—");
   });

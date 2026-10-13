@@ -51,7 +51,7 @@ describe("SignatureMarker", () => {
   it("pendente e à mão: sem botão de conteúdo", () => {
     renderWithProviders(<SignatureMarker label="assinatura do adendo" block={{ mode: "pending", request_id: "sr2", reason_code: "session_expired" }} />);
     expect(screen.getByText("assinatura pendente")).not.toBeNull();
-    expect(screen.getByText("a sessão de assinatura venceu")).not.toBeNull();
+    expect(screen.getByText("sessão de assinatura fechada — abra a sessão para assinar")).not.toBeNull();
     expect(screen.queryByRole("button", { name: "Ver o que foi assinado" })).toBeNull();
     expect(api.getSignature).not.toHaveBeenCalled();
   });

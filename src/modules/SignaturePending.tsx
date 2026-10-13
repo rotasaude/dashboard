@@ -73,7 +73,7 @@ export function SignaturePending({ onNavigate, redirect = goToProvider }: Props)
   const cols: Column<SignatureRequest>[] = [
     { label: "Paciente", w: "2fr", render: (r) => r.patient_display_name ?? "—" },
     { label: "Documento", w: "1fr", render: (r) => documentLabel(r.document_type) },
-    { label: "Finalizado em", w: "1.4fr", render: (r) => fmtDateTime(r.finalized_at) },
+    { label: "Emitido ou finalizado em", w: "1.4fr", render: (r) => fmtDateTime(r.finalized_at) },
     { label: "Motivo", w: "2fr", render: (r) => reasonLabel(r.reason_code) },
     { label: "Tentativas", w: "0.8fr", align: "right", render: (r) => String(r.attempts) },
     {

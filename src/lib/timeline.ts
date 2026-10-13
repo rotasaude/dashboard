@@ -96,9 +96,11 @@ export function entryWhen(entry: TimelineEntry): string {
   return fmtDateTime(entry.occurred_at);
 }
 
-export function entryWhere(entry: TimelineEntry): string {
-  const parts = [ entry.unit?.name, entry.professional?.name ].filter((p): p is string => !!p);
-  return parts.length > 0 ? parts.join(" · ") : "—";
+// Unidade e pessoa separadas, para a tela pôr em duas linhas sem cortar
+// (AT-15). Conta sem nome cadastrado chega com o e-mail: não se mostra.
+export function entryWhere(entry: TimelineEntry): { unit: string | null; person: string | null } {
+  const name = entry.professional?.name ?? null;
+  return { unit: entry.unit?.name ?? null, person: name && name.includes("@") ? "pessoa sem nome cadastrado" : name };
 }
 
 export function openLabel(entry: TimelineEntry): string {

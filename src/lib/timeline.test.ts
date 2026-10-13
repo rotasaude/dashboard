@@ -84,9 +84,12 @@ describe("detalhe", () => {
 
   it("quando, onde/quem e o nome do botão", () => {
     expect(entryWhen(CONSULTATION)).toBe("10/09/2026, 14:30");
-    expect(entryWhere(CONSULTATION)).toBe("UBS Centro · Dra. Helena Prado");
-    expect(entryWhere(entry({ professional: null }))).toBe("UBS Centro");
-    expect(entryWhere(TRIAGE)).toBe("—");
+    expect(entryWhere(CONSULTATION)).toEqual({ unit: "UBS Centro", person: "Dra. Helena Prado" });
+    expect(entryWhere(entry({ professional: null }))).toEqual({ unit: "UBS Centro", person: null });
+    expect(entryWhere(TRIAGE)).toEqual({ unit: null, person: null });
+    // AT-15: quem não tem nome cadastrado não aparece pelo e-mail.
+    expect(entryWhere(entry({ professional: { ...CONSULTATION.professional!, name: "recepcao@curitiba.demo" } })).person)
+      .toBe("pessoa sem nome cadastrado");
     expect(openLabel(CONSULTATION)).toBe("Abrir consulta de 10/09/2026, 14:30");
     expect(openLabel(APPOINTMENT)).toBe("Abrir agendamento de 01/10/2026, 09:00");
   });

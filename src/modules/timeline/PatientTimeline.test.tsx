@@ -49,7 +49,8 @@ describe("PatientTimeline", () => {
       .map((t) => text.indexOf(t));
     expect(order.every((p) => p >= 0)).toBe(true);
     expect([ ...order ].sort((a, b) => a - b)).toEqual(order);
-    expect(screen.getAllByText("UBS Centro · Dra. Helena Prado").length).toBeGreaterThan(0);
+    // AT-15: unidade e pessoa em duas linhas, sem cortar.
+    expect(screen.getAllByText("Dra. Helena Prado").length).toBeGreaterThan(0);
     expect(screen.getByText("comum · digital")).not.toBeNull();
     expect(screen.getByText("finalizada")).not.toBeNull();
     expect(screen.getByText("confirmado")).not.toBeNull();

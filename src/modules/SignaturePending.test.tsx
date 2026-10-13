@@ -36,6 +36,11 @@ describe("SignaturePending", () => {
 
   const renderIt = () => renderWithProviders(<SignaturePending onNavigate={onNavigate} redirect={redirect} />);
 
+  it("AT-13: a coluna diz emitido ou finalizado", async () => {
+    renderIt();
+    expect(await screen.findByRole("columnheader", { name: "Emitido ou finalizado em" })).not.toBeNull();
+  });
+
   it("lista paciente, documento, finalização, motivo e tentativas", async () => {
     renderIt();
     const panel = await screen.findByRole("region", { name: "Pendentes" });

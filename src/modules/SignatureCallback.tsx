@@ -28,6 +28,8 @@ type View =
 interface Props {
   params: SignatureCallbackParams;
   onDone(landing: ModuleId): void;
+  // Navegar pelo menu ou pela trilha (o hash muda) sai do retorno (AT-14).
+  onLeave?(): void;
   clearUrl?(): void;
 }
 
@@ -36,7 +38,7 @@ function landingFromError(err: unknown): ModuleId {
   return (returnTo ? moduleFromPath(returnTo) : null) ?? "overview";
 }
 
-export function SignatureCallback({ params, onDone, clearUrl = clearSignatureCallbackFromUrl }: Props) {
+export function SignatureCallback({ params, onDone, onLeave, clearUrl = clearSignatureCallbackFromUrl }: Props) {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const started = useRef(false);
@@ -83,6 +85,12 @@ export function SignatureCallback({ params, onDone, clearUrl = clearSignatureCal
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!onLeave) return;
+    window.addEventListener("hashchange", onLeave);
+    return () => window.removeEventListener("hashchange", onLeave);
+  }, [ onLeave ]);
 
   const simulated = usesSimulatedPsc(user) || (view.kind === "done" && view.simulated);
 

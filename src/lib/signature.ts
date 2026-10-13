@@ -112,7 +112,8 @@ export function sessionBadge(session: SignatureSessionState | undefined, nowMs: 
 
 const REASON_LABEL: Record<string, string> = {
   no_session: "sem sessão de assinatura aberta",
-  session_expired: "a sessão de assinatura venceu",
+  // Vale também para "nunca abriu": o que a pessoa faz é o mesmo (AT-13).
+  session_expired: "sessão de assinatura fechada — abra a sessão para assinar",
   provider_unavailable: "o prestador não respondeu",
   provider_rejected: "o prestador recusou a assinatura",
   signer_unavailable: "o serviço de assinatura não respondeu",

@@ -144,7 +144,15 @@ export function PatientTimeline({
               )
             },
             { label: "Situação", w: "0.9fr", render: (e) => statusLabel(e.status) },
-            { label: "Onde e quem", w: "1.6fr", render: (e) => entryWhere(e) },
+            { label: "Onde e quem", w: "1.6fr", render: (e) => {
+              const w = entryWhere(e);
+              if (!w.unit && !w.person) return "—";
+              return (
+                <span style={{ display: "flex", flexDirection: "column" }}>
+                  {w.unit ?? "—"}{w.person && <span style={{ color: "var(--ink2)" }}>{w.person}</span>}
+                </span>
+              );
+            } },
             {
               label: "", w: "auto", align: "right", render: (e) => {
                 const target = detailTarget(e, inContext, canOpenRequests);

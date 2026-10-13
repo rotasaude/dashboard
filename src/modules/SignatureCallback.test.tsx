@@ -207,3 +207,16 @@ describe("SignatureCallback", () => {
     expect(screen.queryByText(SIMULATED_NOTICE)).toBeNull();
   });
 });
+
+describe("SignatureCallback — navegar sai do retorno (AT-14)", () => {
+  it("mudar o hash (menu, trilha) chama onLeave", async () => {
+    mocked(api.fetchCurrentSession).mockResolvedValue(signer());
+    mocked(api.completeSignatureOAuth).mockResolvedValue(SESSION);
+    const onLeave = vi.fn();
+    renderWithProviders(<SignatureCallback params={OK} onDone={vi.fn()} onLeave={onLeave} clearUrl={vi.fn()} />);
+    await screen.findByRole("status");
+    window.dispatchEvent(new HashChangeEvent("hashchange"));
+    expect(onLeave).toHaveBeenCalled();
+  });
+});
+

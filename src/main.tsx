@@ -51,7 +51,8 @@ function AppRoot() {
   return (
     <QueryClientProvider client={queryClient}>
       {signatureReturn
-        ? <SignatureCallback params={signatureReturn} onDone={(next) => { setSignatureReturn(null); setLanding(next); }} />
+        ? <SignatureCallback params={signatureReturn} onDone={(next) => { setSignatureReturn(null); setLanding(next); }}
+          onLeave={() => setSignatureReturn(null)} />
         : sncrReturn
           ? <SncrCallback params={sncrReturn} onDone={(next) => { setSncrReturn(null); setLanding(next); }} />
           : <App initialModule={landing} />}
