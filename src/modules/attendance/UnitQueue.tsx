@@ -18,7 +18,7 @@ import { ConfirmButton } from "../../components/ConfirmButton";
 import { ActionMessage } from "../../components/ActionMessage";
 import { useActionMessage } from "../../lib/useActionMessage";
 import { useReveal } from "../../lib/useReveal";
-import { personLabel } from "../../lib/queueLabels";
+import { arrivalLabel, personLabel, priorityLabel, staleArrival } from "../../lib/queueLabels";
 import { COLOR_LABEL, COLOR_TONE, screeningError, waitLabel, waitedMinutes } from "../../lib/screening";
 import { ScreeningDetail, ScreeningDetailLoader } from "./ScreeningDetail";
 import { ScreeningForm } from "./ScreeningForm";
@@ -115,10 +115,17 @@ export function UnitQueue({
     else setPanel(result.attendance.screening ? { kind: "called", screening: result.attendance.screening } : null);
   }
 
-  // Módulo 19 (Divergência D3): nome de exibição, também para a recepção.
-  const nameCol = clinicalRecord
-    ? [ { label: "Nome", w: "1.5fr" as const, render: (r: QueueRow) => r.display_name ?? "—" } ]
-    : [];
+  // Pessoa: nome de exibição (módulo 19, D3, também para a recepção) em cima e
+  // o CPF mascarado embaixo; sem nome, o CPF (FC-07/FC-15).
+  const personCol = { label: "Pessoa", w: "1.6fr" as const, render: (r: QueueRow) => {
+    const p = personLabel(r);
+    return (
+      <span style={{ display: "flex", flexDirection: "column" }}>
+        <strong style={{ fontWeight: 600 }}>{p.title}</strong>
+        {p.sub && <span className="mono" style={{ fontSize: 11, color: "var(--ink2)" }}>{p.sub}</span>}
+      </span>
+    );
+  } };
 
   async function onCallNext() {
     if (callingNext) return;
@@ -202,6 +209,7 @@ export function UnitQueue({
   const inCare = uniq(query.data?.in_care ?? []);
   const inCareIds = new Set(inCare.map((r) => r.id));
   const waiting = uniq((query.data?.waiting ?? []).filter((r) => !inCareIds.has(r.id)));
+  const staleCount = waiting.filter((r) => staleArrival(r.checked_in_at, at)).length;
   const consultationRow = panel?.kind === "consultation" ? inCare.find((r) => r.id === panel.attendanceId) : undefined;
   const consultationRef = useReveal<HTMLElement>(panel?.kind === "consultation");
 
@@ -230,20 +238,28 @@ export function UnitQueue({
               ) : waiting.length === 0 ? (
                 <EmptyState title="Ninguém aguardando" />
               ) : (
+                <>
+                {staleCount > 0 && (
+                  <p style={{ margin: 0, fontSize: 12.5, color: "var(--warn)" }}>
+                    {staleCount === 1 ? "1 pessoa" : `${staleCount} pessoas`} na fila desde dias anteriores
+                  </p>
+                )}
                 <DataTable<QueueRow>
                   rowStyle={redRow}
                   cols={[
-                    { label: "CPF", w: "1.5fr", render: (r) => r.cpf_masked },
-                    ...nameCol,
+                    personCol,
                     { label: "Cor", w: "0.8fr", render: (r) => colorTag(r) },
-                    { label: "Chegada", w: "1fr", render: (r) => fmtDateTime(r.checked_in_at) },
-                    { label: "Espera", w: "0.8fr", render: (r) =>
-                      waitLabel(r.screening?.waited_minutes ?? waitedMinutes(r.checked_in_at, at)) },
+                    { label: "Chegada", w: "1fr", render: (r) => arrivalLabel(r.checked_in_at, at) },
+                    { label: "Espera", w: "0.8fr", render: (r) => {
+                      const wait = waitLabel(r.screening?.waited_minutes ?? waitedMinutes(r.checked_in_at, at));
+                      const stale = staleArrival(r.checked_in_at, at);
+                      return stale ? <span style={{ display: "flex", flexDirection: "column", gap: 2 }}>{wait}<Tag tone="warn">{stale}</Tag></span> : wait;
+                    } },
                     { label: "Protocolo", w: "1.5fr", render: (r) => r.protocol_name ?? "—" },
-                    { label: "Prioridade", w: "1fr", render: (r) => String(r.priority ?? "—") },
+                    { label: "Prioridade", w: "1fr", render: (r) => priorityLabel(r.priority) },
                     {
                       label: "Origem", w: "1.5fr", render: (r) =>
-                        r.source === "appointment" ? `Agendamento ${fmtHourMinute(r.appointment_time)}` : "—"
+                        r.source === "appointment" ? `Agendamento ${fmtHourMinute(r.appointment_time)}` : null
                     },
                     {
                       label: "", w: "auto", align: "right", render: (r) => (
@@ -268,6 +284,7 @@ export function UnitQueue({
                   rows={waiting}
                   rowKey={(r) => r.id}
                 />
+                </>
               )}
             </section>
 
@@ -280,11 +297,10 @@ export function UnitQueue({
               ) : (
                 <DataTable<QueueRow>
                   cols={[
-                    { label: "CPF", w: "1.5fr", render: (r) => r.cpf_masked },
-                    ...nameCol,
+                    personCol,
                     { label: "Cor", w: "0.8fr", render: (r) => colorTag(r) },
                     { label: "Protocolo", w: "1.5fr", render: (r) => r.protocol_name ?? "—" },
-                    { label: "Prioridade", w: "1fr", render: (r) => String(r.priority ?? "—") },
+                    { label: "Prioridade", w: "1fr", render: (r) => priorityLabel(r.priority) },
                     { label: "Chamada", w: "2fr", render: (r) => `chamado por ${r.called_by_name} às ${fmtHourMinute(r.called_at)}` },
                     ...(canCare || clinicalDocuments ? [ {
                       label: "", w: "auto" as const, align: "right" as const, render: (r: QueueRow) => (

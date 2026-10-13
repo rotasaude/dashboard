@@ -75,4 +75,6 @@
   .dt-row > .dt-cell[data-card="actions"] button { min-height: 44px; }
 
   .dt-row > .dt-cell[data-card="hide"] { display: none; }
+  /* Célula sem valor não vira "Rótulo —" no cartão (FC-15). */
+  .dt-row > .dt-cell:empty { display: none; }
 }

@@ -80,9 +80,9 @@ describe("UnitQueue", () => {
       "***.982.247-**", "***.111.222-**", "***.333.444-**"
     ]);
 
-    expect(screen.getByText("1")).not.toBeNull();
-    expect(screen.getByText("2")).not.toBeNull();
-    expect(screen.getByText("3")).not.toBeNull();
+    expect(screen.getByText("prioridade 1")).not.toBeNull();
+    expect(screen.getByText("prioridade 2")).not.toBeNull();
+    expect(screen.getByText("prioridade 3")).not.toBeNull();
 
     // hh:mm no fuso da cidade (13:00Z e 12:00Z → 10:00 e 09:00), sem segundos.
     expect(screen.getByText("Agendamento 10:00")).not.toBeNull();

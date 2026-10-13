@@ -126,4 +126,24 @@ describe("UnitQueue — usabilidade (6b)", () => {
     expect(error.mock.calls.some((c) => String(c[0]).includes("same key"))).toBe(false);
     error.mockRestore();
   });
+
+  it("FC-07/FC-15: coluna Pessoa com nome e CPF; Origem vazia fica vazia (some no cartão)", async () => {
+    renderQueue({ canCare: false, clinicalRecord: true });
+    const row = (await screen.findAllByRole("row")).find((r) => r.textContent?.includes("Luíza Alves"))!;
+    expect(within(row).getByText("***.343.399-**")).toBeTruthy();
+    expect(row.querySelector('[data-label="Origem"]')?.textContent).toBe("");
+  });
+
+  it("FC-08: quem chegou em outro dia tem selo e a espera em dias, com aviso no topo", async () => {
+    mocked(api.listUnitQueue).mockResolvedValue({ waiting: [ row({ id: "o1", checked_in_at: "2026-10-09T12:00:00Z" }), w2 ], in_care: [] });
+    renderQueue({ canCare: false, now: () => new Date("2026-10-12T20:32:00Z") });
+    expect(await screen.findByText("há 3 dias")).toBeTruthy();
+    expect(screen.getByText("3 d 8 h")).toBeTruthy();
+    expect(screen.getByText("1 pessoa na fila desde dias anteriores")).toBeTruthy();
+  });
+
+  it("FC-09: prioridade com rótulo", async () => {
+    renderQueue({ canCare: false });
+    expect((await screen.findAllByText("prioridade 1")).length).toBe(2);
+  });
 });
