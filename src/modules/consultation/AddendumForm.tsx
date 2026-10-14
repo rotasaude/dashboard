@@ -38,12 +38,13 @@ export function AddendumForm({ consultation, options, patientProblems, loadPatie
   const [ problems, setProblems ] = useState<EvaluatedProblem[]>([]);
   const [ conducts, setConducts ] = useState<string[]>(consultation.conducts);
   const [ exams, setExams ] = useState<ExamRequest[]>(consultation.exam_requests);
-  // A33: só o exame mantido da consulta tem prioridade fixa; removido e pedido de novo no mesmo adendo é um exame novo.
-  const [ keptCodes, setKeptCodes ] = useState<string[]>(consultation.exam_requests.map((e) => e.sigtap_code));
-  const changeExams = (next: ExamRequest[]) => {
-    setExams(next);
-    setKeptCodes((kept) => kept.filter((c) => next.some((e) => e.sigtap_code === c)));
-  };
+  // A33: o api compara só código e CID-10 no adendo; um código da consulta mantém a prioridade
+  // da ordem existente (mesmo removido e pedido de novo aqui), então ela volta ao valor de base.
+  const baseCodes = consultation.exam_requests.map((e) => e.sigtap_code);
+  const changeExams = (next: ExamRequest[]) => setExams(next.map((e) => {
+    const base = consultation.exam_requests.find((b) => b.sigtap_code === e.sigtap_code);
+    return base ? { ...e, priority: base.priority } : e;
+  }));
   const [ busy, setBusy ] = useState(false);
   const [ error, setError ] = useState<string | null>(null);
 
@@ -92,7 +93,7 @@ export function AddendumForm({ consultation, options, patientProblems, loadPatie
           <ConductsField options={options?.conducts ?? []} value={conducts} onChange={setConducts} />
           <ExamRequestsField value={exams} onChange={changeExams} cid10Allowed={options?.cid10_allowed_for_cbo ?? false}
             searchDelayMs={searchDelayMs} priorityOn={examPriority}
-            fixedPriorityCodes={keptCodes} />
+            fixedPriorityCodes={baseCodes} />
         </>
       )}
       {touched && problem && <p role="alert" style={alert}>{problem}</p>}

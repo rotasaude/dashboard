@@ -251,7 +251,7 @@ export function addendumChanges(base: Consultation, edit: AddendumEdit): Addendu
   const sameConducts = edit.conducts.length === base.conducts.length && edit.conducts.every((c) => base.conducts.includes(c));
   if (!sameConducts) changes.conducts = edit.conducts;
   const examKey = (list: ExamRequest[]) =>
-    JSON.stringify(list.map((e) => `${e.sigtap_code}|${normalizeCid10(e.cid10_justification ?? "")}|${e.priority ?? "routine"}`).sort());
+    JSON.stringify(list.map((e) => `${e.sigtap_code}|${normalizeCid10(e.cid10_justification ?? "")}`).sort());
   if (examKey(edit.exams) !== examKey(base.exam_requests)) changes.exam_requests = edit.exams.map(examPayload);
   return Object.keys(changes).length > 0 ? changes : undefined;
 }

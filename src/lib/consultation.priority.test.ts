@@ -18,10 +18,8 @@ describe("prioridade do exame no rascunho (módulo 21a, D10)", () => {
     ]);
   });
 
-  it("adendo: mesmo exame com a prioridade trocada (removido e pedido de novo) conta como mudança", () => {
+  it("adendo: diferença só de prioridade NÃO é mudança (o api compara código e CID-10)", () => {
     const base = consultation({ exam_requests: [ { ...exam, priority: "routine" } ] });
-    const changes = addendumChanges(base, { problems: [], conducts: base.conducts, exams: [ { ...exam, priority: "urgent" } ] });
-    expect(changes?.exam_requests).toEqual([ { ...exam, priority: "urgent" } ]);
-    expect(addendumChanges(base, { problems: [], conducts: base.conducts, exams: [ exam ] })).toBeUndefined();
+    expect(addendumChanges(base, { problems: [], conducts: base.conducts, exams: [ { ...exam, priority: "urgent" } ] })).toBeUndefined();
   });
 });

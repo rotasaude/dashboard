@@ -35,7 +35,10 @@ export function ExamRequestsField({ value, onChange, cid10Allowed, searchDelayMs
                   </div>
                 )}
                 {priorityOn && fixedPriorityCodes.includes(e.sigtap_code) && (
-                  <span style={{ fontSize: 12, color: "var(--ink2)" }}>{`Prioridade: ${e.priority === "urgent" ? "urgente" : "rotina"}`}</span>
+                  <span style={{ fontSize: 12, color: "var(--ink2)", display: "flex", flexDirection: "column", gap: 2 }}>
+                    <span>{`Prioridade: ${e.priority === "urgent" ? "urgente" : "rotina"}`}</span>
+                    <small style={{ color: "var(--ink3)" }}>para trocar a prioridade, retire o exame num adendo e peça de novo num adendo seguinte</small>
+                  </span>
                 )}
                 {priorityOn && !fixedPriorityCodes.includes(e.sigtap_code) && (
                   <label style={labelStyle}>

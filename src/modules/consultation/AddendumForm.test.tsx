@@ -36,7 +36,7 @@ describe("AddendumForm — prioridade do exame (módulo 21a, A33)", () => {
     fireEvent.click(screen.getByLabelText("Mudar problemas, condutas ou exames"));
   };
 
-  it("exame já pedido: prioridade só para leitura; removido e pedido de novo no mesmo adendo: escolhe", async () => {
+  it("exame já pedido: prioridade só para leitura (com a dica), mesmo removido e pedido de novo; código novo escolhe", async () => {
     open();
     expect(screen.queryByLabelText("Prioridade (0202010503)")).toBeNull();
     expect(screen.getByText("Prioridade: urgente")).not.toBeNull();
@@ -44,7 +44,13 @@ describe("AddendumForm — prioridade do exame (módulo 21a, A33)", () => {
     mocked(api.searchSigtap).mockResolvedValue([ { code: "0202010503", label: "HbA1c" } ]);
     fireEvent.change(screen.getByLabelText("Solicitar exame (SIGTAP)"), { target: { value: "hba" } });
     fireEvent.click(await screen.findByRole("button", { name: /0202010503/ }));
-    expect(screen.getByLabelText("Prioridade (0202010503)")).not.toBeNull();
+    expect(screen.queryByLabelText("Prioridade (0202010503)")).toBeNull();
+    expect(screen.getByText("Prioridade: urgente")).not.toBeNull();
+    expect(screen.getByText("para trocar a prioridade, retire o exame num adendo e peça de novo num adendo seguinte")).not.toBeNull();
+    mocked(api.searchSigtap).mockResolvedValue([ { code: "0202020380", label: "Hemograma completo" } ]);
+    fireEvent.change(screen.getByLabelText("Solicitar exame (SIGTAP)"), { target: { value: "hem" } });
+    fireEvent.click(await screen.findByRole("button", { name: /0202020380/ }));
+    expect(screen.getByLabelText("Prioridade (0202020380)")).not.toBeNull();
   });
 });
 
