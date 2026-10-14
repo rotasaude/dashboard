@@ -8,6 +8,7 @@ import { canSign } from "./lib/signature";
 import { useExamPending } from "./hooks/useExamPending";
 import { canUseExams, examRoles } from "./lib/exams";
 import { ExamsAdmin } from "./modules/ExamsAdmin";
+import { ProviderPortal } from "./modules/ProviderPortal";
 import { AcknowledgementNotice } from "./modules/exams/AcknowledgementNotice";
 import { Shell } from "./shell/Shell";
 import { ContextStrip } from "./shell/ContextStrip";
@@ -212,6 +213,7 @@ export function renderModule(active: ModuleId, setActive: (id: ModuleId) => void
     case "exams-overdue":  return <ExamsOverdue />;
     case "exam-regulation": return <ExamRegulation />;
     case "exam-report": return <ExamReport />;
+    case "exam-provider": return <ProviderPortal />;
     case "exams-admin": return <ExamsAdmin onGoToSecurity={() => setActive("security")} />;
     default:               return <Placeholder title={labelFor(active)} />;
   }
