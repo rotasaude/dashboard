@@ -33,6 +33,11 @@ describe("atalhos entre telas", () => {
 });
 
 describe("grupos do shell", () => {
+  it("Resultados aguardando ciência leva a contagem no rótulo e no ponto do trilho", () => {
+    const item = shellGroups(NAV_GROUPS, 0, 4).flatMap((g) => g.items).find((i) => i.id === "exam-acknowledgements");
+    expect(item).toEqual({ id: "exam-acknowledgements", label: "Resultados aguardando ciência (4)", count: 4 });
+  });
+
   it("slugs vêm de NAV_GROUPS e Pendentes leva a contagem no rótulo (withPendingCount)", () => {
     const gs = shellGroups(NAV_GROUPS, 3);
     expect(gs.map((g) => g.slug)).toContain("visao-geral");

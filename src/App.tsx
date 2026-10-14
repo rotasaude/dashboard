@@ -1,10 +1,13 @@
 import { useCallback, useMemo, useState } from "react";
 import { ScopeContext, PERIOD_OPTIONS, useScope, type PeriodKey } from "./lib/scope";
 import { useAuth } from "./lib/auth";
-import { NAV_GROUPS, labelFor, navGroupsFor, withPendingCount, type ModuleId, type NavGroupDef } from "./shell/modules";
+import { NAV_GROUPS, labelFor, navGroupsFor, withExamPendingCount, withPendingCount, type ModuleId, type NavGroupDef } from "./shell/modules";
 import { useAlerts } from "./hooks/useAlerts";
 import { usePendingSignatures } from "./hooks/usePendingSignatures";
 import { canSign } from "./lib/signature";
+import { useExamPending } from "./hooks/useExamPending";
+import { canUseExams, examRoles } from "./lib/exams";
+import { AcknowledgementNotice } from "./modules/exams/AcknowledgementNotice";
 import { Shell } from "./shell/Shell";
 import { ContextStrip } from "./shell/ContextStrip";
 import { TenantChip } from "./shell/TenantChip";
@@ -60,13 +63,16 @@ const ALL_SLUGS: ReadonlySet<string> = new Set(NAV_GROUPS.map((g) => slugOf(g.la
 // Grupos do shell a partir do filtro por papel de hoje. O rótulo de
 // Pendentes leva a contagem de withPendingCount ("(3)", "(200+)"), como no
 // menu antigo; `count` só acende o ponto do trilho.
-export function shellGroups(groups: NavGroupDef[], pending: number): ShellGroup[] {
-  return withPendingCount(groups, pending).map((g) => ({
+export function shellGroups(groups: NavGroupDef[], pending: number, examPending = 0, examHasMore = false): ShellGroup[] {
+  return withExamPendingCount(withPendingCount(groups, pending), examPending, examHasMore).map((g) => ({
     label: g.label,
     slug: slugOf(g.label),
-    items: g.items.map((i) => (i.id === "signature-pending" && pending > 0
-      ? { id: i.id, label: i.label, count: pending }
-      : { id: i.id, label: i.label }))
+    items: g.items.map((i) => {
+      if (i.id === "signature-pending" && pending > 0) return { id: i.id, label: i.label, count: pending };
+      // Módulo 21a: `examPending` acende o item "Resultados aguardando ciência".
+      if (i.id === "exam-acknowledgements" && examPending > 0) return { id: i.id, label: i.label, count: examPending };
+      return { id: i.id, label: i.label };
+    })
   }));
 }
 
@@ -88,9 +94,13 @@ function ShellInner({ initialModule }: { initialModule?: ModuleId }) {
   const auth = useAuth();
   const scope = useScope();
   const pending = usePendingSignatures(canSign(auth.user));
+  const examPending = useExamPending(canUseExams(auth.user) && examRoles(auth.user).professional, auth.user?.id ?? null);
+  const examCount = examPending.data?.orders.length ?? 0;
+  const deniedCount = examPending.data?.denied.length ?? 0;
+  const examHasMore = !!examPending.data?.next_before;
   const groups = useMemo(
-    () => shellGroups(navGroupsFor(auth.user), pending.data?.length ?? 0),
-    [ auth.user, pending.data?.length ]
+    () => shellGroups(navGroupsFor(auth.user), pending.data?.length ?? 0, examCount, examHasMore),
+    [ auth.user, pending.data?.length, examCount, examHasMore ]
   );
 
   const isAllowed = useCallback((r: Route<ModuleId>) => {
@@ -111,7 +121,12 @@ function ShellInner({ initialModule }: { initialModule?: ModuleId }) {
   const active: ModuleId = route.kind === "screen" ? route.id : "overview";
 
   let content;
-  if (route.kind === "home") content = <HomeCards groups={groups} catalog={CATALOG} go={goShell} />;
+  if (route.kind === "home") content = (
+    <>
+      <AcknowledgementNotice pending={examCount} denied={deniedCount} hasMore={examHasMore} onOpen={() => navigate("exam-acknowledgements")} />
+      <HomeCards groups={groups} catalog={CATALOG} go={goShell} />
+    </>
+  );
   else if (route.kind === "a11y") content = <A11yPage contact="Fale com o administrador da sua prefeitura." />;
   else if (route.kind === "group") {
     const group = groups.find((g) => g.slug === route.slug);

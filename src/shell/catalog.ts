@@ -1,11 +1,11 @@
 // Ícones e descrições dos cards (spec do subprojeto 2, §4.3). Rótulos vêm
 // de NAV_GROUPS; aqui só o que o card mostra além do rótulo.
 import {
-  IconArrowsExchange, IconBuildingCommunity, IconBuildingHospital, IconCalendar, IconCertificate,
-  IconChartLine, IconChartPie, IconClipboardList, IconDownload, IconFileCertificate, IconFileDescription,
-  IconFilePencil, IconFileText, IconHeartbeat, IconHistory, IconIdBadge2, IconInbox, IconLayoutDashboard,
-  IconListCheck, IconLock, IconMapPin, IconMessages, IconNotes, IconPencil, IconPill, IconPlugConnected,
-  IconServerCog, IconShieldCheck, IconSignature, IconSpeakerphone, IconStack2, IconStethoscope, IconUpload,
+  IconAlarm, IconArrowsExchange, IconBuildingCommunity, IconBuildingHospital, IconCalendar, IconCertificate,
+  IconChartLine, IconChartPie, IconChecklist, IconClipboardList, IconDownload, IconFileCertificate, IconFileDescription,
+  IconFilePencil, IconFileText, IconGavel, IconHeartbeat, IconHistory, IconIdBadge2, IconInbox, IconLayoutDashboard,
+  IconListCheck, IconLock, IconMapPin, IconMessages, IconMicroscope, IconNotes, IconPencil, IconPill, IconPlugConnected,
+  IconReportAnalytics, IconServerCog, IconSettings, IconShieldCheck, IconSignature, IconSpeakerphone, IconStack2, IconStethoscope, IconTestPipe, IconTruckDelivery, IconUpload,
   IconUser, IconUserCircle, IconUsers, IconUsersGroup
 } from "@tabler/icons-react";
 import type { Catalog } from "./types";
@@ -19,6 +19,7 @@ export const CATALOG: Catalog = {
     "Governança":  { icon: IconFileCertificate, description: "Protocolos e auditoria" },
     "Operação":    { icon: IconServerCog, description: "Filas e saúde do sistema" },
     "Atendimento": { icon: IconStethoscope, description: "Agenda, prontuário e consultas" },
+    "Exames":      { icon: IconMicroscope, description: "Pedidos, resultados e prestadores" },
     "Comunicação": { icon: IconSpeakerphone, description: "Campanhas por SMS" },
     "Equipe":      { icon: IconUsers, description: "Pessoas, papéis e assinaturas" },
     "Cidade":      { icon: IconBuildingCommunity, description: "Território e documentos" },
@@ -46,6 +47,13 @@ export const CATALOG: Catalog = {
     "my-consultations": { icon: IconClipboardList, description: "Consultas que você registrou" },
     "professional-consultations": { icon: IconUsersGroup, description: "Consultas da equipe por pessoa" },
     "open-drafts": { icon: IconFilePencil, description: "Consultas iniciadas e não concluídas" },
+    "exam-acknowledgements": { icon: IconChecklist, description: "Resultados dos seus pedidos e da equipe" },
+    "exams-unit": { icon: IconTestPipe, description: "Guias, agendamento, coleta e resultado" },
+    "exams-overdue": { icon: IconAlarm, description: "Exames fora do prazo, por etapa" },
+    "exam-regulation": { icon: IconGavel, description: "Autorizar ou negar exames" },
+    "exam-report": { icon: IconReportAnalytics, description: "Guias por prestador e mês" },
+    "exams-admin": { icon: IconSettings, description: "Exames da cidade, prazos e prestadores" },
+    "exam-provider": { icon: IconTruckDelivery, description: "Guias do seu laboratório" },
     "campaigns": { icon: IconSpeakerphone, description: "Criar e enviar campanhas por SMS" },
     "team": { icon: IconUsers, description: "Usuários, convites e papéis" },
     "professionals": { icon: IconIdBadge2, description: "Vínculos, CBO e turnos" },

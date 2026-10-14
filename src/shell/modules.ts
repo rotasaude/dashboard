@@ -10,7 +10,8 @@ export type ModuleId =
   | "queues" | "health" | "protocol-editor" | "security" | "team" | "attendance"
   | "professionals" | "my-profile" | "territory" | "campaigns" | "analytics"
   | "integrations" | "cnes" | "production" | "my-agenda" | "clinical-record" | "my-consultations" | "professional-consultations" | "open-drafts"
-  | "signature" | "signature-pending" | "signature-overview" | "clinical-documents-admin" | "sncr" | "sncr-overview";
+  | "signature" | "signature-pending" | "signature-overview" | "clinical-documents-admin" | "sncr" | "sncr-overview"
+  | "exam-acknowledgements" | "exams-unit" | "exams-overdue" | "exam-regulation" | "exam-report" | "exams-admin" | "exam-provider";
 
 export interface NavItem { id: ModuleId; label: string; icon: string; }
 export interface NavGroupDef { label: string; items: NavItem[]; }
@@ -47,6 +48,15 @@ export const NAV_GROUPS: NavGroupDef[] = [
     { id: "my-consultations", label: "Minhas consultas", icon: "☰" },
     { id: "professional-consultations", label: "Consultas por profissional", icon: "☷" },
     { id: "open-drafts", label: "Rascunhos abertos", icon: "✎" }
+  ]},
+  { label: "Exames", items: [
+    { id: "exam-acknowledgements", label: "Resultados aguardando ciência", icon: "⚑" },
+    { id: "exams-unit", label: "Exames da unidade", icon: "⚗" },
+    { id: "exams-overdue", label: "Exames atrasados", icon: "⏱" },
+    { id: "exam-regulation", label: "Fila de regulação", icon: "⚖" },
+    { id: "exam-report", label: "Conferência de exames", icon: "▤" },
+    { id: "exams-admin", label: "Catálogo e prestadores", icon: "⚙" },
+    { id: "exam-provider", label: "Portal do prestador", icon: "⇆" }
   ]},
   { label: "Comunicação", items: [
     { id: "campaigns", label: "Campanhas", icon: "✉" }
@@ -101,6 +111,16 @@ export function navGroupsFor(
   user: { operator: boolean; memberships?: { role: string }[]; features?: unknown } | null
 ): NavGroupDef[] {
   const roles = user?.memberships?.map((m) => m.role) ?? [];
+  // Módulo 21a (spec §6): o usuário do prestador vê só o portal e a
+  // Segurança — nada de painel, atendimento ou prontuário. O api isola de
+  // novo (403/404); aqui só não se oferece a porta.
+  if (!user?.operator && roles.includes("exam_provider")) {
+    return NAV_GROUPS.flatMap((group) => {
+      const items = group.items.filter((item) =>
+        item.id === "security" || (item.id === "exam-provider" && hasFeature(user, "exam_tracking")));
+      return items.length > 0 ? [ { ...group, items } ] : [];
+    });
+  }
   const isAdmin = roles.includes("municipal_admin");
   const canAttend = isAdmin || roles.includes("citizen_verifier") || roles.includes("health_professional");
   const isProfessional = roles.includes("health_professional");
@@ -124,6 +144,11 @@ export function navGroupsFor(
   const canClinicalRecord = !user?.operator && (isProfessional || isAdmin) && (
     hasFeature(user, "clinical_record") || hasFeature(user, "patient_timeline")
   );
+  // Módulo 21a: tudo de exames só com `exam_tracking` ligado na sessão.
+  // O administrador não é equipe de unidade (C4): sem "Exames da unidade".
+  const examsOn = !user?.operator && hasFeature(user, "exam_tracking");
+  const isRegulator = roles.includes("exam_regulator");
+  const isReception = roles.includes("citizen_verifier");
   return NAV_GROUPS.filter((group) => {
     if (group.label === "Conta") return !user?.operator;
     if (group.label === "Equipe") return isAdmin;
@@ -159,6 +184,12 @@ export function navGroupsFor(
       if (item.id === "sncr-overview") return canSeeSncrOverview(user);
       // Módulo 19c: CNPJ, REMUME e protocolos de enfermagem, só do municipal_admin, com clinical_documents.
       if (item.id === "clinical-documents-admin") return !user?.operator && isAdmin && hasFeature(user, "clinical_documents");
+      if (item.id === "exam-acknowledgements") return examsOn && isProfessional;
+      if (item.id === "exams-unit") return examsOn && (isProfessional || isReception);
+      if (item.id === "exams-overdue" || item.id === "exam-regulation" || item.id === "exam-report") return examsOn && (isAdmin || isRegulator);
+      if (item.id === "exams-admin") return examsOn && isAdmin;
+      // O portal só aparece pelo ramo do prestador, acima.
+      if (item.id === "exam-provider") return false;
       if (item.id === "integrations" || item.id === "cnes") return canIntegrations;
       if (item.id === "production") return canProduction;
       return true;
@@ -175,5 +206,16 @@ export function withPendingCount(groups: NavGroupDef[], count: number): NavGroup
   return groups.map((group) => ({
     ...group,
     items: group.items.map((item) => item.id === "signature-pending" ? { ...item, label: `${item.label} (${shown})` } : item)
+  }));
+}
+
+// Módulo 21a: contador de resultados aguardando ciência no item do menu.
+// A lista vem em páginas de 50 (C14): com mais páginas, "50+"; 200 ou mais, "200+".
+export function withExamPendingCount(groups: NavGroupDef[], count: number, hasMore = false): NavGroupDef[] {
+  if (count <= 0) return groups;
+  const shown = count >= 200 ? "200+" : hasMore ? `${count}+` : String(count);
+  return groups.map((group) => ({
+    ...group,
+    items: group.items.map((item) => item.id === "exam-acknowledgements" ? { ...item, label: `${item.label} (${shown})` } : item)
   }));
 }
