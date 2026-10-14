@@ -85,4 +85,77 @@ describe("ExamRegulation", () => {
     expect(await screen.findByText("seu papel não permite ver esta tela")).not.toBeNull();
     expect(api.listRegulationQueue).not.toHaveBeenCalled();
   });
+  it("409: o botão Decidir some enquanto a releitura está pendente e depois a fila vazia aparece", async () => {
+    mocked(api.authorizeExam).mockRejectedValue(new ApiError(409, { error: "invalid_transition", status: "awaiting_schedule" }, "x"));
+    let release: (v: { orders: never[]; next_before: null }) => void = () => {};
+    mocked(api.listRegulationQueue).mockResolvedValueOnce({ orders: [ WAITING ], next_before: null })
+      .mockReturnValueOnce(new Promise((r) => { release = r; }));
+    renderWithProviders(<ExamRegulation />);
+    const panel = await decide();
+    fireEvent.change(await within(panel).findByLabelText("Prestador"), { target: { value: "pv1" } });
+    fireEvent.click(within(panel).getByRole("button", { name: "Autorizar" }));
+    await screen.findByText("a situação do exame mudou — atualize para ver a atual");
+    await waitFor(() => expect(api.listRegulationQueue).toHaveBeenCalledTimes(2));
+    expect(screen.queryByRole("button", { name: "Decidir Hemograma completo de Joana Lima" })).toBeNull();
+    release({ orders: [], next_before: null });
+    expect(await screen.findByText("nenhum exame aguardando autorização")).not.toBeNull();
+  });
+
+  it("409 ao negar: fecha, avisa e esconde a linha", async () => {
+    mocked(api.denyExam).mockRejectedValue(new ApiError(409, { error: "invalid_transition" }, "x"));
+    mocked(api.listRegulationQueue).mockResolvedValueOnce({ orders: [ WAITING ], next_before: null }).mockResolvedValue({ orders: [], next_before: null });
+    renderWithProviders(<ExamRegulation />);
+    const panel = await decide();
+    fireEvent.click(within(panel).getByRole("button", { name: "Negar" }));
+    const form = within(panel).getByRole("form", { name: "Motivo da negativa" });
+    fireEvent.change(within(form).getByLabelText("Motivo da negativa"), { target: { value: "Fora do protocolo municipal" } });
+    fireEvent.click(within(form).getByRole("button", { name: "Negar exame" }));
+    expect((await screen.findByText("a situação do exame mudou — atualize para ver a atual")).getAttribute("role")).toBe("alert");
+    expect(screen.queryByRole("region", { name: "Decidir: Hemograma completo de Joana Lima" })).toBeNull();
+    await waitFor(() => expect(api.listRegulationQueue).toHaveBeenCalledTimes(2));
+  });
+
+  it("404 ao autorizar: trata como situação mudada", async () => {
+    mocked(api.authorizeExam).mockRejectedValue(new ApiError(404, { error: "not_found" }, "x"));
+    renderWithProviders(<ExamRegulation />);
+    const panel = await decide();
+    fireEvent.change(await within(panel).findByLabelText("Prestador"), { target: { value: "pv1" } });
+    fireEvent.click(within(panel).getByRole("button", { name: "Autorizar" }));
+    expect((await screen.findByText("exame não encontrado — atualize a lista")).getAttribute("role")).toBe("alert");
+    expect(screen.queryByRole("region", { name: "Decidir: Hemograma completo de Joana Lima" })).toBeNull();
+    await waitFor(() => expect(api.listRegulationQueue).toHaveBeenCalledTimes(2));
+  });
+
+  it("422 prestador não faz o exame: frase, painel aberto, lista de prestadores relida", async () => {
+    mocked(api.authorizeExam).mockRejectedValue(new ApiError(422, { error: "provider_not_enabled_for_exam" }, "x"));
+    renderWithProviders(<ExamRegulation />);
+    const panel = await decide();
+    fireEvent.change(await within(panel).findByLabelText("Prestador"), { target: { value: "pv1" } });
+    fireEvent.click(within(panel).getByRole("button", { name: "Autorizar" }));
+    expect((await within(panel).findByText("este prestador não faz este exame — escolha outro ou habilite-o no cadastro")).getAttribute("role")).toBe("alert");
+    expect(screen.queryByRole("region", { name: "Decidir: Hemograma completo de Joana Lima" })).not.toBeNull();
+    await waitFor(() => expect(api.listEnabledProviders).toHaveBeenCalledTimes(2));
+  });
+
+  it("administrador municipal acessa a fila", async () => {
+    mocked(api.fetchCurrentSession).mockResolvedValue(examUser([ "municipal_admin" ]));
+    renderWithProviders(<ExamRegulation />);
+    expect(await screen.findByRole("button", { name: "Decidir Hemograma completo de Joana Lima" })).not.toBeNull();
+  });
+
+  it("sem CID-10 mostra traço", async () => {
+    mocked(api.listRegulationQueue).mockResolvedValue({ orders: [ { ...WAITING, cid10_justification: null } ], next_before: null });
+    renderWithProviders(<ExamRegulation />);
+    const panel = await decide();
+    expect(within(panel).getByText("—")).not.toBeNull();
+  });
+
+  it("Carregar mais com id repetido entre páginas mostra o exame uma vez", async () => {
+    mocked(api.listRegulationQueue).mockResolvedValueOnce({ orders: [ WAITING ], next_before: "c1" })
+      .mockResolvedValueOnce({ orders: [ WAITING ], next_before: null });
+    renderWithProviders(<ExamRegulation />);
+    fireEvent.click(await screen.findByRole("button", { name: "Carregar mais" }));
+    await waitFor(() => expect(api.listRegulationQueue).toHaveBeenCalledTimes(2));
+    expect(screen.getAllByRole("button", { name: "Decidir Hemograma completo de Joana Lima" })).toHaveLength(1);
+  });
 });

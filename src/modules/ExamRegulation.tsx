@@ -32,6 +32,7 @@ export function ExamRegulation() {
   const allowed = canUseExams(user) && (roles.regulator || roles.admin);
   const { query, orders } = useExamOrderPages([ EXAM_REGULATION_KEY ], (before) => listRegulationQueue(before), allowed);
   const [ deciding, setDeciding ] = useState<ExamOrder | null>(null);
+  const [ hidden, setHidden ] = useState<ReadonlySet<string>>(new Set());
   const [ notice, setNotice ] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
 
   if (!user) return null;
@@ -39,6 +40,8 @@ export function ExamRegulation() {
   if (!allowed) return <Frame><EmptyState title={EXAMS_NO_ROLE} /></Frame>;
 
   function finish(next: { kind: "ok" | "error"; text: string }) {
+    // Some da lista já, sem esperar a releitura (a fila antiga fica em cache durante o refetch).
+    if (deciding) setHidden((prev) => new Set(prev).add(deciding.id));
     setDeciding(null);
     setNotice(next);
     void refreshExams(queryClient);
@@ -51,7 +54,7 @@ export function ExamRegulation() {
         <Decision key={deciding.id} order={deciding} onCancel={() => setDeciding(null)}
           onDone={(text) => finish({ kind: "ok", text })} onStale={(text) => finish({ kind: "error", text })} />
       )}
-      <Panel title="Fila de regulação" sub="urgentes primeiro, depois os mais antigos">
+      <Panel title="Fila de regulação" sub="por prioridade e ordem de chegada">
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           {query.isPending && <p className="mono" style={muted}>carregando…</p>}
           {query.isError && <p role="alert" style={alert}>{examError(query.error)}</p>}
@@ -70,7 +73,7 @@ export function ExamRegulation() {
                     onClick={() => { setNotice(null); setDeciding(o); }}>Decidir</button>
                 ) }
               ]}
-              rows={orders} rowKey={(o) => o.id} empty="nenhum exame aguardando autorização"
+              rows={orders.filter((o) => !hidden.has(o.id))} rowKey={(o) => o.id} empty="nenhum exame aguardando autorização"
             />
           )}
           {query.hasNextPage && (
@@ -88,6 +91,7 @@ function Decision({ order, onDone, onStale, onCancel }: {
   const providers = useQuery({
     queryKey: [ EXAM_PROVIDER_REFS_KEY, order.sigtap_code ], queryFn: () => listEnabledProviders(order.sigtap_code), retry: false, gcTime: 0, staleTime: 0
   });
+  const queryClient = useQueryClient();
   const [ providerId, setProviderId ] = useState("");
   const [ denying, setDenying ] = useState(false);
   const [ error, setError ] = useState<string | null>(null);
@@ -98,7 +102,8 @@ function Decision({ order, onDone, onStale, onCancel }: {
     try {
       await authorizeExam(order.id, providerId);
     } catch (err) {
-      if (errorCode(err) === "invalid_transition") { onStale(examError(err)); return; }
+      if (isStale(err)) { onStale(examError(err)); return; }
+      if (errorCode(err) === "provider_not_enabled_for_exam") void queryClient.invalidateQueries({ queryKey: [ EXAM_PROVIDER_REFS_KEY ] });
       setError(examError(err));
       return;
     }
@@ -110,7 +115,7 @@ function Decision({ order, onDone, onStale, onCancel }: {
     try {
       await denyExam(order.id, reason);
     } catch (err) {
-      if (errorCode(err) === "invalid_transition") { onStale(examError(err)); return; }
+      if (isStale(err)) { onStale(examError(err)); return; }
       throw err;
     }
     onDone("Exame negado. Quem pediu vê o aviso no início do painel.");
@@ -153,6 +158,12 @@ function Decision({ order, onDone, onStale, onCancel }: {
       {denying && <ReasonForm label="Motivo da negativa" submitLabel="Negar exame" onCancel={() => setDenying(false)} onSubmit={deny} />}
     </section>
   );
+}
+
+// Outro regulador decidiu antes (409) ou o exame sumiu (404): fecha, explica e relê.
+function isStale(err: unknown): boolean {
+  const code = errorCode(err);
+  return code === "invalid_transition" || code === "not_found";
 }
 
 function Frame({ children }: { children: ReactNode }) {
