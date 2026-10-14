@@ -1,7 +1,7 @@
 // src/lib/api.exams.test.ts
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  acknowledgeExam, fetchExamPdf, fetchExamReportCsv, isExamLinkExpired, listExamOrders, listPendingAcknowledgements,
+  acknowledgeExam, countPendingAcknowledgements, fetchExamPdf, fetchExamReportCsv, isExamLinkExpired, listExamOrders, listPendingAcknowledgements,
   listProviderOrders, listTeamAcknowledgements, lookupExamPatient, providerSchedule, revokeFhirToken, updateCatalogItem, uploadExamFile
 } from "./api";
 
@@ -75,6 +75,14 @@ describe("cliente de exames (contrato §3–§6)", () => {
     fetchMock.mockImplementation(() => ok({ orders: [] }));
     expect(await listPendingAcknowledgements()).toEqual({ orders: [], denied: [], next_before: null });
     expect(urlOf().pathname).toBe("/exams/acknowledgements/pending");
+  });
+
+  it("contagem de pendentes: GET só da rota /count, tipada (A46)", async () => {
+    fetchMock.mockImplementation(() => ok({ pending: 51, has_more: true, denied: 2 }));
+    expect(await countPendingAcknowledgements()).toEqual({ pending: 51, has_more: true, denied: 2 });
+    expect(urlOf().pathname).toBe("/exams/acknowledgements/pending/count");
+    fetchMock.mockImplementation(() => ok({}));
+    expect(await countPendingAcknowledgements()).toEqual({ pending: 0, has_more: false, denied: 0 });
   });
 
   it("revogar o token: DELETE com corpo JSON", async () => {

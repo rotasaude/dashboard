@@ -108,4 +108,21 @@ describe("ExamAcknowledgements", () => {
     const calls = mocked(api.listPendingAcknowledgements).mock.calls.length;
     expect(calls).toBeGreaterThan(1);
   });
+
+  it("negados mostram o motivo (texto escapado) ou — quando não há; singular no resumo", async () => {
+    mocked(api.listPendingAcknowledgements).mockResolvedValue({
+      orders: [ examOrder({ status: "resulted", result: examResult() }) ],
+      denied: [
+        { ...examOrder({ id: "eo3", status: "denied", label: "Ressonância magnética de crânio" }), denied_reason: "<b>sem indicação</b>" },
+        { ...examOrder({ id: "eo5", status: "denied", label: "Tomografia" }), denied_reason: null }
+      ],
+      next_before: null
+    });
+    renderWithProviders(<ExamAcknowledgements />);
+    const denied = await screen.findByRole("region", { name: "Exames negados" });
+    expect(within(denied).getByText("<b>sem indicação</b>")).not.toBeNull();
+    expect(within(denied).getByText("—")).not.toBeNull();
+    expect(screen.getByText("1 resultado aguardando sua ciência")).not.toBeNull();
+    expect(screen.queryByText(/1 resultados/)).toBeNull();
+  });
 });

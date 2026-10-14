@@ -1,7 +1,8 @@
 // Resultados aguardando ciência (módulo 21a; spec §5 etapa 6 e "Alertas";
 // contrato §3, D7): os do próprio solicitante, os negados pela regulação e a
 // fila da equipe de referência. Quem está na equipe é do api (403 not_in_team
-// = sem equipe ativa). As listas vêm sem andamento: o motivo da negação e a
+// = sem equipe ativa). As listas vêm sem andamento: o motivo da negação vem em
+// `denied_reason` (A47) e a
 // marca de crítico por escalada aparecem no exame aberto (nenhuma leitura de
 // detalhe por linha). Páginas de 50 (C14). Dado de saúde: gcTime 0.
 import { useState, type ReactNode } from "react";
@@ -9,7 +10,7 @@ import { ApiError, errorCode, listPendingAcknowledgements, listTeamAcknowledgeme
 import { useAuth } from "../lib/auth";
 import {
   ESCALATION_LABEL, EXAMS_DISABLED, EXAMS_NO_ROLE, EXAM_PENDING_KEY, EXAM_TEAM_KEY, canUseExams, escalationReason, examError, examRoles,
-  fmtDay, overdueLabel, pendingCountText
+  fmtDay, overdueLabel, pendingNoticeText
 } from "../lib/exams";
 import { fmtDateTime } from "../lib/format";
 import { useExamOrderPages } from "../hooks/useExamOrderPages";
@@ -62,9 +63,7 @@ export function ExamAcknowledgements() {
     <Frame>
       {open && <ExamOrderDetail key={open} id={open} onClose={() => setOpen(null)} />}
       <Panel title="Aguardando sua ciência"
-        sub={pending.orders.length > 0
-          ? `${pendingCountText(pending.orders.length, pendingMore)} resultados aguardando sua ciência`
-          : "resultados dos exames que você pediu"}>
+        sub={pendingNoticeText(pending.orders.length, 0, pendingMore) || "resultados dos exames que você pediu"}>
         {pending.query.isPending && <p className="mono" style={muted}>carregando…</p>}
         {pending.query.isError && <p role="alert" style={alert}>{examError(pending.query.error)}</p>}
         {pending.query.isSuccess && (
@@ -76,8 +75,9 @@ export function ExamAcknowledgements() {
         )}
       </Panel>
       {denied.length > 0 && (
-        <Panel title="Exames negados" sub="decisão da regulação · o motivo está no andamento do exame">
-          <DataTable cols={[ ...exam, { label: "Desde", w: "1fr", render: (o) => fmtDateTime(o.status_changed_at) }, openCol ]}
+        <Panel title="Exames negados" sub="decisão da regulação">
+          <DataTable cols={[ ...exam, { label: "Desde", w: "1fr", render: (o) => fmtDateTime(o.status_changed_at) },
+            { label: "Motivo", w: "1.5fr", render: (o) => o.denied_reason || "—" }, openCol ]}
             rows={denied} rowKey={(o) => o.id} />
         </Panel>
       )}

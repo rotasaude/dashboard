@@ -2419,7 +2419,11 @@ export interface ExternalResultInput {
   values: { key: string; value: string }[]; consultation_id?: string;
 }
 // `orders` é paginado (50); `denied` são as negadas dos últimos 30 dias (até 50).
-export interface PendingAcknowledgements { orders: ExamOrder[]; denied: ExamOrder[]; next_before: string | null }
+// `denied_reason` (A47) só vem nas negadas; null sem motivo registrado.
+export type DeniedExamOrder = ExamOrder & { denied_reason?: string | null };
+export interface PendingAcknowledgements { orders: ExamOrder[]; denied: DeniedExamOrder[]; next_before: string | null }
+// A46: só contagens (sem dado clínico e sem trilha de leitura). `has_more` = mais de 50.
+export interface PendingAcknowledgementCount { pending: number; has_more: boolean; denied: number }
 
 export interface ExamCatalogItem {
   id: string; sigtap_code: string; label: string; requires_authorization: boolean; release_policy: ExamReleasePolicy;
@@ -2546,9 +2550,14 @@ export async function listPendingAcknowledgements(before: string | null = null):
   const p = new URLSearchParams();
   if (before) p.set("before", before);
   p.set("limit", String(EXAM_PAGE_SIZE));
-  const body = await jsonFetch<{ orders: ExamOrder[]; denied?: ExamOrder[]; next_before?: string | null }>(
+  const body = await jsonFetch<{ orders: ExamOrder[]; denied?: DeniedExamOrder[]; next_before?: string | null }>(
     withQuery(examPath("acknowledgements", "pending"), p));
   return { orders: body.orders, denied: body.denied ?? [], next_before: body.next_before ?? null };
+}
+
+export async function countPendingAcknowledgements(): Promise<PendingAcknowledgementCount> {
+  const body = await jsonFetch<Partial<PendingAcknowledgementCount>>(examPath("acknowledgements", "pending", "count"));
+  return { pending: body.pending ?? 0, has_more: !!body.has_more, denied: body.denied ?? 0 };
 }
 
 // 403 `not_in_team` = o profissional não está em equipe de referência ativa.

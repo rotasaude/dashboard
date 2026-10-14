@@ -100,9 +100,9 @@ function ShellInner({ initialModule }: { initialModule?: ModuleId }) {
   const pending = usePendingSignatures(canSign(auth.user));
   const examPending = useExamPending(canUseExams(auth.user) && examRoles(auth.user).professional, auth.user?.id ?? null);
   // (enabled só liga com sessão; o id nunca é null com a consulta ligada)
-  const examCount = examPending.data?.orders.length ?? 0;
-  const deniedCount = examPending.data?.denied.length ?? 0;
-  const examHasMore = !!examPending.data?.next_before;
+  const examCount = examPending.data?.pending ?? 0;
+  const deniedCount = examPending.data?.denied ?? 0;
+  const examHasMore = !!examPending.data?.has_more;
   const groups = useMemo(
     () => shellGroups(navGroupsFor(auth.user), pending.data?.length ?? 0, examCount, examHasMore),
     [ auth.user, pending.data?.length, examCount, examHasMore ]
