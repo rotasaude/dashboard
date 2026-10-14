@@ -3,7 +3,7 @@
 // por prestador e mês — autorizadas, coletadas, resultado no prazo e em
 // atraso, pendentes. Tela e CSV; o detalhado leva só short_code, SIGTAP e
 // datas. Admin municipal e regulador (D14).
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { fetchExamReportCsv, getExamReport, listEnabledProviders, type ExamReportRow, type SignatureFile } from "../lib/api";
 import { useAuth } from "../lib/auth";
@@ -38,6 +38,10 @@ export function ExamReport() {
   const [ month, setMonth ] = useState(() => todayInCity().slice(0, 7));
   const [ providerId, setProviderId ] = useState("");
   const [ downloadError, setDownloadError ] = useState<string | null>(null);
+  // Um download por vez (também entre os dois botões): o ref barra o clique
+  // duplo antes do re-render; o estado deixa os dois botões ocupados.
+  const downloadingRef = useRef(false);
+  const [ downloading, setDownloading ] = useState(false);
   const validMonth = /^\d{4}-\d{2}$/.test(month);
   const providers = useQuery({ queryKey: [ EXAM_PROVIDER_REFS_KEY, "" ], queryFn: () => listEnabledProviders(), enabled: allowed, retry: false });
   const report = useQuery({
@@ -50,12 +54,18 @@ export function ExamReport() {
   if (!allowed) return <Frame><EmptyState title={EXAMS_NO_ROLE} /></Frame>;
 
   async function download(detail: boolean) {
+    if (downloadingRef.current) return;
+    downloadingRef.current = true;
+    setDownloading(true);
     setDownloadError(null);
     try {
       const file = await fetchExamReportCsv(month, providerId || null, detail);
       saveFile(file, `conferencia-exames-${month}${detail ? "-detalhado" : ""}.csv`);
     } catch (err) {
       setDownloadError(examError(err));
+    } finally {
+      downloadingRef.current = false;
+      setDownloading(false);
     }
   }
 
@@ -96,8 +106,8 @@ export function ExamReport() {
             />
           )}
           <div style={row}>
-            <ActionButton variant="secondary" disabledReason={validMonth ? null : "escolha o mês"} onClick={() => download(false)}>Baixar CSV</ActionButton>
-            <ActionButton variant="secondary" disabledReason={validMonth ? null : "escolha o mês"} onClick={() => download(true)}>Baixar CSV detalhado</ActionButton>
+            <ActionButton variant="secondary" busy={downloading} disabledReason={validMonth ? null : "escolha o mês"} onClick={() => download(false)}>Baixar CSV</ActionButton>
+            <ActionButton variant="secondary" busy={downloading} disabledReason={validMonth ? null : "escolha o mês"} onClick={() => download(true)}>Baixar CSV detalhado</ActionButton>
           </div>
           <p style={muted}>O CSV detalhado traz só o código do exame, o SIGTAP e as datas — nenhum dado do paciente.</p>
           {downloadError && <p role="alert" style={alert}>{downloadError}</p>}

@@ -1,6 +1,6 @@
 // src/modules/ExamReport.test.tsx
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 
 vi.mock("../lib/api", async (importOriginal) => {
   const real = await importOriginal<typeof import("../lib/api")>();
@@ -65,6 +65,7 @@ describe("ExamReport", () => {
     expect(await screen.findByText("seu papel não permite ver esta tela")).not.toBeNull();
     expect(api.getExamReport).not.toHaveBeenCalled();
   });
+
   it("usa sempre o nome montado pela tela, ignorando o nome enviado pelo api", async () => {
     mocked(api.fetchExamReportCsv).mockResolvedValue({ blob: new Blob([ "short_code\n" ], { type: "text/csv" }), filename: "conferencia-exames-2026-10.csv" });
     renderWithProviders(<ExamReport />);
@@ -73,5 +74,39 @@ describe("ExamReport", () => {
     await waitFor(() => expect(downloads).toEqual([ "conferencia-exames-2026-10-detalhado.csv" ]));
     fireEvent.click(within(panel).getByRole("button", { name: "Baixar CSV" }));
     await waitFor(() => expect(downloads).toEqual([ "conferencia-exames-2026-10-detalhado.csv", "conferencia-exames-2026-10.csv" ]));
+  });
+
+  it("libera o endereço do arquivo 60 s depois do download", async () => {
+    let deliver!: (f: { blob: Blob; filename: null }) => void;
+    mocked(api.fetchExamReportCsv).mockReturnValue(new Promise((r) => { deliver = r; }));
+    renderWithProviders(<ExamReport />);
+    const panel = await screen.findByRole("region", { name: "Conferência por prestador" });
+    fireEvent.click(await within(panel).findByRole("button", { name: "Baixar CSV" }));
+    vi.useRealTimers(); // useFakeTimers não reinstala se já há relógio falso
+    vi.useFakeTimers({ toFake: [ "Date", "setTimeout", "clearTimeout" ] });
+    vi.setSystemTime(new Date(NOW21));
+    deliver({ blob: new Blob([ "short_code\n" ], { type: "text/csv" }), filename: null });
+    // Só microtarefas (vi.waitFor avançaria o relógio falso).
+    await act(async () => { for (let i = 0; i < 10; i += 1) await Promise.resolve(); });
+    expect(downloads).toEqual([ "conferencia-exames-2026-10.csv" ]);
+    expect(URL.revokeObjectURL).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(59_999);
+    expect(URL.revokeObjectURL).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:csv-1");
+  });
+
+  it("download em andamento: novo clique (mesmo no outro botão) não baixa de novo", async () => {
+    let deliver!: (f: { blob: Blob; filename: null }) => void;
+    mocked(api.fetchExamReportCsv).mockReturnValue(new Promise((r) => { deliver = r; }));
+    renderWithProviders(<ExamReport />);
+    const panel = await screen.findByRole("region", { name: "Conferência por prestador" });
+    fireEvent.click(await within(panel).findByRole("button", { name: "Baixar CSV" }));
+    fireEvent.click(within(panel).getByRole("button", { name: /^Baixar CSV detalhado/ }));
+    fireEvent.click(within(panel).getByRole("button", { name: /^Baixar CSV( …)?$/ }));
+    expect(api.fetchExamReportCsv).toHaveBeenCalledTimes(1);
+    deliver({ blob: new Blob([ "short_code\n" ], { type: "text/csv" }), filename: null });
+    await waitFor(() => expect(downloads).toEqual([ "conferencia-exames-2026-10.csv" ]));
+    expect(api.fetchExamReportCsv).toHaveBeenCalledTimes(1);
   });
 });
