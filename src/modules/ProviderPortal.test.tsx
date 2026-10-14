@@ -170,6 +170,21 @@ describe("ProviderPortal", () => {
     expect(within(guide).getByRole("button", { name: "Registrar resultado" })).not.toBeNull();
   });
 
+  it("409 com a guia fora da lista relida: fecha o painel e explica no portal; trocar de aba limpa o aviso", async () => {
+    mocked(api.listProviderOrders)
+      .mockResolvedValueOnce({ orders: [ providerOrder({ status: "scheduled" }) ], next_before: null, overdue_count: 0 })
+      .mockResolvedValue({ orders: [], next_before: null, overdue_count: 0 });
+    mocked(api.providerCollect).mockRejectedValue(new ApiError(409, { error: "invalid_transition" }, "x"));
+    renderWithProviders(<ProviderPortal />);
+    const guide = await openGuide();
+    fireEvent.click(within(guide).getByRole("button", { name: "Registrar coleta" }));
+    fireEvent.click(within(guide).getByRole("button", { name: "Confirmar" }));
+    await waitFor(() => expect(screen.queryByRole("region", { name: "Guia K7M2Q9XW3P" })).toBeNull());
+    expect((await screen.findByRole("alert")).textContent).toBe(DETAIL_TRANSITION_REREAD);
+    fireEvent.click(screen.getByRole("tab", { name: "Coletadas" }));
+    await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+  });
+
   it("404 (guia de outro prestador): relê e fecha a guia", async () => {
     mocked(api.listProviderOrders)
       .mockResolvedValueOnce({ orders: [ providerOrder({ status: "scheduled" }) ], next_before: null, overdue_count: 0 })

@@ -3,11 +3,11 @@
 // guias do prestador do usuário `exam_provider`, por situação e em atraso.
 // O isolamento é do api (guia de outro prestador = 404); a tela não tem
 // caminho para prontuário, linha do tempo ou consulta.
-import { useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { listProviderOrders, type ProviderOrder } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import {
-  EXAMS_DISABLED, EXAMS_NO_ROLE, PROVIDER_ORDERS_KEY, canUseExams, cpfTail, examError, examRoles, fmtDay, overdueLabel
+  DETAIL_TRANSITION_REREAD, EXAMS_DISABLED, EXAMS_NO_ROLE, PROVIDER_ORDERS_KEY, canUseExams, cpfTail, examError, examRoles, fmtDay, overdueLabel
 } from "../lib/exams";
 import { fmtDateTime } from "../lib/format";
 import { useExamOrderPages } from "../hooks/useExamOrderPages";
@@ -32,12 +32,21 @@ export function ProviderPortal() {
   const [ openId, setOpenId ] = useState<string | null>(null);
   const [ notice, setNotice ] = useState<string | null>(null);
   const [ gone, setGone ] = useState<string | null>(null);
+  // Guia que levou 409: se a releitura a tirar da aba, o painel fecha e a
+  // explicação (que vivia nele) sobe para o portal.
+  const [ conflictId, setConflictId ] = useState<string | null>(null);
   const { query, orders } = useExamOrderPages([ PROVIDER_ORDERS_KEY, tab ],
     (before) => listProviderOrders(tab === "overdue" ? { overdue: true, before } : { statuses: [ tab ], before }), allowed);
   // O número em atraso vem em toda página; enquanto a aba nova carrega, vale o último lido.
   const lastOverdue = useRef(0);
   const freshOverdue = query.data?.pages[0]?.overdue_count;
   if (freshOverdue !== undefined) lastOverdue.current = freshOverdue;
+
+  useEffect(() => {
+    if (conflictId && !orders.some((o) => o.id === conflictId)) {
+      setConflictId(null); setOpenId(null); setGone(DETAIL_TRANSITION_REREAD);
+    }
+  }, [ conflictId, orders ]);
 
   if (!user) return null;
   if (!canUseExams(user)) return <Frame><EmptyState title={EXAMS_DISABLED} /></Frame>;
@@ -60,13 +69,13 @@ export function ProviderPortal() {
       {notice && <p style={okText}>{notice}</p>}
       {gone && <p role="alert" style={alert}>{gone}</p>}
       {open && (
-        <ProviderOrderPanel key={open.id} order={open} onClose={() => setOpenId(null)}
+        <ProviderOrderPanel key={open.id} order={open} onClose={() => { setOpenId(null); setConflictId(null); }} onConflict={() => setConflictId(open.id)}
           onDone={(text) => { setOpenId(null); setNotice(text); }}
           onGone={(text) => { setOpenId(null); setGone(text); }} />
       )}
       <Panel title="Guias do prestador" sub="coletas e resultados · prazos da cidade">
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          <SegmentedControl<PortalTab> options={tabs} value={tab} onChange={(t) => { setTab(t); setOpenId(null); }} />
+          <SegmentedControl<PortalTab> options={tabs} value={tab} onChange={(t) => { setTab(t); setOpenId(null); setConflictId(null); setGone(null); }} />
           {query.isPending && <p className="mono" style={muted}>carregando…</p>}
           {query.isError && <p role="alert" style={alert}>{examError(query.error)}</p>}
           {query.isSuccess && (
@@ -83,7 +92,7 @@ export function ProviderPortal() {
                 { label: "Prazo", w: "1.1fr", render: (o) => overdueLabel(o.overdue) },
                 { label: "", w: "auto", align: "right", card: "actions", render: (o) => (
                   <button type="button" aria-label={`Abrir guia ${o.short_code}`} style={secondaryButtonStyle}
-                    onClick={() => { setNotice(null); setGone(null); setOpenId(o.id); }}>Abrir</button>
+                    onClick={() => { setNotice(null); setGone(null); setConflictId(null); setOpenId(o.id); }}>Abrir</button>
                 ) }
               ]}
               rows={orders} rowKey={(o) => o.id} empty="nenhuma guia nesta situação"

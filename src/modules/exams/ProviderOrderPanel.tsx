@@ -18,8 +18,8 @@ import { ResultForm } from "./ResultForm";
 import { ScheduleForm } from "./ScheduleForm";
 import { alert, grid, muted, panel, row, title } from "./styles";
 
-export function ProviderOrderPanel({ order, onDone, onGone, onClose }: {
-  order: ProviderOrder; onDone(text: string): void; onGone(text: string): void; onClose(): void;
+export function ProviderOrderPanel({ order, onDone, onGone, onClose, onConflict }: {
+  order: ProviderOrder; onConflict?(): void; onDone(text: string): void; onGone(text: string): void; onClose(): void;
 }) {
   const queryClient = useQueryClient();
   const [ mode, setMode ] = useState<null | "schedule" | "result">(null);
@@ -39,6 +39,7 @@ export function ProviderOrderPanel({ order, onDone, onGone, onClose }: {
       }
       if (code !== "invalid_transition") throw err;
       setMode(null);
+      onConflict?.();
       setError(DETAIL_TRANSITION_REREAD);
       setRereading(true);
       try { await refreshExams(queryClient); } finally { setRereading(false); }
