@@ -169,7 +169,7 @@ export function examActions(order: ExamOrder, roles: ExamRoles, userId: string |
   const isRequester = !!userId && order.requester.user_id === userId;
   const byTeam = order.status === "resulted" && order.escalated && roles.professional && !isRequester;
   return {
-    // A unidade agenda e reagenda (pode trocar o prestador) até a coleta.
+    // A unidade agenda e reagenda até a coleta; reagendar mantém o prestador atual.
     schedule: unit && (order.status === "awaiting_schedule" || order.status === "scheduled"),
     collect: unit && order.status === "scheduled",
     result: unit && (order.status === "scheduled" || order.status === "collected"),

@@ -133,7 +133,11 @@ export function ExamOrderDetail({ id, onClose, onChanged }: { id: string; onClos
       {mode === null && rereading && <p className="mono" style={muted}>relendo o exame…</p>}
       {mode === null && !rereading && (
         <div style={row}>
-          {actions.schedule && <button type="button" style={secondaryButtonStyle} onClick={() => setMode("schedule")}>Agendar</button>}
+          {actions.schedule && (
+            <button type="button" style={secondaryButtonStyle} onClick={() => setMode("schedule")}>
+              {order.status === "scheduled" ? "Reagendar" : "Agendar"}
+            </button>
+          )}
           {actions.collect && (
             <ConfirmButton label="Registrar coleta" question="Confirmar que o material foi coletado?"
               onConfirm={confirm(() => collectExam(order.id), "Coleta registrada.")} />

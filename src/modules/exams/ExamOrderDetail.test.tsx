@@ -92,6 +92,25 @@ describe("ExamOrderDetail", () => {
     expect(api.listEnabledProviders).not.toHaveBeenCalled();
   });
 
+  it("exame agendado: Reagendar mantém o prestador atual (sem seletor)", async () => {
+    sessionAs([ "citizen_verifier" ], "us9");
+    mocked(api.getExamOrder).mockResolvedValue(examOrder({ status: "scheduled", scheduled_at: "2026-10-20T08:30:00-03:00", scheduled_place: "Posto" }));
+    mocked(api.scheduleExam).mockResolvedValue(undefined);
+    renderWithProviders(<ExamOrderDetail id="eo1" onClose={vi.fn()} />);
+    const region = await detail();
+    expect(within(region).queryByRole("button", { name: "Agendar" })).toBeNull();
+    fireEvent.click(within(region).getByRole("button", { name: "Reagendar" }));
+    const form = await screen.findByRole("form", { name: "Agendar exame" });
+    expect(within(form).queryByLabelText("Prestador")).toBeNull();
+    fireEvent.change(within(form).getByLabelText("Data e hora"), { target: { value: "2026-10-22T10:00" } });
+    fireEvent.change(within(form).getByLabelText("Local"), { target: { value: "Posto Norte" } });
+    fireEvent.click(within(form).getByRole("button", { name: "Confirmar agendamento" }));
+    await waitFor(() => expect(api.scheduleExam).toHaveBeenCalledWith("eo1", {
+      provider_id: "pv1", scheduled_at: "2026-10-22T10:00:00-03:00", scheduled_place: "Posto Norte"
+    }));
+    expect(api.listEnabledProviders).not.toHaveBeenCalled();
+  });
+
   it("409 invalid_transition: explica, fecha o formulário e relê", async () => {
     sessionAs([ "citizen_verifier" ], "us9");
     let reread!: (o: ReturnType<typeof examOrder>) => void;
