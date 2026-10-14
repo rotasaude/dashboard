@@ -4,7 +4,7 @@
 // trazer o nome do paciente: o nome fica só na tela de quem anexou. Trocar o
 // arquivo apaga o anexo anterior; uma resposta atrasada de um arquivo
 // trocado é ignorada.
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { EXAM_UPLOAD_TYPES, uploadExamFile } from "../../lib/api";
 import { examError, uploadProblem } from "../../lib/exams";
 import { inputStyle } from "../../components/formStyles";
@@ -18,6 +18,12 @@ export function UploadField({ label, types = EXAM_UPLOAD_TYPES, uploadId, onUplo
   const [ state, setState ] = useState<State>({ kind: "idle" });
   const [ name, setName ] = useState<string | null>(null);
   const seq = useRef(0);
+  // Desmontado (ex.: o paciente mudou), um envio que termina depois é ignorado.
+  const alive = useRef(true);
+  useEffect(() => {
+    alive.current = true;
+    return () => { alive.current = false; };
+  }, []);
 
   async function pick(file: File | null) {
     const mine = ++seq.current;
@@ -30,12 +36,12 @@ export function UploadField({ label, types = EXAM_UPLOAD_TYPES, uploadId, onUplo
     setState({ kind: "sending" });
     try {
       const id = await uploadExamFile(file);
-      if (mine !== seq.current) return;
+      if (!alive.current || mine !== seq.current) return;
       setName(file.name);
       setState({ kind: "idle" });
       onUploaded(id);
     } catch (err) {
-      if (mine !== seq.current) return;
+      if (!alive.current || mine !== seq.current) return;
       setState({ kind: "error", text: examError(err) });
     }
   }

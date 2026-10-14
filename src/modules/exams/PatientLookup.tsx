@@ -1,7 +1,7 @@
 // src/modules/exams/PatientLookup.tsx
 // O paciente pelo CPF (Divergência D2): CPF no corpo de um POST, nunca na
 // URL; a tela guarda só o id, o nome de exibição e o CPF mascarado.
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { lookupExamPatient, type ExamPatient } from "../../lib/api";
 import { isValidCpf, maskCpf, onlyDigits } from "../../lib/attendance";
 import { examError } from "../../lib/exams";
@@ -12,15 +12,25 @@ import { alert, fieldLabel, row } from "./styles";
 export function PatientLookup({ patient, onFound }: { patient: ExamPatient | null; onFound(p: ExamPatient | null): void }) {
   const [ cpf, setCpf ] = useState("");
   const [ error, setError ] = useState<string | null>(null);
+  const [ busy, setBusy ] = useState(false);
+  const running = useRef(false);
 
+  // Uma busca por vez: clique ou Enter durante a busca são ignorados.
   async function find() {
+    if (running.current) return;
     if (!isValidCpf(cpf)) { setError("CPF inválido"); return; }
+    running.current = true;
+    setBusy(true);
     setError(null);
     try {
-      onFound(await lookupExamPatient(onlyDigits(cpf)));
+      const found = await lookupExamPatient(onlyDigits(cpf));
       setCpf("");
+      onFound(found);
     } catch (err) {
       setError(examError(err));
+    } finally {
+      running.current = false;
+      setBusy(false);
     }
   }
 
@@ -40,7 +50,7 @@ export function PatientLookup({ patient, onFound }: { patient: ExamPatient | nul
           <input value={cpf} inputMode="numeric" autoComplete="off" style={inputStyle} onChange={(e) => setCpf(maskCpf(e.target.value))}
             onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void find(); } }} />
         </label>
-        <ActionButton variant="secondary" onClick={find}>Buscar paciente</ActionButton>
+        <ActionButton variant="secondary" busy={busy} onClick={find}>Buscar paciente</ActionButton>
       </div>
       {error && <p role="alert" style={alert}>{error}</p>}
     </div>

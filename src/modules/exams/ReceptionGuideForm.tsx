@@ -31,11 +31,13 @@ export function ReceptionGuideForm({ unit, onDone, onCancel }: { unit: HealthUni
   const [ reattach, setReattach ] = useState(false);
   const set = (patch: Partial<GuideDraft>) => setDraft((d) => ({ ...d, ...patch }));
 
+  // Sempre que sai um paciente, o campo é remontado — também com um envio em
+  // andamento, cujo resultado o campo desmontado ignora.
   function changePatient(next: ExamPatient | null) {
-    if (patient && next?.id !== patient.id && draft.guideUploadId) {
+    if (patient && next?.id !== patient.id) {
+      if (draft.guideUploadId) setReattach(true);
       set({ guideUploadId: null });
       setUploadKey((k) => k + 1);
-      setReattach(true);
     }
     setPatient(next);
   }

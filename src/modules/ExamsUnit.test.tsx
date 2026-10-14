@@ -142,10 +142,12 @@ describe("ExamsUnit", () => {
     const form = await startGuide();
     fireEvent.change(await within(form).findByLabelText("Profissional que pediu"), { target: { value: "us1" } });
     await attach(form);
+    const fileBefore = within(form).getByLabelText("Foto ou PDF da guia (até 10 MB)");
     fireEvent.click(within(form).getByRole("button", { name: "Trocar paciente" }));
     expect(within(form).getByText("anexe a guia de novo")).not.toBeNull();
     expect(within(form).queryByText("anexado: guia.pdf")).toBeNull();
-    expect((within(form).getByLabelText("Foto ou PDF da guia (até 10 MB)") as HTMLInputElement).value).toBe("");
+    // O campo foi remontado: o elemento antigo (com o arquivo) saiu do documento.
+    expect(fileBefore.isConnected).toBe(false);
     fireEvent.change(within(form).getByLabelText("CPF do paciente"), { target: { value: VALID_CPF } });
     fireEvent.click(within(form).getByRole("button", { name: "Buscar paciente" }));
     await within(form).findByText("Paciente: Joana Lima · CPF ***.982.247-**");
@@ -176,16 +178,60 @@ describe("ExamsUnit", () => {
     expect(api.lookupExamPatient).toHaveBeenCalledTimes(2);
   });
 
-  it("o CPF não fica em campo nem no cache depois da busca", async () => {
+  it("o CPF não fica no campo depois da busca (nem ao trocar o paciente) nem no cache de consultas", async () => {
     const { client } = renderWithProviders(<ExamsUnit />);
-    await startGuide();
+    const form = await startGuide();
+    fireEvent.click(within(form).getByRole("button", { name: "Trocar paciente" }));
+    expect((within(form).getByLabelText("CPF do paciente") as HTMLInputElement).value).toBe("");
     expect(screen.queryByDisplayValue(VALID_CPF)).toBeNull();
     expect(screen.queryByDisplayValue("529.982.247-25")).toBeNull();
-    const cached = JSON.stringify([
-      client.getQueryCache().getAll().map((q) => [ q.queryKey, q.state.data ]),
-      client.getMutationCache().getAll().map((m) => m.state)
-    ]);
+    const cached = JSON.stringify(client.getQueryCache().getAll().map((q) => [ q.queryKey, q.state.data ]));
     expect(cached.replace(/\D/g, "")).not.toContain(VALID_CPF);
+  });
+
+  it("guarda para um useMutation futuro: o cache de mutações não guarda o CPF", async () => {
+    const { client } = renderWithProviders(<ExamsUnit />);
+    await startGuide();
+    const mutations = JSON.stringify(client.getMutationCache().getAll().map((m) => m.state));
+    expect(mutations.replace(/\D/g, "")).not.toContain(VALID_CPF);
+  });
+
+  it("upload que termina depois de trocar o paciente não é anexado", async () => {
+    let finish: (id: string) => void = () => {};
+    mocked(api.uploadExamFile).mockImplementationOnce(() => new Promise<string>((resolve) => { finish = resolve; }));
+    renderWithProviders(<ExamsUnit />);
+    const form = await startGuide();
+    fireEvent.change(await within(form).findByLabelText("Profissional que pediu"), { target: { value: "us1" } });
+    fireEvent.change(within(form).getByLabelText("Foto ou PDF da guia (até 10 MB)"), { target: { files: [ pdfFile("guia-a.pdf") ] } });
+    await within(form).findByText("enviando o arquivo…");
+    fireEvent.click(within(form).getByRole("button", { name: "Trocar paciente" }));
+    mocked(api.lookupExamPatient).mockResolvedValueOnce({ id: "pa2", display_name: "Maria Souza", cpf_masked: "***.123.456-**" });
+    fireEvent.change(within(form).getByLabelText("CPF do paciente"), { target: { value: VALID_CPF } });
+    fireEvent.click(within(form).getByRole("button", { name: "Buscar paciente" }));
+    await within(form).findByText("Paciente: Maria Souza · CPF ***.123.456-**");
+    finish("up-a");
+    await new Promise((r) => setTimeout(r, 0));
+    expect(within(form).queryByText("anexado: guia-a.pdf")).toBeNull();
+    fireEvent.click(within(form).getByRole("button", { name: "Registrar guia" }));
+    expect((await within(form).findByRole("alert")).textContent).toBe("anexe a foto ou o PDF da guia");
+    expect(api.createReceptionOrder).not.toHaveBeenCalled();
+  });
+
+  it("busca em andamento ignora novo clique ou Enter", async () => {
+    let found: (p: { id: string; display_name: string; cpf_masked: string }) => void = () => {};
+    mocked(api.lookupExamPatient).mockImplementationOnce(() => new Promise((resolve) => { found = resolve; }));
+    renderWithProviders(<ExamsUnit />);
+    await openUnit();
+    fireEvent.click(await screen.findByRole("button", { name: "Nova guia" }));
+    const form = screen.getByRole("form", { name: "Nova guia" });
+    const cpf = within(form).getByLabelText("CPF do paciente");
+    fireEvent.change(cpf, { target: { value: VALID_CPF } });
+    fireEvent.click(within(form).getByRole("button", { name: "Buscar paciente" }));
+    fireEvent.keyDown(cpf, { key: "Enter" });
+    fireEvent.click(within(form).getByRole("button", { name: /Buscar paciente/ }));
+    expect(api.lookupExamPatient).toHaveBeenCalledTimes(1);
+    found({ id: "pa1", display_name: "Joana Lima", cpf_masked: "***.982.247-**" });
+    await within(form).findByText("Paciente: Joana Lima · CPF ***.982.247-**");
   });
 
   it("CPF sem cadastro validado e excesso de buscas explicam", async () => {
