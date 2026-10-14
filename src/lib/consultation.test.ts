@@ -38,6 +38,11 @@ describe("rascunho ↔ corpo do PATCH", () => {
     expect(blockedReason(checkDraft(d))).toBeNull();
   });
 
+  it("o id do pedido de exame (só leitura) nunca volta no rascunho", () => {
+    const d = draftFrom(consultation({ exam_requests: [ { id: "rq1", sigtap_code: "0202010503", label: "HbA1c" } ] }));
+    expect(checkDraft(d).input.exam_requests).toEqual([ { sigtap_code: "0202010503", label: "HbA1c" } ]);
+  });
+
   it("justificativa do exame vai normalizada; vazia sai do corpo", () => {
     const d = draftFrom(consultation({ exam_requests: [
       { sigtap_code: "0202010503", label: "HbA1c", cid10_justification: "e11.9" },
@@ -214,6 +219,12 @@ describe("adendo", () => {
       evaluated_problems: [ { problem_id: "pp1", terminology: "ciap2", code: "T90", label: problem().label, action: "resolve" } ],
       exam_requests: []
     });
+  });
+
+  it("o id do pedido de exame não vai no adendo", () => {
+    const base = finalized();
+    const kept = addendumChanges(base, { problems: [], conducts: [ "9" ], exams: [ { id: "rq1", sigtap_code: "1", label: "x" } ] });
+    expect(kept?.exam_requests).toEqual([ { sigtap_code: "1", label: "x" } ]);
   });
 
   it("mantém a justificativa existente e trata chaves ausentes como null", () => {

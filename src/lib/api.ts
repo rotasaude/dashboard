@@ -1599,7 +1599,8 @@ export interface EvaluatedProblem {
   onset_on?: string | null; onset_precision?: OnsetPrecision | null;
 }
 // Módulo 21a (Divergência D10): prioridade do pedido; ausente = rotina.
-export interface ExamRequest { sigtap_code: string; label: string; cid10_justification?: string | null; priority?: ExamPriority }
+// `id` só vem na leitura de item de consulta finalizada; nunca é enviado de volta.
+export interface ExamRequest { id?: string; sigtap_code: string; label: string; cid10_justification?: string | null; priority?: ExamPriority }
 // Divergência D4: `evaluated_problems` são eventos novos (mesma forma da
 // consulta); `conducts` e `exam_requests` são as listas finais.
 export interface AddendumChanges { evaluated_problems?: EvaluatedProblem[]; conducts?: string[]; exam_requests?: ExamRequest[] }
@@ -2384,6 +2385,8 @@ export interface ExamOrder {
   // Presentes em toda lista e detalhe. Na visão administrativa (guia, resultado,
   // regulação, fila da unidade) `cid10_justification` e `requester.cns` vêm null.
   consultation_id: string | null;
+  // Pedido da consulta que originou a ordem; null na guia da recepção e no PEC.
+  consultation_exam_request_id: string | null;
   // URL curta e assinada da guia (/exams/files/<token>); null sem guia.
   guide_url?: string | null;
   // Só no GET /exams/orders/:id (e nas respostas de ação que devolvem o detalhe).

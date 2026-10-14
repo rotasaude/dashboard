@@ -44,7 +44,7 @@ export function examOrder(over: Partial<ExamOrder> = {}): ExamOrder {
     scheduled_at: null, scheduled_place: null, external_reference: null, status: "awaiting_schedule",
     status_changed_at: "2026-10-10T09:00:00-03:00", overdue: null, escalated: false, result: null,
     events: [ { kind: "requested", occurred_at: "2026-10-10T09:00:00-03:00", actor: { type: "user", name: "Dra. Ana Souza" }, reason: null } ],
-    consultation_id: "c1", guide_url: null, result_fields: HEMOGRAM_FIELDS, ...over
+    consultation_id: "c1", consultation_exam_request_id: null, guide_url: null, result_fields: HEMOGRAM_FIELDS, ...over
   };
 }
 
