@@ -45,4 +45,10 @@ describe("features da sessão (contratos §1)", () => {
     expect(hasFeature({ features: [ "patient_timeline" ] }, "patient_timeline")).toBe(true);
     expect(hasFeature({ features: [ "clinical_record" ] }, "patient_timeline")).toBe(false);
   });
+  it("módulo 21a: os quatro interruptores de exames têm rótulo", () => {
+    expect(featureLabel("exam_tracking")).toBe("Rastreamento de exames");
+    expect(featureLabel("exam_fhir_inbound")).toBe("Entrada de resultados por FHIR");
+    expect(featureLabel("exam_pec_bridge")).toBe("Solicitar exames pelo PEC");
+    expect(featureLabel("fake_lab")).toBe("Laboratório simulado (fora de produção)");
+  });
 });

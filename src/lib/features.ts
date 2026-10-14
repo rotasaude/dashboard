@@ -7,7 +7,7 @@ import { ApiError } from "./api";
 
 export type FeatureKey =
   | "ledi_export" | "cadsus_lookup" | "clinical_record" | "digital_signature" | "clinical_documents" | "controlled_prescriptions"
-  | "patient_timeline";
+  | "patient_timeline" | "exam_tracking" | "exam_fhir_inbound" | "exam_pec_bridge" | "fake_lab";
 
 export const FEATURE_DISABLED_MESSAGE = "esta funcionalidade está desligada para a cidade";
 
@@ -18,7 +18,11 @@ const FEATURE_LABEL: Record<string, string> = {
   digital_signature: "Assinatura digital",
   clinical_documents: "Documentos clínicos",
   controlled_prescriptions: "Receita de controle especial e de antimicrobiano (SNCR)",
-  patient_timeline: "Linha do tempo do paciente"
+  patient_timeline: "Linha do tempo do paciente",
+  exam_tracking: "Rastreamento de exames",
+  exam_fhir_inbound: "Entrada de resultados por FHIR",
+  exam_pec_bridge: "Solicitar exames pelo PEC",
+  fake_lab: "Laboratório simulado (fora de produção)"
 };
 
 export function sessionFeatures(user: { features?: unknown } | null | undefined): string[] {

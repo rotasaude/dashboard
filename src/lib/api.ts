@@ -1598,7 +1598,8 @@ export interface EvaluatedProblem {
   problem_id: string | null; terminology: Terminology; code: string; label: string; action: ProblemAction;
   onset_on?: string | null; onset_precision?: OnsetPrecision | null;
 }
-export interface ExamRequest { sigtap_code: string; label: string; cid10_justification?: string | null }
+// Módulo 21a (Divergência D10): prioridade do pedido; ausente = rotina.
+export interface ExamRequest { sigtap_code: string; label: string; cid10_justification?: string | null; priority?: ExamPriority }
 // Divergência D4: `evaluated_problems` são eventos novos (mesma forma da
 // consulta); `conducts` e `exam_requests` são as listas finais.
 export interface AddendumChanges { evaluated_problems?: EvaluatedProblem[]; conducts?: string[]; exam_requests?: ExamRequest[] }
@@ -2328,4 +2329,341 @@ export function reassignDraft(id: string, userId: string, reason: string):
   Promise<{ consultation_id: string; author: { user_id: string; name: string } }> {
   return jsonFetch(`${CLINICAL_RECORD_BASE}/consultation_drafts/${encodeURIComponent(id)}/reassign`,
     { method: "POST", body: JSON.stringify({ user_id: userId, reason }) });
+}
+
+// ─── Exames (módulo 21a, ADR 0036; contrato 2026-10-13 §1–§10) ───────────────
+// Na URL só ids, códigos SIGTAP, situações, etapas, mês e o cursor — CPF,
+// nome, motivo e valores de resultado vão no corpo. Arquivo (guia, laudo)
+// sobe em JSON com base64 e SEM o nome do arquivo (Divergência D1). Ler um
+// exame grava a trilha no api; quem lê o quê é do api (regras do 19a e o
+// isolamento do prestador).
+
+const EXAMS_BASE = import.meta.env.VITE_EXAMS_BASE || "/exams";
+
+export type ExamPriority = "routine" | "urgent";
+export type ExamOrigin = "consultation" | "reception_guide" | "pec";
+export type ExamStatus =
+  | "awaiting_authorization" | "denied" | "awaiting_schedule" | "scheduled" | "collected" | "resulted" | "acknowledged" | "cancelled";
+export type ExamStage = "authorize" | "schedule" | "collect" | "result" | "acknowledge";
+export type ExamEventKind =
+  | "requested" | "authorized" | "denied" | "scheduled" | "collected" | "resulted" | "acknowledged" | "escalated" | "cancelled";
+export type ExamReleasePolicy = "immediate" | "after_acknowledgement" | "never_citizen";
+export type ExamProviderKind = "municipal" | "accredited" | "consortium" | "lacen" | "imaging";
+export type ExamDeadlines = Record<ExamStage, number | null>;
+
+export interface ExamResultField { key: string; label: string; unit: string | null; loinc: string | null }
+export interface ExamResultValue { key: string | null; label: string; value: string; unit: string | null; loinc: string | null }
+// Visão clínica (quem pediu, leitura do 19a, equipe) traz tudo; a visão
+// administrativa (unidade, regulador — plano do api, Desvio 10) só traz id,
+// origem, fonte, data e laboratório: valores, crítico e laudo ausentes.
+export interface ExamResult {
+  id: string; origin: "order" | "external"; source: "unit" | "provider" | "fhir" | "consultation";
+  released_on: string; laboratory_name: string; critical?: boolean; values?: ExamResultValue[];
+  // Curta e assinada (5 min); o download grava trilha.
+  pdf_url?: string; acknowledged_at?: string | null;
+}
+// Divergência D8: o resultado externo listado traz o exame.
+export interface ExternalExamResult extends ExamResult { sigtap_code: string; label: string }
+// A16/A28: o job de atraso/crítico grava ator `system` sem nome. `reason` de
+// `escalated` é um código (overdue | critical | unlinked_requester), só na
+// visão clínica; negar/cancelar levam o motivo nas duas visões.
+export interface ExamEvent {
+  kind: ExamEventKind | string; occurred_at: string;
+  actor: { type: "user" | "provider" | "system"; name: string | null }; reason: string | null;
+}
+export interface ExamOverdue { stage: ExamStage; due_on: string; days_late: number }
+export interface ExamOrder {
+  id: string; short_code: string; patient: { id: string; display_name: string };
+  sigtap_code: string; sigtap_competence: string; label: string; priority: ExamPriority;
+  cid10_justification: string | null; origin: ExamOrigin | string;
+  requester: { user_id: string | null; name: string; cns: string | null };
+  unit: { id: string; name: string }; provider: { id: string; name: string } | null;
+  scheduled_at: string | null; scheduled_place: string | null; external_reference: string | null;
+  status: ExamStatus | string; status_changed_at: string; overdue: ExamOverdue | null; escalated: boolean;
+  result: ExamResult | null;
+  // Presentes em toda lista e detalhe. Na visão administrativa (guia, resultado,
+  // regulação, fila da unidade) `cid10_justification` e `requester.cns` vêm null.
+  consultation_id: string | null;
+  // URL curta e assinada da guia (/exams/files/<token>); null sem guia.
+  guide_url?: string | null;
+  // Só no GET /exams/orders/:id (e nas respostas de ação que devolvem o detalhe).
+  events?: ExamEvent[]; result_fields?: ExamResultField[];
+}
+export interface ExamOrderPage { orders: ExamOrder[]; next_before: string | null }
+export interface ExamOrderQuery {
+  patientId?: string; unitId?: string; consultationId?: string; statuses?: ExamStatus[];
+  overdue?: boolean; stage?: ExamStage | ""; providerId?: string; sigtapCode?: string; before?: string | null;
+}
+export const EXAM_PAGE_SIZE = 50;
+
+export interface ExamPatient { id: string; display_name: string; cpf_masked: string }
+export interface ExamCatalogEntry { sigtap_code: string; label: string; result_fields: ExamResultField[] }
+export interface ExamProviderRef { id: string; name: string }
+export interface ExamRequester { user_id: string; name: string }
+
+// Divergência D16: a guia é da unidade escolhida (`unit_id`).
+export interface ReceptionOrderInput {
+  patient_id: string; unit_id: string; sigtap_code: string; priority: ExamPriority; cid10_justification?: string;
+  requester: { user_id: string } | { name: string; cns: string }; external_reference?: string; guide_upload_id: string;
+}
+export interface ScheduleWhen { scheduled_at: string; scheduled_place: string }
+export interface ScheduleInput extends ScheduleWhen { provider_id: string }
+export interface ResultInput {
+  upload_id: string; released_on: string; laboratory_name: string; critical: boolean; values: { key: string; value: string }[];
+}
+export interface ExternalResultInput {
+  patient_id: string; sigtap_code: string; released_on: string; laboratory_name: string; upload_id: string;
+  values: { key: string; value: string }[]; consultation_id?: string;
+}
+// `orders` é paginado (50); `denied` são as negadas dos últimos 30 dias (até 50).
+export interface PendingAcknowledgements { orders: ExamOrder[]; denied: ExamOrder[]; next_before: string | null }
+
+export interface ExamCatalogItem {
+  id: string; sigtap_code: string; label: string; requires_authorization: boolean; release_policy: ExamReleasePolicy;
+  deadlines: ExamDeadlines; result_fields: ExamResultField[]; active: boolean;
+}
+export type ExamCatalogItemInput = Omit<ExamCatalogItem, "id" | "label">;
+export interface ExamProviderItem { catalog_item_id: string; deadlines: ExamDeadlines }
+export interface ExamProvider {
+  id: string; name: string; cnes: string | null; kind: ExamProviderKind; active: boolean;
+  items: (ExamProviderItem & { sigtap_code: string })[];
+  // O token nunca volta: só se existe um ativo e quando foi gerado.
+  has_fhir_token: boolean; fhir_token_rotated_at: string | null;
+  // Laboratório simulado (fora de produção).
+  simulated: boolean;
+  users: { user_id: string; email: string }[];
+}
+// Corpo de POST/PATCH: `simulated`, token e usuários não se escrevem aqui.
+export type ExamProviderInput = Pick<ExamProvider, "name" | "cnes" | "kind" | "active"> & { items: ExamProviderItem[] };
+export interface ExamReportRow {
+  provider: ExamProviderRef; authorized: number; collected: number; resulted_on_time: number; resulted_late: number; pending: number;
+}
+export interface ProviderOrder {
+  id: string; short_code: string; patient: { name: string; birth_date: string; cpf_last3: string };
+  sigtap_code: string; label: string; priority: ExamPriority; status: ExamStatus | string;
+  scheduled_at: string | null; scheduled_place: string | null; overdue: ExamOverdue | null;
+  // Divergência D6.
+  result_fields?: ExamResultField[];
+}
+// `overdue_count` vem no corpo (A20; o cabeçalho X-Overdue-Count repete).
+export interface ProviderOrderPage { orders: ProviderOrder[]; next_before: string | null; overdue_count: number }
+export interface ProviderOrderQuery { statuses?: ExamStatus[]; overdue?: boolean; before?: string | null }
+
+export const EXAM_UPLOAD_MAX_BYTES = 10 * 1024 * 1024;
+export const EXAM_UPLOAD_TYPES = [ "application/pdf", "image/jpeg", "image/png" ] as const;
+
+const examPath = (...parts: string[]) => [ EXAMS_BASE, ...parts.map(encodeURIComponent) ].join("/");
+const withQuery = (path: string, params: URLSearchParams) => (params.toString() ? `${path}?${params.toString()}` : path);
+
+function orderParams(q: ExamOrderQuery): URLSearchParams {
+  const p = new URLSearchParams();
+  if (q.patientId) p.set("patient_id", q.patientId);
+  if (q.unitId) p.set("unit_id", q.unitId);
+  if (q.consultationId) p.set("consultation_id", q.consultationId);
+  for (const s of q.statuses ?? []) p.append("status[]", s);
+  if (q.overdue) p.set("overdue", "true");
+  if (q.stage) p.set("stage", q.stage);
+  if (q.providerId) p.set("provider_id", q.providerId);
+  if (q.sigtapCode) p.set("sigtap_code", q.sigtapCode);
+  if (q.before) p.set("before", q.before);
+  p.set("limit", String(EXAM_PAGE_SIZE));
+  return p;
+}
+
+export function listExamOrders(q: ExamOrderQuery): Promise<ExamOrderPage> {
+  return jsonFetch(withQuery(examPath("orders"), orderParams(q)));
+}
+
+export function getExamOrder(id: string): Promise<ExamOrder> {
+  return jsonFetch(examPath("orders", id));
+}
+
+export async function lookupExamPatient(cpf: string): Promise<ExamPatient> {
+  return (await jsonFetch<{ patient: ExamPatient }>(examPath("patient_lookup"), postProfessional({ cpf }))).patient;
+}
+
+export async function listExamCatalog(): Promise<ExamCatalogEntry[]> {
+  return (await jsonFetch<{ items: ExamCatalogEntry[] }>(examPath("catalog"))).items;
+}
+
+export async function listEnabledProviders(sigtapCode?: string): Promise<ExamProviderRef[]> {
+  const p = new URLSearchParams();
+  if (sigtapCode) p.set("sigtap_code", sigtapCode);
+  return (await jsonFetch<{ providers: ExamProviderRef[] }>(withQuery(examPath("providers"), p))).providers;
+}
+
+export async function listExamRequesters(unitId: string): Promise<ExamRequester[]> {
+  const p = new URLSearchParams({ unit_id: unitId });
+  return (await jsonFetch<{ requesters: ExamRequester[] }>(withQuery(examPath("requesters"), p))).requesters;
+}
+
+export function createReceptionOrder(input: ReceptionOrderInput): Promise<ExamOrder> {
+  return jsonFetch(examPath("orders"), postProfessional(input));
+}
+
+function readBase64(file: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = String(reader.result);
+      resolve(text.slice(text.indexOf(",") + 1));
+    };
+    reader.onerror = () => reject(reader.error ?? new Error("read_failed"));
+    reader.readAsDataURL(file);
+  });
+}
+
+// Só o tipo e o conteúdo: o nome do arquivo pode trazer o nome do paciente.
+export async function uploadExamFile(file: File): Promise<string> {
+  const data = await readBase64(file);
+  return (await jsonFetch<{ upload_id: string }>(examPath("uploads"), postProfessional({ content_type: file.type, data }))).upload_id;
+}
+
+export async function scheduleExam(id: string, input: ScheduleInput): Promise<void> {
+  await jsonFetch<unknown>(examPath("orders", id, "schedule"), postProfessional(input));
+}
+
+export async function collectExam(id: string): Promise<void> {
+  await jsonFetch<unknown>(examPath("orders", id, "collect"), postProfessional({}));
+}
+
+export async function cancelExam(id: string, reason: string): Promise<void> {
+  await jsonFetch<unknown>(examPath("orders", id, "cancel"), postProfessional({ reason }));
+}
+
+export async function registerExamResult(id: string, input: ResultInput): Promise<void> {
+  await jsonFetch<unknown>(examPath("orders", id, "result"), postProfessional(input));
+}
+
+export async function acknowledgeExam(id: string, reason?: string): Promise<void> {
+  await jsonFetch<unknown>(examPath("orders", id, "acknowledge"), postProfessional(reason ? { reason } : {}));
+}
+
+export async function listPendingAcknowledgements(): Promise<PendingAcknowledgements> {
+  const body = await jsonFetch<{ orders: ExamOrder[]; denied?: ExamOrder[]; next_before?: string | null }>(
+    examPath("acknowledgements", "pending"));
+  return { orders: body.orders, denied: body.denied ?? [], next_before: body.next_before ?? null };
+}
+
+// 403 `not_in_team` = o profissional não está em equipe de referência ativa.
+export function listTeamAcknowledgements(): Promise<ExamOrderPage> {
+  return jsonFetch(examPath("acknowledgements", "team"));
+}
+
+export function recordExternalResult(input: ExternalResultInput): Promise<ExamResult> {
+  return jsonFetch(examPath("external_results"), postProfessional(input));
+}
+
+export async function listExternalResults(patientId: string): Promise<ExternalExamResult[]> {
+  const p = new URLSearchParams({ patient_id: patientId });
+  return (await jsonFetch<{ results: ExternalExamResult[] }>(withQuery(examPath("external_results"), p))).results;
+}
+
+export function listRegulationQueue(before: string | null): Promise<ExamOrderPage> {
+  const p = new URLSearchParams();
+  if (before) p.set("before", before);
+  p.set("limit", String(EXAM_PAGE_SIZE));
+  return jsonFetch(withQuery(examPath("regulation", "queue"), p));
+}
+
+export async function authorizeExam(id: string, providerId: string): Promise<void> {
+  await jsonFetch<unknown>(examPath("orders", id, "authorize"), postProfessional({ provider_id: providerId }));
+}
+
+export async function denyExam(id: string, reason: string): Promise<void> {
+  await jsonFetch<unknown>(examPath("orders", id, "deny"), postProfessional({ reason }));
+}
+
+// Admin municipal; toda escrita com step-up (quem trata 401 mfa_required é o SensitiveAction).
+export async function listCatalogItems(): Promise<ExamCatalogItem[]> {
+  return (await jsonFetch<{ items: ExamCatalogItem[] }>(examPath("admin", "catalog_items"))).items;
+}
+
+export function createCatalogItem(input: ExamCatalogItemInput): Promise<ExamCatalogItem> {
+  return jsonFetch(examPath("admin", "catalog_items"), postProfessional(input));
+}
+
+// C17: o código SIGTAP é a identidade do item; o PATCH nunca o manda.
+export function updateCatalogItem(id: string, input: ExamCatalogItemInput): Promise<ExamCatalogItem> {
+  const { sigtap_code: _identity, ...rest } = input;
+  return jsonFetch(examPath("admin", "catalog_items", id), { method: "PATCH", body: JSON.stringify(rest) });
+}
+
+export async function listExamProviders(): Promise<ExamProvider[]> {
+  return (await jsonFetch<{ providers: ExamProvider[] }>(examPath("admin", "providers"))).providers;
+}
+
+export function createExamProvider(input: ExamProviderInput): Promise<ExamProvider> {
+  return jsonFetch(examPath("admin", "providers"), postProfessional(input));
+}
+
+export function updateExamProvider(id: string, input: ExamProviderInput): Promise<ExamProvider> {
+  return jsonFetch(examPath("admin", "providers", id), { method: "PATCH", body: JSON.stringify(input) });
+}
+
+// Mostrado uma vez: quem chama guarda só no estado do componente.
+export async function rotateFhirToken(id: string): Promise<string> {
+  return (await jsonFetch<{ token: string }>(examPath("admin", "providers", id, "fhir_token"), postProfessional({}))).token;
+}
+
+export async function revokeFhirToken(id: string): Promise<void> {
+  await jsonFetch<unknown>(examPath("admin", "providers", id, "fhir_token"), { method: "DELETE", body: "{}" });
+}
+
+export function inviteProviderUser(id: string, email: string): Promise<Invitation> {
+  return jsonFetch(examPath("admin", "providers", id, "users"), postProfessional({ email }));
+}
+
+function reportParams(month: string, providerId: string | null): URLSearchParams {
+  const p = new URLSearchParams({ month });
+  if (providerId) p.set("provider_id", providerId);
+  return p;
+}
+
+export async function getExamReport(month: string, providerId: string | null): Promise<ExamReportRow[]> {
+  return (await jsonFetch<{ rows: ExamReportRow[] }>(withQuery(examPath("admin", "report"), reportParams(month, providerId)))).rows;
+}
+
+export function fetchExamReportCsv(month: string, providerId: string | null, detail: boolean): Promise<SignatureFile> {
+  const p = reportParams(month, providerId);
+  if (detail) p.set("detail", "true");
+  return binaryFetch(withQuery(examPath("admin", "report.csv"), p), "text/csv");
+}
+
+// Portal do prestador (contrato §6): guia de outro prestador = 404 not_found.
+export async function listProviderOrders(q: ProviderOrderQuery): Promise<ProviderOrderPage> {
+  const p = new URLSearchParams();
+  for (const s of q.statuses ?? []) p.append("status[]", s);
+  if (q.overdue) p.set("overdue", "true");
+  if (q.before) p.set("before", q.before);
+  p.set("limit", String(EXAM_PAGE_SIZE));
+  const body = await jsonFetch<{ orders: ProviderOrder[]; next_before: string | null; overdue_count?: unknown }>(
+    withQuery(examPath("provider", "orders"), p));
+  const count = Number(body.overdue_count ?? 0);
+  return { orders: body.orders, next_before: body.next_before, overdue_count: Number.isFinite(count) ? count : 0 };
+}
+
+// Divergência D9: o prestador é o do usuário; o corpo não leva provider_id.
+export async function providerSchedule(id: string, input: ScheduleWhen): Promise<void> {
+  await jsonFetch<unknown>(examPath("provider", "orders", id, "schedule"), postProfessional(input));
+}
+
+export async function providerCollect(id: string): Promise<void> {
+  await jsonFetch<unknown>(examPath("provider", "orders", id, "collect"), postProfessional({}));
+}
+
+export async function providerResult(id: string, input: ResultInput): Promise<void> {
+  await jsonFetch<unknown>(examPath("provider", "orders", id, "result"), postProfessional(input));
+}
+
+// O `pdf_url` vem pronto do api (curto e assinado); lido com fetch para a
+// tela mostrar a recusa (link vencido) em vez de uma janela em branco.
+export function fetchExamPdf(pdfUrl: string): Promise<SignatureFile> {
+  return binaryFetch(pdfUrl, "application/pdf");
+}
+
+// C9: link vencido é 410 `link_expired`; 404 é não achado (token de outro
+// usuário ou forjado) e 403 é só `feature_disabled` — nenhum dos dois é "vencido".
+export function isExamLinkExpired(err: unknown): boolean {
+  return err instanceof ApiError && err.status === 410 && errorCode(err) === "link_expired";
 }
