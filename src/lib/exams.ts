@@ -13,6 +13,7 @@ import { OPENING_ENDED } from "./clinicalRecord";
 import { cid10Problem } from "./consultation";
 import { featureDisabledKey, hasFeature } from "./features";
 import { cityLocalIso } from "./format";
+import { TIMELINE_KEY } from "./timeline";
 import { isValidCns } from "./professionals";
 import type { Tone } from "../theme/tokens";
 
@@ -30,8 +31,11 @@ export const PROVIDER_ORDERS_KEY = "providerOrders";
 export const EXTERNAL_RESULTS_KEY = "examExternalResults";
 export const EXAM_REQUESTERS_KEY = "examRequesters";
 
-// Tudo o que muda quando um exame anda (as listas e o detalhe).
-const MOVING_KEYS = [ EXAM_ORDERS_KEY, EXAM_ORDER_KEY, EXAM_PENDING_KEY, EXAM_TEAM_KEY, EXAM_REGULATION_KEY, PROVIDER_ORDERS_KEY, EXTERNAL_RESULTS_KEY ];
+// Tudo o que muda quando um exame anda (as listas, o detalhe e a linha do
+// tempo, que também abre o exame).
+const MOVING_KEYS = [
+  EXAM_ORDERS_KEY, EXAM_ORDER_KEY, EXAM_PENDING_KEY, EXAM_TEAM_KEY, EXAM_REGULATION_KEY, PROVIDER_ORDERS_KEY, EXTERNAL_RESULTS_KEY, TIMELINE_KEY
+];
 
 export const EXAMS_DISABLED = "o rastreamento de exames está desligado nesta cidade";
 export const EXAMS_NO_ROLE = "seu papel não permite ver esta tela";
