@@ -35,6 +35,23 @@ function fillMinimum() {
   text("Plano (P)", "Ajuste de dose; retorno em 30 dias.");
 }
 
+describe("ConsultationEditor — prioridade do exame (módulo 21a)", () => {
+  const withExam = consultation({ exam_requests: [ { sigtap_code: "0202020380", label: "Hemograma completo" } ] });
+  const mount = (examPriority?: boolean) => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={client}><ConsultationEditor consultation={withExam} record={record()} options={options()} unit={unit} units={units}
+      examPriority={examPriority} autosaveDelayMs={0} searchDelayMs={0} onFinalized={vi.fn()} onLocked={vi.fn()} /></QueryClientProvider>);
+  };
+
+  it("com examPriority: o exame tem o seletor de prioridade; sem: não", () => {
+    mount(true);
+    expect(screen.getByLabelText("Prioridade (0202020380)")).not.toBeNull();
+    cleanup();
+    mount();
+    expect(screen.queryByLabelText("Prioridade (0202020380)")).toBeNull();
+  });
+});
+
 describe("ConsultationEditor", () => {
   beforeEach(() => {
     for (const fn of [ api.saveConsultationDraft, api.finalizeConsultation, api.searchTerminology, api.searchSigtap ]) mocked(fn).mockReset();

@@ -41,6 +41,41 @@ describe("ConsultationExamStatus", () => {
     expect(await screen.findByRole("region", { name: "Exame Hemograma completo" })).not.toBeNull();
   });
 
+  it.each([ [ "cancelada antes" ], [ "cancelada depois" ] ])("mesmo código com duas ordens (%s): mostra a não cancelada e abre essa", async (which) => {
+    const cancelled = examOrder({ id: "eo-old", status: "cancelled", status_changed_at: "2026-10-11T09:00:00-03:00" });
+    const live = examOrder({ id: "eo-new", status: "scheduled", status_changed_at: "2026-10-12T09:00:00-03:00" });
+    mocked(api.listExamOrders).mockResolvedValue({ orders: which === "cancelada antes" ? [ cancelled, live ] : [ live, cancelled ], next_before: null });
+    mocked(api.getExamOrder).mockImplementation(async (id: string) => (id === "eo-new" ? live : cancelled));
+    renderWithProviders(<ConsultationExamStatus consultationId="c1" requests={[ REQUESTS[0] ]} />);
+    const item = (await screen.findAllByRole("listitem"))[0];
+    await within(item).findByText("agendado");
+    expect(within(item).queryByText("cancelado")).toBeNull();
+    fireEvent.click(within(item).getByRole("button", { name: "Acompanhar Hemograma completo" }));
+    await screen.findByRole("region", { name: "Exame Hemograma completo" });
+    expect(api.getExamOrder).toHaveBeenCalledWith("eo-new");
+  });
+
+  it("todas canceladas: a de mudança de situação mais recente", async () => {
+    const a = examOrder({ id: "eo-a", status: "cancelled", status_changed_at: "2026-10-11T09:00:00-03:00" });
+    const b = examOrder({ id: "eo-b", status: "cancelled", status_changed_at: "2026-10-12T09:00:00-03:00" });
+    mocked(api.listExamOrders).mockResolvedValue({ orders: [ b, a ], next_before: null });
+    mocked(api.getExamOrder).mockImplementation(async (id: string) => (id === "eo-b" ? b : a));
+    renderWithProviders(<ConsultationExamStatus consultationId="c1" requests={[ REQUESTS[0] ]} />);
+    const item = (await screen.findAllByRole("listitem"))[0];
+    fireEvent.click(await within(item).findByRole("button", { name: "Acompanhar Hemograma completo" }));
+    await screen.findByRole("region", { name: "Exame Hemograma completo" });
+    expect(api.getExamOrder).toHaveBeenCalledWith("eo-b");
+  });
+
+  it("lista cortada (next_before): exame ausente não diz 'sem acompanhamento'", async () => {
+    mocked(api.listExamOrders).mockResolvedValue({ orders: [ examOrder({ status: "scheduled" }) ], next_before: "cursor-1" });
+    renderWithProviders(<ConsultationExamStatus consultationId="c1" requests={REQUESTS} />);
+    const items = await screen.findAllByRole("listitem");
+    await within(items[0]).findByText("agendado");
+    expect(within(items[1]).queryByText("sem acompanhamento")).toBeNull();
+    expect(within(items[1]).getByText("veja na tela Exames")).not.toBeNull();
+  });
+
   it("a leitura falha: a lista continua e a frase aparece", async () => {
     mocked(api.listExamOrders).mockRejectedValue(new ApiError(403, { error: "feature_disabled", feature: "exam_tracking" }, "x"));
     renderWithProviders(<ConsultationExamStatus consultationId="c1" requests={REQUESTS} />);

@@ -27,6 +27,27 @@ function renderForm(extra: { loadPatientProblems?: () => Promise<import("../../l
 }
 const text = (label: string, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
 
+describe("AddendumForm — prioridade do exame (módulo 21a, A33)", () => {
+  const base = finalized({ exam_requests: [ { sigtap_code: "0202010503", label: "HbA1c", priority: "urgent" } ] });
+  const open = () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={client}><AddendumForm consultation={base} options={options()} patientProblems={[]}
+      searchDelayMs={0} examPriority onDone={vi.fn()} onCancel={vi.fn()} /></QueryClientProvider>);
+    fireEvent.click(screen.getByLabelText("Mudar problemas, condutas ou exames"));
+  };
+
+  it("exame já pedido: prioridade só para leitura; removido e pedido de novo no mesmo adendo: escolhe", async () => {
+    open();
+    expect(screen.queryByLabelText("Prioridade (0202010503)")).toBeNull();
+    expect(screen.getByText("Prioridade: urgente")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Remover exame 0202010503" }));
+    mocked(api.searchSigtap).mockResolvedValue([ { code: "0202010503", label: "HbA1c" } ]);
+    fireEvent.change(screen.getByLabelText("Solicitar exame (SIGTAP)"), { target: { value: "hba" } });
+    fireEvent.click(await screen.findByRole("button", { name: /0202010503/ }));
+    expect(screen.getByLabelText("Prioridade (0202010503)")).not.toBeNull();
+  });
+});
+
 describe("AddendumForm", () => {
   beforeEach(() => {
     mocked(api.addAddendum).mockReset();

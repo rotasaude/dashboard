@@ -4,12 +4,24 @@
 // cancelado e trocado) aparece "sem acompanhamento".
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { listExamOrders, type ExamRequest } from "../../lib/api";
+import { listExamOrders, type ExamOrder, type ExamRequest } from "../../lib/api";
 import { EXAM_ORDERS_KEY, examError, examStatusLabel, examStatusTone } from "../../lib/exams";
 import { Tag } from "../../components/Tag";
 import { secondaryButtonStyle } from "../../components/formStyles";
 import { ExamOrderDetail } from "./ExamOrderDetail";
-import { alert, list, row } from "./styles";
+import { alert, list, muted, row } from "./styles";
+
+// Um mesmo código pode ter mais de uma ordem (cancelada e pedida de novo por adendo):
+// vale a não cancelada; entre várias, a de mudança de situação mais recente.
+function pickOrders(orders: ExamOrder[]): Map<string, ExamOrder> {
+  const best = new Map<string, ExamOrder>();
+  const rank = (o: ExamOrder) => (o.status === "cancelled" ? 0 : 1);
+  for (const o of orders) {
+    const cur = best.get(o.sigtap_code);
+    if (!cur || rank(o) > rank(cur) || (rank(o) === rank(cur) && Date.parse(o.status_changed_at) > Date.parse(cur.status_changed_at))) best.set(o.sigtap_code, o);
+  }
+  return best;
+}
 
 export function ConsultationExamStatus({ consultationId, requests }: { consultationId: string; requests: ExamRequest[] }) {
   const query = useQuery({
@@ -18,7 +30,8 @@ export function ConsultationExamStatus({ consultationId, requests }: { consultat
     gcTime: 0, staleTime: 0, retry: false
   });
   const [ open, setOpen ] = useState<string | null>(null);
-  const byCode = new Map((query.data?.orders ?? []).map((o) => [ o.sigtap_code, o ]));
+  const byCode = pickOrders(query.data?.orders ?? []);
+  const truncated = query.data?.next_before != null;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -30,7 +43,8 @@ export function ConsultationExamStatus({ consultationId, requests }: { consultat
               <span>{`${e.sigtap_code} — ${e.label}${e.cid10_justification ? ` · CID-10 ${e.cid10_justification}` : ""}`}</span>
               {e.priority === "urgent" && <Tag tone="urgent">urgente</Tag>}
               {order && <Tag tone={examStatusTone(order.status)}>{examStatusLabel(order.status)}</Tag>}
-              {!order && query.isSuccess && <Tag>sem acompanhamento</Tag>}
+              {!order && query.isSuccess && !truncated && <Tag>sem acompanhamento</Tag>}
+              {!order && query.isSuccess && truncated && <small style={muted}>veja na tela Exames</small>}
               {order && (
                 <button type="button" aria-label={`Acompanhar ${e.label}`} style={secondaryButtonStyle} onClick={() => setOpen(order.id)}>
                   Acompanhar
