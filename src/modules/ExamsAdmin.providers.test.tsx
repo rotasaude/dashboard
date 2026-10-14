@@ -42,7 +42,7 @@ describe("ExamsAdmin — prestadores", () => {
     const row = (await within(await providersPanel()).findAllByRole("row"))[1];
     expect(within(row).getByText("Credenciado")).not.toBeNull();
     expect(within(row).getByText("1234567")).not.toBeNull();
-    expect(within(row).getByText("1")).not.toBeNull();
+    expect(row.querySelector('[role="cell"][data-label="Exames"]')?.textContent).toBe("1");
     expect(within(row).getByText("sem token")).not.toBeNull();
     expect(within(row).queryByText("simulado")).toBeNull();
   });
@@ -135,6 +135,73 @@ describe("ExamsAdmin — prestadores", () => {
     await access(panel);
     expect(document.body.innerHTML).not.toContain("tok_abc123");
     expect(screen.queryByRole("region", { name: "Token FHIR novo" })).toBeNull();
+  });
+
+  it("depois de gerar e Já guardei, o acesso relido oferece Trocar (com o aviso) e Revogar", async () => {
+    mocked(api.listExamProviders).mockResolvedValueOnce([ examProvider() ]).mockResolvedValue([ examProvider({ has_fhir_token: true }) ]);
+    renderWithProviders(<ExamsAdmin />);
+    const box = await access(await providersPanel());
+    fireEvent.click(within(box).getByRole("button", { name: "Gerar token FHIR" }));
+    fireEvent.click(within(screen.getByRole("region", { name: "Gerar token FHIR — Laboratório Simulado" })).getByRole("button", { name: "Gerar token" }));
+    const shown = await screen.findByRole("region", { name: "Token FHIR novo" });
+    await waitFor(() => expect(api.listExamProviders).toHaveBeenCalledTimes(2));
+    // A releitura não derruba o token que ainda está na tela.
+    expect(within(shown).getByText("tok_abc123")).not.toBeNull();
+    fireEvent.click(within(shown).getByRole("button", { name: "Já guardei" }));
+    expect(within(box).queryByRole("button", { name: "Gerar token FHIR" })).toBeNull();
+    expect(within(box).getByRole("button", { name: "Revogar token FHIR" })).not.toBeNull();
+    fireEvent.click(within(box).getByRole("button", { name: "Trocar token FHIR" }));
+    const confirm = screen.getByRole("region", { name: "Trocar token FHIR — Laboratório Simulado" });
+    expect(within(confirm).getByText("O token atual deixa de funcionar na hora.")).not.toBeNull();
+    expect(document.body.innerHTML).not.toContain("tok_abc123");
+  });
+
+  it("depois de revogar, o acesso relido só oferece Gerar", async () => {
+    mocked(api.listExamProviders).mockResolvedValueOnce([ examProvider({ has_fhir_token: true }) ]).mockResolvedValue([ examProvider() ]);
+    renderWithProviders(<ExamsAdmin />);
+    const box = await access(await providersPanel());
+    fireEvent.click(within(box).getByRole("button", { name: "Revogar token FHIR" }));
+    fireEvent.click(within(screen.getByRole("region", { name: "Revogar token FHIR — Laboratório Simulado" })).getByRole("button", { name: "Revogar token" }));
+    expect(await within(box).findByRole("button", { name: "Gerar token FHIR" })).not.toBeNull();
+    expect(within(box).queryByRole("button", { name: "Trocar token FHIR" })).toBeNull();
+    expect(within(box).queryByRole("button", { name: "Revogar token FHIR" })).toBeNull();
+  });
+
+  it("o token na tela é selecionável inteiro", async () => {
+    renderWithProviders(<ExamsAdmin />);
+    const box = await access(await providersPanel());
+    fireEvent.click(within(box).getByRole("button", { name: "Gerar token FHIR" }));
+    fireEvent.click(within(screen.getByRole("region", { name: "Gerar token FHIR — Laboratório Simulado" })).getByRole("button", { name: "Gerar token" }));
+    const code = within(await screen.findByRole("region", { name: "Token FHIR novo" })).getByText("tok_abc123");
+    expect(code.style.userSelect).toBe("all");
+  });
+
+  it("catálogo só com exames inativos não se diz vazio", async () => {
+    mocked(api.listCatalogItems).mockResolvedValue([ examCatalogItem({ active: false }) ]);
+    renderWithProviders(<ExamsAdmin />);
+    const panel = await providersPanel();
+    fireEvent.click(await within(panel).findByRole("button", { name: "Novo prestador" }));
+    const form = within(panel).getByRole("form", { name: "Novo prestador" });
+    expect(within(form).queryByText("o catálogo da cidade está vazio — inclua os exames primeiro")).toBeNull();
+    expect(within(form).getByText("nenhum exame ativo no catálogo — ative ou inclua os exames primeiro")).not.toBeNull();
+  });
+
+  it("exame do prestador fora da lista do catálogo aparece (pelo SIGTAP) e pode sair", async () => {
+    mocked(api.listCatalogItems).mockResolvedValue([]);
+    renderWithProviders(<ExamsAdmin />);
+    const panel = await providersPanel();
+    fireEvent.click(await within(panel).findByRole("button", { name: "Editar Laboratório Simulado" }));
+    const form = within(panel).getByRole("form", { name: "Editar Laboratório Simulado" });
+    expect(within(form).queryByText("o catálogo da cidade está vazio — inclua os exames primeiro")).toBeNull();
+    const check = within(form).getByLabelText("Faz exame SIGTAP 0202020380") as HTMLInputElement;
+    expect(check.checked).toBe(true);
+    expect(within(form).getByRole("group", { name: "Prazos — exame SIGTAP 0202020380" })).not.toBeNull();
+    fireEvent.click(check);
+    fireEvent.click(within(form).getByRole("button", { name: "Revisar e salvar" }));
+    fireEvent.click(within(screen.getByRole("region", { name: "Salvar Laboratório Simulado" })).getByRole("button", { name: "Salvar prestador" }));
+    await waitFor(() => expect(api.updateExamProvider).toHaveBeenCalledWith("pv1", {
+      name: "Laboratório Simulado", cnes: "1234567", kind: "accredited", active: true, items: []
+    }));
   });
 
   it("trocar o token avisa que o atual deixa de funcionar", async () => {

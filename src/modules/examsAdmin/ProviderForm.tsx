@@ -9,6 +9,8 @@ import { providerBody, providerDraft, providerProblem, type ProviderDraft } from
 import { buttonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { alert, checkLabel, fieldLabel, fieldset, form, legend, muted, row } from "../exams/styles";
 
+type Row = Pick<ExamCatalogItem, "id" | "label"> & { deadlines: ExamCatalogItem["deadlines"] | null };
+
 export function ProviderForm({ initial, catalog, onReview, onCancel }: {
   initial?: ExamProvider; catalog: ExamCatalogItem[]; onReview(input: ExamProviderInput): void; onCancel(): void;
 }) {
@@ -16,8 +18,16 @@ export function ProviderForm({ initial, catalog, onReview, onCancel }: {
   const [ error, setError ] = useState<string | null>(null);
   const set = (patch: Partial<ProviderDraft>) => setDraft((d) => ({ ...d, ...patch }));
   // Exame inativo só aparece se o prestador já o tinha (para poder tirá-lo).
-  const shown = catalog.filter((c) => c.active || draft.items[c.id]);
-  const labelOf = (id: string) => catalog.find((c) => c.id === id)?.label ?? id;
+  // Exame do prestador fora da lista do catálogo também aparece (pelo SIGTAP):
+  // nada vai no corpo sem estar na tela.
+  const orphans: Row[] = (initial?.items ?? [])
+    .filter((i) => !catalog.some((c) => c.id === i.catalog_item_id))
+    .map((i) => ({ id: i.catalog_item_id, label: `exame SIGTAP ${i.sigtap_code}`, deadlines: null }));
+  const shown: Row[] = [ ...catalog.filter((c) => c.active || draft.items[c.id]), ...orphans ];
+  const labelOf = (id: string) => shown.find((c) => c.id === id)?.label ?? id;
+  const empty = catalog.length === 0
+    ? "o catálogo da cidade está vazio — inclua os exames primeiro"
+    : "nenhum exame ativo no catálogo — ative ou inclua os exames primeiro";
 
   function toggle(id: string, on: boolean) {
     setDraft((d) => {
@@ -53,7 +63,7 @@ export function ProviderForm({ initial, catalog, onReview, onCancel }: {
       </label>
       <fieldset style={fieldset}>
         <legend style={legend}>Exames que este prestador faz</legend>
-        {shown.length === 0 && <p style={muted}>o catálogo da cidade está vazio — inclua os exames primeiro</p>}
+        {shown.length === 0 && <p style={muted}>{empty}</p>}
         {shown.map((c) => (
           <div key={c.id} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             <label style={checkLabel}>

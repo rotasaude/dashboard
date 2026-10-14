@@ -27,7 +27,11 @@ export function ProvidersPanel({ onGoToSecurity }: { onGoToSecurity?(): void }) 
   const catalog = useQuery({ queryKey: [ EXAM_ADMIN_CATALOG_KEY ], queryFn: listCatalogItems, retry: false });
   const [ editing, setEditing ] = useState<Editing | null>(null);
   const [ confirming, setConfirming ] = useState<Confirming | null>(null);
-  const [ access, setAccess ] = useState<ExamProvider | null>(null);
+  // Só o id: o prestador vem da lista relida, para o acesso aberto refletir o
+  // token depois de gerar/revogar (sem isso, um segundo "Gerar" trocaria o
+  // token recém-entregue sem o aviso de que o anterior deixa de funcionar).
+  const [ accessId, setAccessId ] = useState<string | null>(null);
+  const access = accessId ? providers.data?.find((p) => p.id === accessId) ?? null : null;
   const [ notice, setNotice ] = useState<string | null>(null);
   const busy = editing !== null || access !== null;
 
@@ -59,7 +63,7 @@ export function ProvidersPanel({ onGoToSecurity }: { onGoToSecurity?(): void }) 
                   <button type="button" aria-label={`Editar ${p.name}`} style={secondaryButtonStyle} disabled={busy}
                     onClick={() => { setNotice(null); setEditing({ provider: p }); }}>Editar</button>
                   <button type="button" aria-label={`Acesso de ${p.name}`} style={secondaryButtonStyle} disabled={busy}
-                    onClick={() => { setNotice(null); setAccess(p); }}>Acesso</button>
+                    onClick={() => { setNotice(null); setAccessId(p.id); }}>Acesso</button>
                 </span>
               ) }
             ]}
@@ -91,8 +95,9 @@ export function ProvidersPanel({ onGoToSecurity }: { onGoToSecurity?(): void }) 
             translateError={(err) => (errorCode(err) ? examError(err) : null)}
           />
         )}
+        {/* key = id: o estado local (o token, enquanto na tela) sobrevive à releitura. */}
         {access && (
-          <ProviderAccess key={access.id} provider={access} onGoToSecurity={onGoToSecurity} onChanged={reload} onClose={() => setAccess(null)} />
+          <ProviderAccess key={access.id} provider={access} onGoToSecurity={onGoToSecurity} onChanged={reload} onClose={() => setAccessId(null)} />
         )}
       </div>
     </Panel>

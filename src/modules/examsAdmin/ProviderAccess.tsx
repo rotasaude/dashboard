@@ -51,7 +51,7 @@ export function ProviderAccess({ provider, onGoToSecurity, onChanged, onClose }:
       {token && (
         <section aria-label="Token FHIR novo" style={box}>
           <p style={alert}>Copie agora: o token não aparece de novo. Ele substitui o anterior, que deixa de funcionar.</p>
-          <code className="mono" style={{ overflowWrap: "anywhere", fontSize: 13 }}>{token}</code>
+          <code className="mono" style={{ overflowWrap: "anywhere", fontSize: 13, userSelect: "all" }}>{token}</code>
           <div style={row}>
             <button type="button" style={secondaryButtonStyle} onClick={() => void copy()}>Copiar</button>
             <button type="button" style={secondaryButtonStyle} onClick={() => { setToken(null); setCopyNote(null); }}>Já guardei</button>
