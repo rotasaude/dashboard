@@ -2542,15 +2542,21 @@ export async function acknowledgeExam(id: string, reason?: string): Promise<void
   await jsonFetch<unknown>(examPath("orders", id, "acknowledge"), postProfessional(reason ? { reason } : {}));
 }
 
-export async function listPendingAcknowledgements(): Promise<PendingAcknowledgements> {
+export async function listPendingAcknowledgements(before: string | null = null): Promise<PendingAcknowledgements> {
+  const p = new URLSearchParams();
+  if (before) p.set("before", before);
+  p.set("limit", String(EXAM_PAGE_SIZE));
   const body = await jsonFetch<{ orders: ExamOrder[]; denied?: ExamOrder[]; next_before?: string | null }>(
-    examPath("acknowledgements", "pending"));
+    withQuery(examPath("acknowledgements", "pending"), p));
   return { orders: body.orders, denied: body.denied ?? [], next_before: body.next_before ?? null };
 }
 
 // 403 `not_in_team` = o profissional não está em equipe de referência ativa.
-export function listTeamAcknowledgements(): Promise<ExamOrderPage> {
-  return jsonFetch(examPath("acknowledgements", "team"));
+export function listTeamAcknowledgements(before: string | null = null): Promise<ExamOrderPage> {
+  const p = new URLSearchParams();
+  if (before) p.set("before", before);
+  p.set("limit", String(EXAM_PAGE_SIZE));
+  return jsonFetch(withQuery(examPath("acknowledgements", "team"), p));
 }
 
 export function recordExternalResult(input: ExternalResultInput): Promise<ExamResult> {

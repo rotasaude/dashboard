@@ -13,7 +13,7 @@ export const EXAM_PENDING_REFRESH_MS = 60_000;
 export function useExamPending(enabled: boolean, userId: string | null) {
   return useQuery({
     queryKey: [ EXAM_PENDING_KEY, userId ],
-    queryFn: listPendingAcknowledgements,
+    queryFn: () => listPendingAcknowledgements(),
     enabled,
     refetchInterval: enabled ? EXAM_PENDING_REFRESH_MS : false,
     gcTime: 0, staleTime: 0, retry: false

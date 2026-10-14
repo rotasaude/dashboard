@@ -32,6 +32,7 @@ import { Protocols } from "./modules/Protocols";
 import { Queues } from "./modules/Queues";
 import { Events } from "./modules/Events";
 import { Health } from "./modules/Health";
+import { ExamAcknowledgements } from "./modules/ExamAcknowledgements";
 import { Placeholder } from "./modules/Placeholder";
 import { ProtocolEditor } from "./modules/ProtocolEditor";
 import { Security } from "./modules/Security";
@@ -201,6 +202,7 @@ export function renderModule(active: ModuleId, setActive: (id: ModuleId) => void
     case "sncr":           return <SncrAccount />;
     case "sncr-overview":  return <SncrOverview />;
     case "clinical-documents-admin": return <ClinicalDocumentsAdmin onGoToSecurity={() => setActive("security")} />;
+    case "exam-acknowledgements": return <ExamAcknowledgements />;
     default:               return <Placeholder title={labelFor(active)} />;
   }
 }
