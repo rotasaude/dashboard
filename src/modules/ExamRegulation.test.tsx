@@ -7,13 +7,20 @@ vi.mock("../lib/api", async (importOriginal) => {
   return { ...real, fetchCurrentSession: vi.fn(), listRegulationQueue: vi.fn(), listEnabledProviders: vi.fn(), authorizeExam: vi.fn(), denyExam: vi.fn() };
 });
 
+vi.mock("../lib/exams", async (importOriginal) => {
+  const real = await importOriginal<typeof import("../lib/exams")>();
+  return { ...real, refreshExams: vi.fn(real.refreshExams) };
+});
+
 import * as api from "../lib/api";
+import * as exams from "../lib/exams";
 import { ApiError } from "../lib/api";
 import { ExamRegulation } from "./ExamRegulation";
 import { renderWithProviders } from "../test/campaignFixtures";
 import { examOrder, examUser } from "../test/examFixtures";
 
 const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
+const refreshSpy = mocked(exams.refreshExams);
 const WAITING = examOrder({ status: "awaiting_authorization", priority: "urgent", provider: null, cid10_justification: "E11" });
 afterEach(cleanup);
 
@@ -23,13 +30,15 @@ async function decide() {
 }
 
 describe("ExamRegulation", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     for (const fn of [ api.fetchCurrentSession, api.listRegulationQueue, api.listEnabledProviders, api.authorizeExam, api.denyExam ]) mocked(fn).mockReset();
     mocked(api.fetchCurrentSession).mockResolvedValue(examUser([ "exam_regulator" ], { id: "rg1" }));
     mocked(api.listRegulationQueue).mockResolvedValue({ orders: [ WAITING ], next_before: null });
     mocked(api.listEnabledProviders).mockResolvedValue([ { id: "pv1", name: "Laboratório Simulado" } ]);
     mocked(api.authorizeExam).mockResolvedValue(undefined);
     mocked(api.denyExam).mockResolvedValue(undefined);
+    const real = await vi.importActual<typeof import("../lib/exams")>("../lib/exams");
+    refreshSpy.mockReset().mockImplementation(real.refreshExams);
   });
 
   it("fila com prioridade e justificativa; autorizar exige e manda o prestador", async () => {
@@ -184,5 +193,26 @@ describe("ExamRegulation", () => {
     expect((await screen.findByText("exame não encontrado — atualize a lista")).getAttribute("role")).toBe("alert");
     expect(screen.queryByRole("region", { name: "Decidir: Hemograma completo de Joana Lima" })).toBeNull();
     await waitFor(() => expect(api.listRegulationQueue).toHaveBeenCalledTimes(2));
+  });
+  it("duas decisões sobrepostas: a releitura da primeira só devolve a primeira linha", async () => {
+    const OTHER = { ...WAITING, id: "eo2", label: "Glicemia de jejum" };
+    mocked(api.listRegulationQueue).mockResolvedValue({ orders: [ WAITING, OTHER ], next_before: null });
+    const settles: (() => void)[] = [];
+    refreshSpy.mockImplementation(() => new Promise<void>((r) => { settles.push(r); }));
+    renderWithProviders(<ExamRegulation />);
+    let panel = await decide();
+    fireEvent.change(await within(panel).findByLabelText("Prestador"), { target: { value: "pv1" } });
+    fireEvent.click(within(panel).getByRole("button", { name: "Autorizar" }));
+    await waitFor(() => expect(settles.length).toBe(1));
+    fireEvent.click(await screen.findByRole("button", { name: "Decidir Glicemia de jejum de Joana Lima" }));
+    panel = screen.getByRole("region", { name: "Decidir: Glicemia de jejum de Joana Lima" });
+    fireEvent.change(await within(panel).findByLabelText("Prestador"), { target: { value: "pv1" } });
+    fireEvent.click(within(panel).getByRole("button", { name: "Autorizar" }));
+    await waitFor(() => expect(settles.length).toBe(2));
+    settles[0]();
+    expect(await screen.findByRole("button", { name: "Decidir Hemograma completo de Joana Lima" })).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Decidir Glicemia de jejum de Joana Lima" })).toBeNull();
+    settles[1]();
+    expect(await screen.findByRole("button", { name: "Decidir Glicemia de jejum de Joana Lima" })).not.toBeNull();
   });
 });

@@ -41,11 +41,20 @@ export function ExamRegulation() {
 
   function finish(next: { kind: "ok" | "error"; text: string }) {
     // Some da lista já, sem esperar a releitura (a fila antiga fica em cache durante o refetch).
-    if (deciding) setHidden((prev) => new Set(prev).add(deciding.id));
+    const id = deciding?.id ?? null;
+    if (id) setHidden((prev) => new Set(prev).add(id));
     setDeciding(null);
     setNotice(next);
-    // Releu a fila: o que ainda aguarda volta a aparecer.
-    void refreshExams(queryClient).finally(() => setHidden(new Set()));
+    // Releu a fila: se ainda aguarda, volta a aparecer. Só o desta decisão —
+    // outra decisão sobreposta espera a própria releitura.
+    void refreshExams(queryClient).finally(() => {
+      if (!id) return;
+      setHidden((prev) => {
+        const rest = new Set(prev);
+        rest.delete(id);
+        return rest;
+      });
+    });
   }
 
   return (
