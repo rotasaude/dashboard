@@ -3,7 +3,7 @@
 // guias do prestador do usuário `exam_provider`, por situação e em atraso.
 // O isolamento é do api (guia de outro prestador = 404); a tela não tem
 // caminho para prontuário, linha do tempo ou consulta.
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { listProviderOrders, type ProviderOrder } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import {
@@ -34,13 +34,17 @@ export function ProviderPortal() {
   const [ gone, setGone ] = useState<string | null>(null);
   const { query, orders } = useExamOrderPages([ PROVIDER_ORDERS_KEY, tab ],
     (before) => listProviderOrders(tab === "overdue" ? { overdue: true, before } : { statuses: [ tab ], before }), allowed);
+  // O número em atraso vem em toda página; enquanto a aba nova carrega, vale o último lido.
+  const lastOverdue = useRef(0);
+  const freshOverdue = query.data?.pages[0]?.overdue_count;
+  if (freshOverdue !== undefined) lastOverdue.current = freshOverdue;
 
   if (!user) return null;
   if (!canUseExams(user)) return <Frame><EmptyState title={EXAMS_DISABLED} /></Frame>;
   if (!allowed) return <Frame><EmptyState title={EXAMS_NO_ROLE} /></Frame>;
 
   const open = openId ? orders.find((o) => o.id === openId) ?? null : null;
-  const overdueCount = query.data?.pages[0]?.overdue_count ?? 0;
+  const overdueCount = freshOverdue ?? lastOverdue.current;
   const tabs: { key: PortalTab; label: string }[] = [
     { key: "awaiting_schedule", label: "A agendar" },
     { key: "scheduled", label: "Agendadas" },

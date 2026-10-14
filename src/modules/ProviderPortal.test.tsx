@@ -46,7 +46,9 @@ describe("ProviderPortal", () => {
     expect(within(list).getByText("CPF final 725")).not.toBeNull();
     expect(screen.getByRole("status").textContent).toBe("2 guias em atraso");
     expect(screen.getByRole("tab", { name: "Em atraso (2)" })).not.toBeNull();
-    expect(document.body.textContent).not.toMatch(/prontu[aá]rio|linha do tempo|consulta/i);
+    // Nenhum caminho para prontuário, linha do tempo ou consulta.
+    const actions = [ ...screen.queryAllByRole("button"), ...screen.queryAllByRole("link"), ...screen.queryAllByRole("tab") ];
+    expect(actions.filter((el) => /prontu[aá]rio|linha do tempo|consulta/i.test(el.textContent ?? ""))).toEqual([]);
     expect(api.listProviderOrders).toHaveBeenCalledWith({ statuses: [ "awaiting_schedule" ], before: null });
   });
 
@@ -56,6 +58,43 @@ describe("ProviderPortal", () => {
     await waitFor(() => expect(api.listProviderOrders).toHaveBeenLastCalledWith({ statuses: [ "scheduled" ], before: null }));
     fireEvent.click(screen.getByRole("tab", { name: "Em atraso (2)" }));
     await waitFor(() => expect(api.listProviderOrders).toHaveBeenLastCalledWith({ overdue: true, before: null }));
+  });
+
+  it("ao trocar de aba, o número em atraso continua enquanto a nova aba carrega", async () => {
+    renderWithProviders(<ProviderPortal />);
+    await screen.findByRole("tab", { name: "Em atraso (2)" });
+    mocked(api.listProviderOrders).mockReturnValue(new Promise(() => {}));
+    fireEvent.click(screen.getByRole("tab", { name: "Agendadas" }));
+    await waitFor(() => expect(api.listProviderOrders).toHaveBeenLastCalledWith({ statuses: [ "scheduled" ], before: null }));
+    expect(screen.getByText("carregando…")).not.toBeNull();
+    expect(screen.getByRole("tab", { name: "Em atraso (2)" })).not.toBeNull();
+    expect(screen.getByRole("status").textContent).toBe("2 guias em atraso");
+  });
+
+  it("ações por situação: a agendar só agenda; com resultado, nenhuma ação", async () => {
+    renderWithProviders(<ProviderPortal />);
+    let guide = await openGuide();
+    expect(within(guide).getByRole("button", { name: "Agendar" })).not.toBeNull();
+    expect(within(guide).queryByRole("button", { name: "Registrar coleta" })).toBeNull();
+    expect(within(guide).queryByRole("button", { name: "Registrar resultado" })).toBeNull();
+    cleanup();
+    mocked(api.listProviderOrders).mockResolvedValue({ orders: [ providerOrder({ status: "resulted" }) ], next_before: null, overdue_count: 0 });
+    renderWithProviders(<ProviderPortal />);
+    guide = await openGuide();
+    expect(within(guide).getAllByRole("button").map((b) => b.textContent)).toEqual([ "Fechar" ]);
+  });
+
+  it("Carregar mais manda o cursor da página anterior", async () => {
+    mocked(api.listProviderOrders)
+      .mockResolvedValueOnce({ orders: [ providerOrder() ], next_before: "cur-1", overdue_count: 2 })
+      .mockResolvedValueOnce({ orders: [ providerOrder({ id: "eo2", short_code: "Z9Z9Z9Z9Z9", patient: { name: "Ana Reis", birth_date: "1990-01-01", cpf_last3: "111" } }) ],
+        next_before: null, overdue_count: 2 });
+    renderWithProviders(<ProviderPortal />);
+    fireEvent.click(await screen.findByRole("button", { name: "Carregar mais" }));
+    await waitFor(() => expect(api.listProviderOrders).toHaveBeenLastCalledWith({ statuses: [ "awaiting_schedule" ], before: "cur-1" }));
+    expect(await screen.findByText("Ana Reis")).not.toBeNull();
+    expect(screen.getByText("Joana Lima")).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Carregar mais" })).toBeNull();
   });
 
   it("agenda sem escolher prestador", async () => {
