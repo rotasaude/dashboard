@@ -18,6 +18,7 @@ import { ReceptionGuideForm } from "./exams/ReceptionGuideForm";
 import { PatientLookup } from "./exams/PatientLookup";
 import { ExternalResultForm } from "./exams/ExternalResultForm";
 import { UnitExamList } from "./exams/UnitExamList";
+import { OverduePanel } from "./exams/OverduePanel";
 import { okText, row, stack } from "./exams/styles";
 
 type Mode = null | "guide" | "external";
@@ -66,6 +67,7 @@ export function ExamsUnit() {
             </Panel>
           )}
           <UnitExamList unit={unit} />
+          <OverduePanel unitId={unit.id} canOpen />
         </>
       )}
     </Frame>
