@@ -134,7 +134,8 @@ describe("ExamsUnit", () => {
     fireEvent.click(within(list).getByRole("tab", { name: "Agendados" }));
     await waitFor(() => expect(api.listExamOrders).toHaveBeenCalledWith({ unitId: "u1", statuses: [ "scheduled" ], before: null }));
     fireEvent.click(await within(list).findByRole("button", { name: "Abrir Hemograma completo de Joana Lima" }));
-    expect(await screen.findByRole("region", { name: "Exame Hemograma completo" })).not.toBeNull();
+    const opened = await screen.findByRole("region", { name: "Exame Hemograma completo" });
+    await waitFor(() => expect(document.activeElement).toBe(within(opened).getByRole("heading", { name: "Hemograma completo" })));
   });
 
   it("trocar de unidade fecha o exame aberto e volta à primeira aba", async () => {

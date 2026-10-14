@@ -56,7 +56,7 @@ export function UnitExamList({ unit }: { unit: HealthUnit }) {
         {query.hasNextPage && (
           <div><button type="button" style={secondaryButtonStyle} onClick={() => void query.fetchNextPage()}>Carregar mais</button></div>
         )}
-        {open && <ExamOrderDetail key={open} id={open} onClose={() => setOpen(null)} />}
+        {open && <ExamOrderDetail key={open} id={open} focusOnOpen onClose={() => setOpen(null)} />}
       </div>
     </Panel>
   );

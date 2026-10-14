@@ -43,7 +43,8 @@ describe("Exames atrasados", () => {
     }));
     expect(within(panel).getByRole("status").textContent).toBe("1 exame atrasado");
     fireEvent.click(within(panel).getByRole("button", { name: "Abrir Hemograma completo de Joana Lima" }));
-    expect(await screen.findByRole("region", { name: "Exame Hemograma completo" })).not.toBeNull();
+    const opened = await screen.findByRole("region", { name: "Exame Hemograma completo" });
+    await waitFor(() => expect(document.activeElement).toBe(within(opened).getByRole("heading", { name: "Hemograma completo" })));
   });
 
   it("coordenação: a cidade inteira, com a unidade e sem abrir o exame", async () => {

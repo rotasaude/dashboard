@@ -6,7 +6,7 @@
 // antes) fecha o formulário, explica e relê — sem botões até a releitura.
 // Duas visões (clínica e administrativa): mostra-se o que vem; CID e CNS de
 // quem pediu só quando o api manda (A42/A44).
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   acknowledgeExam, cancelExam, collectExam, errorCode, getExamOrder, listEnabledProviders, registerExamResult, scheduleExam,
@@ -39,7 +39,11 @@ function eventText(e: ExamEvent): string {
   return `${fmtDateTime(e.occurred_at)} · ${eventLabel(e.kind)} · ${actor}${reason ? ` — ${reason}` : ""}`;
 }
 
-export function ExamOrderDetail({ id, onClose, onChanged }: { id: string; onClose(): void; onChanged?(): void }) {
+// `focusOnOpen`: aberto abaixo de uma tabela, o foco vai para o título do
+// exame (uma vez, quando ele chega) — leitor de tela e teclado acham o detalhe.
+export function ExamOrderDetail({ id, onClose, onChanged, focusOnOpen = false }: {
+  id: string; onClose(): void; onChanged?(): void; focusOnOpen?: boolean;
+}) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const query = useQuery({ queryKey: [ EXAM_ORDER_KEY, id ], queryFn: () => getExamOrder(id), gcTime: 0, staleTime: 0, retry: false });
@@ -47,6 +51,16 @@ export function ExamOrderDetail({ id, onClose, onChanged }: { id: string; onClos
   const [ rereading, setRereading ] = useState(false);
   const message = useActionMessage();
   const order = query.data;
+  const headingRef = useRef<HTMLHeadingElement | null>(null);
+  const focused = useRef(false);
+  const loaded = !!order;
+  useEffect(() => {
+    const el = headingRef.current;
+    if (!focusOnOpen || !loaded || focused.current || !el) return;
+    focused.current = true;
+    el.focus();
+    if (typeof el.scrollIntoView === "function") el.scrollIntoView({ block: "nearest" });
+  }, [ focusOnOpen, loaded ]);
   const needsProvider = mode === "schedule" && !!order && !order.provider;
   const providers = useQuery({
     queryKey: [ EXAM_PROVIDER_REFS_KEY, order?.sigtap_code ?? "" ],
@@ -101,7 +115,7 @@ export function ExamOrderDetail({ id, onClose, onChanged }: { id: string; onClos
   return (
     <section aria-label={`Exame ${order.label}`} style={panel}>
       <div style={row}>
-        <h3 style={title}>{order.label}</h3>
+        <h3 ref={headingRef} tabIndex={-1} style={title}>{order.label}</h3>
         <Tag tone={examStatusTone(order.status)}>{examStatusLabel(order.status)}</Tag>
         {order.priority === "urgent" && <Tag tone="urgent">urgente</Tag>}
         {order.escalated && <Tag tone="warn">na fila da equipe</Tag>}

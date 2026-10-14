@@ -80,7 +80,8 @@ describe("PatientExams", () => {
     mocked(api.getExamOrder).mockResolvedValue(examOrder());
     renderWithProviders(<PatientExams patientId="pa1" />);
     fireEvent.click(await screen.findByRole("button", { name: "Abrir Hemograma completo" }));
-    expect(await screen.findByRole("region", { name: "Exame Hemograma completo" })).not.toBeNull();
+    const opened = await screen.findByRole("region", { name: "Exame Hemograma completo" });
+    await waitFor(() => expect(document.activeElement).toBe(within(opened).getByRole("heading", { name: "Hemograma completo" })));
   });
 
   it("sem papel de profissional: não lê nem mostra resultados externos", async () => {

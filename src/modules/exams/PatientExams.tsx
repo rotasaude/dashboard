@@ -67,7 +67,7 @@ export function PatientExams({ patientId, consultationId = null }: PatientExamsP
       {query.hasNextPage && (
         <div><button type="button" style={secondaryButtonStyle} onClick={() => void query.fetchNextPage()}>Carregar mais</button></div>
       )}
-      {open && <ExamOrderDetail key={open} id={open} onClose={() => setOpen(null)} />}
+      {open && <ExamOrderDetail key={open} id={open} focusOnOpen onClose={() => setOpen(null)} />}
 
       {roles.professional && <section aria-label="Resultados externos" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         <strong style={{ fontSize: 12.5 }}>Resultados externos</strong>
