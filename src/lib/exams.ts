@@ -6,7 +6,7 @@
 import type { QueryClient } from "@tanstack/react-query";
 import {
   ApiError, EXAM_UPLOAD_MAX_BYTES, EXAM_UPLOAD_TYPES, errorCode, isExamLinkExpired,
-  type ExamDeadlines, type ExamOrder, type ExamOverdue, type ExamPriority, type ExamProviderKind, type ExamReleasePolicy,
+  type ExamDeadlines, type ExamEvent, type ExamOrder, type ExamOverdue, type ExamPriority, type ExamProviderKind, type ExamReleasePolicy,
   type ExamResultField, type ExamStage, type ReceptionOrderInput, type ResultInput, type ScheduleInput, type ScheduleWhen
 } from "./api";
 import { OPENING_ENDED } from "./clinicalRecord";
@@ -36,6 +36,10 @@ const MOVING_KEYS = [ EXAM_ORDERS_KEY, EXAM_ORDER_KEY, EXAM_PENDING_KEY, EXAM_TE
 export const EXAMS_DISABLED = "o rastreamento de exames está desligado nesta cidade";
 export const EXAMS_NO_ROLE = "seu papel não permite ver esta tela";
 export const PDF_LINK_EXPIRED = "o link do laudo expirou — abra de novo";
+// 404 no laudo: token de outro usuário, forjado ou o laudo trocou — relê o exame.
+export const PDF_NOT_FOUND = "laudo não encontrado — abra o exame de novo";
+// 409 no detalhe: a tela já relê sozinha, não manda o usuário atualizar.
+export const DETAIL_TRANSITION_REREAD = "a situação do exame mudou; a tela foi atualizada";
 
 const STATUS_LABEL: Record<string, string> = {
   awaiting_authorization: "aguardando autorização",
@@ -119,9 +123,14 @@ export function escalationLabel(code: string | null | undefined): string {
 // crítico vence — também quando a 1ª escalada foi por prazo e o crítico veio
 // depois (A31, o evento está no detalhe); solicitante digitado é escalado já
 // no resultado; o resto é prazo.
+// A31: a marca "crítico" também vem de qualquer escalada por crítico no andamento.
+export function criticalFromTrail(events: ExamEvent[] | null | undefined): boolean {
+  return !!events?.some((e) => e.kind === "escalated" && e.reason === "critical");
+}
+
 export function escalationReason(o: ExamOrder): EscalationReason {
   if (o.result?.critical) return "critical";
-  if (o.events?.some((e) => e.kind === "escalated" && e.reason === "critical")) return "critical";
+  if (criticalFromTrail(o.events)) return "critical";
   if (o.requester.user_id === null) return "unlinked_requester";
   return "overdue";
 }

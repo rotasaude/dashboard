@@ -2,8 +2,9 @@
 // O resultado (contrato §2 `<exam_result>`): data, laboratório, origem,
 // "crítico", os valores e o laudo. Duas visões: a clínica traz valores,
 // crítico e laudo; a administrativa (unidade, regulador) não traz nenhum dos
-// três — mostra-se o que vem, sem supor o que falta. `critical` de fora
-// cobre a escalada por crítico registrada no andamento (A31).
+// três — a clínica sempre manda `critical` (booleano), então é ele que decide
+// a visão. `critical` de fora cobre a escalada por crítico do andamento (A31).
+// `onExpired`: o link do laudo venceu ou sumiu (410/404) — releia o exame.
 import { useState } from "react";
 import type { ExamResult, ExamResultValue } from "../../lib/api";
 import { SOURCE_LABEL, fmtDay } from "../../lib/exams";
@@ -16,7 +17,7 @@ import { alert, box, muted, row } from "./styles";
 
 export function ExamResultBlock({ result, onExpired, critical }: { result: ExamResult; onExpired(): void; critical?: boolean }) {
   const [ error, setError ] = useState<string | null>(null);
-  const clinical = result.values !== undefined || result.pdf_url !== undefined || result.critical !== undefined;
+  const clinical = typeof result.critical === "boolean";
   const values = result.values ?? [];
   const pdfUrl = result.pdf_url ?? null;
   const isCritical = result.critical === true || (clinical && critical === true);
@@ -27,7 +28,7 @@ export function ExamResultBlock({ result, onExpired, critical }: { result: ExamR
     const outcome = await openExamPdf(pdfUrl);
     if (outcome.ok) return;
     setError(outcome.text);
-    if (outcome.expired) onExpired();
+    if (outcome.reread) onExpired();
   }
 
   return (
@@ -50,7 +51,7 @@ export function ExamResultBlock({ result, onExpired, critical }: { result: ExamR
           rowKey={(v, i) => `${v.key ?? v.loinc ?? "valor"}:${i}`}
         />
       )}
-      {result.values !== undefined && values.length === 0 && <p style={muted}>sem valores digitados — veja o laudo</p>}
+      {clinical && values.length === 0 && <p style={muted}>{pdfUrl ? "sem valores digitados — veja o laudo" : "sem valores digitados"}</p>}
       {result.acknowledged_at && <p style={muted}>{`ciência em ${fmtDateTime(result.acknowledged_at)}`}</p>}
       {pdfUrl && <div><ActionButton variant="secondary" onClick={open}>Abrir laudo</ActionButton></div>}
       {error && <p role="alert" style={alert}>{error}</p>}

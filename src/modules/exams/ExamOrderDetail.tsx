@@ -14,7 +14,7 @@ import {
 } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import {
-  EXAM_ORDER_KEY, EXAM_PROVIDER_REFS_KEY, ORIGIN_LABEL, escalationLabel, eventLabel, examActions, examError, examRoles,
+  DETAIL_TRANSITION_REREAD, EXAM_ORDER_KEY, EXAM_PROVIDER_REFS_KEY, ORIGIN_LABEL, criticalFromTrail, escalationLabel, eventLabel, examActions, examError, examRoles,
   examStatusLabel, examStatusTone, overdueLabel, refreshExams, scheduleBody
 } from "../../lib/exams";
 import { cityIsoDate, fmtDateTime } from "../../lib/format";
@@ -63,15 +63,19 @@ export function ExamOrderDetail({ id, onClose, onChanged }: { id: string; onClos
     } catch (err) {
       if (errorCode(err) !== "invalid_transition") throw err;
       setMode(null);
-      message.fail(examError(err));
-      setRereading(true);
-      try { await refreshExams(queryClient); } finally { setRereading(false); }
+      message.fail(DETAIL_TRANSITION_REREAD);
+      await reread();
       return;
     }
     setMode(null);
     message.ok(okText);
-    await refreshExams(queryClient);
+    await reread();
     onChanged?.();
+  }
+  // Sem botões até a releitura: a situação de antes poderia oferecer ação velha.
+  async function reread(): Promise<void> {
+    setRereading(true);
+    try { await refreshExams(queryClient); } finally { setRereading(false); }
   }
   // Confirmação de um clique: a recusa aparece na mensagem do exame.
   const confirm = (run: () => Promise<void>, okText: string) => () =>
@@ -92,7 +96,7 @@ export function ExamOrderDetail({ id, onClose, onChanged }: { id: string; onClos
   const actions = examActions(order, examRoles(user), user?.id ?? null);
   const requester = order.requester.user_id ? order.requester.name : `${order.requester.name} (digitado)`;
   const scheduled = order.scheduled_at ? `${fmtDateTime(order.scheduled_at)} · ${order.scheduled_place ?? ""}` : "—";
-  const criticalInTrail = !!order.events?.some((e) => e.kind === "escalated" && e.reason === "critical");
+  const criticalInTrail = criticalFromTrail(order.events);
 
   return (
     <section aria-label={`Exame ${order.label}`} style={panel}>

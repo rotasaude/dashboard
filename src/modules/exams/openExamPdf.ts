@@ -5,17 +5,18 @@
 // nem é baixado. Link vencido (C9: 410 `link_expired`) devolve `expired` para
 // quem chamou reler o exame (novo `pdf_url`); 404 é "não achado". A mensagem
 // do erro (que traz `/exams/files/<token>`) nunca sai daqui: só a frase.
-import { fetchExamPdf } from "../../lib/api";
-import { PDF_LINK_EXPIRED, examError, pdfLinkExpired } from "../../lib/exams";
+// `reread`: 410 e 404 pedem para quem chamou reler o exame (novo `pdf_url`).
+import { ApiError, fetchExamPdf } from "../../lib/api";
+import { PDF_LINK_EXPIRED, PDF_NOT_FOUND, examError, pdfLinkExpired } from "../../lib/exams";
 
 export const POPUP_BLOCKED = "o navegador bloqueou a janela nova — permita janelas deste site para ver o laudo";
 const BLOB_TTL_MS = 60_000;
 
-export type PdfOutcome = { ok: true } | { ok: false; expired: boolean; text: string };
+export type PdfOutcome = { ok: true } | { ok: false; expired: boolean; reread: boolean; text: string };
 
 export async function openExamPdf(pdfUrl: string): Promise<PdfOutcome> {
   const win = window.open("", "_blank");
-  if (!win) return { ok: false, expired: false, text: POPUP_BLOCKED };
+  if (!win) return { ok: false, expired: false, reread: false, text: POPUP_BLOCKED };
   try { win.opener = null; } catch { /* algumas janelas não deixam */ }
   try {
     const file = await fetchExamPdf(pdfUrl);
@@ -26,6 +27,8 @@ export async function openExamPdf(pdfUrl: string): Promise<PdfOutcome> {
   } catch (err) {
     win.close();
     const expired = pdfLinkExpired(err);
-    return { ok: false, expired, text: expired ? PDF_LINK_EXPIRED : examError(err) };
+    const missing = err instanceof ApiError && err.status === 404;
+    const text = expired ? PDF_LINK_EXPIRED : missing ? PDF_NOT_FOUND : examError(err);
+    return { ok: false, expired, reread: expired || missing, text };
   }
 }

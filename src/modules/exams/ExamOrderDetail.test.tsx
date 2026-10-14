@@ -94,8 +94,9 @@ describe("ExamOrderDetail", () => {
 
   it("409 invalid_transition: explica, fecha o formulário e relê", async () => {
     sessionAs([ "citizen_verifier" ], "us9");
+    let reread!: (o: ReturnType<typeof examOrder>) => void;
     mocked(api.getExamOrder).mockResolvedValueOnce(examOrder({ status: "scheduled", scheduled_at: "2026-10-20T08:30:00-03:00", scheduled_place: "Posto" }))
-      .mockResolvedValue(examOrder({ status: "collected" }));
+      .mockImplementationOnce(() => new Promise((resolve) => { reread = resolve; }));
     mocked(api.registerExamResult).mockRejectedValue(new ApiError(409, { error: "invalid_transition", status: "collected" }, "x"));
     mocked(api.uploadExamFile).mockResolvedValue("up1");
     renderWithProviders(<ExamOrderDetail id="eo1" onClose={vi.fn()} />);
@@ -106,12 +107,32 @@ describe("ExamOrderDetail", () => {
     await within(form).findByText("anexado: l.pdf");
     fireEvent.change(within(form).getByLabelText("Laboratório"), { target: { value: "Lab" } });
     fireEvent.click(within(form).getByRole("button", { name: "Registrar resultado" }));
-    expect((await screen.findByText("a situação do exame mudou — atualize para ver a atual")).getAttribute("role")).toBe("alert");
+    expect((await screen.findByText("a situação do exame mudou; a tela foi atualizada")).getAttribute("role")).toBe("alert");
     expect(screen.queryByRole("form", { name: "Registrar resultado" })).toBeNull();
     await waitFor(() => expect(api.getExamOrder).toHaveBeenCalledTimes(2));
+    expect(screen.getByText("relendo o exame…")).not.toBeNull();
+    expect(screen.queryByRole("button", { name: /Registrar|Agendar|Cancelar exame|Fechar/ })).toBeNull();
+    reread(examOrder({ status: "collected" }));
     expect(await screen.findByText("coletado")).not.toBeNull();
     expect(screen.queryByRole("button", { name: "Registrar coleta" })).toBeNull();
     expect(screen.getByRole("button", { name: "Registrar resultado" })).not.toBeNull();
+  });
+
+  it("depois de uma ação certa, nenhum botão até a releitura do exame", async () => {
+    sessionAs([ "citizen_verifier" ], "us9");
+    let reread!: (o: ReturnType<typeof examOrder>) => void;
+    mocked(api.getExamOrder).mockResolvedValueOnce(examOrder({ status: "scheduled" }))
+      .mockImplementationOnce(() => new Promise((resolve) => { reread = resolve; }));
+    mocked(api.collectExam).mockResolvedValue(undefined);
+    renderWithProviders(<ExamOrderDetail id="eo1" onClose={vi.fn()} />);
+    fireEvent.click(within(await detail()).getByRole("button", { name: "Registrar coleta" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+    expect(await screen.findByText("relendo o exame…")).not.toBeNull();
+    expect(screen.queryByRole("button", { name: /Registrar|Agendar|Cancelar exame|Fechar/ })).toBeNull();
+    reread(examOrder({ status: "collected" }));
+    expect(await screen.findByRole("button", { name: "Registrar resultado" })).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Registrar coleta" })).toBeNull();
+    expect(screen.queryByText("relendo o exame…")).toBeNull();
   });
 
   it("registrar coleta pede confirmação", async () => {
@@ -174,13 +195,18 @@ describe("ExamOrderDetail", () => {
   });
 
   it("laudo com link vencido: avisa e relê o exame", async () => {
-    mocked(api.getExamOrder).mockResolvedValue(examOrder({ status: "resulted", result: examResult() }));
-    mocked(api.fetchExamPdf).mockRejectedValue(new ApiError(410, { error: "link_expired" }, "x"));
+    mocked(api.getExamOrder).mockResolvedValueOnce(examOrder({ status: "resulted", result: examResult() }))
+      .mockResolvedValue(examOrder({ status: "resulted", result: examResult({ pdf_url: "/exams/files/tok-er1-new" }) }));
+    mocked(api.fetchExamPdf).mockRejectedValueOnce(new ApiError(410, { error: "link_expired" }, "x"))
+      .mockResolvedValue({ blob: new Blob([ "%PDF" ], { type: "application/pdf" }), filename: null });
     renderWithProviders(<ExamOrderDetail id="eo1" onClose={vi.fn()} />);
     fireEvent.click(within(await detail()).getByRole("button", { name: "Abrir laudo" }));
     expect((await screen.findByRole("alert")).textContent).toBe("o link do laudo expirou — abra de novo");
     expect(win.close).toHaveBeenCalled();
     await waitFor(() => expect(api.getExamOrder).toHaveBeenCalledTimes(2));
+    fireEvent.click(screen.getByRole("button", { name: "Abrir laudo" }));
+    await waitFor(() => expect(api.fetchExamPdf).toHaveBeenLastCalledWith("/exams/files/tok-er1-new"));
+    await waitFor(() => expect(win.location.href).toBe("blob:laudo-1"));
   });
 
   it("visão administrativa (unidade): resultado sem valores, sem crítico e sem laudo", async () => {
@@ -239,19 +265,19 @@ describe("ExamOrderDetail", () => {
     expect(within(region).getByText("702002887429583")).not.toBeNull();
   });
 
-  it("laudo não achado (404): frase de não achado, sem reler e sem expor o token do link", async () => {
+  it("laudo não achado (404): frase do laudo, relê e não expõe o token do link", async () => {
     mocked(api.getExamOrder).mockResolvedValue(examOrder({ status: "resulted", result: examResult() }));
     mocked(api.fetchExamPdf).mockRejectedValue(new ApiError(404, { error: "not_found" }, "404 on /exams/files/tok-er1"));
     const log = vi.spyOn(console, "error");
     renderWithProviders(<ExamOrderDetail id="eo1" onClose={vi.fn()} />);
     fireEvent.click(within(await detail()).getByRole("button", { name: "Abrir laudo" }));
     const alert = await screen.findByRole("alert");
-    expect(alert.textContent).toBe("exame não encontrado — atualize a lista");
+    expect(alert.textContent).toBe("laudo não encontrado — abra o exame de novo");
     expect(win.close).toHaveBeenCalled();
     expect(URL.createObjectURL).not.toHaveBeenCalled();
     expect(document.body.textContent).not.toContain("tok-er1");
     expect(log.mock.calls.flat().join(" ")).not.toContain("tok-er1");
-    expect(api.getExamOrder).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(api.getExamOrder).toHaveBeenCalledTimes(2));
   });
 
   it("falha que não é do api: frase genérica, nunca a mensagem do erro", async () => {
@@ -270,6 +296,30 @@ describe("ExamOrderDetail", () => {
     fireEvent.click(within(await detail()).getByRole("button", { name: "Abrir laudo" }));
     expect((await screen.findByRole("alert")).textContent).toContain("o navegador bloqueou a janela nova");
     expect(api.fetchExamPdf).not.toHaveBeenCalled();
+  });
+
+  it("visão clínica sem valores e sem laudo não manda ver o laudo", async () => {
+    mocked(api.getExamOrder).mockResolvedValue(examOrder({
+      status: "resulted", result: { id: "er1", origin: "order", source: "unit", released_on: "2026-10-12", laboratory_name: "Lab", critical: false, values: [] }
+    }));
+    renderWithProviders(<ExamOrderDetail id="eo1" onClose={vi.fn()} />);
+    const result = within(await detail()).getByRole("region", { name: "Resultado" });
+    expect(within(result).getByText("sem valores digitados")).not.toBeNull();
+    expect(result.textContent).not.toContain("veja o laudo");
+    expect(result.textContent).not.toContain("ficam com quem pediu");
+  });
+
+  it("visão administrativa ignora crítico da trilha mesmo com campos inesperados", async () => {
+    sessionAs([ "citizen_verifier" ], "us9");
+    mocked(api.getExamOrder).mockResolvedValue(examOrder({
+      status: "resulted", escalated: true,
+      result: { id: "er1", origin: "order", source: "fhir", released_on: "2026-10-12", laboratory_name: "Lab", acknowledged_at: null },
+      events: [ { kind: "escalated", occurred_at: "2026-10-12T08:00:00-03:00", actor: { type: "system", name: null }, reason: "critical" } ]
+    }));
+    renderWithProviders(<ExamOrderDetail id="eo1" onClose={vi.fn()} />);
+    const result = within(await detail()).getByRole("region", { name: "Resultado" });
+    expect(within(result).queryByText("crítico")).toBeNull();
+    expect(within(result).getByText("valores e laudo ficam com quem pediu e com a equipe")).not.toBeNull();
   });
 
   it("visão administrativa do regulador traz o CID quando vem (A42)", async () => {

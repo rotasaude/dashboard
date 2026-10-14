@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { ApiError } from "./api";
 import {
   EMPTY_GUIDE, EXAMS_DISABLED, PDF_LINK_EXPIRED, cnesProblem, cpfTail, deadlineDraft, deadlinesFrom, deadlinesProblem, deadlinesSummary,
-  effectiveDeadline, emptyResultDraft, ESCALATION_LABEL, escalationLabel, escalationReason, eventLabel, examActions, examError, examRoles, examStatusLabel, fmtDay,
+  effectiveDeadline, emptyResultDraft, ESCALATION_LABEL, escalationLabel, escalationReason, criticalFromTrail, eventLabel, examActions, examError, examRoles, examStatusLabel, fmtDay,
   guideBody, guideProblem, mergeById, overdueLabel, pdfLinkExpired, pendingCountText, pendingNoticeText, providerCanSchedule, reasonProblem, resultBody, resultFieldsProblem,
   resultProblem, scheduleBody, scheduleProblem, scheduleWhen, sigtapProblem, uploadProblem, canUseExams
 } from "./exams";
@@ -241,5 +241,17 @@ describe("páginas e recusas", () => {
     expect(pdfLinkExpired(new ApiError(403, { error: "feature_disabled", feature: "exam_tracking" }, "x"))).toBe(false);
     expect(pdfLinkExpired(new ApiError(500, "", "x"))).toBe(false);
     expect(examError(new ApiError(410, { error: "link_expired" }, "x"))).toBe(PDF_LINK_EXPIRED);
+  });
+});
+
+describe("criticalFromTrail (A31)", () => {
+  const ev = (kind: string, reason: string | null) =>
+    ({ kind, occurred_at: "2026-10-12T08:00:00-03:00", actor: { type: "system" as const, name: null }, reason });
+  it("só a escalada por crítico conta", () => {
+    expect(criticalFromTrail(undefined)).toBe(false);
+    expect(criticalFromTrail([])).toBe(false);
+    expect(criticalFromTrail([ ev("escalated", "overdue") ])).toBe(false);
+    expect(criticalFromTrail([ ev("cancelled", "critical") ])).toBe(false);
+    expect(criticalFromTrail([ ev("escalated", "overdue"), ev("escalated", "critical") ])).toBe(true);
   });
 });
