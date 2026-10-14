@@ -20,11 +20,13 @@ interface Props {
   // "Minhas consultas" (dashboard#12): a lista completa do paciente, buscada ao abrir o adendo.
   loadPatientProblems?: () => Promise<PatientProblem[]>;
   searchDelayMs?: number;
+  // Módulo 21a: prioridade dos exames novos (exam_tracking); os já pedidos ficam só para leitura (A33).
+  examPriority?: boolean;
   onDone(addendum: Addendum): void;
   onCancel(): void;
 }
 
-export function AddendumForm({ consultation, options, patientProblems, loadPatientProblems, searchDelayMs, onDone, onCancel }: Props) {
+export function AddendumForm({ consultation, options, patientProblems, loadPatientProblems, searchDelayMs, examPriority, onDone, onCancel }: Props) {
   const full = useQuery({
     queryKey: [ "consultationProblems", consultation.id ], queryFn: () => loadPatientProblems!(),
     enabled: !!loadPatientProblems, gcTime: 0, staleTime: 0, retry: false
@@ -83,7 +85,8 @@ export function AddendumForm({ consultation, options, patientProblems, loadPatie
             cid10Allowed={options?.cid10_allowed_for_cbo ?? false} today={todayInCity()} searchDelayMs={searchDelayMs} />
           <ConductsField options={options?.conducts ?? []} value={conducts} onChange={setConducts} />
           <ExamRequestsField value={exams} onChange={setExams} cid10Allowed={options?.cid10_allowed_for_cbo ?? false}
-            searchDelayMs={searchDelayMs} />
+            searchDelayMs={searchDelayMs} priorityOn={examPriority}
+            fixedPriorityCodes={consultation.exam_requests.map((e) => e.sigtap_code)} />
         </>
       )}
       {touched && problem && <p role="alert" style={alert}>{problem}</p>}

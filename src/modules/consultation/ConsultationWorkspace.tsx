@@ -60,6 +60,7 @@ export function ConsultationWorkspace(props: Props) {
   const documentsOn = canUseDocuments(user);
   // Módulo 20: a aba "Linha do tempo" no painel do paciente, pelo atendimento (em contexto).
   const timelineOn = hasFeature(user, "patient_timeline");
+  const examsOn = hasFeature(user, "exam_tracking");
   // Aba Documentos: o editor continua montado (escondido) para o autosave não
   // perder o que foi digitado; os documentos só montam na primeira abertura da
   // aba e depois ficam montados (escondidos), para a volta à Consulta não perder
@@ -175,7 +176,7 @@ export function ConsultationWorkspace(props: Props) {
             {consultation?.status === "draft" && options.isError && <p role="alert" style={alert}>{consultationError(options.error)}</p>}
             {consultation?.status === "draft" && options.data && (
               <ConsultationEditor key={consultation.id} consultation={consultation} record={record.data} options={options.data}
-                referenceUnitIds={props.referenceUnitIds} unit={props.unit} units={props.units}
+                referenceUnitIds={props.referenceUnitIds} unit={props.unit} units={props.units} examPriority={examsOn}
                 autosaveDelayMs={props.autosaveDelayMs} searchDelayMs={props.searchDelayMs}
                 onFinalized={(c) => { setConsultation(c); restartRereads(); void rereadProblems(c.id); props.onFinalized(); }}
                 onLocked={(message) => void reload(message)} />

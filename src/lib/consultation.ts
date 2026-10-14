@@ -5,7 +5,7 @@
 // repete texto clínico: só códigos e rótulos.
 import {
   ApiError, type Addendum, type AddendumChanges, type CodedOption, type Consultation, type ConsultationDraftInput,
-  type EvaluatedProblem, type ExamRequest, type OnsetPrecision, type PatientProblem, type ProblemAction, type Terminology
+  type EvaluatedProblem, type ExamPriority, type ExamRequest, type OnsetPrecision, type PatientProblem, type ProblemAction, type Terminology
 } from "./api";
 import { fmtDay } from "./audiencePhrase";
 import { parseVitals, screeningError, vitalsFormFrom, type VitalsForm, type VitalsProblems } from "./screening";
@@ -207,12 +207,20 @@ export function cid10Problem(text: string | null | undefined): string | null {
 
 function examPayload(e: ExamRequest): ExamRequest {
   const j = normalizeCid10(e.cid10_justification ?? "");
-  return j === "" ? { sigtap_code: e.sigtap_code, label: e.label } : { sigtap_code: e.sigtap_code, label: e.label, cid10_justification: j };
+  const out: ExamRequest = { sigtap_code: e.sigtap_code, label: e.label };
+  if (j !== "") out.cid10_justification = j;
+  // Módulo 21a (D10): a prioridade só vai quando foi escolhida (ausente = rotina no api).
+  if (e.priority) out.priority = e.priority;
+  return out;
 }
 
 export function addExam(exams: ExamRequest[], ref: CodedOption): ExamRequest[] {
   if (exams.some((e) => e.sigtap_code === ref.code)) return exams;
   return [ ...exams, { sigtap_code: ref.code, label: ref.label } ];
+}
+
+export function setPriority(exams: ExamRequest[], code: string, priority: ExamPriority): ExamRequest[] {
+  return exams.map((e) => (e.sigtap_code === code ? { ...e, priority } : e));
 }
 
 export function setJustification(exams: ExamRequest[], code: string, text: string): ExamRequest[] {

@@ -1,0 +1,61 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, screen, within } from "@testing-library/react";
+
+vi.mock("../../lib/api", async (importOriginal) => {
+  const real = await importOriginal<typeof import("../../lib/api")>();
+  return { ...real, fetchCurrentSession: vi.fn(), listExamOrders: vi.fn(), getExamOrder: vi.fn() };
+});
+
+import * as api from "../../lib/api";
+import { ApiError } from "../../lib/api";
+import { ConsultationExamStatus } from "./ConsultationExamStatus";
+import { ConsultationView } from "../consultation/ConsultationView";
+import { renderWithProviders } from "../../test/campaignFixtures";
+import { finalized, options } from "../../test/consultationFixtures";
+import { examOrder, examUser } from "../../test/examFixtures";
+
+const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
+const REQUESTS = [
+  { sigtap_code: "0202020380", label: "Hemograma completo", priority: "urgent" as const },
+  { sigtap_code: "0202010503", label: "Dosagem de hemoglobina glicosilada" }
+];
+
+afterEach(cleanup);
+
+describe("ConsultationExamStatus", () => {
+  beforeEach(() => {
+    for (const fn of [ api.fetchCurrentSession, api.listExamOrders, api.getExamOrder ]) mocked(fn).mockReset();
+    mocked(api.fetchCurrentSession).mockResolvedValue(examUser());
+    mocked(api.listExamOrders).mockResolvedValue({ orders: [ examOrder({ status: "scheduled" }) ], next_before: null });
+    mocked(api.getExamOrder).mockResolvedValue(examOrder({ status: "scheduled" }));
+  });
+
+  it("cada exame pedido com a situação; sem exame acompanhado diz isso; Acompanhar abre o exame", async () => {
+    renderWithProviders(<ConsultationExamStatus consultationId="c1" requests={REQUESTS} />);
+    const items = (await screen.findAllByRole("listitem"));
+    await within(items[0]).findByText("agendado");
+    expect(within(items[0]).getByText("urgente")).not.toBeNull();
+    expect(within(items[1]).getByText("sem acompanhamento")).not.toBeNull();
+    expect(api.listExamOrders).toHaveBeenCalledWith({ consultationId: "c1" });
+    fireEvent.click(within(items[0]).getByRole("button", { name: "Acompanhar Hemograma completo" }));
+    expect(await screen.findByRole("region", { name: "Exame Hemograma completo" })).not.toBeNull();
+  });
+
+  it("a leitura falha: a lista continua e a frase aparece", async () => {
+    mocked(api.listExamOrders).mockRejectedValue(new ApiError(403, { error: "feature_disabled", feature: "exam_tracking" }, "x"));
+    renderWithProviders(<ConsultationExamStatus consultationId="c1" requests={REQUESTS} />);
+    expect((await screen.findByRole("alert")).textContent).toBe("o rastreamento de exames está desligado nesta cidade");
+    expect(screen.getAllByRole("listitem")).toHaveLength(2);
+  });
+
+  it("ConsultationView usa o acompanhamento só com o rastreamento ligado e fora da leitura administrativa", async () => {
+    const c = finalized({ exam_requests: REQUESTS });
+    renderWithProviders(<ConsultationView consultation={c} options={options()} patientProblems={[]} onAddendumAdded={vi.fn()} onClose={vi.fn()} />);
+    await screen.findByText("agendado");
+    cleanup();
+    mocked(api.listExamOrders).mockClear();
+    renderWithProviders(<ConsultationView consultation={c} options={options()} patientProblems={[]} readOnly onAddendumAdded={vi.fn()} onClose={vi.fn()} />);
+    await screen.findByRole("list", { name: "exames solicitados" });
+    expect(api.listExamOrders).not.toHaveBeenCalled();
+  });
+});

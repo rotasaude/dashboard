@@ -17,6 +17,8 @@ import { VitalsList } from "./PatientPanel";
 import { AddendumForm } from "./AddendumForm";
 import { SignatureMarker } from "../signature/SignatureMarker";
 import { canSign, printHint } from "../../lib/signature";
+import { hasFeature } from "../../lib/features";
+import { ConsultationExamStatus } from "../exams/ConsultationExamStatus";
 import { useReveal } from "../../lib/useReveal";
 
 export interface ConsultationViewProps {
@@ -46,6 +48,9 @@ export function ConsultationView(props: ConsultationViewProps) {
   const { user } = useAuth();
   // Imprimir e Adendo são só da autora (decide a sessão, não o chamador).
   const isAuthor = !props.readOnly && !!user && user.id === c.author.id;
+  // Módulo 21a: na consulta finalizada, cada exame com a situação de agora
+  // (não na leitura administrativa, que é só do registro).
+  const examTracking = hasFeature(user, "exam_tracking") && !props.readOnly && c.status === "finalized";
   // dashboard#14: "veja Pendentes" só para quem assina esta consulta (a autora com assinatura digital).
   const linkToPending = isAuthor && canSign(user);
   const [ adding, setAdding ] = useState(false);
@@ -106,15 +111,17 @@ export function ConsultationView(props: ConsultationViewProps) {
         </ul>
       )}
       <p style={textStyle}>{`Condutas: ${c.conducts.map(conductLabel).join(" · ") || "—"}`}</p>
-      {c.exam_requests.length > 0 && (
-        <ul aria-label="exames solicitados" style={list}>
-          {c.exam_requests.map((e) => (
-            <li key={e.sigtap_code}>
-              {`${e.sigtap_code} — ${e.label}${e.cid10_justification ? ` · CID-10 ${e.cid10_justification}` : ""}`}
-            </li>
-          ))}
-        </ul>
-      )}
+      {c.exam_requests.length > 0 && (examTracking
+        ? <ConsultationExamStatus consultationId={c.id} requests={c.exam_requests} />
+        : (
+          <ul aria-label="exames solicitados" style={list}>
+            {c.exam_requests.map((e) => (
+              <li key={e.sigtap_code}>
+                {`${e.sigtap_code} — ${e.label}${e.cid10_justification ? ` · CID-10 ${e.cid10_justification}` : ""}`}
+              </li>
+            ))}
+          </ul>
+        ))}
 
       {addenda.length > 0 && (
         <ol aria-label="adendos" style={{ margin: 0, paddingLeft: 18, display: "flex", flexDirection: "column", gap: 8 }}>
@@ -149,7 +156,7 @@ export function ConsultationView(props: ConsultationViewProps) {
       {adding && (
         <AddendumForm consultation={c} options={options} patientProblems={props.patientProblems}
           loadPatientProblems={props.loadPatientProblems}
-          searchDelayMs={props.searchDelayMs}
+          searchDelayMs={props.searchDelayMs} examPriority={hasFeature(user, "exam_tracking")}
           onDone={(addendum) => { setAdding(false); props.onAddendumAdded(addendum); }}
           onCancel={() => setAdding(false)} />
       )}

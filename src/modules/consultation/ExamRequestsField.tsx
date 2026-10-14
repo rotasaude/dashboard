@@ -2,14 +2,18 @@
 // Exames solicitados (SIGTAP da competência ativa; contratos §4 e §5). A
 // justificativa CID-10 só aparece para o CBO que pode usar CID-10 (Divergência D9).
 import type { CSSProperties } from "react";
-import { searchSigtap, type ExamRequest } from "../../lib/api";
-import { addExam, cid10Problem, consultationError, setJustification } from "../../lib/consultation";
+import { searchSigtap, type ExamPriority, type ExamRequest } from "../../lib/api";
+import { addExam, cid10Problem, consultationError, setJustification, setPriority } from "../../lib/consultation";
 import { inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { CodeSearch } from "./CodeSearch";
 
-interface Props { value: ExamRequest[]; onChange(next: ExamRequest[]): void; cid10Allowed: boolean; searchDelayMs?: number }
+interface Props { value: ExamRequest[]; onChange(next: ExamRequest[]): void; cid10Allowed: boolean; searchDelayMs?: number;
+  // Módulo 21a: prioridade por exame (com exam_tracking ligado). Na prioridade fixa (A33: adendo),
+  // os exames já pedidos mostram a prioridade só para leitura.
+  priorityOn?: boolean; fixedPriorityCodes?: string[];
+}
 
-export function ExamRequestsField({ value, onChange, cid10Allowed, searchDelayMs }: Props) {
+export function ExamRequestsField({ value, onChange, cid10Allowed, searchDelayMs, priorityOn = false, fixedPriorityCodes = [] }: Props) {
   return (
     <fieldset style={fieldset}>
       <legend style={legend}>Exames solicitados</legend>
@@ -29,6 +33,19 @@ export function ExamRequestsField({ value, onChange, cid10Allowed, searchDelayMs
                     </label>
                     {problem && <small role="alert" style={{ fontSize: 12, color: "var(--down)" }}>{problem}</small>}
                   </div>
+                )}
+                {priorityOn && fixedPriorityCodes.includes(e.sigtap_code) && (
+                  <span style={{ fontSize: 12, color: "var(--ink2)" }}>{`Prioridade: ${e.priority === "urgent" ? "urgente" : "rotina"}`}</span>
+                )}
+                {priorityOn && !fixedPriorityCodes.includes(e.sigtap_code) && (
+                  <label style={labelStyle}>
+                    {`Prioridade (${e.sigtap_code})`}
+                    <select value={e.priority ?? "routine"} style={inputStyle}
+                      onChange={(ev) => onChange(setPriority(value, e.sigtap_code, ev.target.value as ExamPriority))}>
+                      <option value="routine">Rotina</option>
+                      <option value="urgent">Urgente</option>
+                    </select>
+                  </label>
                 )}
                 <button type="button" aria-label={`Remover exame ${e.sigtap_code}`} style={secondaryButtonStyle}
                   onClick={() => onChange(value.filter((x) => x.sigtap_code !== e.sigtap_code))}>Remover</button>

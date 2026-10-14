@@ -26,6 +26,8 @@ import { ConductsField } from "./ConductsField";
 import { ExamRequestsField } from "./ExamRequestsField";
 
 export interface ConsultationEditorProps {
+  // Módulo 21a: prioridade de cada exame (com exam_tracking ligado).
+  examPriority?: boolean;
   consultation: Consultation;
   record: ClinicalRecord;
   options: ConsultationOptions;
@@ -140,7 +142,7 @@ export function ConsultationEditor(props: ConsultationEditorProps) {
         cid10Allowed={options.cid10_allowed_for_cbo} today={today} searchDelayMs={props.searchDelayMs} />
       <ConductsField options={options.conducts} value={draft.conducts} onChange={(conducts) => set({ conducts })} />
       <ExamRequestsField value={draft.exams} onChange={(exams) => set({ exams })} cid10Allowed={options.cid10_allowed_for_cbo}
-        searchDelayMs={props.searchDelayMs} />
+        searchDelayMs={props.searchDelayMs} priorityOn={props.examPriority} />
 
       {!finalizing ? (
         <div>
