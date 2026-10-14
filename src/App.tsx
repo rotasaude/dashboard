@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { ScopeContext, PERIOD_OPTIONS, useScope, type PeriodKey } from "./lib/scope";
 import { useAuth } from "./lib/auth";
-import { NAV_GROUPS, labelFor, navGroupsFor, withExamPendingCount, withPendingCount, type ModuleId, type NavGroupDef } from "./shell/modules";
+import { NAV_GROUPS, labelFor, isExamProvider, navGroupsFor, withExamPendingCount, withPendingCount, type ModuleId, type NavGroupDef } from "./shell/modules";
 import { useAlerts } from "./hooks/useAlerts";
 import { usePendingSignatures } from "./hooks/usePendingSignatures";
 import { canSign } from "./lib/signature";
@@ -90,11 +90,14 @@ export function App({ initialModule }: { initialModule?: ModuleId } = {}) {
 
 // Dentro do Provider: useAlerts (via useHealth → useScope) consome o contexto.
 function ShellInner({ initialModule }: { initialModule?: ModuleId }) {
-  const alerts = useAlerts();
   const auth = useAuth();
+  // O prestador de exames só tem o portal: sem alertas de infra nem sino.
+  const providerOnly = isExamProvider(auth.user);
+  const alerts = useAlerts(!providerOnly);
   const scope = useScope();
   const pending = usePendingSignatures(canSign(auth.user));
   const examPending = useExamPending(canUseExams(auth.user) && examRoles(auth.user).professional, auth.user?.id ?? null);
+  // (enabled só liga com sessão; o id nunca é null com a consulta ligada)
   const examCount = examPending.data?.orders.length ?? 0;
   const deniedCount = examPending.data?.denied.length ?? 0;
   const examHasMore = !!examPending.data?.next_before;
@@ -109,10 +112,11 @@ function ShellInner({ initialModule }: { initialModule?: ModuleId }) {
     return groups.some((g) => g.items.some((i) => i.id === r.id));
   }, [ groups ]);
 
-  const { route, go } = useHashRoute<ModuleId>({
-    ids: ALL_IDS, slugs: ALL_SLUGS, isAllowed,
-    initial: initialModule ? { kind: "screen", id: initialModule } : undefined
-  });
+  // O retorno do OAuth também passa pelo filtro por papel (o prestador não
+  // é levado a outra tela); fora dele, o roteador cai no Início.
+  const initial: Route<ModuleId> | undefined = initialModule && isAllowed({ kind: "screen", id: initialModule })
+    ? { kind: "screen", id: initialModule } : undefined;
+  const { route, go } = useHashRoute<ModuleId>({ ids: ALL_IDS, slugs: ALL_SLUGS, isAllowed, initial });
   const navigate = useCallback((id: ModuleId) => go({ kind: "screen", id }), [ go ]);
   // As peças do shell só produzem ids vindos dos próprios grupos (ModuleId).
   const goShell = go as (r: Route) => void;
@@ -153,7 +157,7 @@ function ShellInner({ initialModule }: { initialModule?: ModuleId }) {
           </>}
         />
       }
-      notifications={<NotificationCenter active={alerts.active} limitations={alerts.limitations} onNavigate={navigate} />}
+      notifications={providerOnly ? null : <NotificationCenter active={alerts.active} limitations={alerts.limitations} onNavigate={navigate} />}
       account={auth.user ? <ContaMenu email={auth.user.email_address} onLogout={() => { void auth.logout(); }} /> : null}
     >
       {content}

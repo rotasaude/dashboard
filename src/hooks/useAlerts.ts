@@ -7,9 +7,9 @@ import { useQueues } from "./useQueues";
 import { useHealth } from "./useHealth";
 import { deriveAlerts } from "../lib/alerts";
 
-export function useAlerts() {
-  const q = useQueues();
-  const h = useHealth();
+export function useAlerts(enabled = true) {
+  const q = useQueues(enabled);
+  const h = useHealth(enabled);
   return deriveAlerts({
     queues: q.data?.data,
     health: h.data?.data

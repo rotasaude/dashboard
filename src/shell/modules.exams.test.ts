@@ -34,11 +34,10 @@ describe("grupo Exames (módulo 21a)", () => {
     expect(ids(userWith([ "exam_provider" ], {}))).toEqual([ "security" ]);
   });
 
-  it("contador de ciência no rótulo; 200 ou mais vira 200+; mais páginas vira N+", () => {
+  it("contador de ciência no rótulo; mais páginas vira N+", () => {
     const item = (n: number, more = false) => withExamPendingCount(NAV_GROUPS, n, more).flatMap((g) => g.items).find((i) => i.id === "exam-acknowledgements");
     expect(item(0)?.label).toBe("Resultados aguardando ciência");
     expect(item(4)?.label).toBe("Resultados aguardando ciência (4)");
     expect(item(50, true)?.label).toBe("Resultados aguardando ciência (50+)");
-    expect(item(250)?.label).toBe("Resultados aguardando ciência (200+)");
   });
 });

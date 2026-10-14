@@ -107,6 +107,12 @@ export function moduleFromPath(path: string | null | undefined): ModuleId | null
 // Fatia 2: "Equipe" é o contrário — só municipal_admin, e escondido enquanto
 // não se sabe quem é. A API recusaria (403) para qualquer outro papel, então
 // oferecer o item antes da sessão seria oferecer uma porta trancada.
+// Módulo 21a: o usuário do prestador é só do portal; o shell também usa
+// este predicado para não rodar alertas de infra nem oferecer o sino.
+export function isExamProvider(user: { operator: boolean; memberships?: { role: string }[] } | null): boolean {
+  return !!user && !user.operator && !!user.memberships?.some((m) => m.role === "exam_provider");
+}
+
 export function navGroupsFor(
   user: { operator: boolean; memberships?: { role: string }[]; features?: unknown } | null
 ): NavGroupDef[] {
@@ -114,7 +120,7 @@ export function navGroupsFor(
   // Módulo 21a (spec §6): o usuário do prestador vê só o portal e a
   // Segurança — nada de painel, atendimento ou prontuário. O api isola de
   // novo (403/404); aqui só não se oferece a porta.
-  if (!user?.operator && roles.includes("exam_provider")) {
+  if (isExamProvider(user)) {
     return NAV_GROUPS.flatMap((group) => {
       const items = group.items.filter((item) =>
         item.id === "security" || (item.id === "exam-provider" && hasFeature(user, "exam_tracking")));
@@ -210,10 +216,10 @@ export function withPendingCount(groups: NavGroupDef[], count: number): NavGroup
 }
 
 // Módulo 21a: contador de resultados aguardando ciência no item do menu.
-// A lista vem em páginas de 50 (C14): com mais páginas, "50+"; 200 ou mais, "200+".
+// A lista vem em páginas de 50 (C14): com mais páginas, "50+".
 export function withExamPendingCount(groups: NavGroupDef[], count: number, hasMore = false): NavGroupDef[] {
   if (count <= 0) return groups;
-  const shown = count >= 200 ? "200+" : hasMore ? `${count}+` : String(count);
+  const shown = hasMore ? `${count}+` : String(count);
   return groups.map((group) => ({
     ...group,
     items: group.items.map((item) => item.id === "exam-acknowledgements" ? { ...item, label: `${item.label} (${shown})` } : item)

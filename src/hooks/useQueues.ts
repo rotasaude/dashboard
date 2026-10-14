@@ -3,9 +3,10 @@ import { adminFetch } from "../lib/api";
 import type { QueuesData } from "../lib/types";
 
 // Queues é cross-tenant por natureza (infra). Não muda com escopo.
-export function useQueues() {
+export function useQueues(enabled = true) {
   return useQuery({
     queryKey: [ "queues" ],
+    enabled,
     queryFn: () => adminFetch<QueuesData>("/queues"),
     staleTime: 15_000,
     refetchInterval: 30_000
