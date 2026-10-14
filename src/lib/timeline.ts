@@ -24,6 +24,11 @@ export const TIMELINE_KINDS: { key: TimelineKind; label: string }[] = [
   { key: "exam", label: "Exame" }
 ];
 
+// O tipo Exame só existe com o rastreamento de exames ligado (módulo 21a).
+export function timelineKinds(examTracking: boolean): typeof TIMELINE_KINDS {
+  return examTracking ? TIMELINE_KINDS : TIMELINE_KINDS.filter((k) => k.key !== "exam");
+}
+
 export const ALL_FILTERS: TimelineFilters = { kinds: [], from: "", to: "" };
 export const PARTIAL_NOTICE =
   "Histórico parcial: aqui está só o que passou pelo Rota Saúde. As consultas desta cidade são registradas no PEC.";
@@ -47,17 +52,19 @@ export function toggleKind(d: FilterDraft, kind: TimelineKind): FilterDraft {
   return { ...d, kinds: d.kinds.includes(kind) ? d.kinds.filter((k) => k !== kind) : [ ...d.kinds, kind ] };
 }
 
-export function filterProblem(d: FilterDraft): string | null {
-  if (d.kinds.length === 0) return "marque ao menos um tipo de registro";
+export function filterProblem(d: FilterDraft, kinds = TIMELINE_KINDS): string | null {
+  if (!kinds.some((k) => d.kinds.includes(k.key))) return "marque ao menos um tipo de registro";
   if (d.from && d.to && d.from > d.to) return "o início do período é depois do fim";
   return null;
 }
 
 // Todos marcados = sem kinds[] (o api devolve tudo, inclusive tipo novo).
-export function filtersFrom(d: FilterDraft): TimelineFilters {
-  const all = TIMELINE_KINDS.every((k) => d.kinds.includes(k.key));
+// `kinds` são os tipos que a tela mostra: sem o rastreamento de exames, o
+// Exame não aparece nem vai no pedido.
+export function filtersFrom(d: FilterDraft, kinds = TIMELINE_KINDS): TimelineFilters {
+  const all = kinds.every((k) => d.kinds.includes(k.key));
   return {
-    kinds: all ? [] : TIMELINE_KINDS.map((k) => k.key).filter((k) => d.kinds.includes(k)),
+    kinds: all ? [] : kinds.map((k) => k.key).filter((k) => d.kinds.includes(k)),
     from: d.from, to: d.to
   };
 }

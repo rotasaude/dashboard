@@ -88,13 +88,30 @@ describe("PatientTimeline", () => {
     fireEvent.change(screen.getByLabelText("Até"), { target: { value: "2026-09-30" } });
     fireEvent.click(screen.getByRole("button", { name: "Filtrar" }));
     await waitFor(() => expect(api.getTimeline).toHaveBeenLastCalledWith({ attendanceId: "a1" }, {
-      kinds: [ "attendance", "screening", "appointment", "consultation", "clinical_document", "controlled_notification", "exam" ], // + exame (módulo 21a)
+      kinds: [ "attendance", "screening", "appointment", "consultation", "clinical_document", "controlled_notification" ],
       from: "2026-09-01", to: "2026-09-30"
     }, null));
 
     fireEvent.click(screen.getByRole("button", { name: "Limpar filtros" }));
     await waitFor(() => expect(api.getTimeline).toHaveBeenLastCalledWith({ attendanceId: "a1" }, ALL, null));
     expect((screen.getByLabelText("Campanha") as HTMLInputElement).checked).toBe(true);
+  });
+
+  it("sem o rastreamento de exames não há filtro Exame; com ele, o tipo aparece e vai no pedido", async () => {
+    renderWithProviders(<PatientTimeline subject={{ attendanceId: "a1" }} />);
+    await screen.findByText("Linha do tempo de Joana Lima");
+    expect(screen.queryByLabelText("Exame")).toBeNull();
+    cleanup();
+    m(api.fetchCurrentSession).mockResolvedValue(sessionWith([ "health_professional" ], { id: "us1", features: [ "patient_timeline", "exam_tracking" ] }));
+    renderWithProviders(<PatientTimeline subject={{ attendanceId: "a1" }} />);
+    await screen.findByText("Linha do tempo de Joana Lima");
+    await screen.findByLabelText("Exame");
+    fireEvent.click(screen.getByLabelText("Campanha"));
+    fireEvent.click(screen.getByRole("button", { name: "Filtrar" }));
+    await waitFor(() => expect(api.getTimeline).toHaveBeenLastCalledWith({ attendanceId: "a1" }, {
+      kinds: [ "triage", "attendance", "screening", "appointment", "consultation", "clinical_document", "controlled_notification", "exam" ],
+      from: "", to: ""
+    }, null));
   });
 
   it("período invertido ou nenhum tipo: diz o motivo e não consulta", async () => {
@@ -107,7 +124,7 @@ describe("PatientTimeline", () => {
     expect(api.getTimeline).toHaveBeenCalledTimes(1);
 
     fireEvent.click(screen.getByRole("button", { name: "Limpar filtros" }));
-    for (const label of [ "Triagem", "Atendimento", "Escuta", "Agendamento", "Consulta", "Documento", "Notificação de receita", "Campanha", "Exame" ]) { // + exame (módulo 21a)
+    for (const label of [ "Triagem", "Atendimento", "Escuta", "Agendamento", "Consulta", "Documento", "Notificação de receita", "Campanha" ]) {
       fireEvent.click(screen.getByLabelText(label));
     }
     fireEvent.click(screen.getByRole("button", { name: "Filtrar" }));

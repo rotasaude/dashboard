@@ -9,10 +9,11 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { errorCode, getTimeline, type Addendum, type PatientProblem, type TimelineEntry, type TimelineFilters, type TimelineSubject } from "../../lib/api";
 import {
-  ALL_FILTERS, EMPTY_DRAFT, PARTIAL_NOTICE, TIMELINE_EMPTY, TIMELINE_KEY, TIMELINE_KINDS, detailTarget, endsOpening, entryWhen,
+  ALL_FILTERS, EMPTY_DRAFT, PARTIAL_NOTICE, TIMELINE_EMPTY, TIMELINE_KEY, detailTarget, endsOpening, entryWhen,
   entryWhere, filterProblem, filtersFrom, mergePages, openLabel, statusLabel, subjectKey, timelineError, timelineKindLabel,
-  toggleKind, type DetailTarget, type FilterDraft
+  timelineKinds, toggleKind, type DetailTarget, type FilterDraft
 } from "../../lib/timeline";
+import { hasFeature } from "../../lib/features";
 import { useAuth } from "../../lib/auth";
 import { OPENING_ENDED } from "../../lib/clinicalRecord";
 import { VERIFIER_ROLE } from "../../lib/team";
@@ -44,6 +45,7 @@ export function PatientTimeline({
   // O pedido de agendamento só abre para quem tem citizen_verifier (a rota exige o papel).
   const { user } = useAuth();
   const canOpenRequests = !!user?.memberships.some((m) => m.role === VERIFIER_ROLE);
+  const kinds = timelineKinds(hasFeature(user, "exam_tracking"));
   const key = subjectKey(subject);
   const queryClient = useQueryClient();
   // Fim da abertura (403 opening_required, ou out_of_context pela abertura):
@@ -84,11 +86,11 @@ export function PatientTimeline({
   const entries = mergePages(pages);
 
   function apply() {
-    const p = filterProblem(draft);
+    const p = filterProblem(draft, kinds);
     setProblem(p);
     if (p) return;
     setOpen(null);
-    setFilters(filtersFrom(draft));
+    setFilters(filtersFrom(draft, kinds));
   }
 
   function clear() {
@@ -105,7 +107,7 @@ export function PatientTimeline({
 
       <fieldset aria-label="filtros da linha do tempo" style={fieldset}>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
-          {TIMELINE_KINDS.map((k) => (
+          {kinds.map((k) => (
             <label key={k.key} style={check}>
               <input type="checkbox" checked={draft.kinds.includes(k.key)} onChange={() => setDraft(toggleKind(draft, k.key))} />
               {k.label}

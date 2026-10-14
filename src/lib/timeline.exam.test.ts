@@ -1,6 +1,6 @@
 // src/lib/timeline.exam.test.ts
 import { describe, expect, it } from "vitest";
-import { TIMELINE_KINDS, detailTarget, filtersFrom, statusLabel, timelineKindLabel } from "./timeline";
+import { EMPTY_DRAFT, TIMELINE_KINDS, detailTarget, filterProblem, filtersFrom, statusLabel, timelineKinds, timelineKindLabel, toggleKind } from "./timeline";
 import { entry } from "../test/timelineFixtures";
 
 describe("linha do tempo — exames (módulo 21a; contrato §10)", () => {
@@ -24,6 +24,17 @@ describe("linha do tempo — exames (módulo 21a; contrato §10)", () => {
     const all = TIMELINE_KINDS.map((k) => k.key);
     expect(filtersFrom({ kinds: all, from: "", to: "" }).kinds).toEqual([]);
     expect(filtersFrom({ kinds: [ "exam" ], from: "", to: "" }).kinds).toEqual([ "exam" ]);
+  });
+
+  it("sem o rastreamento de exames, o tipo Exame não existe nos filtros nem vai no pedido", () => {
+    const kinds = timelineKinds(false);
+    expect(kinds.some((k) => k.key === "exam")).toBe(false);
+    expect(timelineKinds(true)).toEqual(TIMELINE_KINDS);
+    expect(filtersFrom(EMPTY_DRAFT, kinds).kinds).toEqual([]);
+    expect(filtersFrom(toggleKind(EMPTY_DRAFT, "campaign"), kinds).kinds).toEqual([
+      "triage", "attendance", "screening", "appointment", "consultation", "clinical_document", "controlled_notification"
+    ]);
+    expect(filterProblem({ ...EMPTY_DRAFT, kinds: [ "exam" ] }, kinds)).toBe("marque ao menos um tipo de registro");
   });
 
   it("resultado externo (api: status external, detail_ref exam_result): rótulo próprio e sem detalhe", () => {
