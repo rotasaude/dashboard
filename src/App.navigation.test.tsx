@@ -24,7 +24,7 @@ describe("atalhos entre telas", () => {
   });
 
   it.each([ "integrations", "cnes", "production", "my-consultations", "professional-consultations",
-    "open-drafts", "clinical-record", "signature", "clinical-documents-admin" ] as const)
+    "open-drafts", "clinical-record", "signature", "clinical-documents-admin", "exams-admin" ] as const)
   ("%s.onGoToSecurity abre Segurança", (screenId) => {
     const navigate = vi.fn();
     (renderModule(screenId, navigate) as El).props.onGoToSecurity();
