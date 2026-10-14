@@ -16,7 +16,7 @@ import { App } from "./App";
 const user = (role: string) => ({
   id: "u1", email_address: "a@b.c", operator: false, memberships: [ { role } ], mfa_enrolled: true, mfa_verified_at: null, features: [ "exam_tracking" ]
 });
-const mount = (initialModule?: Parameters<typeof App>[0]["initialModule"]) =>
+const mount = (initialModule?: import("./shell/modules").ModuleId) =>
   render(<QueryClientProvider client={new QueryClient()}><App initialModule={initialModule} /></QueryClientProvider>);
 
 beforeEach(() => { adminFetch.mockClear(); window.location.hash = ""; });
