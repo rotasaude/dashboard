@@ -27,8 +27,11 @@ export function ProviderPortal() {
   const { user } = useAuth();
   const allowed = canUseExams(user) && examRoles(user).provider;
   const [ tab, setTab ] = useState<PortalTab>("awaiting_schedule");
-  const [ open, setOpen ] = useState<ProviderOrder | null>(null);
+  // Só o id: a guia aberta vem da lista relida; fora dela (404, outro
+  // prestador, saiu da situação da aba), o painel fecha.
+  const [ openId, setOpenId ] = useState<string | null>(null);
   const [ notice, setNotice ] = useState<string | null>(null);
+  const [ gone, setGone ] = useState<string | null>(null);
   const { query, orders } = useExamOrderPages([ PROVIDER_ORDERS_KEY, tab ],
     (before) => listProviderOrders(tab === "overdue" ? { overdue: true, before } : { statuses: [ tab ], before }), allowed);
 
@@ -36,6 +39,7 @@ export function ProviderPortal() {
   if (!canUseExams(user)) return <Frame><EmptyState title={EXAMS_DISABLED} /></Frame>;
   if (!allowed) return <Frame><EmptyState title={EXAMS_NO_ROLE} /></Frame>;
 
+  const open = openId ? orders.find((o) => o.id === openId) ?? null : null;
   const overdueCount = query.data?.pages[0]?.overdue_count ?? 0;
   const tabs: { key: PortalTab; label: string }[] = [
     { key: "awaiting_schedule", label: "A agendar" },
@@ -50,13 +54,15 @@ export function ProviderPortal() {
         <p role="status" style={{ ...alert, fontWeight: 600 }}>{overdueCount === 1 ? "1 guia em atraso" : `${overdueCount} guias em atraso`}</p>
       )}
       {notice && <p style={okText}>{notice}</p>}
+      {gone && <p role="alert" style={alert}>{gone}</p>}
       {open && (
-        <ProviderOrderPanel key={open.id} order={open} onClose={() => setOpen(null)}
-          onDone={(text) => { setOpen(null); setNotice(text); }} />
+        <ProviderOrderPanel key={open.id} order={open} onClose={() => setOpenId(null)}
+          onDone={(text) => { setOpenId(null); setNotice(text); }}
+          onGone={(text) => { setOpenId(null); setGone(text); }} />
       )}
       <Panel title="Guias do prestador" sub="coletas e resultados · prazos da cidade">
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          <SegmentedControl<PortalTab> options={tabs} value={tab} onChange={(t) => { setTab(t); setOpen(null); }} />
+          <SegmentedControl<PortalTab> options={tabs} value={tab} onChange={(t) => { setTab(t); setOpenId(null); }} />
           {query.isPending && <p className="mono" style={muted}>carregando…</p>}
           {query.isError && <p role="alert" style={alert}>{examError(query.error)}</p>}
           {query.isSuccess && (
@@ -73,7 +79,7 @@ export function ProviderPortal() {
                 { label: "Prazo", w: "1.1fr", render: (o) => overdueLabel(o.overdue) },
                 { label: "", w: "auto", align: "right", card: "actions", render: (o) => (
                   <button type="button" aria-label={`Abrir guia ${o.short_code}`} style={secondaryButtonStyle}
-                    onClick={() => { setNotice(null); setOpen(o); }}>Abrir</button>
+                    onClick={() => { setNotice(null); setGone(null); setOpenId(o.id); }}>Abrir</button>
                 ) }
               ]}
               rows={orders} rowKey={(o) => o.id} empty="nenhuma guia nesta situação"

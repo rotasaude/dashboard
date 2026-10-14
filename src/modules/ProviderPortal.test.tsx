@@ -10,6 +10,7 @@ vi.mock("../lib/api", async (importOriginal) => {
 import * as api from "../lib/api";
 import { ApiError } from "../lib/api";
 import { ProviderPortal } from "./ProviderPortal";
+import { DETAIL_TRANSITION_REREAD } from "../lib/exams";
 import { renderWithProviders } from "../test/campaignFixtures";
 import { NOW21, TODAY21, examUser, pdfFile, providerOrder } from "../test/examFixtures";
 
@@ -115,15 +116,34 @@ describe("ProviderPortal", () => {
     expect((await within(form).findByRole("alert")).textContent).toBe("o resultado deste exame já foi registrado");
   });
 
-  it("guia que não é mais deste prestador: 404 explica e relê", async () => {
-    mocked(api.listProviderOrders).mockResolvedValue({ orders: [ providerOrder({ status: "scheduled" }) ], next_before: null, overdue_count: 0 });
+  it("409: fecha o formulário, explica e mostra a guia relida (sem ação velha)", async () => {
+    mocked(api.listProviderOrders)
+      .mockResolvedValueOnce({ orders: [ providerOrder({ status: "scheduled" }) ], next_before: null, overdue_count: 0 })
+      .mockResolvedValue({ orders: [ providerOrder({ status: "collected" }) ], next_before: null, overdue_count: 0 });
+    mocked(api.providerCollect).mockRejectedValue(new ApiError(409, { error: "invalid_transition" }, "x"));
+    renderWithProviders(<ProviderPortal />);
+    const guide = await openGuide();
+    fireEvent.click(within(guide).getByRole("button", { name: "Registrar coleta" }));
+    fireEvent.click(within(guide).getByRole("button", { name: "Confirmar" }));
+    expect((await within(guide).findByRole("alert")).textContent).toBe(DETAIL_TRANSITION_REREAD);
+    await within(guide).findByText("coletado");
+    expect(within(guide).queryByRole("button", { name: "Registrar coleta" })).toBeNull();
+    expect(within(guide).getByRole("button", { name: "Registrar resultado" })).not.toBeNull();
+  });
+
+  it("404 (guia de outro prestador): relê e fecha a guia", async () => {
+    mocked(api.listProviderOrders)
+      .mockResolvedValueOnce({ orders: [ providerOrder({ status: "scheduled" }) ], next_before: null, overdue_count: 0 })
+      .mockResolvedValue({ orders: [], next_before: null, overdue_count: 0 });
     mocked(api.providerCollect).mockRejectedValue(new ApiError(404, { error: "not_found" }, "x"));
     renderWithProviders(<ProviderPortal />);
     const guide = await openGuide();
     fireEvent.click(within(guide).getByRole("button", { name: "Registrar coleta" }));
     fireEvent.click(within(guide).getByRole("button", { name: "Confirmar" }));
-    expect((await within(guide).findByRole("alert")).textContent).toBe("exame não encontrado — atualize a lista");
-    await waitFor(() => expect(api.listProviderOrders).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByRole("region", { name: "Guia K7M2Q9XW3P" })).toBeNull());
+    expect(screen.queryByText("Joana Lima")).toBeNull();
+    expect(screen.getByRole("alert").textContent).toBe("exame não encontrado — atualize a lista");
+    expect(api.listProviderOrders).toHaveBeenCalledTimes(2);
   });
 
   it("só o papel do prestador, com o rastreamento ligado", async () => {
