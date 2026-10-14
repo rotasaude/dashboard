@@ -44,7 +44,8 @@ export function ExamRegulation() {
     if (deciding) setHidden((prev) => new Set(prev).add(deciding.id));
     setDeciding(null);
     setNotice(next);
-    void refreshExams(queryClient);
+    // Releu a fila: o que ainda aguarda volta a aparecer.
+    void refreshExams(queryClient).finally(() => setHidden(new Set()));
   }
 
   return (

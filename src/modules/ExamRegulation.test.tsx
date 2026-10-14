@@ -158,4 +158,31 @@ describe("ExamRegulation", () => {
     await waitFor(() => expect(api.listRegulationQueue).toHaveBeenCalledTimes(2));
     expect(screen.getAllByRole("button", { name: "Decidir Hemograma completo de Joana Lima" })).toHaveLength(1);
   });
+  it("a releitura devolve o mesmo exame ainda aguardando: a linha volta", async () => {
+    mocked(api.authorizeExam).mockRejectedValue(new ApiError(409, { error: "invalid_transition" }, "x"));
+    let release: (v: { orders: typeof WAITING[]; next_before: null }) => void = () => {};
+    mocked(api.listRegulationQueue).mockResolvedValueOnce({ orders: [ WAITING ], next_before: null })
+      .mockReturnValueOnce(new Promise((r) => { release = r; }));
+    renderWithProviders(<ExamRegulation />);
+    const panel = await decide();
+    fireEvent.change(await within(panel).findByLabelText("Prestador"), { target: { value: "pv1" } });
+    fireEvent.click(within(panel).getByRole("button", { name: "Autorizar" }));
+    await waitFor(() => expect(api.listRegulationQueue).toHaveBeenCalledTimes(2));
+    expect(screen.queryByRole("button", { name: "Decidir Hemograma completo de Joana Lima" })).toBeNull();
+    release({ orders: [ WAITING ], next_before: null });
+    expect(await screen.findByRole("button", { name: "Decidir Hemograma completo de Joana Lima" })).not.toBeNull();
+  });
+
+  it("404 ao negar: fecha, explica e relê", async () => {
+    mocked(api.denyExam).mockRejectedValue(new ApiError(404, { error: "not_found" }, "x"));
+    renderWithProviders(<ExamRegulation />);
+    const panel = await decide();
+    fireEvent.click(within(panel).getByRole("button", { name: "Negar" }));
+    const form = within(panel).getByRole("form", { name: "Motivo da negativa" });
+    fireEvent.change(within(form).getByLabelText("Motivo da negativa"), { target: { value: "Fora do protocolo municipal" } });
+    fireEvent.click(within(form).getByRole("button", { name: "Negar exame" }));
+    expect((await screen.findByText("exame não encontrado — atualize a lista")).getAttribute("role")).toBe("alert");
+    expect(screen.queryByRole("region", { name: "Decidir: Hemograma completo de Joana Lima" })).toBeNull();
+    await waitFor(() => expect(api.listRegulationQueue).toHaveBeenCalledTimes(2));
+  });
 });
