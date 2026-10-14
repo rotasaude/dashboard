@@ -37,6 +37,7 @@ import { ExamAcknowledgements } from "./modules/ExamAcknowledgements";
 import { ExamsUnit } from "./modules/ExamsUnit";
 import { ExamsOverdue } from "./modules/ExamsOverdue";
 import { ExamRegulation } from "./modules/ExamRegulation";
+import { ExamReport } from "./modules/ExamReport";
 import { Placeholder } from "./modules/Placeholder";
 import { ProtocolEditor } from "./modules/ProtocolEditor";
 import { Security } from "./modules/Security";
@@ -210,6 +211,7 @@ export function renderModule(active: ModuleId, setActive: (id: ModuleId) => void
     case "exams-unit":     return <ExamsUnit />;
     case "exams-overdue":  return <ExamsOverdue />;
     case "exam-regulation": return <ExamRegulation />;
+    case "exam-report": return <ExamReport />;
     case "exams-admin": return <ExamsAdmin onGoToSecurity={() => setActive("security")} />;
     default:               return <Placeholder title={labelFor(active)} />;
   }
