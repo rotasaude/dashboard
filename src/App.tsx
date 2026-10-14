@@ -35,6 +35,7 @@ import { Health } from "./modules/Health";
 import { ExamAcknowledgements } from "./modules/ExamAcknowledgements";
 import { ExamsUnit } from "./modules/ExamsUnit";
 import { ExamsOverdue } from "./modules/ExamsOverdue";
+import { ExamRegulation } from "./modules/ExamRegulation";
 import { Placeholder } from "./modules/Placeholder";
 import { ProtocolEditor } from "./modules/ProtocolEditor";
 import { Security } from "./modules/Security";
@@ -207,6 +208,7 @@ export function renderModule(active: ModuleId, setActive: (id: ModuleId) => void
     case "exam-acknowledgements": return <ExamAcknowledgements />;
     case "exams-unit":     return <ExamsUnit />;
     case "exams-overdue":  return <ExamsOverdue />;
+    case "exam-regulation": return <ExamRegulation />;
     default:               return <Placeholder title={labelFor(active)} />;
   }
 }
