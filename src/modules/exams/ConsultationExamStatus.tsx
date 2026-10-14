@@ -31,7 +31,8 @@ export function ConsultationExamStatus({ consultationId, requests }: { consultat
   });
   const [ open, setOpen ] = useState<string | null>(null);
   const orders = query.data?.orders ?? [];
-  const byCode = pickOrders(orders);
+  const claimed = new Set(requests.map((r) => r.id).filter(Boolean));
+  const byCode = pickOrders(orders.filter((o) => !o.consultation_exam_request_id || !claimed.has(o.consultation_exam_request_id)));
   // Pedido com id: a ordem ligada a ele. Sem id (exame de adendo): heurística por código.
   const orderFor = (e: ExamRequest) => (e.id ? orders.find((o) => o.consultation_exam_request_id === e.id) : byCode.get(e.sigtap_code));
   const truncated = query.data?.next_before != null;
@@ -39,10 +40,10 @@ export function ConsultationExamStatus({ consultationId, requests }: { consultat
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
       <ul aria-label="exames solicitados" style={list}>
-        {requests.map((e) => {
+        {requests.map((e, i) => {
           const order = orderFor(e);
           return (
-            <li key={e.id ?? e.sigtap_code} style={row}>
+            <li key={e.id ?? `${e.sigtap_code}-${i}`} style={row}>
               <span>{`${e.sigtap_code} — ${e.label}${e.cid10_justification ? ` · CID-10 ${e.cid10_justification}` : ""}`}</span>
               {e.priority === "urgent" && <Tag tone="urgent">urgente</Tag>}
               {order && <Tag tone={examStatusTone(order.status)}>{examStatusLabel(order.status)}</Tag>}

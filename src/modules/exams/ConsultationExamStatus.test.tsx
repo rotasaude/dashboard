@@ -80,6 +80,31 @@ describe("ConsultationExamStatus", () => {
     expect(within(items[0]).getByText("sem acompanhamento")).not.toBeNull();
   });
 
+  it("linha sem id não pega a ordem já ligada a uma linha com id; pega a do adendo", async () => {
+    const a = examOrder({ id: "eo-a", status: "cancelled", status_changed_at: "2026-10-12T09:00:00-03:00", consultation_exam_request_id: "rq1" });
+    const b = examOrder({ id: "eo-b", status: "scheduled", status_changed_at: "2026-10-11T09:00:00-03:00", consultation_exam_request_id: "rq-hidden" });
+    const reqs = [ { id: "rq1", sigtap_code: "0202020380", label: "Hemograma completo" }, { sigtap_code: "0202020380", label: "Hemograma completo" } ];
+    mocked(api.listExamOrders).mockResolvedValue({ orders: [ a, b ], next_before: null });
+    const { unmount } = renderWithProviders(<ConsultationExamStatus consultationId="c1" requests={reqs} />);
+    let items = await screen.findAllByRole("listitem");
+    await within(items[1]).findByText("agendado");
+    expect(within(items[0]).getByText("cancelado")).not.toBeNull();
+    unmount();
+    mocked(api.listExamOrders).mockResolvedValue({ orders: [ a ], next_before: null });
+    renderWithProviders(<ConsultationExamStatus consultationId="c1" requests={reqs} />);
+    items = await screen.findAllByRole("listitem");
+    await within(items[0]).findByText("cancelado");
+    expect(within(items[1]).getByText("sem acompanhamento")).not.toBeNull();
+    expect(within(items[1]).queryByText("cancelado")).toBeNull();
+  });
+
+  it("pedido com id sem ordem e lista cortada: 'veja na tela Exames'", async () => {
+    mocked(api.listExamOrders).mockResolvedValue({ orders: [], next_before: "cursor-1" });
+    renderWithProviders(<ConsultationExamStatus consultationId="c1" requests={[ { id: "rq1", sigtap_code: "0202020380", label: "Hemograma completo" } ]} />);
+    const item = (await screen.findAllByRole("listitem"))[0];
+    await within(item).findByText("veja na tela Exames");
+  });
+
   it("todas canceladas: a de mudança de situação mais recente", async () => {
     const a = examOrder({ id: "eo-a", status: "cancelled", status_changed_at: "2026-10-11T09:00:00-03:00" });
     const b = examOrder({ id: "eo-b", status: "cancelled", status_changed_at: "2026-10-12T09:00:00-03:00" });
