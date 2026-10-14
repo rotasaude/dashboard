@@ -137,6 +137,23 @@ describe("ExamsUnit", () => {
     expect(await screen.findByRole("region", { name: "Exame Hemograma completo" })).not.toBeNull();
   });
 
+  it("trocar de unidade fecha o exame aberto e volta à primeira aba", async () => {
+    mocked(api.listActiveUnits).mockResolvedValue([ UNIT21, { id: "u2", name: "UBS Norte", kind: "ubs" } ]);
+    mocked(api.getExamOrder).mockResolvedValue(examOrder());
+    renderWithProviders(<ExamsUnit />);
+    await openUnit();
+    const list = await screen.findByRole("region", { name: "Exames da unidade" });
+    fireEvent.click(within(list).getByRole("tab", { name: "Agendados" }));
+    fireEvent.click(await within(list).findByRole("button", { name: "Abrir Hemograma completo de Joana Lima" }));
+    await screen.findByRole("region", { name: "Exame Hemograma completo" });
+    fireEvent.click(screen.getByRole("button", { name: "trocar" }));
+    fireEvent.click(await screen.findByRole("button", { name: "UBS Norte" }));
+    await waitFor(() => expect(api.listExamOrders).toHaveBeenCalledWith({ unitId: "u2", statuses: [ "awaiting_schedule" ], before: null }));
+    expect(screen.queryByRole("region", { name: "Exame Hemograma completo" })).toBeNull();
+    const tab = within(await screen.findByRole("region", { name: "Exames da unidade" })).getByRole("tab", { name: "A agendar" });
+    expect(tab.getAttribute("aria-selected")).toBe("true");
+  });
+
   it("trocar o paciente descarta o anexo da guia (documento do paciente anterior)", async () => {
     renderWithProviders(<ExamsUnit />);
     const form = await startGuide();

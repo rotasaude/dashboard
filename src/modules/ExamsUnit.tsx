@@ -66,8 +66,9 @@ export function ExamsUnit() {
               </div>
             </Panel>
           )}
-          <UnitExamList unit={unit} />
-          <OverduePanel unitId={unit.id} canOpen />
+          {/* key: trocar de unidade descarta o exame aberto, a aba e os filtros. */}
+          <UnitExamList key={`list:${unit.id}`} unit={unit} />
+          <OverduePanel key={`overdue:${unit.id}`} unitId={unit.id} canOpen />
         </>
       )}
     </Frame>
