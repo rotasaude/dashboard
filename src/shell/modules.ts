@@ -216,10 +216,10 @@ export function withPendingCount(groups: NavGroupDef[], count: number): NavGroup
 }
 
 // Módulo 21a: contador de resultados aguardando ciência no item do menu.
-// A lista vem em páginas de 50 (C14): com mais páginas, "50+".
-export function withExamPendingCount(groups: NavGroupDef[], count: number, hasMore = false): NavGroupDef[] {
+// O número vem da rota de contagem (A46), que é exato: sem "+".
+export function withExamPendingCount(groups: NavGroupDef[], count: number): NavGroupDef[] {
   if (count <= 0) return groups;
-  const shown = hasMore ? `${count}+` : String(count);
+  const shown = String(count);
   return groups.map((group) => ({
     ...group,
     items: group.items.map((item) => item.id === "exam-acknowledgements" ? { ...item, label: `${item.label} (${shown})` } : item)

@@ -372,7 +372,8 @@ export async function refreshExams(client: QueryClient): Promise<void> {
   await Promise.all(MOVING_KEYS.map((key) => client.invalidateQueries({ queryKey: [ key ] })));
 }
 
-// A lista de ciências pendentes vem em páginas de 50 (C14): com mais páginas, "50+".
+// "+" só na tela da lista (C14): conta as linhas lidas e há mais páginas. O
+// Início e o menu usam a rota de contagem (A46), exata — sem "+".
 export function pendingCountText(count: number, hasMore: boolean): string {
   return hasMore ? `${count}+` : String(count);
 }

@@ -2424,7 +2424,8 @@ export interface ExternalResultInput {
 // `denied_reason` (A47) só vem nas negadas; null sem motivo registrado.
 export type DeniedExamOrder = ExamOrder & { denied_reason?: string | null };
 export interface PendingAcknowledgements { orders: ExamOrder[]; denied: DeniedExamOrder[]; next_before: string | null }
-// A46: só contagens (sem dado clínico e sem trilha de leitura). `has_more` = mais de 50.
+// A46: só contagens (sem dado clínico e sem trilha de leitura). `pending` é exato;
+// `has_more` = a lista passa de uma página (50); `denied` é limitado a 50.
 export interface PendingAcknowledgementCount { pending: number; has_more: boolean; denied: number }
 
 export interface ExamCatalogItem {

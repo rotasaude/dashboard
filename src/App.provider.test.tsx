@@ -49,12 +49,12 @@ describe("shell do prestador de exames", () => {
 });
 
 describe("contador de resultados aguardando ciência (A46)", () => {
-  it("o Início lê só a rota de contagem, nunca a lista, e mostra 50+ e os negados", async () => {
+  it("o Início lê só a rota de contagem, nunca a lista, e mostra o número exato e os negados", async () => {
     sessionUser = user("health_professional");
     adminFetch.mockRejectedValue(new Error("offline"));
-    countPending.mockResolvedValue({ pending: 50, has_more: true, denied: 1 });
+    countPending.mockResolvedValue({ pending: 73, has_more: true, denied: 1 });
     mount();
-    expect(await screen.findByText("50+ resultados aguardando sua ciência · 1 exame negado")).not.toBeNull();
+    expect(await screen.findByText("73 resultados aguardando sua ciência · 1 exame negado")).not.toBeNull();
     expect(countPending).toHaveBeenCalled();
     expect(listPending).not.toHaveBeenCalled();
   });

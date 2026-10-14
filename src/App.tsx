@@ -70,8 +70,8 @@ const ALL_SLUGS: ReadonlySet<string> = new Set(NAV_GROUPS.map((g) => slugOf(g.la
 // Grupos do shell a partir do filtro por papel de hoje. O rótulo de
 // Pendentes leva a contagem de withPendingCount ("(3)", "(200+)"), como no
 // menu antigo; `count` só acende o ponto do trilho.
-export function shellGroups(groups: NavGroupDef[], pending: number, examPending = 0, examHasMore = false): ShellGroup[] {
-  return withExamPendingCount(withPendingCount(groups, pending), examPending, examHasMore).map((g) => ({
+export function shellGroups(groups: NavGroupDef[], pending: number, examPending = 0): ShellGroup[] {
+  return withExamPendingCount(withPendingCount(groups, pending), examPending).map((g) => ({
     label: g.label,
     slug: slugOf(g.label),
     items: g.items.map((i) => {
@@ -106,11 +106,11 @@ function ShellInner({ initialModule }: { initialModule?: ModuleId }) {
   const examPending = useExamPending(canUseExams(auth.user) && examRoles(auth.user).professional, auth.user?.id ?? null);
   // (enabled só liga com sessão; o id nunca é null com a consulta ligada)
   const examCount = examPending.data?.pending ?? 0;
+  // A46: `pending` é a contagem exata (has_more só diz que a lista tem mais de uma página).
   const deniedCount = examPending.data?.denied ?? 0;
-  const examHasMore = !!examPending.data?.has_more;
   const groups = useMemo(
-    () => shellGroups(navGroupsFor(auth.user), pending.data?.length ?? 0, examCount, examHasMore),
-    [ auth.user, pending.data?.length, examCount, examHasMore ]
+    () => shellGroups(navGroupsFor(auth.user), pending.data?.length ?? 0, examCount),
+    [ auth.user, pending.data?.length, examCount ]
   );
 
   const isAllowed = useCallback((r: Route<ModuleId>) => {
@@ -134,7 +134,7 @@ function ShellInner({ initialModule }: { initialModule?: ModuleId }) {
   let content;
   if (route.kind === "home") content = (
     <>
-      <AcknowledgementNotice pending={examCount} denied={deniedCount} hasMore={examHasMore} onOpen={() => navigate("exam-acknowledgements")} />
+      <AcknowledgementNotice pending={examCount} denied={deniedCount} onOpen={() => navigate("exam-acknowledgements")} />
       <HomeCards groups={groups} catalog={CATALOG} go={goShell} />
     </>
   );

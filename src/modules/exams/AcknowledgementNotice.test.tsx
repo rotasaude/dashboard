@@ -13,9 +13,9 @@ describe("AcknowledgementNotice", () => {
     expect(onOpen).toHaveBeenCalledTimes(1);
   });
 
-  it("com mais páginas, mostra 50+", () => {
-    render(<AcknowledgementNotice pending={50} denied={0} hasMore onOpen={vi.fn()} />);
-    expect(screen.getByRole("status").textContent).toBe("50+ resultados aguardando sua ciência");
+  it("a contagem é exata: mostra o número sem +", () => {
+    render(<AcknowledgementNotice pending={73} denied={0} onOpen={vi.fn()} />);
+    expect(screen.getByRole("status").textContent).toBe("73 resultados aguardando sua ciência");
   });
 
   it("nada pendente: não aparece", () => {
