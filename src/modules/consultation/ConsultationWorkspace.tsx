@@ -145,6 +145,7 @@ export function ConsultationWorkspace(props: Props) {
       {record.data && (
         <>
           <PatientPanel record={record.data} onOpenConsultation={setViewing}
+            exams={examsOn ? { patientId: record.data.patient.id, consultationId: consultation?.status === "draft" ? consultation.id : null } : undefined}
             timeline={timelineOn ? { subject: { attendanceId: props.attendanceId }, searchDelayMs: props.searchDelayMs } : undefined}
             besideProblems={documentsOn ? (
             <MedicationsBlock patientId={record.data.patient.id} unitId={props.unit.id} searchDelayMs={props.searchDelayMs}

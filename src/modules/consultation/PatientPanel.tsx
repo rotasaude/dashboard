@@ -15,6 +15,7 @@ import { secondaryButtonStyle } from "../../components/formStyles";
 import type { TimelineSubject } from "../../lib/api";
 import { SegmentedControl } from "../../shell/SegmentedControl";
 import { PatientTimeline } from "../timeline/PatientTimeline";
+import { PatientExams, type PatientExamsProps } from "../exams/PatientExams";
 
 // Módulo 20: a aba "Linha do tempo" (quem passa a prop decide a pessoa).
 // `onAddendumAdded`: o mesmo do Resumo, para a consulta aberta pela aba; os
@@ -39,18 +40,28 @@ export function VitalsList({ vitals, label }: { vitals: VitalSigns; label: strin
 }
 
 // Módulo 19c: `besideProblems` = os medicamentos em uso, logo depois dos problemas.
-// Módulo 20: `timeline` liga as abas "Resumo" e "Linha do tempo".
-export function PatientPanel({ record, onOpenConsultation, besideProblems, timeline }: {
+// Módulo 20: `timeline` liga as abas "Resumo" e "Linha do tempo"; módulo 21a: `exams`, a aba "Exames".
+export function PatientPanel({ record, onOpenConsultation, besideProblems, timeline, exams }: {
   record: ClinicalRecord; onOpenConsultation(id: string): void; besideProblems?: ReactNode; timeline?: PatientTimelineProps;
+  exams?: PatientExamsProps;
 }) {
   const { patient, problems, consultations } = record;
   const active = problems.filter((p) => p.status === "active");
   const rev = record.today_screening?.current_revision ?? null;
   // A linha do tempo só lê na primeira abertura da aba e depois fica montada
   // (escondida), para a volta ao Resumo não perder filtros nem páginas.
-  const [ tab, setTab ] = useState<"summary" | "timeline">("summary");
+  type PanelTab = "summary" | "timeline" | "exams";
+  const [ tab, setTab ] = useState<PanelTab>("summary");
   const [ timelineOpened, setTimelineOpened ] = useState(false);
-  const onSummary = !timeline || tab === "summary";
+  const [ examsOpened, setExamsOpened ] = useState(false);
+  const onTimeline = !!timeline && tab === "timeline";
+  const onExams = !!exams && tab === "exams";
+  const onSummary = !onTimeline && !onExams;
+  const tabs: { key: PanelTab; label: string }[] = [
+    { key: "summary", label: "Resumo" },
+    ...(timeline ? [ { key: "timeline" as const, label: "Linha do tempo" } ] : []),
+    ...(exams ? [ { key: "exams" as const, label: "Exames" } ] : [])
+  ];
 
   return (
     <section aria-label="Paciente" style={panel}>
@@ -61,10 +72,12 @@ export function PatientPanel({ record, onOpenConsultation, besideProblems, timel
         <KeyValue k="CPF" v={patient.cpf_masked} />
       </div>
 
-      {timeline && (
-        <SegmentedControl
-          options={[ { key: "summary", label: "Resumo" }, { key: "timeline", label: "Linha do tempo" } ]}
-          value={tab} onChange={(key) => { setTab(key); if (key === "timeline") setTimelineOpened(true); }} />
+      {tabs.length > 1 && (
+        <SegmentedControl<PanelTab> options={tabs} value={tab} onChange={(key) => {
+          setTab(key);
+          if (key === "timeline") setTimelineOpened(true);
+          if (key === "exams") setExamsOpened(true);
+        }} />
       )}
 
       {/* display: contents não mexe no gap do painel; só vale com o Resumo aberto. */}
@@ -124,8 +137,13 @@ export function PatientPanel({ record, onOpenConsultation, besideProblems, timel
       </div>
 
       {timeline && timelineOpened && (
-        <div hidden={onSummary} style={onSummary ? undefined : { display: "contents" }}>
+        <div hidden={!onTimeline} style={onTimeline ? { display: "contents" } : undefined}>
           <PatientTimeline {...timeline} patientProblems={problems} />
+        </div>
+      )}
+      {exams && examsOpened && (
+        <div hidden={!onExams} style={onExams ? { display: "contents" } : undefined}>
+          <PatientExams {...exams} />
         </div>
       )}
     </section>
