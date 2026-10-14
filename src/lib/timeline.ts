@@ -20,7 +20,8 @@ export const TIMELINE_KINDS: { key: TimelineKind; label: string }[] = [
   { key: "consultation", label: "Consulta" },
   { key: "clinical_document", label: "Documento" },
   { key: "controlled_notification", label: "Notificação de receita" },
-  { key: "campaign", label: "Campanha" }
+  { key: "campaign", label: "Campanha" },
+  { key: "exam", label: "Exame" }
 ];
 
 export const ALL_FILTERS: TimelineFilters = { kinds: [], from: "", to: "" };
@@ -76,9 +77,9 @@ export function mergePages(pages: TimelinePage[]): TimelineEntry[] {
   return out;
 }
 
-export type DetailType = "consultation" | "clinical_document" | "screening" | "appointment_request";
+export type DetailType = "consultation" | "clinical_document" | "screening" | "appointment_request" | "exam_order";
 export interface DetailTarget { type: DetailType; id: string }
-const OPENABLE: ReadonlySet<string> = new Set<DetailType>([ "consultation", "clinical_document", "screening", "appointment_request" ]);
+const OPENABLE: ReadonlySet<string> = new Set<DetailType>([ "consultation", "clinical_document", "screening", "appointment_request", "exam_order" ]);
 
 // Pela abertura justificada (fora de contexto) só a consulta abre: as rotas de
 // documento, escuta e pedido não aceitam a abertura (contrato §9). O pedido de
@@ -130,12 +131,21 @@ const STATUS_LABEL: Record<string, string> = {
   issued: "emitido",
   cancelled: "cancelado",
   read: "aviso lido",
-  unread: "aviso não lido"
+  unread: "aviso não lido",
+  // Módulo 21a (contrato §1): situação do exame (scheduled e cancelled já estão acima);
+  // external = resultado externo registrado por qualquer unidade (A38).
+  awaiting_authorization: "aguardando autorização",
+  denied: "negado",
+  awaiting_schedule: "a agendar",
+  collected: "coletado",
+  resulted: "resultado registrado",
+  acknowledged: "ciência dada",
+  external: "resultado externo"
 };
 
-export function statusLabel(status: string | null): string {
+export function statusLabel(status: string | null, apiLabel?: string | null): string {
   if (!status) return "—";
-  return STATUS_LABEL[status] ?? status;
+  return STATUS_LABEL[status] ?? apiLabel ?? status;
 }
 
 export function endsOpening(err: unknown, endOnOutOfContext: boolean): boolean {

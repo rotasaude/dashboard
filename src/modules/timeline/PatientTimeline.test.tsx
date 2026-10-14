@@ -88,7 +88,7 @@ describe("PatientTimeline", () => {
     fireEvent.change(screen.getByLabelText("Até"), { target: { value: "2026-09-30" } });
     fireEvent.click(screen.getByRole("button", { name: "Filtrar" }));
     await waitFor(() => expect(api.getTimeline).toHaveBeenLastCalledWith({ attendanceId: "a1" }, {
-      kinds: [ "attendance", "screening", "appointment", "consultation", "clinical_document", "controlled_notification" ],
+      kinds: [ "attendance", "screening", "appointment", "consultation", "clinical_document", "controlled_notification", "exam" ], // + exame (módulo 21a)
       from: "2026-09-01", to: "2026-09-30"
     }, null));
 
@@ -107,7 +107,7 @@ describe("PatientTimeline", () => {
     expect(api.getTimeline).toHaveBeenCalledTimes(1);
 
     fireEvent.click(screen.getByRole("button", { name: "Limpar filtros" }));
-    for (const label of [ "Triagem", "Atendimento", "Escuta", "Agendamento", "Consulta", "Documento", "Notificação de receita", "Campanha" ]) {
+    for (const label of [ "Triagem", "Atendimento", "Escuta", "Agendamento", "Consulta", "Documento", "Notificação de receita", "Campanha", "Exame" ]) { // + exame (módulo 21a)
       fireEvent.click(screen.getByLabelText(label));
     }
     fireEvent.click(screen.getByRole("button", { name: "Filtrar" }));

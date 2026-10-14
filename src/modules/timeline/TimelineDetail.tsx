@@ -12,6 +12,7 @@ import { useAuth } from "../../lib/auth";
 import { ConsultationLoader } from "../consultation/ConsultationView";
 import { ScreeningDetailLoader } from "../attendance/ScreeningDetail";
 import { RequestDetailPanel } from "../attendance/RequestDetailPanel";
+import { ExamOrderDetail } from "../exams/ExamOrderDetail";
 import { DocumentDetail } from "./DocumentDetail";
 
 interface Props {
@@ -55,5 +56,7 @@ export function TimelineDetail({
       return <ScreeningDetailLoader id={target.id} onClose={onClose} />;
     case "appointment_request":
       return <RequestDetailPanel requestId={target.id} onClose={onClose} />;
+    case "exam_order":
+      return <ExamOrderDetail id={target.id} onClose={onClose} />;
   }
 }

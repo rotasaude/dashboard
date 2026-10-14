@@ -143,7 +143,7 @@ export function PatientTimeline({
                 </div>
               )
             },
-            { label: "Situação", w: "0.9fr", render: (e) => statusLabel(e.status) },
+            { label: "Situação", w: "0.9fr", render: (e) => statusLabel(e.status, e.status_label) },
             { label: "Onde e quem", w: "1.6fr", render: (e) => {
               const w = entryWhere(e);
               if (!w.unit && !w.person) return "—";

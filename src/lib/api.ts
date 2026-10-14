@@ -2274,7 +2274,7 @@ export async function getLastPatientIdentification(consultationId: string): Prom
 
 export type TimelineKind =
   | "triage" | "attendance" | "screening" | "appointment" | "consultation"
-  | "clinical_document" | "controlled_notification" | "campaign";
+  | "clinical_document" | "controlled_notification" | "campaign" | "exam";
 
 export interface TimelineDetailRef { type: string; id: string }
 export interface TimelineEntry {
@@ -2284,6 +2284,8 @@ export interface TimelineEntry {
   // title e summary em português, prontos; status é o código da origem
   // (finalized, issued, confirmed…), traduzido na tela (Divergência D3).
   title: string; summary: string | null; status: string | null;
+  // Rótulo pronto do api, se vier (usado só para situação sem tradução aqui).
+  status_label?: string | null;
   // Divergência D2: nulo (ou tipo sem tela) = a entrada não abre detalhe.
   detail_ref: TimelineDetailRef | null;
 }
