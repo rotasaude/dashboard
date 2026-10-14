@@ -15,7 +15,7 @@ import {
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { PatientLookup } from "./PatientLookup";
 import { UploadField } from "./UploadField";
-import { alert, checkLabel, fieldLabel, fieldset, form, legend, row } from "./styles";
+import { alert, checkLabel, fieldLabel, fieldset, form, legend, muted, row } from "./styles";
 
 export function ReceptionGuideForm({ unit, onDone, onCancel }: { unit: HealthUnit; onDone(order: ExamOrder): void; onCancel(): void }) {
   const queryClient = useQueryClient();
@@ -25,7 +25,20 @@ export function ReceptionGuideForm({ unit, onDone, onCancel }: { unit: HealthUni
   const [ draft, setDraft ] = useState<GuideDraft>(EMPTY_GUIDE);
   const [ error, setError ] = useState<string | null>(null);
   const [ busy, setBusy ] = useState(false);
+  // O anexo é documento do paciente: trocar o paciente descarta o anexo e
+  // remonta o campo (some o nome do arquivo e o arquivo escolhido).
+  const [ uploadKey, setUploadKey ] = useState(0);
+  const [ reattach, setReattach ] = useState(false);
   const set = (patch: Partial<GuideDraft>) => setDraft((d) => ({ ...d, ...patch }));
+
+  function changePatient(next: ExamPatient | null) {
+    if (patient && next?.id !== patient.id && draft.guideUploadId) {
+      set({ guideUploadId: null });
+      setUploadKey((k) => k + 1);
+      setReattach(true);
+    }
+    setPatient(next);
+  }
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -50,7 +63,7 @@ export function ReceptionGuideForm({ unit, onDone, onCancel }: { unit: HealthUni
 
   return (
     <form aria-label="Nova guia" onSubmit={submit} style={form}>
-      <PatientLookup patient={patient} onFound={setPatient} />
+      <PatientLookup patient={patient} onFound={changePatient} />
       {catalog.isError && <p role="alert" style={alert}>{examError(catalog.error)}</p>}
       {catalog.isSuccess && (
         <label style={fieldLabel}>
@@ -109,9 +122,11 @@ export function ReceptionGuideForm({ unit, onDone, onCancel }: { unit: HealthUni
       </fieldset>
       <label style={fieldLabel}>
         Número da guia no prestador (opcional)
-        <input value={draft.externalReference} style={inputStyle} onChange={(e) => set({ externalReference: e.target.value })} />
+        <input value={draft.externalReference} maxLength={60} style={inputStyle} onChange={(e) => set({ externalReference: e.target.value })} />
       </label>
-      <UploadField label="Foto ou PDF da guia (até 10 MB)" uploadId={draft.guideUploadId} onUploaded={(guideUploadId) => set({ guideUploadId })} />
+      <UploadField key={uploadKey} label="Foto ou PDF da guia (até 10 MB)" uploadId={draft.guideUploadId}
+        onUploaded={(guideUploadId) => { if (guideUploadId) setReattach(false); set({ guideUploadId }); }} />
+      {reattach && <p role="status" style={muted}>anexe a guia de novo</p>}
       {error && <p role="alert" style={alert}>{error}</p>}
       <div style={row}>
         <button type="submit" aria-disabled={busy || undefined} style={busy ? disabledButtonStyle : buttonStyle}>Registrar guia</button>

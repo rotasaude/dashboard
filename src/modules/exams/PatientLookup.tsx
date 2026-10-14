@@ -37,7 +37,8 @@ export function PatientLookup({ patient, onFound }: { patient: ExamPatient | nul
       <div style={{ ...row, alignItems: "flex-end" }}>
         <label style={fieldLabel}>
           CPF do paciente
-          <input value={cpf} inputMode="numeric" autoComplete="off" style={inputStyle} onChange={(e) => setCpf(maskCpf(e.target.value))} />
+          <input value={cpf} inputMode="numeric" autoComplete="off" style={inputStyle} onChange={(e) => setCpf(maskCpf(e.target.value))}
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void find(); } }} />
         </label>
         <ActionButton variant="secondary" onClick={find}>Buscar paciente</ActionButton>
       </div>

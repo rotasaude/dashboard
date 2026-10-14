@@ -137,6 +137,80 @@ describe("ExamsUnit", () => {
     expect(await screen.findByRole("region", { name: "Exame Hemograma completo" })).not.toBeNull();
   });
 
+  it("trocar o paciente descarta o anexo da guia (documento do paciente anterior)", async () => {
+    renderWithProviders(<ExamsUnit />);
+    const form = await startGuide();
+    fireEvent.change(await within(form).findByLabelText("Profissional que pediu"), { target: { value: "us1" } });
+    await attach(form);
+    fireEvent.click(within(form).getByRole("button", { name: "Trocar paciente" }));
+    expect(within(form).getByText("anexe a guia de novo")).not.toBeNull();
+    expect(within(form).queryByText("anexado: guia.pdf")).toBeNull();
+    expect((within(form).getByLabelText("Foto ou PDF da guia (até 10 MB)") as HTMLInputElement).value).toBe("");
+    fireEvent.change(within(form).getByLabelText("CPF do paciente"), { target: { value: VALID_CPF } });
+    fireEvent.click(within(form).getByRole("button", { name: "Buscar paciente" }));
+    await within(form).findByText("Paciente: Joana Lima · CPF ***.982.247-**");
+    fireEvent.click(within(form).getByRole("button", { name: "Registrar guia" }));
+    expect((await within(form).findByRole("alert")).textContent).toBe("anexe a foto ou o PDF da guia");
+    expect(api.createReceptionOrder).not.toHaveBeenCalled();
+    await attach(form);
+    expect(within(form).queryByText("anexe a guia de novo")).toBeNull();
+  });
+
+  it("Enter no CPF busca o paciente, na guia e no resultado externo", async () => {
+    renderWithProviders(<ExamsUnit />);
+    await openUnit();
+    fireEvent.click(await screen.findByRole("button", { name: "Nova guia" }));
+    const form = screen.getByRole("form", { name: "Nova guia" });
+    const cpf = within(form).getByLabelText("CPF do paciente");
+    fireEvent.change(cpf, { target: { value: VALID_CPF } });
+    expect(fireEvent.keyDown(cpf, { key: "Enter" })).toBe(false);
+    await within(form).findByText("Paciente: Joana Lima · CPF ***.982.247-**");
+    expect(within(form).queryByRole("alert")).toBeNull();
+    fireEvent.click(within(form).getByRole("button", { name: "Voltar" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Resultado externo" }));
+    const ext = screen.getByRole("region", { name: "Registrar resultado externo" });
+    const cpf2 = within(ext).getByLabelText("CPF do paciente");
+    fireEvent.change(cpf2, { target: { value: VALID_CPF } });
+    expect(fireEvent.keyDown(cpf2, { key: "Enter" })).toBe(false);
+    await within(ext).findByText("Paciente: Joana Lima · CPF ***.982.247-**");
+    expect(api.lookupExamPatient).toHaveBeenCalledTimes(2);
+  });
+
+  it("o CPF não fica em campo nem no cache depois da busca", async () => {
+    const { client } = renderWithProviders(<ExamsUnit />);
+    await startGuide();
+    expect(screen.queryByDisplayValue(VALID_CPF)).toBeNull();
+    expect(screen.queryByDisplayValue("529.982.247-25")).toBeNull();
+    const cached = JSON.stringify([
+      client.getQueryCache().getAll().map((q) => [ q.queryKey, q.state.data ]),
+      client.getMutationCache().getAll().map((m) => m.state)
+    ]);
+    expect(cached.replace(/\D/g, "")).not.toContain(VALID_CPF);
+  });
+
+  it("CPF sem cadastro validado e excesso de buscas explicam", async () => {
+    mocked(api.lookupExamPatient).mockRejectedValueOnce(new ApiError(409, { error: "citizen_not_verified" }, "x"))
+      .mockRejectedValueOnce(new ApiError(429, { error: "too_many_requests" }, "x"));
+    renderWithProviders(<ExamsUnit />);
+    await openUnit();
+    fireEvent.click(await screen.findByRole("button", { name: "Nova guia" }));
+    const form = screen.getByRole("form", { name: "Nova guia" });
+    fireEvent.change(within(form).getByLabelText("CPF do paciente"), { target: { value: VALID_CPF } });
+    fireEvent.click(within(form).getByRole("button", { name: "Buscar paciente" }));
+    await waitFor(() => expect(within(form).getByRole("alert").textContent)
+      .toBe("este CPF ainda não tem cadastro validado — faça a validação presencial no balcão antes"));
+    fireEvent.click(within(form).getByRole("button", { name: "Buscar paciente" }));
+    await waitFor(() => expect(within(form).getByRole("alert").textContent).toBe("muitas tentativas seguidas — espere um minuto e tente de novo"));
+  });
+
+  it("número da guia no prestador aceita até 60 caracteres", async () => {
+    renderWithProviders(<ExamsUnit />);
+    await openUnit();
+    fireEvent.click(await screen.findByRole("button", { name: "Nova guia" }));
+    const ref = within(screen.getByRole("form", { name: "Nova guia" })).getByLabelText("Número da guia no prestador (opcional)");
+    expect((ref as HTMLInputElement).maxLength).toBe(60);
+  });
+
   it("papel sem acesso e rastreamento desligado", async () => {
     mocked(api.fetchCurrentSession).mockResolvedValue(examUser([ "viewer" ]));
     renderWithProviders(<ExamsUnit />);
