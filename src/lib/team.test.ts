@@ -56,11 +56,15 @@ describe("reviewerCount", () => {
 const apiError = (status: number, body: unknown) => new ApiError(status, body, String(status));
 
 describe("convite", () => {
-  it("oferece os 9 papéis da cidade", () => {
+  it("oferece os 10 papéis da cidade que se convidam pela Equipe", () => {
     expect(INVITE_ROLES.map((r) => r.role).sort()).toEqual([
-      "analyst", "campaign_manager", "citizen_verifier", "health_professional", "municipal_admin", "protocol_author",
-      "protocol_publisher", "protocol_reviewer", "viewer"
+      "analyst", "campaign_manager", "citizen_verifier", "exam_regulator", "health_professional", "municipal_admin",
+      "protocol_author", "protocol_publisher", "protocol_reviewer", "viewer"
     ]);
+    expect(INVITE_ROLES.find((r) => r.role === "exam_regulator")?.label).toBe("Regulador de exames");
+    expect(isPrivilegedRole("exam_regulator")).toBe(true);
+    // O exam_provider só entra pelo cadastro do prestador.
+    expect(INVITE_ROLES.some((r) => r.role === "exam_provider")).toBe(false);
     expect(INVITE_ROLES.find((r) => r.role === "campaign_manager")?.label).toBe("Gestor de campanhas");
     expect(INVITE_ROLES.find((r) => r.role === "analyst")?.label).toBe("Análise");
   });

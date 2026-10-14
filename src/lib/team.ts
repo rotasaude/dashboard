@@ -74,8 +74,8 @@ export function reviewerCount(members: TeamMember[]): number {
   return members.filter((m) => m.isReviewer).length;
 }
 
-// Os 9 papéis da cidade (Membership::ROLES na API), na ordem do seletor do
-// convite.
+// Papéis da cidade que se convidam pela Equipe (Membership::ROLES na API), na
+// ordem do seletor. O exam_provider entra só pelo cadastro do prestador (módulo 21a).
 export const INVITE_ROLES: { role: string; label: string }[] = [
   { role: "viewer", label: "Leitura (viewer)" },
   { role: ANALYST_ROLE, label: "Análise" },
@@ -85,11 +85,12 @@ export const INVITE_ROLES: { role: string; label: string }[] = [
   { role: "citizen_verifier", label: "Atendente" },
   { role: "health_professional", label: "Profissional de saúde" },
   { role: CAMPAIGN_MANAGER_ROLE, label: "Gestor de campanhas" },
+  { role: "exam_regulator", label: "Regulador de exames" },
   { role: "municipal_admin", label: "Administrador municipal" }
 ];
 
 // Membership::PRIVILEGED_ROLES: conceder OU convidar exige step-up.
-const PRIVILEGED_ROLES = new Set([ "municipal_admin", REVIEWER_ROLE, VERIFIER_ROLE, PROFESSIONAL_ROLE, CAMPAIGN_MANAGER_ROLE ]);
+const PRIVILEGED_ROLES = new Set([ "municipal_admin", REVIEWER_ROLE, VERIFIER_ROLE, PROFESSIONAL_ROLE, CAMPAIGN_MANAGER_ROLE, "exam_regulator" ]);
 
 export function isPrivilegedRole(role: string): boolean {
   return PRIVILEGED_ROLES.has(role);

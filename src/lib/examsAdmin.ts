@@ -1,8 +1,12 @@
 // src/lib/examsAdmin.ts
 // Formulários do admin municipal de exames (módulo 21a; contrato §5): o
 // catálogo da cidade e (Task 13) os prestadores. Prazo em branco = herda.
-import type { ExamCatalogItem, ExamCatalogItemInput, ExamReleasePolicy, ExamResultField } from "./api";
-import { deadlineDraft, deadlinesFrom, deadlinesProblem, resultFieldsProblem, sigtapProblem, type DeadlineDraft } from "./exams";
+import type {
+  ExamCatalogItem, ExamCatalogItemInput, ExamProvider, ExamProviderInput, ExamProviderKind, ExamReleasePolicy, ExamResultField
+} from "./api";
+import {
+  cnesProblem, deadlineDraft, deadlinesFrom, deadlinesProblem, resultFieldsProblem, sigtapProblem, type DeadlineDraft
+} from "./exams";
 
 export interface CatalogDraft {
   sigtapCode: string; requiresAuthorization: boolean; releasePolicy: ExamReleasePolicy;
@@ -46,5 +50,43 @@ export function catalogBody(d: CatalogDraft): ExamCatalogItemInput {
       key: f.key.trim(), label: f.label.trim(), unit: f.unit?.trim() || null, loinc: f.loinc?.trim() || null
     })),
     active: d.active
+  };
+}
+
+export interface ProviderDraft {
+  name: string; cnes: string; kind: ExamProviderKind; active: boolean;
+  // catalog_item_id → prazos próprios; presente = o prestador faz o exame.
+  items: Record<string, DeadlineDraft>;
+}
+
+export function providerDraft(p?: ExamProvider | null): ProviderDraft {
+  return {
+    name: p?.name ?? "",
+    cnes: p?.cnes ?? "",
+    kind: p?.kind ?? "accredited",
+    active: p?.active ?? true,
+    items: Object.fromEntries((p?.items ?? []).map((i) => [ i.catalog_item_id, deadlineDraft(i.deadlines) ]))
+  };
+}
+
+export function providerProblem(d: ProviderDraft, labelOf: (catalogItemId: string) => string): string | null {
+  if (!d.name.trim()) return "informe o nome do prestador";
+  const cnes = cnesProblem(d.cnes);
+  if (cnes) return cnes;
+  for (const [ id, deadlines ] of Object.entries(d.items)) {
+    const problem = deadlinesProblem(deadlines);
+    if (problem) return `${labelOf(id)}: ${problem}`;
+  }
+  return null;
+}
+
+// Só os campos que o admin escreve: `simulated`, token e usuários nunca vão.
+export function providerBody(d: ProviderDraft): ExamProviderInput {
+  return {
+    name: d.name.trim(),
+    cnes: d.cnes.trim() || null,
+    kind: d.kind,
+    active: d.active,
+    items: Object.entries(d.items).map(([ catalog_item_id, deadlines ]) => ({ catalog_item_id, deadlines: deadlinesFrom(deadlines) }))
   };
 }

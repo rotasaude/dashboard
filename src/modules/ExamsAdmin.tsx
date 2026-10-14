@@ -7,6 +7,7 @@ import { EXAMS_DISABLED, EXAMS_NO_ROLE, canUseExams, examRoles } from "../lib/ex
 import { PageHeader } from "../components/PageHeader";
 import { EmptyState } from "../components/EmptyState";
 import { CatalogPanel } from "./examsAdmin/CatalogPanel";
+import { ProvidersPanel } from "./examsAdmin/ProvidersPanel";
 import { stack } from "./exams/styles";
 
 export function ExamsAdmin({ onGoToSecurity }: { onGoToSecurity?(): void }) {
@@ -17,6 +18,7 @@ export function ExamsAdmin({ onGoToSecurity }: { onGoToSecurity?(): void }) {
   return (
     <Frame>
       <CatalogPanel onGoToSecurity={onGoToSecurity} />
+      <ProvidersPanel onGoToSecurity={onGoToSecurity} />
     </Frame>
   );
 }
