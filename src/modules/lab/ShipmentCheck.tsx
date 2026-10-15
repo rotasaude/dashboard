@@ -10,6 +10,7 @@ import { LAB_SHIPMENTS_KEY, labError, refreshLab } from "../../lib/lab";
 import { fmtDateTime } from "../../lib/format";
 import { Panel } from "../../components/Panel";
 import { DataTable } from "../../components/DataTable";
+import { ActionButton } from "../../components/ActionButton";
 import { ConfirmButton } from "../../components/ConfirmButton";
 import { Tag } from "../../components/Tag";
 import { secondaryButtonStyle } from "../../components/formStyles";
@@ -27,9 +28,10 @@ export function ShipmentCheck({ providerId }: { providerId: string }) {
   const readRef = useRef<string[]>([]);
   const setRead = (next: string[]) => { readRef.current = next; setReadState(next); };
   const [ error, setError ] = useState<string | null>(null);
+  const [ scanning, setScanning ] = useState(false);
   const [ notice, setNotice ] = useState<string | null>(null);
 
-  function start(s: LabShipment) { setOpen(s); setRead([]); setError(null); setNotice(null); }
+  function start(s: LabShipment) { setScanning(false); setOpen(s); setRead([]); setError(null); setNotice(null); }
 
   async function scan(code: string): Promise<ScanOutcome> {
     if (!open) return { ok: false, text: "escolha a remessa" };
@@ -45,8 +47,10 @@ export function ShipmentCheck({ providerId }: { providerId: string }) {
     try {
       await receiveShipment(open.id, readRef.current);
       setOpen(null);
+      setScanning(false);
       setNotice("Remessa conferida. Siga para o recebimento de cada amostra.");
-      await refreshLab(queryClient);
+      // a conferência já foi gravada: falha ao reler as listas não a desfaz
+      await refreshLab(queryClient).catch(() => undefined);
     } catch (err) {
       setError(labError(err));
       if (errorCode(err) === "invalid_transition") { setOpen(null); void shipments.refetch(); }
@@ -66,7 +70,7 @@ export function ShipmentCheck({ providerId }: { providerId: string }) {
               { label: "Enviada", w: "1.2fr", render: (s) => fmtDateTime(s.sent_at) },
               { label: "Amostras", w: "0.8fr", align: "right", render: (s) => String(s.samples.length) },
               { label: "Temperatura", w: "0.9fr", render: (s) => (s.temperature_celsius === null ? "—" : `${String(s.temperature_celsius).replace(".", ",")} °C`) },
-              { label: "", w: "auto", card: "actions", render: (s) => <button type="button" style={secondaryButtonStyle} onClick={() => start(s)}>Conferir</button> }
+              { label: "", w: "auto", card: "actions", render: (s) => <ActionButton variant="secondary" onClick={() => start(s)}>Conferir</ActionButton> }
             ]}
             rows={shipments.data ?? []} rowKey={(s) => s.id} empty={shipments.isPending ? "carregando…" : "nenhuma remessa a caminho"}
           />
@@ -74,7 +78,7 @@ export function ShipmentCheck({ providerId }: { providerId: string }) {
       </Panel>
       {open && (
         <section aria-label={`Conferência da remessa de ${open.origin_unit.name}`} style={panel}>
-          <ScanField label="Etiqueta do tubo recebido" onScan={scan} />
+          <ScanField label="Etiqueta do tubo recebido" onScan={scan} onBusyChange={setScanning} />
           <p style={muted}>{`${read.length} de ${open.samples.length} lidas`}</p>
           <ul aria-label="amostras da remessa" style={{ margin: 0, paddingLeft: 18, fontSize: 12.5 }}>
             {open.samples.map((s) => (
@@ -86,11 +90,11 @@ export function ShipmentCheck({ providerId }: { providerId: string }) {
           </ul>
           <div style={row}>
             {missing > 0 ? (
-              <ConfirmButton label="Concluir conferência"
+              <ConfirmButton label="Concluir conferência" disabledReason={scanning ? "aguarde as leituras terminarem" : null}
                 question={`${missing} amostra${missing === 1 ? "" : "s"} não lida${missing === 1 ? "" : "s"} ficará${missing === 1 ? "" : "ão"} como "não chegou" e a UBS será avisada. Concluir?`}
                 onConfirm={finish} />
             ) : (
-              <button type="button" style={secondaryButtonStyle} onClick={() => void finish()}>Concluir conferência</button>
+              <ActionButton variant="secondary" disabledReason={scanning ? "aguarde as leituras terminarem" : null} onClick={finish}>Concluir conferência</ActionButton>
             )}
             <button type="button" style={secondaryButtonStyle} onClick={() => setOpen(null)}>Fechar</button>
           </div>

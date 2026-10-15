@@ -131,6 +131,32 @@ describe("LabShipments — laboratório", () => {
     expect(await screen.findByText("Remessa conferida. Siga para o recebimento de cada amostra.")).not.toBeNull();
   });
 
+  it("Concluir fica desabilitado enquanto há leitura na fila e a contagem sai depois dela", async () => {
+    renderWithProviders(<LabShipments />);
+    fireEvent.click(await screen.findByRole("button", { name: "Conferir" }));
+    const check = await screen.findByRole("region", { name: "Conferência da remessa de UBS Centro" });
+    read("Etiqueta do tubo recebido", "0000012301");
+    // a leitura ainda está na fila: concluir agora contaria a amostra como "não chegou"
+    expect(within(check).getByRole("button", { name: "Concluir conferência" }).getAttribute("aria-disabled")).toBe("true");
+    await within(check).findByText("1 de 2 lidas");
+    await waitFor(() => expect(within(check).getByRole("button", { name: "Concluir conferência" }).getAttribute("aria-disabled")).toBeNull());
+    fireEvent.click(within(check).getByRole("button", { name: "Concluir conferência" }));
+    expect(within(check).getByText(/1 amostra não lida ficará/)).not.toBeNull();
+  });
+
+  it("falha ao reler as listas depois de conferir não vira erro de conferência", async () => {
+    renderWithProviders(<LabShipments />);
+    fireEvent.click(await screen.findByRole("button", { name: "Conferir" }));
+    read("Etiqueta do tubo recebido", "0000012301");
+    read("Etiqueta do tubo recebido", "0000012302");
+    await screen.findByText("2 de 2 lidas");
+    mocked(api.listShipments).mockRejectedValue(new Error("rede"));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Concluir conferência" }).getAttribute("aria-disabled")).toBeNull());
+    fireEvent.click(screen.getByRole("button", { name: "Concluir conferência" }));
+    expect(await screen.findByText("Remessa conferida. Siga para o recebimento de cada amostra.")).not.toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
   it("409: outra pessoa já conferiu — explica e relê a lista", async () => {
     mocked(api.receiveShipment).mockRejectedValueOnce(new api.ApiError(409, { error: "invalid_transition" }, "x"));
     renderWithProviders(<LabShipments />);

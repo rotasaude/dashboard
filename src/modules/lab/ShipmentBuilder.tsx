@@ -48,10 +48,10 @@ export function ShipmentBuilder({ unitId, providerId, onSent }: { unitId: string
       return;
     }
     // A remessa já existe: as listas (montadas, pendências da UBS) mudaram, enviar ou não.
-    void refreshLab(queryClient);
+    refreshLab(queryClient).catch(() => undefined);
     try {
       const sent = await sendShipment(created.id);
-      void refreshLab(queryClient);
+      refreshLab(queryClient).catch(() => undefined);
       setNotice(`Remessa enviada com ${barcodes.length} amostra${barcodes.length === 1 ? "" : "s"}.`);
       setBarcodes([]);
       setTemperature("");

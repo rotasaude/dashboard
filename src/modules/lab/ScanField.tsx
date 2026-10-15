@@ -20,7 +20,11 @@ const SCAN_FAILED = "não foi possível registrar — leia de novo";
 interface Entry { id: number; code: string; state: "waiting" | "ok" | "error" | "ignored"; text: string }
 interface Job { id: number; code: string }
 
-export function ScanField({ label, onScan, hint }: { label: string; onScan(code: string): Promise<ScanOutcome>; hint?: string }) {
+export function ScanField({ label, onScan, hint, onBusyChange }: {
+  label: string; onScan(code: string): Promise<ScanOutcome>; hint?: string;
+  // true enquanto houver leitura na fila ou em gravação (quem conclui algo irreversível espera)
+  onBusyChange?(busy: boolean): void;
+}) {
   const inputId = useId();
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [ value, setValue ] = useState("");
@@ -34,6 +38,8 @@ export function ScanField({ label, onScan, hint }: { label: string; onScan(code:
   // A função da hora da leitura mais recente do pai (ex.: decisão escolhida antes).
   const scanRef = useRef(onScan);
   scanRef.current = onScan;
+  const busyRef = useRef(onBusyChange);
+  busyRef.current = onBusyChange;
 
   useEffect(() => {
     mounted.current = true;
@@ -66,6 +72,7 @@ export function ScanField({ label, onScan, hint }: { label: string; onScan(code:
       }
     } finally {
       running.current = false;
+      if (queue.current.length === 0 && mounted.current) busyRef.current?.(false);
     }
   }
 
@@ -83,6 +90,7 @@ export function ScanField({ label, onScan, hint }: { label: string; onScan(code:
     last.current = { code, at: now };
     push({ id, code, state: "waiting", text: "aguardando…" });
     queue.current.push({ id, code });
+    busyRef.current?.(true);
     void drain();
   }
 
