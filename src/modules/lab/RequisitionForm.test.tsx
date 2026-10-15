@@ -100,4 +100,66 @@ describe("RequisitionForm", () => {
     expect((await screen.findByRole("alert")).textContent).toContain("um dos exames não pode entrar na requisição");
     await waitFor(() => expect(api.listLabCandidates).toHaveBeenCalledTimes(2));
   });
+
+  it("trocar a unidade de origem zera o profissional da rede escolhido", async () => {
+    mocked(api.fetchCurrentSession).mockResolvedValue(labUser([ "lab_staff" ]));
+    mocked(api.listActiveUnits).mockResolvedValue([ UBS21B, { id: "u2", name: "UBS Norte", kind: "ubs" } ]);
+    renderWithProviders(<RequisitionForm place="lab" providerId="pv9" originUnit={null} onDone={vi.fn()} onCancel={vi.fn()} />);
+    await screen.findByRole("option", { name: "UBS Norte" });
+    fireEvent.change(screen.getByLabelText("Unidade de origem"), { target: { value: "u1" } });
+    await findPatient();
+    fireEvent.click(screen.getByRole("button", { name: "Incluir pedido em papel" }));
+    const paper = screen.getByRole("group", { name: "Pedido em papel 1" });
+    await within(paper).findByRole("option", { name: "Dra. Ana" });
+    fireEvent.change(within(paper).getByLabelText("Quem pediu"), { target: { value: "us1" } });
+    expect((within(paper).getByLabelText("Quem pediu") as HTMLSelectElement).value).toBe("us1");
+    fireEvent.change(screen.getByLabelText("Unidade de origem"), { target: { value: "u2" } });
+    expect((within(paper).getByLabelText("Quem pediu") as HTMLSelectElement).value).toBe("");
+  });
+
+  it("corpo com pedido em papel da rede, urgente e informação clínica", async () => {
+    renderWithProviders(<RequisitionForm place="ubs" providerId="pv9" originUnit={UBS21B} onDone={vi.fn()} onCancel={vi.fn()} />);
+    await findPatient();
+    fireEvent.click(screen.getByRole("button", { name: "Incluir pedido em papel" }));
+    const paper = screen.getByRole("group", { name: "Pedido em papel 1" });
+    await within(paper).findByRole("option", { name: "Dra. Ana" });
+    fireEvent.change(within(paper).getByLabelText("Exame"), { target: { value: "0202010473" } });
+    fireEvent.change(within(paper).getByLabelText("Quem pediu"), { target: { value: "us1" } });
+    fireEvent.change(screen.getByLabelText("Sexo biológico"), { target: { value: "female" } });
+    fireEvent.change(screen.getByLabelText("Nome da mãe"), { target: { value: "Maria Lima" } });
+    fireEvent.click(screen.getByLabelText("Urgente"));
+    fireEvent.change(screen.getByLabelText("Informação clínica (opcional)"), { target: { value: "jejum de 8 h" } });
+    fireEvent.click(await screen.findByRole("button", { name: "Abrir requisição" }));
+    await waitFor(() => expect(mocked(api.createLabRequisition).mock.calls[0][0]).toMatchObject({
+      urgent: true, clinical_info: "jejum de 8 h", exam_order_ids: [],
+      paper_orders: [ { sigtap_code: "0202010473", requester: { user_id: "us1" } } ]
+    }));
+  });
+
+  it("order_not_eligible limpa a seleção", async () => {
+    mocked(api.createLabRequisition).mockRejectedValueOnce(new api.ApiError(422, { error: "order_not_eligible" }, "x"));
+    renderWithProviders(<RequisitionForm place="ubs" providerId="pv9" originUnit={UBS21B} onDone={vi.fn()} onCancel={vi.fn()} />);
+    await findPatient();
+    const box = await screen.findByRole("checkbox", { name: /Hemograma completo/ });
+    fireEvent.click(box);
+    fireEvent.change(screen.getByLabelText("Sexo biológico"), { target: { value: "female" } });
+    fireEvent.change(screen.getByLabelText("Nome da mãe"), { target: { value: "Maria Lima" } });
+    fireEvent.click(screen.getByRole("button", { name: "Abrir requisição" }));
+    await screen.findByRole("alert");
+    await waitFor(() => expect((screen.getByRole("checkbox", { name: /Hemograma completo/ }) as HTMLInputElement).checked).toBe(false));
+  });
+
+  it.each([
+    [ "mother_name_required", "informe o nome da mãe (identificação da amostra)" ],
+    [ "exam_not_in_lab_catalog", "este exame não está no catálogo do laboratório" ]
+  ])("422 %s mostra a mensagem", async (code, message) => {
+    mocked(api.createLabRequisition).mockRejectedValueOnce(new api.ApiError(422, { error: code }, "x"));
+    renderWithProviders(<RequisitionForm place="ubs" providerId="pv9" originUnit={UBS21B} onDone={vi.fn()} onCancel={vi.fn()} />);
+    await findPatient();
+    fireEvent.click(await screen.findByRole("checkbox", { name: /Hemograma completo/ }));
+    fireEvent.change(screen.getByLabelText("Sexo biológico"), { target: { value: "female" } });
+    fireEvent.change(screen.getByLabelText("Nome da mãe"), { target: { value: "Maria Lima" } });
+    fireEvent.click(screen.getByRole("button", { name: "Abrir requisição" }));
+    expect((await screen.findByRole("alert")).textContent).toBe(message);
+  });
 });

@@ -12,7 +12,7 @@ import {
   type ExamPatient, type HealthUnit, type LabRequisition
 } from "../../lib/api";
 import {
-  COLLECTION_PLACE_LABEL, EMPTY_PAPER, EMPTY_REQUISITION, LAB_CANDIDATES_KEY, LAB_EXAMS_KEY, SEX_OPTIONS, labError,
+  COLLECTION_PLACE_LABEL, EMPTY_PAPER, EMPTY_REQUISITION, LAB_CANDIDATES_KEY, LAB_EXAMS_KEY, ORIGIN_UNIT_REQUIRED, SEX_OPTIONS, labError,
   requisitionBody, requisitionProblem, type PaperDraft, type RequisitionDraft
 } from "../../lib/lab";
 import { PRIORITY_LABEL } from "../../lib/exams";
@@ -50,7 +50,7 @@ export function RequisitionForm({ place, providerId, originUnit, onDone, onCance
   }
 
   async function submit() {
-    if (!unitId) { setError("escolha a unidade de origem"); return; }
+    if (!unitId) { setError(ORIGIN_UNIT_REQUIRED); return; }
     const problem = requisitionProblem({ ...draft, patientId: patient?.id ?? null });
     if (problem) { setError(problem); return; }
     setError(null);
@@ -72,7 +72,7 @@ export function RequisitionForm({ place, providerId, originUnit, onDone, onCance
       {place === "lab" && (
         <label style={fieldLabel}>
           Unidade de origem
-          <select value={unitId} style={inputStyle} onChange={(e) => setUnitId(e.target.value)}>
+          <select value={unitId} style={inputStyle} onChange={(e) => { setUnitId(e.target.value); set({ paper: draft.paper.map((p) => ({ ...p, userId: "" })) }); }}>
             <option value="">—</option>
             {(units.data ?? []).map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
           </select>

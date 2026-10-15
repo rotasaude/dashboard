@@ -43,6 +43,7 @@ const MOVING_KEYS = [
 
 export const LAB_DISABLED = "o laboratório municipal está desligado nesta cidade";
 export const LAB_NO_ROLE = "seu papel não permite ver esta tela";
+export const ORIGIN_UNIT_REQUIRED = "escolha a unidade de origem";
 export const LAB_NO_LAB = "nenhum laboratório municipal para você — fale com o administrador";
 export const BARCODE_INVALID = "código ilegível — leia a etiqueta de novo";
 export const UNIT_DOES_NOT_COLLECT = "esta unidade não coleta amostras para o laboratório — o administrador marca isso no cadastro da unidade";
