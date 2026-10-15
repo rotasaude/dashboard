@@ -11,7 +11,9 @@ export type ModuleId =
   | "professionals" | "my-profile" | "territory" | "campaigns" | "analytics"
   | "integrations" | "cnes" | "production" | "my-agenda" | "clinical-record" | "my-consultations" | "professional-consultations" | "open-drafts"
   | "signature" | "signature-pending" | "signature-overview" | "clinical-documents-admin" | "sncr" | "sncr-overview"
-  | "exam-acknowledgements" | "exams-unit" | "exams-overdue" | "exam-regulation" | "exam-report" | "exams-admin" | "exam-provider";
+  | "exam-acknowledgements" | "exams-unit" | "exams-overdue" | "exam-regulation" | "exam-report" | "exams-admin" | "exam-provider"
+  | "lab-requisitions" | "lab-collection" | "lab-shipments" | "lab-reception" | "lab-worklist" | "lab-entry" | "lab-release"
+  | "lab-admin" | "lab-reports";
 
 export interface NavItem { id: ModuleId; label: string; icon: string; }
 export interface NavGroupDef { label: string; items: NavItem[]; }
@@ -57,6 +59,17 @@ export const NAV_GROUPS: NavGroupDef[] = [
     { id: "exam-report", label: "Conferência de exames", icon: "▤" },
     { id: "exams-admin", label: "Catálogo e prestadores", icon: "⚙" },
     { id: "exam-provider", label: "Portal do prestador", icon: "⇆" }
+  ]},
+  { label: "Laboratório", items: [
+    { id: "lab-requisitions", label: "Requisições e situação", icon: "☰" },
+    { id: "lab-collection", label: "Coleta", icon: "⌁" },
+    { id: "lab-shipments", label: "Remessas", icon: "⇢" },
+    { id: "lab-reception", label: "Recebimento de amostras", icon: "⇲" },
+    { id: "lab-worklist", label: "Mapa de trabalho", icon: "▦" },
+    { id: "lab-entry", label: "Digitação de resultados", icon: "✎" },
+    { id: "lab-release", label: "Liberação de laudos", icon: "✔" },
+    { id: "lab-admin", label: "Exames e liberadores do laboratório", icon: "⚙" },
+    { id: "lab-reports", label: "Relatórios do laboratório", icon: "▤" }
   ]},
   { label: "Comunicação", items: [
     { id: "campaigns", label: "Campanhas", icon: "✉" }
@@ -155,6 +168,12 @@ export function navGroupsFor(
   const examsOn = !user?.operator && hasFeature(user, "exam_tracking");
   const isRegulator = roles.includes("exam_regulator");
   const isReception = roles.includes("citizen_verifier");
+  // Módulo 21b: tudo do laboratório só com `municipal_lab` ligado na sessão.
+  // A UBS que coleta (health_professional) requisita, coleta e monta remessa;
+  // o api confere a unidade (`unit_does_not_collect`, `not_unit_staff`).
+  const labOn = !user?.operator && hasFeature(user, "municipal_lab");
+  const isLabStaff = roles.includes("lab_staff");
+  const isReleaser = roles.includes("lab_releaser");
   return NAV_GROUPS.filter((group) => {
     if (group.label === "Conta") return !user?.operator;
     if (group.label === "Equipe") return isAdmin;
@@ -196,6 +215,12 @@ export function navGroupsFor(
       if (item.id === "exams-admin") return examsOn && isAdmin;
       // O portal só aparece pelo ramo do prestador, acima.
       if (item.id === "exam-provider") return false;
+      if (item.id === "lab-requisitions" || item.id === "lab-collection" || item.id === "lab-shipments") return labOn && (isLabStaff || isProfessional);
+      if (item.id === "lab-reception" || item.id === "lab-entry") return labOn && isLabStaff;
+      if (item.id === "lab-worklist") return labOn && (isLabStaff || isReleaser);
+      if (item.id === "lab-release") return labOn && isReleaser;
+      if (item.id === "lab-admin") return labOn && isAdmin;
+      if (item.id === "lab-reports") return labOn && (isAdmin || isReleaser);
       if (item.id === "integrations" || item.id === "cnes") return canIntegrations;
       if (item.id === "production") return canProduction;
       return true;
@@ -223,5 +248,15 @@ export function withExamPendingCount(groups: NavGroupDef[], count: number): NavG
   return groups.map((group) => ({
     ...group,
     items: group.items.map((item) => item.id === "exam-acknowledgements" ? { ...item, label: `${item.label} (${shown})` } : item)
+  }));
+}
+
+// Módulo 21b: críticos liberados sem registro de aviso, no item da liberação.
+// O número vem da rota de contagem (sem trilha, D11).
+export function withLabCriticalCount(groups: NavGroupDef[], count: number): NavGroupDef[] {
+  if (count <= 0) return groups;
+  return groups.map((group) => ({
+    ...group,
+    items: group.items.map((item) => item.id === "lab-release" ? { ...item, label: `${item.label} (${count} sem aviso)` } : item)
   }));
 }

@@ -86,11 +86,13 @@ export const INVITE_ROLES: { role: string; label: string }[] = [
   { role: "health_professional", label: "Profissional de saúde" },
   { role: CAMPAIGN_MANAGER_ROLE, label: "Gestor de campanhas" },
   { role: "exam_regulator", label: "Regulador de exames" },
+  { role: "lab_staff", label: "Equipe do laboratório" },
+  { role: "lab_releaser", label: "Liberador de laudos" },
   { role: "municipal_admin", label: "Administrador municipal" }
 ];
 
 // Membership::PRIVILEGED_ROLES: conceder OU convidar exige step-up.
-const PRIVILEGED_ROLES = new Set([ "municipal_admin", REVIEWER_ROLE, VERIFIER_ROLE, PROFESSIONAL_ROLE, CAMPAIGN_MANAGER_ROLE, "exam_regulator" ]);
+const PRIVILEGED_ROLES = new Set([ "municipal_admin", REVIEWER_ROLE, VERIFIER_ROLE, PROFESSIONAL_ROLE, CAMPAIGN_MANAGER_ROLE, "exam_regulator", "lab_staff", "lab_releaser" ]);
 
 export function isPrivilegedRole(role: string): boolean {
   return PRIVILEGED_ROLES.has(role);

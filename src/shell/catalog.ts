@@ -1,11 +1,11 @@
 // Ícones e descrições dos cards (spec do subprojeto 2, §4.3). Rótulos vêm
 // de NAV_GROUPS; aqui só o que o card mostra além do rótulo.
 import {
-  IconAlarm, IconArrowsExchange, IconBuildingCommunity, IconBuildingHospital, IconCalendar, IconCertificate,
-  IconChartLine, IconChartPie, IconChecklist, IconClipboardList, IconDownload, IconFileCertificate, IconFileDescription,
-  IconFilePencil, IconFileText, IconGavel, IconHeartbeat, IconHistory, IconIdBadge2, IconInbox, IconLayoutDashboard,
-  IconListCheck, IconLock, IconMapPin, IconMessages, IconMicroscope, IconNotes, IconPencil, IconPill, IconPlugConnected,
-  IconReportAnalytics, IconServerCog, IconSettings, IconShieldCheck, IconSignature, IconSpeakerphone, IconStack2, IconStethoscope, IconTestPipe, IconTruckDelivery, IconUpload,
+  IconAdjustments, IconAlarm, IconArrowsExchange, IconBarcode, IconBuildingCommunity, IconBuildingHospital, IconCalendar, IconCertificate,
+  IconChartBar, IconChartLine, IconChartPie, IconChecklist, IconClipboardList, IconDownload, IconFileCertificate, IconFileDescription,
+  IconFileBarcode, IconFilePencil, IconFileText, IconGavel, IconFlask, IconHeartbeat, IconHistory, IconIdBadge2, IconInbox, IconLayoutDashboard,
+  IconKeyboard, IconListCheck, IconListDetails, IconLock, IconMapPin, IconMessages, IconMicroscope, IconNotes, IconPackageImport, IconPencil, IconPill, IconPlugConnected,
+  IconReportAnalytics, IconRosetteDiscountCheck, IconServerCog, IconSettings, IconShieldCheck, IconSignature, IconSpeakerphone, IconStack2, IconStethoscope, IconTestPipe, IconTruck, IconTruckDelivery, IconUpload,
   IconUser, IconUserCircle, IconUsers, IconUsersGroup
 } from "@tabler/icons-react";
 import type { Catalog } from "./types";
@@ -20,6 +20,7 @@ export const CATALOG: Catalog = {
     "Operação":    { icon: IconServerCog, description: "Filas e saúde do sistema" },
     "Atendimento": { icon: IconStethoscope, description: "Agenda, prontuário e consultas" },
     "Exames":      { icon: IconMicroscope, description: "Pedidos, resultados e prestadores" },
+    "Laboratório": { icon: IconFlask, description: "Amostras, mapa, digitação e laudos" },
     "Comunicação": { icon: IconSpeakerphone, description: "Campanhas por SMS" },
     "Equipe":      { icon: IconUsers, description: "Pessoas, papéis e assinaturas" },
     "Cidade":      { icon: IconBuildingCommunity, description: "Território e documentos" },
@@ -54,6 +55,15 @@ export const CATALOG: Catalog = {
     "exam-report": { icon: IconReportAnalytics, description: "Guias por prestador e mês" },
     "exams-admin": { icon: IconSettings, description: "Exames da cidade, prazos e prestadores" },
     "exam-provider": { icon: IconTruckDelivery, description: "Guias do seu laboratório" },
+    "lab-requisitions": { icon: IconFileBarcode, description: "Requisição, etiquetas, entrega e situação" },
+    "lab-collection": { icon: IconBarcode, description: "Registrar a coleta lendo a etiqueta" },
+    "lab-shipments": { icon: IconTruck, description: "Remessa da UBS e conferência no laboratório" },
+    "lab-reception": { icon: IconPackageImport, description: "Aceitar, rejeitar ou aceitar com restrição" },
+    "lab-worklist": { icon: IconListDetails, description: "Amostras por setor e bancada, com PDF" },
+    "lab-entry": { icon: IconKeyboard, description: "Resultados pelo mapa ou pela etiqueta" },
+    "lab-release": { icon: IconRosetteDiscountCheck, description: "Conferir, assinar e liberar laudos" },
+    "lab-admin": { icon: IconAdjustments, description: "Exames, versões, motivos e liberadores" },
+    "lab-reports": { icon: IconChartBar, description: "Produção, rejeição e prazo de entrega" },
     "campaigns": { icon: IconSpeakerphone, description: "Criar e enviar campanhas por SMS" },
     "team": { icon: IconUsers, description: "Usuários, convites e papéis" },
     "professionals": { icon: IconIdBadge2, description: "Vínculos, CBO e turnos" },

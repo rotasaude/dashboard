@@ -1,12 +1,15 @@
 import { useCallback, useMemo, useState } from "react";
 import { ScopeContext, PERIOD_OPTIONS, useScope, type PeriodKey } from "./lib/scope";
 import { useAuth } from "./lib/auth";
-import { NAV_GROUPS, labelFor, isExamProvider, navGroupsFor, withExamPendingCount, withPendingCount, type ModuleId, type NavGroupDef } from "./shell/modules";
+import { NAV_GROUPS, labelFor, isExamProvider, navGroupsFor, withExamPendingCount, withLabCriticalCount, withPendingCount, type ModuleId, type NavGroupDef } from "./shell/modules";
 import { useAlerts } from "./hooks/useAlerts";
 import { usePendingSignatures } from "./hooks/usePendingSignatures";
 import { canSign } from "./lib/signature";
 import { useExamPending } from "./hooks/useExamPending";
 import { canUseExams, examRoles } from "./lib/exams";
+import { useLabCriticalCount } from "./hooks/useLabCriticalCount";
+import { canUseLab, labRoles } from "./lib/lab";
+import { LabCriticalNotice } from "./modules/lab/LabCriticalNotice";
 import { ExamsAdmin } from "./modules/ExamsAdmin";
 import { ProviderPortal } from "./modules/ProviderPortal";
 import { AcknowledgementNotice } from "./modules/exams/AcknowledgementNotice";
@@ -70,14 +73,16 @@ const ALL_SLUGS: ReadonlySet<string> = new Set(NAV_GROUPS.map((g) => slugOf(g.la
 // Grupos do shell a partir do filtro por papel de hoje. O rótulo de
 // Pendentes leva a contagem de withPendingCount ("(3)", "(200+)"), como no
 // menu antigo; `count` só acende o ponto do trilho.
-export function shellGroups(groups: NavGroupDef[], pending: number, examPending = 0): ShellGroup[] {
-  return withExamPendingCount(withPendingCount(groups, pending), examPending).map((g) => ({
+export function shellGroups(groups: NavGroupDef[], pending: number, examPending = 0, labCritical = 0): ShellGroup[] {
+  return withLabCriticalCount(withExamPendingCount(withPendingCount(groups, pending), examPending), labCritical).map((g) => ({
     label: g.label,
     slug: slugOf(g.label),
     items: g.items.map((i) => {
       if (i.id === "signature-pending" && pending > 0) return { id: i.id, label: i.label, count: pending };
       // Módulo 21a: `examPending` acende o item "Resultados aguardando ciência".
       if (i.id === "exam-acknowledgements" && examPending > 0) return { id: i.id, label: i.label, count: examPending };
+      // Módulo 21b: críticos sem aviso acendem a liberação.
+      if (i.id === "lab-release" && labCritical > 0) return { id: i.id, label: i.label, count: labCritical };
       return { id: i.id, label: i.label };
     })
   }));
@@ -108,9 +113,11 @@ function ShellInner({ initialModule }: { initialModule?: ModuleId }) {
   const examCount = examPending.data?.pending ?? 0;
   // A46: `pending` é a contagem exata (has_more só diz que a lista tem mais de uma página).
   const deniedCount = examPending.data?.denied ?? 0;
+  const labCriticalQuery = useLabCriticalCount(canUseLab(auth.user) && labRoles(auth.user).releaser, auth.user?.id ?? null);
+  const labCritical = labCriticalQuery.data ?? 0;
   const groups = useMemo(
-    () => shellGroups(navGroupsFor(auth.user), pending.data?.length ?? 0, examCount),
-    [ auth.user, pending.data?.length, examCount ]
+    () => shellGroups(navGroupsFor(auth.user), pending.data?.length ?? 0, examCount, labCritical),
+    [ auth.user, pending.data?.length, examCount, labCritical ]
   );
 
   const isAllowed = useCallback((r: Route<ModuleId>) => {
@@ -135,6 +142,7 @@ function ShellInner({ initialModule }: { initialModule?: ModuleId }) {
   if (route.kind === "home") content = (
     <>
       <AcknowledgementNotice pending={examCount} denied={deniedCount} onOpen={() => navigate("exam-acknowledgements")} />
+      <LabCriticalNotice count={labCritical} onOpen={() => navigate("lab-release")} />
       <HomeCards groups={groups} catalog={CATALOG} go={goShell} />
     </>
   );
