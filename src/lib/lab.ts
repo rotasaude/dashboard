@@ -34,10 +34,11 @@ export const LAB_TEMPLATES_KEY = "labTemplates";
 export const LAB_RELEASERS_KEY = "labReleasers";
 export const LAB_REPORTS_KEY = "labReports";
 
-// Tudo o que muda quando uma amostra, um resultado ou um laudo anda.
+// Toda chave do laboratório: depois de uma ação, nenhuma tela fica com dado velho.
 const MOVING_KEYS = [
-  LAB_REQUISITIONS_KEY, LAB_REQUISITION_KEY, LAB_SHIPMENTS_KEY, LAB_UNIT_PENDING_KEY, LAB_WORKLIST_KEY, LAB_ENTRY_KEY,
-  LAB_RELEASES_KEY, LAB_CRITICALS_KEY, LAB_CRITICAL_COUNT_KEY
+  LAB_CONTEXT_KEY, LAB_REQUISITIONS_KEY, LAB_REQUISITION_KEY, LAB_CANDIDATES_KEY, LAB_EXAMS_KEY, LAB_SHIPMENTS_KEY,
+  LAB_UNIT_PENDING_KEY, LAB_WORKLIST_KEY, LAB_ENTRY_KEY, LAB_RELEASES_KEY, LAB_CRITICALS_KEY, LAB_CRITICAL_COUNT_KEY,
+  LAB_REASONS_KEY, LAB_ADMIN_EXAMS_KEY, LAB_TEMPLATES_KEY, LAB_RELEASERS_KEY, LAB_REPORTS_KEY
 ];
 
 export const LAB_DISABLED = "o laboratório municipal está desligado nesta cidade";
@@ -335,6 +336,11 @@ const ERRORS: Record<string, string> = {
   invalid_provider: "prestador inválido — escolha um laboratório municipal",
   invalid_loinc: "código LOINC inválido",
   invalid_decimals: "casas decimais inválidas (0 a 4)",
+  invalid_name: "nome inválido — preencha o nome",
+  invalid_active: "situação (ativo ou inativo) inválida",
+  duplicate_name: "já existe um motivo com este nome",
+  invalid_delivery_days: "prazo de entrega inválido — use de 1 a 90 dias",
+  invalid_bench: "bancada inválida — use até 60 caracteres",
   too_many_requests: "muitas tentativas seguidas — espere um minuto e tente de novo"
 };
 

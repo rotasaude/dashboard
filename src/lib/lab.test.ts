@@ -1,10 +1,11 @@
 // src/lib/lab.test.ts
+import { QueryClient } from "@tanstack/react-query";
 import { describe, expect, it } from "vitest";
 import { ApiError } from "./api";
 import {
   BARCODE_INVALID, EMPTY_CRITICAL, EMPTY_REQUISITION, LAB_DISABLED, canUseLab, criticalBody, criticalProblem, entryProblem, flagLabel,
   flagTone, labError, labRoles, normalizeBarcode, normalizeNumber, normalizeRequisitionNumber, lookupKind, onlyIcp, reportStatusLabel, reportStatusTone, sectorLabel, parseTemperature, previewFlag, rectifyProblem,
-  requisitionBody, requisitionProblem, type PaperDraft, requisitionStatusLabel, sampleStatusLabel, temperatureProblem, totpProblem
+  refreshLab, requisitionBody, requisitionProblem, type PaperDraft, requisitionStatusLabel, sampleStatusLabel, temperatureProblem, totpProblem
 } from "./lab";
 import { glucoseEntry, labUser } from "../test/labFixtures";
 
@@ -220,5 +221,36 @@ describe("recusas", () => {
       expect(labError(err(422, { error: code }))).not.toContain(code);
     }
     expect(labError(new Error("offline"))).toBe("sem conexão com o servidor — tente de novo");
+  });
+});
+
+describe("correções da rodada 1", () => {
+  it("recusas do catálogo: motivos, prazo e bancada", () => {
+    expect(labError(err(422, { error: "invalid_name" }))).toBe("nome inválido — preencha o nome");
+    expect(labError(err(422, { error: "invalid_active" }))).toBe("situação (ativo ou inativo) inválida");
+    expect(labError(err(422, { error: "duplicate_name" }))).toBe("já existe um motivo com este nome");
+    expect(labError(err(422, { error: "invalid_delivery_days" }))).toBe("prazo de entrega inválido — use de 1 a 90 dias");
+    expect(labError(err(422, { error: "invalid_bench" }))).toBe("bancada inválida — use até 60 caracteres");
+  });
+
+  it("limites exatos de digitação e de temperatura", () => {
+    expect(entryProblem(GLU, "10")).toBeNull();
+    expect(entryProblem(GLU, "1500")).toBeNull();
+    expect(entryProblem(GLU, "9,9")).not.toBeNull();
+    expect(entryProblem(GLU, "1500,1")).not.toBeNull();
+    expect(temperatureProblem("-30")).toBeNull();
+    expect(temperatureProblem("60")).toBeNull();
+    expect(temperatureProblem("-30.1")).toBe("temperatura fora do esperado (-30 a 60 °C) — confira o termômetro");
+    expect(temperatureProblem("60,1")).toBe("temperatura fora do esperado (-30 a 60 °C) — confira o termômetro");
+  });
+
+  it("refreshLab invalida toda chave do laboratório", async () => {
+    const client = new QueryClient();
+    const keys = [ "labContext", "labRequisitions", "labRequisition", "labCandidates", "labExams", "labShipments", "labUnitPending",
+      "labWorklist", "labEntry", "labReleases", "labCriticals", "labCriticalCount", "labReasons", "labAdminExams", "labTemplates",
+      "labReleasers", "labReports" ];
+    for (const k of keys) client.setQueryData([ k, "x" ], 1);
+    await refreshLab(client);
+    for (const k of keys) expect(client.getQueryState([ k, "x" ])?.isInvalidated, k).toBe(true);
   });
 });
