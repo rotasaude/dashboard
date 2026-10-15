@@ -12,6 +12,7 @@ import { canUseLab, labRoles } from "./lib/lab";
 import { LabCriticalNotice } from "./modules/lab/LabCriticalNotice";
 import { ExamsAdmin } from "./modules/ExamsAdmin";
 import { LabRequisitions } from "./modules/LabRequisitions";
+import { LabCollection } from "./modules/LabCollection";
 import { ProviderPortal } from "./modules/ProviderPortal";
 import { AcknowledgementNotice } from "./modules/exams/AcknowledgementNotice";
 import { Shell } from "./shell/Shell";
@@ -225,6 +226,7 @@ export function renderModule(active: ModuleId, setActive: (id: ModuleId) => void
     case "exam-provider": return <ProviderPortal />;
     case "exams-admin": return <ExamsAdmin onGoToSecurity={() => setActive("security")} />;
     case "lab-requisitions": return <LabRequisitions />;
+    case "lab-collection": return <LabCollection />;
     default:               return <Placeholder title={labelFor(active)} />;
   }
 }
