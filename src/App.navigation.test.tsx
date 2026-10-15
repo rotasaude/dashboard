@@ -38,6 +38,12 @@ describe("grupos do shell", () => {
     expect(item).toEqual({ id: "exam-acknowledgements", label: "Resultados aguardando ciência (4)", count: 4 });
   });
 
+  it("Liberação de laudos leva a contagem no rótulo e no ponto do trilho; zero não acende nada", () => {
+    const item = (n: number) => shellGroups(NAV_GROUPS, 0, 0, n).flatMap((g) => g.items).find((i) => i.id === "lab-release");
+    expect(item(3)).toEqual({ id: "lab-release", label: "Liberação de laudos (3 sem aviso)", count: 3 });
+    expect(item(0)).toEqual({ id: "lab-release", label: "Liberação de laudos" });
+  });
+
   it("slugs vêm de NAV_GROUPS e Pendentes leva a contagem no rótulo (withPendingCount)", () => {
     const gs = shellGroups(NAV_GROUPS, 3);
     expect(gs.map((g) => g.slug)).toContain("visao-geral");
