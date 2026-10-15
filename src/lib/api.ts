@@ -466,7 +466,11 @@ export interface UnitAddress {
 }
 
 // `screening_scope` (módulo 18; contrato §5): ausente em api anterior = `walk_in`.
-export interface HealthUnit extends Partial<UnitAddress> { id: string; name: string; kind: string; screening_scope?: ScreeningScope }
+export interface HealthUnit extends Partial<UnitAddress> {
+  id: string; name: string; kind: string; screening_scope?: ScreeningScope;
+  // Módulo 21b: a unidade coleta amostras para o laboratório municipal.
+  collects_samples?: boolean;
+}
 export interface HealthUnitRow extends HealthUnit {
   active: boolean;
   // O que ainda prende a unidade (api#29): pedidos vivos e horários marcados.
@@ -502,9 +506,11 @@ export async function createUnit(name: string, kind: string, address: UnitAddres
 }
 
 export async function updateUnit(
-  id: string, name: string, kind: string, address: UnitAddress, screeningScope?: ScreeningScope
+  id: string, name: string, kind: string, address: UnitAddress, screeningScope?: ScreeningScope, collectsSamples?: boolean
 ): Promise<HealthUnitRow> {
-  const body = screeningScope ? { name, kind, ...address, screening_scope: screeningScope } : { name, kind, ...address };
+  const body: Record<string, unknown> = { name, kind, ...address };
+  if (screeningScope) body.screening_scope = screeningScope;
+  if (collectsSamples !== undefined) body.collects_samples = collectsSamples;
   const payload = await jsonFetch<{ unit: HealthUnitRow }>(`${ATTENDANCE_BASE}/units/${encodeURIComponent(id)}`, {
     method: "POST", body: JSON.stringify(body)
   });
@@ -2360,8 +2366,11 @@ export interface ExamResultValue { key: string | null; label: string; value: str
 // administrativa (unidade, regulador — plano do api, Desvio 10) só traz id,
 // origem, fonte, data e laboratório: valores, crítico e laudo ausentes.
 export interface ExamResult {
-  id: string; origin: "order" | "external"; source: "unit" | "provider" | "fhir" | "consultation";
+  id: string; origin: "order" | "external"; source: "unit" | "provider" | "fhir" | "consultation" | "lab";
   released_on: string; laboratory_name: string; critical?: boolean; values?: ExamResultValue[];
+  // Módulo 21b (contrato §9): o resultado que este substitui (retificação) e, nos substituídos,
+  // quando deixaram de valer. Só na visão clínica.
+  replaces_result_id?: string | null; superseded_at?: string | null;
   // Curta e assinada (5 min); o download grava trilha.
   pdf_url?: string; acknowledged_at?: string | null;
 }
@@ -2393,6 +2402,10 @@ export interface ExamOrder {
   guide_url?: string | null;
   // Só no GET /exams/orders/:id (e nas respostas de ação que devolvem o detalhe).
   events?: ExamEvent[]; result_fields?: ExamResultField[];
+  // Módulo 21b (Divergência D16): laudos substituídos por retificação, do mais novo para o mais antigo; só na visão clínica.
+  superseded_results?: ExamResult[];
+  // F-21.24 (Divergência D17): número da requisição no GAL; null sem registro.
+  gal_requisition?: string | null;
 }
 export interface ExamOrderPage { orders: ExamOrder[]; next_before: string | null }
 export interface ExamOrderQuery {
@@ -2442,9 +2455,14 @@ export interface ExamProvider {
   // Laboratório simulado (fora de produção).
   simulated: boolean;
   users: { user_id: string; email: string }[];
+  // Módulo 21b: o laboratório usa o fluxo analítico do Rota Saúde (resultado pela liberação, nunca pelo portal
+  // nem pelo FHIR) e se tem token de middleware. B31: endereço e telefone (obrigatórios com uses_municipal_lab).
+  uses_municipal_lab?: boolean; has_middleware_token?: boolean; address?: string | null; phone?: string | null;
 }
 // Corpo de POST/PATCH: `simulated`, token e usuários não se escrevem aqui.
-export type ExamProviderInput = Pick<ExamProvider, "name" | "cnes" | "kind" | "active"> & { items: ExamProviderItem[] };
+export type ExamProviderInput = Pick<ExamProvider, "name" | "cnes" | "kind" | "active"> & {
+  items: ExamProviderItem[]; uses_municipal_lab?: boolean; address?: string | null; phone?: string | null;
+};
 export interface ExamReportRow {
   provider: ExamProviderRef; authorized: number; collected: number; resulted_on_time: number; resulted_late: number; pending: number;
 }
@@ -2687,4 +2705,425 @@ export function fetchExamPdf(pdfUrl: string): Promise<SignatureFile> {
 // usuário ou forjado) e 403 é só `feature_disabled` — nenhum dos dois é "vencido".
 export function isExamLinkExpired(err: unknown): boolean {
   return err instanceof ApiError && err.status === 410 && errorCode(err) === "link_expired";
+}
+
+// ─── Laboratório municipal (módulo 21b; contrato 2026-10-15) ────────────────
+// Fluxo analítico sobre o 21a: requisição, amostra, remessa, mapa, digitação,
+// liberação e laudo. Na URL só ids, situações, setor, bancada, datas, mês,
+// número da requisição, código de barras e o cursor; o resto vai no corpo.
+const LAB_BASE = import.meta.env.VITE_LAB_BASE || "/lab";
+
+export type BiologicalSex = "male" | "female";
+export type LabCollectionPlace = "ubs" | "lab";
+export type LabRequisitionStatus = "open" | "in_analysis" | "typed" | "released" | "delivered";
+export type LabSampleStatus = "awaiting" | "in_transit" | "received" | "rejected" | "accepted_with_restriction" | "not_received";
+export type LabShipmentStatus = "open" | "sent" | "received";
+export type LabReportStatus = "pending_signature" | "released" | "rectified" | "withdrawn";
+export type LabFlag = "normal" | "low" | "high" | "critical_low" | "critical_high";
+export type LabSignatureKind = "icp" | "advanced";
+export type LabItemStatus = "pending" | "typed" | "released" | "cancelled";
+export type LabValueType = "numeric" | "text" | "choice";
+export type LabReceiveDecision = "accept" | "reject" | "accept_with_restriction";
+export type CriticalChannel = "telefone" | "presencial" | "sistema";
+export const LAB_PAGE_SIZE = 50;
+
+export interface LabProviderRef { id: string; name: string }
+// Divergência D1: laboratórios em que a sessão atua e o conselho do liberador.
+export interface LabContext { labs: LabProviderRef[]; releaser_of: string[]; council: string | null }
+
+export interface LabPatient { id: string; display_name: string; birth_date: string; biological_sex: BiologicalSex | string }
+export interface LabItem {
+  id: string; exam_order_id: string; sigtap_code: string; label: string; version: number;
+  sample_id: string | null; status: LabItemStatus | string;
+}
+export interface LabSample {
+  id: string; barcode: string; material: string; container: string; status: LabSampleStatus | string;
+  collected_at: string | null; collected_by: string | null; received_at: string | null;
+  rejection_reason: string | null; restriction_note: string | null; recollection_of_id: string | null; shipment_id: string | null;
+}
+export interface LabReportSummary {
+  id: string; version: number; partial: boolean; status: LabReportStatus | string; signature_kind: LabSignatureKind | string;
+  released_at: string | null; released_by: string | null; short_code: string | null; pdf_url: string | null;
+  replaces_report_id: string | null;
+}
+export interface LabRequisition {
+  id: string; number: string; patient: LabPatient; origin_unit: { id: string; name: string };
+  collection_place: LabCollectionPlace | string; urgent: boolean; status: LabRequisitionStatus | string;
+  expected_delivery_on: string | null; items: LabItem[]; samples: LabSample[]; reports: LabReportSummary[];
+  delivered_to: string | null; delivered_at: string | null;
+}
+export type LabRequisitionRow = Omit<LabRequisition, "items" | "samples">;
+export interface LabRequisitionPage { requisitions: LabRequisitionRow[]; next_before: string | null }
+export interface LabRequisitionQuery {
+  statuses?: LabRequisitionStatus[]; providerId?: string; originUnitId?: string; number?: string; barcode?: string; before?: string | null;
+}
+// Divergência D2: forma do candidato (exame do 21a sem item de requisição).
+export interface LabCandidateOrder {
+  id: string; short_code: string; sigtap_code: string; label: string; priority: ExamPriority; status: string; requester_name: string;
+}
+// Divergência D3: exames ativos do laboratório, para o pedido em papel.
+export interface LabExamRef { sigtap_code: string; name: string; material: string; delivery_days: number }
+export interface LabPaperOrder { sigtap_code: string; requester: { user_id: string } | { name: string; cns: string } }
+export interface LabRequisitionInput {
+  patient_id: string; provider_id: string; origin_unit_id: string; collection_place: LabCollectionPlace;
+  biological_sex: BiologicalSex; mother_name: string; urgent: boolean; clinical_info?: string;
+  exam_order_ids: string[]; paper_orders?: LabPaperOrder[];
+}
+// Divergência D4: forma da remessa e da amostra dentro dela.
+export interface LabShipmentSample { id: string; barcode: string; material: string; status: LabSampleStatus | string; requisition_number: string }
+export interface LabShipment {
+  id: string; origin_unit: { id: string; name: string }; provider: LabProviderRef; status: LabShipmentStatus | string;
+  temperature_celsius: number | null; sent_at: string | null; sent_by: string | null; received_at: string | null;
+  received_by: string | null; samples: LabShipmentSample[];
+}
+export interface LabShipmentInput { origin_unit_id: string; provider_id: string; barcodes: string[]; temperature_celsius: number }
+// Divergência D5: recoletas e não recebidas da UBS.
+export interface LabPendingSample extends LabSample { requisition: { id: string; number: string; patient_display_name: string } }
+export interface LabUnitPending { recollections: LabPendingSample[]; not_received: LabPendingSample[] }
+export interface LabReceiveInput { barcode: string; decision: LabReceiveDecision; reason_id?: string; restriction_note?: string }
+// Divergência D6: o recebimento devolve a amostra e, na rejeição, a recoleta.
+export interface LabReceiveResult { sample: LabSample & { requisition_number: string }; recollection: LabSample | null }
+
+// `notified` só em linha crítica (Divergência D9); `value` só para quem é do laboratório.
+export interface LabResultRow {
+  id: string; item_id: string; analyte_key: string; name: string; value: string; unit: string | null; flag: LabFlag | string;
+  source: "typed" | "hl7" | string; entered_at: string; entered_by: string | null; chosen: boolean;
+  // B30: o valor que vale é a linha com effective true (calculado no api); `chosen` fica como história.
+  effective: boolean; notified?: boolean;
+}
+export interface LabReference { low: number | null; high: number | null; text: string | null }
+// Divergência D7: componente para digitar, com a faixa já escolhida pelo api
+// (sexo e idade na data da coleta) e os limites da versão.
+export interface LabAnalyteEntry {
+  key: string; name: string; unit: string | null; value_type: LabValueType | string; choices: string[] | null; decimals: number;
+  reference: LabReference | null; entry_min: number | null; entry_max: number | null;
+  critical_low: number | null; critical_high: number | null; formula: string | null;
+}
+export interface LabEntryItem {
+  item_id: string; requisition_id: string; requisition_number: string; barcode: string;
+  patient: { display_name: string; birth_date: string; biological_sex: string };
+  sigtap_code: string; label: string; version: number; status: LabItemStatus | string; sample_status: LabSampleStatus | string;
+  restriction_note: string | null; analytes: LabAnalyteEntry[]; results: LabResultRow[];
+}
+// Divergência D8: forma do mapa de trabalho.
+export interface LabWorklistItem {
+  item_id: string; requisition_id: string; requisition_number: string; barcode: string; patient_display_name: string;
+  sigtap_code: string; label: string; urgent: boolean; received_at: string | null; status: LabItemStatus | string;
+}
+export interface LabWorklistGroup { sector: string; bench: string | null; items: LabWorklistItem[] }
+export interface LabWorklistQuery { providerId: string; sector?: string; bench?: string; urgent?: boolean; date?: string; pending?: boolean }
+// Divergência D9: forma da fila de liberação.
+export interface LabReleaseItem extends LabItem { restriction_note: string | null; results: LabResultRow[] }
+export interface LabReleaseRequisition {
+  id: string; number: string; patient: LabPatient; urgent: boolean; items: LabReleaseItem[]; reports: LabReportSummary[];
+}
+// Divergência D10: forma da lista de críticos sem aviso (sem valor).
+export interface LabCriticalRow {
+  result_id: string; requisition_id: string; requisition_number: string; patient_display_name: string;
+  analyte_name: string; flag: LabFlag | string; released_at: string | null;
+}
+export interface LabCriticalInput {
+  result_id: string; notified_person: string; notified_role: string; channel: CriticalChannel; notified_at: string;
+}
+export interface LabReleaseInput { item_ids: string[]; signature: LabSignatureKind; totp?: string }
+export interface LabRectifyInput {
+  item_ids: string[]; reason: string; contacts: { person: string; channel: CriticalChannel; at: string }[];
+  signature: LabSignatureKind; totp?: string;
+}
+
+// Admin do laboratório (contrato §3).
+export interface LabReferenceRange {
+  sex: "male" | "female" | "any"; age_min_days: number; age_max_days: number; // B3: 0..43800 (43800 = sem limite)
+  low: number | null; high: number | null; text: string | null;
+}
+export interface LabAnalyteTemplate {
+  key: string; name: string; loinc: string | null; unit: string | null; value_type: LabValueType;
+  choices?: string[] | null; decimals: number; reference_ranges: LabReferenceRange[];
+}
+// Divergência D12: forma do catálogo-base, do exame adotado e da versão.
+export interface LabTemplate {
+  id: string; sigtap_code: string; name: string; sector: string; material: string; container: string;
+  suggested_method: string | null; preparation: string | null; analytes: LabAnalyteTemplate[];
+}
+export interface LabAnalyteVersion extends LabAnalyteTemplate {
+  entry_min: number | null; entry_max: number | null; critical_low: number | null; critical_high: number | null; formula: string | null;
+}
+export interface LabExamVersion {
+  id: string; version: number; method: string; material: string; container: string; instrument_test_code: string | null;
+  analytes: LabAnalyteVersion[]; created_by: string | null; created_at: string;
+}
+export interface LabExam {
+  id: string; provider_id: string; template_id: string; sigtap_code: string; name: string; sector: string; bench: string | null;
+  delivery_days: number; active: boolean; current_version: LabExamVersion | null;
+  versions?: { id: string; version: number; created_at: string; created_by: string | null }[];
+}
+export interface LabExamAdoptInput { provider_id: string; template_id: string; sector: string; bench: string | null; delivery_days: number }
+export interface LabExamSettingsInput { sector: string; bench: string | null; delivery_days: number; active: boolean }
+export type LabVersionInput = Omit<LabExamVersion, "id" | "version" | "created_by" | "created_at">;
+export interface LabRejectionReason { id: string; provider_id: string; name: string; active: boolean }
+export interface LabRejectionReasonInput { provider_id: string; name: string; active: boolean }
+export interface LabReleaser {
+  id: string; user_id: string; name: string; email: string; provider_id: string;
+  council: string | null; council_uf: string | null; council_number: string | null; technical_lead: boolean; technical_deputy: boolean;
+}
+export interface LabReleaserInput { user_id: string; provider_id: string; technical_lead: boolean; technical_deputy: boolean }
+
+// Relatórios (contrato §6; Divergência D13).
+export interface LabReportQuery { providerId: string | null; month: string }
+export type LabReportKind = "production" | "rejections" | "turnaround";
+export interface LabProductionRow {
+  origin_unit: { id: string; name: string }; sigtap_code: string; exam_name: string; sector: string;
+  releaser: { id: string; name: string } | null; quantity: number; sigtap_value_cents: number;
+}
+export interface LabProductionReport { rows: LabProductionRow[]; total_quantity: number; total_value_cents: number }
+export interface LabRejectionRow { reason: { id: string; name: string }; origin_unit: { id: string; name: string }; count: number }
+export interface LabTurnaroundRow { sigtap_code: string; exam_name: string; on_time: number; late: number; pending: number }
+
+const labPath = (...parts: string[]) => [ LAB_BASE, ...parts.map(encodeURIComponent) ].join("/");
+const labQuery = (path: string, params: URLSearchParams) => (params.toString() ? `${path}?${params.toString()}` : path);
+const labPost = (body: unknown): RequestInit => ({ method: "POST", body: JSON.stringify(body) });
+
+export function getLabContext(): Promise<LabContext> {
+  return jsonFetch(labPath("context"));
+}
+
+export function listLabRequisitions(q: LabRequisitionQuery): Promise<LabRequisitionPage> {
+  const p = new URLSearchParams();
+  for (const s of q.statuses ?? []) p.append("status[]", s);
+  if (q.providerId) p.set("provider_id", q.providerId);
+  if (q.originUnitId) p.set("origin_unit_id", q.originUnitId);
+  if (q.number) p.set("number", q.number);
+  if (q.barcode) p.set("barcode", q.barcode);
+  if (q.before) p.set("before", q.before);
+  p.set("limit", String(LAB_PAGE_SIZE));
+  return jsonFetch(labQuery(labPath("requisitions"), p));
+}
+
+export function getLabRequisition(id: string): Promise<LabRequisition> {
+  return jsonFetch(labPath("requisitions", id));
+}
+
+export async function listLabCandidates(patientId: string, providerId: string): Promise<LabCandidateOrder[]> {
+  const p = new URLSearchParams({ patient_id: patientId, provider_id: providerId });
+  return (await jsonFetch<{ orders: LabCandidateOrder[] }>(labQuery(labPath("candidate_orders"), p))).orders;
+}
+
+export async function listLabExams(providerId: string): Promise<LabExamRef[]> {
+  const p = new URLSearchParams({ provider_id: providerId });
+  return (await jsonFetch<{ exams: LabExamRef[] }>(labQuery(labPath("exams"), p))).exams;
+}
+
+export function createLabRequisition(input: LabRequisitionInput): Promise<LabRequisition> {
+  return jsonFetch(labPath("requisitions"), labPost(input));
+}
+
+export function fetchLabReceipt(id: string): Promise<SignatureFile> {
+  return binaryFetch(labPath("requisitions", id, "receipt.pdf"), "application/pdf");
+}
+
+export function fetchLabLabels(id: string, sampleIds: string[]): Promise<SignatureFile> {
+  const p = new URLSearchParams();
+  for (const s of sampleIds) p.append("sample_ids[]", s);
+  return binaryFetch(labQuery(labPath("requisitions", id, "labels.pdf"), p), "application/pdf");
+}
+
+export function collectSample(id: string): Promise<LabSample> {
+  return jsonFetch(labPath("samples", id, "collect"), labPost({}));
+}
+
+export function collectSampleByBarcode(barcode: string): Promise<LabSample & { requisition_number?: string }> {
+  return jsonFetch(labPath("samples", "collect"), labPost({ barcode }));
+}
+
+export function createShipment(input: LabShipmentInput): Promise<LabShipment> {
+  return jsonFetch(labPath("shipments"), labPost(input));
+}
+
+export function sendShipment(id: string): Promise<LabShipment> {
+  return jsonFetch(labPath("shipments", id, "send"), labPost({}));
+}
+
+export function receiveShipment(id: string, barcodes: string[]): Promise<LabShipment> {
+  return jsonFetch(labPath("shipments", id, "receive"), labPost({ barcodes }));
+}
+
+export async function listShipments(q: { providerId?: string; originUnitId?: string; statuses: LabShipmentStatus[] }): Promise<LabShipment[]> {
+  const p = new URLSearchParams();
+  if (q.providerId) p.set("provider_id", q.providerId);
+  if (q.originUnitId) p.set("origin_unit_id", q.originUnitId);
+  for (const s of q.statuses) p.append("status[]", s);
+  return (await jsonFetch<{ shipments: LabShipment[] }>(labQuery(labPath("shipments"), p))).shipments;
+}
+
+export function receiveSample(input: LabReceiveInput): Promise<LabReceiveResult> {
+  return jsonFetch(labPath("samples", "receive"), labPost(input));
+}
+
+export async function listUnitPending(originUnitId: string): Promise<LabUnitPending> {
+  const p = new URLSearchParams({ origin_unit_id: originUnitId });
+  const body = await jsonFetch<Partial<LabUnitPending>>(labQuery(labPath("recollections"), p));
+  return { recollections: body.recollections ?? [], not_received: body.not_received ?? [] };
+}
+
+export function deliverRequisition(id: string, deliveredTo: string): Promise<LabRequisition> {
+  return jsonFetch(labPath("requisitions", id, "deliver"), labPost({ delivered_to: deliveredTo }));
+}
+
+function worklistParams(q: LabWorklistQuery): URLSearchParams {
+  const p = new URLSearchParams({ provider_id: q.providerId });
+  if (q.sector) p.set("sector", q.sector);
+  if (q.bench) p.set("bench", q.bench);
+  if (q.urgent) p.set("urgent", "true");
+  if (q.date) p.set("date", q.date);
+  if (q.pending) p.set("pending", "true");
+  return p;
+}
+
+export async function listWorklist(q: LabWorklistQuery): Promise<LabWorklistGroup[]> {
+  return (await jsonFetch<{ groups: LabWorklistGroup[] }>(labQuery(labPath("worklists"), worklistParams(q)))).groups;
+}
+
+export function fetchWorklistPdf(q: LabWorklistQuery): Promise<SignatureFile> {
+  return binaryFetch(labQuery(labPath("worklists.pdf"), worklistParams(q)), "application/pdf");
+}
+
+export async function getLabEntry(by: { itemId: string } | { barcode: string }): Promise<LabEntryItem[]> {
+  const p = "itemId" in by ? new URLSearchParams({ item_id: by.itemId }) : new URLSearchParams({ barcode: by.barcode });
+  return (await jsonFetch<{ items: LabEntryItem[] }>(labQuery(labPath("entry"), p))).items;
+}
+
+export async function enterLabResults(input: { item_id: string; values: { analyte_key: string; value: string }[] }): Promise<LabResultRow[]> {
+  return (await jsonFetch<{ results: LabResultRow[] }>(labPath("results"), labPost(input))).results;
+}
+
+export function chooseLabResult(id: string): Promise<LabResultRow> {
+  return jsonFetch(labPath("results", id, "choose"), labPost({}));
+}
+
+export async function listReleases(providerId: string): Promise<LabReleaseRequisition[]> {
+  const p = new URLSearchParams({ provider_id: providerId });
+  return (await jsonFetch<{ requisitions: LabReleaseRequisition[] }>(labQuery(labPath("releases"), p))).requisitions;
+}
+
+// Divergência D9: a mesma forma para uma requisição só, em qualquer situação
+// (conferência e retificação de laudo já liberado).
+export function getReleaseRequisition(id: string): Promise<LabReleaseRequisition> {
+  return jsonFetch(labPath("releases", id));
+}
+
+export async function listUnnotifiedCriticals(): Promise<LabCriticalRow[]> {
+  return (await jsonFetch<{ criticals: LabCriticalRow[] }>(labPath("criticals", "unnotified"))).criticals;
+}
+
+// Divergência D11: só a contagem, sem dado clínico e sem trilha.
+export async function countUnnotifiedCriticals(): Promise<number> {
+  const body = await jsonFetch<{ count?: unknown }>(labPath("criticals", "unnotified", "count"));
+  const n = Number(body.count ?? 0);
+  return Number.isFinite(n) ? n : 0;
+}
+
+export async function recordCriticalNotice(input: LabCriticalInput): Promise<void> {
+  await jsonFetch<unknown>(labPath("criticals"), labPost(input));
+}
+
+export function releaseRequisition(id: string, input: LabReleaseInput): Promise<LabReportSummary> {
+  return jsonFetch(labPath("requisitions", id, "release"), labPost(input));
+}
+
+export function rectifyLabReport(id: string, input: LabRectifyInput): Promise<LabReportSummary> {
+  return jsonFetch(labPath("reports", id, "rectify"), labPost(input));
+}
+
+// Admin (`/lab/admin`, municipal_admin; escrita com step-up pelo SensitiveAction).
+export async function listLabTemplates(): Promise<LabTemplate[]> {
+  return (await jsonFetch<{ templates: LabTemplate[] }>(labPath("admin", "templates"))).templates;
+}
+
+export async function listLabAdminExams(providerId: string): Promise<LabExam[]> {
+  const p = new URLSearchParams({ provider_id: providerId });
+  return (await jsonFetch<{ exams: LabExam[] }>(labQuery(labPath("admin", "exams"), p))).exams;
+}
+
+export function getLabAdminExam(id: string): Promise<LabExam> {
+  return jsonFetch(labPath("admin", "exams", id));
+}
+
+export function adoptLabExam(input: LabExamAdoptInput): Promise<LabExam> {
+  return jsonFetch(labPath("admin", "exams"), labPost(input));
+}
+
+export function updateLabExam(id: string, input: LabExamSettingsInput): Promise<LabExam> {
+  return jsonFetch(labPath("admin", "exams", id), { method: "PATCH", body: JSON.stringify(input) });
+}
+
+export function createLabExamVersion(id: string, input: LabVersionInput): Promise<LabExamVersion> {
+  return jsonFetch(labPath("admin", "exams", id, "versions"), labPost(input));
+}
+
+export async function listRejectionReasons(providerId: string): Promise<LabRejectionReason[]> {
+  const p = new URLSearchParams({ provider_id: providerId });
+  return (await jsonFetch<{ reasons: LabRejectionReason[] }>(labQuery(labPath("admin", "rejection_reasons"), p))).reasons;
+}
+
+// Divergência D14: o recebimento lê os motivos ativos fora do admin.
+export async function listActiveRejectionReasons(providerId: string): Promise<LabRejectionReason[]> {
+  const p = new URLSearchParams({ provider_id: providerId });
+  return (await jsonFetch<{ reasons: LabRejectionReason[] }>(labQuery(labPath("rejection_reasons"), p))).reasons;
+}
+
+export function createRejectionReason(input: LabRejectionReasonInput): Promise<LabRejectionReason> {
+  return jsonFetch(labPath("admin", "rejection_reasons"), labPost(input));
+}
+
+export function updateRejectionReason(id: string, input: { name: string; active: boolean }): Promise<LabRejectionReason> {
+  return jsonFetch(labPath("admin", "rejection_reasons", id), { method: "PATCH", body: JSON.stringify(input) });
+}
+
+export async function listLabReleasers(): Promise<LabReleaser[]> {
+  return (await jsonFetch<{ releasers: LabReleaser[] }>(labPath("admin", "releasers"))).releasers;
+}
+
+export function addLabReleaser(input: LabReleaserInput): Promise<LabReleaser> {
+  return jsonFetch(labPath("admin", "releasers"), labPost(input));
+}
+
+export async function removeLabReleaser(id: string): Promise<void> {
+  await jsonFetch<unknown>(labPath("admin", "releasers", id), { method: "DELETE", body: "{}" });
+}
+
+// Mostrado uma vez: quem chama guarda só no estado do componente.
+export async function rotateMiddlewareToken(providerId: string): Promise<string> {
+  return (await jsonFetch<{ token: string }>(labPath("admin", "providers", providerId, "middleware_token"), labPost({}))).token;
+}
+
+export async function revokeMiddlewareToken(providerId: string): Promise<void> {
+  await jsonFetch<unknown>(labPath("admin", "providers", providerId, "middleware_token"), { method: "DELETE", body: "{}" });
+}
+
+function labReportParams(q: LabReportQuery): URLSearchParams {
+  const p = new URLSearchParams();
+  if (q.providerId) p.set("provider_id", q.providerId);
+  p.set("month", q.month);
+  return p;
+}
+
+export function getLabProduction(q: LabReportQuery): Promise<LabProductionReport> {
+  return jsonFetch(labQuery(labPath("reports", "production"), labReportParams(q)));
+}
+
+export async function getLabRejections(q: LabReportQuery): Promise<LabRejectionRow[]> {
+  return (await jsonFetch<{ rows: LabRejectionRow[] }>(labQuery(labPath("reports", "rejections"), labReportParams(q)))).rows;
+}
+
+export async function getLabTurnaround(q: LabReportQuery): Promise<LabTurnaroundRow[]> {
+  return (await jsonFetch<{ rows: LabTurnaroundRow[] }>(labQuery(labPath("reports", "turnaround"), labReportParams(q)))).rows;
+}
+
+export function fetchLabReportCsv(kind: LabReportKind, q: LabReportQuery): Promise<SignatureFile> {
+  return binaryFetch(labQuery(labPath("reports", `${kind}.csv`), labReportParams(q)), "text/csv");
+}
+
+// F-21.24 (Divergência D17): número da requisição no GAL do LACEN.
+export async function setGalRequisition(orderId: string, value: string): Promise<void> {
+  await jsonFetch<unknown>(examPath("orders", orderId, "gal_requisition"), postProfessional({ gal_requisition: value }));
 }

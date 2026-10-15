@@ -51,4 +51,11 @@ describe("features da sessão (contratos §1)", () => {
     expect(featureLabel("exam_pec_bridge")).toBe("Solicitar exames pelo PEC");
     expect(featureLabel("fake_lab")).toBe("Laboratório simulado (fora de produção)");
   });
+
+  it("rótulos do laboratório municipal (módulo 21b)", () => {
+    expect(featureLabel("municipal_lab")).toBe("Laboratório municipal");
+    expect(featureLabel("lab_hl7_inbound")).toBe("Entrada de resultados de aparelhos (HL7)");
+    expect(featureLabel("fake_middleware")).toBe("Middleware de aparelhos simulado (fora de produção)");
+    expect(hasFeature({ features: [ "exam_tracking", "municipal_lab" ] }, "municipal_lab")).toBe(true);
+  });
 });
