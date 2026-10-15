@@ -9,6 +9,7 @@ vi.mock("../lib/api", async (importOriginal) => {
 import * as api from "../lib/api";
 import { LabCollection, collectOutcome } from "./LabCollection";
 import { renderWithProviders } from "../test/campaignFixtures";
+import { LAB_REQUISITIONS_KEY, UNIT_DOES_NOT_COLLECT } from "../lib/lab";
 import { UBS21B, labContext, labSample, labUser } from "../test/labFixtures";
 
 const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
@@ -31,12 +32,15 @@ beforeEach(() => {
 
 describe("LabCollection", () => {
   it("UBS: a leitura registra a coleta e diz a requisição", async () => {
-    renderWithProviders(<LabCollection />);
+    const { client } = renderWithProviders(<LabCollection />);
+    const invalidate = vi.spyOn(client, "invalidateQueries");
     fireEvent.click(await screen.findByRole("button", { name: "UBS Centro" }));
     await screen.findByLabelText("Etiqueta do tubo");
     read("0000012301");
     await waitFor(() => expect(api.collectSampleByBarcode).toHaveBeenCalledWith("0000012301"));
     expect(await screen.findByText("0000012301 · coleta registrada · requisição 20260123")).not.toBeNull();
+    await waitFor(() => expect(invalidate).toHaveBeenCalled());
+    expect(invalidate.mock.calls.map((c) => (c[0] as { queryKey: string[] }).queryKey[0])).toContain(LAB_REQUISITIONS_KEY);
   });
 
   it("etiqueta desconhecida e amostra já coletada têm frases próprias", async () => {
@@ -60,6 +64,8 @@ describe("LabCollection", () => {
     mocked(api.listActiveUnits).mockResolvedValue([ { ...UBS21B, collects_samples: false } ]);
     renderWithProviders(<LabCollection />);
     fireEvent.click(await screen.findByRole("button", { name: "UBS Centro" }));
-    await waitFor(() => expect(screen.queryByLabelText("Etiqueta do tubo")).toBeNull());
+    expect(await screen.findByText(UNIT_DOES_NOT_COLLECT)).not.toBeNull();
+    expect(screen.queryByLabelText("Etiqueta do tubo")).toBeNull();
+    expect(api.collectSampleByBarcode).not.toHaveBeenCalled();
   });
 });
