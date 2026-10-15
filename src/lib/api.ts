@@ -2845,7 +2845,9 @@ export interface LabTemplate {
   id: string; sigtap_code: string; name: string; sector: string; material: string; container: string;
   suggested_method: string | null; preparation: string | null; analytes: LabAnalyteTemplate[];
 }
-export interface LabAnalyteVersion extends LabAnalyteTemplate {
+export interface LabAnalyteVersion extends Omit<LabAnalyteTemplate, "choices"> {
+  // O api devolve [] nos componentes que não são de escolha.
+  choices: string[];
   entry_min: number | null; entry_max: number | null; critical_low: number | null; critical_high: number | null; formula: string | null;
 }
 export interface LabExamVersion {
@@ -2987,8 +2989,11 @@ export function fetchWorklistPdf(q: LabWorklistQuery): Promise<SignatureFile> {
   return binaryFetch(labQuery(labPath("worklists.pdf"), worklistParams(q)), "application/pdf");
 }
 
-export async function getLabEntry(by: { itemId: string } | { barcode: string }): Promise<LabEntryItem[]> {
-  const p = "itemId" in by ? new URLSearchParams({ item_id: by.itemId }) : new URLSearchParams({ barcode: by.barcode });
+// B5/B16: pela etiqueta o `sigtap_code` é obrigatório (uma etiqueta serve a vários exames da amostra).
+export async function getLabEntry(by: { itemId: string } | { barcode: string; sigtapCode: string }): Promise<LabEntryItem[]> {
+  const p = "itemId" in by
+    ? new URLSearchParams({ item_id: by.itemId })
+    : new URLSearchParams({ barcode: by.barcode, sigtap_code: by.sigtapCode });
   return (await jsonFetch<{ items: LabEntryItem[] }>(labQuery(labPath("entry"), p))).items;
 }
 

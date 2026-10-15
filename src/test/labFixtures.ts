@@ -102,7 +102,7 @@ export function labTemplate(over: Partial<LabTemplate> = {}): LabTemplate {
   return {
     id: "tp1", sigtap_code: "0202010473", name: "Glicose", sector: "biochemistry", material: "soro", container: "tubo cinza",
     suggested_method: "enzimático (GOD-PAP)", preparation: "jejum de 8 h",
-    analytes: [ { key: "glicose", name: "Glicose", loinc: "2345-7", unit: "mg/dL", value_type: "numeric", choices: null, decimals: 0,
+    analytes: [ { key: "glicose", name: "Glicose", loinc: "2345-7", unit: "mg/dL", value_type: "numeric", choices: [], decimals: 0,
       reference_ranges: [ { sex: "any", age_min_days: 6570, age_max_days: 43800, low: 70, high: 99, text: null } ] } ],
     ...over
   };
@@ -111,7 +111,7 @@ export function labTemplate(over: Partial<LabTemplate> = {}): LabTemplate {
 export function labVersion(over: Partial<LabExamVersion> = {}): LabExamVersion {
   return {
     id: "ev1", version: 1, method: "enzimático (GOD-PAP)", material: "soro", container: "tubo cinza", instrument_test_code: "GLU",
-    analytes: [ { key: "glicose", name: "Glicose", loinc: "2345-7", unit: "mg/dL", value_type: "numeric", choices: null, decimals: 0,
+    analytes: [ { key: "glicose", name: "Glicose", loinc: "2345-7", unit: "mg/dL", value_type: "numeric", choices: [], decimals: 0,
       reference_ranges: [ { sex: "any", age_min_days: 6570, age_max_days: 43800, low: 70, high: 99, text: null } ],
       entry_min: 10, entry_max: 1500, critical_low: 40, critical_high: 400, formula: null } ],
     created_by: "Admin", created_at: "2026-10-14T10:00:00-03:00", ...over

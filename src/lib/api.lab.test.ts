@@ -96,10 +96,12 @@ describe("cliente do laboratório (contrato §3–§6)", () => {
   it("digitação: abre por item ou por etiqueta; valores só no corpo", async () => {
     fetchMock.mockImplementation(() => ok({ items: [] }));
     await getLabEntry({ itemId: "it1" });
-    await getLabEntry({ barcode: "0000012301" });
+    await getLabEntry({ barcode: "0000012301", sigtapCode: "0202010473" });
     await enterLabResults({ item_id: "it1", values: [ { analyte_key: "glicose", value: "98" } ] });
     expect(urlOf(0).searchParams.get("item_id")).toBe("it1");
+    expect(urlOf(0).searchParams.get("sigtap_code")).toBeNull();
     expect(urlOf(1).searchParams.get("barcode")).toBe("0000012301");
+    expect(urlOf(1).searchParams.get("sigtap_code")).toBe("0202010473");
     expect(urlOf(2).pathname).toBe("/lab/results");
     expect(urlOf(2).search).toBe("");
     expect(bodyOf(2).values).toEqual([ { analyte_key: "glicose", value: "98" } ]);
