@@ -1,0 +1,114 @@
+// Campo de leitura do código de barras (spec §5.2–§5.4). O leitor é um
+// teclado: digita o código e manda Enter. As leituras entram numa fila e são
+// gravadas uma por vez, na ordem (o leitor é mais rápido que a rede); o mesmo
+// código repetido em até 2 s é a mesma etiqueta lida duas vezes e é ignorado.
+// O campo nasce com foco, mas nunca o rouba de volta: sem foco, avisa.
+// Nada aqui vai para log, console ou storage: o código lido só aparece na tela.
+import { useEffect, useId, useRef, useState } from "react";
+import { BARCODE_INVALID, normalizeBarcode } from "../../lib/lab";
+import { inputStyle, secondaryButtonStyle } from "../../components/formStyles";
+import { Tag } from "../../components/Tag";
+import { box, fieldLabel, list, muted, row } from "../exams/styles";
+
+export interface ScanOutcome { ok: boolean; text: string }
+export const SCAN_DUPLICATE_MS = 2000;
+export const SCAN_LOG_SIZE = 8;
+export const SCAN_FOCUS_HINT = "clique no campo para ler";
+export const SCAN_DUPLICATE = "lida duas vezes seguidas — a segunda foi ignorada";
+const SCAN_FAILED = "não foi possível registrar — leia de novo";
+
+interface Entry { id: number; code: string; state: "waiting" | "ok" | "error" | "ignored"; text: string }
+interface Job { id: number; code: string }
+
+export function ScanField({ label, onScan, hint }: { label: string; onScan(code: string): Promise<ScanOutcome>; hint?: string }) {
+  const inputId = useId();
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const [ value, setValue ] = useState("");
+  const [ focused, setFocused ] = useState(true);
+  const [ log, setLog ] = useState<Entry[]>([]);
+  const queue = useRef<Job[]>([]);
+  const running = useRef(false);
+  const mounted = useRef(true);
+  const seq = useRef(0);
+  const last = useRef<{ code: string; at: number } | null>(null);
+  // A função da hora da leitura mais recente do pai (ex.: decisão escolhida antes).
+  const scanRef = useRef(onScan);
+  scanRef.current = onScan;
+
+  useEffect(() => {
+    mounted.current = true;
+    inputRef.current?.focus();
+    return () => { mounted.current = false; queue.current = []; };
+  }, []);
+
+  const push = (entry: Entry) => setLog((l) => [ entry, ...l ].slice(0, SCAN_LOG_SIZE));
+  const settle = (id: number, state: Entry["state"], text: string) => {
+    if (mounted.current) setLog((l) => l.map((e) => (e.id === id ? { ...e, state, text } : e)));
+  };
+
+  async function drain() {
+    if (running.current) return;
+    running.current = true;
+    try {
+      while (mounted.current && queue.current.length > 0) {
+        const job = queue.current.shift() as Job;
+        try {
+          const out = await scanRef.current(job.code);
+          settle(job.id, out.ok ? "ok" : "error", out.text);
+        } catch {
+          settle(job.id, "error", SCAN_FAILED);
+        }
+      }
+    } finally {
+      running.current = false;
+    }
+  }
+
+  function submit() {
+    const raw = value;
+    setValue("");
+    const id = ++seq.current;
+    const code = normalizeBarcode(raw);
+    if (code === null) { push({ id, code: raw.trim() || "—", state: "error", text: BARCODE_INVALID }); return; }
+    const now = Date.now();
+    if (last.current && last.current.code === code && now - last.current.at < SCAN_DUPLICATE_MS) {
+      push({ id, code, state: "ignored", text: SCAN_DUPLICATE });
+      return;
+    }
+    last.current = { code, at: now };
+    push({ id, code, state: "waiting", text: "aguardando…" });
+    queue.current.push({ id, code });
+    void drain();
+  }
+
+  return (
+    <div style={box}>
+      <label htmlFor={inputId} style={fieldLabel}>{label}</label>
+      <input
+        id={inputId} ref={inputRef} value={value} autoComplete="off" spellCheck={false} inputMode="text" style={inputStyle}
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); submit(); } }}
+        onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
+      />
+      {hint && <p style={muted}>{hint}</p>}
+      {!focused && (
+        <div style={row}>
+          <p role="status" style={muted}>{SCAN_FOCUS_HINT}</p>
+          <button type="button" style={secondaryButtonStyle} onClick={() => inputRef.current?.focus()}>Voltar a ler</button>
+        </div>
+      )}
+      {log.length > 0 && (
+        <ol aria-label="leituras" aria-live="polite" style={list}>
+          {log.map((e) => (
+            <li key={e.id}>
+              {e.state === "error" && <Tag tone="down">erro</Tag>}
+              {e.state === "ignored" && <Tag tone="neutral">repetida</Tag>}
+              {e.state === "ok" && <Tag tone="ok">ok</Tag>}{" "}
+              <span className="mono">{`${e.code} · ${e.text}`}</span>
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
+  );
+}
