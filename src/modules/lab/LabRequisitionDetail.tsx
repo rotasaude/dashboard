@@ -92,8 +92,10 @@ export function LabRequisitionDetail({ id, onClose }: { id: string; onClose(): v
             </Tag>
           ) },
           { label: "", w: "auto", card: "actions", render: (s) => (
-            <ConfirmButton label="Reimprimir" question="A reimpressão fica registrada. Reimprimir a etiqueta?"
-              onConfirm={() => pdf(() => fetchLabLabels(r.id, [ s.id ]))} />
+            s.status === "rejected" ? null : (
+              <ConfirmButton label="Reimprimir" question="A reimpressão fica registrada. Reimprimir a etiqueta?"
+                onConfirm={() => pdf(() => fetchLabLabels(r.id, [ s.id ]))} />
+            )
           ) }
         ]}
         rows={r.samples} rowKey={(s) => s.id}
@@ -116,7 +118,7 @@ export function LabRequisitionDetail({ id, onClose }: { id: string; onClose(): v
       {r.status === "delivered" && r.delivered_to && (
         <p style={muted}>{`Entregue a ${r.delivered_to} · ${fmtDateTime(r.delivered_at)}`}</p>
       )}
-      {r.status === "released" && (
+      {r.status === "released" && r.reports.some((rep) => rep.status === "released") && (
         <div style={{ ...row, alignItems: "flex-end" }}>
           <label style={fieldLabel}>
             Quem retirou

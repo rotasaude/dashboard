@@ -5,7 +5,7 @@
 import { useState, type ReactNode } from "react";
 import type { HealthUnit } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
-import { LAB_NO_LAB, UNIT_DOES_NOT_COLLECT, labError, type LabRoles } from "../../lib/lab";
+import { UNIT_DOES_NOT_COLLECT, labError, type LabRoles } from "../../lib/lab";
 import { EmptyState } from "../../components/EmptyState";
 import { inputStyle } from "../../components/formStyles";
 import { UnitPicker } from "../attendance/UnitPicker";
@@ -25,7 +25,7 @@ export function LabScope({ roles, children }: { roles: LabRoles; children(scope:
   if (context.isPending) return <p className="mono" style={muted}>carregando…</p>;
   if (context.isError) return <p role="alert" style={alert}>{labError(context.error)}</p>;
   const labs = context.data.labs;
-  if (labs.length === 0) return <EmptyState title={LAB_NO_LAB} />;
+  // Lista vazia (B32) já é barrada pelo LabGate; aqui há ao menos um laboratório.
   const lab = labs.find((l) => l.id === providerId) ?? labs[0];
   const labPicker = labs.length > 1 && (
     <label style={fieldLabel}>

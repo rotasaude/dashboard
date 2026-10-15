@@ -74,11 +74,37 @@ describe("LabRequisitionDetail", () => {
     await waitFor(() => expect(api.getLabRequisition).toHaveBeenCalledTimes(2));
   });
 
+  it("entrega com sucesso: grava, limpa o campo e relê", async () => {
+    mocked(api.getLabRequisition).mockResolvedValue(labRequisition({ status: "released", reports: [ labReport() ] }));
+    mocked(api.deliverRequisition).mockResolvedValue(undefined);
+    renderWithProviders(<LabRequisitionDetail id="rq1" onClose={vi.fn()} />);
+    const input = await screen.findByLabelText("Quem retirou");
+    fireEvent.change(input, { target: { value: " Joana Lima " } });
+    fireEvent.click(screen.getByRole("button", { name: "Registrar entrega" }));
+    await waitFor(() => expect(api.deliverRequisition).toHaveBeenCalledWith("rq1", "Joana Lima"));
+    await waitFor(() => expect(api.getLabRequisition).toHaveBeenCalledTimes(2));
+    expect((screen.getByLabelText("Quem retirou") as HTMLInputElement).value).toBe("");
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("só laudo devolvido (withdrawn): sem registrar entrega", async () => {
+    mocked(api.getLabRequisition).mockResolvedValue(labRequisition({ status: "released", reports: [ labReport({ status: "withdrawn" }) ] }));
+    renderWithProviders(<LabRequisitionDetail id="rq1" onClose={vi.fn()} />);
+    await screen.findByRole("list", { name: "laudos" });
+    expect(screen.queryByRole("button", { name: "Registrar entrega" })).toBeNull();
+  });
+
+  it("amostra rejeitada não tem Reimprimir", async () => {
+    renderWithProviders(<LabRequisitionDetail id="rq1" onClose={vi.fn()} />);
+    const row = (await screen.findByText("0000012302")).closest("[role='row']") as HTMLElement;
+    expect(within(row).queryByRole("button", { name: "Reimprimir" })).toBeNull();
+  });
+
   it("laudo retirado (withdrawn) mostra o rótulo, nunca o código", async () => {
     mocked(api.getLabRequisition).mockResolvedValue(labRequisition({ status: "released", reports: [ labReport({ status: "withdrawn" }) ] }));
     renderWithProviders(<LabRequisitionDetail id="rq1" onClose={vi.fn()} />);
     const list = await screen.findByRole("list", { name: "laudos" });
-    expect(list.textContent).toContain("retirado");
+    expect(list.textContent).toContain("devolvido — assinatura digital desligada; libere de novo");
     expect(list.textContent).not.toContain("withdrawn");
   });
 

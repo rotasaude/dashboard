@@ -46,6 +46,10 @@ describe("LabRequisitions", () => {
     fireEvent.click(screen.getByRole("button", { name: "Ver situação" }));
     expect((await screen.findByRole("alert")).textContent).toBe("informe o número da requisição (8 dígitos) ou leia a etiqueta (10 dígitos)");
     expect(api.listLabRequisitions).not.toHaveBeenCalled();
+    expect(screen.queryByText("00000123")).toBeNull();
+    fireEvent.change(screen.getByLabelText("Número da requisição ou etiqueta"), { target: { value: "0000" } });
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(await screen.findByText("00000123")).not.toBeNull();
   });
 
   it("situação pela leitura da etiqueta: código de etiqueta vai como barcode", async () => {

@@ -72,7 +72,7 @@ function RequisitionsBody({ scope }: { scope: LabScopeValue }) {
           <div style={{ ...row, alignItems: "flex-end" }}>
             <label style={fieldLabel}>
               Número da requisição ou etiqueta
-              <input value={search} autoComplete="off" style={inputStyle} onChange={(e) => setSearch(e.target.value)}
+              <input value={search} autoComplete="off" style={inputStyle} onChange={(e) => { setSearch(e.target.value); setSearchError(null); }}
                 onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); find(); } }} />
             </label>
             <button type="button" style={secondaryButtonStyle} onClick={find}>Ver situação</button>
@@ -80,7 +80,7 @@ function RequisitionsBody({ scope }: { scope: LabScopeValue }) {
           {searchError && <p role="alert" style={alert}>{searchError}</p>}
           {query.isError && <p role="alert" style={alert}>{labError(query.error)}</p>}
           {query.isPending && <p className="mono" style={muted}>carregando…</p>}
-          {query.isSuccess && (
+          {query.isSuccess && !searchError && (
             <DataTable<LabRequisitionRow>
               cols={[
                 { label: "Número", w: "1fr", card: "title", render: (r) => <span className="mono">{r.number}</span> },
@@ -95,7 +95,7 @@ function RequisitionsBody({ scope }: { scope: LabScopeValue }) {
               rows={rows} rowKey={(r) => r.id} empty="nenhuma requisição"
             />
           )}
-          {query.hasNextPage && (
+          {query.hasNextPage && !searchError && (
             <div><button type="button" style={secondaryButtonStyle} onClick={() => void query.fetchNextPage()}>Carregar mais</button></div>
           )}
         </div>

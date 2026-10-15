@@ -36,7 +36,7 @@ describe("rótulos", () => {
     expect([ "biochemistry", "hematology", "immunology", "urinalysis", "parasitology", "microbiology" ].map(sectorLabel))
       .toEqual([ "Bioquímica", "Hematologia", "Imunologia", "Urinálise", "Parasitologia", "Microbiologia" ]);
     expect(sectorLabel("bioquimica")).toBe("bioquimica");
-    expect(reportStatusLabel("withdrawn")).toBe("retirado");
+    expect(reportStatusLabel("withdrawn")).toBe("devolvido — assinatura digital desligada; libere de novo");
     expect(reportStatusTone("withdrawn")).toBe("down");
     expect(reportStatusTone("released")).toBe("ok");
   });

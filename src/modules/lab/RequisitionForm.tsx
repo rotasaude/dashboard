@@ -34,7 +34,9 @@ export function RequisitionForm({ place, providerId, originUnit, onDone, onCance
   const units = useQuery({ queryKey: [ "activeUnits" ], queryFn: listActiveUnits, enabled: place === "lab", retry: false });
   const candidates = useQuery({
     queryKey: [ LAB_CANDIDATES_KEY, patient?.id ?? null, providerId ], queryFn: () => listLabCandidates(patient?.id as string, providerId),
-    enabled: !!patient, gcTime: 0, staleTime: 0, retry: false
+    enabled: !!patient, gcTime: 0, staleTime: 0, retry: false,
+    // B37: cada leitura grava um acesso clínico no api; nada de releitura sozinha.
+    refetchOnWindowFocus: false, refetchOnReconnect: false
   });
   const exams = useQuery({ queryKey: [ LAB_EXAMS_KEY, providerId ], queryFn: () => listLabExams(providerId), retry: false });
   const requesters = useQuery({

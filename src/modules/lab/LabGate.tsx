@@ -3,8 +3,9 @@
 // a porta). B32: contexto com `labs: []` = sem laboratório municipal (estado
 // vazio, não erro).
 import type { ReactNode } from "react";
+import { errorCode } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
-import { LAB_DISABLED, LAB_NO_LAB, LAB_NO_ROLE, canUseLab, labError, labRoles, type LabRoles } from "../../lib/lab";
+import { LAB_DISABLED, LAB_NO_LAB, LAB_NO_ROLE, UNIT_DOES_NOT_COLLECT, canUseLab, labError, labRoles, type LabRoles } from "../../lib/lab";
 import { PageHeader } from "../../components/PageHeader";
 import { EmptyState } from "../../components/EmptyState";
 import { ErrorState } from "../../components/ErrorState";
@@ -30,6 +31,8 @@ export function LabGate({ title, sub, allow, needsLab = true, children }: {
   else if (!permitted) body = <EmptyState title={LAB_NO_ROLE} />;
   else if (!needsLab) body = children(roles);
   else if (context.isPending) body = <Skeleton rows={3} />;
+  // O api responde 403 missing_role ao profissional cujas unidades não coletam.
+  else if (context.isError && roles.professional && errorCode(context.error) === "missing_role") body = <EmptyState title={UNIT_DOES_NOT_COLLECT} />;
   else if (context.isError) body = <ErrorState message={labError(context.error)} onRetry={() => { void context.refetch(); }} />;
   else if (context.data.labs.length === 0) body = <EmptyState title={LAB_NO_LAB} />;
   else body = children(roles);

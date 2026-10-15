@@ -76,6 +76,21 @@ describe("LabGate", () => {
     expect(container.textContent).not.toContain("nenhum laboratório");
   });
 
+  it("profissional com 403 missing_role: unidade não coleta (estado vazio, sem erro)", async () => {
+    mocked(api.fetchCurrentSession).mockResolvedValue(labUser([ "health_professional" ]));
+    mocked(api.getLabContext).mockRejectedValue(new api.ApiError(403, { error: "missing_role" }, "x"));
+    gate((r) => (r as { professional?: boolean }).professional === true);
+    expect(await screen.findByText(/esta unidade não coleta amostras/)).not.toBeNull();
+    expect(screen.queryByText("Falha ao carregar")).toBeNull();
+  });
+
+  it("403 missing_role de quem não é profissional segue como erro", async () => {
+    mocked(api.fetchCurrentSession).mockResolvedValue(labUser([ "lab_staff" ]));
+    mocked(api.getLabContext).mockRejectedValue(new api.ApiError(403, { error: "missing_role" }, "x"));
+    gate();
+    expect(await screen.findByText("Falha ao carregar")).not.toBeNull();
+  });
+
   it("falha na leitura do contexto vira ErrorState com nova tentativa", async () => {
     mocked(api.fetchCurrentSession).mockResolvedValue(labUser([ "lab_staff" ]));
     mocked(api.getLabContext).mockRejectedValueOnce(new Error("rede"));

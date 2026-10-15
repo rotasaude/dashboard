@@ -91,7 +91,7 @@ const SHIPMENT_STATUS: Record<string, string> = { open: "montando", sent: "envia
 export function shipmentStatusLabel(s: string): string { return SHIPMENT_STATUS[s] ?? s; }
 
 const REPORT_STATUS: Record<string, string> = {
-  pending_signature: "aguardando assinatura ICP", released: "liberado", rectified: "retificado (substituído)", withdrawn: "retirado"
+  pending_signature: "aguardando assinatura ICP", released: "liberado", rectified: "retificado (substituído)", withdrawn: "devolvido — assinatura digital desligada; libere de novo"
 };
 // B13: `withdrawn` = o sistema devolveu o pedido ICP (digital_signature desligado); o laudo não vale.
 const REPORT_TONE: Record<string, Tone> = { pending_signature: "warn", released: "ok", rectified: "neutral", withdrawn: "down" };
