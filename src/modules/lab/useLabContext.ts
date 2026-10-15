@@ -3,8 +3,12 @@
 // responde 200 com `labs: []` — quem usa trata a lista vazia, não é erro.
 import { useQuery } from "@tanstack/react-query";
 import { getLabContext } from "../../lib/api";
+import { useAuth } from "../../lib/auth";
 import { LAB_CONTEXT_KEY } from "../../lib/lab";
 
 export function useLabContext(enabled: boolean) {
-  return useQuery({ queryKey: [ LAB_CONTEXT_KEY ], queryFn: getLabContext, enabled, retry: false, staleTime: 60_000 });
+  const { user } = useAuth();
+  // Chave por usuário: outra sessão no mesmo navegador não herda o contexto.
+  // O prefixo [LAB_CONTEXT_KEY] segue casando com a invalidação de refreshLab.
+  return useQuery({ queryKey: [ LAB_CONTEXT_KEY, user?.id ?? null ], queryFn: getLabContext, enabled, retry: false, staleTime: 60_000 });
 }

@@ -46,6 +46,9 @@ export function ScanField({ label, onScan, hint }: { label: string; onScan(code:
     if (mounted.current) setLog((l) => l.map((e) => (e.id === id ? { ...e, state, text } : e)));
   };
 
+  // Leitura que falhou não vale como "já lida": o operador pode repetir já.
+  const forgetLast = (code: string) => { if (last.current?.code === code) last.current = null; };
+
   async function drain() {
     if (running.current) return;
     running.current = true;
@@ -54,8 +57,10 @@ export function ScanField({ label, onScan, hint }: { label: string; onScan(code:
         const job = queue.current.shift() as Job;
         try {
           const out = await scanRef.current(job.code);
+          if (!out.ok) forgetLast(job.code);
           settle(job.id, out.ok ? "ok" : "error", out.text);
         } catch {
+          forgetLast(job.code);
           settle(job.id, "error", SCAN_FAILED);
         }
       }

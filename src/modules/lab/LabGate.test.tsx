@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, screen } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const real = await importOriginal<typeof import("../../lib/api")>();
@@ -14,8 +14,8 @@ import { labContext, labUser } from "../../test/labFixtures";
 const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
 afterEach(cleanup);
 
-function gate(allow = (r: { staff: boolean }) => r.staff) {
-  return renderWithProviders(<LabGate title="Bancada" sub="x" allow={allow}>{() => <p>conteúdo</p>}</LabGate>);
+function gate(allow: (r: { staff: boolean; admin: boolean }) => boolean = (r) => r.staff, needsLab?: boolean) {
+  return renderWithProviders(<LabGate title="Bancada" sub="x" allow={allow} needsLab={needsLab}>{() => <p>conteúdo</p>}</LabGate>);
 }
 
 describe("LabGate", () => {
@@ -49,5 +49,41 @@ describe("LabGate", () => {
     gate();
     expect(await screen.findByText("o laboratório municipal está desligado nesta cidade")).not.toBeNull();
     expect(api.getLabContext).not.toHaveBeenCalled();
+  });
+
+  it("tela de administração (needsLab=false) abre com labs vazio e não lê o contexto", async () => {
+    mocked(api.fetchCurrentSession).mockResolvedValue(labUser([ "municipal_admin" ]));
+    mocked(api.getLabContext).mockResolvedValue(labContext({ labs: [] }));
+    gate((r) => r.admin, false);
+    expect(await screen.findByText("conteúdo")).not.toBeNull();
+    expect(screen.queryByText(/nenhum laboratório municipal para você/)).toBeNull();
+    expect(api.getLabContext).not.toHaveBeenCalled();
+  });
+
+  it("administrador numa tela que exige laboratório (padrão) segue a regra de B32", async () => {
+    mocked(api.fetchCurrentSession).mockResolvedValue(labUser([ "municipal_admin" ]));
+    mocked(api.getLabContext).mockResolvedValue(labContext({ labs: [] }));
+    gate((r) => r.admin);
+    expect(await screen.findByText(/nenhum laboratório municipal para você/)).not.toBeNull();
+  });
+
+  it("enquanto lê o contexto mostra o esqueleto, sem o conteúdo", async () => {
+    mocked(api.fetchCurrentSession).mockResolvedValue(labUser([ "lab_staff" ]));
+    mocked(api.getLabContext).mockReturnValue(new Promise(() => {}));
+    const { container } = gate();
+    await waitFor(() => expect(api.getLabContext).toHaveBeenCalled());
+    expect(screen.queryByText("conteúdo")).toBeNull();
+    expect(container.textContent).not.toContain("nenhum laboratório");
+  });
+
+  it("falha na leitura do contexto vira ErrorState com nova tentativa", async () => {
+    mocked(api.fetchCurrentSession).mockResolvedValue(labUser([ "lab_staff" ]));
+    mocked(api.getLabContext).mockRejectedValueOnce(new Error("rede"));
+    gate();
+    expect(await screen.findByText("Falha ao carregar")).not.toBeNull();
+    expect(screen.queryByText("conteúdo")).toBeNull();
+    mocked(api.getLabContext).mockResolvedValueOnce(labContext());
+    fireEvent.click(screen.getByRole("button", { name: "tentar novamente" }));
+    expect(await screen.findByText("conteúdo")).not.toBeNull();
   });
 });

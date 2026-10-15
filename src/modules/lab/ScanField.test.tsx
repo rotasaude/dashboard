@@ -94,4 +94,23 @@ describe("ScanField", () => {
     await act(async () => { resolvers[0]({ ok: true, text: "ok" }); });
     expect(onScan).toHaveBeenCalledTimes(1);
   });
+
+  it("leitura que falhou, repetida dentro de 2 s, é aceita de novo", async () => {
+    vi.useFakeTimers({ toFake: [ "Date" ] });
+    vi.setSystemTime(new Date("2026-10-15T10:00:00-03:00"));
+    const onScan = vi.fn()
+      .mockResolvedValueOnce({ ok: false, text: "não encontrada" })
+      .mockRejectedValueOnce(new Error("rede"))
+      .mockResolvedValueOnce({ ok: true, text: "ok" });
+    render(<ScanField label="Etiqueta" onScan={onScan} />);
+    const input = screen.getByLabelText("Etiqueta");
+    read(input, "0000000041");
+    await screen.findByText("0000000041 · não encontrada");
+    read(input, "0000000041");
+    await waitFor(() => expect(onScan).toHaveBeenCalledTimes(2));
+    await screen.findByText("0000000041 · não foi possível registrar — leia de novo");
+    read(input, "0000000041");
+    await waitFor(() => expect(onScan).toHaveBeenCalledTimes(3));
+    expect(screen.queryByText(`0000000041 · ${SCAN_DUPLICATE}`)).toBeNull();
+  });
 });

@@ -12,18 +12,23 @@ import { Skeleton } from "../../components/Skeleton";
 import { stack } from "../exams/styles";
 import { useLabContext } from "./useLabContext";
 
-export function LabGate({ title, sub, allow, children }: {
-  title: string; sub: string; allow(roles: LabRoles): boolean; children(roles: LabRoles): ReactNode;
+// `needsLab` (padrão true): telas de administração (catálogo, relatórios) leem
+// os prestadores por conta própria e têm estado vazio próprio apontando para
+// Exames → Catálogo e prestadores; passam `needsLab={false}` e o portão não lê
+// o contexto nem mostra LAB_NO_LAB.
+export function LabGate({ title, sub, allow, needsLab = true, children }: {
+  title: string; sub: string; allow(roles: LabRoles): boolean; needsLab?: boolean; children(roles: LabRoles): ReactNode;
 }) {
   const { user } = useAuth();
   const roles = labRoles(user);
   const switchOn = canUseLab(user);
   const permitted = switchOn && allow(roles);
-  const context = useLabContext(permitted);
+  const context = useLabContext(permitted && needsLab);
   if (!user) return null;
   let body: ReactNode;
   if (!switchOn) body = <EmptyState title={LAB_DISABLED} />;
   else if (!permitted) body = <EmptyState title={LAB_NO_ROLE} />;
+  else if (!needsLab) body = children(roles);
   else if (context.isPending) body = <Skeleton rows={3} />;
   else if (context.isError) body = <ErrorState message={labError(context.error)} onRetry={() => { void context.refetch(); }} />;
   else if (context.data.labs.length === 0) body = <EmptyState title={LAB_NO_LAB} />;
