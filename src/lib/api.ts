@@ -2392,6 +2392,8 @@ export interface ExamOrder {
   unit: { id: string; name: string }; provider: { id: string; name: string } | null;
   scheduled_at: string | null; scheduled_place: string | null; external_reference: string | null;
   status: ExamStatus | string; status_changed_at: string; overdue: ExamOverdue | null; escalated: boolean;
+  // B63: motivos gravados (A31), só na visão clínica; null na administrativa.
+  escalation_reasons?: string[] | null;
   result: ExamResult | null;
   // Presentes em toda lista e detalhe. Na visão administrativa (guia, resultado,
   // regulação, fila da unidade) `cid10_justification` e `requester.cns` vêm null.

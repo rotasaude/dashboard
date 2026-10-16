@@ -24,7 +24,7 @@ describe("ExamAcknowledgements", () => {
       next_before: null
     });
     mocked(api.listTeamAcknowledgements).mockResolvedValue({
-      orders: [ examOrder({ id: "eo4", status: "resulted", escalated: true, result: examResult(), requester: { user_id: null, name: "Dr. Externo", cns: VALID_CNS },
+      orders: [ examOrder({ id: "eo4", status: "resulted", escalated: true, escalation_reasons: [ "unlinked_requester" ], result: examResult(), requester: { user_id: null, name: "Dr. Externo", cns: VALID_CNS },
         patient: { id: "pa2", display_name: "Carlos Dias" } }) ],
       next_before: null
     });

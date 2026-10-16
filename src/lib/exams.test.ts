@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { ApiError } from "./api";
 import {
   EMPTY_GUIDE, EXAMS_DISABLED, PDF_LINK_EXPIRED, cnesProblem, cpfTail, deadlineDraft, deadlinesFrom, deadlinesProblem, deadlinesSummary,
-  effectiveDeadline, emptyResultDraft, ESCALATION_LABEL, escalationLabel, escalationReason, criticalFromTrail, eventLabel, examActions, examError, examRoles, examStatusLabel, fmtDay,
+  effectiveDeadline, emptyResultDraft, ESCALATION_LABEL, escalationLabel, escalationReasonsText, criticalFromTrail, eventLabel, examActions, examError, examRoles, examStatusLabel, fmtDay,
   guideBody, guideProblem, mergeById, overdueLabel, pdfLinkExpired, pendingCountText, pendingNoticeText, providerCanSchedule, reasonProblem, resultBody, resultFieldsProblem,
   resultProblem, scheduleBody, scheduleProblem, scheduleWhen, sigtapProblem, uploadProblem, canUseExams
 } from "./exams";
@@ -92,16 +92,12 @@ describe("papéis e botões", () => {
     expect(examActions(examOrder({ status: "denied" }), { ...NONE, admin: true }, "us2").cancel).toBe(false);
   });
 
-  it("motivo do escalonamento derivado do exame", () => {
-    expect(escalationReason(examOrder({ result: examResult({ critical: true }) }))).toBe("critical");
-    expect(escalationReason(examOrder({ requester: { user_id: null, name: "Dr. Externo", cns: VALID_CNS } }))).toBe("unlinked_requester");
-    expect(escalationReason(examOrder({ result: examResult() }))).toBe("overdue");
-    // A31: a 1ª escalada foi por prazo, depois veio o crítico
-    const events = [
-      { kind: "escalated", occurred_at: "2026-10-12T09:00:00-03:00", actor: { type: "system" as const, name: null }, reason: "overdue" },
-      { kind: "escalated", occurred_at: "2026-10-13T09:00:00-03:00", actor: { type: "system" as const, name: null }, reason: "critical" }
-    ];
-    expect(escalationReason(examOrder({ events }))).toBe("critical");
+  // B63: o motivo é o gravado pelo api, nunca deduzido do resultado vigente.
+  it("motivos do escalonamento: os gravados, na ordem", () => {
+    expect(escalationReasonsText(examOrder({ escalated: true, escalation_reasons: [ "critical" ], result: examResult({ critical: false }) }))).toBe("resultado crítico");
+    expect(escalationReasonsText(examOrder({ escalated: true, escalation_reasons: [ "overdue", "critical" ] }))).toBe("prazo de ciência vencido · resultado crítico");
+    expect(escalationReasonsText(examOrder({ escalated: true, escalation_reasons: [ "unlinked_requester" ] }))).toBe("solicitante sem vínculo");
+    expect(escalationReasonsText(examOrder({ escalated: true, escalation_reasons: null, result: examResult({ critical: true }) }))).toBe("—");
     expect(ESCALATION_LABEL.overdue).toBe("prazo de ciência vencido");
     expect(escalationLabel("critical")).toBe("resultado crítico");
     expect(escalationLabel("outro_codigo")).toBe("outro_codigo");

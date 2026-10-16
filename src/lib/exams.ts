@@ -132,11 +132,11 @@ export function criticalFromTrail(events: ExamEvent[] | null | undefined): boole
   return !!events?.some((e) => e.kind === "escalated" && e.reason === "critical");
 }
 
-export function escalationReason(o: ExamOrder): EscalationReason {
-  if (o.result?.critical) return "critical";
-  if (criticalFromTrail(o.events)) return "critical";
-  if (o.requester.user_id === null) return "unlinked_requester";
-  return "overdue";
+// B63: os motivos gravados pelo api, na ordem; nada é deduzido do resultado vigente
+// (um crítico retificado para normal continua "resultado crítico").
+export function escalationReasonsText(o: ExamOrder): string {
+  const reasons = o.escalation_reasons ?? [];
+  return reasons.length > 0 ? reasons.map((r) => escalationLabel(r)).join(" · ") : "—";
 }
 
 export interface ExamRoles { professional: boolean; reception: boolean; regulator: boolean; admin: boolean; provider: boolean }

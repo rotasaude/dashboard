@@ -9,7 +9,7 @@ import { useState, type ReactNode } from "react";
 import { ApiError, errorCode, listPendingAcknowledgements, listTeamAcknowledgements, type ExamOrder } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import {
-  ESCALATION_LABEL, EXAMS_DISABLED, EXAMS_NO_ROLE, EXAM_PENDING_KEY, EXAM_TEAM_KEY, canUseExams, escalationReason, examError, examRoles,
+  EXAMS_DISABLED, EXAMS_NO_ROLE, EXAM_PENDING_KEY, EXAM_TEAM_KEY, canUseExams, escalationReasonsText, examError, examRoles,
   fmtDay, overdueLabel, pendingNoticeText
 } from "../lib/exams";
 import { fmtDateTime } from "../lib/format";
@@ -89,7 +89,7 @@ export function ExamAcknowledgements() {
         {team.query.isSuccess && (
           <>
             <DataTable cols={[ ...exam,
-              { label: "Motivo", w: "1.2fr", render: (o) => ESCALATION_LABEL[escalationReason(o)] },
+              { label: "Motivo", w: "1.2fr", render: (o) => escalationReasonsText(o) },
               { label: "Solicitante", w: "1.2fr", render: (o) => o.requester.name },
               resultCol, openCol ]}
               rows={team.orders} rowKey={(o) => o.id} empty="a fila da equipe está vazia" />
