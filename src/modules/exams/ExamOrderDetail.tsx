@@ -15,7 +15,7 @@ import {
 import { useAuth } from "../../lib/auth";
 import { hasFeature } from "../../lib/features";
 import {
-  DETAIL_TRANSITION_REREAD, EXAM_ORDER_KEY, EXAM_PROVIDER_REFS_KEY, ORIGIN_LABEL, criticalFromTrail, escalationLabel, eventLabel, examActions, examError, examRoles,
+  DETAIL_TRANSITION_REREAD, EXAM_ORDER_KEY, EXAM_PROVIDER_REFS_KEY, ORIGIN_LABEL, criticalFromTrail, escalationLabel, escalationReasonsText, eventLabel, examActions, examError, examRoles,
   examStatusLabel, examStatusTone, overdueLabel, refreshExams, scheduleBody
 } from "../../lib/exams";
 import { cityIsoDate, fmtDateTime } from "../../lib/format";
@@ -115,7 +115,8 @@ export function ExamOrderDetail({ id, onClose, onChanged, focusOnOpen = false }:
   const actions = examActions(order, roles, user?.id ?? null);
   const requester = order.requester.user_id ? order.requester.name : `${order.requester.name} (digitado)`;
   const scheduled = order.scheduled_at ? `${fmtDateTime(order.scheduled_at)} · ${order.scheduled_place ?? ""}` : "—";
-  const criticalInTrail = criticalFromTrail(order.events);
+  // B63: vale o motivo gravado pelo api; a trilha é a reserva (detalhe sem a lista).
+  const criticalInTrail = order.escalation_reasons?.includes("critical") ?? criticalFromTrail(order.events);
 
   return (
     <section aria-label={`Exame ${order.label}`} style={panel}>
@@ -123,7 +124,7 @@ export function ExamOrderDetail({ id, onClose, onChanged, focusOnOpen = false }:
         <h3 ref={headingRef} tabIndex={-1} style={title}>{order.label}</h3>
         <Tag tone={examStatusTone(order.status)}>{examStatusLabel(order.status)}</Tag>
         {order.priority === "urgent" && <Tag tone="urgent">urgente</Tag>}
-        {order.escalated && <Tag tone="warn">na fila da equipe</Tag>}
+        {order.escalated && <Tag tone="warn">{(order.escalation_reasons ?? []).length > 0 ? `na fila da equipe · ${escalationReasonsText(order)}` : "na fila da equipe"}</Tag>}
       </div>
       <div style={grid}>
         <KeyValue k="Código" v={order.short_code} />

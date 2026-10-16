@@ -258,6 +258,17 @@ describe("ExamOrderDetail", () => {
     expect(within(result).getByText("crítico")).not.toBeNull();
   });
 
+  // B63: o motivo gravado pelo api (escalation_reasons) vale mesmo sem a trilha.
+  it("motivos gravados: crítico retificado para normal segue crítico, e o motivo aparece na marca", async () => {
+    mocked(api.getExamOrder).mockResolvedValue(examOrder({
+      status: "resulted", escalated: true, escalation_reasons: [ "critical" ], result: examResult({ critical: false }), events: []
+    }));
+    renderWithProviders(<ExamOrderDetail id="eo1" onClose={vi.fn()} />);
+    const region = await detail();
+    expect(within(within(region).getByRole("region", { name: "Resultado" })).getByText("crítico")).not.toBeNull();
+    expect(within(region).getByText("na fila da equipe · resultado crítico")).not.toBeNull();
+  });
+
   it("motivo da negação aparece; ator de sistema nunca vira 'null'; CID e CNS só quando vêm", async () => {
     sessionAs([ "exam_regulator" ], "us7");
     mocked(api.getExamOrder).mockResolvedValue(examOrder({
