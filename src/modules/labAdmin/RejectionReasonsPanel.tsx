@@ -10,6 +10,7 @@ import { DataTable } from "../../components/DataTable";
 import { Tag } from "../../components/Tag";
 import { SensitiveAction } from "../../components/SensitiveAction";
 import { inputStyle, secondaryButtonStyle } from "../../components/formStyles";
+import { errorCode } from "../../lib/api";
 import { alert, fieldLabel, row, stack } from "../exams/styles";
 
 type Pending = null | { kind: "create"; name: string } | { kind: "toggle"; reason: LabRejectionReason };
@@ -21,6 +22,13 @@ export function RejectionReasonsPanel({ providerId, onGoToSecurity }: { provider
   const [ pending, setPending ] = useState<Pending>(null);
   const [ error, setError ] = useState<string | null>(null);
   const refresh = () => queryClient.invalidateQueries({ queryKey: [ LAB_REASONS_KEY ] });
+  const busyElsewhere = pending !== null;
+  // not_found no admin = o motivo sumiu; a tela recarrega a lista.
+  const toggleError = (err: unknown) => {
+    if (errorCode(err) !== "not_found") return labError(err);
+    void refresh();
+    return "motivo não encontrado — a lista foi atualizada";
+  };
 
   return (
     <Panel title="Motivos de rejeição" sub="usados no recebimento; desative em vez de apagar">
@@ -31,14 +39,14 @@ export function RejectionReasonsPanel({ providerId, onGoToSecurity }: { provider
             { label: "Motivo", w: "2fr", card: "title", render: (r) => r.name },
             { label: "Situação", w: "1fr", render: (r) => <Tag tone={r.active ? "ok" : undefined}>{r.active ? "ativo" : "inativo"}</Tag> },
             { label: "", w: "auto", card: "actions", render: (r) => (
-              <button type="button" style={secondaryButtonStyle} onClick={() => setPending({ kind: "toggle", reason: r })}>{r.active ? "Desativar" : "Ativar"}</button>
+              <button type="button" style={secondaryButtonStyle} disabled={busyElsewhere} onClick={() => setPending({ kind: "toggle", reason: r })}>{r.active ? "Desativar" : "Ativar"}</button>
             ) }
           ]}
           rows={reasons.data ?? []} rowKey={(r) => r.id} empty={reasons.isPending ? "carregando…" : "nenhum motivo cadastrado"}
         />
         <div style={{ ...row, alignItems: "flex-end" }}>
           <label style={fieldLabel}>Novo motivo<input value={name} maxLength={80} style={inputStyle} onChange={(e) => setName(e.target.value)} /></label>
-          <button type="button" style={secondaryButtonStyle}
+          <button type="button" style={secondaryButtonStyle} disabled={busyElsewhere}
             onClick={() => { if (!name.trim()) { setError("escreva o motivo"); return; }
               if (name.trim().length > 80) { setError("motivo com até 80 caracteres"); return; } setError(null); setPending({ kind: "create", name: name.trim() }); }}>Incluir motivo</button>
         </div>
@@ -55,7 +63,7 @@ export function RejectionReasonsPanel({ providerId, onGoToSecurity }: { provider
             requiresStepUp confirmLabel={pending.reason.active ? "Desativar" : "Ativar"}
             run={async () => { await updateRejectionReason(pending.reason.id, { name: pending.reason.name, active: !pending.reason.active }); }}
             onDone={() => { setPending(null); void refresh(); }} onCancel={() => setPending(null)} onGoToSecurity={onGoToSecurity}
-            translateError={(err) => labError(err)} />
+            translateError={toggleError} />
         )}
       </div>
     </Panel>

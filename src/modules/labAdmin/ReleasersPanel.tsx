@@ -12,6 +12,7 @@ import { DataTable } from "../../components/DataTable";
 import { Tag } from "../../components/Tag";
 import { SensitiveAction } from "../../components/SensitiveAction";
 import { inputStyle, secondaryButtonStyle } from "../../components/formStyles";
+import { errorCode } from "../../lib/api";
 import { alert, checkLabel, fieldLabel, muted, row, stack } from "../exams/styles";
 
 type Pending = null | { kind: "add"; userId: string; email: string; lead: boolean; deputy: boolean } | { kind: "remove"; releaser: LabReleaser };
@@ -28,6 +29,13 @@ export function ReleasersPanel({ providerId, onGoToSecurity }: { providerId: str
   const mine = (releasers.data ?? []).filter((r) => r.provider_id === providerId);
   const candidates = (members.data ?? []).filter((m) => m.role === "lab_releaser" && !mine.some((r) => r.user_id === m.user.id));
   const refresh = () => queryClient.invalidateQueries({ queryKey: [ LAB_RELEASERS_KEY ] });
+  const busyElsewhere = pending !== null;
+  const addError = (err: unknown) => (errorCode(err) === "not_found" ? "pessoa não encontrada ou inativa" : labError(err));
+  const removeError = (err: unknown) => {
+    if (errorCode(err) !== "not_found") return labError(err);
+    void refresh();
+    return "este liberador já foi retirado — a lista foi atualizada";
+  };
 
   function add() {
     if (!userId) { setError("escolha a pessoa"); return; }
@@ -47,7 +55,7 @@ export function ReleasersPanel({ providerId, onGoToSecurity }: { providerId: str
             { label: "Conselho", w: "1.2fr", render: (r) => (r.council ? `${r.council}-${r.council_uf ?? "?"} ${r.council_number ?? ""}` : "—") },
             { label: "Marca", w: "1fr", render: (r) => <>{r.technical_lead && <Tag tone="accent">RT</Tag>}{r.technical_deputy && <Tag>substituto</Tag>}</> },
             { label: "", w: "auto", card: "actions", render: (r) => (
-              <button type="button" style={secondaryButtonStyle} onClick={() => setPending({ kind: "remove", releaser: r })}>Tirar</button>
+              <button type="button" style={secondaryButtonStyle} disabled={busyElsewhere} onClick={() => setPending({ kind: "remove", releaser: r })}>Tirar</button>
             ) }
           ]}
           rows={mine} rowKey={(r) => r.id} empty={releasers.isPending ? "carregando…" : "nenhum liberador neste laboratório"}
@@ -63,7 +71,7 @@ export function ReleasersPanel({ providerId, onGoToSecurity }: { providerId: str
           </label>
           <label style={checkLabel}><input type="checkbox" checked={lead} onChange={(e) => setLead(e.target.checked)} />Responsável técnico (RT)</label>
           <label style={checkLabel}><input type="checkbox" checked={deputy} onChange={(e) => setDeputy(e.target.checked)} />Substituto do RT</label>
-          <button type="button" style={secondaryButtonStyle} onClick={add}>Incluir liberador</button>
+          <button type="button" style={secondaryButtonStyle} disabled={busyElsewhere} onClick={add}>Incluir liberador</button>
         </div>
         {error && <p role="alert" style={alert}>{error}</p>}
         {pending?.kind === "add" && (
@@ -72,14 +80,14 @@ export function ReleasersPanel({ providerId, onGoToSecurity }: { providerId: str
             requiresStepUp confirmLabel="Incluir"
             run={async () => { await addLabReleaser({ user_id: pending.userId, provider_id: providerId, technical_lead: pending.lead, technical_deputy: pending.deputy }); }}
             onDone={() => { setPending(null); setUserId(""); setLead(false); setDeputy(false); void refresh(); }} onCancel={() => setPending(null)}
-            onGoToSecurity={onGoToSecurity} translateError={(err) => labError(err)} />
+            onGoToSecurity={onGoToSecurity} translateError={addError} />
         )}
         {pending?.kind === "remove" && (
           <SensitiveAction title={`Tirar liberador — ${pending.releaser.name}`} description="Deixa de liberar laudos deste laboratório; os laudos já assinados não mudam."
             requiresStepUp confirmLabel="Tirar"
             run={async () => { await removeLabReleaser(pending.releaser.id); }}
             onDone={() => { setPending(null); void refresh(); }} onCancel={() => setPending(null)} onGoToSecurity={onGoToSecurity}
-            translateError={(err) => labError(err)} />
+            translateError={removeError} />
         )}
       </div>
     </Panel>

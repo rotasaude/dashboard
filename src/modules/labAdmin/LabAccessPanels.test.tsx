@@ -112,3 +112,107 @@ describe("token do middleware", () => {
     expect(screen.getByRole("button", { name: "Revogar token do middleware" })).not.toBeNull();
   });
 });
+
+describe("rodada de correção 1", () => {
+  const err = (status: number, error: string) => new api.ApiError(status, { error }, "x");
+
+  it("motivo com mais de 80 caracteres não chega ao api", async () => {
+    renderWithProviders(<RejectionReasonsPanel providerId="pv9" />);
+    const panel = await screen.findByRole("region", { name: "Motivos de rejeição" });
+    const input = within(panel).getByLabelText("Novo motivo") as HTMLInputElement;
+    expect(input.maxLength).toBe(80);
+    fireEvent.change(input, { target: { value: "x".repeat(81) } });
+    fireEvent.click(within(panel).getByRole("button", { name: "Incluir motivo" }));
+    expect(within(panel).getByRole("alert").textContent).toBe("motivo com até 80 caracteres");
+    expect(api.createRejectionReason).not.toHaveBeenCalled();
+  });
+
+  it("desativar um motivo grava active=false; enquanto a confirmação está aberta, as outras linhas ficam travadas", async () => {
+    mocked(api.updateRejectionReason).mockResolvedValue({ id: "rr1", provider_id: "pv9", name: "hemolisada", active: false });
+    renderWithProviders(<RejectionReasonsPanel providerId="pv9" />);
+    const panel = await screen.findByRole("region", { name: "Motivos de rejeição" });
+    const button = await within(panel).findByRole("button", { name: "Desativar" });
+    fireEvent.click(button);
+    expect((button as HTMLButtonElement).disabled).toBe(true);
+    expect((within(panel).getByRole("button", { name: "Incluir motivo" }) as HTMLButtonElement).disabled).toBe(true);
+    const confirm = await screen.findByRole("region", { name: /Desativar motivo/ });
+    fireEvent.click(within(confirm).getByRole("button", { name: "Desativar" }));
+    await waitFor(() => expect(api.updateRejectionReason).toHaveBeenCalledWith("rr1", { name: "hemolisada", active: false }));
+  });
+
+  it("motivo que sumiu: frase própria e a lista é relida", async () => {
+    mocked(api.updateRejectionReason).mockRejectedValue(err(404, "not_found"));
+    renderWithProviders(<RejectionReasonsPanel providerId="pv9" />);
+    const panel = await screen.findByRole("region", { name: "Motivos de rejeição" });
+    fireEvent.click(await within(panel).findByRole("button", { name: "Desativar" }));
+    const confirm = await screen.findByRole("region", { name: /Desativar motivo/ });
+    fireEvent.click(within(confirm).getByRole("button", { name: "Desativar" }));
+    expect(await within(confirm).findByText("motivo não encontrado — a lista foi atualizada")).not.toBeNull();
+    await waitFor(() => expect(mocked(api.listRejectionReasons).mock.calls.length).toBeGreaterThan(1));
+  });
+
+  async function withReleaser() {
+    mocked(api.listLabReleasers).mockResolvedValue([ { id: "rl1", user_id: "us7", name: "Bia", email: "bia@curitiba.demo", provider_id: "pv9",
+      council: "CRF", council_uf: "PR", council_number: "123", technical_lead: true, technical_deputy: false } ]);
+    renderWithProviders(<ReleasersPanel providerId="pv9" />);
+    const panel = await screen.findByRole("region", { name: "Liberadores" });
+    const tirar = await within(panel).findByRole("button", { name: "Tirar" });
+    return { panel, tirar };
+  }
+
+  it("tirar liberador chama o api e trava o resto do painel durante a confirmação", async () => {
+    mocked(api.removeLabReleaser).mockResolvedValue(undefined);
+    const { panel, tirar } = await withReleaser();
+    fireEvent.click(tirar);
+    expect((within(panel).getByRole("button", { name: "Incluir liberador" }) as HTMLButtonElement).disabled).toBe(true);
+    const confirm = await screen.findByRole("region", { name: /Tirar liberador/ });
+    fireEvent.click(within(confirm).getByRole("button", { name: "Tirar" }));
+    await waitFor(() => expect(api.removeLabReleaser).toHaveBeenCalledWith("rl1"));
+  });
+
+  it("liberador já retirado: frase própria e a lista é relida", async () => {
+    mocked(api.removeLabReleaser).mockRejectedValue(err(404, "not_found"));
+    const { tirar } = await withReleaser();
+    fireEvent.click(tirar);
+    const confirm = await screen.findByRole("region", { name: /Tirar liberador/ });
+    fireEvent.click(within(confirm).getByRole("button", { name: "Tirar" }));
+    expect(await within(confirm).findByText("este liberador já foi retirado — a lista foi atualizada")).not.toBeNull();
+    await waitFor(() => expect(mocked(api.listLabReleasers).mock.calls.length).toBeGreaterThan(1));
+  });
+
+  it("incluir: pessoa inexistente e RT já ocupado aparecem pela tela", async () => {
+    mocked(api.addLabReleaser).mockRejectedValueOnce(err(404, "not_found")).mockRejectedValueOnce(err(409, "lead_taken"));
+    renderWithProviders(<ReleasersPanel providerId="pv9" />);
+    const panel = await screen.findByRole("region", { name: "Liberadores" });
+    const select = within(panel).getByLabelText("Pessoa com o papel de liberador") as HTMLSelectElement;
+    await waitFor(() => expect(select.options.length).toBe(2));
+    fireEvent.change(select, { target: { value: "us7" } });
+    fireEvent.click(within(panel).getByRole("button", { name: "Incluir liberador" }));
+    let confirm = await screen.findByRole("region", { name: /Incluir liberador/ });
+    fireEvent.click(within(confirm).getByRole("button", { name: "Incluir" }));
+    expect(await within(confirm).findByText("pessoa não encontrada ou inativa")).not.toBeNull();
+    fireEvent.click(within(confirm).getByRole("button", { name: "Incluir" }));
+    expect(await within(confirm).findByText(/tire o atual da lista \(Tirar\)/)).not.toBeNull();
+  });
+
+  it("revogar o token pede confirmação e chama o api", async () => {
+    mocked(api.revokeMiddlewareToken).mockResolvedValue(undefined);
+    const onChanged = vi.fn();
+    renderWithProviders(<MiddlewareTokenPanel provider={{ ...LAB, has_middleware_token: true }} onChanged={onChanged} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Revogar token do middleware" }));
+    expect(api.revokeMiddlewareToken).not.toHaveBeenCalled();
+    const confirm = await screen.findByRole("region", { name: /Revogar token do middleware —/ });
+    fireEvent.click(within(confirm).getByRole("button", { name: "Revogar token" }));
+    await waitFor(() => expect(api.revokeMiddlewareToken).toHaveBeenCalledWith("pv9"));
+    await waitFor(() => expect(onChanged).toHaveBeenCalled());
+  });
+
+  it("o token some do documento quando o painel é desmontado", async () => {
+    const { unmount } = renderWithProviders(<MiddlewareTokenPanel provider={LAB} onChanged={vi.fn()} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Gerar token do middleware" }));
+    fireEvent.click(within(screen.getByRole("region", { name: /Gerar token do middleware —/ })).getByRole("button", { name: "Gerar token" }));
+    await screen.findByText("mw_secret_123");
+    unmount();
+    expect(document.body.innerHTML).not.toContain("mw_secret_123");
+  });
+});
