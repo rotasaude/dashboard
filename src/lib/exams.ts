@@ -6,7 +6,7 @@
 import type { QueryClient } from "@tanstack/react-query";
 import {
   ApiError, EXAM_UPLOAD_MAX_BYTES, EXAM_UPLOAD_TYPES, errorCode, isExamLinkExpired,
-  type ExamDeadlines, type ExamEvent, type ExamOrder, type ExamOverdue, type ExamPriority, type ExamProviderKind, type ExamReleasePolicy,
+  type ExamDeadlines, type ExamOrder, type ExamOverdue, type ExamPriority, type ExamProviderKind, type ExamReleasePolicy,
   type ExamResultField, type ExamStage, type ReceptionOrderInput, type ResultInput, type ScheduleInput, type ScheduleWhen
 } from "./api";
 import { OPENING_ENDED } from "./clinicalRecord";
@@ -122,15 +122,6 @@ export const ESCALATION_LABEL: Record<EscalationReason, string> = {
 export function escalationLabel(code: string | null | undefined): string {
   if (!code) return "—";
   return (ESCALATION_LABEL as Record<string, string>)[code] ?? code;
-}
-
-// O motivo sai do próprio exame (contrato §2 não traz o motivo na lista):
-// crítico vence — também quando a 1ª escalada foi por prazo e o crítico veio
-// depois (A31, o evento está no detalhe); solicitante digitado é escalado já
-// no resultado; o resto é prazo.
-// A31: a marca "crítico" também vem de qualquer escalada por crítico no andamento.
-export function criticalFromTrail(events: ExamEvent[] | null | undefined): boolean {
-  return !!events?.some((e) => e.kind === "escalated" && e.reason === "critical");
 }
 
 // B63: os motivos gravados pelo api, na ordem; nada é deduzido do resultado vigente

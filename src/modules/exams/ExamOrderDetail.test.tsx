@@ -248,24 +248,18 @@ describe("ExamOrderDetail", () => {
     fireEvent.click(screen.getByRole("button", { name: "Fechar" }));
     expect(onClose).toHaveBeenCalled();
   });
-  it("crítico vem também do evento de escalada por crítico (A31)", async () => {
+  // B64: a marca "crítico" do resultado segue o vigente (result.critical); o motivo do
+  // escalonamento fica só na marca da fila; o substituído crítico mantém a dele.
+  it("crítico retificado para normal: o vigente sem marca, o substituído com, o motivo na fila", async () => {
     mocked(api.getExamOrder).mockResolvedValue(examOrder({
-      status: "resulted", escalated: true, result: examResult({ critical: false }),
-      events: [ { kind: "escalated", occurred_at: "2026-10-12T08:00:00-03:00", actor: { type: "system", name: null }, reason: "critical" } ]
-    }));
-    renderWithProviders(<ExamOrderDetail id="eo1" onClose={vi.fn()} />);
-    const result = within(await detail()).getByRole("region", { name: "Resultado" });
-    expect(within(result).getByText("crítico")).not.toBeNull();
-  });
-
-  // B63: o motivo gravado pelo api (escalation_reasons) vale mesmo sem a trilha.
-  it("motivos gravados: crítico retificado para normal segue crítico, e o motivo aparece na marca", async () => {
-    mocked(api.getExamOrder).mockResolvedValue(examOrder({
-      status: "resulted", escalated: true, escalation_reasons: [ "critical" ], result: examResult({ critical: false }), events: []
+      status: "resulted", escalated: true, escalation_reasons: [ "critical" ], result: examResult({ critical: false }),
+      events: [ { kind: "escalated", occurred_at: "2026-10-12T08:00:00-03:00", actor: { type: "system", name: null }, reason: "critical" } ],
+      superseded_results: [ { ...examResult({ id: "rs0", critical: true }), superseded_at: "2026-10-12T09:00:00-03:00" } ]
     }));
     renderWithProviders(<ExamOrderDetail id="eo1" onClose={vi.fn()} />);
     const region = await detail();
-    expect(within(within(region).getByRole("region", { name: "Resultado" })).getByText("crítico")).not.toBeNull();
+    expect(within(within(region).getByRole("region", { name: "Resultado" })).queryByText("crítico")).toBeNull();
+    expect(within(within(region).getByRole("region", { name: "Laudos substituídos" })).getByText("crítico")).not.toBeNull();
     expect(within(region).getByText("na fila da equipe · resultado crítico")).not.toBeNull();
   });
 

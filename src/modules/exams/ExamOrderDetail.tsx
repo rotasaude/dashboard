@@ -15,7 +15,7 @@ import {
 import { useAuth } from "../../lib/auth";
 import { hasFeature } from "../../lib/features";
 import {
-  DETAIL_TRANSITION_REREAD, EXAM_ORDER_KEY, EXAM_PROVIDER_REFS_KEY, ORIGIN_LABEL, criticalFromTrail, escalationLabel, escalationReasonsText, eventLabel, examActions, examError, examRoles,
+  DETAIL_TRANSITION_REREAD, EXAM_ORDER_KEY, EXAM_PROVIDER_REFS_KEY, ORIGIN_LABEL, escalationLabel, escalationReasonsText, eventLabel, examActions, examError, examRoles,
   examStatusLabel, examStatusTone, overdueLabel, refreshExams, scheduleBody
 } from "../../lib/exams";
 import { cityIsoDate, fmtDateTime } from "../../lib/format";
@@ -115,8 +115,6 @@ export function ExamOrderDetail({ id, onClose, onChanged, focusOnOpen = false }:
   const actions = examActions(order, roles, user?.id ?? null);
   const requester = order.requester.user_id ? order.requester.name : `${order.requester.name} (digitado)`;
   const scheduled = order.scheduled_at ? `${fmtDateTime(order.scheduled_at)} · ${order.scheduled_place ?? ""}` : "—";
-  // B63: vale o motivo gravado pelo api; a trilha é a reserva (detalhe sem a lista).
-  const criticalInTrail = order.escalation_reasons?.includes("critical") ?? criticalFromTrail(order.events);
 
   return (
     <section aria-label={`Exame ${order.label}`} style={panel}>
@@ -146,7 +144,7 @@ export function ExamOrderDetail({ id, onClose, onChanged, focusOnOpen = false }:
         </ol>
       )}
       {order.result && (
-        <ExamResultBlock key={order.result.id} result={order.result} critical={criticalInTrail}
+        <ExamResultBlock key={order.result.id} result={order.result}
           onExpired={() => void query.refetch()} />
       )}
       {order.superseded_results && order.superseded_results.length > 0 && (

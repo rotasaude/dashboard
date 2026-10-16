@@ -3,7 +3,8 @@
 // "crítico", os valores e o laudo. Duas visões: a clínica traz valores,
 // crítico e laudo; a administrativa (unidade, regulador) não traz nenhum dos
 // três — a clínica sempre manda `critical` (booleano), então é ele que decide
-// a visão. `critical` de fora cobre a escalada por crítico do andamento (A31).
+// a visão. B64: "crítico" é o do próprio resultado (o vigente, ou o substituído
+// na lista dele); o motivo do escalonamento fica só na marca da fila.
 // `onExpired`: o link do laudo venceu ou sumiu (410/404) — releia o exame.
 import { useState } from "react";
 import type { ExamResult, ExamResultValue } from "../../lib/api";
@@ -15,14 +16,14 @@ import { Tag } from "../../components/Tag";
 import { openExamPdf } from "./openExamPdf";
 import { alert, box, muted, row } from "./styles";
 
-export function ExamResultBlock({ result, onExpired, critical, superseded = false }: {
-  result: ExamResult; onExpired(): void; critical?: boolean; superseded?: boolean;
+export function ExamResultBlock({ result, onExpired, superseded = false }: {
+  result: ExamResult; onExpired(): void; superseded?: boolean;
 }) {
   const [ error, setError ] = useState<string | null>(null);
   const clinical = typeof result.critical === "boolean";
   const values = result.values ?? [];
   const pdfUrl = result.pdf_url ?? null;
-  const isCritical = result.critical === true || (clinical && critical === true);
+  const isCritical = result.critical === true;
 
   async function open() {
     if (!pdfUrl) return;
