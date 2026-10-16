@@ -43,7 +43,8 @@ type SessionLike = { operator?: boolean; memberships?: { role: string }[]; featu
 const rolesOf = (user: SessionLike) => user?.memberships?.map((m) => m.role) ?? [];
 
 export function canSign(user: SessionLike): boolean {
-  return !!user && !user.operator && rolesOf(user).includes("health_professional") && hasFeature(user, "digital_signature");
+  const roles = rolesOf(user);
+  return !!user && !user.operator && (roles.includes("health_professional") || roles.includes("lab_releaser")) && hasFeature(user, "digital_signature");
 }
 
 export function canSeeSignatureOverview(user: SessionLike): boolean {
@@ -135,7 +136,7 @@ export function reasonLabel(code: string | null | undefined): string {
 }
 
 const DOCUMENT_LABEL: Record<string, string> = {
-  consultation: "consulta", consultation_addendum: "adendo", clinical_document: "documento clínico"
+  consultation: "consulta", consultation_addendum: "adendo", clinical_document: "documento clínico", lab_report: "laudo laboratorial"
 };
 
 export function documentLabel(type: string): string {

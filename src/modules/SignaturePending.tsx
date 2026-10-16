@@ -77,9 +77,10 @@ export function SignaturePending({ onNavigate, redirect = goToProvider }: Props)
     { label: "Motivo", w: "2fr", render: (r) => reasonLabel(r.reason_code) },
     { label: "Tentativas", w: "0.8fr", align: "right", render: (r) => String(r.attempts) },
     {
-      label: "", w: "1.2fr", render: (r) => (
-        <button type="button" style={secondaryButtonStyle} onClick={() => { setNotice(null); setPaperFor(r); }}>Voltar ao papel</button>
-      )
+      label: "", w: "1.2fr", render: (r) => (r.document_type === "lab_report"
+        // O laudo do laboratório não volta ao papel (D19); se o ICP falhar, assina de novo pelo lote.
+        ? <span style={{ fontSize: 12, color: "var(--ink3)" }}>assine pelo lote</span>
+        : <button type="button" style={secondaryButtonStyle} onClick={() => { setNotice(null); setPaperFor(r); }}>Voltar ao papel</button>)
     }
   ];
 
@@ -88,7 +89,7 @@ export function SignaturePending({ onNavigate, redirect = goToProvider }: Props)
       <PageHeader title="Pendentes de assinatura" sub="atendimento · assinatura digital" />
       <Panel
         title="Pendentes"
-        sub="consultas e adendos que esperam a sua assinatura digital"
+        sub="consultas, adendos e laudos que esperam a sua assinatura digital"
         right={(
           <button type="button" disabled={items.length === 0 || batch.isPending}
             style={items.length === 0 || batch.isPending ? disabledButtonStyle : buttonStyle}

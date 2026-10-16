@@ -1793,7 +1793,7 @@ export type SignatureReason =
   | "no_session" | "session_expired" | "provider_unavailable" | "provider_rejected" | "signer_unavailable"
   | "verification_failed" | "certificate_expired" | "certificate_revoked" | "certificate_cpf_mismatch"
   | "feature_disabled" | "user_request" | "document_cancelled";
-export type SignatureDocumentType = "consultation" | "consultation_addendum" | "clinical_document";
+export type SignatureDocumentType = "consultation" | "consultation_addendum" | "clinical_document" | "lab_report";
 export type CertificateStatus = "active" | "replaced" | "unlinked" | "revoked" | "expired";
 export type SignatureFileKind = "pdf" | "package";
 
@@ -1817,7 +1817,7 @@ export type OAuthCallbackResult =
   | { purpose: "session"; result: { expires_at: string }; return_to?: string }
   | { purpose: "batch"; result: BatchResult; return_to?: string };
 export interface SignatureRequest {
-  id: string; document_type: SignatureDocumentType; document_id: string; consultation_id: string;
+  id: string; document_type: SignatureDocumentType; document_id: string; consultation_id: string | null;
   patient_display_name: string | null; finalized_at: string | null; status: SignatureRequestStatus;
   reason_code?: SignatureReason | null; attempts: number;
 }
