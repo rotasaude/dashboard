@@ -25,12 +25,15 @@ import { KeyValue } from "../../components/KeyValue";
 import { Tag } from "../../components/Tag";
 import { secondaryButtonStyle } from "../../components/formStyles";
 import { ExamResultBlock } from "./ExamResultBlock";
+import { GalRequisitionForm } from "./GalRequisitionForm";
 import { ReasonForm } from "./ReasonForm";
 import { ResultForm } from "./ResultForm";
 import { ScheduleForm } from "./ScheduleForm";
 import { alert, grid, list, muted, panel, row, title } from "./styles";
 
-type Mode = null | "schedule" | "result" | "cancel" | "acknowledge";
+type Mode = null | "schedule" | "result" | "cancel" | "acknowledge" | "gal";
+
+const CLOSED = new Set([ "denied", "cancelled" ]);
 
 // C1: ator `system` vem sem nome. C2: o motivo da escalada é um código.
 function eventText(e: ExamEvent): string {
@@ -107,7 +110,8 @@ export function ExamOrderDetail({ id, onClose, onChanged, focusOnOpen = false }:
     );
   }
 
-  const actions = examActions(order, examRoles(user), user?.id ?? null);
+  const roles = examRoles(user);
+  const actions = examActions(order, roles, user?.id ?? null);
   const requester = order.requester.user_id ? order.requester.name : `${order.requester.name} (digitado)`;
   const scheduled = order.scheduled_at ? `${fmtDateTime(order.scheduled_at)} · ${order.scheduled_place ?? ""}` : "—";
   const criticalInTrail = criticalFromTrail(order.events);
@@ -130,6 +134,7 @@ export function ExamOrderDetail({ id, onClose, onChanged, focusOnOpen = false }:
         {order.requester.cns && <KeyValue k="CNS do solicitante" v={order.requester.cns} />}
         <KeyValue k="Unidade" v={order.unit.name} mono={false} />
         <KeyValue k="Prestador" v={order.provider?.name ?? "—"} mono={false} />
+        {order.gal_requisition && <KeyValue k="Requisição GAL" v={order.gal_requisition} />}
         <KeyValue k="Agendado" v={scheduled} mono={false} />
         <KeyValue k="Prazo" v={overdueLabel(order.overdue)} mono={false} />
       </div>
@@ -141,6 +146,14 @@ export function ExamOrderDetail({ id, onClose, onChanged, focusOnOpen = false }:
       {order.result && (
         <ExamResultBlock key={order.result.id} result={order.result} critical={criticalInTrail}
           onExpired={() => void query.refetch()} />
+      )}
+      {order.superseded_results && order.superseded_results.length > 0 && (
+        <section aria-label="Laudos substituídos" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <p style={muted}>o cidadão vê só o laudo vigente</p>
+          {order.superseded_results.map((r) => (
+            <ExamResultBlock key={r.id} result={r} superseded onExpired={() => void query.refetch()} />
+          ))}
+        </section>
       )}
       <ActionMessage message={message.message} />
 
@@ -157,6 +170,9 @@ export function ExamOrderDetail({ id, onClose, onChanged, focusOnOpen = false }:
               onConfirm={confirm(() => collectExam(order.id), "Coleta registrada.")} />
           )}
           {actions.result && <button type="button" style={secondaryButtonStyle} onClick={() => setMode("result")}>Registrar resultado</button>}
+          {order.gal_requisition === null && (roles.reception || roles.professional) && !CLOSED.has(order.status) && (
+            <button type="button" style={secondaryButtonStyle} onClick={() => setMode("gal")}>Registrar requisição do GAL</button>
+          )}
           {actions.acknowledge && !actions.acknowledgeNeedsReason && (
             <ConfirmButton label="Dar ciência" variant="primary" question="Confirmar que você viu este resultado?"
               onConfirm={confirm(() => acknowledgeExam(order.id), "Ciência registrada.")} />
@@ -183,6 +199,10 @@ export function ExamOrderDetail({ id, onClose, onChanged, focusOnOpen = false }:
       {mode === "result" && (
         <ResultForm fields={order.result_fields ?? []} today={cityIsoDate()} submitLabel="Registrar resultado" onCancel={() => setMode(null)}
           onSubmit={(input) => act(() => registerExamResult(order.id, input), "Resultado registrado.")} />
+      )}
+      {mode === "gal" && (
+        <GalRequisitionForm orderId={order.id} current={order.gal_requisition ?? null} onCancel={() => setMode(null)}
+          onDone={() => void act(() => Promise.resolve(), "Requisição do GAL registrada.")} />
       )}
       {mode === "cancel" && (
         <ReasonForm label="Motivo do cancelamento" submitLabel="Cancelar exame" onCancel={() => setMode(null)}

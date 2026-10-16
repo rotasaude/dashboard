@@ -75,10 +75,10 @@ export const STAGE_LABEL: Record<ExamStage, string> = {
 export const DEFAULT_DEADLINES: Record<ExamStage, number> = { authorize: 15, schedule: 15, collect: 30, result: 30, acknowledge: 15 };
 
 export const PRIORITY_LABEL: Record<ExamPriority, string> = { routine: "rotina", urgent: "urgente" };
-export const ORIGIN_LABEL: Record<string, string> = { consultation: "consulta", reception_guide: "guia da recepção", pec: "PEC" };
+export const ORIGIN_LABEL: Record<string, string> = { consultation: "consulta", reception_guide: "guia da recepção", pec: "PEC", lab_reception: "recepção do laboratório" };
 export const SOURCE_LABEL: Record<string, string> = {
   unit: "registrado pela unidade", provider: "registrado pelo prestador", fhir: "recebido do laboratório (FHIR)",
-  consultation: "registrado na consulta"
+  consultation: "registrado na consulta", lab: "laudo do laboratório municipal"
 };
 
 const EVENT_LABEL: Record<string, string> = {
@@ -446,8 +446,16 @@ const ERRORS: Record<string, string> = {
   patient_mismatch: "este exame é de outra pessoa",
   identifier_conflict: "este identificador já está em uso",
   not_verified: "este CPF ainda não tem cadastro validado — faça a validação presencial no balcão antes",
-  too_many_requests: "muitas tentativas seguidas — espere um minuto e tente de novo"
+  too_many_requests: "muitas tentativas seguidas — espere um minuto e tente de novo",
+  invalid_gal_requisition: "número do GAL inválido — use letras, números e hífen (até 30)",
+  gal_already_registered: "a requisição do GAL deste exame já foi registrada",
+  provider_uses_municipal_lab: "este prestador usa o laboratório municipal — o resultado sai pela liberação do laudo"
 };
+
+// F-21.24: número da requisição no GAL do LACEN (só registro, uma vez só — B5).
+export function galProblem(value: string): string | null {
+  return /^[A-Za-z0-9-]{1,30}$/.test(value.trim()) ? null : ERRORS.invalid_gal_requisition;
+}
 
 export const FAKE_LAB_DISABLED = "o laboratório simulado está desligado nesta cidade";
 

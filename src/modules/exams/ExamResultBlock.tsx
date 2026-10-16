@@ -15,7 +15,9 @@ import { Tag } from "../../components/Tag";
 import { openExamPdf } from "./openExamPdf";
 import { alert, box, muted, row } from "./styles";
 
-export function ExamResultBlock({ result, onExpired, critical }: { result: ExamResult; onExpired(): void; critical?: boolean }) {
+export function ExamResultBlock({ result, onExpired, critical, superseded = false }: {
+  result: ExamResult; onExpired(): void; critical?: boolean; superseded?: boolean;
+}) {
   const [ error, setError ] = useState<string | null>(null);
   const clinical = typeof result.critical === "boolean";
   const values = result.values ?? [];
@@ -32,13 +34,16 @@ export function ExamResultBlock({ result, onExpired, critical }: { result: ExamR
   }
 
   return (
-    <section aria-label="Resultado" style={box}>
+    <section aria-label={superseded ? "Resultado substituído" : "Resultado"} style={box}>
       <div style={row}>
         <strong>{`Resultado liberado em ${fmtDay(result.released_on)}`}</strong>
+        {superseded && <Tag tone="neutral">substituído</Tag>}
         {isCritical && <Tag tone="down">crítico</Tag>}
         {result.origin === "external" && <Tag>externo</Tag>}
       </div>
       <p style={muted}>{`${result.laboratory_name} · ${SOURCE_LABEL[result.source] ?? result.source}`}</p>
+      {superseded && result.superseded_at && <p style={muted}>{`deixou de valer em ${fmtDateTime(result.superseded_at)}`}</p>}
+      {!superseded && result.replaces_result_id && <p style={muted}>laudo retificado — substitui o anterior</p>}
       {!clinical && <p style={muted}>valores e laudo ficam com quem pediu e com a equipe</p>}
       {values.length > 0 && (
         <DataTable<ExamResultValue>
