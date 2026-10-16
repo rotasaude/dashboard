@@ -181,7 +181,8 @@ export function navGroupsFor(
     if (group.label === "Cidade") return isAdmin;
     if (group.label === "Comunicação") return canCampaigns;
     if (group.label === "Análise") return canAnalytics;
-    if (group.label === "Atendimento") return canAttend;
+    // 21b: o liberador só do laboratório (patologista, CRM) assina laudo ICP em Pendentes.
+    if (group.label === "Atendimento") return canAttend || (isReleaser && canSign(user));
     return true;
   }).map((group) => ({
     ...group,
@@ -189,6 +190,7 @@ export function navGroupsFor(
       // Módulo 10: "Meu perfil" é do profissional; sem sessão ainda, some
       // (a API responderia 404 no_profile para quem não é profissional).
       if (item.id === "my-profile") return isProfessional;
+      if (item.id === "attendance") return canAttend;
       // Módulo 17: "Minha agenda" idem (GET /me/agenda responde 403/404 a quem não é).
       if (item.id === "my-agenda") return isProfessional;
       if (item.id === "clinical-record") return canClinicalRecord;

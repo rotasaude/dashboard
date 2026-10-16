@@ -10,6 +10,7 @@ vi.mock("../lib/api", async (importOriginal) => {
 
 import * as api from "../lib/api";
 import { LabRelease } from "./LabRelease";
+import { PENDING_KEY } from "../lib/signature";
 import { renderWithProviders } from "../test/campaignFixtures";
 import { NOW21B, labContext, labItem, labReport, labResultRow, labUser, releaseRequisition } from "../test/labFixtures";
 
@@ -83,13 +84,16 @@ describe("LabRelease", () => {
     mocked(api.getLabContext).mockResolvedValue(labContext({ releaser_of: [ "pv9" ], council: "CRM" }));
     mocked(api.releaseRequisition).mockResolvedValue(labReport({ status: "pending_signature", signature_kind: "icp", pdf_url: null, released_at: null }));
     const onNavigate = vi.fn();
-    renderWithProviders(<LabRelease onNavigate={onNavigate} />);
+    const { client } = renderWithProviders(<LabRelease onNavigate={onNavigate} />);
+    const invalidate = vi.spyOn(client, "invalidateQueries");
     fireEvent.click(await within(await screen.findByRole("region", { name: "Fila de liberação" })).findByRole("button", { name: "Conferir" }));
     const review = await screen.findByRole("region", { name: "Conferência da requisição 00000123" });
     expect(within(review).queryByLabelText("Assinatura eletrônica avançada (código do autenticador)")).toBeNull();
     expect(within(review).getByText("médico (CRM) libera só com ICP-Brasil")).not.toBeNull();
     fireEvent.click(within(review).getByRole("button", { name: "Liberar laudo" }));
     await waitFor(() => expect(api.releaseRequisition).toHaveBeenCalledWith("rq1", { item_ids: [ "it2" ], signature: "icp" }));
+    // Prova no navegador: a lista de Pendentes (e o contador do menu) ficava com o cache de antes.
+    await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: [ PENDING_KEY ] }));
     fireEvent.click(await screen.findByRole("button", { name: "Ir para Pendentes de assinatura" }));
     expect(onNavigate).toHaveBeenCalledWith("signature-pending");
   });

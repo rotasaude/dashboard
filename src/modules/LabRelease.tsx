@@ -8,6 +8,7 @@ import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-quer
 import { listLabRequisitions, listReleases, listUnnotifiedCriticals, type LabCriticalRow, type LabReleaseRequisition, type LabReportSummary } from "../lib/api";
 import { LAB_CRITICALS_KEY, LAB_RELEASES_KEY, flagLabel, isCritical, labError, lookupKind, refreshLab } from "../lib/lab";
 import { fmtDateTime } from "../lib/format";
+import { PENDING_KEY } from "../lib/signature";
 import type { ModuleId } from "../shell/modules";
 import { Panel } from "../components/Panel";
 import { DataTable } from "../components/DataTable";
@@ -83,6 +84,8 @@ function ReleaseBody({ providerId, onNavigate }: { providerId: string; onNavigat
     setMessage(rep.status === "pending_signature"
       ? { kind: "ok", text: `${what} enviado para assinatura ICP — assine em Pendentes de assinatura.`, pending: true }
       : { kind: "ok", text: `${what} liberado com assinatura eletrônica avançada.` });
+    // O laudo ICP entra em Pendentes de assinatura: lista e contador do menu releem.
+    if (rep.status === "pending_signature") void queryClient.invalidateQueries({ queryKey: [ PENDING_KEY ] });
     void after();
   }
 

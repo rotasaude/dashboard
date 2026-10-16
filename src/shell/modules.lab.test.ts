@@ -21,6 +21,15 @@ describe("grupo Laboratório (módulo 21b)", () => {
     expect(navGroupsFor(userWith([ "lab_staff" ], {})).some((g) => g.label === "Laboratório")).toBe(false);
   });
 
+  // Prova no navegador: o patologista (só lab_releaser, CRM) libera com ICP e a tela
+  // manda assinar em Pendentes — que ficava escondido com o grupo Atendimento.
+  it("liberador só do laboratório, com assinatura digital: vê Pendentes de assinatura e nada mais do Atendimento", () => {
+    const groups = navGroupsFor(userWith([ "lab_releaser" ], { features: [ "exam_tracking", "municipal_lab", "digital_signature" ] }));
+    expect(groups.find((g) => g.label === "Atendimento")?.items.map((i) => i.id)).toEqual([ "signature-pending" ]);
+    const noSignature = navGroupsFor(userWith([ "lab_releaser" ]));
+    expect(noSignature.some((g) => g.label === "Atendimento")).toBe(false);
+  });
+
   it("cada papel vê o seu", () => {
     expect(labIds(userWith([ "lab_staff" ]))).toEqual([
       "lab-requisitions", "lab-collection", "lab-shipments", "lab-reception", "lab-worklist", "lab-entry"
