@@ -79,7 +79,7 @@ describe("liberadores", () => {
   it("recusas do api viram frase: RT/substituto ocupados, já ligado, marcas inválidas", async () => {
     const { labError } = await import("../../lib/lab");
     const e = (error: string) => new api.ApiError(422, { error }, "x");
-    expect(labError(e("lead_taken"))).toMatch(/responsável técnico/);
+    expect(labError(e("lead_taken"))).toMatch(/Tirar.*depois inclua.*bloqueada/);
     expect(labError(e("deputy_taken"))).toMatch(/substituto/);
     expect(labError(e("already_assigned"))).toMatch(/já é liberador/);
     expect(labError(e("invalid_marks"))).toBe("a mesma pessoa não é RT e substituto ao mesmo tempo");
@@ -192,7 +192,7 @@ describe("rodada de correção 1", () => {
     fireEvent.click(within(confirm).getByRole("button", { name: "Incluir" }));
     expect(await within(confirm).findByText("pessoa não encontrada ou inativa")).not.toBeNull();
     fireEvent.click(within(confirm).getByRole("button", { name: "Incluir" }));
-    expect(await within(confirm).findByText(/tire o atual da lista \(Tirar\)/)).not.toBeNull();
+    expect(await within(confirm).findByText(/encerre o atual com "Tirar"/)).not.toBeNull();
   });
 
   it("revogar o token pede confirmação e chama o api", async () => {

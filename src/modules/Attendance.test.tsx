@@ -81,6 +81,21 @@ describe("Attendance", () => {
     expect(await screen.findByRole("region", { name: "Pedidos sem unidade" })).not.toBeNull();
   });
 
+  it("administrador com municipal_lab vê a coluna Coleta em Unidades; sem o interruptor, não", async () => {
+    mocked(api.fetchCurrentSession).mockResolvedValue({ ...session("municipal_admin"), features: [ "municipal_lab" ] });
+    mocked(api.listAllUnits).mockResolvedValue([ { id: "u1", name: "UBS Centro", kind: "ubs", active: true, collects_samples: true } ]);
+    renderAttendance();
+    expect(await screen.findByText("Coleta")).not.toBeNull();
+  });
+
+  it("administrador sem municipal_lab não vê a coluna Coleta", async () => {
+    mocked(api.fetchCurrentSession).mockResolvedValue(session("municipal_admin"));
+    mocked(api.listAllUnits).mockResolvedValue([ { id: "u1", name: "UBS Centro", kind: "ubs", active: true, collects_samples: true } ]);
+    renderAttendance();
+    await screen.findByText("UBS Centro");
+    expect(screen.queryByText("Coleta")).toBeNull();
+  });
+
   it("sem citizen_verifier não aparece 'Pedidos sem unidade'", async () => {
     mocked(api.fetchCurrentSession).mockResolvedValue(session("municipal_admin"));
     renderAttendance();

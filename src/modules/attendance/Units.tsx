@@ -66,9 +66,7 @@ export function Units({ labOn = false }: { labOn?: boolean } = {}) {
     try {
       const address = addressPayload(value);
       if (editing.id) {
-        // Sem a marca (interruptor desligado) o 6º argumento nem existe: o corpo não muda.
-        if (value.collectsSamples === undefined) await updateUnit(editing.id, value.name, value.kind, address, value.screeningScope);
-        else await updateUnit(editing.id, value.name, value.kind, address, value.screeningScope, value.collectsSamples);
+        await updateUnit(editing.id, value.name, value.kind, address, value.screeningScope, value.collectsSamples);
       } else {
         await createUnit(value.name, value.kind, address);
         void queryClient.invalidateQueries({ queryKey: [ "activeUnits" ] });

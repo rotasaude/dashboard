@@ -111,3 +111,9 @@ describe("recusas do módulo 17 no balcão", () => {
     expect(msg("cadsus_lookup_missing")).toBe("a consulta ao CADSUS venceu — consulte de novo ou desmarque a gravação do CNS");
   });
 });
+
+describe("módulo 21b", () => {
+  it("invalid_collects_samples tem mensagem própria", () => {
+    expect(attendanceError(new ApiError(422, { error: "invalid_collects_samples" }, "x"))).toBe("marca de coleta de amostras inválida");
+  });
+});

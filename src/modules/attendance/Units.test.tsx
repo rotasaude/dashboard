@@ -27,10 +27,10 @@ const rows = [
 ];
 const centro = { id: "n1", name: "Centro", active: true, source: "seed" as const, units: [] };
 
-function renderUnits(client = new QueryClient({ defaultOptions: { queries: { retry: false } } })) {
+function renderUnits(client = new QueryClient({ defaultOptions: { queries: { retry: false } } }), labOn = false) {
   const wrapper = ({ children }: { children: ReactNode }) =>
     <QueryClientProvider client={client}>{children}</QueryClientProvider>;
-  render(<Units />, { wrapper });
+  render(<Units labOn={labOn} />, { wrapper });
   return client;
 }
 
@@ -66,7 +66,7 @@ describe("Units", () => {
     fireEvent.click(screen.getByRole("button", { name: "Salvar" }));
     await waitFor(() => expect(api.updateUnit).toHaveBeenCalledWith("u1", "UBS Centro Novo", "ubs", {
       address_street: "Rua A", address_number: "1", address_complement: null, address_zip: null, neighborhood_id: "n1"
-    }, "walk_in"));
+    }, "walk_in", undefined));
     expect(await screen.findByText("UBS Centro Novo")).not.toBeNull();
   });
 
@@ -81,7 +81,7 @@ describe("Units", () => {
     expect(scope.value).toBe("walk_in");
     fireEvent.change(scope, { target: { value: "all" } });
     fireEvent.click(screen.getByRole("button", { name: "Salvar" }));
-    await waitFor(() => expect(api.updateUnit).toHaveBeenCalledWith("u1", "UBS Centro", "ubs", expect.anything(), "all"));
+    await waitFor(() => expect(api.updateUnit).toHaveBeenCalledWith("u1", "UBS Centro", "ubs", expect.anything(), "all", undefined));
   });
 
   it("unidade nova não mostra o escopo (nasce só demanda espontânea)", async () => {
@@ -230,6 +230,35 @@ describe("Units", () => {
       fireEvent.change(screen.getByLabelText("Motivo"), { target: { value: "unidade fechada para reforma" } });
       fireEvent.click(screen.getByRole("button", { name: "Esvaziar unidade" }));
       expect(await screen.findByText("escolha outra unidade ativa como destino")).not.toBeNull();
+    });
+  });
+
+  describe("módulo 21b — coleta de amostras", () => {
+    const lab = [ { ...rows[0], collects_samples: true }, rows[1] ];
+
+    it("sem labOn: sem coluna Coleta nem checkbox", async () => {
+      mocked(api.listAllUnits).mockResolvedValue(lab);
+      renderUnits();
+      await screen.findByText("UBS Centro");
+      expect(screen.queryByRole("columnheader", { name: "Coleta" })).toBeNull();
+      expect(screen.queryByText("coleta")).toBeNull();
+      fireEvent.click(screen.getAllByRole("button", { name: "Editar" })[0]);
+      expect(screen.queryByLabelText("Coleta amostras para o laboratório municipal")).toBeNull();
+    });
+
+    it("com labOn: coluna Coleta e a marca vai ao updateUnit", async () => {
+      mocked(api.listAllUnits).mockResolvedValue(lab);
+      mocked(api.updateUnit).mockResolvedValue(lab[0]);
+      renderUnits(undefined, true);
+      await screen.findByText("UBS Centro");
+      expect(screen.getByText("Coleta")).not.toBeNull();
+      expect(screen.getByText("coleta")).not.toBeNull();
+      fireEvent.click(screen.getAllByRole("button", { name: "Editar" })[0]);
+      const box = screen.getByLabelText("Coleta amostras para o laboratório municipal") as HTMLInputElement;
+      expect(box.checked).toBe(true);
+      fireEvent.click(box);
+      fireEvent.click(screen.getByRole("button", { name: "Salvar" }));
+      await waitFor(() => expect(api.updateUnit).toHaveBeenCalledWith("u1", "UBS Centro", "ubs", expect.anything(), "walk_in", false));
     });
   });
 });
