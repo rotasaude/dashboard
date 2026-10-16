@@ -83,7 +83,8 @@ export const SOURCE_LABEL: Record<string, string> = {
 
 const EVENT_LABEL: Record<string, string> = {
   requested: "solicitado", authorized: "autorizado", denied: "negado", scheduled: "agendado", collected: "coletado",
-  resulted: "resultado registrado", acknowledged: "ciência", escalated: "enviado à equipe", cancelled: "cancelado"
+  resulted: "resultado registrado", acknowledged: "ciência", escalated: "enviado à equipe", cancelled: "cancelado",
+  result_rectified: "resultado retificado"
 };
 
 export function eventLabel(kind: string): string {

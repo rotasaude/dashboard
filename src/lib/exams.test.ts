@@ -17,6 +17,7 @@ describe("rótulos", () => {
     expect(examStatusLabel("resulted")).toBe("resultado registrado");
     expect(examStatusLabel("archived")).toBe("archived");
     expect(eventLabel("escalated")).toBe("enviado à equipe");
+    expect(eventLabel("result_rectified")).toBe("resultado retificado");
     expect(eventLabel("rerouted")).toBe("rerouted");
   });
 
