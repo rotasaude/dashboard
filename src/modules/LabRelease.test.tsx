@@ -94,6 +94,21 @@ describe("LabRelease", () => {
     expect(onNavigate).toHaveBeenCalledWith("signature-pending");
   });
 
+  // Prova no navegador: o hemograma mostrava 9 valores sem o nome do componente, e "4.50" com ponto.
+  it("exame de vários componentes: cada lista mostra o nome do componente; decimal com vírgula", async () => {
+    mocked(api.getReleaseRequisition).mockResolvedValue(releaseRequisition({ items: [ {
+      ...labItem({ id: "it2", label: "Hemograma completo", status: "typed" }), restriction_note: null,
+      results: [ labResultRow({ id: "h1", analyte_key: "hemacias", name: "Hemácias", value: "4.50", unit: "10*6/uL", effective: true }),
+        labResultRow({ id: "h2", analyte_key: "hemoglobina", name: "Hemoglobina", value: "13.5", unit: "g/dL", effective: true }) ]
+    } ] }));
+    const review = await openReview();
+    expect(within(review).getByText("Hemácias")).not.toBeNull();
+    expect(within(review).getByText("Hemoglobina")).not.toBeNull();
+    const rbc = within(review).getByRole("list", { name: "Hemácias · valores" });
+    expect(within(rbc).getByRole("listitem").textContent).toContain("4,50 10*6/uL");
+    expect(within(review).queryByText(/4\.50/)).toBeNull();
+  });
+
   it("repetição: escolher o valor que vale relê a requisição", async () => {
     mocked(api.getReleaseRequisition).mockResolvedValue(releaseRequisition({ items: [ {
       ...labItem({ id: "it2", label: "Glicose", status: "typed" }), restriction_note: "lipêmica",

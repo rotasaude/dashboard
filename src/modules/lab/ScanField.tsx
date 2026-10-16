@@ -112,12 +112,13 @@ export function ScanField<C = undefined>({ label, onScan, hint, onBusyChange, ca
         onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
       />
       {hint && <p style={muted}>{hint}</p>}
-      {!focused && (
-        <div style={row}>
-          <p role="status" style={muted}>{SCAN_FOCUS_HINT}</p>
-          <button type="button" style={secondaryButtonStyle} onClick={() => inputRef.current?.focus()}>Voltar a ler</button>
-        </div>
-      )}
+      {/* O lugar do aviso existe sempre (oculto com foco): se ele nascesse no blur, empurraria os
+          botões de baixo e o clique de mouse — cujo mousedown tira o foco — cairia no vazio. */}
+      <div style={{ ...row, visibility: focused ? "hidden" : "visible" }} aria-hidden={focused}>
+        <p role={focused ? undefined : "status"} style={muted}>{SCAN_FOCUS_HINT}</p>
+        <button type="button" style={secondaryButtonStyle} tabIndex={focused ? -1 : undefined}
+          onClick={() => inputRef.current?.focus()}>Voltar a ler</button>
+      </div>
       {log.length > 0 && (
         <ol aria-label="leituras" aria-live="polite" style={list}>
           {log.map((e) => (

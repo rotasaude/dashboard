@@ -5,13 +5,13 @@
 // (aviso antes ou confirmação de liberar sem aviso), exames a liberar
 // (parcial quando nem todos) e a assinatura. O código do autenticador é
 // apagado antes de cada envio; 409 devolve à fila.
-import { useRef, useState } from "react";
+import { Fragment, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   chooseLabResult, errorCode, getReleaseRequisition, releaseRequisition,
   type LabReleaseItem, type LabReportSummary, type LabResultRow, type LabSignatureKind
 } from "../../lib/api";
-import { LAB_CRITICALS_KEY, LAB_CRITICAL_COUNT_KEY, LAB_RELEASES_KEY, flagLabel, flagTone, isCritical, itemStatusLabel, labError, onlyIcp, totpProblem } from "../../lib/lab";
+import { LAB_CRITICALS_KEY, LAB_CRITICAL_COUNT_KEY, LAB_RELEASES_KEY, displayValue, flagLabel, flagTone, isCritical, itemStatusLabel, labError, onlyIcp, totpProblem } from "../../lib/lab";
 import { fmtDay } from "../../lib/exams";
 import { hasFeature } from "../../lib/features";
 import { useAuth } from "../../lib/auth";
@@ -162,20 +162,23 @@ export function ReleaseReview({ requisitionId, council, onReleased, onConflict, 
       </label>
       {i.restriction_note && <p style={alert}>{`restrição da amostra: ${i.restriction_note}`}</p>}
       {byAnalyte(i.results).map(([ key, rows ]) => (
-        <ul key={key} aria-label={`${rows[0].name} · valores`} style={list}>
-          {rows.map((x) => (
-            <li key={x.id} style={row}>
-              <span>{`${x.value}${x.unit ? ` ${x.unit}` : ""} · ${x.source === "hl7" ? "aparelho — conferir" : `digitado${x.entered_by ? ` por ${x.entered_by}` : ""}`} · ${fmtDateTime(x.entered_at)}`}</span>
-              {x.flag !== "normal" && <Tag tone={flagTone(x.flag)}>{flagLabel(x.flag)}</Tag>}
-              {x.effective ? <Tag tone="ok">vale</Tag> : rows.length > 1 && (
-                <ActionButton variant="secondary" busy={busy} onClick={() => choose(x)}>{`Usar ${x.value}`}</ActionButton>
-              )}
-              {x.effective && isCritical(x.flag) && x.notified !== true && (
-                <button type="button" style={secondaryButtonStyle} onClick={() => setNoticeFor(x)}>Registrar aviso</button>
-              )}
-            </li>
-          ))}
-        </ul>
+        <Fragment key={key}>
+          <p style={muted}>{rows[0].name}</p>
+          <ul aria-label={`${rows[0].name} · valores`} style={list}>
+            {rows.map((x) => (
+              <li key={x.id} style={row}>
+                <span>{`${displayValue(x.value)}${x.unit ? ` ${x.unit}` : ""} · ${x.source === "hl7" ? "aparelho — conferir" : `digitado${x.entered_by ? ` por ${x.entered_by}` : ""}`} · ${fmtDateTime(x.entered_at)}`}</span>
+                {x.flag !== "normal" && <Tag tone={flagTone(x.flag)}>{flagLabel(x.flag)}</Tag>}
+                {x.effective ? <Tag tone="ok">vale</Tag> : rows.length > 1 && (
+                  <ActionButton variant="secondary" busy={busy} onClick={() => choose(x)}>{`Usar ${displayValue(x.value)}`}</ActionButton>
+                )}
+                {x.effective && isCritical(x.flag) && x.notified !== true && (
+                  <button type="button" style={secondaryButtonStyle} onClick={() => setNoticeFor(x)}>Registrar aviso</button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </Fragment>
       ))}
       {noticeFor && i.results.some((x) => x.id === noticeFor.id) && (
         <CriticalNoticeForm key={noticeFor.id} guard={writeGuard} resultId={noticeFor.id} label={noticeFor.name}

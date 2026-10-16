@@ -6,7 +6,7 @@
 // Nada aqui vai para log, console ou storage: valores e etiqueta só na tela.
 import { useId, useState } from "react";
 import { enterLabResults, errorCode, type LabAnalyteEntry, type LabEntryItem, type LabResultRow } from "../../lib/api";
-import { entryProblem, flagLabel, flagTone, labError, normalizeNumber, previewFlag } from "../../lib/lab";
+import { displayValue, entryProblem, flagLabel, flagTone, labError, normalizeNumber, previewFlag } from "../../lib/lab";
 import { fmtDay } from "../../lib/exams";
 import { fmtDateTime } from "../../lib/format";
 import { ActionButton } from "../../components/ActionButton";
@@ -36,7 +36,7 @@ export function referenceText(a: LabAnalyteEntry): string {
 
 function rowText(r: LabResultRow): string {
   const who = r.source === "hl7" ? "aparelho" : `digitado${r.entered_by ? ` por ${r.entered_by}` : ""}`;
-  return `${r.value}${r.unit ? ` ${r.unit}` : ""} · ${who} · ${fmtDateTime(r.entered_at)}`;
+  return `${displayValue(r.value)}${r.unit ? ` ${r.unit}` : ""} · ${who} · ${fmtDateTime(r.entered_at)}`;
 }
 
 export function ResultEntryForm({ item, onSaved, onStale, onClose }: { item: LabEntryItem; onSaved(): void; onStale?(): void; onClose(): void }) {

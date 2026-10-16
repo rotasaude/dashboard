@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { ApiError } from "./api";
 import {
   BARCODE_INVALID, EMPTY_CRITICAL, EMPTY_REQUISITION, LAB_DISABLED, canUseLab, criticalBody, criticalProblem, entryProblem, flagLabel,
-  flagTone, labError, labRoles, normalizeBarcode, normalizeNumber, normalizeRequisitionNumber, lookupKind, onlyIcp, reportStatusLabel, reportStatusTone, sectorLabel, parseTemperature, previewFlag, rectifyProblem,
+  flagTone, labError, labRoles, normalizeBarcode, normalizeNumber, normalizeRequisitionNumber, displayValue, lookupKind, onlyIcp, reportStatusLabel, reportStatusTone, sectorLabel, parseTemperature, previewFlag, rectifyProblem,
   refreshLab, requisitionBody, requisitionProblem, type PaperDraft, requisitionStatusLabel, sampleStatusLabel, temperatureProblem, totpProblem
 } from "./lab";
 import { glucoseEntry, labUser } from "../test/labFixtures";
@@ -77,6 +77,14 @@ describe("leitura do código de barras", () => {
 });
 
 describe("número com vírgula e limite de digitação", () => {
+  it("valor do api aparece com vírgula; texto de escolha fica como veio", () => {
+    expect(displayValue("4.50")).toBe("4,50");
+    expect(displayValue("-2.0")).toBe("-2,0");
+    expect(displayValue("98")).toBe("98");
+    expect(displayValue("positivo")).toBe("positivo");
+    expect(displayValue("1.2.3")).toBe("1.2.3");
+  });
+
   it("vírgula vira ponto; texto não numérico é recusado", () => {
     expect(normalizeNumber("13,5")).toBe("13.5");
     expect(normalizeNumber(" 98 ")).toBe("98");

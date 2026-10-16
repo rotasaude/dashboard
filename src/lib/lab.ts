@@ -149,6 +149,9 @@ export function normalizeNumber(raw: string): string | null {
   return /^-?\d+(,\d+)?$/.test(t) ? t.replace(",", ".") : null;
 }
 
+// Valor gravado (formato do api, "4.50") na tela: vírgula. Texto de escolha fica como veio.
+export const displayValue = (v: string) => (/^-?\d+\.\d+$/.test(v) ? v.replace(".", ",") : v);
+
 const fmtLimit = (n: number) => String(n).replace(".", ",");
 
 export function entryProblem(a: LabAnalyteEntry, raw: string): string | null {

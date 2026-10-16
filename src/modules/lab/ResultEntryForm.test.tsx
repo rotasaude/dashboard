@@ -38,6 +38,11 @@ describe("ResultEntryForm", () => {
     expect((screen.getByLabelText("Glicose (mg/dL)") as HTMLInputElement).value).toBe("");
   });
 
+  it("valor já gravado aparece com vírgula (o api guarda com ponto)", async () => {
+    renderWithProviders(<ResultEntryForm item={glucoseEntry({ results: [ labResultRow({ value: "98.5" }) ] })} onSaved={vi.fn()} onClose={vi.fn()} />);
+    expect(await screen.findByText(/^98,5 mg\/dL · digitado/)).not.toBeNull();
+  });
+
   it("crítico no limite é crítico (B27) e o limite da faixa é normal", async () => {
     renderWithProviders(<ResultEntryForm item={glucoseEntry()} onSaved={vi.fn()} onClose={vi.fn()} />);
     const field = await screen.findByLabelText("Glicose (mg/dL)");

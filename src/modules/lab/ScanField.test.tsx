@@ -83,6 +83,21 @@ describe("ScanField", () => {
     expect(document.activeElement).toBe(screen.getByLabelText("Etiqueta"));
   });
 
+  // Prova no navegador: o aviso nascia no blur e empurrava os botões de baixo;
+  // o clique de mouse (mousedown tira o foco) caía no vazio.
+  it("com foco, o lugar do aviso já existe, oculto: perder o foco não desloca a tela", () => {
+    render(<ScanField label="Etiqueta" onScan={vi.fn()} />);
+    expect(document.activeElement).toBe(screen.getByLabelText("Etiqueta"));
+    const hint = screen.getByText(SCAN_FOCUS_HINT);
+    expect((hint.parentElement as HTMLElement).style.visibility).toBe("hidden");
+    expect(screen.queryByRole("button", { name: "Voltar a ler" })).toBeNull();
+    expect(screen.queryByRole("status")).toBeNull();
+    fireEvent.blur(screen.getByLabelText("Etiqueta"));
+    expect(screen.getByText(SCAN_FOCUS_HINT)).toBe(hint);
+    expect((hint.parentElement as HTMLElement).style.visibility).toBe("visible");
+    expect(screen.getByRole("button", { name: "Voltar a ler" })).not.toBeNull();
+  });
+
   it("desmontar no meio da fila não grava as leituras que sobraram", async () => {
     const resolvers: ((o: ScanOutcome) => void)[] = [];
     const onScan = vi.fn((_code: string) => new Promise<ScanOutcome>((r) => { resolvers.push(r); }));
