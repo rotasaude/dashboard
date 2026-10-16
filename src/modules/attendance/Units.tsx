@@ -25,7 +25,8 @@ const SCOPE_SHORT: Record<ScreeningScope, string> = { walk_in: "sem horário", a
 
 interface Editing { id: string | null; initial: UnitFormValue }
 
-export function Units() {
+// Módulo 21b: `labOn` = `municipal_lab` ligado (vem do Atendimento, que já lê a sessão).
+export function Units({ labOn = false }: { labOn?: boolean } = {}) {
   const queryClient = useQueryClient();
   const neighborhoods = useQuery({ queryKey: NEIGHBORHOODS_KEY, queryFn: listNeighborhoods });
   const [ rows, setRows ] = useState<HealthUnitRow[] | null>(null);
@@ -65,7 +66,9 @@ export function Units() {
     try {
       const address = addressPayload(value);
       if (editing.id) {
-        await updateUnit(editing.id, value.name, value.kind, address, value.screeningScope);
+        // Sem a marca (interruptor desligado) o 6º argumento nem existe: o corpo não muda.
+        if (value.collectsSamples === undefined) await updateUnit(editing.id, value.name, value.kind, address, value.screeningScope);
+        else await updateUnit(editing.id, value.name, value.kind, address, value.screeningScope, value.collectsSamples);
       } else {
         await createUnit(value.name, value.kind, address);
         void queryClient.invalidateQueries({ queryKey: [ "activeUnits" ] });
@@ -132,13 +135,15 @@ export function Units() {
               { label: "Endereço", w: "3fr", render: (r) =>
                 formatAddress(r, r.neighborhood_id ? nameOf.get(r.neighborhood_id) : null) },
               { label: "Acolhimento", w: "1.2fr", render: (r) => SCOPE_SHORT[r.screening_scope ?? "walk_in"] },
+              ...(labOn ? [ { label: "Coleta", w: "0.8fr", render: (r: HealthUnitRow) => (r.collects_samples ? "coleta" : "—") } ] : []),
               { label: "Situação", w: "1fr", render: (r) => <Tag tone={r.active ? "ok" : undefined}>{r.active ? "ativa" : "inativa"}</Tag> },
               {
                 label: "", w: "auto", align: "right", render: (r) => (
                   <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
                     <button type="button" style={secondaryButtonStyle}
                       onClick={() => setEditing({ id: r.id, initial: {
-                        name: r.name, kind: r.kind, ...addressFieldsFrom(r), screeningScope: r.screening_scope ?? "walk_in"
+                        name: r.name, kind: r.kind, ...addressFieldsFrom(r), screeningScope: r.screening_scope ?? "walk_in",
+                        ...(labOn ? { collectsSamples: r.collects_samples === true } : {})
                       } })}>
                       Editar
                     </button>

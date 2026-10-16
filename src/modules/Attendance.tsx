@@ -140,7 +140,7 @@ export function Attendance({ onNavigate }: { onNavigate(id: ModuleId): void }) {
       {canVerify && <ErasureRequest />}
       {isAdmin && <History />}
       {isAdmin && <ErasureRequests onGoToSecurity={goToSecurity} />}
-      {isAdmin && <Units />}
+      {isAdmin && <Units labOn={hasFeature(user, "municipal_lab")} />}
     </div>
   );
 }

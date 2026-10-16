@@ -11,11 +11,12 @@ import { alert, checkLabel, fieldLabel, fieldset, form, legend, muted, row } fro
 
 type Row = Pick<ExamCatalogItem, "id" | "label"> & { deadlines: ExamCatalogItem["deadlines"] | null };
 
-export function ProviderForm({ initial, catalog, onReview, onCancel }: {
-  initial?: ExamProvider; catalog: ExamCatalogItem[]; onReview(input: ExamProviderInput): void; onCancel(): void;
+export function ProviderForm({ initial, catalog, labOn = false, onReview, onCancel }: {
+  initial?: ExamProvider; catalog: ExamCatalogItem[]; labOn?: boolean; onReview(input: ExamProviderInput): void; onCancel(): void;
 }) {
   const [ draft, setDraft ] = useState<ProviderDraft>(() => providerDraft(initial));
   const [ error, setError ] = useState<string | null>(null);
+  const [ labChanged, setLabChanged ] = useState(false);
   const set = (patch: Partial<ProviderDraft>) => setDraft((d) => ({ ...d, ...patch }));
   // Exame inativo só aparece se o prestador já o tinha (para poder tirá-lo).
   // Exame do prestador fora da lista do catálogo também aparece (pelo SIGTAP):
@@ -39,10 +40,10 @@ export function ProviderForm({ initial, catalog, onReview, onCancel }: {
 
   function submit(event: FormEvent) {
     event.preventDefault();
-    const problem = providerProblem(draft, labelOf);
+    const problem = providerProblem(draft, labelOf, labOn);
     if (problem) { setError(problem); return; }
     setError(null);
-    onReview(providerBody(draft));
+    onReview(providerBody(draft, labOn));
   }
 
   return (
@@ -61,6 +62,29 @@ export function ProviderForm({ initial, catalog, onReview, onCancel }: {
       <label style={checkLabel}>
         <input type="checkbox" checked={draft.active} onChange={(e) => set({ active: e.target.checked })} />Ativo
       </label>
+      {labOn && (
+        <>
+          <label style={checkLabel}>
+            <input type="checkbox" checked={draft.usesMunicipalLab} onChange={(e) => { set({ usesMunicipalLab: e.target.checked }); setLabChanged(true); }} />
+            Usa o laboratório municipal do Rota Saúde (resultado sai pela liberação do laudo)
+          </label>
+          {labChanged && (
+            <p role="status" style={alert}>
+              {draft.usesMunicipalLab
+                ? "Com esta marca o prestador deixa de receber resultados pelo portal, pela FHIR e pela entrada na unidade — o resultado sai só pela liberação do laudo. Vale mesmo com o interruptor do laboratório municipal desligado: nesse caso o laboratório não entrega por canal nenhum até a marca ser retirada."
+                : "Sem esta marca o prestador volta a receber resultados pelo portal, pela FHIR e pela entrada na unidade."}
+            </p>
+          )}
+          <label style={fieldLabel}>
+            {draft.usesMunicipalLab ? "Endereço do laboratório" : "Endereço do laboratório (opcional)"}
+            <input value={draft.address} maxLength={200} style={inputStyle} onChange={(e) => set({ address: e.target.value })} />
+          </label>
+          <label style={fieldLabel}>
+            {draft.usesMunicipalLab ? "Telefone do laboratório" : "Telefone do laboratório (opcional)"}
+            <input value={draft.phone} inputMode="tel" placeholder="(41) 3333-4444" style={inputStyle} onChange={(e) => set({ phone: e.target.value })} />
+          </label>
+        </>
+      )}
       <fieldset style={fieldset}>
         <legend style={legend}>Exames que este prestador faz</legend>
         {shown.length === 0 && <p style={muted}>{empty}</p>}

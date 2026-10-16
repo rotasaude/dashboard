@@ -9,6 +9,8 @@ import {
 import {
   EXAM_ADMIN_CATALOG_KEY, EXAM_ADMIN_PROVIDERS_KEY, EXAM_PROVIDER_REFS_KEY, examError, providerKindLabel
 } from "../../lib/exams";
+import { useAuth } from "../../lib/auth";
+import { hasFeature } from "../../lib/features";
 import { Panel } from "../../components/Panel";
 import { DataTable } from "../../components/DataTable";
 import { SensitiveAction } from "../../components/SensitiveAction";
@@ -23,6 +25,7 @@ type Confirming = { provider: ExamProvider | null; input: ExamProviderInput };
 
 export function ProvidersPanel({ onGoToSecurity }: { onGoToSecurity?(): void }) {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   const providers = useQuery({ queryKey: [ EXAM_ADMIN_PROVIDERS_KEY ], queryFn: listExamProviders, retry: false });
   const catalog = useQuery({ queryKey: [ EXAM_ADMIN_CATALOG_KEY ], queryFn: listCatalogItems, retry: false });
   const [ editing, setEditing ] = useState<Editing | null>(null);
@@ -76,7 +79,7 @@ export function ProvidersPanel({ onGoToSecurity }: { onGoToSecurity?(): void }) 
         {editing && catalog.isError && <p role="alert" style={alert}>{examError(catalog.error)}</p>}
         {editing && catalog.isSuccess && (
           <div hidden={confirming !== null}>
-            <ProviderForm key={editing.provider?.id ?? "new"} initial={editing.provider ?? undefined} catalog={catalog.data}
+            <ProviderForm key={editing.provider?.id ?? "new"} initial={editing.provider ?? undefined} catalog={catalog.data} labOn={hasFeature(user, "municipal_lab")}
               onReview={(input) => setConfirming({ provider: editing.provider, input })} onCancel={() => setEditing(null)} />
           </div>
         )}

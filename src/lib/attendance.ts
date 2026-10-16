@@ -62,6 +62,7 @@ export function nivelLabel(level: "declared" | "verified"): string {
 
 const GENERIC = "não foi possível concluir — tente de novo";
 const MESSAGES: Record<string, string> = {
+  invalid_collects_samples: "marca de coleta de amostras inválida",
   invalid_cpf: "CPF inválido",
   invalid_code: "código não confere — confira com o cidadão",
   code_expired: "código vencido ou já usado — peça ao cidadão para gerar outro código",

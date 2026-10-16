@@ -13,7 +13,7 @@ import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } fr
 // bairro ATIVO de mesmo nome apenas se o admin ainda não escolheu nenhum.
 // Qualquer falha deixa os campos livres.
 // `screeningScope` (módulo 18) só existe na edição: a unidade nova nasce `walk_in` no api.
-export interface UnitFormValue extends AddressFields { name: string; kind: string; screeningScope?: ScreeningScope }
+export interface UnitFormValue extends AddressFields { name: string; kind: string; screeningScope?: ScreeningScope; collectsSamples?: boolean }
 
 interface Props {
   initial: UnitFormValue;
@@ -124,6 +124,12 @@ export function UnitForm({ initial, neighborhoods, busy, cepTimeoutMs = VIACEP_T
             onChange={(e) => set({ screeningScope: e.target.value as ScreeningScope })}>
             {(Object.keys(SCOPE_LABEL) as ScreeningScope[]).map((k) => <option key={k} value={k}>{SCOPE_LABEL[k]}</option>)}
           </select>
+        </label>
+      )}
+      {value.collectsSamples !== undefined && (
+        <label style={{ ...labelStyle, flexDirection: "row", alignItems: "center", gap: 6 }}>
+          <input type="checkbox" checked={value.collectsSamples} onChange={(e) => set({ collectsSamples: e.target.checked })} />
+          Coleta amostras para o laboratório municipal
         </label>
       )}
       <div style={{ display: "flex", gap: 8 }}>
