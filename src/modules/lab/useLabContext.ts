@@ -9,6 +9,6 @@ import { LAB_CONTEXT_KEY } from "../../lib/lab";
 export function useLabContext(enabled: boolean) {
   const { user } = useAuth();
   // Chave por usuário: outra sessão no mesmo navegador não herda o contexto.
-  // O prefixo [LAB_CONTEXT_KEY] segue casando com a invalidação de refreshLab.
+  // Fora do refreshLab (muda só pela administração): relê ao montar e após 60 s.
   return useQuery({ queryKey: [ LAB_CONTEXT_KEY, user?.id ?? null ], queryFn: getLabContext, enabled, retry: false, staleTime: 60_000 });
 }

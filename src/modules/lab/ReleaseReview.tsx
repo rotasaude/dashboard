@@ -11,7 +11,7 @@ import {
   chooseLabResult, errorCode, getReleaseRequisition, releaseRequisition,
   type LabReleaseItem, type LabReportSummary, type LabResultRow, type LabSignatureKind
 } from "../../lib/api";
-import { LAB_RELEASES_KEY, flagLabel, flagTone, isCritical, itemStatusLabel, labError, onlyIcp, refreshLab, totpProblem } from "../../lib/lab";
+import { LAB_CRITICALS_KEY, LAB_CRITICAL_COUNT_KEY, LAB_RELEASES_KEY, flagLabel, flagTone, isCritical, itemStatusLabel, labError, onlyIcp, totpProblem } from "../../lib/lab";
 import { fmtDay } from "../../lib/exams";
 import { hasFeature } from "../../lib/features";
 import { useAuth } from "../../lib/auth";
@@ -179,7 +179,12 @@ export function ReleaseReview({ requisitionId, council, onReleased, onConflict, 
       ))}
       {noticeFor && i.results.some((x) => x.id === noticeFor.id) && (
         <CriticalNoticeForm key={noticeFor.id} guard={writeGuard} resultId={noticeFor.id} label={noticeFor.name}
-          onCancel={() => setNoticeFor(null)} onDone={() => { setNoticeFor(null); void refreshLab(queryClient).catch(() => undefined); void reread("aviso registrado"); }} />
+          onCancel={() => setNoticeFor(null)} onDone={() => {
+            setNoticeFor(null);
+            // Só os críticos: a requisição desta conferência é relida uma vez pelo reread (rota com trilha).
+            for (const key of [ LAB_CRITICALS_KEY, LAB_CRITICAL_COUNT_KEY ]) void queryClient.invalidateQueries({ queryKey: [ key ] }).catch(() => undefined);
+            void reread("aviso registrado");
+          }} />
       )}
     </div>
   );
