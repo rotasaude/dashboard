@@ -97,7 +97,7 @@ function ReleaseBody({ providerId, onNavigate }: { providerId: string; onNavigat
         </div>
       )}
       <Panel title="Críticos sem aviso" sub="liberados sem o registro de quem foi avisado — registre o aviso">
-        {criticals.isError ? <p role="alert" style={alert}>{labError(criticals.error)}</p> : (
+        {criticals.isError && !criticals.data ? <p role="alert" style={alert}>{labError(criticals.error)}</p> : (
           <DataTable<LabCriticalRow>
             cols={[
               { label: "Requisição", w: "1fr", card: "title", render: (c) => <span className="mono">{c.requisition_number}</span> },
@@ -111,7 +111,8 @@ function ReleaseBody({ providerId, onNavigate }: { providerId: string; onNavigat
             rows={criticalRows} rowKey={(c) => c.result_id} empty={criticals.isPending ? "carregando…" : "nenhum crítico sem aviso"}
           />
         )}
-        {criticals.hasNextPage && !criticals.isError && (
+        {criticals.isError && criticals.data && <p role="alert" style={alert}>{labError(criticals.error)}</p>}
+        {criticals.hasNextPage && (
           <div><button type="button" style={secondaryButtonStyle} disabled={criticals.isFetchingNextPage} onClick={() => void loadMoreCriticals()}>Carregar mais</button></div>
         )}
         {noticeFor && (

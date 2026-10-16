@@ -425,6 +425,21 @@ describe("LabRelease", () => {
       expect(more()).toBeNull();
     });
 
+    it("erro ao carregar mais: a lista fica, o alerta aparece junto do botão e dá para tentar de novo", async () => {
+      mocked(api.listUnnotifiedCriticals)
+        .mockResolvedValueOnce({ criticals: [ crit(1) ], next_after: "c1" })
+        .mockRejectedValueOnce(new api.ApiError(422, { error: "invalid_cursor" }, "x"))
+        .mockResolvedValueOnce({ criticals: [ crit(2) ], next_after: null });
+      renderWithProviders(<LabRelease onNavigate={vi.fn()} />);
+      await screen.findByText("Analito 1", { exact: false });
+      fireEvent.click(await screen.findByRole("button", { name: "Carregar mais" }));
+      expect((await screen.findByRole("alert")).textContent).toContain("lista de críticos mudou");
+      expect(screen.getByText("Analito 1", { exact: false })).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: "Carregar mais" }));
+      expect(await screen.findByText("Analito 2", { exact: false })).toBeTruthy();
+      expect(screen.getByText("Analito 1", { exact: false })).toBeTruthy();
+    });
+
     it("clique duplo busca uma vez só", async () => {
       let release: (v: unknown) => void = () => undefined;
       mocked(api.listUnnotifiedCriticals)
