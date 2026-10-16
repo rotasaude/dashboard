@@ -61,6 +61,57 @@ describe("LabReception", () => {
     expect(await screen.findByText(`${CODE} · rejeitada · recoleta 0000012399 pedida à UBS de origem`)).not.toBeNull();
   });
 
+  it("depois de uma rejeição a tela volta a aceitar e limpa o motivo", async () => {
+    mocked(api.receiveSample).mockResolvedValueOnce({
+      sample: { ...labSample({ status: "rejected" }), requisition_number: "00000123" }, recollection: labSample({ id: "sa9", barcode: "0000012399" })
+    });
+    renderWithProviders(<LabReception />);
+    fireEvent.click(await screen.findByLabelText("Rejeitar"));
+    expect((await screen.findByRole("alert")).textContent).toContain("Não dá para desfazer");
+    fireEvent.change(screen.getByLabelText("Motivo da rejeição"), { target: { value: "rr1" } });
+    read(CODE);
+    await screen.findByText(/rejeitada · recoleta/);
+    expect((screen.getByLabelText("Aceitar") as HTMLInputElement).checked).toBe(true);
+    read("0000012302");
+    await waitFor(() => expect(api.receiveSample).toHaveBeenLastCalledWith({ barcode: "0000012302", decision: "accept" }));
+    fireEvent.click(screen.getByLabelText("Rejeitar"));
+    expect((screen.getByLabelText("Motivo da rejeição") as HTMLSelectElement).value).toBe("");
+  });
+
+  it("depois de aceitar com restrição volta a aceitar e limpa a nota", async () => {
+    renderWithProviders(<LabReception />);
+    fireEvent.click(await screen.findByLabelText("Aceitar com restrição"));
+    fireEvent.change(screen.getByLabelText("Restrição (vai ao laudo)"), { target: { value: "lipêmica" } });
+    read(CODE);
+    await screen.findByText(`${CODE} · aceita com restrição · requisição 00000123`);
+    expect((screen.getByLabelText("Aceitar") as HTMLInputElement).checked).toBe(true);
+    fireEvent.click(screen.getByLabelText("Aceitar com restrição"));
+    expect((screen.getByLabelText("Restrição (vai ao laudo)") as HTMLInputElement).value).toBe("");
+  });
+
+  it("trocar de laboratório não leva o motivo do outro", async () => {
+    mocked(api.getLabContext).mockResolvedValue(labContext({ labs: [ { id: "pv9", name: "Lab A" }, { id: "pv8", name: "Lab B" } ] }));
+    mocked(api.listActiveRejectionReasons).mockImplementation(async (id: string) =>
+      [ { id: id === "pv9" ? "rrA" : "rrB", provider_id: id, name: "hemolisada", active: true } ]);
+    renderWithProviders(<LabReception />);
+    fireEvent.click(await screen.findByLabelText("Rejeitar"));
+    await waitFor(() => expect(screen.getAllByRole("option", { name: "hemolisada" }).length).toBe(1));
+    fireEvent.change(screen.getByLabelText("Motivo da rejeição"), { target: { value: "rrA" } });
+    fireEvent.change(screen.getByLabelText("Laboratório"), { target: { value: "pv8" } });
+    fireEvent.click(await screen.findByLabelText("Rejeitar"));
+    await waitFor(() => expect((screen.getByLabelText("Motivo da rejeição") as HTMLSelectElement).value).toBe(""));
+    read(CODE);
+    expect(await screen.findByText(`${CODE} · escolha o motivo da rejeição antes de ler`)).not.toBeNull();
+    expect(api.receiveSample).not.toHaveBeenCalled();
+  });
+
+  it("sem motivos cadastrados avisa em vez de deixar a lista vazia", async () => {
+    mocked(api.listActiveRejectionReasons).mockResolvedValue([]);
+    renderWithProviders(<LabReception />);
+    fireEvent.click(await screen.findByLabelText("Rejeitar"));
+    expect(await screen.findByText(/nenhum motivo de rejeição ativo/)).not.toBeNull();
+  });
+
   it("aceitar com restrição leva a nota que vai ao laudo; sem nota não chama o api", async () => {
     renderWithProviders(<LabReception />);
     fireEvent.click(await screen.findByLabelText("Aceitar com restrição"));

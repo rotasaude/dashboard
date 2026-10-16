@@ -22,7 +22,7 @@ const DECISIONS: { value: LabReceiveDecision; label: string }[] = [
 export function LabReception() {
   return (
     <LabGate title="Recebimento de amostras" sub="laboratório municipal · aceitar, rejeitar ou aceitar com restrição" allow={(r) => r.staff}>
-      {(roles) => <LabScope roles={roles}>{(scope) => <ReceptionBody providerId={scope.providerId} />}</LabScope>}
+      {(roles) => <LabScope roles={roles}>{(scope) => <ReceptionBody key={scope.providerId} providerId={scope.providerId} />}</LabScope>}
     </LabGate>
   );
 }
@@ -45,6 +45,8 @@ function ReceptionBody({ providerId }: { providerId: string }) {
         ...(d === "accept_with_restriction" ? { restriction_note: restriction.trim() } : {})
       });
       // o recebimento já foi gravado: falha ao reler as listas não o desfaz
+      // uma rejeição ou restrição por escolha explícita: a próxima leitura volta a aceitar
+      if (d !== "accept") { setDecision("accept"); setReasonId(""); setNote(""); }
       void Promise.resolve().then(() => refreshLab(queryClient)).catch(() => undefined);
       if (d === "reject") {
         return { ok: true, text: `rejeitada${out.recollection ? ` · recoleta ${out.recollection.barcode} pedida à UBS de origem` : ""}` };
@@ -76,7 +78,8 @@ function ReceptionBody({ providerId }: { providerId: string }) {
                 {(reasons.data ?? []).map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
               </select>
             </label>
-            <p style={muted}>Cada etiqueta lida será rejeitada e a recoleta é pedida à UBS de origem. Não dá para desfazer.</p>
+            <p role="alert" style={alert}>A próxima etiqueta lida será rejeitada e a recoleta é pedida à UBS de origem. Não dá para desfazer.</p>
+            {reasons.data?.length === 0 && <p style={muted}>nenhum motivo de rejeição ativo neste laboratório — o administrador cadastra em Exames</p>}
           </>
         )}
         {reasons.isError && <p role="alert" style={alert}>{labError(reasons.error)}</p>}
