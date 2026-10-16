@@ -5,7 +5,7 @@ vi.mock("../lib/api", async (importOriginal) => {
   const real = await importOriginal<typeof import("../lib/api")>();
   return {
     ...real, fetchCurrentSession: vi.fn(), listExamProviders: vi.fn(), listLabAdminExams: vi.fn(), listLabTemplates: vi.fn(), adoptLabExam: vi.fn(),
-    getLabContext: vi.fn()
+    getLabContext: vi.fn(), listRejectionReasons: vi.fn(), listLabReleasers: vi.fn(), listMemberships: vi.fn()
   };
 });
 
@@ -24,6 +24,9 @@ beforeEach(() => {
   mocked(api.listExamProviders).mockReset().mockResolvedValue([ examProvider({ id: "pv9", name: "Laboratório Municipal", uses_municipal_lab: true }) ]);
   mocked(api.listLabAdminExams).mockReset().mockResolvedValue([ labExam() ]);
   mocked(api.listLabTemplates).mockReset().mockResolvedValue([ labTemplate(), labTemplate({ id: "tp2", name: "Ureia", sigtap_code: "0202010651" }) ]);
+  mocked(api.listRejectionReasons).mockReset().mockResolvedValue([]);
+  mocked(api.listLabReleasers).mockReset().mockResolvedValue([]);
+  mocked(api.listMemberships).mockReset().mockResolvedValue([]);
   mocked(api.adoptLabExam).mockReset().mockResolvedValue(labExam({ id: "le2", template_id: "tp2" }));
 });
 
@@ -32,6 +35,14 @@ describe("LabAdmin", () => {
     renderWithProviders(<LabAdmin />);
     expect((await screen.findAllByText("Glicose")).length).toBeGreaterThan(0);
     expect(api.getLabContext).not.toHaveBeenCalled();
+  });
+
+  it("mostra motivos de rejeição, liberadores e token do middleware do laboratório", async () => {
+    renderWithProviders(<LabAdmin />);
+    expect(await screen.findByRole("region", { name: "Motivos de rejeição" })).not.toBeNull();
+    expect(screen.getByRole("region", { name: "Liberadores" })).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Gerar token do middleware" })).not.toBeNull();
+    expect(api.listRejectionReasons).toHaveBeenCalledWith("pv9");
   });
 
   it("sem prestador com laboratório municipal: estado vazio que aponta o cadastro", async () => {

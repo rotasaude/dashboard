@@ -1,11 +1,11 @@
 // src/modules/LabAdmin.tsx
 // Admin do laboratório municipal (spec §7 "Admin"; contrato §3): por
 // laboratório (prestador com `uses_municipal_lab`), exames e versões;
-// a Task 16 acrescenta motivos de rejeição, liberadores e o token do middleware.
+// motivos de rejeição, liberadores e o token do middleware.
 // O administrador não passa pelo contexto do laboratório (`needsLab={false}`):
 // a tela lê os prestadores e tem estado vazio próprio.
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { listExamProviders } from "../lib/api";
 import { EXAM_ADMIN_PROVIDERS_KEY } from "../lib/exams";
 import { labError } from "../lib/lab";
@@ -14,6 +14,9 @@ import { EmptyState } from "../components/EmptyState";
 import { inputStyle } from "../components/formStyles";
 import { LabGate } from "./lab/LabGate";
 import { LabExamsPanel } from "./labAdmin/LabExamsPanel";
+import { RejectionReasonsPanel } from "./labAdmin/RejectionReasonsPanel";
+import { ReleasersPanel } from "./labAdmin/ReleasersPanel";
+import { MiddlewareTokenPanel } from "./labAdmin/MiddlewareTokenPanel";
 import { alert, fieldLabel, muted, stack } from "./exams/styles";
 
 export function LabAdmin({ onGoToSecurity }: { onGoToSecurity?(): void }) {
@@ -25,6 +28,7 @@ export function LabAdmin({ onGoToSecurity }: { onGoToSecurity?(): void }) {
 }
 
 function AdminBody({ onGoToSecurity }: { onGoToSecurity?(): void }) {
+  const queryClient = useQueryClient();
   const providers = useQuery({ queryKey: [ EXAM_ADMIN_PROVIDERS_KEY ], queryFn: listExamProviders, retry: false });
   const [ providerId, setProviderId ] = useState("");
   if (providers.isPending) return <p className="mono" style={muted}>carregando…</p>;
@@ -44,6 +48,10 @@ function AdminBody({ onGoToSecurity }: { onGoToSecurity?(): void }) {
         </label>
       )}
       <LabExamsPanel key={lab.id} providerId={lab.id} onGoToSecurity={onGoToSecurity} />
+      <RejectionReasonsPanel key={`r-${lab.id}`} providerId={lab.id} onGoToSecurity={onGoToSecurity} />
+      <ReleasersPanel key={`l-${lab.id}`} providerId={lab.id} onGoToSecurity={onGoToSecurity} />
+      <MiddlewareTokenPanel key={`m-${lab.id}`} provider={lab} onGoToSecurity={onGoToSecurity}
+        onChanged={() => void queryClient.invalidateQueries({ queryKey: [ EXAM_ADMIN_PROVIDERS_KEY ] })} />
     </div>
   );
 }
