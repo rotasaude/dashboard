@@ -5,7 +5,7 @@ import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-libra
 vi.mock("../lib/api", async (importOriginal) => {
   const real = await importOriginal<typeof import("../lib/api")>();
   return { ...real, fetchCurrentSession: vi.fn(), getLabContext: vi.fn(), listReleases: vi.fn(), getReleaseRequisition: vi.fn(),
-    listUnnotifiedCriticals: vi.fn(), recordCriticalNotice: vi.fn(), chooseLabResult: vi.fn(), releaseRequisition: vi.fn(), listLabRequisitions: vi.fn() };
+    listUnnotifiedCriticals: vi.fn(), recordCriticalNotice: vi.fn(), chooseLabResult: vi.fn(), releaseRequisition: vi.fn(), listLabRequisitions: vi.fn(), rectifyLabReport: vi.fn() };
 });
 
 import * as api from "../lib/api";
@@ -15,7 +15,7 @@ import { NOW21B, labContext, labItem, labReport, labResultRow, labUser, releaseR
 
 const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
 const ALL = [ api.fetchCurrentSession, api.getLabContext, api.listReleases, api.getReleaseRequisition, api.listUnnotifiedCriticals,
-  api.recordCriticalNotice, api.chooseLabResult, api.releaseRequisition, api.listLabRequisitions ];
+  api.recordCriticalNotice, api.chooseLabResult, api.releaseRequisition, api.listLabRequisitions, api.rectifyLabReport ];
 
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); });
 
@@ -367,5 +367,66 @@ describe("LabRelease", () => {
     await act(async () => { vi.advanceTimersByTime(10 * 60_000); });
     expect(api.listReleases).toHaveBeenCalledTimes(1);
     expect(api.listUnnotifiedCriticals).toHaveBeenCalledTimes(1);
+  });
+
+  describe("Laudo já liberado", () => {
+    async function panel() {
+      renderWithProviders(<LabRelease onNavigate={vi.fn()} />);
+      return within(await screen.findByRole("region", { name: "Laudo já liberado" }));
+    }
+
+    it("número de 8 dígitos abre a conferência com os laudos", async () => {
+      mocked(api.listLabRequisitions).mockResolvedValue({ requisitions: [ { id: "rq1" } as never ], next_before: null });
+      mocked(api.getReleaseRequisition).mockResolvedValue(releaseRequisition({ items: [ { ...labItem({ id: "it2", label: "Glicose", status: "released" }), restriction_note: null, results: [ labResultRow() ] } ],
+        reports: [ labReport() ] }));
+      const p = await panel();
+      fireEvent.change(p.getByLabelText("Número da requisição"), { target: { value: "00000123" } });
+      fireEvent.click(p.getByRole("button", { name: "Abrir" }));
+      const review = await screen.findByRole("region", { name: "Conferência da requisição 00000123" });
+      expect(api.listLabRequisitions).toHaveBeenCalledWith(expect.objectContaining({ number: "00000123", providerId: "pv9" }));
+      expect(within(review).getByRole("list", { name: "laudos" })).not.toBeNull();
+      expect(within(review).queryByRole("button", { name: "Liberar laudo" })).toBeNull();
+      fireEvent.click(within(review).getByRole("button", { name: "Retificar" }));
+      expect(within(review).getByRole("region", { name: "Retificar laudo v1" })).not.toBeNull();
+    });
+
+    it("código de barras de 10 dígitos busca pela etiqueta", async () => {
+      mocked(api.listLabRequisitions).mockResolvedValue({ requisitions: [], next_before: null });
+      const p = await panel();
+      fireEvent.change(p.getByLabelText("Número da requisição"), { target: { value: "0000012301" } });
+      fireEvent.click(p.getByRole("button", { name: "Abrir" }));
+      expect((await p.findByRole("alert")).textContent).toBe("nenhuma requisição com este número neste laboratório");
+      expect(api.listLabRequisitions).toHaveBeenCalledWith(expect.objectContaining({ barcode: "0000012301" }));
+    });
+
+    it("número fora de 8 ou 10 dígitos não consulta", async () => {
+      const p = await panel();
+      fireEvent.change(p.getByLabelText("Número da requisição"), { target: { value: "123" } });
+      fireEvent.click(p.getByRole("button", { name: "Abrir" }));
+      expect(p.getByRole("alert").textContent).toBe("informe o número da requisição (8 dígitos) ou o código de barras (10 dígitos)");
+      expect(api.listLabRequisitions).not.toHaveBeenCalled();
+    });
+
+    it("laudo retificado liberado mostra a mensagem de retificação", async () => {
+      mocked(api.listLabRequisitions).mockResolvedValue({ requisitions: [ { id: "rq1" } as never ], next_before: null });
+      mocked(api.getReleaseRequisition).mockResolvedValue(releaseRequisition({ items: [ { ...labItem({ id: "it2", label: "Glicose", status: "released" }), restriction_note: null, results: [ labResultRow() ] } ],
+        reports: [ labReport() ] }));
+      mocked(api.rectifyLabReport).mockResolvedValue(labReport({ id: "lr2", version: 2, replaces_report_id: "lr1" }));
+      const p = await panel();
+      fireEvent.change(p.getByLabelText("Número da requisição"), { target: { value: "00000123" } });
+      fireEvent.click(p.getByRole("button", { name: "Abrir" }));
+      const review = await screen.findByRole("region", { name: "Conferência da requisição 00000123" });
+      fireEvent.click(within(review).getByRole("button", { name: "Retificar" }));
+      const form = within(review).getByRole("region", { name: "Retificar laudo v1" });
+      fireEvent.change(within(form).getByLabelText("Motivo da retificação"), { target: { value: "valor de glicose digitado trocado" } });
+      fireEvent.click(within(form).getByRole("button", { name: "Incluir contato" }));
+      const c = within(form).getByRole("group", { name: "Contato 1" });
+      fireEvent.change(within(c).getByLabelText("Quem foi avisado"), { target: { value: "Dra. Ana" } });
+      fireEvent.change(within(c).getByLabelText("Como"), { target: { value: "telefone" } });
+      fireEvent.click(within(form).getByLabelText("Assinatura eletrônica avançada (código do autenticador)"));
+      fireEvent.change(within(form).getByLabelText("Código do autenticador"), { target: { value: "123456" } });
+      fireEvent.click(within(form).getByRole("button", { name: "Emitir laudo retificado" }));
+      expect(await screen.findByText("Laudo retificado liberado com assinatura eletrônica avançada.")).not.toBeNull();
+    });
   });
 });

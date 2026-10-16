@@ -3,22 +3,22 @@
 // liberação e a conferência. Leitura só ao abrir e depois de cada ação —
 // nenhuma releitura automática (as rotas gravam trilha); o contador do menu
 // é a rota /count (Task 3).
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { listReleases, listUnnotifiedCriticals, type LabCriticalRow, type LabReleaseRequisition, type LabReportSummary } from "../lib/api";
-import { LAB_CRITICALS_KEY, LAB_RELEASES_KEY, flagLabel, isCritical, labError, refreshLab } from "../lib/lab";
+import { listLabRequisitions, listReleases, listUnnotifiedCriticals, type LabCriticalRow, type LabReleaseRequisition, type LabReportSummary } from "../lib/api";
+import { LAB_CRITICALS_KEY, LAB_RELEASES_KEY, flagLabel, isCritical, labError, lookupKind, refreshLab } from "../lib/lab";
 import { fmtDateTime } from "../lib/format";
 import type { ModuleId } from "../shell/modules";
 import { Panel } from "../components/Panel";
 import { DataTable } from "../components/DataTable";
 import { Tag } from "../components/Tag";
-import { secondaryButtonStyle } from "../components/formStyles";
+import { inputStyle, secondaryButtonStyle } from "../components/formStyles";
 import { LabGate } from "./lab/LabGate";
 import { LabScope } from "./lab/LabScope";
 import { CriticalNoticeForm } from "./lab/CriticalNoticeForm";
 import { ReleaseReview } from "./lab/ReleaseReview";
 import { useLabContext } from "./lab/useLabContext";
-import { alert, muted, okText, row, stack } from "./exams/styles";
+import { alert, fieldLabel, muted, okText, row, stack } from "./exams/styles";
 
 export function LabRelease({ onNavigate }: { onNavigate(id: ModuleId): void }) {
   return (
@@ -38,15 +38,39 @@ function ReleaseBody({ providerId, onNavigate }: { providerId: string; onNavigat
   const [ noticeFor, setNoticeFor ] = useState<LabCriticalRow | null>(null);
   const [ message, setMessage ] = useState<{ kind: "ok" | "error"; text: string; pending?: boolean } | null>(null);
 
+  const [ number, setNumber ] = useState("");
+  const [ searchError, setSearchError ] = useState<string | null>(null);
+  const searching = useRef(false);
+
+  // Busca pelo número (8 dígitos) ou pela etiqueta (10) — B16. Cada leitura grava trilha: uma por vez.
+  async function findReleased() {
+    if (searching.current) return;
+    const text = number.trim();
+    const kind = lookupKind(text);
+    if (!kind) { setSearchError("informe o número da requisição (8 dígitos) ou o código de barras (10 dígitos)"); return; }
+    searching.current = true;
+    setSearchError(null);
+    try {
+      const page = await listLabRequisitions({ providerId, [kind]: text, before: null });
+      const found = page.requisitions[0];
+      if (!found) { setSearchError("nenhuma requisição com este número neste laboratório"); return; }
+      setMessage(null);
+      setOpenId(found.id);
+    } catch (err) {
+      setSearchError(labError(err));
+    } finally { searching.current = false; }
+  }
+
   async function after() {
     await refreshLab(queryClient);
   }
 
   function released(rep: LabReportSummary) {
     setOpenId(null);
+    const what = rep.replaces_report_id ? "Laudo retificado" : "Laudo";
     setMessage(rep.status === "pending_signature"
-      ? { kind: "ok", text: "Laudo enviado para assinatura ICP — assine em Pendentes de assinatura.", pending: true }
-      : { kind: "ok", text: "Laudo liberado com assinatura eletrônica avançada." });
+      ? { kind: "ok", text: `${what} enviado para assinatura ICP — assine em Pendentes de assinatura.`, pending: true }
+      : { kind: "ok", text: `${what} liberado com assinatura eletrônica avançada.` });
     void after();
   }
 
@@ -95,6 +119,17 @@ function ReleaseBody({ providerId, onNavigate }: { providerId: string; onNavigat
             rows={queue.data ?? []} rowKey={(q) => q.id} empty={queue.isPending ? "carregando…" : "nada esperando liberação"}
           />
         )}
+      </Panel>
+      <Panel title="Laudo já liberado" sub="abrir os laudos de uma requisição para ver ou retificar">
+        <div style={{ ...row, alignItems: "flex-end" }}>
+          <label style={fieldLabel}>
+            Número da requisição
+            <input value={number} inputMode="numeric" style={inputStyle} onChange={(e) => { setNumber(e.target.value); setSearchError(null); }}
+              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void findReleased(); } }} />
+          </label>
+          <button type="button" style={secondaryButtonStyle} onClick={() => void findReleased()}>Abrir</button>
+        </div>
+        {searchError && <p role="alert" style={alert}>{searchError}</p>}
       </Panel>
       {context.isError && <p role="alert" style={alert}>{labError(context.error)}</p>}
       {openId && !context.isPending && (

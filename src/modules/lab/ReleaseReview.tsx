@@ -21,6 +21,8 @@ import { ActionButton } from "../../components/ActionButton";
 import { Tag } from "../../components/Tag";
 import { secondaryButtonStyle } from "../../components/formStyles";
 import { CriticalNoticeForm } from "./CriticalNoticeForm";
+import { LabReportList } from "./LabReportList";
+import { RectifyForm } from "./RectifyForm";
 import { NO_ICP_FOR_DOCTOR, SignatureChoice } from "./SignatureChoice";
 import { alert, box, checkLabel, list, muted, panel, row, title } from "../exams/styles";
 
@@ -48,6 +50,7 @@ export function ReleaseReview({ requisitionId, council, onReleased, onConflict, 
   const [ certificateLink, setCertificateLink ] = useState(false);
   const [ confirming, setConfirming ] = useState(false);
   const [ noticeFor, setNoticeFor ] = useState<LabResultRow | null>(null);
+  const [ rectifying, setRectifying ] = useState<LabReportSummary | null>(null);
   // I1: uma ação de gravação por vez na conferência (liberar ou escolher valor).
   const inFlight = useRef(false);
   const [ busy, setBusy ] = useState(false);
@@ -175,7 +178,16 @@ export function ReleaseReview({ requisitionId, council, onReleased, onConflict, 
       </div>
       <p style={muted}>{`${r.patient.display_name} · nascimento ${fmtDay(r.patient.birth_date)}`}</p>
       {r.items.map(itemBlock)}
-      <SignatureChoice council={council} kind={signature} onKind={(k) => { if (k === "icp") setTotp(""); setKind(k); }} totp={totp} onTotp={setTotp} icpAvailable={available} />
+      {r.reports.length > 0 && (
+        <LabReportList reports={r.reports} onRectify={setRectifying} onExpired={() => void query.refetch()} />
+      )}
+      {rectifying && (
+        <RectifyForm key={rectifying.id} report={rectifying} items={r.items} council={council} onCancel={() => setRectifying(null)}
+          onConflict={onConflict} onDone={(rep) => { setRectifying(null); onReleased(rep); }} />
+      )}
+      {releasable.length > 0 && (
+        <SignatureChoice council={council} kind={signature} onKind={(k) => { if (k === "icp") setTotp(""); setKind(k); }} totp={totp} onTotp={setTotp} icpAvailable={available} />
+      )}
       {confirming && unnotified.length > 0 && (
         <div role="group" aria-label="crítico sem aviso" style={box}>
           <p style={{ margin: 0 }}>{`${unnotified.length === 1 ? "1 valor crítico" : `${unnotified.length} valores críticos`} sem registro de aviso. Liberar mesmo assim? O aviso fica pendente em Críticos sem aviso.`}</p>
@@ -190,9 +202,11 @@ export function ReleaseReview({ requisitionId, council, onReleased, onConflict, 
         <div><button type="button" style={secondaryButtonStyle} onClick={() => onNavigate("signature")}>Ir para Assinatura digital</button></div>
       )}
       <div style={row}>
-        <ActionButton busy={busy} disabledReason={noIcpForDoctor ? "sem assinatura ICP o médico não consegue liberar" : null} onClick={() => release(false)}>
-          {partial ? `Liberar laudo parcial (${chosenIds.length} de ${base.length})` : "Liberar laudo"}
-        </ActionButton>
+        {releasable.length > 0 && (
+          <ActionButton busy={busy} disabledReason={noIcpForDoctor ? "sem assinatura ICP o médico não consegue liberar" : null} onClick={() => release(false)}>
+            {partial ? `Liberar laudo parcial (${chosenIds.length} de ${base.length})` : "Liberar laudo"}
+          </ActionButton>
+        )}
         <button type="button" style={secondaryButtonStyle} onClick={onClose}>Fechar</button>
       </div>
     </section>
