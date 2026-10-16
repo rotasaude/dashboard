@@ -428,5 +428,49 @@ describe("LabRelease", () => {
       fireEvent.click(within(form).getByRole("button", { name: "Emitir laudo retificado" }));
       expect(await screen.findByText("Laudo retificado liberado com assinatura eletrônica avançada.")).not.toBeNull();
     });
+
+    it("I1: com a retificação em curso, valor/liberação ficam bloqueados e Cancelar também", async () => {
+      mocked(api.listLabRequisitions).mockResolvedValue({ requisitions: [ { id: "rq1" } as never ], next_before: null });
+      mocked(api.getReleaseRequisition).mockResolvedValue(releaseRequisition({
+        items: [
+          { ...labItem({ id: "it1", label: "Hemoglobina", status: "released" }), restriction_note: null, results: [ labResultRow({ id: "r1", analyte_key: "hb", name: "Hb" }) ] },
+          { ...labItem({ id: "it2", label: "Glicose", status: "typed" }), restriction_note: null, results: [
+            labResultRow({ id: "r2", value: "90", effective: true }), labResultRow({ id: "r3", value: "95", effective: false }) ] }
+        ],
+        reports: [ labReport({ item_ids: [ "it1" ] }) ]
+      }));
+      mocked(api.rectifyLabReport).mockReturnValue(new Promise(() => {}));
+      const p = await panel();
+      fireEvent.change(p.getByLabelText("Número da requisição"), { target: { value: "00000123" } });
+      fireEvent.click(p.getByRole("button", { name: "Abrir" }));
+      const review = await screen.findByRole("region", { name: "Conferência da requisição 00000123" });
+      fireEvent.click(within(review).getByRole("button", { name: "Retificar" }));
+      const form = within(review).getByRole("region", { name: "Retificar laudo v1" });
+      fireEvent.change(within(form).getByLabelText("Motivo da retificação"), { target: { value: "valor de glicose digitado trocado" } });
+      fireEvent.click(within(form).getByRole("button", { name: "Incluir contato" }));
+      const c = within(form).getByRole("group", { name: "Contato 1" });
+      fireEvent.change(within(c).getByLabelText("Quem foi avisado"), { target: { value: "Dra. Ana" } });
+      fireEvent.change(within(c).getByLabelText("Como"), { target: { value: "telefone" } });
+      const adv = within(form).getAllByLabelText("Assinatura eletrônica avançada (código do autenticador)");
+      fireEvent.click(adv[adv.length - 1]);
+      fireEvent.change(within(form).getByLabelText("Código do autenticador"), { target: { value: "123456" } });
+      fireEvent.click(within(form).getByRole("button", { name: "Emitir laudo retificado" }));
+      await waitFor(() => expect(api.rectifyLabReport).toHaveBeenCalledTimes(1));
+      expect(within(review).getByRole("button", { name: /Usar 95/ }).getAttribute("aria-disabled")).toBe("true");
+      fireEvent.click(within(review).getByRole("button", { name: /Usar 95/ }));
+      expect(api.chooseLabResult).not.toHaveBeenCalled();
+      expect(within(review).getByRole("button", { name: /Liberar laudo/ }).getAttribute("aria-disabled")).toBe("true");
+      expect(within(form).getByRole("button", { name: "Cancelar" }).hasAttribute("disabled")).toBe(true);
+    });
+
+    it("a busca é uma por vez: dois cliques consultam uma vez", async () => {
+      mocked(api.listLabRequisitions).mockReturnValue(new Promise(() => {}));
+      const p = await panel();
+      fireEvent.change(p.getByLabelText("Número da requisição"), { target: { value: "00000123" } });
+      const open = p.getByRole("button", { name: "Abrir" });
+      fireEvent.click(open);
+      fireEvent.click(open);
+      expect(api.listLabRequisitions).toHaveBeenCalledTimes(1);
+    });
   });
 });

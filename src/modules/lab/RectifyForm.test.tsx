@@ -14,6 +14,7 @@ import { renderWithProviders } from "../../test/campaignFixtures";
 import { NOW21B, labItem, labReport, labResultRow, labUser } from "../../test/labFixtures";
 
 const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
+const NOGUARD = { begin: () => true, end: () => {}, busy: false };
 const ITEMS = [ { ...labItem({ id: "it2", label: "Glicose", status: "released" }), restriction_note: null, results: [ labResultRow() ] } ];
 
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); });
@@ -36,7 +37,7 @@ function fill(form: HTMLElement) {
 
 describe("RectifyForm", () => {
   it("exige motivo e quem foi avisado antes de enviar", async () => {
-    renderWithProviders(<RectifyForm report={labReport()} items={ITEMS} council="CRF" onDone={vi.fn()} onConflict={vi.fn()} onCancel={vi.fn()} />);
+    renderWithProviders(<RectifyForm guard={NOGUARD} report={labReport()} items={ITEMS} council="CRF" onDone={vi.fn()} onConflict={vi.fn()} onCancel={vi.fn()} />);
     const form = await screen.findByRole("region", { name: "Retificar laudo v1" });
     fireEvent.click(within(form).getByRole("button", { name: "Emitir laudo retificado" }));
     expect((await within(form).findByRole("alert")).textContent).toBe("escreva o motivo da retificação (ao menos 10 caracteres)");
@@ -48,7 +49,7 @@ describe("RectifyForm", () => {
 
   it("assinatura avançada: contatos com a hora da cidade e o código só no corpo", async () => {
     const onDone = vi.fn();
-    renderWithProviders(<RectifyForm report={labReport()} items={ITEMS} council="CRF" onDone={onDone} onConflict={vi.fn()} onCancel={vi.fn()} />);
+    renderWithProviders(<RectifyForm guard={NOGUARD} report={labReport()} items={ITEMS} council="CRF" onDone={onDone} onConflict={vi.fn()} onCancel={vi.fn()} />);
     const form = await screen.findByRole("region", { name: "Retificar laudo v1" });
     fill(form);
     fireEvent.click(within(form).getByLabelText("Assinatura eletrônica avançada (código do autenticador)"));
@@ -66,7 +67,7 @@ describe("RectifyForm", () => {
       .mockRejectedValueOnce(new api.ApiError(401, { error: "mfa_required" }, "x"))
       .mockRejectedValueOnce(new api.ApiError(409, { error: "invalid_transition" }, "x"));
     const onConflict = vi.fn();
-    renderWithProviders(<RectifyForm report={labReport()} items={ITEMS} council="CRF" onDone={vi.fn()} onConflict={onConflict} onCancel={vi.fn()} />);
+    renderWithProviders(<RectifyForm guard={NOGUARD} report={labReport()} items={ITEMS} council="CRF" onDone={vi.fn()} onConflict={onConflict} onCancel={vi.fn()} />);
     const form = await screen.findByRole("region", { name: "Retificar laudo v1" });
     fill(form);
     fireEvent.click(within(form).getByLabelText("Assinatura eletrônica avançada (código do autenticador)"));
@@ -107,7 +108,7 @@ describe("RectifyForm — assinatura e gravação", () => {
   it("com assinatura digital na cidade a ICP é a escolha inicial e vai sem código", async () => {
     mocked(api.fetchCurrentSession).mockResolvedValue(labUser([ "lab_releaser" ], { features: ICP_FEATURES }));
     const onDone = vi.fn();
-    renderWithProviders(<RectifyForm {...props("CRF")} onDone={onDone} />);
+    renderWithProviders(<RectifyForm guard={NOGUARD} {...props("CRF")} onDone={onDone} />);
     const form = await screen.findByRole("region", { name: "Retificar laudo v1" });
     fill(form);
     await waitFor(() => expect((within(form).getByLabelText("ICP-Brasil (assina em Pendentes de assinatura)") as HTMLInputElement).checked).toBe(true));
@@ -119,14 +120,14 @@ describe("RectifyForm — assinatura e gravação", () => {
   });
 
   it("sem assinatura digital a ICP não é oferecida e a avançada é a escolha inicial", async () => {
-    renderWithProviders(<RectifyForm {...props("CRF")} onDone={vi.fn()} />);
+    renderWithProviders(<RectifyForm guard={NOGUARD} {...props("CRF")} onDone={vi.fn()} />);
     const form = await screen.findByRole("region", { name: "Retificar laudo v1" });
     expect(within(form).queryByLabelText("ICP-Brasil (assina em Pendentes de assinatura)")).toBeNull();
     expect((within(form).getByLabelText("Assinatura eletrônica avançada (código do autenticador)") as HTMLInputElement).checked).toBe(true);
   });
 
   it("médico (CRM) sem assinatura digital: não retifica e nada é enviado", async () => {
-    renderWithProviders(<RectifyForm {...props("CRM")} onDone={vi.fn()} />);
+    renderWithProviders(<RectifyForm guard={NOGUARD} {...props("CRM")} onDone={vi.fn()} />);
     const form = await screen.findByRole("region", { name: "Retificar laudo v1" });
     fill(form);
     expect(within(form).getByText("médico não libera nesta cidade — a assinatura ICP-Brasil não está ativa")).not.toBeNull();
@@ -139,7 +140,7 @@ describe("RectifyForm — assinatura e gravação", () => {
 
   it("médico (CRM) com assinatura digital: só ICP", async () => {
     mocked(api.fetchCurrentSession).mockResolvedValue(labUser([ "lab_releaser" ], { features: ICP_FEATURES }));
-    renderWithProviders(<RectifyForm {...props("CRM")} onDone={vi.fn()} />);
+    renderWithProviders(<RectifyForm guard={NOGUARD} {...props("CRM")} onDone={vi.fn()} />);
     const form = await screen.findByRole("region", { name: "Retificar laudo v1" });
     fill(form);
     await waitFor(() => expect(within(form).getByText("médico (CRM) libera só com ICP-Brasil")).not.toBeNull());
@@ -148,11 +149,11 @@ describe("RectifyForm — assinatura e gravação", () => {
     await waitFor(() => expect(api.rectifyLabReport).toHaveBeenCalledWith("lr1", expect.objectContaining({ signature: "icp" })));
   });
 
-  it("uma gravação por vez: dois cliques enviam uma vez; erro tardio não substitui o sucesso", async () => {
+  it("uma gravação por vez: dois cliques enviam uma vez e o sucesso vai a quem chamou uma só vez", async () => {
     let resolve!: (r: ReturnType<typeof labReport>) => void;
     mocked(api.rectifyLabReport).mockReset().mockReturnValue(new Promise((r) => { resolve = r; }));
     const onDone = vi.fn();
-    renderWithProviders(<RectifyForm {...props("CRF")} onDone={onDone} />);
+    renderWithProviders(<RectifyForm guard={NOGUARD} {...props("CRF")} onDone={onDone} />);
     const form = await screen.findByRole("region", { name: "Retificar laudo v1" });
     fill(form);
     fireEvent.click(within(form).getByLabelText("Assinatura eletrônica avançada (código do autenticador)"));
@@ -168,7 +169,7 @@ describe("RectifyForm — assinatura e gravação", () => {
 
   it("falha apaga o código digitado", async () => {
     mocked(api.rectifyLabReport).mockReset().mockRejectedValue(new api.ApiError(422, { error: "invalid_version" }, "x"));
-    renderWithProviders(<RectifyForm {...props("CRF")} onDone={vi.fn()} />);
+    renderWithProviders(<RectifyForm guard={NOGUARD} {...props("CRF")} onDone={vi.fn()} />);
     const form = await screen.findByRole("region", { name: "Retificar laudo v1" });
     fill(form);
     fireEvent.click(within(form).getByLabelText("Assinatura eletrônica avançada (código do autenticador)"));
@@ -187,5 +188,103 @@ describe("LabReportList — situações", () => {
     expect(item.textContent).toContain("devolvido — assinatura digital desligada; libere de novo");
     expect(within(item).queryByRole("button", { name: "Retificar" })).toBeNull();
     expect(within(item).queryByRole("button", { name: "Abrir laudo" })).toBeNull();
+  });
+});
+
+describe("RectifyForm — itens, erros de assinatura e guarda", () => {
+  const two = [
+    { ...labItem({ id: "it1", label: "Hemoglobina", status: "released" }), restriction_note: null, results: [ labResultRow() ] },
+    { ...labItem({ id: "it2", label: "Glicose", status: "released" }), restriction_note: null, results: [ labResultRow() ] }
+  ];
+  const ICP = [ "exam_tracking", "municipal_lab", "digital_signature" ];
+
+  it("I2: oferece e marca só os exames liberados do laudo retificado", async () => {
+    renderWithProviders(<RectifyForm guard={NOGUARD} report={labReport({ item_ids: [ "it1" ] })} items={two} council="CRF" onDone={vi.fn()} onConflict={vi.fn()} onCancel={vi.fn()} />);
+    const form = await screen.findByRole("region", { name: "Retificar laudo v1" });
+    expect(within(form).getByLabelText("Hemoglobina")).not.toBeNull();
+    expect(within(form).queryByLabelText("Glicose")).toBeNull();
+    fill(form);
+    fireEvent.click(within(form).getByLabelText("Assinatura eletrônica avançada (código do autenticador)"));
+    fireEvent.change(within(form).getByLabelText("Código do autenticador"), { target: { value: "123456" } });
+    fireEvent.click(within(form).getByRole("button", { name: "Emitir laudo retificado" }));
+    await waitFor(() => expect(api.rectifyLabReport).toHaveBeenCalledWith("lr1", expect.objectContaining({ item_ids: [ "it1" ] })));
+  });
+
+  it("signature_unavailable: some a ICP e passa à avançada", async () => {
+    mocked(api.fetchCurrentSession).mockResolvedValue(labUser([ "lab_releaser" ], { features: ICP }));
+    mocked(api.rectifyLabReport).mockReset().mockRejectedValue(new api.ApiError(422, { error: "signature_unavailable" }, "x"));
+    renderWithProviders(<RectifyForm guard={NOGUARD} report={labReport()} items={ITEMS} council="CRF" onDone={vi.fn()} onConflict={vi.fn()} onCancel={vi.fn()} />);
+    const form = await screen.findByRole("region", { name: "Retificar laudo v1" });
+    fill(form);
+    await waitFor(() => expect(within(form).getByLabelText("ICP-Brasil (assina em Pendentes de assinatura)")).not.toBeNull());
+    fireEvent.click(within(form).getByRole("button", { name: "Emitir laudo retificado" }));
+    expect((await within(form).findByRole("alert")).textContent).toBe("a assinatura ICP-Brasil não está disponível nesta cidade — peça ao administrador para ativá-la");
+    expect(within(form).queryByLabelText("ICP-Brasil (assina em Pendentes de assinatura)")).toBeNull();
+    expect((within(form).getByLabelText("Assinatura eletrônica avançada (código do autenticador)") as HTMLInputElement).checked).toBe(true);
+  });
+
+  it("signature_unavailable para médico (CRM): mensagem do médico", async () => {
+    mocked(api.fetchCurrentSession).mockResolvedValue(labUser([ "lab_releaser" ], { features: ICP }));
+    mocked(api.rectifyLabReport).mockReset().mockRejectedValue(new api.ApiError(422, { error: "signature_unavailable" }, "x"));
+    renderWithProviders(<RectifyForm guard={NOGUARD} report={labReport()} items={ITEMS} council="CRM" onDone={vi.fn()} onConflict={vi.fn()} onCancel={vi.fn()} />);
+    const form = await screen.findByRole("region", { name: "Retificar laudo v1" });
+    fill(form);
+    await waitFor(() => expect(within(form).getByText("médico (CRM) libera só com ICP-Brasil")).not.toBeNull());
+    fireEvent.click(within(form).getByRole("button", { name: "Emitir laudo retificado" }));
+    expect((await within(form).findByRole("alert")).textContent).toBe("médico não libera nesta cidade — a assinatura ICP-Brasil não está ativa");
+  });
+
+  it("icp_required: passa a ICP", async () => {
+    mocked(api.fetchCurrentSession).mockResolvedValue(labUser([ "lab_releaser" ], { features: ICP }));
+    mocked(api.rectifyLabReport).mockReset().mockRejectedValue(new api.ApiError(422, { error: "icp_required" }, "x"));
+    renderWithProviders(<RectifyForm guard={NOGUARD} report={labReport()} items={ITEMS} council="CRF" onDone={vi.fn()} onConflict={vi.fn()} onCancel={vi.fn()} />);
+    const form = await screen.findByRole("region", { name: "Retificar laudo v1" });
+    fill(form);
+    await waitFor(() => expect(within(form).getByLabelText("ICP-Brasil (assina em Pendentes de assinatura)")).not.toBeNull());
+    fireEvent.click(within(form).getByLabelText("Assinatura eletrônica avançada (código do autenticador)"));
+    fireEvent.change(within(form).getByLabelText("Código do autenticador"), { target: { value: "123456" } });
+    fireEvent.click(within(form).getByRole("button", { name: "Emitir laudo retificado" }));
+    expect((await within(form).findByRole("alert")).textContent).toBe("médico libera só com ICP-Brasil — escolha ICP");
+    expect((within(form).getByLabelText("ICP-Brasil (assina em Pendentes de assinatura)") as HTMLInputElement).checked).toBe(true);
+  });
+
+  it("I1: pede a guarda do pai e a devolve ao fim", async () => {
+    let resolve!: (r: ReturnType<typeof labReport>) => void;
+    mocked(api.rectifyLabReport).mockReset().mockReturnValue(new Promise((r) => { resolve = r; }));
+    const begin = vi.fn(() => true), end = vi.fn();
+    const onCancel = vi.fn();
+    renderWithProviders(<RectifyForm guard={{ begin, end, busy: false }} report={labReport()} items={ITEMS} council="CRF" onDone={vi.fn()} onConflict={vi.fn()} onCancel={onCancel} />);
+    const form = await screen.findByRole("region", { name: "Retificar laudo v1" });
+    fill(form);
+    fireEvent.click(within(form).getByLabelText("Assinatura eletrônica avançada (código do autenticador)"));
+    fireEvent.change(within(form).getByLabelText("Código do autenticador"), { target: { value: "123456" } });
+    fireEvent.click(within(form).getByRole("button", { name: "Emitir laudo retificado" }));
+    await waitFor(() => expect(begin).toHaveBeenCalledTimes(1));
+    resolve(labReport({ id: "lr2" }));
+    await waitFor(() => expect(end).toHaveBeenCalledTimes(1));
+  });
+
+  it("guarda do pai ocupada: não envia", async () => {
+    renderWithProviders(<RectifyForm guard={{ begin: () => false, end: vi.fn(), busy: true }} report={labReport()} items={ITEMS} council="CRF" onDone={vi.fn()} onConflict={vi.fn()} onCancel={vi.fn()} />);
+    const form = await screen.findByRole("region", { name: "Retificar laudo v1" });
+    fill(form);
+    fireEvent.click(within(form).getByLabelText("Assinatura eletrônica avançada (código do autenticador)"));
+    fireEvent.change(within(form).getByLabelText("Código do autenticador"), { target: { value: "123456" } });
+    fireEvent.click(within(form).getByRole("button", { name: /Emitir laudo retificado/ }));
+    expect(api.rectifyLabReport).not.toHaveBeenCalled();
+  });
+});
+
+describe("LabReportList — PDF", () => {
+  it("link vencido: mostra a frase e pede releitura; link válido não relê", async () => {
+    const onExpired = vi.fn();
+    const win = { opener: null, location: { href: "" }, close: vi.fn() };
+    vi.spyOn(window, "open").mockReturnValue(win as unknown as Window);
+    mocked(api.fetchExamPdf).mockReset().mockRejectedValueOnce(new api.ApiError(410, { error: "link_expired" }, "x"));
+    renderWithProviders(<LabReportList onRectify={vi.fn()} onExpired={onExpired} reports={[ labReport() ]} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Abrir laudo" }));
+    expect((await screen.findByRole("alert")).textContent).toBeTruthy();
+    expect(api.fetchExamPdf).toHaveBeenCalledWith("/lab/files/tok-lr1");
+    expect(onExpired).toHaveBeenCalledTimes(1);
   });
 });

@@ -38,7 +38,7 @@ export function labItem(over: Partial<LabItem> = {}): LabItem {
 export function labReport(over: Partial<LabReportSummary> = {}): LabReportSummary {
   return {
     id: "lr1", version: 1, partial: false, status: "released", signature_kind: "advanced", released_at: "2026-10-15T09:00:00-03:00",
-    released_by: "Bia Farmacêutica", short_code: "QX7M2K9P", pdf_url: "/lab/files/tok-lr1", replaces_report_id: null, ...over
+    released_by: "Bia Farmacêutica", short_code: "QX7M2K9P", pdf_url: "/lab/files/tok-lr1", replaces_report_id: null, item_ids: [ "it2" ], ...over
   };
 }
 

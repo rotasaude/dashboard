@@ -2745,6 +2745,8 @@ export interface LabReportSummary {
   id: string; version: number; partial: boolean; status: LabReportStatus | string; signature_kind: LabSignatureKind | string;
   released_at: string | null; released_by: string | null; short_code: string | null; pdf_url: string | null;
   replaces_report_id: string | null;
+  // Exames da requisição cobertos por este laudo (I2; o api acrescenta o campo).
+  item_ids: string[];
 }
 export interface LabRequisition {
   id: string; number: string; patient: LabPatient; origin_unit: { id: string; name: string };

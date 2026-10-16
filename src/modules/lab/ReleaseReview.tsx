@@ -94,6 +94,13 @@ export function ReleaseReview({ requisitionId, council, onReleased, onConflict, 
     } finally { inFlight.current = false; setBusy(false); }
   }
 
+  // A retificação entra na mesma guarda de gravação (uma ação por vez).
+  const writeGuard = {
+    begin: () => { if (inFlight.current) return false; inFlight.current = true; setBusy(true); return true; },
+    end: () => { inFlight.current = false; setBusy(false); },
+    busy
+  };
+
   // A ação já valeu; só a releitura falhou — não se diz que a ação falhou.
   async function reread(done: string) {
     const out = await query.refetch();
@@ -164,7 +171,7 @@ export function ReleaseReview({ requisitionId, council, onReleased, onConflict, 
         </ul>
       ))}
       {noticeFor && i.results.some((x) => x.id === noticeFor.id) && (
-        <CriticalNoticeForm key={noticeFor.id} resultId={noticeFor.id} label={noticeFor.name}
+        <CriticalNoticeForm key={noticeFor.id} busy={busy} resultId={noticeFor.id} label={noticeFor.name}
           onCancel={() => setNoticeFor(null)} onDone={() => { setNoticeFor(null); void reread("aviso registrado"); }} />
       )}
     </div>
@@ -182,7 +189,7 @@ export function ReleaseReview({ requisitionId, council, onReleased, onConflict, 
         <LabReportList reports={r.reports} onRectify={setRectifying} onExpired={() => void query.refetch()} />
       )}
       {rectifying && (
-        <RectifyForm key={rectifying.id} report={rectifying} items={r.items} council={council} onCancel={() => setRectifying(null)}
+        <RectifyForm key={rectifying.id} report={rectifying} items={r.items} council={council} guard={writeGuard} onCancel={() => setRectifying(null)}
           onConflict={onConflict} onDone={(rep) => { setRectifying(null); onReleased(rep); }} />
       )}
       {releasable.length > 0 && (

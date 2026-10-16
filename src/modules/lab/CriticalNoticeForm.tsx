@@ -13,7 +13,7 @@ export function cityNowLocal(): string {
   return `${cityIsoDate()}T${fmtHourMinute(new Date().toISOString())}`;
 }
 
-export function CriticalNoticeForm({ resultId, label, onDone, onCancel }: { resultId: string; label: string; onDone(): void; onCancel(): void }) {
+export function CriticalNoticeForm({ resultId, label, onDone, onCancel, busy }: { resultId: string; label: string; onDone(): void; onCancel(): void; busy?: boolean }) {
   const [ draft, setDraft ] = useState<CriticalDraft>(() => ({ ...EMPTY_CRITICAL, at: cityNowLocal() }));
   const [ error, setError ] = useState<string | null>(null);
   const set = (patch: Partial<CriticalDraft>) => setDraft((d) => ({ ...d, ...patch }));
@@ -44,7 +44,7 @@ export function CriticalNoticeForm({ resultId, label, onDone, onCancel }: { resu
       <label style={fieldLabel}>Quando<input type="datetime-local" value={draft.at} style={inputStyle} onChange={(e) => set({ at: e.target.value })} /></label>
       {error && <p role="alert" style={alert}>{error}</p>}
       <div style={row}>
-        <ActionButton onClick={save}>Registrar aviso</ActionButton>
+        <ActionButton busy={busy} onClick={save}>Registrar aviso</ActionButton>
         <button type="button" style={secondaryButtonStyle} onClick={onCancel}>Cancelar</button>
       </div>
     </section>

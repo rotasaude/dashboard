@@ -4,7 +4,7 @@
 // "substituído". Mesma assinatura da liberação (médico só ICP; ICP só onde há
 // assinatura digital); o código é apagado antes do envio e nunca guardado.
 // Os valores que entram são os escolhidos agora (digite o novo valor e escolha-o antes).
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { errorCode, rectifyLabReport, type LabReleaseItem, type LabReportSummary, type LabSignatureKind } from "../../lib/api";
 import { CHANNEL_OPTIONS, contactsBody, labError, onlyIcp, rectifyProblem, totpProblem, type ContactDraft } from "../../lib/lab";
 import { hasFeature } from "../../lib/features";
@@ -15,12 +15,17 @@ import { NO_ICP_FOR_DOCTOR, SignatureChoice } from "./SignatureChoice";
 import { cityNowLocal } from "./CriticalNoticeForm";
 import { alert, box, checkLabel, fieldLabel, fieldset, legend, muted, row } from "../exams/styles";
 
-export function RectifyForm({ report, items, council, onDone, onConflict, onCancel }: {
-  report: LabReportSummary; items: LabReleaseItem[]; council: string | null;
+// `guard`: a guarda de gravação da conferência (uma ação por vez — liberar,
+// escolher valor, avisar e retificar não correm juntas).
+export interface WriteGuard { begin(): boolean; end(): void; busy: boolean }
+
+export function RectifyForm({ report, items, council, guard, onDone, onConflict, onCancel }: {
+  report: LabReportSummary; items: LabReleaseItem[]; council: string | null; guard: WriteGuard;
   onDone(r: LabReportSummary): void; onConflict(text: string): void; onCancel(): void;
 }) {
   const { user } = useAuth();
-  const released = items.filter((i) => i.status === "released");
+  // Só os exames liberados que este laudo cobre (I2).
+  const released = items.filter((i) => i.status === "released" && report.item_ids.includes(i.id));
   const [ itemIds, setItemIds ] = useState<string[]>(released.map((i) => i.id));
   const [ reason, setReason ] = useState("");
   const [ contacts, setContacts ] = useState<ContactDraft[]>([]);
@@ -29,7 +34,6 @@ export function RectifyForm({ report, items, council, onDone, onConflict, onCanc
   const [ icpRefused, setIcpRefused ] = useState(false);
   const [ totp, setTotp ] = useState("");
   const [ error, setError ] = useState<string | null>(null);
-  const done = useRef(false);
   const available = hasFeature(user, "digital_signature") && !icpRefused;
   const signature: LabSignatureKind = onlyIcp(council) ? "icp" : available ? (chosen ?? "icp") : "advanced";
   const noIcpForDoctor = onlyIcp(council) && !available;
@@ -38,33 +42,32 @@ export function RectifyForm({ report, items, council, onDone, onConflict, onCanc
     setContacts((list) => list.map((c, j) => (j === i ? { ...c, ...patch } : c)));
 
   async function submit() {
-    if (done.current) return;
     if (noIcpForDoctor) { setError(NO_ICP_FOR_DOCTOR); return; }
     const problem = rectifyProblem(reason, contacts, new Date().toISOString())
       ?? (itemIds.length === 0 ? "escolha ao menos um exame" : null)
       ?? (signature === "advanced" ? totpProblem(totp) : null);
     if (problem) { setError(problem); return; }
+    if (!guard.begin()) return;
     setError(null);
     const code = totp;
     setTotp("");
+    let out: LabReportSummary;
     try {
       const body = { item_ids: itemIds, reason: reason.trim(), contacts: contactsBody(contacts), signature };
-      const out = await rectifyLabReport(report.id, signature === "advanced" ? { ...body, totp: code } : body);
-      done.current = true;
-      onDone(out);
+      out = await rectifyLabReport(report.id, signature === "advanced" ? { ...body, totp: code } : body);
     } catch (err) {
-      // Depois do laudo criado, um erro tardio não substitui o sucesso.
-      if (done.current) return;
-      const reason = errorCode(err);
-      if (reason === "invalid_transition") { onConflict(labError(err)); return; }
-      if (reason === "icp_required" && available) setChosen("icp");
-      if (reason === "signature_unavailable") {
+      const why = errorCode(err);
+      if (why === "invalid_transition") { onConflict(labError(err)); return; }
+      if (why === "icp_required" && available) setChosen("icp");
+      if (why === "signature_unavailable") {
         setIcpRefused(true);
         setError(onlyIcp(council) ? NO_ICP_FOR_DOCTOR : labError(err));
         return;
       }
       setError(labError(err));
-    }
+      return;
+    } finally { guard.end(); }
+    onDone(out);
   }
 
   return (
@@ -107,8 +110,8 @@ export function RectifyForm({ report, items, council, onDone, onConflict, onCanc
         totp={totp} onTotp={setTotp} icpAvailable={available} />
       {error && <p role="alert" style={alert}>{error}</p>}
       <div style={row}>
-        <ActionButton onClick={submit} disabledReason={noIcpForDoctor ? "sem assinatura ICP o médico não consegue retificar" : null}>Emitir laudo retificado</ActionButton>
-        <button type="button" style={secondaryButtonStyle} onClick={onCancel}>Cancelar</button>
+        <ActionButton busy={guard.busy} onClick={submit} disabledReason={noIcpForDoctor ? "sem assinatura ICP o médico não consegue retificar" : null}>Emitir laudo retificado</ActionButton>
+        <button type="button" style={secondaryButtonStyle} disabled={guard.busy} onClick={onCancel}>Cancelar</button>
       </div>
     </section>
   );
