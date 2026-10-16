@@ -9,7 +9,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  acknowledgeExam, cancelExam, collectExam, errorCode, getExamOrder, listEnabledProviders, registerExamResult, scheduleExam,
+  acknowledgeExam, cancelExam, collectExam, errorCode, getExamOrder, listEnabledProviders, registerExamResult, scheduleExam, setGalRequisition,
   type ExamEvent
 } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
@@ -201,8 +201,8 @@ export function ExamOrderDetail({ id, onClose, onChanged, focusOnOpen = false }:
           onSubmit={(input) => act(() => registerExamResult(order.id, input), "Resultado registrado.")} />
       )}
       {mode === "gal" && (
-        <GalRequisitionForm orderId={order.id} current={order.gal_requisition ?? null} onCancel={() => setMode(null)}
-          onDone={() => void act(() => Promise.resolve(), "Requisição do GAL registrada.")} />
+        <GalRequisitionForm current={order.gal_requisition ?? null} onCancel={() => setMode(null)}
+          onSubmit={(v) => act(() => setGalRequisition(order.id, v), "Requisição do GAL registrada.")} />
       )}
       {mode === "cancel" && (
         <ReasonForm label="Motivo do cancelamento" submitLabel="Cancelar exame" onCancel={() => setMode(null)}

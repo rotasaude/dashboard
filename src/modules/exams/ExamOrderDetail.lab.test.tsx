@@ -48,6 +48,24 @@ describe("ExamOrderDetail — 21b", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Salvar número do GAL" }));
     await waitFor(() => expect(api.setGalRequisition).toHaveBeenCalledWith("eo1", "GAL-2026-77"));
     await waitFor(() => expect(api.getExamOrder).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText("Requisição do GAL registrada.")).not.toBeNull();
+    expect(screen.queryByLabelText("Número da requisição no GAL")).toBeNull();
+    expect(api.getExamOrder).toHaveBeenCalledTimes(2);
+  });
+
+  it("GAL: só recepção e profissional", async () => {
+    mocked(api.fetchCurrentSession).mockResolvedValue(examUser([ "exam_regulator" ]));
+    mocked(api.getExamOrder).mockResolvedValue(examOrder({ status: "scheduled", gal_requisition: null }));
+    renderWithProviders(<ExamOrderDetail id="eo1" onClose={vi.fn()} />);
+    await screen.findByText("Hemograma completo");
+    expect(screen.queryByRole("button", { name: "Registrar requisição do GAL" })).toBeNull();
+  });
+
+  it.each([ "denied", "cancelled" ])("GAL: escondido com o exame %s", async (status) => {
+    mocked(api.getExamOrder).mockResolvedValue(examOrder({ status, gal_requisition: null }));
+    renderWithProviders(<ExamOrderDetail id="eo1" onClose={vi.fn()} />);
+    await screen.findByText("Hemograma completo");
+    expect(screen.queryByRole("button", { name: "Registrar requisição do GAL" })).toBeNull();
   });
 
   it("GAL já registrado: mostra o número e não oferece trocar (B5)", async () => {
