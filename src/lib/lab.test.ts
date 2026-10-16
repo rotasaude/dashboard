@@ -82,6 +82,9 @@ describe("número com vírgula e limite de digitação", () => {
     expect(normalizeNumber(" 98 ")).toBe("98");
     expect(normalizeNumber("-2,0")).toBe("-2.0");
     expect(normalizeNumber("1.234,5")).toBeNull();
+    expect(normalizeNumber("150.000")).toBeNull();
+    expect(normalizeNumber("4.5")).toBeNull();
+    expect(normalizeNumber("150000")).toBe("150000");
     expect(normalizeNumber("abc")).toBeNull();
     expect(normalizeNumber("")).toBeNull();
   });
@@ -96,6 +99,11 @@ describe("número com vírgula e limite de digitação", () => {
     expect(entryProblem(GLU, "5")).toBe("fora do limite de digitação (10 a 1500 mg/dL) — confira o valor");
     expect(entryProblem(GLU, "nove")).toBe("valor numérico inválido — use dígitos e vírgula");
     expect(entryProblem(GLU, "")).toBeNull();
+    const DOT = "use vírgula para decimais e não use ponto de milhar (ex.: 150000 ou 4,5)";
+    expect(entryProblem(GLU, "150.000")).toBe(DOT);
+    expect(entryProblem({ ...GLU, decimals: 1 }, "4.5")).toBe(DOT);
+    expect(entryProblem({ ...GLU, entry_max: null }, "150000")).toBeNull();
+    expect(entryProblem({ ...GLU, decimals: 2 }, "20,25")).toBeNull();
   });
 
   it("escolha precisa estar entre as opções; texto livre passa", () => {
@@ -244,7 +252,7 @@ describe("correções da rodada 1", () => {
     expect(entryProblem(GLU, "1500,1")).not.toBeNull();
     expect(temperatureProblem("-30")).toBeNull();
     expect(temperatureProblem("60")).toBeNull();
-    expect(temperatureProblem("-30.1")).toBe("temperatura fora do esperado (-30 a 60 °C) — confira o termômetro");
+    expect(temperatureProblem("-30,1")).toBe("temperatura fora do esperado (-30 a 60 °C) — confira o termômetro");
     expect(temperatureProblem("60,1")).toBe("temperatura fora do esperado (-30 a 60 °C) — confira o termômetro");
   });
 

@@ -7,6 +7,7 @@
 // catálogo-base). B3: idade obrigatória no corpo, 0..43800; campo mínimo em
 // branco vale 0 e máximo em branco vale 43800 ("sem limite").
 import type { ExamProvider, LabExamVersion, LabReferenceRange, LabTemplate, LabValueType, LabVersionInput } from "./api";
+import { DOT_IN_NUMBER } from "./lab";
 
 export type AgeUnit = "days" | "months" | "years";
 const UNIT_DAYS: Record<AgeUnit, number> = { days: 1, months: 30, years: 365 };
@@ -40,10 +41,11 @@ export function daysToAge(days: number | null, side: "min" | "max" = "max"): { v
   return { value: String(days), unit: "days" };
 }
 
-const num = (v: number | null | undefined) => (v === null || v === undefined ? "" : String(v));
+// Do api vem número (ponto); na tela é pt-BR (vírgula).
+const num = (v: number | null | undefined) => (v === null || v === undefined ? "" : String(v).replace(".", ","));
 const parse = (v: string): number | null => {
-  const t = v.trim().replace(",", ".");
-  return t === "" || !/^-?\d+(\.\d+)?$/.test(t) ? null : Number(t);
+  const t = v.trim();
+  return !/^-?\d+(,\d+)?$/.test(t) ? null : Number(t.replace(",", "."));
 };
 
 function rangeDraft(r: LabReferenceRange): RangeDraft {
@@ -70,6 +72,7 @@ export function formulaKeys(formula: string): string[] {
 }
 
 const badNumber = (v: string) => v.trim() !== "" && parse(v) === null;
+const numberMessage = (v: string, generic: string) => (v.includes(".") ? DOT_IN_NUMBER : generic);
 
 // Limites do api (Lab::CreateVersion, Analytes, Ranges, Choices, Formula).
 export const LIMITS = {
@@ -146,7 +149,7 @@ export function versionProblem(d: VersionDraft): string | null {
     if (a.unit.length > LIMITS.unit) return `${n}: a unidade tem no máximo ${LIMITS.unit} caracteres`;
     if (!/^[0-4]$/.test(a.decimals.trim())) return `${n}: casas decimais de 0 a 4`;
     if (a.valueType === "choice" && !choicesValid(a.choices)) return `${n}: informe de 1 a ${MAX_CHOICES} opções distintas, separadas por ;, com até ${MAX_CHOICE_LENGTH} caracteres`;
-    for (const v of [ a.entryMin, a.entryMax, a.criticalLow, a.criticalHigh ]) if (badNumber(v)) return `${n}: número inválido nos limites`;
+    for (const v of [ a.entryMin, a.entryMax, a.criticalLow, a.criticalHigh ]) if (badNumber(v)) return `${n}: ${numberMessage(v, "número inválido nos limites")}`;
     const [ emin, emax ] = [ parse(a.entryMin), parse(a.entryMax) ];
     if (a.valueType !== "numeric" && [ a.entryMin, a.entryMax, a.criticalLow, a.criticalHigh ].some((v) => v.trim() !== "")) {
       return `${n}: limites de digitação e críticos valem só para componente numérico`;
@@ -155,7 +158,7 @@ export function versionProblem(d: VersionDraft): string | null {
     if (a.ranges.length > LIMITS.ranges) return `${n}: no máximo ${LIMITS.ranges} faixas`;
     for (const [ j, r ] of a.ranges.entries()) {
       const rn = `${n}, faixa ${j + 1}`;
-      if (badNumber(r.low) || badNumber(r.high)) return `${rn}: número inválido`;
+      for (const v of [ r.low, r.high ]) if (badNumber(v)) return `${rn}: ${numberMessage(v, "número inválido")}`;
       if (r.low.trim() === "" && r.high.trim() === "" && !r.text.trim()) return `${rn}: informe mínimo, máximo ou um texto`;
       if (r.text.trim().length > LIMITS.rangeText) return `${rn}: o texto tem no máximo ${LIMITS.rangeText} caracteres`;
       const [ lo, hi ] = [ parse(r.low), parse(r.high) ];

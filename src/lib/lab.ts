@@ -139,10 +139,14 @@ export function lookupKind(raw: string): "barcode" | "number" | null {
   return null;
 }
 
-// "13,5" → "13.5". Separador de milhar não é aceito (ambíguo na bancada).
+// pt-BR: o separador decimal é a vírgula e ponto nunca é aceito ("150.000" não pode virar 150).
+export const DOT_IN_NUMBER = "use vírgula para decimais e não use ponto de milhar (ex.: 150000 ou 4,5)";
+export const hasDot = (raw: string) => raw.includes(".");
+
+// "13,5" → "13.5" (formato do api). Ponto digitado é recusado (null).
 export function normalizeNumber(raw: string): string | null {
-  const t = raw.trim().replace(",", ".");
-  return /^-?\d+(\.\d+)?$/.test(t) ? t : null;
+  const t = raw.trim();
+  return /^-?\d+(,\d+)?$/.test(t) ? t.replace(",", ".") : null;
 }
 
 const fmtLimit = (n: number) => String(n).replace(".", ",");
@@ -151,6 +155,7 @@ export function entryProblem(a: LabAnalyteEntry, raw: string): string | null {
   if (raw.trim() === "") return null;
   if (a.value_type === "choice") return a.choices && a.choices.includes(raw) ? null : "escolha uma das opções";
   if (a.value_type !== "numeric") return null;
+  if (hasDot(raw)) return DOT_IN_NUMBER;
   const n = normalizeNumber(raw);
   if (n === null) return "valor numérico inválido — use dígitos e vírgula";
   // mais casas do que o exame tem: zeros à direita não contam ("98,0" vale 98)
@@ -231,6 +236,7 @@ export function parseTemperature(raw: string): number | null {
 
 export function temperatureProblem(raw: string): string | null {
   if (raw.trim() === "") return "informe a temperatura da caixa em °C";
+  if (hasDot(raw)) return DOT_IN_NUMBER;
   const t = parseTemperature(raw);
   if (t === null) return "temperatura inválida — use dígitos e vírgula";
   if (t < -30 || t > 60) return "temperatura fora do esperado (-30 a 60 °C) — confira o termômetro";

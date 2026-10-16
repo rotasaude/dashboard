@@ -36,6 +36,19 @@ describe("versão", () => {
     });
   });
 
+  it("limites vindos do api (com ponto) aparecem com vírgula e voltam sem perda", () => {
+    const v = labVersion();
+    const a = { ...v.analytes[0], entry_min: 1.5, critical_low: -1.25, reference_ranges: [ { ...v.analytes[0].reference_ranges[0], low: 4.5, high: 150000 } ] };
+    const d = versionDraft({ ...v, analytes: [ a ] });
+    expect(d.analytes[0].entryMin).toBe("1,5");
+    expect(d.analytes[0].criticalLow).toBe("-1,25");
+    expect(d.analytes[0].ranges[0].low).toBe("4,5");
+    expect(d.analytes[0].ranges[0].high).toBe("150000");
+    expect(versionProblem(d)).toBeNull();
+    const body = versionBody(d).analytes[0];
+    expect([ body.entry_min, body.critical_low, body.reference_ranges[0].low, body.reference_ranges[0].high ]).toEqual([ 1.5, -1.25, 4.5, 150000 ]);
+  });
+
   it("parte do modelo do catálogo-base quando não há versão", () => {
     const d = versionDraft(null, labTemplate());
     expect(d.method).toBe("enzimático (GOD-PAP)");
@@ -59,6 +72,13 @@ describe("versão", () => {
       .toBe("componente 2: a fórmula usa k, que não é componente deste exame");
     expect(versionProblem({ ...base, method: " " })).toBe("informe o método");
     expect(versionProblem(base)).toBeNull();
+    const DOT = "use vírgula para decimais e não use ponto de milhar (ex.: 150000 ou 4,5)";
+    expect(versionProblem(with1({ entryMax: "150.000" }))).toBe(`componente 1: ${DOT}`);
+    expect(versionProblem(with1({ criticalLow: "4.5" }))).toBe(`componente 1: ${DOT}`);
+    expect(versionProblem(with1({ ranges: [ { ...range, high: "1.000" } ] }))).toBe(`componente 1, faixa 1: ${DOT}`);
+    expect(versionProblem(with1({ entryMax: "150000" }))).toBeNull();
+    expect(versionProblem(with1({ entryMin: "-1,25", entryMax: "4,5" }))).toBeNull();
+    expect(versionProblem(with1({ criticalLow: "-1,25" }))).toBeNull();
   });
 
   it("D4: casas decimais 0 a 4", () => {
