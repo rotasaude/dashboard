@@ -3,13 +3,13 @@ import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/re
 
 vi.mock("../lib/api", async (importOriginal) => {
   const real = await importOriginal<typeof import("../lib/api")>();
-  return { ...real, fetchCurrentSession: vi.fn(), getLabContext: vi.fn(), listWorklist: vi.fn(), fetchWorklistPdf: vi.fn(), getLabEntry: vi.fn() };
+  return { ...real, fetchCurrentSession: vi.fn(), getLabContext: vi.fn(), listWorklist: vi.fn(), fetchWorklistPdf: vi.fn(), getLabEntry: vi.fn(), enterLabResults: vi.fn() };
 });
 
 import * as api from "../lib/api";
 import { LabWorklist } from "./LabWorklist";
 import { renderWithProviders } from "../test/campaignFixtures";
-import { NOW21B, glucoseEntry, labContext, labUser } from "../test/labFixtures";
+import { NOW21B, glucoseEntry, labResultRow, labContext, labUser } from "../test/labFixtures";
 
 const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
 const ITEM = { item_id: "it2", requisition_id: "rq1", requisition_number: "20260123", barcode: "1000000005",
@@ -22,7 +22,7 @@ afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); });
 beforeEach(() => {
   vi.useFakeTimers({ toFake: [ "Date" ] });
   vi.setSystemTime(new Date(NOW21B));
-  for (const fn of [ api.fetchCurrentSession, api.getLabContext, api.listWorklist, api.fetchWorklistPdf, api.getLabEntry ]) mocked(fn).mockReset();
+  for (const fn of [ api.fetchCurrentSession, api.getLabContext, api.listWorklist, api.fetchWorklistPdf, api.getLabEntry, api.enterLabResults ]) mocked(fn).mockReset();
   mocked(api.fetchCurrentSession).mockResolvedValue(labUser([ "lab_staff" ]));
   mocked(api.getLabContext).mockResolvedValue(labContext());
   mocked(api.listWorklist).mockResolvedValue([ { sector: "biochemistry", bench: "B1", items: [ ITEM ] } ]);
@@ -67,5 +67,84 @@ describe("LabWorklist", () => {
     renderWithProviders(<LabWorklist />);
     const group = await screen.findByRole("region", { name: GROUP });
     expect(within(group).queryByRole("button", { name: "Digitar" })).toBeNull();
+  });
+
+  it("duplo clique em Digitar consulta uma vez só", async () => {
+    let resolve!: (v: unknown) => void;
+    mocked(api.getLabEntry).mockReturnValue(new Promise((r) => { resolve = r; }));
+    renderWithProviders(<LabWorklist />);
+    const group = await screen.findByRole("region", { name: GROUP });
+    const btn = within(group).getByRole("button", { name: "Digitar" });
+    fireEvent.click(btn);
+    fireEvent.click(btn);
+    resolve([ glucoseEntry() ]);
+    expect(await screen.findByLabelText("Glicose (mg/dL)")).not.toBeNull();
+    expect(api.getLabEntry).toHaveBeenCalledTimes(1);
+  });
+
+  it("o liberador nunca chama getLabEntry", async () => {
+    mocked(api.fetchCurrentSession).mockResolvedValue(labUser([ "lab_releaser" ]));
+    renderWithProviders(<LabWorklist />);
+    await screen.findByRole("region", { name: GROUP });
+    expect(api.getLabEntry).not.toHaveBeenCalled();
+  });
+
+  it("falha ao abrir mostra a mensagem e some ao mudar filtro", async () => {
+    mocked(api.getLabEntry).mockRejectedValue(new Error("boom"));
+    renderWithProviders(<LabWorklist />);
+    const group = await screen.findByRole("region", { name: GROUP });
+    fireEvent.click(within(group).getByRole("button", { name: "Digitar" }));
+    await screen.findByRole("alert");
+    fireEvent.click(screen.getByLabelText("Só urgentes"));
+    await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+  });
+
+  it("exame que sumiu avisa para atualizar o mapa", async () => {
+    mocked(api.getLabEntry).mockResolvedValue([]);
+    renderWithProviders(<LabWorklist />);
+    const group = await screen.findByRole("region", { name: GROUP });
+    fireEvent.click(within(group).getByRole("button", { name: "Digitar" }));
+    expect(await screen.findByText(/não está mais para digitar/)).not.toBeNull();
+  });
+
+  it("falha do PDF mostra a mensagem", async () => {
+    mocked(api.fetchWorklistPdf).mockRejectedValue(new Error("boom"));
+    renderWithProviders(<LabWorklist />);
+    await screen.findByRole("region", { name: GROUP });
+    fireEvent.click(screen.getByRole("button", { name: "Baixar PDF do mapa" }));
+    expect(await screen.findByRole("alert")).not.toBeNull();
+  });
+
+  async function openAndSave() {
+    mocked(api.enterLabResults).mockResolvedValue([ labResultRow() ]);
+    renderWithProviders(<LabWorklist />);
+    const group = await screen.findByRole("region", { name: GROUP });
+    fireEvent.click(within(group).getByRole("button", { name: "Digitar" }));
+    fireEvent.change(await screen.findByLabelText("Glicose (mg/dL)"), { target: { value: "90" } });
+  }
+
+  it("depois de salvar relê o item e o mapa", async () => {
+    await openAndSave();
+    const before = mocked(api.listWorklist).mock.calls.length;
+    fireEvent.click(screen.getByRole("button", { name: "Salvar resultado" }));
+    expect(await screen.findByText("Resultado salvo.")).not.toBeNull();
+    await waitFor(() => expect(api.getLabEntry).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(mocked(api.listWorklist).mock.calls.length).toBeGreaterThan(before));
+  });
+
+  it("falha ao reler depois de salvar diz que o resultado foi salvo", async () => {
+    await openAndSave();
+    mocked(api.getLabEntry).mockRejectedValue(new Error("network"));
+    fireEvent.click(screen.getByRole("button", { name: "Salvar resultado" }));
+    expect(await screen.findByText(/resultado salvo, mas não foi possível reler/)).not.toBeNull();
+  });
+
+  it("invalid_transition não diz 'resultado salvo'", async () => {
+    await openAndSave();
+    mocked(api.enterLabResults).mockRejectedValue(new api.ApiError(409, { error: "invalid_transition" }, "x"));
+    mocked(api.getLabEntry).mockRejectedValue(new Error("network"));
+    fireEvent.click(screen.getByRole("button", { name: "Salvar resultado" }));
+    expect(await screen.findByText(/não foi possível reler o exame/)).not.toBeNull();
+    expect(screen.queryByText(/resultado salvo, mas/)).toBeNull();
   });
 });

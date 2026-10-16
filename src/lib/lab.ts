@@ -363,3 +363,8 @@ export function labError(err: unknown): string {
 export async function refreshLab(client: QueryClient): Promise<void> {
   await Promise.all(MOVING_KEYS.map((key) => client.invalidateQueries({ queryKey: [ key ] })));
 }
+
+// Releitura do exame que falhou: se o resultado já tinha sido salvo, a mensagem diz isso.
+export function rereadError(saved: boolean, err: unknown): string {
+  return saved ? `resultado salvo, mas não foi possível reler o exame — ${labError(err)}` : `não foi possível reler o exame — ${labError(err)}`;
+}

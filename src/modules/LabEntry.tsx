@@ -6,7 +6,7 @@
 import { useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { getLabEntry, listLabEntryItems, type LabEntryItem, type LabEntryListItem } from "../lib/api";
-import { itemStatusLabel, labError, refreshLab } from "../lib/lab";
+import { itemStatusLabel, labError, refreshLab, rereadError } from "../lib/lab";
 import { Panel } from "../components/Panel";
 import { secondaryButtonStyle } from "../components/formStyles";
 import { LabGate } from "./lab/LabGate";
@@ -73,7 +73,7 @@ function EntryBody() {
       const [ fresh ] = await getLabEntry({ itemId });
       setEntry((cur) => (cur && cur.item_id === itemId ? fresh ?? null : cur));
     } catch (err) {
-      setError(saved ? `resultado salvo, mas não foi possível reler o exame — ${labError(err)}` : `não foi possível reler o exame — ${labError(err)}`);
+      setError(rereadError(saved, err));
     }
     void Promise.resolve().then(() => refreshLab(queryClient)).catch(() => undefined);
   }

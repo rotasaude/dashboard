@@ -2,10 +2,10 @@
 // bancada, com filtros de urgência, data e pendentes, e o PDF com os mesmos
 // filtros. A equipe digita direto do mapa; o liberador só vê. Sem polling.
 // Nada de etiqueta ou paciente em log, console ou storage.
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchWorklistPdf, getLabEntry, listWorklist, type LabEntryItem, type LabWorklistItem, type LabWorklistQuery } from "../lib/api";
-import { LAB_WORKLIST_KEY, SECTOR_LABEL, itemStatusLabel, labError, sectorLabel, type LabRoles } from "../lib/lab";
+import { LAB_WORKLIST_KEY, SECTOR_LABEL, itemStatusLabel, labError, rereadError, refreshLab, sectorLabel, type LabRoles } from "../lib/lab";
 import { todayInCity } from "../lib/campaigns";
 import { fmtDateTime } from "../lib/format";
 import { Panel } from "../components/Panel";
@@ -35,31 +35,42 @@ function WorklistBody({ providerId, roles }: { providerId: string; roles: LabRol
   const [ pending, setPending ] = useState(true);
   const [ entry, setEntry ] = useState<LabEntryItem | null>(null);
   const [ error, setError ] = useState<string | null>(null);
+  const [ opening, setOpening ] = useState(false);
+  const seq = useRef(0);
+  const queryClient = useQueryClient();
   const q: LabWorklistQuery = {
     providerId, ...(sector ? { sector } : {}), ...(bench.trim() ? { bench: bench.trim() } : {}), ...(urgent ? { urgent: true } : {}),
     ...(date ? { date } : {}), ...(pending ? { pending: true } : {})
   };
   const groups = useQuery({ queryKey: [ LAB_WORKLIST_KEY, q ], queryFn: () => listWorklist(q), gcTime: 0, staleTime: 0, retry: false });
 
+  // a abertura mais recente vence; cada GET /lab/entry grava trilha de acesso
   async function openEntry(item: LabWorklistItem) {
+    if (opening) return;
+    const mine = ++seq.current;
+    setOpening(true);
     setError(null);
     try {
       const [ found ] = await getLabEntry({ itemId: item.item_id });
+      if (mine !== seq.current) return;
       setEntry(found ?? null);
       if (!found) setError("este exame não está mais para digitar — atualize o mapa");
     } catch (err) {
-      setError(labError(err));
+      if (mine === seq.current) setError(labError(err));
+    } finally {
+      setOpening(false);
     }
   }
 
-  async function reloadEntry(itemId: string) {
+  async function reloadEntry(itemId: string, saved: boolean) {
     try {
       const [ fresh ] = await getLabEntry({ itemId });
-      setEntry(fresh ?? null);
+      setEntry((cur) => (cur && cur.item_id === itemId ? fresh ?? null : cur));
       void groups.refetch();
     } catch (err) {
-      setError(labError(err));
+      setError(rereadError(saved, err));
     }
+    void Promise.resolve().then(() => refreshLab(queryClient)).catch(() => undefined);
   }
 
   async function pdf() {
@@ -73,15 +84,15 @@ function WorklistBody({ providerId, roles }: { providerId: string; roles: LabRol
       <div style={{ ...row, alignItems: "flex-end" }}>
         <label style={fieldLabel}>
           Setor
-          <select value={sector} style={inputStyle} onChange={(e) => setSector(e.target.value)}>
+          <select value={sector} style={inputStyle} onChange={(e) => { setSector(e.target.value); setError(null); }}>
             <option value="">todos</option>
             {Object.entries(SECTOR_LABEL).map(([ k, v ]) => <option key={k} value={k}>{v}</option>)}
           </select>
         </label>
-        <label style={fieldLabel}>Bancada<input value={bench} style={inputStyle} onChange={(e) => setBench(e.target.value)} /></label>
-        <label style={fieldLabel}>Data<input type="date" value={date} style={inputStyle} onChange={(e) => setDate(e.target.value)} /></label>
-        <label style={checkLabel}><input type="checkbox" checked={urgent} onChange={(e) => setUrgent(e.target.checked)} />Só urgentes</label>
-        <label style={checkLabel}><input type="checkbox" checked={pending} onChange={(e) => setPending(e.target.checked)} />Só pendentes</label>
+        <label style={fieldLabel}>Bancada<input value={bench} style={inputStyle} onChange={(e) => { setBench(e.target.value); setError(null); }} /></label>
+        <label style={fieldLabel}>Data<input type="date" value={date} style={inputStyle} onChange={(e) => { setDate(e.target.value); setError(null); }} /></label>
+        <label style={checkLabel}><input type="checkbox" checked={urgent} onChange={(e) => { setUrgent(e.target.checked); setError(null); }} />Só urgentes</label>
+        <label style={checkLabel}><input type="checkbox" checked={pending} onChange={(e) => { setPending(e.target.checked); setError(null); }} />Só pendentes</label>
         <ActionButton variant="secondary" onClick={pdf}>Baixar PDF do mapa</ActionButton>
       </div>
       {error && <p role="alert" style={alert}>{error}</p>}
@@ -99,14 +110,14 @@ function WorklistBody({ providerId, roles }: { providerId: string; roles: LabRol
               { label: "Recebida", w: "1fr", render: (i) => fmtDateTime(i.received_at) },
               { label: "Situação", w: "0.9fr", render: (i) => itemStatusLabel(i.status) },
               ...(roles.staff ? [ { label: "", w: "auto", card: "actions" as const, render: (i: LabWorklistItem) => (
-                <button type="button" style={secondaryButtonStyle} onClick={() => void openEntry(i)}>Digitar</button>
+                <button type="button" style={secondaryButtonStyle} aria-disabled={opening || undefined} onClick={() => void openEntry(i)}>Digitar</button>
               ) } ] : [])
             ]}
             rows={g.items} rowKey={(i) => i.item_id}
           />
         </Panel>
       ))}
-      {entry && <ResultEntryForm key={entry.item_id} item={entry} onSaved={() => void reloadEntry(entry.item_id)} onClose={() => setEntry(null)} />}
+      {entry && <ResultEntryForm key={entry.item_id} item={entry} onSaved={() => void reloadEntry(entry.item_id, true)} onStale={() => void reloadEntry(entry.item_id, false)} onClose={() => setEntry(null)} />}
     </div>
   );
 }
