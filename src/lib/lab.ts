@@ -311,6 +311,8 @@ const ERRORS: Record<string, string> = {
   already_assigned: "esta pessoa já é liberadora deste laboratório",
   user_missing_role: "a pessoa não tem o papel de liberador — dê o papel na Equipe antes",
   provider_uses_municipal_lab: "este prestador usa o laboratório municipal — o resultado sai pela liberação do laudo",
+  item_frozen: "este exame está num laudo aguardando assinatura ICP — assine ou aguarde a devolução antes de alterar",
+  rectify_items_mismatch: "a lista de exames não bate com o que mudou — desmarque os sem alteração e marque os alterados (veja as marcas na lista)",
   missing_role: "seu papel não permite esta ação",
   not_unit_staff: "você não atua nesta unidade",
   unit_does_not_collect: UNIT_DOES_NOT_COLLECT,

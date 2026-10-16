@@ -81,6 +81,53 @@ describe("RectifyForm", () => {
   });
 });
 
+describe("RectifyForm — rectify_items_mismatch", () => {
+  const ITEMS2 = [
+    ...ITEMS,
+    { ...labItem({ id: "it3", label: "Ureia", status: "released" }), restriction_note: null, results: [ labResultRow() ] }
+  ];
+
+  it("422: mensagem clara, marca os itens e mantém o que foi digitado", async () => {
+    mocked(api.rectifyLabReport).mockRejectedValueOnce(new api.ApiError(422, { error: "rectify_items_mismatch", unchanged: [ "it2" ], unlisted: [ "it3" ] }, "x"));
+    const report = labReport({ item_ids: [ "it2", "it3" ] });
+    renderWithProviders(<RectifyForm guard={NOGUARD} report={report} items={ITEMS2} council="CRF" onDone={vi.fn()} onConflict={vi.fn()} onCancel={vi.fn()} />);
+    const form = await screen.findByRole("region", { name: "Retificar laudo v1" });
+    fill(form);
+    fireEvent.click(within(form).getByLabelText("Assinatura eletrônica avançada (código do autenticador)"));
+    fireEvent.change(within(form).getByLabelText("Código do autenticador"), { target: { value: "123456" } });
+    fireEvent.click(within(form).getByLabelText("Ureia"));
+    fireEvent.click(within(form).getByRole("button", { name: "Emitir laudo retificado" }));
+    expect((await within(form).findByRole("alert")).textContent).toContain("a lista de exames não bate com o que mudou");
+    expect(within(form).getByText("sem alteração — desmarque")).not.toBeNull();
+    expect(within(form).getByText("alterado — marque")).not.toBeNull();
+    expect((within(form).getByLabelText("Motivo da retificação") as HTMLTextAreaElement).value).toBe("valor de glicose digitado trocado");
+    expect((within(form).getByLabelText("Glicose") as HTMLInputElement).checked).toBe(true);
+    expect((within(form).getByLabelText("Ureia") as HTMLInputElement).checked).toBe(false);
+    expect(within(form).getByRole("group", { name: "Contato 1" })).not.toBeNull();
+  });
+
+  it("corrigir a seleção e reenviar tira as marcas", async () => {
+    mocked(api.rectifyLabReport)
+      .mockRejectedValueOnce(new api.ApiError(422, { error: "rectify_items_mismatch", unchanged: [ "it2" ], unlisted: [] }, "x"))
+      .mockResolvedValueOnce(labReport({ id: "lr2", version: 2 }));
+    const onDone = vi.fn();
+    const report = labReport({ item_ids: [ "it2", "it3" ] });
+    renderWithProviders(<RectifyForm guard={NOGUARD} report={report} items={ITEMS2} council="CRF" onDone={onDone} onConflict={vi.fn()} onCancel={vi.fn()} />);
+    const form = await screen.findByRole("region", { name: "Retificar laudo v1" });
+    fill(form);
+    fireEvent.click(within(form).getByLabelText("Assinatura eletrônica avançada (código do autenticador)"));
+    fireEvent.change(within(form).getByLabelText("Código do autenticador"), { target: { value: "123456" } });
+    fireEvent.click(within(form).getByRole("button", { name: "Emitir laudo retificado" }));
+    await within(form).findByText("sem alteração — desmarque");
+    fireEvent.click(within(form).getByLabelText("Glicose"));
+    fireEvent.change(within(form).getByLabelText("Código do autenticador"), { target: { value: "222222" } });
+    fireEvent.click(within(form).getByRole("button", { name: "Emitir laudo retificado" }));
+    await waitFor(() => expect(onDone).toHaveBeenCalled());
+    expect(within(form).queryByText("sem alteração — desmarque")).toBeNull();
+    expect(api.rectifyLabReport).toHaveBeenLastCalledWith("lr1", expect.objectContaining({ item_ids: [ "it3" ] }));
+  });
+});
+
 describe("LabReportList", () => {
   it("liberado pode ser retificado; retificado e pendente não", async () => {
     const onRectify = vi.fn();

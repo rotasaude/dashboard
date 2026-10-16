@@ -56,6 +56,16 @@ describe("ResultEntryForm", () => {
     expect(screen.getByText("falta um valor da conta deste componente — digite os componentes juntos")).not.toBeNull();
   });
 
+  it("422 item_frozen: mostra a frase e mantém o valor digitado", async () => {
+    mocked(api.enterLabResults).mockRejectedValueOnce(new api.ApiError(422, { error: "item_frozen" }, "x"));
+    renderWithProviders(<ResultEntryForm item={glucoseEntry()} onSaved={vi.fn()} onClose={vi.fn()} />);
+    const input = await screen.findByLabelText("Glicose (mg/dL)");
+    fireEvent.change(input, { target: { value: "90" } });
+    fireEvent.click(screen.getByRole("button", { name: "Salvar resultado" }));
+    expect((await screen.findByRole("alert")).textContent).toBe("este exame está num laudo aguardando assinatura ICP — assine ou aguarde a devolução antes de alterar");
+    expect((input as HTMLInputElement).value).toBe("90");
+  });
+
   it("bloqueia fora do limite sem chamar o api", async () => {
     renderWithProviders(<ResultEntryForm item={glucoseEntry()} onSaved={vi.fn()} onClose={vi.fn()} />);
     fireEvent.change(await screen.findByLabelText("Glicose (mg/dL)"), { target: { value: "1600" } });

@@ -34,6 +34,8 @@ export function RectifyForm({ report, items, council, guard, onDone, onConflict,
   const [ icpRefused, setIcpRefused ] = useState(false);
   const [ totp, setTotp ] = useState("");
   const [ error, setError ] = useState<string | null>(null);
+  // rectify_items_mismatch: itens a desmarcar (sem alteração) e a marcar (alterados e não listados).
+  const [ mismatch, setMismatch ] = useState<{ unchanged: string[]; unlisted: string[] }>({ unchanged: [], unlisted: [] });
   const available = hasFeature(user, "digital_signature") && !icpRefused;
   const signature: LabSignatureKind = onlyIcp(council) ? "icp" : available ? (chosen ?? "icp") : "advanced";
   const noIcpForDoctor = onlyIcp(council) && !available;
@@ -49,6 +51,7 @@ export function RectifyForm({ report, items, council, guard, onDone, onConflict,
     if (problem) { setError(problem); return; }
     if (!guard.begin()) return;
     setError(null);
+    setMismatch({ unchanged: [], unlisted: [] });
     const code = totp;
     setTotp("");
     let out: LabReportSummary;
@@ -57,6 +60,11 @@ export function RectifyForm({ report, items, council, guard, onDone, onConflict,
       out = await rectifyLabReport(report.id, signature === "advanced" ? { ...body, totp: code } : body);
     } catch (err) {
       const why = errorCode(err);
+      if (why === "rectify_items_mismatch") {
+        const b = (err as { body?: { unchanged?: unknown; unlisted?: unknown } }).body;
+        const ids = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);
+        setMismatch({ unchanged: ids(b?.unchanged), unlisted: ids(b?.unlisted) });
+      }
       if (why === "invalid_transition") { onConflict(labError(err)); return; }
       if (why === "icp_required" && available) setChosen("icp");
       if (why === "signature_unavailable") {
@@ -76,11 +84,15 @@ export function RectifyForm({ report, items, council, guard, onDone, onConflict,
       <fieldset style={fieldset}>
         <legend style={legend}>Exames do laudo novo</legend>
         {released.map((i) => (
-          <label key={i.id} style={checkLabel}>
-            <input type="checkbox" checked={itemIds.includes(i.id)}
-              onChange={(e) => setItemIds((l) => (e.target.checked ? [ ...l, i.id ] : l.filter((x) => x !== i.id)))} />
-            {i.label}
-          </label>
+          <div key={i.id}>
+            <label style={checkLabel}>
+              <input type="checkbox" checked={itemIds.includes(i.id)}
+                onChange={(e) => setItemIds((l) => (e.target.checked ? [ ...l, i.id ] : l.filter((x) => x !== i.id)))} />
+              {i.label}
+            </label>
+            {mismatch.unchanged.includes(i.id) && <span role="note" style={alert}>sem alteração — desmarque</span>}
+            {mismatch.unlisted.includes(i.id) && <span role="note" style={alert}>alterado — marque</span>}
+          </div>
         ))}
       </fieldset>
       <label style={fieldLabel}>

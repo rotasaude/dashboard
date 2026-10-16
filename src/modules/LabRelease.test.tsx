@@ -271,6 +271,18 @@ describe("LabRelease", () => {
     await waitFor(() => expect(api.listReleases).toHaveBeenCalledTimes(2));
   });
 
+  it("item_frozen em Usar X: explica e relê a conferência", async () => {
+    mocked(api.getReleaseRequisition).mockResolvedValue(releaseRequisition({ items: [ {
+      ...labItem({ id: "it2", label: "Glicose", status: "typed" }), restriction_note: null,
+      results: [ labResultRow({ id: "r1", value: "410", effective: true }), labResultRow({ id: "r2", value: "98", effective: false }) ]
+    } ] }));
+    mocked(api.chooseLabResult).mockRejectedValue(new api.ApiError(422, { error: "item_frozen" }, "x"));
+    const review = await openReview();
+    fireEvent.click(within(review).getByRole("button", { name: "Usar 98" }));
+    expect(await screen.findByText(/aguardando assinatura ICP — assine ou aguarde a devolução/)).not.toBeNull();
+    await waitFor(() => expect(api.listReleases).toHaveBeenCalledTimes(2));
+  });
+
   it("final L1: com um aviso crítico sendo gravado, Liberar não grava", async () => {
     mocked(api.getReleaseRequisition).mockResolvedValue(critItem());
     let finish: (v: unknown) => void = () => {};

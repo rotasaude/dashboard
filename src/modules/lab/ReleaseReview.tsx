@@ -93,7 +93,7 @@ export function ReleaseReview({ requisitionId, council, onReleased, onConflict, 
       try {
         await chooseLabResult(row.id);
       } catch (err) {
-        if (errorCode(err) === "invalid_transition") { onConflict(labError(err)); return; }
+        if (errorCode(err) === "invalid_transition" || errorCode(err) === "item_frozen") { onConflict(labError(err)); return; }
         setError(labError(err));
         return;
       }
