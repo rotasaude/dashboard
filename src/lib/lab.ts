@@ -347,6 +347,10 @@ const ERRORS: Record<string, string> = {
   duplicate_name: "já existe um motivo com este nome",
   invalid_delivery_days: "prazo de entrega inválido — use de 1 a 90 dias",
   invalid_bench: "bancada inválida — use até 60 caracteres",
+  not_critical: "este valor não é crítico — não há aviso a registrar",
+  invalid_notice: "aviso inválido — confira quem foi avisado (até 120 caracteres), a função (até 60), o canal e a hora (não pode ser no futuro)",
+  invalid_samples: "nenhuma amostra para imprimir etiqueta",
+  invalid_collected_at: "data e hora da coleta inválidas ou no futuro",
   too_many_requests: "muitas tentativas seguidas — espere um minuto e tente de novo"
 };
 

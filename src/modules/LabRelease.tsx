@@ -76,7 +76,7 @@ function ReleaseBody({ providerId, onNavigate }: { providerId: string; onNavigat
           />
         )}
         {noticeFor && (
-          <CriticalNoticeForm resultId={noticeFor.result_id} label={noticeFor.analyte_name} onCancel={() => setNoticeFor(null)}
+          <CriticalNoticeForm key={noticeFor.result_id} resultId={noticeFor.result_id} label={noticeFor.analyte_name} onCancel={() => setNoticeFor(null)}
             onDone={() => { setNoticeFor(null); setMessage({ kind: "ok", text: "Aviso registrado." }); void criticals.refetch(); void after(); }} />
         )}
       </Panel>

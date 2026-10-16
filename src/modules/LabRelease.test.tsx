@@ -149,8 +149,9 @@ describe("LabRelease", () => {
     mocked(api.getLabContext).mockResolvedValue(labContext({ releaser_of: [ "pv9" ], council: "CRM" }));
     const review = await openReview();
     expect(within(review).getByText("médico não libera nesta cidade — a assinatura ICP-Brasil não está ativa")).not.toBeNull();
-    fireEvent.click(within(review).getByRole("button", { name: "Liberar laudo" }));
-    expect((await within(review).findByRole("alert")).textContent).toBe("médico não libera nesta cidade — a assinatura ICP-Brasil não está ativa");
+    const button = within(review).getByRole("button", { name: "Liberar laudo" });
+    expect(button.getAttribute("aria-disabled")).toBe("true");
+    fireEvent.click(button);
     expect(api.releaseRequisition).not.toHaveBeenCalled();
   });
 
@@ -211,6 +212,151 @@ describe("LabRelease", () => {
     const message = await within(review).findByRole("alert");
     expect(message.textContent).toContain("valor escolhido, mas não foi possível reler a requisição");
     expect(within(review).getByRole("list", { name: "Glicose · valores" })).not.toBeNull();
+  });
+
+  const critItem = (over: object = {}) => releaseRequisition({ items: [ {
+    ...labItem({ id: "it2", label: "Glicose", status: "typed" }), restriction_note: null,
+    results: [ labResultRow({ id: "r1", value: "450", flag: "critical_high", notified: false }) ], ...over
+  } ] });
+  const fillAdvanced = (review: HTMLElement) => {
+    fireEvent.click(within(review).getByLabelText("Assinatura eletrônica avançada (código do autenticador)"));
+    fireEvent.change(within(review).getByLabelText("Código do autenticador"), { target: { value: "123456" } });
+  };
+
+  it("I1: com uma liberação em andamento, nenhum outro liberar nem Usar sai", async () => {
+    mocked(api.getReleaseRequisition).mockResolvedValue(critItem());
+    let finish: (v: unknown) => void = () => {};
+    mocked(api.releaseRequisition).mockReturnValue(new Promise((res) => { finish = res; }));
+    const review = await openReview();
+    fillAdvanced(review);
+    fireEvent.click(within(review).getByRole("button", { name: "Liberar laudo" }));
+    fireEvent.click(within(review).getByRole("button", { name: "Liberar sem aviso" }));
+    await waitFor(() => expect(api.releaseRequisition).toHaveBeenCalledTimes(1));
+    fillAdvanced(review);
+    fireEvent.click(within(review).getByRole("button", { name: /^Liberar laudo/ }));
+    fireEvent.click(within(review).queryByRole("button", { name: "Liberar sem aviso" }) ?? review);
+    expect(within(review).queryByRole("group", { name: "crítico sem aviso" })).toBeNull();
+    expect(api.releaseRequisition).toHaveBeenCalledTimes(1);
+    finish(labReport());
+    expect(await screen.findByText("Laudo liberado com assinatura eletrônica avançada.")).not.toBeNull();
+  });
+
+  it("I1: Usar X em clique duplo ou em sequência manda uma escolha só", async () => {
+    mocked(api.getReleaseRequisition).mockResolvedValue(releaseRequisition({ items: [ {
+      ...labItem({ id: "it2", label: "Glicose", status: "typed" }), restriction_note: null,
+      results: [ labResultRow({ id: "r1", value: "410", effective: true }), labResultRow({ id: "r2", value: "98", effective: false }),
+        labResultRow({ id: "r3", value: "120", effective: false }) ]
+    } ] }));
+    let finish: (v: unknown) => void = () => {};
+    mocked(api.chooseLabResult).mockReturnValue(new Promise((res) => { finish = res; }));
+    const review = await openReview();
+    const use98 = within(review).getByRole("button", { name: "Usar 98" });
+    const use120 = within(review).getByRole("button", { name: "Usar 120" });
+    fireEvent.click(use98);
+    fireEvent.click(use98);
+    fireEvent.click(use120);
+    expect(api.chooseLabResult).toHaveBeenCalledTimes(1);
+    await act(async () => { finish(labResultRow({ id: "r9" })); });
+  });
+
+  it("I2: trocar de crítico zera o formulário de aviso", async () => {
+    mocked(api.getReleaseRequisition).mockResolvedValue(releaseRequisition({ items: [ {
+      ...labItem({ id: "it2", label: "Glicose", status: "typed" }), restriction_note: null,
+      results: [ labResultRow({ id: "r1", analyte_key: "a", name: "Glicose", flag: "critical_high", notified: false }),
+        labResultRow({ id: "r2", analyte_key: "b", name: "Potássio", flag: "critical_high", notified: false }) ]
+    } ] }));
+    const review = await openReview();
+    fireEvent.click(within(review).getAllByRole("button", { name: "Registrar aviso" })[0]);
+    fireEvent.change(within(review).getByLabelText("Quem foi avisado"), { target: { value: "Dra. Ana" } });
+    fireEvent.click(within(review).getAllByRole("button", { name: "Registrar aviso" })[1]);
+    const form = within(review).getByRole("region", { name: "Aviso do valor crítico — Potássio" });
+    expect((within(form).getByLabelText("Quem foi avisado") as HTMLInputElement).value).toBe("");
+  });
+
+  it("I3/L8: limites de tamanho dos campos do aviso", async () => {
+    mocked(api.getReleaseRequisition).mockResolvedValue(critItem());
+    const review = await openReview();
+    fireEvent.click(within(review).getByRole("button", { name: "Registrar aviso" }));
+    expect(within(review).getByLabelText("Quem foi avisado").getAttribute("maxlength")).toBe("120");
+    expect(within(review).getByLabelText("Função").getAttribute("maxlength")).toBe("60");
+  });
+
+  it("L2: Liberar sem aviso libera; depois de avisar e reler, Liberar vai direto ao api", async () => {
+    mocked(api.getReleaseRequisition).mockResolvedValueOnce(critItem());
+    const review = await openReview();
+    fillAdvanced(review);
+    fireEvent.click(within(review).getByRole("button", { name: "Liberar laudo" }));
+    fireEvent.click(within(review).getByRole("button", { name: "Liberar sem aviso" }));
+    await waitFor(() => expect(api.releaseRequisition).toHaveBeenCalledWith("rq1", { item_ids: [ "it2" ], signature: "advanced", totp: "123456" }));
+  });
+
+  it("L2: aviso registrado e releitura com notified: true — Liberar não pede confirmação", async () => {
+    mocked(api.getReleaseRequisition).mockResolvedValueOnce(critItem()).mockResolvedValue(
+      critItem({ results: [ labResultRow({ id: "r1", value: "450", flag: "critical_high", notified: true }) ] }));
+    mocked(api.recordCriticalNotice).mockResolvedValue(undefined as never);
+    const review = await openReview();
+    fireEvent.click(within(review).getByRole("button", { name: "Registrar aviso" }));
+    const form = within(review).getByRole("region", { name: "Aviso do valor crítico — Glicose" });
+    fireEvent.change(within(form).getByLabelText("Quem foi avisado"), { target: { value: "Dra. Ana" } });
+    fireEvent.change(within(form).getByLabelText("Função"), { target: { value: "médica" } });
+    fireEvent.change(within(form).getByLabelText("Como"), { target: { value: "telefone" } });
+    fireEvent.click(within(form).getByRole("button", { name: "Registrar aviso" }));
+    await waitFor(() => expect(within(review).queryByRole("button", { name: "Registrar aviso" })).toBeNull());
+    fillAdvanced(review);
+    fireEvent.click(within(review).getByRole("button", { name: "Liberar laudo" }));
+    await waitFor(() => expect(api.releaseRequisition).toHaveBeenCalledTimes(1));
+  });
+
+  it("L2: no_active_certificate mostra o atalho para Assinatura digital; icp_required passa a ICP", async () => {
+    mocked(api.releaseRequisition).mockRejectedValueOnce(new api.ApiError(422, { error: "no_active_certificate" }, "x"));
+    const onNavigate = vi.fn();
+    renderWithProviders(<LabRelease onNavigate={onNavigate} />);
+    fireEvent.click(await within(await screen.findByRole("region", { name: "Fila de liberação" })).findByRole("button", { name: "Conferir" }));
+    const review = await screen.findByRole("region", { name: "Conferência da requisição 00000123" });
+    fireEvent.click(within(review).getByRole("button", { name: "Liberar laudo" }));
+    fireEvent.click(await within(review).findByRole("button", { name: "Ir para Assinatura digital" }));
+    expect(onNavigate).toHaveBeenCalledWith("signature");
+    mocked(api.releaseRequisition).mockRejectedValueOnce(new api.ApiError(422, { error: "icp_required" }, "x"));
+    fireEvent.click(within(review).getByLabelText("Assinatura eletrônica avançada (código do autenticador)"));
+    fireEvent.change(within(review).getByLabelText("Código do autenticador"), { target: { value: "123456" } });
+    fireEvent.click(within(review).getByRole("button", { name: "Liberar laudo" }));
+    await waitFor(() => expect((within(review).getByLabelText("ICP-Brasil (assina em Pendentes de assinatura)") as HTMLInputElement).checked).toBe(true));
+  });
+
+  it("L3: signature_unavailable para médico mostra a frase do médico e bloqueia Liberar", async () => {
+    mocked(api.getLabContext).mockResolvedValue(labContext({ releaser_of: [ "pv9" ], council: "CRM" }));
+    mocked(api.releaseRequisition).mockRejectedValueOnce(new api.ApiError(422, { error: "signature_unavailable" }, "x"));
+    const review = await openReview();
+    fireEvent.click(within(review).getByRole("button", { name: "Liberar laudo" }));
+    expect((await within(review).findByRole("alert")).textContent).toBe("médico não libera nesta cidade — a assinatura ICP-Brasil não está ativa");
+    fireEvent.click(within(review).getByRole("button", { name: "Liberar laudo" }));
+    expect(api.releaseRequisition).toHaveBeenCalledTimes(1);
+  });
+
+  it("L3: signature_unavailable para outro conselho esconde a ICP", async () => {
+    mocked(api.releaseRequisition).mockRejectedValueOnce(new api.ApiError(422, { error: "signature_unavailable" }, "x"));
+    const review = await openReview();
+    fireEvent.click(within(review).getByRole("button", { name: "Liberar laudo" }));
+    await within(review).findByRole("alert");
+    expect(within(review).queryByLabelText("ICP-Brasil (assina em Pendentes de assinatura)")).toBeNull();
+  });
+
+  it("L4: desmarcar o exame crítico fecha a confirmação", async () => {
+    mocked(api.getReleaseRequisition).mockResolvedValue(critItem());
+    const review = await openReview();
+    fillAdvanced(review);
+    fireEvent.click(within(review).getByRole("button", { name: "Liberar laudo" }));
+    expect(within(review).getByRole("group", { name: "crítico sem aviso" })).not.toBeNull();
+    fireEvent.click(within(review).getByRole("checkbox"));
+    expect(within(review).queryByRole("group", { name: "crítico sem aviso" })).toBeNull();
+  });
+
+  it("L7: conferência com erro de leitura tem Fechar", async () => {
+    mocked(api.getReleaseRequisition).mockRejectedValue(new api.ApiError(500, { error: "boom" }, "x"));
+    renderWithProviders(<LabRelease onNavigate={vi.fn()} />);
+    fireEvent.click(await within(await screen.findByRole("region", { name: "Fila de liberação" })).findByRole("button", { name: "Conferir" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Fechar" }));
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 
   it("sem releitura automática: a fila e os críticos são lidos uma vez", async () => {

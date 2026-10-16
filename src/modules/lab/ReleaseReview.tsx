@@ -5,7 +5,7 @@
 // (aviso antes ou confirmação de liberar sem aviso), exames a liberar
 // (parcial quando nem todos) e a assinatura. O código do autenticador é
 // apagado antes de cada envio; 409 devolve à fila.
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   chooseLabResult, errorCode, getReleaseRequisition, releaseRequisition,
@@ -19,7 +19,7 @@ import { fmtDateTime } from "../../lib/format";
 import type { ModuleId } from "../../shell/modules";
 import { ActionButton } from "../../components/ActionButton";
 import { Tag } from "../../components/Tag";
-import { buttonStyle, secondaryButtonStyle } from "../../components/formStyles";
+import { secondaryButtonStyle } from "../../components/formStyles";
 import { CriticalNoticeForm } from "./CriticalNoticeForm";
 import { NO_ICP_FOR_DOCTOR, SignatureChoice } from "./SignatureChoice";
 import { alert, box, checkLabel, list, muted, panel, row, title } from "../exams/styles";
@@ -48,27 +48,47 @@ export function ReleaseReview({ requisitionId, council, onReleased, onConflict, 
   const [ certificateLink, setCertificateLink ] = useState(false);
   const [ confirming, setConfirming ] = useState(false);
   const [ noticeFor, setNoticeFor ] = useState<LabResultRow | null>(null);
+  // I1: uma ação de gravação por vez na conferência (liberar ou escolher valor).
+  const inFlight = useRef(false);
+  const [ busy, setBusy ] = useState(false);
+  const releasedOnce = useRef(false);
+  // L3: a ICP foi recusada como indisponível nesta sessão — some das opções.
+  const [ icpRefused, setIcpRefused ] = useState(false);
   const r = query.data;
 
   // Uma releitura que falha não derruba a conferência: enquanto há dado, ele fica na tela.
   if (!r) {
-    if (query.isError) return <p role="alert" style={alert}>{labError(query.error)}</p>;
+    if (query.isError) {
+      return (
+        <div style={row}>
+          <p role="alert" style={alert}>{labError(query.error)}</p>
+          <button type="button" style={secondaryButtonStyle} onClick={onClose}>Fechar</button>
+        </div>
+      );
+    }
     return <p className="mono" style={muted}>carregando a requisição…</p>;
   }
+  const available = icpAvailable && !icpRefused;
 
   const releasable = r.items.filter((i) => i.status === "typed");
   const chosenIds = selected ?? releasable.map((i) => i.id);
-  const noIcpForDoctor = onlyIcp(council) && !icpAvailable;
-  const signature: LabSignatureKind = onlyIcp(council) ? "icp" : icpAvailable ? kind : "advanced";
+  const noIcpForDoctor = onlyIcp(council) && !available;
+  const signature: LabSignatureKind = onlyIcp(council) ? "icp" : available ? kind : "advanced";
   const unnotified = r.items
     .filter((i) => chosenIds.includes(i.id))
-    .flatMap((i) => i.results.filter((x) => x.effective && isCritical(x.flag) && x.notified === false));
-  const partial = chosenIds.length < r.items.filter((i) => i.status !== "cancelled" && i.status !== "released").length;
+    .flatMap((i) => i.results.filter((x) => x.effective && isCritical(x.flag) && x.notified !== true));
+  const base = r.items.filter((i) => i.status !== "cancelled" && i.status !== "released");
+  const partial = chosenIds.length < base.length;
 
   async function choose(row: LabResultRow) {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    setBusy(true);
     setError(null);
-    try { await chooseLabResult(row.id); } catch (err) { setError(labError(err)); return; }
-    await reread("valor escolhido");
+    try {
+      try { await chooseLabResult(row.id); } catch (err) { setError(labError(err)); return; }
+      await reread("valor escolhido");
+    } finally { inFlight.current = false; setBusy(false); }
   }
 
   // A ação já valeu; só a releitura falhou — não se diz que a ação falhou.
@@ -85,6 +105,9 @@ export function ReleaseReview({ requisitionId, council, onReleased, onConflict, 
       if (problem) { setError(problem); return; }
     }
     if (unnotified.length > 0 && !confirmed) { setConfirming(true); return; }
+    if (inFlight.current) return;
+    inFlight.current = true;
+    setBusy(true);
     setConfirming(false);
     setError(null);
     setCertificateLink(false);
@@ -94,22 +117,30 @@ export function ReleaseReview({ requisitionId, council, onReleased, onConflict, 
       const report = await releaseRequisition(r!.id, signature === "advanced"
         ? { item_ids: chosenIds, signature, totp: code }
         : { item_ids: chosenIds, signature });
+      releasedOnce.current = true;
       onReleased(report);
     } catch (err) {
+      // Depois de um laudo criado, um erro tardio não substitui o sucesso.
+      if (releasedOnce.current) return;
       const reason = errorCode(err);
       if (reason === "invalid_transition") { onConflict(labError(err)); return; }
-      if (reason === "icp_required" && icpAvailable) setKind("icp");
-      if (reason === "signature_unavailable") setKind("advanced");
+      if (reason === "icp_required" && available) setKind("icp");
+      if (reason === "signature_unavailable") {
+        setIcpRefused(true);
+        setKind("advanced");
+        setError(onlyIcp(council) ? NO_ICP_FOR_DOCTOR : labError(err));
+        return;
+      }
       if (reason === "no_active_certificate") setCertificateLink(true);
       setError(labError(err));
-    }
+    } finally { inFlight.current = false; setBusy(false); }
   }
 
   const itemBlock = (i: LabReleaseItem) => (
     <div key={i.id} style={box}>
       <label style={checkLabel}>
         <input type="checkbox" disabled={i.status !== "typed"} checked={chosenIds.includes(i.id)}
-          onChange={(e) => setSelected(e.target.checked ? [ ...chosenIds, i.id ] : chosenIds.filter((x) => x !== i.id))} />
+          onChange={(e) => { setConfirming(false); setSelected(e.target.checked ? [ ...chosenIds, i.id ] : chosenIds.filter((x) => x !== i.id)); }} />
         <strong>{i.label}</strong> <span style={muted}>{`v${i.version} · ${itemStatusLabel(i.status)}`}</span>
       </label>
       {i.restriction_note && <p style={alert}>{`restrição da amostra: ${i.restriction_note}`}</p>}
@@ -120,9 +151,9 @@ export function ReleaseReview({ requisitionId, council, onReleased, onConflict, 
               <span>{`${x.value}${x.unit ? ` ${x.unit}` : ""} · ${x.source === "hl7" ? "aparelho — conferir" : `digitado${x.entered_by ? ` por ${x.entered_by}` : ""}`} · ${fmtDateTime(x.entered_at)}`}</span>
               {x.flag !== "normal" && <Tag tone={flagTone(x.flag)}>{flagLabel(x.flag)}</Tag>}
               {x.effective ? <Tag tone="ok">vale</Tag> : rows.length > 1 && (
-                <button type="button" style={secondaryButtonStyle} onClick={() => void choose(x)}>{`Usar ${x.value}`}</button>
+                <ActionButton variant="secondary" busy={busy} onClick={() => choose(x)}>{`Usar ${x.value}`}</ActionButton>
               )}
-              {x.effective && isCritical(x.flag) && x.notified === false && (
+              {x.effective && isCritical(x.flag) && x.notified !== true && (
                 <button type="button" style={secondaryButtonStyle} onClick={() => setNoticeFor(x)}>Registrar aviso</button>
               )}
             </li>
@@ -130,7 +161,7 @@ export function ReleaseReview({ requisitionId, council, onReleased, onConflict, 
         </ul>
       ))}
       {noticeFor && i.results.some((x) => x.id === noticeFor.id) && (
-        <CriticalNoticeForm resultId={noticeFor.id} label={noticeFor.name}
+        <CriticalNoticeForm key={noticeFor.id} resultId={noticeFor.id} label={noticeFor.name}
           onCancel={() => setNoticeFor(null)} onDone={() => { setNoticeFor(null); void reread("aviso registrado"); }} />
       )}
     </div>
@@ -144,13 +175,13 @@ export function ReleaseReview({ requisitionId, council, onReleased, onConflict, 
       </div>
       <p style={muted}>{`${r.patient.display_name} · nascimento ${fmtDay(r.patient.birth_date)}`}</p>
       {r.items.map(itemBlock)}
-      <SignatureChoice council={council} kind={signature} onKind={setKind} totp={totp} onTotp={setTotp} icpAvailable={icpAvailable} />
-      {confirming && (
+      <SignatureChoice council={council} kind={signature} onKind={(k) => { if (k === "icp") setTotp(""); setKind(k); }} totp={totp} onTotp={setTotp} icpAvailable={available} />
+      {confirming && unnotified.length > 0 && (
         <div role="group" aria-label="crítico sem aviso" style={box}>
           <p style={{ margin: 0 }}>{`${unnotified.length === 1 ? "1 valor crítico" : `${unnotified.length} valores críticos`} sem registro de aviso. Liberar mesmo assim? O aviso fica pendente em Críticos sem aviso.`}</p>
           <div style={row}>
-            <button type="button" style={buttonStyle} onClick={() => void release(true)}>Liberar sem aviso</button>
-            <button type="button" style={secondaryButtonStyle} onClick={() => { setConfirming(false); setNoticeFor(unnotified[0]); }}>Registrar o aviso antes</button>
+            <ActionButton busy={busy} onClick={() => release(true)}>Liberar sem aviso</ActionButton>
+            <button type="button" style={secondaryButtonStyle} onClick={() => { setConfirming(false); setTotp(""); setNoticeFor(unnotified[0]); }}>Registrar o aviso antes</button>
           </div>
         </div>
       )}
@@ -159,8 +190,8 @@ export function ReleaseReview({ requisitionId, council, onReleased, onConflict, 
         <div><button type="button" style={secondaryButtonStyle} onClick={() => onNavigate("signature")}>Ir para Assinatura digital</button></div>
       )}
       <div style={row}>
-        <ActionButton onClick={() => release(false)}>
-          {partial ? `Liberar laudo parcial (${chosenIds.length} de ${r.items.length})` : "Liberar laudo"}
+        <ActionButton busy={busy} disabledReason={noIcpForDoctor ? "sem assinatura ICP o médico não consegue liberar" : null} onClick={() => release(false)}>
+          {partial ? `Liberar laudo parcial (${chosenIds.length} de ${base.length})` : "Liberar laudo"}
         </ActionButton>
         <button type="button" style={secondaryButtonStyle} onClick={onClose}>Fechar</button>
       </div>

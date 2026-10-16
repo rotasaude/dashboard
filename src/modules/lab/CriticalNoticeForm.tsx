@@ -32,8 +32,8 @@ export function CriticalNoticeForm({ resultId, label, onDone, onCancel }: { resu
 
   return (
     <section aria-label={`Aviso do valor crítico — ${label}`} style={box}>
-      <label style={fieldLabel}>Quem foi avisado<input value={draft.person} style={inputStyle} onChange={(e) => set({ person: e.target.value })} /></label>
-      <label style={fieldLabel}>Função<input value={draft.role} style={inputStyle} onChange={(e) => set({ role: e.target.value })} /></label>
+      <label style={fieldLabel}>Quem foi avisado<input value={draft.person} maxLength={120} style={inputStyle} onChange={(e) => set({ person: e.target.value })} /></label>
+      <label style={fieldLabel}>Função<input value={draft.role} maxLength={60} style={inputStyle} onChange={(e) => set({ role: e.target.value })} /></label>
       <label style={fieldLabel}>
         Como
         <select value={draft.channel} style={inputStyle} onChange={(e) => set({ channel: e.target.value as CriticalDraft["channel"] })}>
