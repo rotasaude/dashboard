@@ -153,6 +153,11 @@ export function entryProblem(a: LabAnalyteEntry, raw: string): string | null {
   if (a.value_type !== "numeric") return null;
   const n = normalizeNumber(raw);
   if (n === null) return "valor numérico inválido — use dígitos e vírgula";
+  // mais casas do que o exame tem: zeros à direita não contam ("98,0" vale 98)
+  const frac = (n.split(".")[1] ?? "").replace(/0+$/, "");
+  if (frac.length > a.decimals) {
+    return a.decimals === 0 ? "este exame não usa casas decimais — confira o valor" : `este exame usa no máximo ${a.decimals} ${a.decimals === 1 ? "casa decimal" : "casas decimais"} — confira o valor`;
+  }
   const v = Number(n);
   if ((a.entry_min !== null && v < a.entry_min) || (a.entry_max !== null && v > a.entry_max)) {
     const range = `${a.entry_min === null ? "—" : fmtLimit(a.entry_min)} a ${a.entry_max === null ? "—" : fmtLimit(a.entry_max)}`;

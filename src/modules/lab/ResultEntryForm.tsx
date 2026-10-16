@@ -39,7 +39,7 @@ function rowText(r: LabResultRow): string {
   return `${r.value}${r.unit ? ` ${r.unit}` : ""} · ${who} · ${fmtDateTime(r.entered_at)}`;
 }
 
-export function ResultEntryForm({ item, onSaved, onClose }: { item: LabEntryItem; onSaved(): void; onClose(): void }) {
+export function ResultEntryForm({ item, onSaved, onStale, onClose }: { item: LabEntryItem; onSaved(): void; onStale?(): void; onClose(): void }) {
   const [ values, setValues ] = useState<Record<string, string>>({});
   const [ fieldErrors, setFieldErrors ] = useState<Record<string, string>>({});
   const [ error, setError ] = useState<string | null>(null);
@@ -70,7 +70,8 @@ export function ResultEntryForm({ item, onSaved, onClose }: { item: LabEntryItem
       if (errorCode(err) === "out_of_entry_range" && typeof body?.analyte_key === "string") {
         setFieldErrors({ [body.analyte_key]: "fora do limite de digitação da versão atual — confira" });
       }
-      if (errorCode(err) === "invalid_transition" || errorCode(err) === "unknown_analyte") safely(onSaved);
+      // nada foi gravado: quem chama relê o exame com mensagem neutra
+      if (errorCode(err) === "invalid_transition" || errorCode(err) === "unknown_analyte") safely(onStale ?? onSaved);
       return;
     }
     // gravou: a releitura é de quem chama e a falha dela não desfaz o salvar

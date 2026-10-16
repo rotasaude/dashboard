@@ -2,7 +2,7 @@
 // Dados comuns aos testes do módulo 21b. Cada arquivo de teste faz o próprio
 // vi.mock("…/lib/api"); aqui só tipos e a sessão.
 import type {
-  HealthUnit, LabContext, LabEntryItem, LabExam, LabExamVersion, LabItem, LabReleaseRequisition, LabReportSummary, LabRequisition,
+  HealthUnit, LabContext, LabEntryItem, LabEntryListItem, LabExam, LabExamVersion, LabItem, LabReleaseRequisition, LabReportSummary, LabRequisition,
   LabResultRow, LabSample, LabShipment, LabTemplate, SessionUser
 } from "../lib/api";
 import { sessionWith } from "./campaignFixtures";
@@ -57,6 +57,10 @@ export function labResultRow(over: Partial<LabResultRow> = {}): LabResultRow {
     id: "res1", item_id: "it2", analyte_key: "glicose", name: "Glicose", value: "98", unit: "mg/dL", flag: "normal",
     source: "typed", entered_at: "2026-10-15T08:30:00-03:00", entered_by: "Téc. Carla", chosen: true, effective: true, ...over
   };
+}
+
+export function labEntryListItem(over: Partial<LabEntryListItem> = {}): LabEntryListItem {
+  return { item_id: "it2", sigtap_code: "0202010473", name: "Glicose", status: "pending", ...over };
 }
 
 export function glucoseEntry(over: Partial<LabEntryItem> = {}): LabEntryItem {

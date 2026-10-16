@@ -2997,6 +2997,12 @@ export async function getLabEntry(by: { itemId: string } | { barcode: string; si
   return (await jsonFetch<{ items: LabEntryItem[] }>(labQuery(labPath("entry"), p))).items;
 }
 
+// B39: a leitura da etiqueta sem `sigtap_code` devolve só a lista de exames da amostra.
+export interface LabEntryListItem { item_id: string; sigtap_code: string; name: string; status: LabItemStatus | string }
+export async function listLabEntryItems(barcode: string): Promise<LabEntryListItem[]> {
+  return (await jsonFetch<{ items: LabEntryListItem[] }>(labQuery(labPath("entry"), new URLSearchParams({ barcode })))).items;
+}
+
 export async function enterLabResults(input: { item_id: string; values: { analyte_key: string; value: string }[] }): Promise<LabResultRow[]> {
   return (await jsonFetch<{ results: LabResultRow[] }>(labPath("results"), labPost(input))).results;
 }

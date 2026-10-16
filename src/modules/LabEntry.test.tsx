@@ -3,27 +3,15 @@ import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 
 vi.mock("../lib/api", async (importOriginal) => {
   const real = await importOriginal<typeof import("../lib/api")>();
-  return {
-    ...real, fetchCurrentSession: vi.fn(), getLabContext: vi.fn(), getLabEntry: vi.fn(), enterLabResults: vi.fn(),
-    listLabRequisitions: vi.fn(), getLabRequisition: vi.fn()
-  };
+  return { ...real, fetchCurrentSession: vi.fn(), getLabContext: vi.fn(), getLabEntry: vi.fn(), enterLabResults: vi.fn(), listLabEntryItems: vi.fn() };
 });
 
 import * as api from "../lib/api";
 import { LabEntry } from "./LabEntry";
 import { renderWithProviders } from "../test/campaignFixtures";
-import { glucoseEntry, labContext, labItem, labRequisition, labResultRow, labSample, labUser, lipidEntry } from "../test/labFixtures";
+import { glucoseEntry, labContext, labEntryListItem, labResultRow, labUser, lipidEntry } from "../test/labFixtures";
 
 const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
-
-const requisition = () => labRequisition({
-  items: [
-    labItem({ id: "it2", sigtap_code: "0202010473", label: "Glicose", sample_id: "sa1" }),
-    labItem({ id: "it3", sigtap_code: "0202010295", label: "Colesterol total e frações", sample_id: "sa1" }),
-    labItem({ id: "it9", sigtap_code: "0202020380", label: "Hemograma completo", sample_id: "sa9" })
-  ],
-  samples: [ labSample({ id: "sa1", barcode: "0000012301" }), labSample({ id: "sa9", barcode: "0000012309" }) ]
-});
 
 async function scan(code: string) {
   const input = await screen.findByLabelText("Etiqueta do tubo");
@@ -34,12 +22,12 @@ async function scan(code: string) {
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 beforeEach(() => {
-  for (const fn of [ api.fetchCurrentSession, api.getLabContext, api.getLabEntry, api.enterLabResults, api.listLabRequisitions, api.getLabRequisition ]) mocked(fn).mockReset();
+  for (const fn of [ api.fetchCurrentSession, api.getLabContext, api.getLabEntry, api.enterLabResults, api.listLabEntryItems ]) mocked(fn).mockReset();
   mocked(api.fetchCurrentSession).mockResolvedValue(labUser([ "lab_staff" ]));
   mocked(api.getLabContext).mockResolvedValue(labContext());
-  const { items: _i, samples: _s, ...row } = requisition();
-  mocked(api.listLabRequisitions).mockResolvedValue({ requisitions: [ row ], next_before: null });
-  mocked(api.getLabRequisition).mockResolvedValue(requisition());
+  mocked(api.listLabEntryItems).mockResolvedValue([
+    labEntryListItem(), labEntryListItem({ item_id: "it3", sigtap_code: "0202010295", name: "Colesterol total e frações" })
+  ]);
   mocked(api.getLabEntry).mockImplementation(async (by: unknown) => {
     const b = by as { sigtapCode?: string; itemId?: string };
     if (b.sigtapCode === "0202010295" || b.itemId === "it3") return [ lipidEntry() ];
@@ -51,30 +39,43 @@ describe("LabEntry", () => {
   it("a leitura lista os exames da amostra; escolher um abre o formulário pela etiqueta e o código SIGTAP", async () => {
     renderWithProviders(<LabEntry />);
     await scan("0000012301");
-    await waitFor(() => expect(api.listLabRequisitions).toHaveBeenCalledWith(expect.objectContaining({ barcode: "0000012301" })));
+    await waitFor(() => expect(api.listLabEntryItems).toHaveBeenCalledWith("0000012301"));
     expect(await screen.findByText("0000012301 · 2 exames nesta amostra")).not.toBeNull();
-    expect(screen.queryByRole("button", { name: "Hemograma completo" })).toBeNull();
     expect(api.getLabEntry).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Colesterol total e frações" }));
     expect(await screen.findByLabelText("Colesterol total (mg/dL)")).not.toBeNull();
     expect(api.getLabEntry).toHaveBeenCalledWith({ barcode: "0000012301", sigtapCode: "0202010295" });
   });
 
-  it("etiqueta que não existe: diz e não abre nada", async () => {
-    mocked(api.listLabRequisitions).mockResolvedValue({ requisitions: [], next_before: null });
+  it("etiqueta que não existe: mostra a mensagem do api e não abre nada", async () => {
+    mocked(api.listLabEntryItems).mockRejectedValue(new api.ApiError(404, { error: "not_found" }, "x"));
     renderWithProviders(<LabEntry />);
     await scan("0000012301");
-    expect(await screen.findByText("0000012301 · etiqueta não encontrada")).not.toBeNull();
+    expect(await screen.findByText(/^0000012301 · /)).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Glicose" })).toBeNull();
   });
 
   it("sem exame para digitar: diz e não abre nada", async () => {
-    mocked(api.getLabRequisition).mockResolvedValue(labRequisition({ items: [], samples: [ labSample() ] }));
+    mocked(api.listLabEntryItems).mockResolvedValue([]);
     renderWithProviders(<LabEntry />);
     await scan("0000012301");
     expect(await screen.findByText("0000012301 · nenhum exame para digitar nesta amostra")).not.toBeNull();
   });
 
-  it("salvar relê o item pelo id; falha ao rereler não desfaz o salvar", async () => {
+  it("clique rápido em dois exames: só o primeiro abre enquanto carrega", async () => {
+    let finish: (v: unknown) => void = () => undefined;
+    mocked(api.getLabEntry).mockReturnValueOnce(new Promise((r) => { finish = r; }));
+    renderWithProviders(<LabEntry />);
+    await scan("0000012301");
+    fireEvent.click(await screen.findByRole("button", { name: "Glicose" }));
+    fireEvent.click(screen.getByRole("button", { name: "Colesterol total e frações" }));
+    expect(api.getLabEntry).toHaveBeenCalledTimes(1);
+    finish([ glucoseEntry() ]);
+    expect(await screen.findByLabelText("Glicose (mg/dL)")).not.toBeNull();
+    expect(screen.queryByLabelText("Colesterol total (mg/dL)")).toBeNull();
+  });
+
+  it("salvar relê o item pelo id; falha ao reler não desfaz o salvar", async () => {
     mocked(api.enterLabResults).mockResolvedValue([ labResultRow() ]);
     renderWithProviders(<LabEntry />);
     await scan("0000012301");
@@ -85,5 +86,19 @@ describe("LabEntry", () => {
     expect(await screen.findByText("Resultado salvo.")).not.toBeNull();
     await waitFor(() => expect(api.getLabEntry).toHaveBeenCalledWith({ itemId: "it2" }));
     expect(await screen.findByText(/resultado salvo, mas não foi possível reler/)).not.toBeNull();
+  });
+
+  it("salvar que falha (invalid_transition) não diz 'resultado salvo' nem se a releitura falhar", async () => {
+    mocked(api.enterLabResults).mockRejectedValue(new api.ApiError(409, { error: "invalid_transition" }, "x"));
+    renderWithProviders(<LabEntry />);
+    await scan("0000012301");
+    fireEvent.click(await screen.findByRole("button", { name: "Glicose" }));
+    fireEvent.change(await screen.findByLabelText("Glicose (mg/dL)"), { target: { value: "90" } });
+    mocked(api.getLabEntry).mockRejectedValue(new Error("network"));
+    fireEvent.click(screen.getByRole("button", { name: "Salvar resultado" }));
+    await waitFor(() => expect(api.getLabEntry).toHaveBeenCalledWith({ itemId: "it2" }));
+    expect(await screen.findByText(/não foi possível reler o exame/)).not.toBeNull();
+    expect(screen.queryByText(/resultado salvo/)).toBeNull();
+    expect(screen.queryByText("Resultado salvo.")).toBeNull();
   });
 });

@@ -88,6 +88,10 @@ describe("número com vírgula e limite de digitação", () => {
 
   it("fora de entry_min/entry_max bloqueia com o limite na frase", () => {
     expect(entryProblem(GLU, "98")).toBeNull();
+    expect(entryProblem(GLU, "98,0")).toBeNull();
+    expect(entryProblem(GLU, "98,5")).toBe("este exame não usa casas decimais — confira o valor");
+    expect(entryProblem({ ...GLU, decimals: 1 }, "98,55")).toBe("este exame usa no máximo 1 casa decimal — confira o valor");
+    expect(entryProblem({ ...GLU, decimals: 1 }, "98,5")).toBeNull();
     expect(entryProblem(GLU, "1600")).toBe("fora do limite de digitação (10 a 1500 mg/dL) — confira o valor");
     expect(entryProblem(GLU, "5")).toBe("fora do limite de digitação (10 a 1500 mg/dL) — confira o valor");
     expect(entryProblem(GLU, "nove")).toBe("valor numérico inválido — use dígitos e vírgula");
