@@ -32,8 +32,9 @@ export function ageToDays(value: string, unit: AgeUnit): number | null {
   return Number(t) * UNIT_DAYS[unit];
 }
 
-export function daysToAge(days: number | null): { value: string; unit: AgeUnit } {
-  if (days === null || days >= AGE_MAX_DAYS) return { value: "", unit: "years" };
+// `side` "max": 43800 ("sem limite") volta em branco; na idade mínima ele é um valor como outro.
+export function daysToAge(days: number | null, side: "min" | "max" = "max"): { value: string; unit: AgeUnit } {
+  if (days === null || (side === "max" && days >= AGE_MAX_DAYS)) return { value: "", unit: "years" };
   if (days % 365 === 0 && days > 0) return { value: String(days / 365), unit: "years" };
   if (days % 30 === 0 && days > 0) return { value: String(days / 30), unit: "months" };
   return { value: String(days), unit: "days" };
@@ -46,7 +47,7 @@ const parse = (v: string): number | null => {
 };
 
 function rangeDraft(r: LabReferenceRange): RangeDraft {
-  const min = daysToAge(r.age_min_days);
+  const min = daysToAge(r.age_min_days, "min");
   const max = daysToAge(r.age_max_days);
   return { sex: r.sex, ageMin: min.value, ageMinUnit: min.unit, ageMax: max.value, ageMaxUnit: max.unit, low: num(r.low), high: num(r.high), text: r.text ?? "" };
 }
@@ -70,19 +71,69 @@ export function formulaKeys(formula: string): string[] {
 
 const badNumber = (v: string) => v.trim() !== "" && parse(v) === null;
 
+// Limites do api (Lab::CreateVersion, Analytes, Ranges, Choices, Formula).
+export const LIMITS = {
+  method: 160, material: 60, container: 60, name: 120, unit: 30, rangeText: 120, formula: 200,
+  analytes: 60, ranges: 20, instrumentCode: /^[A-Za-z0-9._-]{1,30}$/
+} as const;
+
 function choiceList(raw: string): string[] { return raw.split(";").map((c) => c.trim()); }
 
+// Igual ao api (Lab::Choices): 1..20, cada uma de 1..60, sem repetir (caixa conta).
 function choicesValid(raw: string): boolean {
   const list = choiceList(raw);
-  const lower = list.map((c) => c.toLowerCase());
-  return list.length >= 1 && list.length <= MAX_CHOICES && list.every((c) => c !== "" && c.length <= MAX_CHOICE_LENGTH) && new Set(lower).size === lower.length;
+  return list.length >= 1 && list.length <= MAX_CHOICES && list.every((c) => c.length >= 1 && c.length <= MAX_CHOICE_LENGTH) && new Set(list).size === list.length;
+}
+
+// Igual ao api (Lab::Formula): números `\d+(\.\d+)?`, chaves, + - * / e parênteses;
+// operando e operador alternados, parênteses equilibrados, sem sinal unário.
+const FORMULA_TOKEN = /^\s*(?:(\d+(?:\.\d+)?)|([a-z][a-z0-9_]{0,39})|([-+*/()]))\s*/;
+
+function formulaTokens(formula: string): { kind: "num" | "var" | "op" | "open" | "close"; v: string }[] | null {
+  const text = formula.trim();
+  if (text.length < 1 || text.length > LIMITS.formula) return null;
+  const tokens: { kind: "num" | "var" | "op" | "open" | "close"; v: string }[] = [];
+  let rest = text;
+  while (rest !== "") {
+    const m = FORMULA_TOKEN.exec(rest);
+    if (!m) return null;
+    if (m[1] !== undefined) tokens.push({ kind: "num", v: m[1] });
+    else if (m[2] !== undefined) tokens.push({ kind: "var", v: m[2] });
+    else if (m[3] === "(") tokens.push({ kind: "open", v: m[3] });
+    else if (m[3] === ")") tokens.push({ kind: "close", v: m[3] });
+    else tokens.push({ kind: "op", v: m[3] });
+    rest = rest.slice(m[0].length);
+  }
+  return tokens;
+}
+
+export function formulaWellFormed(formula: string): boolean {
+  const tokens = formulaTokens(formula);
+  if (!tokens) return false;
+  let expectOperand = true;
+  let depth = 0;
+  for (const t of tokens) {
+    if (t.kind === "open") { if (!expectOperand) return false; depth += 1; }
+    else if (t.kind === "close") { if (expectOperand || depth === 0) return false; depth -= 1; }
+    else if (t.kind === "op") { if (expectOperand) return false; expectOperand = true; }
+    else { if (!expectOperand) return false; expectOperand = false; }
+  }
+  return !expectOperand && depth === 0;
 }
 
 export function versionProblem(d: VersionDraft): string | null {
-  if (!d.method.trim()) return "informe o método";
-  if (!d.material.trim()) return "informe o material";
-  if (!d.container.trim()) return "informe o recipiente";
+  const method = d.method.trim(), material = d.material.trim(), container = d.container.trim();
+  if (!method) return "informe o método";
+  if (method.length > LIMITS.method) return `o método tem no máximo ${LIMITS.method} caracteres`;
+  if (!material) return "informe o material";
+  if (material.length > LIMITS.material) return `o material tem no máximo ${LIMITS.material} caracteres`;
+  if (!container) return "informe o recipiente";
+  if (container.length > LIMITS.container) return `o recipiente tem no máximo ${LIMITS.container} caracteres`;
+  if (d.instrumentTestCode.trim() && !LIMITS.instrumentCode.test(d.instrumentTestCode.trim())) {
+    return "o código do aparelho usa letras, números, ponto, hífen e _, até 30 caracteres";
+  }
   if (d.analytes.length === 0) return "inclua ao menos um componente";
+  if (d.analytes.length > LIMITS.analytes) return `no máximo ${LIMITS.analytes} componentes por exame`;
   const keys = new Set<string>();
   for (const [ i, a ] of d.analytes.entries()) {
     const n = `componente ${i + 1}`;
@@ -90,18 +141,23 @@ export function versionProblem(d: VersionDraft): string | null {
     if (keys.has(a.key.trim())) return `${n}: a chave ${a.key.trim()} repete`;
     keys.add(a.key.trim());
     if (!a.name.trim()) return `${n}: informe o nome`;
+    if (a.name.trim().length > LIMITS.name) return `${n}: o nome tem no máximo ${LIMITS.name} caracteres`;
     if (a.loinc.trim() && !/^\d{1,7}-\d$/.test(a.loinc.trim())) return `${n}: LOINC no formato 2345-7`;
+    if (a.unit.length > LIMITS.unit) return `${n}: a unidade tem no máximo ${LIMITS.unit} caracteres`;
     if (!/^[0-4]$/.test(a.decimals.trim())) return `${n}: casas decimais de 0 a 4`;
     if (a.valueType === "choice" && !choicesValid(a.choices)) return `${n}: informe de 1 a ${MAX_CHOICES} opções distintas, separadas por ;, com até ${MAX_CHOICE_LENGTH} caracteres`;
     for (const v of [ a.entryMin, a.entryMax, a.criticalLow, a.criticalHigh ]) if (badNumber(v)) return `${n}: número inválido nos limites`;
     const [ emin, emax ] = [ parse(a.entryMin), parse(a.entryMax) ];
-    if (emin !== null && emax !== null && emin > emax) return `${n}: o limite de digitação mínimo passa do máximo`;
-    const [ clow, chigh ] = [ parse(a.criticalLow), parse(a.criticalHigh) ];
-    if (clow !== null && chigh !== null && clow > chigh) return `${n}: o crítico baixo passa do crítico alto`;
+    if (a.valueType !== "numeric" && [ a.entryMin, a.entryMax, a.criticalLow, a.criticalHigh ].some((v) => v.trim() !== "")) {
+      return `${n}: limites de digitação e críticos valem só para componente numérico`;
+    }
+    if (emin !== null && emax !== null && emin >= emax) return `${n}: o limite de digitação mínimo deve ser menor que o máximo`;
+    if (a.ranges.length > LIMITS.ranges) return `${n}: no máximo ${LIMITS.ranges} faixas`;
     for (const [ j, r ] of a.ranges.entries()) {
       const rn = `${n}, faixa ${j + 1}`;
       if (badNumber(r.low) || badNumber(r.high)) return `${rn}: número inválido`;
       if (r.low.trim() === "" && r.high.trim() === "" && !r.text.trim()) return `${rn}: informe mínimo, máximo ou um texto`;
+      if (r.text.trim().length > LIMITS.rangeText) return `${rn}: o texto tem no máximo ${LIMITS.rangeText} caracteres`;
       const [ lo, hi ] = [ parse(r.low), parse(r.high) ];
       if (lo !== null && hi !== null && lo > hi) return `${rn}: o mínimo passa do máximo`;
       const [ amin, amax ] = [ ageToDays(r.ageMin, r.ageMinUnit), ageToDays(r.ageMax, r.ageMaxUnit) ];
@@ -110,14 +166,17 @@ export function versionProblem(d: VersionDraft): string | null {
       if ((amin ?? 0) > (amax ?? AGE_MAX_DAYS)) return `${rn}: a idade mínima passa da máxima`;
     }
   }
-  const calculated = new Set(d.analytes.filter((a) => a.formula.trim()).map((a) => a.key.trim()));
+  // Fórmula só em componente numérico, sobre numéricos não calculados da mesma versão.
+  const operands = new Set(d.analytes.filter((a) => a.valueType === "numeric" && !a.formula.trim()).map((a) => a.key.trim()));
   for (const [ i, a ] of d.analytes.entries()) {
     if (!a.formula.trim()) continue;
     const n = `componente ${i + 1}`;
+    if (a.valueType !== "numeric") return `${n}: fórmula só em componente numérico`;
     if (!/^[a-z0-9_+\-*/().\s]+$/.test(a.formula)) return `${n}: a fórmula usa só chaves, números e + - * / ( )`;
+    if (!formulaWellFormed(a.formula)) return `${n}: fórmula mal formada — alterne valores e operadores, feche os parênteses e não use sinal no início`;
     for (const k of formulaKeys(a.formula)) {
       if (!keys.has(k) || k === a.key.trim()) return `${n}: a fórmula usa ${k}, que não é componente deste exame`;
-      if (calculated.has(k)) return `${n}: a fórmula usa ${k}, que é calculado — use só componentes digitados`;
+      if (!operands.has(k)) return `${n}: a fórmula usa ${k}, que é calculado ou não é numérico — use só componentes numéricos digitados`;
     }
   }
   return null;

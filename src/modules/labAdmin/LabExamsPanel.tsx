@@ -50,7 +50,7 @@ export function LabExamsPanel({ providerId, onGoToSecurity }: { providerId: stri
   }
 
   const settingsFields = (
-    <div style={row}>
+    <fieldset disabled={confirm !== null} style={{ ...row, border: 0, padding: 0, margin: 0, minWidth: 0 }}>
       <label style={fieldLabel}>Setor
         <select value={settings.sector} style={inputStyle} onChange={(e) => setSettings((s) => ({ ...s, sector: e.target.value }))}>
           <option value="">—</option>
@@ -59,7 +59,7 @@ export function LabExamsPanel({ providerId, onGoToSecurity }: { providerId: stri
       </label>
       <label style={fieldLabel}>Bancada<input value={settings.bench} maxLength={60} style={inputStyle} onChange={(e) => setSettings((s) => ({ ...s, bench: e.target.value }))} /></label>
       <label style={fieldLabel}>Prazo de entrega (dias, 1 a 90)<input value={settings.deliveryDays} inputMode="numeric" style={inputStyle} onChange={(e) => setSettings((s) => ({ ...s, deliveryDays: e.target.value }))} /></label>
-    </div>
+    </fieldset>
   );
 
   return (
@@ -99,7 +99,7 @@ export function LabExamsPanel({ providerId, onGoToSecurity }: { providerId: stri
             <strong>{`Ajustar ${editing.name}`}</strong>
             {settingsFields}
             <label style={{ ...fieldLabel, flexDirection: "row", gap: 6 }}>
-              <input type="checkbox" checked={settings.active} onChange={(e) => setSettings((s) => ({ ...s, active: e.target.checked }))} />Ativo
+              <input type="checkbox" disabled={confirm !== null} checked={settings.active} onChange={(e) => setSettings((s) => ({ ...s, active: e.target.checked }))} />Ativo
             </label>
             {confirm !== "edit" && <div style={row}>
               <button type="button" style={secondaryButtonStyle} onClick={() => { if (check()) setConfirm("edit"); }}>Salvar ajuste</button>

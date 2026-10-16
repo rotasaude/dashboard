@@ -54,8 +54,7 @@ describe("versão", () => {
       .toBe("componente 1, faixa 1: a idade mínima passa da máxima");
     expect(versionProblem(with1({ ranges: [ { ...range, ageMax: "200", ageMaxUnit: "years" } ] })))
       .toBe("componente 1, faixa 1: a idade passa de 43800 dias (120 anos)");
-    expect(versionProblem(with1({ entryMin: "200", entryMax: "100" }))).toBe("componente 1: o limite de digitação mínimo passa do máximo");
-    expect(versionProblem(with1({ criticalLow: "500", criticalHigh: "400" }))).toBe("componente 1: o crítico baixo passa do crítico alto");
+    expect(versionProblem(with1({ entryMin: "200", entryMax: "100" }))).toBe("componente 1: o limite de digitação mínimo deve ser menor que o máximo");
     expect(versionProblem({ ...base, analytes: [ a, { ...a, key: "calc", name: "Calculado", formula: "glicose * k" } ] }))
       .toBe("componente 2: a fórmula usa k, que não é componente deste exame");
     expect(versionProblem({ ...base, method: " " })).toBe("informe o método");
@@ -73,22 +72,97 @@ describe("versão", () => {
     const a = base.analytes[0];
     const calc = { ...a, key: "c1", name: "C1", formula: "glicose * 2" };
     expect(versionProblem({ ...base, analytes: [ a, calc, { ...a, key: "c2", name: "C2", formula: "c1 + 1" } ] }))
-      .toBe("componente 3: a fórmula usa c1, que é calculado — use só componentes digitados");
+      .toBe("componente 3: a fórmula usa c1, que é calculado ou não é numérico — use só componentes numéricos digitados");
     expect(versionProblem({ ...base, analytes: [ { ...a, formula: "glicose + 1" } ] }))
       .toBe("componente 1: a fórmula usa glicose, que não é componente deste exame");
   });
 
   it("B29: opções de escolha — de 1 a 20, até 60 caracteres, sem repetir", () => {
     const base = versionDraft(labVersion());
-    const choice = (choices: string) => ({ ...base, analytes: [ { ...base.analytes[0], valueType: "choice" as const, choices } ] });
+    const choice = (choices: string) => ({ ...base, analytes: [ { ...base.analytes[0], valueType: "choice" as const, choices, entryMin: "", entryMax: "", criticalLow: "", criticalHigh: "" } ] });
     const msg = "componente 1: informe de 1 a 20 opções distintas, separadas por ;, com até 60 caracteres";
     expect(versionProblem(choice("positivo; negativo"))).toBeNull();
-    expect(versionProblem(choice("positivo; Positivo"))).toBe(msg);
+    expect(versionProblem(choice("positivo; Positivo"))).toBeNull(); // o api compara com caixa
+    expect(versionProblem(choice("positivo; positivo"))).toBe(msg);
     expect(versionProblem(choice("positivo;; negativo"))).toBe(msg);
     expect(versionProblem(choice(""))).toBe(msg);
     expect(versionProblem(choice("x".repeat(61)))).toBe(msg);
     expect(versionProblem(choice(Array.from({ length: 21 }, (_, i) => `o${i}`).join(";")))).toBe(msg);
     expect(versionProblem(choice(Array.from({ length: 20 }, (_, i) => `o${i}`).join(";")))).toBeNull();
+  });
+
+  it("api: limite de digitação mínimo estritamente menor que o máximo", () => {
+    const base = versionDraft(labVersion());
+    const lim = (entryMin: string, entryMax: string) => ({ ...base, analytes: [ { ...base.analytes[0], entryMin, entryMax } ] });
+    expect(versionProblem(lim("10", "10"))).toBe("componente 1: o limite de digitação mínimo deve ser menor que o máximo");
+    expect(versionProblem(lim("10", "11"))).toBeNull();
+    expect(versionProblem(lim("", "10"))).toBeNull();
+  });
+
+  it("api: limites e fórmula só em numérico; fórmula só sobre numéricos digitados", () => {
+    const base = versionDraft(labVersion());
+    const a = base.analytes[0];
+    const text = { ...a, key: "obs", name: "Obs", valueType: "text" as const, entryMin: "", entryMax: "", criticalLow: "", criticalHigh: "", ranges: [] };
+    expect(versionProblem({ ...base, analytes: [ text ] })).toBeNull();
+    expect(versionProblem({ ...base, analytes: [ { ...text, entryMin: "1" } ] })).toBe("componente 1: limites de digitação e críticos valem só para componente numérico");
+    expect(versionProblem({ ...base, analytes: [ { ...text, criticalHigh: "1" } ] })).toBe("componente 1: limites de digitação e críticos valem só para componente numérico");
+    expect(versionProblem({ ...base, analytes: [ { ...text, formula: "1+1" } ] })).toBe("componente 1: fórmula só em componente numérico");
+    expect(versionProblem({ ...base, analytes: [ a, { ...a, key: "c", name: "C", formula: "obs + 1" }, text ] }))
+      .toBe("componente 2: a fórmula usa obs, que é calculado ou não é numérico — use só componentes numéricos digitados");
+    expect(versionProblem({ ...base, analytes: [ a, { ...a, key: "c", name: "C", formula: "glicose + 1" } ] })).toBeNull();
+  });
+
+  it("api: sintaxe da fórmula (sem unário, operador pendente, parênteses, operandos juntos)", () => {
+    const base = versionDraft(labVersion());
+    const a = base.analytes[0];
+    const f = (formula: string) => versionProblem({ ...base, analytes: [ a, { ...a, key: "c", name: "C", formula } ] });
+    const bad = "componente 2: fórmula mal formada — alterne valores e operadores, feche os parênteses e não use sinal no início";
+    for (const ok of [ "glicose", "glicose + 1", "(glicose + 1) * 2.5", "((glicose))", "glicose/2-1" ]) expect(f(ok), ok).toBeNull();
+    for (const no of [ "-glicose", "glicose +", "+ glicose", "(glicose", "glicose)", "glicose glicose", "2glicose", "()", "glicose (1)", "(glicose)(1)", "1 + * 2", "2.", ".5" ]) {
+      expect(f(no), no).not.toBeNull();
+    }
+    expect(f("glicose +")).toBe(bad);
+    expect(f("Glicose")).toBe("componente 2: a fórmula usa só chaves, números e + - * / ( )");
+    expect(f(`glicose${" +glicose".repeat(30)}`)).toBe(bad); // 200 é o teto: 7 + 30*9 > 200
+  });
+
+  it("api: limites de tamanho nos dois lados", () => {
+    const base = versionDraft(labVersion());
+    const a = base.analytes[0];
+    const top = (p: object) => versionProblem({ ...base, ...p });
+    const inA = (p: object) => versionProblem({ ...base, analytes: [ { ...a, ...p } ] });
+    expect(top({ method: "m".repeat(160) })).toBeNull();
+    expect(top({ method: "m".repeat(161) })).toBe("o método tem no máximo 160 caracteres");
+    expect(top({ material: "m".repeat(60) })).toBeNull();
+    expect(top({ material: "m".repeat(61) })).toBe("o material tem no máximo 60 caracteres");
+    expect(top({ container: "m".repeat(60) })).toBeNull();
+    expect(top({ container: "m".repeat(61) })).toBe("o recipiente tem no máximo 60 caracteres");
+    expect(inA({ name: "n".repeat(120) })).toBeNull();
+    expect(inA({ name: "n".repeat(121) })).toBe("componente 1: o nome tem no máximo 120 caracteres");
+    expect(inA({ unit: "u".repeat(30) })).toBeNull();
+    expect(inA({ unit: "u".repeat(31) })).toBe("componente 1: a unidade tem no máximo 30 caracteres");
+    const range = a.ranges[0];
+    expect(inA({ ranges: [ { ...range, text: "t".repeat(120) } ] })).toBeNull();
+    expect(inA({ ranges: [ { ...range, text: "t".repeat(121) } ] })).toBe("componente 1, faixa 1: o texto tem no máximo 120 caracteres");
+    expect(inA({ ranges: Array.from({ length: 20 }, () => range) })).toBeNull();
+    expect(inA({ ranges: Array.from({ length: 21 }, () => range) })).toBe("componente 1: no máximo 20 faixas");
+    const many = (n: number) => ({ ...base, analytes: Array.from({ length: n }, (_, i) => ({ ...a, key: `k${i}`, name: `K${i}` })) });
+    expect(versionProblem(many(60))).toBeNull();
+    expect(versionProblem(many(61))).toBe("no máximo 60 componentes por exame");
+  });
+
+  it("api: código do aparelho", () => {
+    const base = versionDraft(labVersion());
+    const code = (instrumentTestCode: string) => versionProblem({ ...base, instrumentTestCode });
+    for (const ok of [ "", "GLU", "gli.1-a_2", "A".repeat(30) ]) expect(code(ok), ok).toBeNull();
+    for (const no of [ "A".repeat(31), "GL U", "GLÚ", "GLU/1" ]) {
+      expect(code(no), no).toBe("o código do aparelho usa letras, números, ponto, hífen e _, até 30 caracteres");
+    }
+  });
+
+  it("idade mínima 43800 reabre como 120 anos (só a máxima vira 'sem limite')", () => {
+    expect(daysToAge(43800, "min")).toEqual({ value: "120", unit: "years" });
+    expect(daysToAge(43800)).toEqual({ value: "", unit: "years" });
   });
 
   it("chaves da fórmula", () => {
