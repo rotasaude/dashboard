@@ -47,6 +47,15 @@ describe("ResultEntryForm", () => {
     expect(screen.queryByText("alto")).toBeNull();
   });
 
+  it("422 invalid_values: frase própria e marca o componente calculado", async () => {
+    mocked(api.enterLabResults).mockRejectedValueOnce(new api.ApiError(422, { error: "invalid_values", analyte_key: "glicose" }, "x"));
+    renderWithProviders(<ResultEntryForm item={glucoseEntry()} onSaved={vi.fn()} onClose={vi.fn()} />);
+    fireEvent.change(await screen.findByLabelText("Glicose (mg/dL)"), { target: { value: "90" } });
+    fireEvent.click(screen.getByRole("button", { name: "Salvar resultado" }));
+    expect((await screen.findByRole("alert")).textContent).toBe("falta um valor que entra no cálculo de um componente calculado — digite os componentes da conta juntos");
+    expect(screen.getByText("falta um valor da conta deste componente — digite os componentes juntos")).not.toBeNull();
+  });
+
   it("bloqueia fora do limite sem chamar o api", async () => {
     renderWithProviders(<ResultEntryForm item={glucoseEntry()} onSaved={vi.fn()} onClose={vi.fn()} />);
     fireEvent.change(await screen.findByLabelText("Glicose (mg/dL)"), { target: { value: "1600" } });

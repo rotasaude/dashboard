@@ -23,8 +23,8 @@ export function LabScope({ roles, children }: { roles: LabRoles; children(scope:
   const [ unit, setUnit ] = useState<HealthUnit | null>(null);
   if (!user) return null;
   if (context.isPending) return <p className="mono" style={muted}>carregando…</p>;
-  if (context.isError) return <p role="alert" style={alert}>{labError(context.error)}</p>;
-  const labs = context.data.labs;
+  if (context.isError && !context.data) return <p role="alert" style={alert}>{labError(context.error)}</p>;
+  const labs = context.data!.labs;
   // Lista vazia (B32) já é barrada pelo LabGate; aqui há ao menos um laboratório.
   const lab = labs.find((l) => l.id === providerId) ?? labs[0];
   const labPicker = labs.length > 1 && (

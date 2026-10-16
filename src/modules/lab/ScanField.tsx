@@ -18,10 +18,13 @@ export const SCAN_DUPLICATE = "lida duas vezes seguidas — a segunda foi ignora
 const SCAN_FAILED = "não foi possível registrar — leia de novo";
 
 interface Entry { id: number; code: string; state: "waiting" | "ok" | "error" | "ignored"; text: string }
-interface Job { id: number; code: string }
+interface Job<C> { id: number; code: string; captured: C | undefined }
 
-export function ScanField({ label, onScan, hint, onBusyChange }: {
-  label: string; onScan(code: string): Promise<ScanOutcome>; hint?: string;
+export function ScanField<C = undefined>({ label, onScan, hint, onBusyChange, capture, onQueued }: {
+  label: string; onScan(code: string, captured: C | undefined): Promise<ScanOutcome>; hint?: string;
+  // `capture` roda quando a leitura ENTRA na fila (a escolha da tela naquele instante) e vai a `onScan`;
+  // `onQueued` roda logo depois, com a leitura aceita na fila (ex.: a tela volta à escolha padrão).
+  capture?(): C; onQueued?(): void;
   // true enquanto houver leitura na fila ou em gravação (quem conclui algo irreversível espera)
   onBusyChange?(busy: boolean): void;
 }) {
@@ -30,7 +33,7 @@ export function ScanField({ label, onScan, hint, onBusyChange }: {
   const [ value, setValue ] = useState("");
   const [ focused, setFocused ] = useState(true);
   const [ log, setLog ] = useState<Entry[]>([]);
-  const queue = useRef<Job[]>([]);
+  const queue = useRef<Job<C>[]>([]);
   const running = useRef(false);
   const mounted = useRef(true);
   const seq = useRef(0);
@@ -38,6 +41,10 @@ export function ScanField({ label, onScan, hint, onBusyChange }: {
   // A função da hora da leitura mais recente do pai (ex.: decisão escolhida antes).
   const scanRef = useRef(onScan);
   scanRef.current = onScan;
+  const captureRef = useRef(capture);
+  captureRef.current = capture;
+  const queuedRef = useRef(onQueued);
+  queuedRef.current = onQueued;
   const busyRef = useRef(onBusyChange);
   busyRef.current = onBusyChange;
 
@@ -60,9 +67,9 @@ export function ScanField({ label, onScan, hint, onBusyChange }: {
     running.current = true;
     try {
       while (mounted.current && queue.current.length > 0) {
-        const job = queue.current.shift() as Job;
+        const job = queue.current.shift() as Job<C>;
         try {
-          const out = await scanRef.current(job.code);
+          const out = await scanRef.current(job.code, job.captured);
           if (!out.ok) forgetLast(job.code);
           settle(job.id, out.ok ? "ok" : "error", out.text);
         } catch {
@@ -89,8 +96,9 @@ export function ScanField({ label, onScan, hint, onBusyChange }: {
     }
     last.current = { code, at: now };
     push({ id, code, state: "waiting", text: "aguardando…" });
-    queue.current.push({ id, code });
+    queue.current.push({ id, code, captured: captureRef.current?.() });
     busyRef.current?.(true);
+    queuedRef.current?.();
     void drain();
   }
 

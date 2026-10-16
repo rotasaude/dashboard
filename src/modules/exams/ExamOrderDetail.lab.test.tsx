@@ -17,7 +17,7 @@ afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 beforeEach(() => {
   for (const fn of [ api.fetchCurrentSession, api.getExamOrder, api.listEnabledProviders, api.setGalRequisition ]) mocked(fn).mockReset();
-  mocked(api.fetchCurrentSession).mockResolvedValue(examUser([ "health_professional" ]));
+  mocked(api.fetchCurrentSession).mockResolvedValue(examUser([ "health_professional" ], { features: [ "clinical_record", "exam_tracking", "municipal_lab" ] }));
   mocked(api.listEnabledProviders).mockResolvedValue([]);
   mocked(api.setGalRequisition).mockResolvedValue(undefined);
 });
@@ -51,6 +51,14 @@ describe("ExamOrderDetail — 21b", () => {
     expect(await screen.findByText("Requisição do GAL registrada.")).not.toBeNull();
     expect(screen.queryByLabelText("Número da requisição no GAL")).toBeNull();
     expect(api.getExamOrder).toHaveBeenCalledTimes(2);
+  });
+
+  it("GAL: sem o interruptor municipal_lab a tela do 21a fica como antes (I5)", async () => {
+    mocked(api.fetchCurrentSession).mockResolvedValue(examUser([ "health_professional" ]));
+    mocked(api.getExamOrder).mockResolvedValue(examOrder({ status: "scheduled", gal_requisition: null }));
+    renderWithProviders(<ExamOrderDetail id="eo1" onClose={vi.fn()} />);
+    await screen.findByText("Hemograma completo");
+    expect(screen.queryByRole("button", { name: "Registrar requisição do GAL" })).toBeNull();
   });
 
   it("GAL: só recepção e profissional", async () => {

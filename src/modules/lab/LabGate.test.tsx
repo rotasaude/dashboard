@@ -9,6 +9,8 @@ vi.mock("../../lib/api", async (importOriginal) => {
 import * as api from "../../lib/api";
 import { LabGate } from "./LabGate";
 import { renderWithProviders } from "../../test/campaignFixtures";
+import { ApiError } from "../../lib/api";
+import { LabScope } from "./LabScope";
 import { labContext, labUser } from "../../test/labFixtures";
 
 const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
@@ -100,5 +102,28 @@ describe("LabGate", () => {
     mocked(api.getLabContext).mockResolvedValueOnce(labContext());
     fireEvent.click(screen.getByRole("button", { name: "tentar novamente" }));
     expect(await screen.findByText("conteúdo")).not.toBeNull();
+  });
+
+  it("final I1: releitura do contexto que falha com dado presente mantém a tela", async () => {
+    mocked(api.fetchCurrentSession).mockResolvedValue(labUser([ "lab_staff" ]));
+    mocked(api.getLabContext).mockResolvedValueOnce(labContext());
+    const { client } = gate();
+    expect(await screen.findByText("conteúdo")).not.toBeNull();
+    mocked(api.getLabContext).mockRejectedValue(new ApiError(429, { error: "too_many_requests" }, "x"));
+    await client.invalidateQueries({ queryKey: [ "labContext" ] });
+    await waitFor(() => expect(api.getLabContext).toHaveBeenCalledTimes(2));
+    expect(screen.getByText("conteúdo")).not.toBeNull();
+    expect(screen.queryByText("muitas tentativas seguidas — espere um minuto e tente de novo")).toBeNull();
+  });
+
+  it("final I1: LabScope também mantém os filhos quando a releitura falha com dado presente", async () => {
+    mocked(api.fetchCurrentSession).mockResolvedValue(labUser([ "lab_staff" ]));
+    mocked(api.getLabContext).mockResolvedValue(labContext());
+    const { client } = renderWithProviders(<LabScope roles={{ staff: true, releaser: false, admin: false, professional: false }}>{() => <p>filho</p>}</LabScope>);
+    expect(await screen.findByText("filho")).not.toBeNull();
+    mocked(api.getLabContext).mockRejectedValue(new ApiError(429, { error: "too_many_requests" }, "x"));
+    await client.invalidateQueries({ queryKey: [ "labContext" ] });
+    await waitFor(() => expect(mocked(api.getLabContext).mock.calls.length).toBeGreaterThan(1));
+    expect(screen.getByText("filho")).not.toBeNull();
   });
 });

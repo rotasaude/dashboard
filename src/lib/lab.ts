@@ -34,9 +34,9 @@ export const LAB_TEMPLATES_KEY = "labTemplates";
 export const LAB_RELEASERS_KEY = "labReleasers";
 export const LAB_REPORTS_KEY = "labReports";
 
-// Toda chave do laboratório: depois de uma ação, nenhuma tela fica com dado velho.
+// Toda chave do laboratório (menos o contexto, que só o admin muda): depois de uma ação, nenhuma tela fica com dado velho.
 const MOVING_KEYS = [
-  LAB_CONTEXT_KEY, LAB_REQUISITIONS_KEY, LAB_REQUISITION_KEY, LAB_CANDIDATES_KEY, LAB_EXAMS_KEY, LAB_SHIPMENTS_KEY,
+  LAB_REQUISITIONS_KEY, LAB_REQUISITION_KEY, LAB_CANDIDATES_KEY, LAB_EXAMS_KEY, LAB_SHIPMENTS_KEY,
   LAB_UNIT_PENDING_KEY, LAB_WORKLIST_KEY, LAB_ENTRY_KEY, LAB_RELEASES_KEY, LAB_CRITICALS_KEY, LAB_CRITICAL_COUNT_KEY,
   LAB_REASONS_KEY, LAB_ADMIN_EXAMS_KEY, LAB_TEMPLATES_KEY, LAB_RELEASERS_KEY, LAB_REPORTS_KEY
 ];
@@ -355,6 +355,7 @@ const ERRORS: Record<string, string> = {
   invalid_notice: "aviso inválido — confira quem foi avisado (até 120 caracteres), a função (até 60), o canal e a hora (não pode ser no futuro)",
   invalid_samples: "nenhuma amostra para imprimir etiqueta",
   invalid_collected_at: "data e hora da coleta inválidas ou no futuro",
+  invalid_values: "falta um valor que entra no cálculo de um componente calculado — digite os componentes da conta juntos",
   too_many_requests: "muitas tentativas seguidas — espere um minuto e tente de novo"
 };
 

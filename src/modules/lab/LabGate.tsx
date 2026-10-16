@@ -33,8 +33,8 @@ export function LabGate({ title, sub, allow, needsLab = true, children }: {
   else if (context.isPending) body = <Skeleton rows={3} />;
   // O api responde 403 missing_role ao profissional cujas unidades não coletam.
   else if (context.isError && roles.professional && errorCode(context.error) === "missing_role") body = <EmptyState title={UNIT_DOES_NOT_COLLECT} />;
-  else if (context.isError) body = <ErrorState message={labError(context.error)} onRetry={() => { void context.refetch(); }} />;
-  else if (context.data.labs.length === 0) body = <EmptyState title={LAB_NO_LAB} />;
+  else if (context.isError && !context.data) body = <ErrorState message={labError(context.error)} onRetry={() => { void context.refetch(); }} />;
+  else if (context.data!.labs.length === 0) body = <EmptyState title={LAB_NO_LAB} />;
   else body = children(roles);
   return (
     <div style={stack}>

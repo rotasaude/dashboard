@@ -259,6 +259,37 @@ describe("LabRelease", () => {
     await act(async () => { finish(labResultRow({ id: "r9" })); });
   });
 
+  it("final I2: 409 invalid_transition em Usar X explica e relê a conferência", async () => {
+    mocked(api.getReleaseRequisition).mockResolvedValue(releaseRequisition({ items: [ {
+      ...labItem({ id: "it2", label: "Glicose", status: "typed" }), restriction_note: null,
+      results: [ labResultRow({ id: "r1", value: "410", effective: true }), labResultRow({ id: "r2", value: "98", effective: false }) ]
+    } ] }));
+    mocked(api.chooseLabResult).mockRejectedValue(new api.ApiError(409, { error: "invalid_transition" }, "x"));
+    const review = await openReview();
+    fireEvent.click(within(review).getByRole("button", { name: "Usar 98" }));
+    expect(await screen.findByText("a situação mudou — a tela foi atualizada")).not.toBeNull();
+    await waitFor(() => expect(api.listReleases).toHaveBeenCalledTimes(2));
+  });
+
+  it("final L1: com um aviso crítico sendo gravado, Liberar não grava", async () => {
+    mocked(api.getReleaseRequisition).mockResolvedValue(critItem());
+    let finish: (v: unknown) => void = () => {};
+    mocked(api.recordCriticalNotice).mockReturnValue(new Promise((res) => { finish = res; }) as never);
+    const review = await openReview();
+    fireEvent.click(within(review).getByRole("button", { name: "Registrar aviso" }));
+    const form = within(review).getByRole("region", { name: "Aviso do valor crítico — Glicose" });
+    fireEvent.change(within(form).getByLabelText("Quem foi avisado"), { target: { value: "Dra. Ana" } });
+    fireEvent.change(within(form).getByLabelText("Função"), { target: { value: "médica" } });
+    fireEvent.change(within(form).getByLabelText("Como"), { target: { value: "telefone" } });
+    fireEvent.click(within(form).getByRole("button", { name: "Registrar aviso" }));
+    await waitFor(() => expect(api.recordCriticalNotice).toHaveBeenCalledTimes(1));
+    fillAdvanced(review);
+    fireEvent.click(within(review).getByRole("button", { name: /^Liberar laudo/ }));
+    fireEvent.click(within(review).queryByRole("button", { name: "Liberar sem aviso" }) ?? review);
+    expect(api.releaseRequisition).not.toHaveBeenCalled();
+    await act(async () => { finish(undefined); });
+  });
+
   it("I2: trocar de crítico zera o formulário de aviso", async () => {
     mocked(api.getReleaseRequisition).mockResolvedValue(releaseRequisition({ items: [ {
       ...labItem({ id: "it2", label: "Glicose", status: "typed" }), restriction_note: null,

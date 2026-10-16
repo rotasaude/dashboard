@@ -101,7 +101,7 @@ function ReleaseBody({ providerId, onNavigate }: { providerId: string; onNavigat
         )}
         {noticeFor && (
           <CriticalNoticeForm key={noticeFor.result_id} resultId={noticeFor.result_id} label={noticeFor.analyte_name} onCancel={() => setNoticeFor(null)}
-            onDone={() => { setNoticeFor(null); setMessage({ kind: "ok", text: "Aviso registrado." }); void criticals.refetch(); void after(); }} />
+            onDone={() => { setNoticeFor(null); setMessage({ kind: "ok", text: "Aviso registrado." }); void after(); }} />
         )}
       </Panel>
       <Panel title="Fila de liberação" sub="exames digitados ou recebidos do aparelho, esperando conferência">

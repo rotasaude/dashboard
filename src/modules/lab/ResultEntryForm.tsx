@@ -70,6 +70,9 @@ export function ResultEntryForm({ item, onSaved, onStale, onClose }: { item: Lab
       if (errorCode(err) === "out_of_entry_range" && typeof body?.analyte_key === "string") {
         setFieldErrors({ [body.analyte_key]: "fora do limite de digitação da versão atual — confira" });
       }
+      if (errorCode(err) === "invalid_values" && typeof body?.analyte_key === "string") {
+        setFieldErrors({ [body.analyte_key]: "falta um valor da conta deste componente — digite os componentes juntos" });
+      }
       // nada foi gravado: quem chama relê o exame com mensagem neutra
       if (errorCode(err) === "invalid_transition" || errorCode(err) === "unknown_analyte") safely(onStale ?? onSaved);
       return;

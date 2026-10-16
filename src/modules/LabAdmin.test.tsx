@@ -11,6 +11,7 @@ vi.mock("../lib/api", async (importOriginal) => {
 
 import * as api from "../lib/api";
 import { LabAdmin } from "./LabAdmin";
+import { EXAM_ADMIN_PROVIDERS_KEY } from "../lib/exams";
 import { renderWithProviders } from "../test/campaignFixtures";
 import { labExam, labTemplate, labUser } from "../test/labFixtures";
 import { examProvider } from "../test/examFixtures";
@@ -67,5 +68,15 @@ describe("LabAdmin", () => {
     await waitFor(() => expect(api.adoptLabExam).toHaveBeenCalledWith({
       provider_id: "pv9", template_id: "tp2", sector: "biochemistry", bench: null, delivery_days: 3
     }));
+  });
+
+  it("final I1: releitura dos prestadores que falha com dado presente mantém os painéis (token não se perde)", async () => {
+    const { client } = renderWithProviders(<LabAdmin />);
+    expect(await screen.findByRole("region", { name: "Liberadores" })).not.toBeNull();
+    mocked(api.listExamProviders).mockRejectedValue(new api.ApiError(429, { error: "too_many_requests" }, "x"));
+    await client.invalidateQueries({ queryKey: [ EXAM_ADMIN_PROVIDERS_KEY ] });
+    await waitFor(() => expect(api.listExamProviders).toHaveBeenCalledTimes(2));
+    expect(screen.getByRole("region", { name: "Liberadores" })).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Gerar token do middleware" })).not.toBeNull();
   });
 });

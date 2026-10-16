@@ -35,7 +35,10 @@ function ReceptionBody({ providerId }: { providerId: string }) {
   const [ note, setNote ] = useState("");
   const [ scanning, setScanning ] = useState(false);
 
-  const receive = (d: LabReceiveDecision, reason: string, restriction: string) => async (code: string): Promise<ScanOutcome> => {
+  // A escolha é lida quando a leitura entra na fila (capture), não quando é gravada.
+  interface Choice { d: LabReceiveDecision; reason: string; restriction: string }
+  const receive = async (code: string, choice: Choice | undefined): Promise<ScanOutcome> => {
+    const { d, reason, restriction } = choice ?? { d: "accept" as const, reason: "", restriction: "" };
     if (d === "reject" && !reason) return { ok: false, text: "escolha o motivo da rejeição antes de ler" };
     if (d === "accept_with_restriction" && !restriction.trim()) return { ok: false, text: "escreva a restrição antes de ler" };
     try {
@@ -45,8 +48,6 @@ function ReceptionBody({ providerId }: { providerId: string }) {
         ...(d === "accept_with_restriction" ? { restriction_note: restriction.trim() } : {})
       });
       // o recebimento já foi gravado: falha ao reler as listas não o desfaz
-      // uma rejeição ou restrição por escolha explícita: a próxima leitura volta a aceitar
-      if (d !== "accept") { setDecision("accept"); setReasonId(""); setNote(""); }
       void Promise.resolve().then(() => refreshLab(queryClient)).catch(() => undefined);
       if (d === "reject") {
         return { ok: true, text: `rejeitada${out.recollection ? ` · recoleta ${out.recollection.barcode} pedida à UBS de origem` : ""}` };
@@ -89,7 +90,13 @@ function ReceptionBody({ providerId }: { providerId: string }) {
             <input value={note} style={inputStyle} disabled={scanning} onChange={(e) => setNote(e.target.value)} />
           </label>
         )}
-        <ScanField label="Etiqueta do tubo" onScan={receive(decision, reasonId, note)} onBusyChange={setScanning} />
+        <ScanField label="Etiqueta do tubo" onScan={receive} onBusyChange={setScanning}
+          capture={() => ({ d: decision, reason: reasonId, restriction: note })}
+          onQueued={() => {
+            // uma rejeição ou restrição por escolha explícita: a próxima leitura já volta a aceitar
+            const valid = decision === "reject" ? reasonId !== "" : decision === "accept_with_restriction" && note.trim() !== "";
+            if (valid) { setDecision("accept"); setReasonId(""); setNote(""); }
+          }} />
       </div>
     </Panel>
   );

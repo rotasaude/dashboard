@@ -250,11 +250,23 @@ describe("correções da rodada 1", () => {
 
   it("refreshLab invalida toda chave do laboratório", async () => {
     const client = new QueryClient();
-    const keys = [ "labContext", "labRequisitions", "labRequisition", "labCandidates", "labExams", "labShipments", "labUnitPending",
+    const keys = [ "labRequisitions", "labRequisition", "labCandidates", "labExams", "labShipments", "labUnitPending",
       "labWorklist", "labEntry", "labReleases", "labCriticals", "labCriticalCount", "labReasons", "labAdminExams", "labTemplates",
       "labReleasers", "labReports" ];
     for (const k of keys) client.setQueryData([ k, "x" ], 1);
     await refreshLab(client);
     for (const k of keys) expect(client.getQueryState([ k, "x" ])?.isInvalidated, k).toBe(true);
+  });
+
+  it("refreshLab não invalida o contexto do laboratório (I1)", async () => {
+    const client = new QueryClient();
+    client.setQueryData([ "labContext", "x" ], 1);
+    await refreshLab(client);
+    expect(client.getQueryState([ "labContext", "x" ])?.isInvalidated).toBe(false);
+  });
+
+  it("invalid_values tem frase própria (I3)", () => {
+    const err = new ApiError(422, { error: "invalid_values", analyte_key: "ldl" }, "x");
+    expect(labError(err)).toBe("falta um valor que entra no cálculo de um componente calculado — digite os componentes da conta juntos");
   });
 });

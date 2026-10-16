@@ -32,8 +32,8 @@ function AdminBody({ onGoToSecurity }: { onGoToSecurity?(): void }) {
   const providers = useQuery({ queryKey: [ EXAM_ADMIN_PROVIDERS_KEY ], queryFn: listExamProviders, retry: false });
   const [ providerId, setProviderId ] = useState("");
   if (providers.isPending) return <p className="mono" style={muted}>carregando…</p>;
-  if (providers.isError) return <p role="alert" style={alert}>{labError(providers.error)}</p>;
-  const labs = labProviders(providers.data);
+  if (providers.isError && !providers.data) return <p role="alert" style={alert}>{labError(providers.error)}</p>;
+  const labs = labProviders(providers.data!);
   if (labs.length === 0) {
     return <EmptyState title="nenhum prestador usa o laboratório municipal" sub="marque o laboratório em Exames → Catálogo e prestadores" />;
   }

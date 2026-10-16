@@ -13,6 +13,7 @@ import {
   type ExamEvent
 } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
+import { hasFeature } from "../../lib/features";
 import {
   DETAIL_TRANSITION_REREAD, EXAM_ORDER_KEY, EXAM_PROVIDER_REFS_KEY, ORIGIN_LABEL, criticalFromTrail, escalationLabel, eventLabel, examActions, examError, examRoles,
   examStatusLabel, examStatusTone, overdueLabel, refreshExams, scheduleBody
@@ -170,7 +171,7 @@ export function ExamOrderDetail({ id, onClose, onChanged, focusOnOpen = false }:
               onConfirm={confirm(() => collectExam(order.id), "Coleta registrada.")} />
           )}
           {actions.result && <button type="button" style={secondaryButtonStyle} onClick={() => setMode("result")}>Registrar resultado</button>}
-          {order.gal_requisition === null && (roles.reception || roles.professional) && !CLOSED.has(order.status) && (
+          {order.gal_requisition === null && hasFeature(user, "municipal_lab") && (roles.reception || roles.professional) && !CLOSED.has(order.status) && (
             <button type="button" style={secondaryButtonStyle} onClick={() => setMode("gal")}>Registrar requisição do GAL</button>
           )}
           {actions.acknowledge && !actions.acknowledgeNeedsReason && (

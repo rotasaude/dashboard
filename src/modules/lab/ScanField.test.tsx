@@ -17,7 +17,7 @@ describe("ScanField", () => {
     expect(document.activeElement).toBe(input);
     read(input, "  0000123401 ");
     expect(input.value).toBe("");
-    await waitFor(() => expect(onScan).toHaveBeenCalledWith("0000123401"));
+    await waitFor(() => expect(onScan).toHaveBeenCalledWith("0000123401", undefined));
     expect(await screen.findByText("0000123401 · coleta registrada")).not.toBeNull();
   });
 

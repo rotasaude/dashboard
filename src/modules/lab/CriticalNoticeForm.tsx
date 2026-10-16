@@ -7,13 +7,14 @@ import { CHANNEL_OPTIONS, EMPTY_CRITICAL, criticalBody, criticalProblem, labErro
 import { cityIsoDate, fmtHourMinute } from "../../lib/format";
 import { ActionButton } from "../../components/ActionButton";
 import { inputStyle, secondaryButtonStyle } from "../../components/formStyles";
+import type { WriteGuard } from "./RectifyForm";
 import { alert, box, fieldLabel, row } from "../exams/styles";
 
 export function cityNowLocal(): string {
   return `${cityIsoDate()}T${fmtHourMinute(new Date().toISOString())}`;
 }
 
-export function CriticalNoticeForm({ resultId, label, onDone, onCancel, busy }: { resultId: string; label: string; onDone(): void; onCancel(): void; busy?: boolean }) {
+export function CriticalNoticeForm({ resultId, label, onDone, onCancel, busy, guard }: { resultId: string; label: string; onDone(): void; onCancel(): void; busy?: boolean; guard?: WriteGuard }) {
   const [ draft, setDraft ] = useState<CriticalDraft>(() => ({ ...EMPTY_CRITICAL, at: cityNowLocal() }));
   const [ error, setError ] = useState<string | null>(null);
   const set = (patch: Partial<CriticalDraft>) => setDraft((d) => ({ ...d, ...patch }));
@@ -21,13 +22,14 @@ export function CriticalNoticeForm({ resultId, label, onDone, onCancel, busy }: 
   async function save() {
     const problem = criticalProblem(draft, new Date().toISOString());
     if (problem) { setError(problem); return; }
+    if (guard && !guard.begin()) return;
     setError(null);
     try {
       await recordCriticalNotice(criticalBody(resultId, draft));
       onDone();
     } catch (err) {
       setError(labError(err));
-    }
+    } finally { guard?.end(); }
   }
 
   return (
@@ -44,7 +46,7 @@ export function CriticalNoticeForm({ resultId, label, onDone, onCancel, busy }: 
       <label style={fieldLabel}>Quando<input type="datetime-local" value={draft.at} style={inputStyle} onChange={(e) => set({ at: e.target.value })} /></label>
       {error && <p role="alert" style={alert}>{error}</p>}
       <div style={row}>
-        <ActionButton busy={busy} onClick={save}>Registrar aviso</ActionButton>
+        <ActionButton busy={guard ? guard.busy : busy} onClick={save}>Registrar aviso</ActionButton>
         <button type="button" style={secondaryButtonStyle} onClick={onCancel}>Cancelar</button>
       </div>
     </section>

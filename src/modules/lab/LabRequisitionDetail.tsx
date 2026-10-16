@@ -92,7 +92,7 @@ export function LabRequisitionDetail({ id, onClose }: { id: string; onClose(): v
             </Tag>
           ) },
           { label: "", w: "auto", card: "actions", render: (s) => (
-            s.status === "rejected" ? null : (
+            s.status === "rejected" || s.status === "not_received" ? null : (
               <ConfirmButton label="Reimprimir" question="A reimpressão fica registrada. Reimprimir a etiqueta?"
                 onConfirm={() => pdf(() => fetchLabLabels(r.id, [ s.id ]))} />
             )

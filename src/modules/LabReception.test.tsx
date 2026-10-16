@@ -1,6 +1,6 @@
 // src/modules/LabReception.test.tsx
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 
 vi.mock("../lib/api", async (importOriginal) => {
   const real = await importOriginal<typeof import("../lib/api")>();
@@ -170,5 +170,32 @@ describe("LabReception", () => {
     mocked(api.fetchCurrentSession).mockResolvedValue(labUser([ "health_professional" ]));
     renderWithProviders(<LabReception />);
     expect(await screen.findByText("seu papel não permite ver esta tela")).not.toBeNull();
+  });
+
+  it("final I4: segunda leitura enquanto a rejeição é gravada sai como aceitar", async () => {
+    let finish: (v: unknown) => void = () => {};
+    mocked(api.receiveSample).mockReturnValueOnce(new Promise((res) => { finish = res; }));
+    renderWithProviders(<LabReception />);
+    fireEvent.click(await screen.findByLabelText("Rejeitar"));
+    fireEvent.change(await screen.findByLabelText("Motivo da rejeição"), { target: { value: "rr1" } });
+    read(CODE);
+    read("0000012302");
+    expect((screen.getByLabelText("Aceitar") as HTMLInputElement).checked).toBe(true);
+    await act(async () => { finish({ sample: { ...labSample({ status: "rejected" }), requisition_number: "00000123" }, recollection: null }); });
+    await waitFor(() => expect(api.receiveSample).toHaveBeenCalledTimes(2));
+    expect(api.receiveSample).toHaveBeenNthCalledWith(1, { barcode: CODE, decision: "reject", reason_id: "rr1" });
+    expect(api.receiveSample).toHaveBeenNthCalledWith(2, { barcode: "0000012302", decision: "accept" });
+  });
+
+  it("final I1: releitura do contexto que falha não desmonta o campo de leitura nem a fila", async () => {
+    const { client } = renderWithProviders(<LabReception />);
+    await screen.findByLabelText("Etiqueta do tubo");
+    read(CODE);
+    expect(await screen.findByText(`${CODE} · aceita · requisição 00000123`)).not.toBeNull();
+    mocked(api.getLabContext).mockRejectedValue(new api.ApiError(429, { error: "too_many_requests" }, "x"));
+    await client.invalidateQueries({ queryKey: [ "labContext" ] });
+    await waitFor(() => expect(api.getLabContext).toHaveBeenCalledTimes(2));
+    expect(screen.getByLabelText("Etiqueta do tubo")).not.toBeNull();
+    expect(screen.getByText(`${CODE} · aceita · requisição 00000123`)).not.toBeNull();
   });
 });

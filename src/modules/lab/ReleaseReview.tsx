@@ -6,12 +6,12 @@
 // (parcial quando nem todos) e a assinatura. O código do autenticador é
 // apagado antes de cada envio; 409 devolve à fila.
 import { useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   chooseLabResult, errorCode, getReleaseRequisition, releaseRequisition,
   type LabReleaseItem, type LabReportSummary, type LabResultRow, type LabSignatureKind
 } from "../../lib/api";
-import { LAB_RELEASES_KEY, flagLabel, flagTone, isCritical, itemStatusLabel, labError, onlyIcp, totpProblem } from "../../lib/lab";
+import { LAB_RELEASES_KEY, flagLabel, flagTone, isCritical, itemStatusLabel, labError, onlyIcp, refreshLab, totpProblem } from "../../lib/lab";
 import { fmtDay } from "../../lib/exams";
 import { hasFeature } from "../../lib/features";
 import { useAuth } from "../../lib/auth";
@@ -52,6 +52,7 @@ export function ReleaseReview({ requisitionId, council, onReleased, onConflict, 
   const [ noticeFor, setNoticeFor ] = useState<LabResultRow | null>(null);
   const [ rectifying, setRectifying ] = useState<LabReportSummary | null>(null);
   // I1: uma ação de gravação por vez na conferência (liberar ou escolher valor).
+  const queryClient = useQueryClient();
   const inFlight = useRef(false);
   const [ busy, setBusy ] = useState(false);
   const releasedOnce = useRef(false);
@@ -89,7 +90,13 @@ export function ReleaseReview({ requisitionId, council, onReleased, onConflict, 
     setBusy(true);
     setError(null);
     try {
-      try { await chooseLabResult(row.id); } catch (err) { setError(labError(err)); return; }
+      try {
+        await chooseLabResult(row.id);
+      } catch (err) {
+        if (errorCode(err) === "invalid_transition") { onConflict(labError(err)); return; }
+        setError(labError(err));
+        return;
+      }
       await reread("valor escolhido");
     } finally { inFlight.current = false; setBusy(false); }
   }
@@ -171,8 +178,8 @@ export function ReleaseReview({ requisitionId, council, onReleased, onConflict, 
         </ul>
       ))}
       {noticeFor && i.results.some((x) => x.id === noticeFor.id) && (
-        <CriticalNoticeForm key={noticeFor.id} busy={busy} resultId={noticeFor.id} label={noticeFor.name}
-          onCancel={() => setNoticeFor(null)} onDone={() => { setNoticeFor(null); void reread("aviso registrado"); }} />
+        <CriticalNoticeForm key={noticeFor.id} guard={writeGuard} resultId={noticeFor.id} label={noticeFor.name}
+          onCancel={() => setNoticeFor(null)} onDone={() => { setNoticeFor(null); void refreshLab(queryClient).catch(() => undefined); void reread("aviso registrado"); }} />
       )}
     </div>
   );
