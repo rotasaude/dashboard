@@ -4,7 +4,7 @@
 // nenhuma releitura automática (as rotas gravam trilha); o contador do menu
 // é a rota /count (Task 3).
 import { useRef, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { listLabRequisitions, listReleases, listUnnotifiedCriticals, type LabCriticalRow, type LabReleaseRequisition, type LabReportSummary } from "../lib/api";
 import { LAB_CRITICALS_KEY, LAB_RELEASES_KEY, flagLabel, isCritical, labError, lookupKind, refreshLab } from "../lib/lab";
 import { fmtDateTime } from "../lib/format";
@@ -33,7 +33,19 @@ function ReleaseBody({ providerId, onNavigate }: { providerId: string; onNavigat
   const context = useLabContext(true);
   const council = context.data?.council ?? null;
   const queue = useQuery({ queryKey: [ LAB_RELEASES_KEY, providerId ], queryFn: () => listReleases(providerId), gcTime: 0, staleTime: 0, retry: false, refetchOnReconnect: false, refetchOnWindowFocus: false });
-  const criticals = useQuery({ queryKey: [ LAB_CRITICALS_KEY ], queryFn: listUnnotifiedCriticals, gcTime: 0, staleTime: 0, retry: false, refetchOnReconnect: false, refetchOnWindowFocus: false });
+  const criticals = useInfiniteQuery({
+    queryKey: [ LAB_CRITICALS_KEY ], queryFn: ({ pageParam }) => listUnnotifiedCriticals({ after: pageParam }),
+    initialPageParam: null as string | null, getNextPageParam: (last) => last.next_after ?? undefined,
+    gcTime: 0, staleTime: 0, retry: false, refetchOnReconnect: false, refetchOnWindowFocus: false
+  });
+  // Sem repetidos entre páginas (a lista pode andar entre uma busca e outra).
+  const criticalRows = [ ...new Map((criticals.data?.pages.flatMap((p) => p.criticals) ?? []).map((c) => [ c.result_id, c ])).values() ];
+  const loadingMore = useRef(false);
+  async function loadMoreCriticals() {
+    if (loadingMore.current) return;
+    loadingMore.current = true;
+    try { await criticals.fetchNextPage(); } finally { loadingMore.current = false; }
+  }
   const [ openId, setOpenId ] = useState<string | null>(null);
   const [ noticeFor, setNoticeFor ] = useState<LabCriticalRow | null>(null);
   const [ message, setMessage ] = useState<{ kind: "ok" | "error"; text: string; pending?: boolean } | null>(null);
@@ -96,8 +108,11 @@ function ReleaseBody({ providerId, onNavigate }: { providerId: string; onNavigat
                 <button type="button" style={secondaryButtonStyle} onClick={() => setNoticeFor(c)}>Registrar aviso</button>
               ) }
             ]}
-            rows={criticals.data ?? []} rowKey={(c) => c.result_id} empty={criticals.isPending ? "carregando…" : "nenhum crítico sem aviso"}
+            rows={criticalRows} rowKey={(c) => c.result_id} empty={criticals.isPending ? "carregando…" : "nenhum crítico sem aviso"}
           />
+        )}
+        {criticals.hasNextPage && !criticals.isError && (
+          <div><button type="button" style={secondaryButtonStyle} disabled={criticals.isFetchingNextPage} onClick={() => void loadMoreCriticals()}>Carregar mais</button></div>
         )}
         {noticeFor && (
           <CriticalNoticeForm key={noticeFor.result_id} resultId={noticeFor.result_id} label={noticeFor.analyte_name} onCancel={() => setNoticeFor(null)}

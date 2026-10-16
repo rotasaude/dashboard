@@ -3024,8 +3024,15 @@ export function getReleaseRequisition(id: string): Promise<LabReleaseRequisition
   return jsonFetch(labPath("releases", id));
 }
 
-export async function listUnnotifiedCriticals(): Promise<LabCriticalRow[]> {
-  return (await jsonFetch<{ criticals: LabCriticalRow[] }>(labPath("criticals", "unnotified"))).criticals;
+// B52: mais antigos primeiro, sem corte de dias; cursor opaco `after` (invalid_cursor → 422).
+export interface LabCriticalPage { criticals: LabCriticalRow[]; next_after: string | null }
+
+export async function listUnnotifiedCriticals(q: { after?: string | null; limit?: number } = {}): Promise<LabCriticalPage> {
+  const p = new URLSearchParams();
+  if (q.after) p.set("after", q.after);
+  if (q.limit) p.set("limit", String(q.limit));
+  const body = await jsonFetch<{ criticals?: LabCriticalRow[]; next_after?: string | null }>(labQuery(labPath("criticals", "unnotified"), p));
+  return { criticals: body.criticals ?? [], next_after: body.next_after ?? null };
 }
 
 // Divergência D11: só a contagem, sem dado clínico e sem trilha.

@@ -28,7 +28,7 @@ beforeEach(() => {
   mocked(api.getLabContext).mockResolvedValue(labContext({ releaser_of: [ "pv9" ], council: "CRF" }));
   mocked(api.listReleases).mockResolvedValue([ releaseRequisition() ]);
   mocked(api.getReleaseRequisition).mockResolvedValue(releaseRequisition());
-  mocked(api.listUnnotifiedCriticals).mockResolvedValue([]);
+  mocked(api.listUnnotifiedCriticals).mockResolvedValue({ criticals: [], next_after: null });
   mocked(api.releaseRequisition).mockResolvedValue(labReport());
   mocked(api.listLabRequisitions).mockResolvedValue({ requisitions: [], next_before: null });
 });
@@ -398,6 +398,46 @@ describe("LabRelease", () => {
     await act(async () => { vi.advanceTimersByTime(10 * 60_000); });
     expect(api.listReleases).toHaveBeenCalledTimes(1);
     expect(api.listUnnotifiedCriticals).toHaveBeenCalledTimes(1);
+  });
+
+  describe("Críticos sem aviso (B52): páginas", () => {
+    const crit = (n: number) => ({ result_id: `res${n}`, requisition_id: `rq${n}`, requisition_number: `0000010${n}`, patient_display_name: `Paciente ${n}`,
+      analyte_name: `Analito ${n}`, flag: "critical_high", released_at: "2026-10-01T10:00:00Z" });
+    const more = () => screen.queryByRole("button", { name: "Carregar mais" });
+
+    it("duas páginas: Carregar mais usa after=next_after e acrescenta sem duplicar", async () => {
+      mocked(api.listUnnotifiedCriticals)
+        .mockResolvedValueOnce({ criticals: [ crit(1), crit(2) ], next_after: "c2" })
+        .mockResolvedValueOnce({ criticals: [ crit(2), crit(3) ], next_after: null });
+      renderWithProviders(<LabRelease onNavigate={vi.fn()} />);
+      expect(await screen.findByText("Analito 1", { exact: false })).toBeTruthy();
+      fireEvent.click(await screen.findByRole("button", { name: "Carregar mais" }));
+      expect(await screen.findByText("Analito 3", { exact: false })).toBeTruthy();
+      expect(screen.getAllByText("Analito 2", { exact: false })).toHaveLength(1);
+      expect(mocked(api.listUnnotifiedCriticals).mock.calls[1][0]).toMatchObject({ after: "c2" });
+      expect(more()).toBeNull();
+    });
+
+    it("sem próxima página: sem botão", async () => {
+      mocked(api.listUnnotifiedCriticals).mockResolvedValue({ criticals: [ crit(1) ], next_after: null });
+      renderWithProviders(<LabRelease onNavigate={vi.fn()} />);
+      await screen.findByText("Analito 1", { exact: false });
+      expect(more()).toBeNull();
+    });
+
+    it("clique duplo busca uma vez só", async () => {
+      let release: (v: unknown) => void = () => undefined;
+      mocked(api.listUnnotifiedCriticals)
+        .mockResolvedValueOnce({ criticals: [ crit(1) ], next_after: "c1" })
+        .mockReturnValueOnce(new Promise((r) => { release = r; }));
+      renderWithProviders(<LabRelease onNavigate={vi.fn()} />);
+      const button = await screen.findByRole("button", { name: "Carregar mais" });
+      fireEvent.click(button); fireEvent.click(button);
+      expect(api.listUnnotifiedCriticals).toHaveBeenCalledTimes(2);
+      await act(async () => { release({ criticals: [ crit(2) ], next_after: null }); });
+      expect(await screen.findByText("Analito 2", { exact: false })).toBeTruthy();
+      expect(api.listUnnotifiedCriticals).toHaveBeenCalledTimes(2);
+    });
   });
 
   describe("Laudo já liberado", () => {

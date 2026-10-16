@@ -1,7 +1,7 @@
 // src/lib/api.lab.test.ts
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  collectSampleByBarcode, countUnnotifiedCriticals, createLabRequisition, enterLabResults, fetchLabLabels, fetchLabReportCsv,
+  collectSampleByBarcode, countUnnotifiedCriticals, listUnnotifiedCriticals, createLabRequisition, enterLabResults, fetchLabLabels, fetchLabReportCsv,
   fetchWorklistPdf, getLabEntry, listLabRequisitions, listWorklist, receiveSample, receiveShipment, releaseRequisition,
   revokeMiddlewareToken, rotateMiddlewareToken, setGalRequisition, updateUnit
 } from "./api";
@@ -114,6 +114,15 @@ describe("cliente do laboratório (contrato §3–§6)", () => {
     expect(bodyOf(0)).toEqual({ item_ids: [ "it1" ], signature: "icp" });
     expect(bodyOf(1)).toEqual({ item_ids: [ "it1" ], signature: "advanced", totp: "123456" });
     expect(urlOf(1).search).toBe("");
+  });
+
+  it("críticos sem aviso: página com cursor after e limit", async () => {
+    fetchMock.mockReturnValueOnce(ok({ criticals: [ { result_id: "r1" } ], next_after: "c1" }));
+    const page = await listUnnotifiedCriticals({ after: "c0", limit: 25 });
+    expect(page).toEqual({ criticals: [ { result_id: "r1" } ], next_after: "c1" });
+    expect(urlOf().pathname).toBe("/lab/criticals/unnotified");
+    expect(urlOf().searchParams.get("after")).toBe("c0");
+    expect(urlOf().searchParams.get("limit")).toBe("25");
   });
 
   it("contagem de críticos sem aviso: rota própria, sem lista", async () => {
