@@ -17,6 +17,7 @@ import { LabShipments } from "./modules/LabShipments";
 import { LabReception } from "./modules/LabReception";
 import { LabEntry } from "./modules/LabEntry";
 import { LabWorklist } from "./modules/LabWorklist";
+import { LabRelease } from "./modules/LabRelease";
 import { ProviderPortal } from "./modules/ProviderPortal";
 import { AcknowledgementNotice } from "./modules/exams/AcknowledgementNotice";
 import { Shell } from "./shell/Shell";
@@ -235,6 +236,7 @@ export function renderModule(active: ModuleId, setActive: (id: ModuleId) => void
     case "lab-reception": return <LabReception />;
     case "lab-worklist": return <LabWorklist />;
     case "lab-entry": return <LabEntry />;
+    case "lab-release": return <LabRelease onNavigate={setActive} />;
     default:               return <Placeholder title={labelFor(active)} />;
   }
 }
