@@ -13,6 +13,7 @@ import { LabPick } from "./LabPick";
 import { saveFile } from "./saveFile";
 import { ReagentLotTag } from "../inventory/ReagentLotTag";
 import { QC_DISABLED } from "../../lib/qc";
+import { INVENTORY_DISABLED } from "../../lib/inventory";
 import { renderWithProviders } from "../../test/campaignFixtures";
 import { qcContext, qcUser } from "../../test/qcFixtures";
 
@@ -29,6 +30,14 @@ describe("LabGate com interruptor do 21c", () => {
     mocked(api.fetchCurrentSession).mockResolvedValue(qcUser([ "lab_staff" ], { features: [ "exam_tracking", "municipal_lab" ] }));
     gate([ "lab_quality_control" ]);
     expect(await screen.findByText(QC_DISABLED)).not.toBeNull();
+    expect(api.getLabContext).not.toHaveBeenCalled();
+  });
+
+  it("estoque desligado: a frase do estoque, não a do QC", async () => {
+    mocked(api.fetchCurrentSession).mockResolvedValue(qcUser([ "lab_staff" ], { features: [ "exam_tracking", "municipal_lab", "lab_quality_control" ] }));
+    renderWithProviders(<LabGate title="Estoque" sub="x" allow={(r) => r.staff} requires={[ "lab_inventory" ]} disabledText={INVENTORY_DISABLED}>{() => <p>conteúdo</p>}</LabGate>);
+    expect(await screen.findByText(INVENTORY_DISABLED)).not.toBeNull();
+    expect(screen.queryByText(QC_DISABLED)).toBeNull();
     expect(api.getLabContext).not.toHaveBeenCalled();
   });
 
@@ -80,6 +89,8 @@ describe("ReagentLotTag", () => {
 describe("saveFile", () => {
   it("baixa pelo link temporário e devolve o objeto", () => {
     vi.useFakeTimers();
+    const origCreate = URL.createObjectURL;
+    const origRevoke = URL.revokeObjectURL;
     const create = vi.fn(() => "blob:x");
     const revoke = vi.fn();
     Object.defineProperty(URL, "createObjectURL", { configurable: true, value: create });
@@ -90,5 +101,7 @@ describe("saveFile", () => {
     vi.advanceTimersByTime(60_000);
     expect(revoke).toHaveBeenCalledWith("blob:x");
     vi.useRealTimers();
+    Object.defineProperty(URL, "createObjectURL", { configurable: true, writable: true, value: origCreate });
+    Object.defineProperty(URL, "revokeObjectURL", { configurable: true, writable: true, value: origRevoke });
   });
 });
