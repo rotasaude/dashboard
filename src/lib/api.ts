@@ -2730,8 +2730,8 @@ export type CriticalChannel = "telefone" | "presencial" | "sistema";
 export const LAB_PAGE_SIZE = 50;
 
 export interface LabProviderRef { id: string; name: string }
-// Divergência D1: laboratórios em que a sessão atua e o conselho do liberador.
-export interface LabContext { labs: LabProviderRef[]; releaser_of: string[]; council: string | null }
+// Divergência D1 (21b) + C1 (21c): `technical_lead_of` = laboratórios em que a sessão é RT ou substituto ativo.
+export interface LabContext { labs: LabProviderRef[]; releaser_of: string[]; council: string | null; technical_lead_of?: string[] }
 
 export interface LabPatient { id: string; display_name: string; birth_date: string; biological_sex: BiologicalSex | string }
 export interface LabItem {
@@ -2765,8 +2765,8 @@ export interface LabRequisitionQuery {
 export interface LabCandidateOrder {
   id: string; short_code: string; sigtap_code: string; label: string; priority: ExamPriority; status: string; requester_name: string;
 }
-// Divergência D3: exames ativos do laboratório, para o pedido em papel.
-export interface LabExamRef { sigtap_code: string; name: string; material: string; delivery_days: number }
+// Divergência D3 (21b) + C5 (21c): exames ativos do laboratório; `id` e `analytes` para CIQ, CEQ e lote em uso.
+export interface LabExamRef { sigtap_code: string; name: string; material: string; delivery_days: number; id?: string; analytes?: { key: string; name: string }[] }
 export interface LabPaperOrder { sigtap_code: string; requester: { user_id: string } | { name: string; cns: string } }
 export interface LabRequisitionInput {
   patient_id: string; provider_id: string; origin_unit_id: string; collection_place: LabCollectionPlace;
@@ -2794,6 +2794,8 @@ export interface LabResultRow {
   source: "typed" | "hl7" | string; entered_at: string; entered_by: string | null; chosen: boolean;
   // B30: o valor que vale é a linha com effective true (calculado no api); `chosen` fica como história.
   effective: boolean; notified?: boolean;
+  // 21c (contrato §7): lote de reagente em uso na gravação; null = "sem rastreio"; ausente = api antigo ou quem não é do laboratório.
+  reagent_lot?: ReagentLotRef | null;
 }
 export interface LabReference { low: number | null; high: number | null; text: string | null }
 // Divergência D7: componente para digitar, com a faixa já escolhida pelo api
@@ -2856,6 +2858,8 @@ export interface LabAnalyteVersion extends Omit<LabAnalyteTemplate, "choices"> {
 }
 export interface LabExamVersion {
   id: string; version: number; method: string; material: string; container: string; instrument_test_code: string | null;
+  // 21c (contrato §2): aparelho em que o exame roda (opcional); aparelho inativo → invalid_version (C-E43).
+  lab_instrument_id?: string | null;
   analytes: LabAnalyteVersion[]; created_by: string | null; created_at: string;
 }
 export interface LabExam {
@@ -3148,4 +3152,352 @@ export function fetchLabReportCsv(kind: LabReportKind, q: LabReportQuery): Promi
 // F-21.24 (Divergência D17): número da requisição no GAL do LACEN.
 export async function setGalRequisition(orderId: string, value: string): Promise<void> {
   await jsonFetch<unknown>(examPath("orders", orderId, "gal_requisition"), postProfessional({ gal_requisition: value }));
+}
+
+// ─── Qualidade e insumos do laboratório (módulo 21c; contrato 2026-10-18) ───
+// CIQ, CEQ e estoque sobre o 21b. Na URL só ids, situação, nível, chave do
+// analito, datas, mês e ano; valor, média, dp, justificativa, motivo, ação,
+// código de barras do nível e quantidade vão no corpo. Decimais trafegam como
+// string com ponto, sem zero à direita (C-E9: "98", "2.5"); `z_score` e
+// `deviation_pct` são número. As formas seguem o api (apps/api feat/mod-21c-lab-qc).
+export type QcRunStatus = "open" | "approved" | "warning" | "rejected";
+export type QcTargetSource = "package_insert" | "laboratory";
+export type QcRule = "1_2s" | "1_3s" | "2_2s" | "R_4s" | "4_1s" | "10x";
+export const QC_RULES: QcRule[] = [ "1_2s", "1_3s", "2_2s", "R_4s", "4_1s", "10x" ];
+export type QcOutcome = "ok" | "warning" | "reject";
+export type QcReviewDecision = "pending" | "kept" | "rectify";
+export type EqaAdequacy = "adequate" | "inadequate";
+export type SupplyKind = "reagent" | "calibrator" | "control" | "consumable";
+export type SupplyOrigin = "purchase" | "donation" | "loan";
+export type SupplyMovementKind = "receipt" | "opening" | "loss" | "expiry" | "adjustment";
+export type QcLotStatus = "in_use" | "closed";
+export interface ReagentLotRef { id: string; lot_number: string }
+
+// Aparelho (admin_json.rb#instrument): fabricante, modelo e série vazios saem null.
+export interface LabInstrument {
+  id: string; provider_id: string; name: string; manufacturer: string | null; model: string | null; serial_number: string | null;
+  sector: string; hl7_equipment_id: string | null; active: boolean;
+}
+export type LabInstrumentInput = Omit<LabInstrument, "id">;
+
+export interface QcAnalyteRef { lab_exam_id: string; analyte_key: string }
+// `has_lots`: com lote, os níveis não mudam e nenhum analito sai (save_material.rb).
+export interface QcMaterial {
+  id: string; provider_id: string; name: string; manufacturer: string | null; levels: string[]; analytes: QcAnalyteRef[]; active: boolean;
+  has_lots: boolean;
+}
+export type QcMaterialInput = Omit<QcMaterial, "id" | "has_lots">;
+// Divergência C3: forma do lote de controle.
+export interface QcLot {
+  id: string; material_id: string; material_name: string; lot_number: string; expires_on: string; level_barcodes: Record<string, string>;
+  status: QcLotStatus | string; opened_on: string; closed_on: string | null; expired: boolean;
+}
+export interface QcLotInput { material_id: string; lot_number: string; expires_on: string; level_barcodes: Record<string, string> }
+export interface QcTargetKey { lot_id: string; level: string; analyte_key: string; instrument_id: string }
+export interface QcTarget extends QcTargetKey {
+  id: string; version: number; source: QcTargetSource | string; mean: string; sd: string; based_on_runs: number | null; reason: string | null;
+  accepted_by: string | null; accepted_at: string;
+}
+// Divergência C3: vigentes e histórico do lote.
+export interface QcTargetSet { current: QcTarget[]; history: QcTarget[] }
+// Divergência C6: `reason` quando já existe referência vigente para a chave.
+export interface QcTargetInput extends QcTargetKey { mean: string; sd: string; reason?: string }
+export interface QcSuggestion extends QcTargetKey {
+  mean: string; sd: string; runs: number; current_version: number; current_source: QcTargetSource | string;
+}
+export interface QcValue {
+  id: string; run_id: string; lot_id: string; level: string; analyte_key: string; value: string; z_score: number; rules_fired: string[];
+  outcome: QcOutcome | string; source: "typed" | "hl7" | string; target_version: number; reagent_lot_id: string | null;
+  // Divergência C10: o número do lote, como no resultado do paciente.
+  reagent_lot: ReagentLotRef | null; entered_at: string; entered_by: string | null;
+}
+export interface QcRun {
+  id: string; instrument_id: string; sector: string; status: QcRunStatus | string; started_at: string; evaluated_at: string | null;
+  values: QcValue[];
+}
+export interface QcBlock {
+  id: string; instrument_id: string; analyte_key: string; opened_at: string; opened_by_run_id: string;
+  corrective_action: string | null; corrective_action_at: string | null; closed_at: string | null; closed_by_run_id: string | null;
+}
+export interface QcValueInput { run_id: string | null; instrument_id: string; lot_id: string; level: string; analyte_key: string; value: string }
+// C-E3: `notice` quando a corrida aprovou mas o bloqueio segue sem ação corretiva.
+export interface QcValueResult { value: QcValue; run: QcRun; block: QcBlock | null; notice?: "corrective_action_required" }
+export interface QcChartPoint { at: string; value: string; z_score: number; outcome: QcOutcome | string; rules_fired: string[]; target_version: number }
+export interface QcChart { target: { mean: string; sd: string; version: number; source: QcTargetSource | string } | null; points: QcChartPoint[] }
+// C-E5: from/to opcionais (padrão 31 dias; no máximo 366).
+export interface QcChartQuery extends QcTargetKey { from?: string; to?: string }
+// Divergência C16: forma da leitura das regras (ausente = padrão, tudo ligado).
+export interface QcRuleSet {
+  instrument_id: string; analyte_key: string; rules: Record<QcRule, boolean>; is_default: boolean;
+  justification: string | null; changed_by: string | null; changed_at: string | null;
+}
+export interface QcRuleInput { instrument_id: string; analyte_key: string; rules: Record<QcRule, boolean>; justification: string }
+// Divergência C3: item da lista de revisão (sem paciente). `report_id` só na resposta da decisão `rectify`.
+export interface QcReview {
+  id: string; block_id: string; item_id: string; requisition_id: string; requisition_number: string; sigtap_code: string; exam_label: string;
+  analyte_key: string; instrument_id: string; released_at: string | null; decision: QcReviewDecision | string;
+  decided_by: string | null; decided_at: string | null; note: string | null; report_id?: string | null;
+}
+// Divergência C7: exceções concedidas.
+export interface QcException {
+  id: string; block_id: string; item_id: string; requisition_id: string; requisition_number: string; sigtap_code: string; exam_label: string;
+  analyte_key: string; instrument_id: string; justification: string; granted_by: string | null; granted_at: string;
+}
+// Contrato §3 + Divergência C9: um item POR BLOQUEIO (release_check.rb) — o mesmo item_id
+// pode repetir com outro block_id; a exceção é do par bloqueio × item.
+export interface QcBlockedItem { item_id: string; block_id: string; analyte_key: string; instrument_id: string; instrument_name: string }
+// Corpo do 409 da liberação e da retificação (C-E19).
+export interface QcBlockedBody { error: "qc_blocked"; items: QcBlockedItem[] }
+
+export interface EqaItem {
+  analyte_key: string; lab_exam_id: string; submitted: string; target: string; acceptable_low: string | null; acceptable_high: string | null;
+  adequacy: EqaAdequacy | string; action: string | null;
+}
+// C-E24: a rodada não tem relatório anual (é registro próprio, EqaAnnualReport).
+export interface EqaRound {
+  id: string; provider_id: string; program: string; round_code: string; round_date: string; items: EqaItem[];
+  recorded_by: string | null; recorded_at: string;
+}
+export type EqaRoundInput = Omit<EqaRound, "id" | "recorded_by" | "recorded_at">;
+// Divergência C3: resumo anual por analito.
+export interface EqaSummaryRow { analyte_key: string; lab_exam_id: string; rounds: number; adequate: number; inadequate: number }
+// C-E24: por programa, se o ano tem relatório anual.
+export interface EqaProgramSummary { program: string; annual_report: boolean; annual_report_id: string | null }
+export interface EqaSummary { year: number; rows: EqaSummaryRow[]; programs: EqaProgramSummary[] }
+// C-E24/C-E25: relatório anual por laboratório, programa e ano.
+export interface EqaAnnualReport {
+  id: string; provider_id: string; program: string; year: number; url: string; recorded_by: string | null; recorded_at: string;
+}
+export interface EqaAnnualReportInput { provider_id: string; program: string; year: number; upload_id: string }
+
+export interface LabSupply {
+  id: string; provider_id: string; name: string; kind: SupplyKind | string; unit: string; tests_per_package: number | null;
+  minimum_stock: number; expiry_alert_days: number; lab_exam_ids: string[]; active: boolean;
+  // Divergência C3: saldo somado dos lotes. C-E28: `below_minimum` conta só os lotes não vencidos.
+  balance: number; below_minimum: boolean;
+}
+export type LabSupplyInput = Omit<LabSupply, "id" | "balance" | "below_minimum">;
+export interface LabSupplyLot {
+  id: string; supply_id: string; supply_name: string; lot_number: string; expires_on: string; supplier: string;
+  origin: SupplyOrigin | string; balance: number; expired: boolean; in_use: { instrument_id: string; lab_exam_id: string }[];
+}
+export interface LabSupplyLotInput {
+  supply_id: string; lot_number: string; expires_on: string; supplier: string; origin: SupplyOrigin; quantity: number; document?: string;
+}
+// `balance` (saldo do lote depois do movimento) só na resposta do POST.
+export interface LabSupplyMovement {
+  id: string; lot_id: string; kind: SupplyMovementKind | string; quantity: number; reason: string | null; document: string | null;
+  recorded_by: string | null; recorded_at: string; balance?: number;
+}
+// A abertura não exige motivo (record_movement.rb): mande `reason` só quando houver.
+export interface LabSupplyMovementInput { lot_id: string; kind: Exclude<SupplyMovementKind, "receipt">; quantity: number; reason?: string }
+export interface LabSupplyInUse {
+  id: string; lot_id: string; lot_number: string; supply_name: string; instrument_id: string; lab_exam_id: string; exam_name: string;
+  started_at: string; ended_at: string | null;
+}
+export interface LabSupplyInUseInput { lot_id: string; instrument_id: string; lab_exam_id: string }
+// alerts.rb: o lote vencendo é a forma do lote + `lot_id`; o item abaixo do mínimo é a
+// forma do item + `supply_id`, com `balance` = saldo dos lotes não vencidos.
+export interface LabExpiringLot extends LabSupplyLot { lot_id: string }
+export interface LabLowSupply extends LabSupply { supply_id: string }
+export interface LabInventoryAlerts { expiring: LabExpiringLot[]; below_minimum: LabLowSupply[]; untraced_results: number }
+// C-E37: cada lista vem cortada em 5000; `*_truncated` avisa o corte.
+export interface LabLotTrace {
+  lot_id: string; lot_number: string;
+  results: { requisition_number: string; sigtap_code: string; entered_at: string }[]; results_truncated: boolean;
+  qc_values: { run_id: string; analyte_key: string; entered_at: string }[]; qc_values_truncated: boolean;
+}
+// C-E33: uma linha `total` por item e as sub-linhas por aparelho (`no_instrument` = "sem aparelho");
+// nas sub-linhas `tests_opened`/`deviation_pct` são null; na total, null = sem abertura no mês.
+export type LabConsumptionLine = "total" | "instrument" | "no_instrument";
+export interface LabConsumptionRow {
+  line: LabConsumptionLine | string; supply_id: string; name: string; instrument_id: string | null; tests_performed: number;
+  tests_opened: number | null; deviation_pct: number | null;
+}
+export interface LabConsumptionQuery { providerId: string; month: string }
+
+const labPut = (body: unknown): RequestInit => ({ method: "PUT", body: JSON.stringify(body) });
+const labPatch = (body: unknown): RequestInit => ({ method: "PATCH", body: JSON.stringify(body) });
+const byProvider = (providerId: string, extra: Record<string, string> = {}) => new URLSearchParams({ provider_id: providerId, ...extra });
+
+// Aparelhos (contrato §2; Divergências C2 e C13).
+export async function listLabInstruments(providerId: string): Promise<LabInstrument[]> {
+  return (await jsonFetch<{ instruments: LabInstrument[] }>(labQuery(labPath("instruments"), byProvider(providerId)))).instruments;
+}
+export async function listAdminInstruments(providerId: string): Promise<LabInstrument[]> {
+  return (await jsonFetch<{ instruments: LabInstrument[] }>(labQuery(labPath("admin", "instruments"), byProvider(providerId)))).instruments;
+}
+export function createInstrument(input: LabInstrumentInput): Promise<LabInstrument> {
+  return jsonFetch(labPath("admin", "instruments"), labPost(input));
+}
+export function updateInstrument(id: string, input: LabInstrumentInput): Promise<LabInstrument> {
+  return jsonFetch(labPath("admin", "instruments", id), labPatch(input));
+}
+
+// CIQ (contrato §3).
+export async function listQcMaterials(providerId: string): Promise<QcMaterial[]> {
+  return (await jsonFetch<{ materials: QcMaterial[] }>(labQuery(labPath("qc", "materials"), byProvider(providerId)))).materials;
+}
+export function createQcMaterial(input: QcMaterialInput): Promise<QcMaterial> {
+  return jsonFetch(labPath("qc", "materials"), labPost(input));
+}
+export function updateQcMaterial(id: string, input: QcMaterialInput): Promise<QcMaterial> {
+  return jsonFetch(labPath("qc", "materials", id), labPatch(input));
+}
+export async function listQcLots(q: { providerId: string; status?: QcLotStatus }): Promise<QcLot[]> {
+  const p = byProvider(q.providerId);
+  if (q.status) p.set("status", q.status);
+  return (await jsonFetch<{ lots: QcLot[] }>(labQuery(labPath("qc", "lots"), p))).lots;
+}
+export function createQcLot(input: QcLotInput): Promise<QcLot> {
+  return jsonFetch(labPath("qc", "lots"), labPost(input));
+}
+export function closeQcLot(id: string): Promise<QcLot> {
+  return jsonFetch(labPath("qc", "lots", id, "close"), labPost({}));
+}
+export async function getQcTargets(lotId: string): Promise<QcTargetSet> {
+  const body = await jsonFetch<Partial<QcTargetSet>>(labQuery(labPath("qc", "targets"), new URLSearchParams({ lot_id: lotId })));
+  return { current: body.current ?? [], history: body.history ?? [] };
+}
+export function createQcTarget(input: QcTargetInput): Promise<QcTarget> {
+  return jsonFetch(labPath("qc", "targets"), labPost(input));
+}
+export async function listQcSuggestions(providerId: string): Promise<QcSuggestion[]> {
+  return (await jsonFetch<{ suggestions: QcSuggestion[] }>(labQuery(labPath("qc", "targets", "suggestions"), byProvider(providerId)))).suggestions;
+}
+export function acceptQcSuggestion(input: QcTargetKey & { reason: string }): Promise<QcTarget> {
+  return jsonFetch(labPath("qc", "targets", "suggestions", "accept"), labPost(input));
+}
+export async function listQcRuns(instrumentId: string, date: string): Promise<QcRun[]> {
+  const p = new URLSearchParams({ instrument_id: instrumentId, date });
+  return (await jsonFetch<{ runs: QcRun[] }>(labQuery(labPath("qc", "runs"), p))).runs;
+}
+export function openQcRun(instrumentId: string): Promise<QcRun> {
+  return jsonFetch(labPath("qc", "runs"), labPost({ instrument_id: instrumentId }));
+}
+// 409 invalid_transition quando `run_id` é de corrida reprovada (C-E18): zere o runId.
+export function recordQcValue(input: QcValueInput): Promise<QcValueResult> {
+  return jsonFetch(labPath("qc", "values"), labPost(input));
+}
+// Até 200 pontos; sem trilha (contrato §3). Sem from/to, o api usa os últimos 31 dias.
+export function getQcChart(q: QcChartQuery): Promise<QcChart> {
+  const p = new URLSearchParams({ lot_id: q.lot_id, level: q.level, analyte_key: q.analyte_key, instrument_id: q.instrument_id });
+  if (q.from) p.set("from", q.from);
+  if (q.to) p.set("to", q.to);
+  return jsonFetch(labQuery(labPath("qc", "chart"), p));
+}
+export function getQcRules(instrumentId: string, analyteKey: string): Promise<QcRuleSet> {
+  return jsonFetch(labQuery(labPath("qc", "rules"), new URLSearchParams({ instrument_id: instrumentId, analyte_key: analyteKey })));
+}
+export function saveQcRules(input: QcRuleInput): Promise<QcRuleSet> {
+  return jsonFetch(labPath("qc", "rules"), labPut(input));
+}
+export async function listQcBlocks(status: "active" | "closed", providerId: string): Promise<QcBlock[]> {
+  return (await jsonFetch<{ blocks: QcBlock[] }>(labQuery(labPath("qc", "blocks"), byProvider(providerId, { status })))).blocks;
+}
+// Só a contagem, sem dado de corrida e sem trilha (Divergência C11). Única rota do CIQ relida sozinha.
+export async function countActiveQcBlocks(): Promise<number> {
+  const body = await jsonFetch<{ count?: unknown }>(labPath("qc", "blocks", "active", "count"));
+  const n = typeof body?.count === "number" ? body.count : Number.NaN;
+  return Number.isFinite(n) ? n : 0;
+}
+export function recordCorrectiveAction(blockId: string, text: string): Promise<QcBlock> {
+  return jsonFetch(labPath("qc", "blocks", blockId, "corrective_action"), labPost({ text }));
+}
+export function grantQcException(input: { block_id: string; item_id: string; justification: string }): Promise<QcException> {
+  return jsonFetch(labPath("qc", "exceptions"), labPost(input));
+}
+export async function listQcExceptions(providerId: string, month: string): Promise<QcException[]> {
+  return (await jsonFetch<{ exceptions: QcException[] }>(labQuery(labPath("qc", "exceptions"), byProvider(providerId, { month })))).exceptions;
+}
+export async function listQcReviews(providerId: string, status: "pending" | "decided" = "pending"): Promise<QcReview[]> {
+  return (await jsonFetch<{ reviews: QcReview[] }>(labQuery(labPath("qc", "reviews"), byProvider(providerId, { status })))).reviews;
+}
+export function decideQcReview(id: string, input: { decision: "kept" | "rectify"; note?: string }): Promise<QcReview> {
+  return jsonFetch(labPath("qc", "reviews", id), labPost(input));
+}
+
+// CEQ (contrato §4; Divergências C3 e C12; C-E24/C-E25: o relatório anual é registro próprio).
+export async function listEqaRounds(providerId: string, year: string): Promise<EqaRound[]> {
+  return (await jsonFetch<{ rounds: EqaRound[] }>(labQuery(labPath("eqa", "rounds"), byProvider(providerId, { year })))).rounds;
+}
+export function createEqaRound(input: EqaRoundInput): Promise<EqaRound> {
+  return jsonFetch(labPath("eqa", "rounds"), labPost(input));
+}
+// Só o tipo e o conteúdo: o nome do arquivo pode trazer nome de pessoa.
+export async function uploadEqaReport(file: File): Promise<string> {
+  const data = await readBase64(file);
+  return (await jsonFetch<{ upload_id: string }>(labPath("eqa", "uploads"), labPost({ content_type: file.type, data }))).upload_id;
+}
+export async function listEqaAnnualReports(providerId: string, year: string): Promise<EqaAnnualReport[]> {
+  return (await jsonFetch<{ annual_reports: EqaAnnualReport[] }>(labQuery(labPath("eqa", "annual_reports"), byProvider(providerId, { year })))).annual_reports;
+}
+// `year` é número no corpo (422 invalid_year com string); repetido → 409 already_recorded.
+export function createEqaAnnualReport(input: EqaAnnualReportInput): Promise<EqaAnnualReport> {
+  return jsonFetch(labPath("eqa", "annual_reports"), labPost(input));
+}
+export function fetchEqaAnnualReport(id: string): Promise<SignatureFile> {
+  return binaryFetch(labPath("eqa", "annual_reports", id, "pdf"), "application/pdf");
+}
+export async function getEqaSummary(providerId: string, year: string): Promise<EqaSummary> {
+  const body = await jsonFetch<Partial<EqaSummary>>(labQuery(labPath("eqa", "summary"), byProvider(providerId, { year })));
+  return { year: Number(body.year ?? year), rows: body.rows ?? [], programs: body.programs ?? [] };
+}
+
+// Estoque (contrato §5; Divergências C2, C3, C8 e C15).
+export async function listSupplies(providerId: string): Promise<LabSupply[]> {
+  return (await jsonFetch<{ supplies: LabSupply[] }>(labQuery(labPath("inventory", "supplies"), byProvider(providerId)))).supplies;
+}
+export function createSupply(input: LabSupplyInput): Promise<LabSupply> {
+  return jsonFetch(labPath("inventory", "supplies"), labPost(input));
+}
+export function updateSupply(id: string, input: LabSupplyInput): Promise<LabSupply> {
+  return jsonFetch(labPath("inventory", "supplies", id), labPatch(input));
+}
+// Padrão: só lotes com saldo. `withBalance: false` traz os esgotados (o rastreio precisa deles).
+export async function listSupplyLots(q: { supplyId?: string; providerId?: string; withBalance?: boolean }): Promise<LabSupplyLot[]> {
+  const p = new URLSearchParams();
+  if (q.supplyId) p.set("supply_id", q.supplyId);
+  if (q.providerId) p.set("provider_id", q.providerId);
+  if (q.withBalance !== false) p.set("with_balance", "true");
+  return (await jsonFetch<{ lots: LabSupplyLot[] }>(labQuery(labPath("inventory", "lots"), p))).lots;
+}
+export function receiveSupplyLot(input: LabSupplyLotInput): Promise<LabSupplyLot> {
+  return jsonFetch(labPath("inventory", "lots"), labPost(input));
+}
+export async function listSupplyMovements(lotId: string): Promise<LabSupplyMovement[]> {
+  return (await jsonFetch<{ movements: LabSupplyMovement[] }>(labQuery(labPath("inventory", "movements"), new URLSearchParams({ lot_id: lotId })))).movements;
+}
+export function recordSupplyMovement(input: LabSupplyMovementInput): Promise<LabSupplyMovement> {
+  return jsonFetch(labPath("inventory", "movements"), labPost(input));
+}
+export async function listInUse(instrumentId: string): Promise<LabSupplyInUse[]> {
+  return (await jsonFetch<{ in_use: LabSupplyInUse[] }>(labQuery(labPath("inventory", "in_use"), new URLSearchParams({ instrument_id: instrumentId })))).in_use;
+}
+// O mesmo lote já em uso no par aparelho × exame: 200 com o registro atual, nada encerrado (C-E6).
+export function setInUse(input: LabSupplyInUseInput): Promise<LabSupplyInUse> {
+  return jsonFetch(labPath("inventory", "in_use"), labPost(input));
+}
+// Sem trilha (contrato §5): pode ser relido periodicamente.
+export async function getInventoryAlerts(providerId: string): Promise<LabInventoryAlerts> {
+  const body = await jsonFetch<Partial<LabInventoryAlerts>>(labQuery(labPath("inventory", "alerts"), byProvider(providerId)));
+  return { expiring: body.expiring ?? [], below_minimum: body.below_minimum ?? [], untraced_results: Number(body.untraced_results ?? 0) || 0 };
+}
+// Grava trilha de leitura: só no clique.
+export async function traceSupplyLot(lotId: string): Promise<LabLotTrace> {
+  const body = await jsonFetch<Partial<LabLotTrace>>(labPath("inventory", "lots", lotId, "trace"));
+  return {
+    lot_id: body.lot_id ?? lotId, lot_number: body.lot_number ?? "",
+    results: body.results ?? [], results_truncated: body.results_truncated === true,
+    qc_values: body.qc_values ?? [], qc_values_truncated: body.qc_values_truncated === true
+  };
+}
+export function fetchSupplyLotTraceCsv(lotId: string): Promise<SignatureFile> {
+  return binaryFetch(labPath("inventory", "lots", lotId, "trace.csv"), "text/csv");
+}
+export async function getConsumption(q: LabConsumptionQuery): Promise<LabConsumptionRow[]> {
+  return (await jsonFetch<{ rows: LabConsumptionRow[] }>(labQuery(labPath("inventory", "consumption"), byProvider(q.providerId, { month: q.month })))).rows;
+}
+export function fetchConsumptionCsv(q: LabConsumptionQuery): Promise<SignatureFile> {
+  return binaryFetch(labQuery(labPath("inventory", "consumption.csv"), byProvider(q.providerId, { month: q.month })), "text/csv");
 }

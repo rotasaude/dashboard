@@ -58,4 +58,11 @@ describe("features da sessão (contratos §1)", () => {
     expect(featureLabel("fake_middleware")).toBe("Middleware de aparelhos simulado (fora de produção)");
     expect(hasFeature({ features: [ "exam_tracking", "municipal_lab" ] }, "municipal_lab")).toBe(true);
   });
+
+  it("21c: CIQ/CEQ e estoque do laboratório", () => {
+    expect(featureLabel("lab_quality_control")).toBe("Controle de qualidade do laboratório (CIQ e CEQ)");
+    expect(featureLabel("lab_inventory")).toBe("Estoque do laboratório");
+    expect(hasFeature({ features: [ "lab_inventory" ] }, "lab_inventory")).toBe(true);
+    expect(hasFeature({ features: [ "lab_inventory" ] }, "lab_quality_control")).toBe(false);
+  });
 });
