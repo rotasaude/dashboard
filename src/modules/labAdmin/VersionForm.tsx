@@ -2,7 +2,7 @@
 // salvamento cria versão nova e imutável (o laudo guarda a versão). Step-up
 // pelo SensitiveAction.
 import { useState } from "react";
-import { createLabExamVersion, type LabExam, type LabValueType } from "../../lib/api";
+import { createLabExamVersion, type LabExam, type LabInstrument, type LabValueType } from "../../lib/api";
 import { EMPTY_RANGE, LIMITS, versionBody, versionDraft, versionProblem, type AgeUnit, type AnalyteDraft, type RangeDraft, type VersionDraft } from "../../lib/labAdmin";
 import { labError } from "../../lib/lab";
 import { SensitiveAction } from "../../components/SensitiveAction";
@@ -13,8 +13,19 @@ const AGE_UNITS: { value: AgeUnit; label: string }[] = [ { value: "years", label
 const SEX: { value: RangeDraft["sex"]; label: string }[] = [ { value: "any", label: "qualquer" }, { value: "female", label: "feminino" }, { value: "male", label: "masculino" } ];
 const VALUE_TYPES: { value: LabValueType; label: string }[] = [ { value: "numeric", label: "numérico" }, { value: "text", label: "texto" }, { value: "choice", label: "escolha" } ];
 
-export function VersionForm({ exam, onSaved, onCancel, onGoToSecurity }: { exam: LabExam; onSaved(): void; onCancel(): void; onGoToSecurity?(): void }) {
-  const [ draft, setDraft ] = useState<VersionDraft>(() => versionDraft(exam.current_version));
+// `instruments` (21c, contrato §2): presente quando o CIQ ou o estoque estão ligados. Só aparelhos ativos
+// são oferecidos (o api recusa inativo com invalid_version); se a versão atual aponta um inativo, o campo
+// vem vazio, com aviso.
+export function VersionForm({ exam, instruments, onSaved, onCancel, onGoToSecurity }: {
+  exam: LabExam; instruments?: LabInstrument[]; onSaved(): void; onCancel(): void; onGoToSecurity?(): void;
+}) {
+  const active = instruments?.filter((i) => i.active);
+  const currentInstrument = exam.current_version?.lab_instrument_id ?? "";
+  const currentInactive = !!active && !!currentInstrument && !active.some((i) => i.id === currentInstrument);
+  const [ draft, setDraft ] = useState<VersionDraft>(() => {
+    const d = versionDraft(exam.current_version);
+    return currentInactive ? { ...d, instrumentId: "" } : d;
+  });
   const [ error, setError ] = useState<string | null>(null);
   const [ confirming, setConfirming ] = useState(false);
   const next = (exam.current_version?.version ?? 0) + 1;
@@ -45,6 +56,15 @@ export function VersionForm({ exam, onSaved, onCancel, onGoToSecurity }: { exam:
         {text("Material", draft.material, (v) => set({ material: v }), false, LIMITS.material)}
         {text("Recipiente", draft.container, (v) => set({ container: v }), false, LIMITS.container)}
         {text("Código do exame no aparelho (HL7)", draft.instrumentTestCode, (v) => set({ instrumentTestCode: v }), false, 30)}
+        {active && (
+          <label style={fieldLabel}>Aparelho
+            <select value={draft.instrumentId} style={inputStyle} onChange={(e) => set({ instrumentId: e.target.value })}>
+              <option value="">nenhum</option>
+              {active.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
+            </select>
+          </label>
+        )}
+        {currentInactive && <p style={muted}>O aparelho da versão atual está inativo e não é oferecido; escolha outro ou deixe sem aparelho.</p>}
         {draft.analytes.map((a, i) => (
           <fieldset key={i} role="group" aria-label={`Componente ${i + 1}`} style={fieldset}>
             <legend style={legend}>{`Componente ${i + 1}${a.name ? ` — ${a.name}` : ""}`}</legend>
@@ -119,7 +139,7 @@ export function VersionForm({ exam, onSaved, onCancel, onGoToSecurity }: { exam:
           title={`Criar versão ${next} de ${exam.name}`}
           description="Os laudos já emitidos continuam com a versão deles; a nova vale para as próximas requisições."
           requiresStepUp confirmLabel={`Criar versão ${next}`}
-          run={async () => { await createLabExamVersion(exam.id, versionBody(draft)); }}
+          run={async () => { await createLabExamVersion(exam.id, versionBody(draft, instruments !== undefined)); }}
           onDone={() => { setConfirming(false); onSaved(); }}
           onCancel={() => setConfirming(false)} onGoToSecurity={onGoToSecurity}
           translateError={(err) => labError(err)}

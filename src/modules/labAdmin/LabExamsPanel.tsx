@@ -3,9 +3,12 @@
 // uma por vez (abrir uma fecha as outras). Sem polling.
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { adoptLabExam, getLabAdminExam, listLabAdminExams, listLabTemplates, updateLabExam, type LabExam, type LabTemplate } from "../../lib/api";
+import { adoptLabExam, getLabAdminExam, listAdminInstruments, listLabAdminExams, listLabTemplates, updateLabExam, type LabExam, type LabTemplate } from "../../lib/api";
 import { LAB_ADMIN_EXAMS_KEY, LAB_TEMPLATES_KEY, SECTOR_LABEL, labError, refreshLab, sectorLabel } from "../../lib/lab";
 import { fmtDateTime } from "../../lib/format";
+import { useAuth } from "../../lib/auth";
+import { hasFeature } from "../../lib/features";
+import { QC_INSTRUMENTS_KEY, qcError } from "../../lib/qc";
 import { Panel } from "../../components/Panel";
 import { DataTable } from "../../components/DataTable";
 import { Tag } from "../../components/Tag";
@@ -20,6 +23,12 @@ const NEW_SETTINGS: Settings = { sector: "", bench: "", deliveryDays: "2", activ
 
 export function LabExamsPanel({ providerId, onGoToSecurity }: { providerId: string; onGoToSecurity?(): void }) {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  // 21c: aparelho da versão só com o CIQ ou o estoque ligados (Divergência C13).
+  const instrumentsOn = hasFeature(user, "lab_quality_control") || hasFeature(user, "lab_inventory");
+  const instruments = useQuery({
+    queryKey: [ QC_INSTRUMENTS_KEY, providerId, "admin" ], queryFn: () => listAdminInstruments(providerId), enabled: instrumentsOn, retry: false
+  });
   const exams = useQuery({ queryKey: [ LAB_ADMIN_EXAMS_KEY, providerId ], queryFn: () => listLabAdminExams(providerId), retry: false });
   const templates = useQuery({ queryKey: [ LAB_TEMPLATES_KEY ], queryFn: listLabTemplates, retry: false });
   const [ adopting, setAdopting ] = useState<LabTemplate | null>(null);
@@ -90,8 +99,13 @@ export function LabExamsPanel({ providerId, onGoToSecurity }: { providerId: stri
             <ul aria-label={`versões de ${versioning.name}`} style={list}>
               {(versioning.versions ?? []).map((v) => <li key={v.id}>{`v${v.version} · ${fmtDateTime(v.created_at)}${v.created_by ? ` · ${v.created_by}` : ""}`}</li>)}
             </ul>
-            <VersionForm key={versioning.id} exam={versioning} onGoToSecurity={onGoToSecurity} onCancel={() => setVersioning(null)}
-              onSaved={() => { setVersioning(null); setNotice("Versão nova criada."); refresh(); }} />
+            {instrumentsOn && instruments.isError && <p role="alert" style={alert}>{qcError(instruments.error)}</p>}
+            {instrumentsOn && instruments.isPending && <p className="mono" style={muted}>carregando aparelhos…</p>}
+            {(!instrumentsOn || instruments.data) && (
+              <VersionForm key={versioning.id} exam={versioning} instruments={instrumentsOn ? instruments.data : undefined}
+                onGoToSecurity={onGoToSecurity} onCancel={() => setVersioning(null)}
+                onSaved={() => { setVersioning(null); setNotice("Versão nova criada."); refresh(); }} />
+            )}
           </>
         )}
         {editing && (

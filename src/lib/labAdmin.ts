@@ -23,7 +23,7 @@ export interface AnalyteDraft {
   key: string; name: string; loinc: string; unit: string; valueType: LabValueType; choices: string; decimals: string;
   ranges: RangeDraft[]; entryMin: string; entryMax: string; criticalLow: string; criticalHigh: string; formula: string;
 }
-export interface VersionDraft { method: string; material: string; container: string; instrumentTestCode: string; analytes: AnalyteDraft[] }
+export interface VersionDraft { method: string; material: string; container: string; instrumentTestCode: string; instrumentId: string; analytes: AnalyteDraft[] }
 
 export const EMPTY_RANGE: RangeDraft = { sex: "any", ageMin: "", ageMinUnit: "years", ageMax: "", ageMaxUnit: "years", low: "", high: "", text: "" };
 
@@ -58,7 +58,7 @@ export function versionDraft(v: LabExamVersion | null, t?: LabTemplate): Version
   const analytes = v?.analytes ?? (t?.analytes ?? []).map((a) => ({ ...a, entry_min: null, entry_max: null, critical_low: null, critical_high: null, formula: null }));
   return {
     method: v?.method ?? t?.suggested_method ?? "", material: v?.material ?? t?.material ?? "", container: v?.container ?? t?.container ?? "",
-    instrumentTestCode: v?.instrument_test_code ?? "",
+    instrumentTestCode: v?.instrument_test_code ?? "", instrumentId: v?.lab_instrument_id ?? "",
     analytes: analytes.map((a) => ({
       key: a.key, name: a.name, loinc: a.loinc ?? "", unit: a.unit ?? "", valueType: a.value_type, choices: (a.choices ?? []).join("; "),
       decimals: String(a.decimals), ranges: a.reference_ranges.map(rangeDraft), entryMin: num(a.entry_min), entryMax: num(a.entry_max),
@@ -185,10 +185,12 @@ export function versionProblem(d: VersionDraft): string | null {
   return null;
 }
 
-export function versionBody(d: VersionDraft): LabVersionInput {
+// `withInstrument` (21c): só quando a tela ofereceu o aparelho; sem ele o corpo é o do 21b.
+export function versionBody(d: VersionDraft, withInstrument = false): LabVersionInput {
   return {
     method: d.method.trim(), material: d.material.trim(), container: d.container.trim(),
     instrument_test_code: d.instrumentTestCode.trim() || null,
+    ...(withInstrument ? { lab_instrument_id: d.instrumentId || null } : {}),
     analytes: d.analytes.map((a) => ({
       key: a.key.trim(), name: a.name.trim(), loinc: a.loinc.trim() || null, unit: a.unit.trim() || null, value_type: a.valueType,
       choices: a.valueType === "choice" ? choiceList(a.choices) : [],
