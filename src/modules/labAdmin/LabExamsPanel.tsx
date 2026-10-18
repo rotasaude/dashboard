@@ -99,7 +99,12 @@ export function LabExamsPanel({ providerId, onGoToSecurity }: { providerId: stri
             <ul aria-label={`versões de ${versioning.name}`} style={list}>
               {(versioning.versions ?? []).map((v) => <li key={v.id}>{`v${v.version} · ${fmtDateTime(v.created_at)}${v.created_by ? ` · ${v.created_by}` : ""}`}</li>)}
             </ul>
-            {instrumentsOn && instruments.isError && <p role="alert" style={alert}>{qcError(instruments.error)}</p>}
+            {instrumentsOn && instruments.isError && (
+              <div style={row}>
+                <p role="alert" style={alert}>{qcError(instruments.error)}</p>
+                <button type="button" style={secondaryButtonStyle} onClick={() => { void instruments.refetch(); }}>Tentar de novo</button>
+              </div>
+            )}
             {instrumentsOn && instruments.isPending && <p className="mono" style={muted}>carregando aparelhos…</p>}
             {(!instrumentsOn || instruments.data) && (
               <VersionForm key={versioning.id} exam={versioning} instruments={instrumentsOn ? instruments.data : undefined}
