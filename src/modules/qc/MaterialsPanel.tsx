@@ -4,7 +4,7 @@
 // chave de analito não entra em dois exames (C-E12).
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { createQcMaterial, listQcMaterials, updateQcMaterial, type LabExamRef, type QcMaterial } from "../../lib/api";
+import { createQcMaterial, errorCode, listQcMaterials, updateQcMaterial, type LabExamRef, type QcMaterial } from "../../lib/api";
 import {
   EMPTY_MATERIAL, QC_MATERIALS_KEY, analyteName, analyteToken, materialBody, materialDraft, materialProblem, qcError, refreshQc, tokenToAnalyte,
   type MaterialDraft
@@ -35,6 +35,13 @@ export function MaterialsPanel({ providerId, exams, onGoToSecurity }: { provider
   }
   const savedTokens = new Set((original?.analytes ?? []).map(analyteToken));
   const pickedKeys = new Map(draft.analytes.map((t) => [ tokenToAnalyte(t).analyte_key, t ]));
+
+  // 404/409: a frase diz que a tela foi atualizada, então relê de fato.
+  const failed = (err: unknown) => {
+    const code = errorCode(err);
+    if (code === "not_found" || code === "invalid_transition") void refreshQc(queryClient).catch(() => undefined);
+    return qcError(err);
+  };
 
   function open(target: QcMaterial | "new") {
     setEditing(target);
@@ -114,7 +121,7 @@ export function MaterialsPanel({ providerId, exams, onGoToSecurity }: { provider
                   if (original) await updateQcMaterial(original.id, body); else await createQcMaterial(body);
                 }}
                 onDone={() => { setConfirming(false); setEditing(null); setNotice("Material salvo."); void refreshQc(queryClient).catch(() => undefined); }}
-                onCancel={() => setConfirming(false)} onGoToSecurity={onGoToSecurity} translateError={(err) => qcError(err)} />
+                onCancel={() => setConfirming(false)} onGoToSecurity={onGoToSecurity} translateError={failed} />
             )}
           </section>
         )}

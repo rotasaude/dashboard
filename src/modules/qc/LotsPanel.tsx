@@ -5,7 +5,7 @@
 // console, log ou storage.
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { closeQcLot, createQcLot, listQcLots, listQcMaterials, type QcLot } from "../../lib/api";
+import { closeQcLot, createQcLot, errorCode, listQcLots, listQcMaterials, type QcLot } from "../../lib/api";
 import { QC_LOTS_KEY, QC_MATERIALS_KEY, lotBody, lotProblem, lotStatusLabel, qcError, refreshQc, type LotDraft } from "../../lib/qc";
 import { fmtDay } from "../../lib/exams";
 import { todayInCity } from "../../lib/campaigns";
@@ -33,6 +33,12 @@ export function LotsPanel({ providerId, pickedId, onPick, onGoToSecurity }: {
   const material = (materials.data ?? []).find((m) => m.id === draft.materialId);
   const levels = material?.levels ?? [];
   const refresh = () => { void refreshQc(queryClient).catch(() => undefined); };
+  // 404/409: a frase diz que a tela foi atualizada, então relê de fato.
+  const failed = (err: unknown) => {
+    const code = errorCode(err);
+    if (code === "not_found" || code === "invalid_transition") refresh();
+    return qcError(err);
+  };
 
   function review() {
     const problem = lotProblem(draft, levels, todayInCity());
@@ -72,7 +78,7 @@ export function LotsPanel({ providerId, pickedId, onPick, onGoToSecurity }: {
             requiresStepUp confirmLabel={`Confirmar encerramento de ${closing.lot_number}`}
             run={async () => { await closeQcLot(closing.id); }}
             onDone={() => { setNotice(`Lote ${closing.lot_number} encerrado.`); setClosing(null); refresh(); }}
-            onCancel={() => setClosing(null)} onGoToSecurity={onGoToSecurity} translateError={(err) => qcError(err)} />
+            onCancel={() => setClosing(null)} onGoToSecurity={onGoToSecurity} translateError={failed} />
         )}
         {creating && (
           <section aria-label="Novo lote" style={box}>
@@ -105,7 +111,7 @@ export function LotsPanel({ providerId, pickedId, onPick, onGoToSecurity }: {
                 requiresStepUp confirmLabel="Salvar lote"
                 run={async () => { await createQcLot(lotBody(draft, levels)); }}
                 onDone={() => { setConfirming(false); setCreating(false); setDraft(EMPTY_LOT); setNotice("Lote salvo — cadastre a referência da bula de cada nível."); refresh(); }}
-                onCancel={() => setConfirming(false)} onGoToSecurity={onGoToSecurity} translateError={(err) => qcError(err)} />
+                onCancel={() => setConfirming(false)} onGoToSecurity={onGoToSecurity} translateError={failed} />
             )}
           </section>
         )}

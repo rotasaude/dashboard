@@ -101,6 +101,7 @@ describe("LabQcSetup — materiais e lotes", () => {
     const panel = await screen.findByRole("region", { name: "Lotes de controle" });
     fireEvent.click(within(panel).getByRole("button", { name: "Novo lote" }));
     const form = within(panel).getByRole("region", { name: "Novo lote" });
+    await within(form).findByRole("option", { name: "Controle bioquímico" });
     fireEvent.change(within(form).getByLabelText("Material"), { target: { value: "qm1" } });
     fireEvent.change(within(form).getByLabelText("Número do lote"), { target: { value: "L2026B" } });
     fireEvent.change(within(form).getByLabelText("Validade"), { target: { value: "2027-06-30" } });
@@ -123,6 +124,7 @@ describe("LabQcSetup — materiais e lotes", () => {
     const panel = await screen.findByRole("region", { name: "Lotes de controle" });
     fireEvent.click(await within(panel).findByRole("button", { name: "Novo lote" }));
     const form = within(panel).getByRole("region", { name: "Novo lote" });
+    await within(form).findByRole("option", { name: "Controle bioquímico" });
     fireEvent.change(within(form).getByLabelText("Material"), { target: { value: "qm1" } });
     fireEvent.change(within(form).getByLabelText("Número do lote"), { target: { value: "L2026C" } });
     fireEvent.change(within(form).getByLabelText("Validade"), { target: { value: "2027-06-30" } });
@@ -141,6 +143,7 @@ describe("LabQcSetup — materiais e lotes", () => {
     const panel = await screen.findByRole("region", { name: "Lotes de controle" });
     fireEvent.click(within(panel).getByRole("button", { name: "Novo lote" }));
     const form = within(panel).getByRole("region", { name: "Novo lote" });
+    await within(form).findByRole("option", { name: "Controle bioquímico" });
     fireEvent.change(within(form).getByLabelText("Material"), { target: { value: "qm1" } });
     fireEvent.change(within(form).getByLabelText("Número do lote"), { target: { value: "L2025Z" } });
     fireEvent.change(within(form).getByLabelText("Validade"), { target: { value: "2026-10-17" } });
@@ -176,8 +179,10 @@ describe("LabQcSetup — materiais e lotes", () => {
     renderWithProviders(<LabQcSetup />);
     const panel = await screen.findByRole("region", { name: "Lotes de controle" });
     fireEvent.click(await within(panel).findByRole("button", { name: "Encerrar" }));
+    const before = mocked(api.listQcLots).mock.calls.length;
     fireEvent.click(await screen.findByRole("button", { name: "Confirmar encerramento de L2026A" }));
     expect(await screen.findByText("não encontrado neste laboratório — a tela foi atualizada")).not.toBeNull();
+    await waitFor(() => expect(mocked(api.listQcLots).mock.calls.length).toBeGreaterThan(before));
   });
 
   it("CIQ desligado: a frase", async () => {
