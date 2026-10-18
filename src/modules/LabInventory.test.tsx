@@ -170,6 +170,50 @@ describe("LabInventory — itens, lotes e movimentos", () => {
     await waitFor(() => expect(lotReads("su1")).toBe(2));
   });
 
+  it("admin edita item existente por PATCH; trocar para não-reagente limpa o rendimento", async () => {
+    mocked(api.fetchCurrentSession).mockResolvedValue(qcUser([ "municipal_admin" ]));
+    mocked(api.updateSupply).mockResolvedValue(supply());
+    renderWithProviders(<LabInventory />);
+    const panel = await screen.findByRole("region", { name: "Itens de estoque" });
+    fireEvent.click(await within(panel).findByRole("button", { name: "Editar" }));
+    const form = within(panel).getByRole("group", { name: "Editar Glicose GOD-PAP 2×100 mL" });
+    fireEvent.change(within(form).getByLabelText("Testes por embalagem"), { target: { value: "abc" } });
+    fireEvent.change(within(form).getByLabelText("Tipo"), { target: { value: "consumable" } });
+    fireEvent.change(within(form).getByLabelText("Estoque mínimo"), { target: { value: "3" } });
+    fireEvent.click(within(form).getByRole("button", { name: "Revisar e salvar item" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Salvar item" }));
+    await waitFor(() => expect(api.updateSupply).toHaveBeenCalledWith("su1", expect.objectContaining({ kind: "consumable", tests_per_package: null, minimum_stock: 3 })));
+  });
+
+  it("entrada: 404 relê; trocar o item limpa o rascunho; lote esgotado é marcado; motivo acima de 1000 é recusado", async () => {
+    mocked(api.listSupplies).mockResolvedValue([ supply(), supply({ id: "su2", name: "Controle" }) ]);
+    mocked(api.listSupplyLots).mockResolvedValue([ supplyLot(), supplyLot({ id: "sl0", lot_number: "R-100", balance: 0 }) ]);
+    mocked(api.receiveSupplyLot).mockRejectedValueOnce(new api.ApiError(404, { error: "not_found" }, "x"));
+    const panel = await lotsPanel();
+    expect(within(panel).getAllByText("esgotado")).toHaveLength(1);
+    const form = within(panel).getByRole("group", { name: "Entrada de lote" });
+    fireEvent.change(within(form).getByLabelText("Número do lote"), { target: { value: "R-901" } });
+    fireEvent.change(within(form).getByLabelText("Validade"), { target: { value: "2027-05-31" } });
+    fireEvent.change(within(form).getByLabelText("Fornecedor"), { target: { value: "X" } });
+    fireEvent.change(within(form).getByLabelText("Origem"), { target: { value: "purchase" } });
+    fireEvent.change(within(form).getByLabelText("Quantidade"), { target: { value: "4" } });
+    fireEvent.click(await within(form).findByRole("button", { name: "Registrar entrada" }));
+    expect((await within(form).findByRole("alert")).textContent).toBe("não encontrado neste laboratório — a tela foi atualizada");
+    await waitFor(() => expect(lotReads("su1")).toBe(2));
+    fireEvent.change(within(panel).getByLabelText("Item"), { target: { value: "su2" } });
+    expect((within(panel).getByLabelText("Número do lote") as HTMLInputElement).value).toBe("");
+    fireEvent.change(within(panel).getByLabelText("Item"), { target: { value: "su1" } });
+    await within(panel).findByText("R-778");
+    fireEvent.click(within(panel).getAllByRole("button", { name: "Movimentos" })[0]);
+    const box = await within(panel).findByRole("group", { name: /Movimentos do lote/ });
+    fireEvent.change(within(box).getByLabelText("Movimento"), { target: { value: "loss" } });
+    fireEvent.change(within(box).getByLabelText("Quantidade"), { target: { value: "1" } });
+    fireEvent.change(within(box).getByLabelText("Motivo"), { target: { value: "x".repeat(1001) } });
+    fireEvent.click(await within(box).findByRole("button", { name: "Registrar movimento" }));
+    expect(within(box).getByRole("alert").textContent).toContain("1000");
+    expect(api.recordSupplyMovement).not.toHaveBeenCalled();
+  });
+
   it("estoque desligado: a frase", async () => {
     mocked(api.fetchCurrentSession).mockResolvedValue(qcUser([ "lab_staff" ], { features: [ "exam_tracking", "municipal_lab", "lab_quality_control" ] }));
     renderWithProviders(<LabInventory />);

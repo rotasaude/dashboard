@@ -70,7 +70,7 @@ export function SuppliesPanel({ providerId, admin, exams, onGoToSecurity }: { pr
             <div style={row}>
               <label style={fieldLabel}>Nome<input value={draft.name} style={inputStyle} onChange={(e) => set({ name: e.target.value })} /></label>
               <label style={fieldLabel}>Tipo
-                <select value={draft.kind} style={inputStyle} onChange={(e) => set({ kind: e.target.value as SupplyDraft["kind"] })}>
+                <select value={draft.kind} style={inputStyle} onChange={(e) => set({ kind: e.target.value as SupplyDraft["kind"], testsPerPackage: "" })}>
                   <option value="">—</option>
                   {Object.entries(SUPPLY_KIND_LABEL).map(([ k, v ]) => <option key={k} value={k}>{v}</option>)}
                 </select>

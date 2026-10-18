@@ -44,6 +44,7 @@ export function SupplyLotsPanel({ providerId, admin, onGoToSecurity }: { provide
       setNotice("Entrada registrada.");
       void refreshInventory(queryClient).catch(() => undefined);
     } catch (err) {
+      if (errorCode(err) === "not_found") void refreshInventory(queryClient).catch(() => undefined);
       setEntryError(inventoryError(err));
     }
   }
@@ -54,7 +55,7 @@ export function SupplyLotsPanel({ providerId, admin, onGoToSecurity }: { provide
     <Panel title="Lotes e movimentos" sub="saldo = soma dos movimentos; nada é baixado sozinho">
       <div style={stack}>
         <label style={fieldLabel}>Item
-          <select value={supplyId} style={inputStyle} onChange={(e) => { setSupplyId(e.target.value); setLotId(null); setNotice(null); }}>
+          <select value={supplyId} style={inputStyle} onChange={(e) => { setSupplyId(e.target.value); setLotId(null); setNotice(null); setEntry(EMPTY_LOT_ENTRY); setEntryError(null); }}>
             <option value="">—</option>
             {(supplies.data ?? []).filter((s) => s.active).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
@@ -64,7 +65,7 @@ export function SupplyLotsPanel({ providerId, admin, onGoToSecurity }: { provide
           <DataTable<LabSupplyLot>
             cols={[
               { label: "Lote", w: "1fr", card: "title", render: (l) => <span className="mono">{l.lot_number}</span> },
-              { label: "Validade", w: "1fr", render: (l) => <>{fmtDay(l.expires_on)}{l.expires_on < today && <> <Tag tone="down">vencido</Tag></>}</> },
+              { label: "Validade", w: "1fr", render: (l) => <>{fmtDay(l.expires_on)}{l.expires_on < today && <> <Tag tone="down">vencido</Tag></>}{l.balance === 0 && <> <Tag>esgotado</Tag></>}</> },
               { label: "Fornecedor · origem", w: "1.4fr", render: (l) => `${l.supplier} · ${originLabel(l.origin)}` },
               { label: "Saldo", w: "0.7fr", align: "right", render: (l) => `${l.balance}${supply ? ` ${supply.unit}` : ""}` },
               { label: "", w: "auto", card: "actions", render: (l) => (
