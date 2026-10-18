@@ -2,7 +2,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { ApiError } from "./api";
 import {
-  EMPTY_EQA_ITEM, EMPTY_EQA_ROUND, EMPTY_INSTRUMENT, EMPTY_TARGET, QC_DISABLED, adequacyRate, analyteName, decimalProblem, eqaBody, eqaProblem,
+  EMPTY_EQA_ITEM, EMPTY_EQA_ROUND, annualReportProblem, EMPTY_INSTRUMENT, EMPTY_TARGET, QC_DISABLED, adequacyRate, analyteName, decimalProblem, eqaBody, eqaProblem,
   fmtDecimal, fmtZ, instrumentBody, instrumentDraft, instrumentProblem, ljBands, ljModel, lotBody, lotProblem, materialBody, materialDraft,
   materialProblem, parseLevels, qcError, qcValueProblem, reasonProblem, refreshQc, ruleLabel, rulesProblem, rulesText, sdLabel, suggestAdequacy,
   targetBody, targetProblem, turnedOff
@@ -257,6 +257,19 @@ describe("CEQ", () => {
     expect(eqaProblem({ ...round, items: [ item, item ] }, "2026-10-18")).toBe("item 2: este analito já está na rodada");
     expect(eqaProblem({ ...round, items: [ { ...item, submitted: "1,23456" } ] }, "2026-10-18"))
       .toBe("item 1: o valor enviado: no máximo 9 dígitos antes da vírgula e 4 depois");
+  });
+
+  it("relatório anual (C-E25): ano de 4 dígitos entre 2000 e o atual, programa de 1 a 60", () => {
+    expect(annualReportProblem("PNCQ", "2026", 2026)).toBeNull();
+    expect(annualReportProblem("PNCQ", "2000", 2026)).toBeNull();
+    expect(annualReportProblem("PNCQ", "1999", 2026)).toBe("ano entre 2000 e 2026");
+    expect(annualReportProblem("PNCQ", "2027", 2026)).toBe("ano entre 2000 e 2026");
+    expect(annualReportProblem("PNCQ", "", 2026)).toBe("ano com 4 dígitos");
+    expect(annualReportProblem("PNCQ", "26", 2026)).toBe("ano com 4 dígitos");
+    expect(annualReportProblem("", "2026", 2026)).toBe("escolha o programa");
+    expect(annualReportProblem("  ", "2026", 2026)).toBe("escolha o programa");
+    expect(annualReportProblem("p".repeat(60), "2026", 2026)).toBeNull();
+    expect(annualReportProblem("p".repeat(61), "2026", 2026)).toBe("nome do programa com até 60 caracteres");
   });
 
   it("corpo com decimais em ponto, programa escolhido e sem relatório anual (C-E24)", () => {

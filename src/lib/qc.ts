@@ -347,6 +347,19 @@ export function eqaBody(d: EqaRoundDraft, providerId: string): EqaRoundInput {
   };
 }
 
+// C-E25/C-E40: `year` de 4 dígitos entre 2000 e o ano atual; programa de 1 a 60 (record_annual_report.rb).
+export function yearProblem(year: string, currentYear: number): string | null {
+  if (!/^\d{4}$/.test(year)) return "ano com 4 dígitos";
+  const n = Number(year);
+  return n >= 2000 && n <= currentYear ? null : `ano entre 2000 e ${currentYear}`;
+}
+
+export function annualReportProblem(program: string, year: string, currentYear: number): string | null {
+  const name = program.trim();
+  if (!name) return "escolha o programa";
+  return tooLong(name, 60, "nome do programa") ?? yearProblem(year, currentYear);
+}
+
 export function adequacyRate(row: EqaSummaryRow): string {
   if (row.rounds <= 0) return "—";
   return `${fmtDecimal(Math.round((row.adequate * 1000) / row.rounds) / 10)}%`;
