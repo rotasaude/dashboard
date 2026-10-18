@@ -26,6 +26,7 @@ import { LabInstruments } from "./modules/LabInstruments";
 import { LabQcSetup } from "./modules/LabQcSetup";
 import { LabQcRuns } from "./modules/LabQcRuns";
 import { LabQcChart } from "./modules/LabQcChart";
+import { LabQcBlocks } from "./modules/LabQcBlocks";
 import { ProviderPortal } from "./modules/ProviderPortal";
 import { AcknowledgementNotice } from "./modules/exams/AcknowledgementNotice";
 import { Shell } from "./shell/Shell";
@@ -254,6 +255,7 @@ export function renderModule(active: ModuleId, setActive: (id: ModuleId) => void
     case "lab-reports": return <LabReports />;
     case "lab-qc-runs": return <LabQcRuns />;
     case "lab-qc-chart": return <LabQcChart />;
+    case "lab-qc-blocks": return <LabQcBlocks onNavigate={setActive} onGoToSecurity={() => setActive("security")} />;
     case "lab-qc-setup": return <LabQcSetup onGoToSecurity={() => setActive("security")} />;
     case "lab-instruments": return <LabInstruments onGoToSecurity={() => setActive("security")} />;
     default:               return <Placeholder title={labelFor(active)} />;
