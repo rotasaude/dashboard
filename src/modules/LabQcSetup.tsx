@@ -12,6 +12,8 @@ import { LabGate } from "./lab/LabGate";
 import { LabPick } from "./lab/LabPick";
 import { MaterialsPanel } from "./qc/MaterialsPanel";
 import { LotsPanel } from "./qc/LotsPanel";
+import { TargetsPanel } from "./qc/TargetsPanel";
+import { RulesPanel } from "./qc/RulesPanel";
 import { stack } from "./exams/styles";
 
 export function LabQcSetup({ onGoToSecurity }: { onGoToSecurity?(): void }) {
@@ -21,7 +23,7 @@ export function LabQcSetup({ onGoToSecurity }: { onGoToSecurity?(): void }) {
       {(roles) => (
         <LabPick>
           {(lab) => (roles.admin || lab.lead
-            ? <SetupBody providerId={lab.id} onGoToSecurity={onGoToSecurity} />
+            ? <SetupBody providerId={lab.id} lead={lab.lead} admin={roles.admin} onGoToSecurity={onGoToSecurity} />
             : <EmptyState title={QC_LEAD_ONLY} />)}
         </LabPick>
       )}
@@ -29,13 +31,15 @@ export function LabQcSetup({ onGoToSecurity }: { onGoToSecurity?(): void }) {
   );
 }
 
-function SetupBody({ providerId, onGoToSecurity }: { providerId: string; onGoToSecurity?(): void }) {
+function SetupBody({ providerId, lead, admin, onGoToSecurity }: { providerId: string; lead: boolean; admin: boolean; onGoToSecurity?(): void }) {
   const exams = useQuery({ queryKey: [ QC_EXAMS_KEY, providerId ], queryFn: () => listLabExams(providerId), retry: false });
   const [ lotId, setLotId ] = useState<string | null>(null);
   return (
     <div style={stack}>
       <MaterialsPanel providerId={providerId} exams={exams.data ?? []} onGoToSecurity={onGoToSecurity} />
       <LotsPanel providerId={providerId} pickedId={lotId} onPick={setLotId} onGoToSecurity={onGoToSecurity} />
+      {lotId && <TargetsPanel key={lotId} providerId={providerId} lotId={lotId} lead={lead} admin={admin} exams={exams.data ?? []} onGoToSecurity={onGoToSecurity} />}
+      <RulesPanel providerId={providerId} lead={lead} exams={exams.data ?? []} onGoToSecurity={onGoToSecurity} />
     </div>
   );
 }

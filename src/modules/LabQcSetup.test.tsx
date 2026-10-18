@@ -190,4 +190,13 @@ describe("LabQcSetup — materiais e lotes", () => {
     renderWithProviders(<LabQcSetup />);
     expect(await screen.findByText(QC_DISABLED)).not.toBeNull();
   });
+
+  it("Referências abre o painel do lote escolhido", async () => {
+    renderWithProviders(<LabQcSetup />);
+    const panel = await screen.findByRole("region", { name: "Lotes de controle" });
+    fireEvent.click(await within(panel).findByRole("button", { name: "Referências" }));
+    expect(await screen.findByRole("region", { name: "Referências do lote L2026A" })).not.toBeNull();
+    expect(api.getQcTargets).toHaveBeenCalledWith("ql1");
+    expect(await screen.findByRole("region", { name: "Regras de Westgard" })).not.toBeNull();
+  });
 });
