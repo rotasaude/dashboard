@@ -56,13 +56,19 @@ export function ReviewsPanel({ providerId, lead, analyte, instrument, onNavigate
 
   const failed = (err: unknown) => {
     const code = errorCode(err);
-    if (code === "not_found" || code === "invalid_transition") refresh();
+    if (code === "not_found" || code === "invalid_transition") {
+      refresh(); setDeciding(null); setConfirming(false);
+      setError(qcError(err)); // o painel fecha, então a frase fica aqui
+    }
     return qcError(err);
   };
 
   function decided() {
     if (!deciding) return;
-    if (deciding.decision === "rectify") {
+    if (deciding.decision === "rectify" && deciding.review.released_at === null) {
+      // C-E22: laudo ainda pendente de assinatura; não há laudo liberado para retificar.
+      setNotice(`Marcado para retificar — o laudo da requisição ${deciding.review.requisition_number} ainda aguarda assinatura; retifique depois que ele for assinado e liberado.`);
+    } else if (deciding.decision === "rectify") {
       setRectifyFor(deciding.review.requisition_id);
       setNotice(`Marcado para retificar — a conferência da requisição ${deciding.review.requisition_number} abriu abaixo.`);
     } else {
@@ -135,6 +141,7 @@ export function ReviewsPanel({ providerId, lead, analyte, instrument, onNavigate
             )}
           </div>
         )}
+        {!deciding && error && <p role="alert" style={alert}>{error}</p>}
         {rectifyFor && !context.isPending && (
           <ReleaseReview key={rectifyFor} requisitionId={rectifyFor} council={context.data?.council ?? null} onNavigate={onNavigate}
             onClose={() => setRectifyFor(null)} onReleased={rectified} onConflict={(text) => { setRectifyFor(null); setNotice(null); setError(text); }} />

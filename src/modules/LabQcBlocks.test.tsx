@@ -160,4 +160,35 @@ describe("LabQcBlocks", () => {
     expect(api.listQcExceptions).toHaveBeenCalledTimes(1);
     expect(api.listQcReviews).toHaveBeenCalledTimes(1);
   });
+
+  it("laudo pendente de assinatura: retificar não abre a conferência e diz o porquê", async () => {
+    mocked(api.listQcReviews).mockResolvedValue([ qcReview({ released_at: null }) ]);
+    mocked(api.decideQcReview).mockResolvedValue(qcReview({ decision: "rectify", released_at: null }));
+    renderWithProviders(<LabQcBlocks onNavigate={vi.fn()} />);
+    const panel = await reviewsPanel();
+    fireEvent.click(within(panel).getByRole("button", { name: "Retificar" }));
+    fireEvent.click(within(panel).getByRole("button", { name: "Revisar e retificar" }));
+    fireEvent.click(await within(panel).findByRole("button", { name: "Confirmar: retificar" }));
+    expect(await within(panel).findByText(/ainda aguarda assinatura/)).not.toBeNull();
+    expect(api.getReleaseRequisition).not.toHaveBeenCalled();
+  });
+
+  it("mês apagado mostra escolha o mês; exceção mostra o exame", async () => {
+    renderWithProviders(<LabQcBlocks onNavigate={vi.fn()} />);
+    const panel = await screen.findByRole("region", { name: "Exceções concedidas" });
+    expect((await within(panel).findAllByText("Glicose")).length).toBeGreaterThan(0);
+    fireEvent.change(within(panel).getByLabelText("Mês"), { target: { value: "" } });
+    expect(await within(panel).findByText("escolha o mês")).not.toBeNull();
+  });
+
+  it("após 409 o painel de decisão da revisão velha fecha", async () => {
+    mocked(api.decideQcReview).mockRejectedValue(apiError(409, "invalid_transition"));
+    renderWithProviders(<LabQcBlocks onNavigate={vi.fn()} />);
+    const panel = await reviewsPanel();
+    fireEvent.click(within(panel).getByRole("button", { name: "Manter" }));
+    fireEvent.click(within(panel).getByRole("button", { name: "Revisar e manter" }));
+    fireEvent.click(await within(panel).findByRole("button", { name: "Confirmar: manter" }));
+    await within(panel).findByText("a situação mudou — a tela foi atualizada");
+    expect(within(panel).queryByLabelText("Nota (opcional)")).toBeNull();
+  });
 });

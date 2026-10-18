@@ -94,12 +94,14 @@ function BlocksBody({ providerId, lead, onNavigate, onGoToSecurity }: {
           <DataTable<QcException>
             cols={[
               { label: "Requisição", w: "0.9fr", card: "title", render: (e) => <span className="mono">{e.requisition_number}</span> },
+              { label: "Exame", w: "1fr", render: (e) => e.exam_label },
               { label: "Aparelho · analito", w: "1.4fr", render: (e) => label(e) },
               { label: "Justificativa", w: "2fr", render: (e) => e.justification },
               { label: "Por", w: "1fr", render: (e) => e.granted_by ?? "—" },
               { label: "Quando", w: "1fr", render: (e) => fmtDateTime(e.granted_at) }
             ]}
-            rows={exceptions.data ?? []} rowKey={(e) => e.id} empty={exceptions.isPending ? "carregando…" : "nenhuma exceção neste mês"}
+            rows={exceptions.data ?? []} rowKey={(e) => e.id}
+            empty={!/^\d{4}-\d{2}$/.test(month) ? "escolha o mês" : exceptions.isPending ? "carregando…" : "nenhuma exceção neste mês"}
           />
         )}
       </Panel>
