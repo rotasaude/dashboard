@@ -33,6 +33,12 @@ describe("atalhos entre telas", () => {
 });
 
 describe("grupos do shell", () => {
+  it("Bloqueios do CIQ levam a contagem no rótulo e no ponto do trilho", () => {
+    const item = (n: number) => shellGroups(NAV_GROUPS, 0, 0, 0, n).flatMap((g) => g.items).find((i) => i.id === "lab-qc-blocks");
+    expect(item(2)).toEqual({ id: "lab-qc-blocks", label: "Bloqueios e revisões do CIQ (2 ativos)", count: 2 });
+    expect(item(0)).toEqual({ id: "lab-qc-blocks", label: "Bloqueios e revisões do CIQ" });
+  });
+
   it("Resultados aguardando ciência leva a contagem no rótulo e no ponto do trilho", () => {
     const item = shellGroups(NAV_GROUPS, 0, 4).flatMap((g) => g.items).find((i) => i.id === "exam-acknowledgements");
     expect(item).toEqual({ id: "exam-acknowledgements", label: "Resultados aguardando ciência (4)", count: 4 });

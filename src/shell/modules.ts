@@ -13,6 +13,7 @@ export type ModuleId =
   | "signature" | "signature-pending" | "signature-overview" | "clinical-documents-admin" | "sncr" | "sncr-overview"
   | "exam-acknowledgements" | "exams-unit" | "exams-overdue" | "exam-regulation" | "exam-report" | "exams-admin" | "exam-provider"
   | "lab-requisitions" | "lab-collection" | "lab-shipments" | "lab-reception" | "lab-worklist" | "lab-entry" | "lab-release"
+  | "lab-qc-runs" | "lab-qc-chart" | "lab-qc-blocks" | "lab-qc-setup" | "lab-eqa" | "lab-inventory" | "lab-traceability" | "lab-instruments"
   | "lab-admin" | "lab-reports";
 
 export interface NavItem { id: ModuleId; label: string; icon: string; }
@@ -68,6 +69,14 @@ export const NAV_GROUPS: NavGroupDef[] = [
     { id: "lab-worklist", label: "Mapa de trabalho", icon: "▦" },
     { id: "lab-entry", label: "Digitação de resultados", icon: "✎" },
     { id: "lab-release", label: "Liberação de laudos", icon: "✔" },
+    { id: "lab-qc-runs", label: "Corridas de controle", icon: "↻" },
+    { id: "lab-qc-chart", label: "Levey-Jennings", icon: "∿" },
+    { id: "lab-qc-blocks", label: "Bloqueios e revisões do CIQ", icon: "⊘" },
+    { id: "lab-qc-setup", label: "Controles e referências", icon: "◎" },
+    { id: "lab-eqa", label: "Controle externo (CEQ)", icon: "◈" },
+    { id: "lab-inventory", label: "Estoque do laboratório", icon: "▣" },
+    { id: "lab-traceability", label: "Rastreio e consumo de reagentes", icon: "⇶" },
+    { id: "lab-instruments", label: "Aparelhos", icon: "⌬" },
     { id: "lab-admin", label: "Exames e liberadores do laboratório", icon: "⚙" },
     { id: "lab-reports", label: "Relatórios do laboratório", icon: "▤" }
   ]},
@@ -174,6 +183,10 @@ export function navGroupsFor(
   const labOn = !user?.operator && hasFeature(user, "municipal_lab");
   const isLabStaff = roles.includes("lab_staff");
   const isReleaser = roles.includes("lab_releaser");
+  // Módulo 21c: CIQ/CEQ com `lab_quality_control`, estoque com `lab_inventory`
+  // (independentes; os dois exigem municipal_lab). Aparelhos servem aos dois.
+  const qcOn = labOn && hasFeature(user, "lab_quality_control");
+  const invOn = labOn && hasFeature(user, "lab_inventory");
   return NAV_GROUPS.filter((group) => {
     if (group.label === "Conta") return !user?.operator;
     if (group.label === "Equipe") return isAdmin;
@@ -223,6 +236,15 @@ export function navGroupsFor(
       if (item.id === "lab-release") return labOn && isReleaser;
       if (item.id === "lab-admin") return labOn && isAdmin;
       if (item.id === "lab-reports") return labOn && (isAdmin || isReleaser);
+      if (item.id === "lab-qc-runs" || item.id === "lab-qc-blocks") return qcOn && (isLabStaff || isReleaser);
+      // Levey-Jennings: admin e liberador/RT leem; lab_staff não (C-E41).
+      if (item.id === "lab-qc-chart") return qcOn && (isAdmin || isReleaser);
+      // Materiais, lotes, referências e regras: admin ou RT/substituto (a tela confere o RT pelo contexto).
+      if (item.id === "lab-qc-setup" || item.id === "lab-eqa") return qcOn && (isAdmin || isReleaser);
+      if (item.id === "lab-inventory") return invOn && (isAdmin || isLabStaff || isReleaser);
+      // Rastreio e consumo: qualquer membro do laboratório e o admin (C-E41).
+      if (item.id === "lab-traceability") return invOn && (isAdmin || isLabStaff || isReleaser);
+      if (item.id === "lab-instruments") return (qcOn || invOn) && (isAdmin || isLabStaff || isReleaser);
       if (item.id === "integrations" || item.id === "cnes") return canIntegrations;
       if (item.id === "production") return canProduction;
       return true;
@@ -260,5 +282,16 @@ export function withLabCriticalCount(groups: NavGroupDef[], count: number): NavG
   return groups.map((group) => ({
     ...group,
     items: group.items.map((item) => item.id === "lab-release" ? { ...item, label: `${item.label} (${count} sem aviso)` } : item)
+  }));
+}
+
+// Módulo 21c: bloqueios ativos do CIQ no item da tela. O número vem da rota
+// de contagem (sem trilha, Divergência C11).
+export function withQcBlockCount(groups: NavGroupDef[], count: number): NavGroupDef[] {
+  if (count <= 0) return groups;
+  const shown = count === 1 ? "1 ativo" : `${count} ativos`;
+  return groups.map((group) => ({
+    ...group,
+    items: group.items.map((item) => item.id === "lab-qc-blocks" ? { ...item, label: `${item.label} (${shown})` } : item)
   }));
 }

@@ -1,13 +1,15 @@
 import { useCallback, useMemo, useState } from "react";
 import { ScopeContext, PERIOD_OPTIONS, useScope, type PeriodKey } from "./lib/scope";
 import { useAuth } from "./lib/auth";
-import { NAV_GROUPS, labelFor, isExamProvider, navGroupsFor, withExamPendingCount, withLabCriticalCount, withPendingCount, type ModuleId, type NavGroupDef } from "./shell/modules";
+import { NAV_GROUPS, labelFor, isExamProvider, navGroupsFor, withExamPendingCount, withLabCriticalCount, withPendingCount, withQcBlockCount, type ModuleId, type NavGroupDef } from "./shell/modules";
 import { useAlerts } from "./hooks/useAlerts";
 import { usePendingSignatures } from "./hooks/usePendingSignatures";
 import { canSign } from "./lib/signature";
 import { useExamPending } from "./hooks/useExamPending";
 import { canUseExams, examRoles } from "./lib/exams";
 import { useLabCriticalCount } from "./hooks/useLabCriticalCount";
+import { useQcBlockCount } from "./hooks/useQcBlockCount";
+import { canUseQc } from "./lib/qc";
 import { canUseLab, labRoles } from "./lib/lab";
 import { LabCriticalNotice } from "./modules/lab/LabCriticalNotice";
 import { ExamsAdmin } from "./modules/ExamsAdmin";
@@ -82,8 +84,8 @@ const ALL_SLUGS: ReadonlySet<string> = new Set(NAV_GROUPS.map((g) => slugOf(g.la
 // Grupos do shell a partir do filtro por papel de hoje. O rótulo de
 // Pendentes leva a contagem de withPendingCount ("(3)", "(200+)"), como no
 // menu antigo; `count` só acende o ponto do trilho.
-export function shellGroups(groups: NavGroupDef[], pending: number, examPending = 0, labCritical = 0): ShellGroup[] {
-  return withLabCriticalCount(withExamPendingCount(withPendingCount(groups, pending), examPending), labCritical).map((g) => ({
+export function shellGroups(groups: NavGroupDef[], pending: number, examPending = 0, labCritical = 0, qcBlocks = 0): ShellGroup[] {
+  return withQcBlockCount(withLabCriticalCount(withExamPendingCount(withPendingCount(groups, pending), examPending), labCritical), qcBlocks).map((g) => ({
     label: g.label,
     slug: slugOf(g.label),
     items: g.items.map((i) => {
@@ -92,6 +94,8 @@ export function shellGroups(groups: NavGroupDef[], pending: number, examPending 
       if (i.id === "exam-acknowledgements" && examPending > 0) return { id: i.id, label: i.label, count: examPending };
       // Módulo 21b: críticos sem aviso acendem a liberação.
       if (i.id === "lab-release" && labCritical > 0) return { id: i.id, label: i.label, count: labCritical };
+      // Módulo 21c: bloqueios ativos acendem a tela de bloqueios.
+      if (i.id === "lab-qc-blocks" && qcBlocks > 0) return { id: i.id, label: i.label, count: qcBlocks };
       return { id: i.id, label: i.label };
     })
   }));
@@ -124,9 +128,12 @@ function ShellInner({ initialModule }: { initialModule?: ModuleId }) {
   const deniedCount = examPending.data?.denied ?? 0;
   const labCriticalQuery = useLabCriticalCount(canUseLab(auth.user) && labRoles(auth.user).releaser, auth.user?.id ?? null);
   const labCritical = labCriticalQuery.data ?? 0;
+  const qcRoles = labRoles(auth.user);
+  const qcBlockQuery = useQcBlockCount(canUseQc(auth.user) && (qcRoles.staff || qcRoles.releaser), auth.user?.id ?? null);
+  const qcBlocks = qcBlockQuery.data ?? 0;
   const groups = useMemo(
-    () => shellGroups(navGroupsFor(auth.user), pending.data?.length ?? 0, examCount, labCritical),
-    [ auth.user, pending.data?.length, examCount, labCritical ]
+    () => shellGroups(navGroupsFor(auth.user), pending.data?.length ?? 0, examCount, labCritical, qcBlocks),
+    [ auth.user, pending.data?.length, examCount, labCritical, qcBlocks ]
   );
 
   const isAllowed = useCallback((r: Route<ModuleId>) => {

@@ -3,12 +3,16 @@ import { NAV_GROUPS, navGroupsFor, withLabCriticalCount } from "./modules";
 
 const ON = { features: [ "exam_tracking", "municipal_lab" ] };
 const userWith = (roles: string[], extra: object = ON) => ({ operator: false, memberships: roles.map((role) => ({ role })), ...extra });
-const LAB_IDS = [ "lab-requisitions", "lab-collection", "lab-shipments", "lab-reception", "lab-worklist", "lab-entry", "lab-release", "lab-admin", "lab-reports" ];
+const LAB_IDS = [
+  "lab-requisitions", "lab-collection", "lab-shipments", "lab-reception", "lab-worklist", "lab-entry", "lab-release",
+  "lab-qc-runs", "lab-qc-chart", "lab-qc-blocks", "lab-qc-setup", "lab-eqa", "lab-inventory", "lab-traceability", "lab-instruments",
+  "lab-admin", "lab-reports"
+];
 const labIds = (user: Parameters<typeof navGroupsFor>[0]) =>
   navGroupsFor(user).flatMap((g) => g.items.map((i) => i.id)).filter((id) => LAB_IDS.includes(id));
 
 describe("grupo Laboratório (módulo 21b)", () => {
-  it("fica logo depois de Exames, com as nove telas", () => {
+  it("fica logo depois de Exames, com as telas do 21b e do 21c", () => {
     const labels = NAV_GROUPS.map((g) => g.label);
     expect(labels.indexOf("Laboratório")).toBe(labels.indexOf("Exames") + 1);
     expect(NAV_GROUPS.find((g) => g.label === "Laboratório")?.items.map((i) => i.id)).toEqual(LAB_IDS);

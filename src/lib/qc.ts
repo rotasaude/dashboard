@@ -12,8 +12,8 @@ import {
   type EqaAdequacy, type EqaRoundInput, type EqaSummaryRow, type LabExamRef, type LabInstrument, type LabInstrumentInput, type QcAnalyteRef,
   type QcChart, type QcLotInput, type QcMaterial, type QcMaterialInput, type QcRule, type QcTargetInput
 } from "./api";
-import { featureDisabledKey } from "./features";
-import { DOT_IN_NUMBER, SECTOR_LABEL, hasDot, labError, normalizeNumber } from "./lab";
+import { featureDisabledKey, hasFeature } from "./features";
+import { DOT_IN_NUMBER, SECTOR_LABEL, canUseLab, hasDot, labError, normalizeNumber } from "./lab";
 import type { Tone } from "../theme/tokens";
 
 export const QC_INSTRUMENTS_KEY = "qcInstruments";
@@ -410,4 +410,11 @@ export function qcError(err: unknown): string {
 
 export async function refreshQc(client: QueryClient): Promise<void> {
   await Promise.all(QC_KEYS.map((key) => client.invalidateQueries({ queryKey: [ key ] })));
+}
+
+export function canUseQc(user: { operator: boolean; features?: unknown } | null): boolean {
+  return canUseLab(user) && hasFeature(user, "lab_quality_control");
+}
+export function canUseInventory(user: { operator: boolean; features?: unknown } | null): boolean {
+  return canUseLab(user) && hasFeature(user, "lab_inventory");
 }
