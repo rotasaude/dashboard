@@ -68,14 +68,34 @@ describe("LabQcChart", () => {
     expect((await screen.findByRole("alert")).textContent).toContain("não encontrado neste laboratório");
   });
 
-  it("administrador municipal vê; equipe sem papel de liberador não", async () => {
+  it("administrador municipal escolhe e vê o gráfico", async () => {
     mocked(api.fetchCurrentSession).mockResolvedValue(qcUser([ "municipal_admin" ]));
-    renderWithProviders(<LabQcChart />);
-    await screen.findByRole("option", { name: "L2026A · Controle bioquímico" });
-    cleanup();
+    await pick();
+    await waitFor(() => expect(api.getQcChart).toHaveBeenCalledWith({
+      lot_id: "ql1", level: "normal", analyte_key: "glicose", instrument_id: "in1", from: "2026-09-18", to: "2026-10-18"
+    }));
+    expect(await screen.findByRole("figure", { name: /^Levey-Jennings · Glicose/ })).not.toBeNull();
+  });
+
+  it("equipe sem papel de liberador não vê", async () => {
     mocked(api.fetchCurrentSession).mockResolvedValue(qcUser([ "lab_staff" ]));
     renderWithProviders(<LabQcChart />);
     expect(await screen.findByText("seu papel não permite ver esta tela")).not.toBeNull();
     expect(api.getQcChart).not.toHaveBeenCalled();
+  });
+
+  it("aparelho inativo aparece marcado para consultar histórico", async () => {
+    mocked(api.listLabInstruments).mockResolvedValue([ instrument(), instrument({ id: "in2", name: "Velho", active: false }) ]);
+    renderWithProviders(<LabQcChart />);
+    expect(await screen.findByRole("option", { name: "Velho (inativo)" })).not.toBeNull();
+  });
+
+  it("data apagada: a mensagem é sobre a data e não consulta", async () => {
+    await pick();
+    await waitFor(() => expect(api.getQcChart).toHaveBeenCalledTimes(1));
+    fireEvent.change(screen.getByLabelText("De"), { target: { value: "" } });
+    expect(screen.getByText("escolha as duas datas do período")).not.toBeNull();
+    expect(screen.queryByText(/escolha aparelho/)).toBeNull();
+    expect(api.getQcChart).toHaveBeenCalledTimes(1);
   });
 });

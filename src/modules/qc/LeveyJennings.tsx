@@ -13,6 +13,8 @@ import { DataTable } from "../../components/DataTable";
 import { Tag } from "../../components/Tag";
 import { list, muted, row } from "../exams/styles";
 
+// Limite do api (qc/chart.rb MAX_POINTS); o api não manda flag de corte.
+const MAX_POINTS = 200;
 const LINE_COLOR: Record<number, string> = { 0: "var(--ink2)", 1: "var(--rule)", 2: "var(--warn)", 3: "var(--down)" };
 const DOT_COLOR: Record<string, string> = { ok: "var(--ok)", warning: "var(--warn)", reject: "var(--down)" };
 
@@ -70,6 +72,7 @@ export function LeveyJennings({ chart, label }: { chart: QcChart; label: string 
             {ljBands(chart.target).map((b) => <li key={b.k}>{`${b.label}: ${b.value}`}</li>)}
           </ul>
         )}
+        {chart.points.length >= MAX_POINTS && <span>só os 200 pontos mais recentes do período; encurte o período para ver os anteriores</span>}
         {model.mixedVersions && <span>há pontos avaliados contra outra versão da referência — o eixo é em desvios-padrão, cada ponto contra a sua versão</span>}
         <span style={row}>
           <Tag tone="ok">ok</Tag><Tag tone="warn">aviso (1-2s)</Tag><Tag tone="down">reprovado</Tag>

@@ -53,7 +53,7 @@ function ChartBody({ providerId }: { providerId: string }) {
     queryKey: [ QC_CHART_KEY, q ], queryFn: () => getQcChart(q), enabled: ready, retry: false, refetchOnWindowFocus: false, refetchOnReconnect: false
   });
   const name = ref ? analyteName(exams.data ?? [], ref.lab_exam_id, analyteKey) : analyteKey;
-  const instrumentName = active.find((i) => i.id === instrumentId)?.name ?? "";
+  const instrumentName = (instruments.data ?? []).find((i) => i.id === instrumentId)?.name ?? "";
 
   return (
     <div style={stack}>
@@ -61,7 +61,7 @@ function ChartBody({ providerId }: { providerId: string }) {
         <label style={fieldLabel}>Aparelho
           <select value={instrumentId} style={inputStyle} onChange={(e) => setPickedInstrument(e.target.value)}>
             <option value="">—</option>
-            {active.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
+            {(instruments.data ?? []).map((i) => <option key={i.id} value={i.id}>{i.active ? i.name : `${i.name} (inativo)`}</option>)}
           </select>
         </label>
         <label style={fieldLabel}>Lote
@@ -87,7 +87,8 @@ function ChartBody({ providerId }: { providerId: string }) {
       </div>
       {inverted && <p role="alert" style={alert}>o início do período é depois do fim</p>}
       {tooLong && <p role="alert" style={alert}>{`o período vai até ${MAX_DAYS} dias`}</p>}
-      {!ready && !inverted && !tooLong && <p style={muted}>escolha aparelho, lote, nível e analito</p>}
+      {!datesOk && <p style={muted}>escolha as duas datas do período</p>}
+      {datesOk && !ready && !inverted && !tooLong && <p style={muted}>escolha aparelho, lote, nível e analito</p>}
       {ready && (
         <Panel title="Gráfico" sub="até 200 pontos; passe o mouse para ver valor, z e a versão da referência">
           {chart.isError ? <p role="alert" style={alert}>{qcError(chart.error)}</p>

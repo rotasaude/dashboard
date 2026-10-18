@@ -49,4 +49,13 @@ describe("LeveyJennings", () => {
     expect(screen.getByText("sem referência vigente para esta chave — o eixo segue em desvios-padrão da referência de cada ponto")).not.toBeNull();
     expect(screen.queryByRole("list", { name: "faixas da referência vigente" })).toBeNull();
   });
+
+  it("200 pontos: avisa do corte; menos que isso, não", () => {
+    const base = qcChart().points[0];
+    const { unmount } = render(<LeveyJennings chart={qcChart({ points: Array.from({ length: 200 }, () => base) })} label="LJ" />);
+    expect(screen.getByText("só os 200 pontos mais recentes do período; encurte o período para ver os anteriores")).not.toBeNull();
+    unmount();
+    render(<LeveyJennings chart={qcChart()} label="LJ" />);
+    expect(screen.queryByText(/só os 200 pontos/)).toBeNull();
+  });
 });
