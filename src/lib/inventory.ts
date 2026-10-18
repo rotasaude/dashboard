@@ -142,8 +142,9 @@ export function reagentLotMark(row: { reagent_lot?: ReagentLotRef | null }, inve
 
 export function fmtDeviation(pct: number | null): string {
   if (pct === null || !Number.isFinite(pct)) return "—";
-  const t = Math.abs(pct).toFixed(1).replace(".", ",");
-  return pct > 0 ? `+${t}%` : pct < 0 ? `-${t}%` : `${t}%`;
+  const rounded = Number(pct.toFixed(1));
+  const t = Math.abs(rounded).toFixed(1).replace(".", ",");
+  return rounded > 0 ? `+${t}%` : rounded < 0 ? `-${t}%` : `${t}%`;
 }
 
 export function deviationTone(pct: number | null): Tone | undefined {
@@ -177,6 +178,7 @@ const ERRORS: Record<string, string> = {
   invalid_document: "documento longo demais — use até 60 caracteres",
   invalid_expires_on: "validade inválida — informe a data",
   invalid_month: "mês inválido",
+  invalid_provider: "laboratório inválido; escolha o laboratório de novo",
   filter_required: "faltou escolher o item, o lote ou o aparelho",
   mfa_required: "o código do autenticador não valeu — digite o código atual",
   missing_role: "seu papel não permite esta ação"

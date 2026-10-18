@@ -55,6 +55,9 @@ describe("movimento", () => {
   it("saída maior que o saldo e ajuste sem admin", () => {
     expect(movementProblem({ ...EMPTY_MOVEMENT, kind: "opening", quantity: "1" }, 5, false)).toBeNull();
     expect(movementProblem({ ...EMPTY_MOVEMENT, kind: "loss", quantity: "6", reason: "frasco quebrado" }, 5, false)).toBe("saída maior que o saldo do lote (5)");
+    expect(movementProblem({ ...EMPTY_MOVEMENT, kind: "expiry", quantity: "5", reason: "lote vencido" }, 5, false)).toBeNull();
+    expect(movementProblem({ ...EMPTY_MOVEMENT, kind: "expiry", quantity: "6", reason: "lote vencido" }, 5, false)).toBe("saída maior que o saldo do lote (5)");
+    expect(movementProblem({ ...EMPTY_MOVEMENT, kind: "expiry", quantity: "1", reason: "" }, 5, false)).toBe("escreva o motivo");
     expect(movementProblem({ ...EMPTY_MOVEMENT, kind: "loss", quantity: "1", reason: "" }, 5, false)).toBe("escreva o motivo");
     expect(movementProblem({ ...EMPTY_MOVEMENT, kind: "loss", quantity: "1", reason: "x".repeat(1000) }, 5, false)).toBeNull();
     expect(movementProblem({ ...EMPTY_MOVEMENT, kind: "loss", quantity: "1", reason: "x".repeat(1001) }, 5, false)).toBe("motivo com até 1000 caracteres");
@@ -91,6 +94,10 @@ describe("consumo e recusas", () => {
     expect(fmtDeviation(12.5)).toBe("+12,5%");
     expect(fmtDeviation(-30)).toBe("-30,0%");
     expect(fmtDeviation(null)).toBe("—");
+    expect(fmtDeviation(-0.04)).toBe("0,0%");
+    expect(fmtDeviation(0.04)).toBe("0,0%");
+    expect(fmtDeviation(0)).toBe("0,0%");
+    expect(fmtDeviation(0.06)).toBe("+0,1%");
     expect(deviationTone(-30)).toBe("warn");
     expect(deviationTone(5)).toBeUndefined();
   });
@@ -102,6 +109,9 @@ describe("consumo e recusas", () => {
     expect(inventoryError(new ApiError(422, { error: "invalid_instrument" }, "x"))).toContain("aparelho");
     expect(inventoryError(new ApiError(401, { error: "mfa_required" }, "x"))).toContain("autenticador");
     expect(inventoryError(new ApiError(403, { error: "feature_disabled", feature: "lab_quality_control" }, "x"))).toBe(QC_DISABLED);
+  });
+  it("invalid_provider tem frase própria", () => {
+    expect(inventoryError(new ApiError(422, { error: "invalid_provider" }, "x"))).toBe("laboratório inválido; escolha o laboratório de novo");
   });
   it("item vindo do api volta ao rascunho", () => {
     const s = { id: "su1", provider_id: "pv9", name: "Glicose", kind: "reagent", unit: "kit", tests_per_package: 400, minimum_stock: 2, expiry_alert_days: 30,
