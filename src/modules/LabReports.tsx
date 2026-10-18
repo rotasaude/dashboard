@@ -8,7 +8,7 @@ import { useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   fetchLabReportCsv, getLabProduction, getLabRejections, getLabTurnaround,
-  type LabProductionRow, type LabRejectionRow, type LabReportKind, type LabReportQuery, type LabTurnaroundRow, type SignatureFile, listExamProviders
+  type LabProductionRow, type LabRejectionRow, type LabReportKind, type LabReportQuery, type LabTurnaroundRow, listExamProviders
 } from "../lib/api";
 import { EXAM_ADMIN_PROVIDERS_KEY } from "../lib/exams";
 import { labProviders } from "../lib/labAdmin";
@@ -20,10 +20,10 @@ import { DataTable } from "../components/DataTable";
 import { ActionButton } from "../components/ActionButton";
 import { inputStyle } from "../components/formStyles";
 import { LabGate } from "./lab/LabGate";
+import { saveFile } from "./lab/saveFile";
 import { useLabContext } from "./lab/useLabContext";
 import { alert, fieldLabel, muted, row, stack } from "./exams/styles";
 
-const BLOB_TTL_MS = 60_000;
 const FILE_NAME: Record<LabReportKind, string> = { production: "producao", rejections: "rejeicoes", turnaround: "prazo" };
 
 // Centavos inteiros em reais, só com aritmética inteira (sem arredondar Float).
@@ -32,17 +32,6 @@ export function fmtCents(cents: number): string {
   const abs = Math.abs(Math.trunc(cents));
   const reais = String(Math.trunc(abs / 100)).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
   return `${neg ? "-" : ""}R$ ${reais},${String(abs % 100).padStart(2, "0")}`;
-}
-
-function saveFile(file: SignatureFile, name: string) {
-  const url = URL.createObjectURL(file.blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = name;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), BLOB_TTL_MS);
 }
 
 export function LabReports() {

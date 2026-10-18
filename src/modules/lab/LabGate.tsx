@@ -5,6 +5,7 @@
 import type { ReactNode } from "react";
 import { errorCode } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
+import { hasFeature, type FeatureKey } from "../../lib/features";
 import { LAB_DISABLED, LAB_NO_LAB, LAB_NO_ROLE, UNIT_DOES_NOT_COLLECT, canUseLab, labError, labRoles, type LabRoles } from "../../lib/lab";
 import { PageHeader } from "../../components/PageHeader";
 import { EmptyState } from "../../components/EmptyState";
@@ -17,17 +18,23 @@ import { useLabContext } from "./useLabContext";
 // os prestadores por conta própria e têm estado vazio próprio apontando para
 // Exames → Catálogo e prestadores; passam `needsLab={false}` e o portão não lê
 // o contexto nem mostra LAB_NO_LAB.
-export function LabGate({ title, sub, allow, needsLab = true, children }: {
-  title: string; sub: string; allow(roles: LabRoles): boolean; needsLab?: boolean; children(roles: LabRoles): ReactNode;
+// `requires` (21c): interruptores além de `municipal_lab`, basta um ligado;
+// `disabledText` é a frase quando nenhum está.
+export function LabGate({ title, sub, allow, needsLab = true, requires, disabledText, children }: {
+  title: string; sub: string; allow(roles: LabRoles): boolean; needsLab?: boolean; requires?: FeatureKey[]; disabledText?: string;
+  children(roles: LabRoles): ReactNode;
 }) {
   const { user } = useAuth();
   const roles = labRoles(user);
-  const switchOn = canUseLab(user);
+  const labOn = canUseLab(user);
+  const extraOn = !requires || requires.some((key) => hasFeature(user, key));
+  const switchOn = labOn && extraOn;
   const permitted = switchOn && allow(roles);
   const context = useLabContext(permitted && needsLab);
   if (!user) return null;
   let body: ReactNode;
-  if (!switchOn) body = <EmptyState title={LAB_DISABLED} />;
+  if (!labOn) body = <EmptyState title={LAB_DISABLED} />;
+  else if (!extraOn) body = <EmptyState title={disabledText ?? LAB_DISABLED} />;
   else if (!permitted) body = <EmptyState title={LAB_NO_ROLE} />;
   else if (!needsLab) body = children(roles);
   else if (context.isPending) body = <Skeleton rows={3} />;
