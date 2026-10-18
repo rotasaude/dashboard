@@ -131,9 +131,7 @@ export function RectifyForm({ report, items, council, guard, qcLead = false, onD
       <SignatureChoice council={council} kind={signature} onKind={(k) => { if (k === "icp") setTotp(""); setChosen(k); }}
         totp={totp} onTotp={setTotp} icpAvailable={available} />
       {blocked.length > 0 && (
-        <QcBlockedPanel items={blocked} excepted={excepted} lead={qcLead} onGoToSecurity={onGoToSecurity}
-          itemLabel={(id) => items.find((i) => i.id === id)?.label ?? id}
-          analyteLabel={(id, key) => items.find((i) => i.id === id)?.results.find((x) => x.analyte_key === key)?.name ?? key}
+        <QcBlockedPanel items={blocked} exams={items} mode="rectify" excepted={excepted} lead={qcLead} onGoToSecurity={onGoToSecurity}
           onExcepted={(key) => setExcepted((x) => [ ...x, key ])} />
       )}
       {error && <p role="alert" style={alert}>{error}</p>}

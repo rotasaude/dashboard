@@ -1,6 +1,8 @@
 // Uma corrida: situação, horários e os valores com z, regras disparadas,
 // desfecho, origem e o lote do reagente (contrato §3 e §7).
 import type { QcRun, QcValue } from "../../lib/api";
+import { useAuth } from "../../lib/auth";
+import { hasFeature } from "../../lib/features";
 import { fmtDecimal, fmtZ, outcomeLabel, outcomeTone, rulesText, runStatusLabel, runStatusTone } from "../../lib/qc";
 import { fmtDateTime } from "../../lib/format";
 import { DataTable } from "../../components/DataTable";
@@ -9,6 +11,9 @@ import { ReagentLotTag } from "../inventory/ReagentLotTag";
 import { box, muted, row } from "../exams/styles";
 
 export function QcRunCard({ run, analyte }: { run: QcRun; analyte(key: string): string }) {
+  // Estoque desligado: a marca do lote não aparece, então a coluna também some.
+  const { user } = useAuth();
+  const inventory = hasFeature(user, "lab_inventory");
   return (
     <section aria-label={`Corrida de ${fmtDateTime(run.started_at)}`} style={box}>
       <div style={row}>
@@ -23,7 +28,7 @@ export function QcRunCard({ run, analyte }: { run: QcRun; analyte(key: string): 
           { label: "Regras", w: "0.9fr", render: (v) => (v.rules_fired.length > 0 ? rulesText(v.rules_fired) : "—") },
           { label: "Desfecho", w: "0.8fr", render: (v) => <Tag tone={outcomeTone(v.outcome)}>{outcomeLabel(v.outcome)}</Tag> },
           { label: "Origem", w: "1fr", render: (v) => (v.source === "hl7" ? "aparelho" : `digitado${v.entered_by ? ` por ${v.entered_by}` : ""}`) },
-          { label: "Reagente", w: "1fr", render: (v) => <ReagentLotTag row={v} /> }
+          ...(inventory ? [ { label: "Reagente", w: "1fr", render: (v: QcValue) => <ReagentLotTag row={v} /> } ] : [])
         ]}
         rows={run.values} rowKey={(v) => v.id} empty="nenhum valor nesta corrida"
       />

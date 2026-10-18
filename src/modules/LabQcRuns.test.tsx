@@ -62,6 +62,15 @@ describe("LabQcRuns", () => {
     expect(screen.getByText("+0,4")).not.toBeNull();
     expect(screen.getByText("99")).not.toBeNull();
     expect(screen.getByText("lote R-778")).not.toBeNull();
+    expect(screen.queryAllByText("Reagente").length).toBeGreaterThan(0);
+  });
+
+  it("estoque desligado: sem a coluna Reagente e sem o lote", async () => {
+    mocked(api.fetchCurrentSession).mockResolvedValue(qcUser([ "lab_staff" ], { features: [ "exam_tracking", "municipal_lab", "lab_quality_control" ] }));
+    renderWithProviders(<LabQcRuns />);
+    expect(await screen.findByText("aprovada")).not.toBeNull();
+    expect(screen.queryAllByText("Reagente").length).toBe(0);
+    expect(screen.queryByText("lote R-778")).toBeNull();
   });
 
   it("série de valores: ponto bloqueia tudo; 422 no meio marca o campo e mantém os não enviados", async () => {

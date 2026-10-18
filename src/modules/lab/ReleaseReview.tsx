@@ -28,10 +28,6 @@ import { QcBlockedPanel, blockedItems, stuckItemIds } from "../qc/QcBlockedPanel
 import { NO_ICP_FOR_DOCTOR, SignatureChoice } from "./SignatureChoice";
 import { alert, box, checkLabel, list, muted, panel, row, title } from "../exams/styles";
 
-export const itemLabel = (items: LabReleaseItem[], id: string) => items.find((i) => i.id === id)?.label ?? id;
-export const analyteLabel = (items: LabReleaseItem[], id: string, key: string) =>
-  items.find((i) => i.id === id)?.results.find((x) => x.analyte_key === key)?.name ?? key;
-
 function byAnalyte(rows: LabResultRow[]): [ string, LabResultRow[] ][] {
   const groups = new Map<string, LabResultRow[]>();
   for (const r of rows) groups.set(r.analyte_key, [ ...(groups.get(r.analyte_key) ?? []), r ]);
@@ -217,7 +213,7 @@ export function ReleaseReview({ requisitionId, council, qcLead = false, onReleas
       {r.items.map(itemBlock)}
       {blocked.length > 0 && (
         <QcBlockedPanel items={blocked} excepted={excepted} lead={qcLead} onGoToSecurity={onGoToSecurity}
-          itemLabel={(id) => itemLabel(r.items, id)} analyteLabel={(id, key) => analyteLabel(r.items, id, key)}
+          exams={r.items}
           onExcepted={(key) => setExcepted((x) => [ ...x, key ])}
           onSkip={() => {
             const stuck = stuckItemIds(blocked, excepted);

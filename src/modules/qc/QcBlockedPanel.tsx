@@ -6,7 +6,7 @@
 // exceção bloqueio a bloqueio e libera de novo. O item só deixa de estar
 // pendente quando todos os bloqueios dele têm exceção.
 import { useState } from "react";
-import { ApiError, type QcBlockedItem } from "../../lib/api";
+import { ApiError, type LabReleaseItem, type QcBlockedItem } from "../../lib/api";
 import { Tag } from "../../components/Tag";
 import { secondaryButtonStyle } from "../../components/formStyles";
 import { QcExceptionForm } from "./QcExceptionForm";
@@ -21,13 +21,20 @@ export function blockedItems(err: unknown): QcBlockedItem[] {
     !!i && typeof i === "object" && typeof (i as QcBlockedItem).item_id === "string" && typeof (i as QcBlockedItem).block_id === "string");
 }
 
+// Rótulos das linhas do painel a partir dos itens da conferência.
+export const itemLabel = (items: LabReleaseItem[], id: string) => items.find((i) => i.id === id)?.label ?? id;
+export const analyteLabel = (items: LabReleaseItem[], id: string, key: string) =>
+  items.find((i) => i.id === id)?.results.find((x) => x.analyte_key === key)?.name ?? key;
+
 // Itens com ao menos um bloqueio sem exceção.
 export function stuckItemIds(items: QcBlockedItem[], excepted: string[]): string[] {
   return [ ...new Set(items.filter((b) => !excepted.includes(blockKey(b))).map((b) => b.item_id)) ];
 }
 
-export function QcBlockedPanel({ items, itemLabel, analyteLabel, excepted, lead, onSkip, onExcepted, onGoToSecurity }: {
-  items: QcBlockedItem[]; itemLabel(itemId: string): string; analyteLabel(itemId: string, key: string): string;
+export function QcBlockedPanel({ items, exams: examItems, excepted, lead, mode = "release", onSkip, onExcepted, onGoToSecurity }: {
+  items: QcBlockedItem[]; exams: LabReleaseItem[];
+  // "rectify": a frase final fala do laudo retificado.
+  mode?: "release" | "rectify";
   // Pares `item_id:block_id` com exceção registrada.
   excepted: string[]; lead: boolean; onSkip?(): void; onExcepted(key: string): void; onGoToSecurity?(): void;
 }) {
@@ -43,7 +50,7 @@ export function QcBlockedPanel({ items, itemLabel, analyteLabel, excepted, lead,
           return (
             <li key={key}>
               <div style={row}>
-                <span>{`${itemLabel(b.item_id)} · ${analyteLabel(b.item_id, b.analyte_key)} · ${b.instrument_name || b.instrument_id}`}</span>
+                <span>{`${itemLabel(examItems, b.item_id)} · ${analyteLabel(examItems, b.item_id, b.analyte_key)} · ${b.instrument_name || b.instrument_id}`}</span>
                 {excepted.includes(key) ? <Tag tone="ok">exceção registrada</Tag> : lead && formFor !== key && (
                   <button type="button" style={secondaryButtonStyle} onClick={() => setFormFor(key)}>Liberar com exceção</button>
                 )}
@@ -57,7 +64,9 @@ export function QcBlockedPanel({ items, itemLabel, analyteLabel, excepted, lead,
         })}
       </ul>
       {!lead && <p style={muted}>peça a exceção ao responsável técnico ou ao substituto, ou aguarde a corrida aprovada depois da ação corretiva</p>}
-      {stuck.length === 0 && <p style={muted}>exceções registradas — confira e libere de novo</p>}
+      {stuck.length === 0 && (
+        <p style={muted}>{mode === "rectify" ? "exceções registradas — confira e emita o laudo retificado de novo" : "exceções registradas — confira e libere de novo"}</p>
+      )}
       {stuck.length > 0 && onSkip && <div><button type="button" style={secondaryButtonStyle} onClick={onSkip}>Liberar sem os bloqueados</button></div>}
     </div>
   );

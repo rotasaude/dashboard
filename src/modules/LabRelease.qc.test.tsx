@@ -193,6 +193,8 @@ describe("liberação com o CIQ (contrato §3)", () => {
     fireEvent.click(await within(line).findByRole("button", { name: "Confirmar exceção" }));
     await waitFor(() => expect(api.grantQcException).toHaveBeenCalledWith({ block_id: "qb1", item_id: "it2", justification: EXCEPTION }));
     expect(await within(box).findByText("exceção registrada")).not.toBeNull();
+    expect(within(box).getByText("exceções registradas — confira e emita o laudo retificado de novo")).not.toBeNull();
+    expect(within(box).queryByText("exceções registradas — confira e libere de novo")).toBeNull();
     fireEvent.change(within(form).getByLabelText("Código do autenticador"), { target: { value: "654321" } });
     fireEvent.click(within(form).getByRole("button", { name: "Emitir laudo retificado" }));
     expect(await screen.findByText("Laudo retificado liberado com assinatura eletrônica avançada.")).not.toBeNull();
