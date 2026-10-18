@@ -32,6 +32,7 @@ export const QC_EXAMS_KEY = "qcExams";
 export const EQA_ROUNDS_KEY = "eqaRounds";
 export const EQA_SUMMARY_KEY = "eqaSummary";
 
+// QC_EXAMS_KEY fica de fora: é a lista de exames (catálogo), que nenhuma escrita do CIQ/CEQ altera.
 const QC_KEYS = [
   QC_INSTRUMENTS_KEY, QC_MATERIALS_KEY, QC_LOTS_KEY, QC_TARGETS_KEY, QC_SUGGESTIONS_KEY, QC_RUNS_KEY, QC_CHART_KEY, QC_RULES_KEY,
   QC_BLOCKS_KEY, QC_BLOCK_COUNT_KEY, QC_REVIEWS_KEY, QC_EXCEPTIONS_KEY, EQA_ROUNDS_KEY, EQA_SUMMARY_KEY
@@ -168,6 +169,7 @@ export function materialProblem(d: MaterialDraft, original?: QcMaterial): string
   if (new Set(levels.map((l) => l.toLowerCase())).size !== levels.length) return "níveis repetidos";
   if (levels.some((l) => l.length > 40)) return "cada nível com até 40 caracteres";
   if (d.analytes.length === 0) return "escolha ao menos um analito";
+  if (d.analytes.length > 60) return "no máximo 60 analitos por material";
   const keys = d.analytes.map((t) => tokenToAnalyte(t).analyte_key);
   if (new Set(keys).size !== keys.length) return "a mesma chave de analito não pode entrar em dois exames";
   if (original?.has_lots) {
@@ -241,6 +243,8 @@ export function turnedOff(before: Record<QcRule, boolean>, after: Record<QcRule,
 
 export function rulesProblem(before: Record<QcRule, boolean>, after: Record<QcRule, boolean>, justification: string): string | null {
   const off = turnedOff(before, after);
+  // O api recusa texto acima de 1000 sempre; em branco só quando desliga uma regra (C-E2).
+  if (justification.trim().length > TEXT_MAX) return `a justificativa: no máximo ${TEXT_MAX} caracteres`;
   return off.length > 0 ? reasonProblem(justification, `a justificativa para desligar ${rulesText(off)}`) : null;
 }
 
@@ -278,7 +282,7 @@ export function ljBands(target: { mean: string; sd: string }): { k: number; labe
   const places = Math.max(decimalsOf(target.mean), decimalsOf(target.sd));
   const mean = Number(target.mean);
   const sd = Number(target.sd);
-  return [ 3, 2, 1, 0, -1, -2, -3 ].map((k) => ({ k, label: sdLabel(k), value: fmtDecimal((mean + k * sd).toFixed(places)) }));
+  return [ 3, 2, 1, 0, -1, -2, -3 ].map((k) => ({ k, label: sdLabel(k), value: fmtDecimal(((mean + k * sd).toFixed(places)).replace(/^-(0(\.0+)?)$/, "$1")) }));
 }
 
 // ─── CEQ ───

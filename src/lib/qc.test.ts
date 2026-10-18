@@ -114,6 +114,12 @@ describe("material e lote", () => {
     expect(materialProblem(d)).toBeNull();
   });
 
+  it("no máximo 60 analitos (save_material.rb)", () => {
+    const many = (n: number) => Array.from({ length: n }, (_, i) => `le${i}:k${i}`);
+    expect(materialProblem({ ...base, analytes: many(60) })).toBeNull();
+    expect(materialProblem({ ...base, analytes: many(61) })).toBe("no máximo 60 analitos por material");
+  });
+
   it("a mesma chave de analito em dois exames é recusada (C-E12)", () => {
     expect(materialProblem({ ...base, analytes: [ "le1:glicose", "le2:glicose" ] })).toBe("a mesma chave de analito não pode entrar em dois exames");
     expect(materialProblem({ ...base, analytes: [ "le1:glicose", "le2:hdl" ] })).toBeNull();
@@ -175,8 +181,10 @@ describe("referência e regras", () => {
     expect(turnedOff(ALL_ON, off)).toEqual([ "4_1s" ]);
     expect(rulesProblem(ALL_ON, off, "curto")).toBe("escreva a justificativa para desligar 4-1s (ao menos 10 caracteres)");
     expect(rulesProblem(ALL_ON, off, "aparelho em validação, 4-1s gera falso alarme")).toBeNull();
-    expect(rulesProblem(ALL_ON, off, "a".repeat(1001))).toBe("a justificativa para desligar 4-1s: no máximo 1000 caracteres");
+    expect(rulesProblem(ALL_ON, off, "a".repeat(1001))).toBe("a justificativa: no máximo 1000 caracteres");
     expect(rulesProblem(off, ALL_ON, "")).toBeNull();
+    expect(rulesProblem(off, ALL_ON, "a".repeat(1001))).toBe("a justificativa: no máximo 1000 caracteres");
+    expect(rulesProblem(off, ALL_ON, "a".repeat(1000))).toBeNull();
   });
 });
 
@@ -212,6 +220,13 @@ describe("Levey-Jennings", () => {
     ]);
     expect(ljBands({ mean: "98", sd: "2" }).map((b) => b.value)).toEqual([ "104", "102", "100", "98", "96", "94", "92" ]);
     expect(sdLabel(-2)).toBe("-2 dp");
+  });
+
+  it("nunca mostra -0 numa faixa", () => {
+    expect(ljBands({ mean: "0.3", sd: "0.1" }).find((b) => b.k === -3)?.value).toBe("0,0");
+  });
+
+  it("(ver acima)", () => {
   });
 });
 
