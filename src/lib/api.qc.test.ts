@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   acceptQcSuggestion, closeQcLot, countActiveQcBlocks, createEqaAnnualReport, createInstrument, decideQcReview, fetchConsumptionCsv,
-  fetchEqaAnnualReport, fetchSupplyLotTraceCsv, getConsumption, getEqaSummary, getQcChart, grantQcException, listEqaAnnualReports,
+  fetchEqaAnnualReport, fetchSupplyLotTraceCsv, getConsumption, getEqaSummary, getInventoryAlerts, listInUse, setInUse, getQcChart, grantQcException, listEqaAnnualReports,
   listLabInstruments, listQcLots, listQcReviews, listSupplyLots, recordQcValue, recordSupplyMovement, saveQcRules, traceSupplyLot,
   updateInstrument, uploadEqaReport
 } from "./api";
@@ -196,5 +196,33 @@ describe("cliente do 21c (contrato §2–§5)", () => {
     expect(await getConsumption({ providerId: "pv9", month: "2026-10" })).toEqual(rows);
     expect(urlOf().pathname).toBe("/lab/inventory/consumption");
     expect(urlOf().searchParams.get("month")).toBe("2026-10");
+  });
+
+  it("lote em uso: lista por aparelho; marcar manda tudo no corpo (C-E6, C-E31)", async () => {
+    fetchMock.mockImplementationOnce(() => ok({ in_use: [ { id: "iu1" } ] }));
+    expect(await listInUse("in1")).toEqual([ { id: "iu1" } ]);
+    expect(urlOf().pathname).toBe("/lab/inventory/in_use");
+    expect(urlOf().searchParams.get("instrument_id")).toBe("in1");
+    fetchMock.mockImplementationOnce(() => ok({ id: "iu2", lot_id: "sl1" }, { status: 201 }));
+    expect(await setInUse({ lot_id: "sl1", instrument_id: "in1", lab_exam_id: "le1" })).toEqual({ id: "iu2", lot_id: "sl1" });
+    expect(initOf(1).method).toBe("POST");
+    expect(urlOf(1).search).toBe("");
+    expect(bodyOf(1)).toEqual({ lot_id: "sl1", instrument_id: "in1", lab_exam_id: "le1" });
+  });
+
+  it("alertas: lê por laboratório, mantém as chaves C-3 e normaliza o que falta", async () => {
+    const expiring = [ { id: "sl1", lot_id: "sl1", lot_number: "R-778", supply_name: "Glicose", expires_on: "2026-11-05", balance: 5 } ];
+    const below = [ { id: "su2", supply_id: "su2", name: "Ponteiras", unit: "caixa", balance: 1, minimum_stock: 3 } ];
+    fetchMock.mockImplementationOnce(() => ok({ expiring, below_minimum: below, untraced_results: 3 }));
+    expect(await getInventoryAlerts("pv9")).toEqual({ expiring, below_minimum: below, untraced_results: 3 });
+    expect(urlOf().pathname).toBe("/lab/inventory/alerts");
+    expect(urlOf().searchParams.get("provider_id")).toBe("pv9");
+    expect(initOf().method ?? "GET").toBe("GET");
+    fetchMock.mockImplementationOnce(() => ok({}));
+    expect(await getInventoryAlerts("pv9")).toEqual({ expiring: [], below_minimum: [], untraced_results: 0 });
+    fetchMock.mockImplementationOnce(() => ok({ expiring: null, below_minimum: null, untraced_results: "x" }));
+    expect(await getInventoryAlerts("pv9")).toEqual({ expiring: [], below_minimum: [], untraced_results: 0 });
+    fetchMock.mockImplementationOnce(() => ok({ untraced_results: "7" }));
+    expect((await getInventoryAlerts("pv9")).untraced_results).toBe(7);
   });
 });

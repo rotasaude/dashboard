@@ -1,7 +1,8 @@
 // src/modules/LabInventory.tsx
 // Estoque do laboratório (spec §6; contrato §5): itens (admin), entrada de
 // lote, movimentos (abertura, perda, vencimento; ajuste só admin), lote em uso
-// por aparelho e alertas. Nada é baixado sozinho. Sem polling.
+// por aparelho e alertas. Nada é baixado sozinho. Só os alertas (sem trilha)
+// são relidos periodicamente.
 import { useQuery } from "@tanstack/react-query";
 import { listLabExams } from "../lib/api";
 import { INVENTORY_DISABLED } from "../lib/inventory";
@@ -10,6 +11,8 @@ import { LabGate } from "./lab/LabGate";
 import { LabPick } from "./lab/LabPick";
 import { SuppliesPanel } from "./inventory/SuppliesPanel";
 import { SupplyLotsPanel } from "./inventory/SupplyLotsPanel";
+import { AlertsPanel } from "./inventory/AlertsPanel";
+import { InUsePanel } from "./inventory/InUsePanel";
 import { stack } from "./exams/styles";
 
 export function LabInventory({ onGoToSecurity }: { onGoToSecurity?(): void }) {
@@ -25,8 +28,10 @@ function InventoryBody({ providerId, admin, onGoToSecurity }: { providerId: stri
   const exams = useQuery({ queryKey: [ QC_EXAMS_KEY, providerId ], queryFn: () => listLabExams(providerId), retry: false });
   return (
     <div style={stack}>
+      <AlertsPanel providerId={providerId} />
       <SuppliesPanel providerId={providerId} admin={admin} exams={exams.data ?? []} onGoToSecurity={onGoToSecurity} />
       <SupplyLotsPanel providerId={providerId} admin={admin} onGoToSecurity={onGoToSecurity} />
+      <InUsePanel providerId={providerId} exams={exams.data ?? []} />
     </div>
   );
 }
