@@ -2,9 +2,9 @@
 // ano, registro próprio e só de acréscimo. O arquivo fica na memória até a
 // confirmação: o envio (só PDF, até 10 MB) e o registro rodam juntos, com
 // step-up (C-E39). Nada do PDF vai para console, log ou storage.
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createEqaAnnualReport, errorCode, uploadEqaReport } from "../../lib/api";
-import { annualReportProblem, qcError } from "../../lib/qc";
+import { annualReportProblem, qcError, yearProblem } from "../../lib/qc";
 import { SensitiveAction } from "../../components/SensitiveAction";
 import { buttonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { alert, box, fieldLabel, form, row } from "../exams/styles";
@@ -21,6 +21,8 @@ export function AnnualReportForm({ providerId, year, currentYear, onSaved, onCan
   const [ confirming, setConfirming ] = useState(false);
   // Se o envio deu certo e o registro falhou, uma nova tentativa na mesma confirmação reaproveita o envio.
   const uploaded = useRef<string | null>(null);
+  // Mudou o ano: a confirmação aberta era de outro ano; volta à revisão (o PDF escolhido fica).
+  useEffect(() => { setConfirming(false); }, [ year ]);
   const name = program === "outro" ? other.trim() : program;
 
   function pick(f: File | undefined) {
@@ -63,7 +65,7 @@ export function AnnualReportForm({ providerId, year, currentYear, onSaved, onCan
       {error && <p role="alert" style={alert}>{error}</p>}
       {!confirming && (
         <div style={row}>
-          <button type="button" style={buttonStyle} onClick={review}>Revisar e registrar relatório</button>
+          <button type="button" style={buttonStyle} disabled={!!yearProblem(year, currentYear)} onClick={review}>Revisar e registrar relatório</button>
           <button type="button" style={secondaryButtonStyle} onClick={onCancel}>Cancelar</button>
         </div>
       )}

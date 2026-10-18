@@ -73,7 +73,7 @@ function EqaBody({ providerId, onGoToSecurity }: { providerId: string; onGoToSec
                   return <>{`${ok}/${r.items.length} adequados`}{ok < r.items.length && <> <Tag tone="down">inadequado</Tag></>}</>;
                 } }
               ]}
-              rows={valid ? rounds.data ?? [] : []} rowKey={(r) => r.id} empty={valid && rounds.isPending ? "carregando…" : "nenhuma rodada neste ano"}
+              rows={valid ? rounds.data ?? [] : []} rowKey={(r) => r.id} empty={!valid ? "ano inválido" : rounds.isPending ? "carregando…" : "nenhuma rodada neste ano"}
             />
           )}
           {creating === "round" && (
@@ -93,7 +93,7 @@ function EqaBody({ providerId, onGoToSecurity }: { providerId: string; onGoToSec
               { label: "Taxa", w: "0.6fr", align: "right", render: (s) => adequacyRate(s) }
             ]}
             rows={valid ? summary.data?.rows ?? [] : []} rowKey={(s) => `${s.lab_exam_id}:${s.analyte_key}`}
-            empty={valid && summary.isPending ? "carregando…" : "nenhuma rodada neste ano"}
+            empty={!valid ? "ano inválido" : summary.isPending ? "carregando…" : "nenhuma rodada neste ano"}
           />
         )}
       </Panel>
@@ -109,10 +109,10 @@ function EqaBody({ providerId, onGoToSecurity }: { providerId: string; onGoToSec
                   ? <button type="button" style={secondaryButtonStyle} onClick={() => void openReport(p.annual_report_id!)}>{`Abrir relatório de ${p.program}`}</button> : null) }
               ]}
               rows={valid ? summary.data?.programs ?? [] : []} rowKey={(p) => p.program}
-              empty={valid && summary.isPending ? "carregando…" : "nenhum programa neste ano"}
+              empty={!valid ? "ano inválido" : summary.isPending ? "carregando…" : "nenhum programa neste ano"}
             />
           )}
-          {creating === "report" && valid && (
+          {creating === "report" && (
             <AnnualReportForm providerId={providerId} year={year} currentYear={currentYear} onGoToSecurity={onGoToSecurity}
               onCancel={() => setCreating(null)} onStale={refresh}
               onSaved={() => { setCreating(null); setNotice("Relatório anual registrado."); refresh(); }} />

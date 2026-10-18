@@ -163,6 +163,69 @@ describe("LabEqa relatório anual", () => {
   });
 });
 
+describe("LabEqa correções", () => {
+  async function openAnnual2() {
+    renderWithProviders(<LabEqa />);
+    fireEvent.click(await screen.findByRole("button", { name: "Registrar relatório anual" }));
+    const form = screen.getByRole("region", { name: "Novo relatório anual do CEQ" });
+    fireEvent.change(within(form).getByLabelText("Programa do relatório"), { target: { value: "Controllab" } });
+    fireEvent.change(within(form).getByLabelText("Relatório anual (PDF)"), { target: { files: [ pdf() ] } });
+    fireEvent.click(within(form).getByRole("button", { name: "Revisar e registrar relatório" }));
+    return form;
+  }
+
+  it("registro recusado e nova tentativa na mesma confirmação reaproveita o envio", async () => {
+    mocked(api.createEqaAnnualReport).mockRejectedValueOnce(new api.ApiError(422, { error: "invalid_program" }, "x"));
+    await openAnnual2();
+    fireEvent.click(await screen.findByRole("button", { name: "Registrar relatório" }));
+    expect(await screen.findByText("programa inválido — use de 1 a 60 caracteres")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Registrar relatório" }));
+    await waitFor(() => expect(api.createEqaAnnualReport).toHaveBeenCalledTimes(2));
+    expect(api.uploadEqaReport).toHaveBeenCalledTimes(1);
+  });
+
+  it("invalid_file zera o envio e a tentativa seguinte reenvia o PDF", async () => {
+    mocked(api.createEqaAnnualReport).mockRejectedValueOnce(new api.ApiError(422, { error: "invalid_file" }, "x"));
+    await openAnnual2();
+    fireEvent.click(await screen.findByRole("button", { name: "Registrar relatório" }));
+    expect(await screen.findByText("arquivo inválido — envie um PDF")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Registrar relatório" }));
+    await waitFor(() => expect(api.createEqaAnnualReport).toHaveBeenCalledTimes(2));
+    expect(api.uploadEqaReport).toHaveBeenCalledTimes(2);
+  });
+
+  it("admin lê e registra", async () => {
+    mocked(api.fetchCurrentSession).mockResolvedValue(qcUser([ "municipal_admin" ]));
+    mocked(api.getLabContext).mockResolvedValue(qcContext());
+    await openAnnual2();
+    fireEvent.click(await screen.findByRole("button", { name: "Registrar relatório" }));
+    await waitFor(() => expect(api.createEqaAnnualReport).toHaveBeenCalledWith({ provider_id: "pv9", program: "Controllab", year: 2026, upload_id: "up1" }));
+    expect(api.listEqaRounds).toHaveBeenCalledWith("pv9", "2026");
+  });
+
+  it("404 na rodada diz a frase e relê a tela", async () => {
+    mocked(api.createEqaRound).mockRejectedValueOnce(new api.ApiError(404, { error: "not_found" }, "x"));
+    const { form, item } = await newRound();
+    fireEvent.change(within(item).getByLabelText("Ação para o inadequado"), { target: { value: "recalibração e nova dosagem do controle" } });
+    fireEvent.click(within(form).getByRole("button", { name: "Revisar e salvar rodada" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Salvar rodada" }));
+    expect(await screen.findByText("não encontrado neste laboratório — a tela foi atualizada")).not.toBeNull();
+    await waitFor(() => expect(api.listEqaRounds).toHaveBeenCalledTimes(2));
+  });
+
+  it("ano inválido: tabelas dizem 'ano inválido' e o formulário do relatório não some", async () => {
+    renderWithProviders(<LabEqa />);
+    fireEvent.click(await screen.findByRole("button", { name: "Registrar relatório anual" }));
+    const form = screen.getByRole("region", { name: "Novo relatório anual do CEQ" });
+    fireEvent.change(within(form).getByLabelText("Relatório anual (PDF)"), { target: { files: [ pdf() ] } });
+    fireEvent.change(screen.getByLabelText("Ano"), { target: { value: "" } });
+    expect(screen.getAllByText("ano inválido").length).toBe(3);
+    expect(screen.queryByText("nenhuma rodada neste ano")).toBeNull();
+    expect(screen.getByRole("region", { name: "Novo relatório anual do CEQ" })).not.toBeNull();
+    expect((within(form).getByRole("button", { name: "Revisar e registrar relatório" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+});
+
 describe("LabEqa papéis", () => {
   it("equipe sem papel de liberador não vê", async () => {
     mocked(api.fetchCurrentSession).mockResolvedValue(qcUser([ "lab_staff" ]));
