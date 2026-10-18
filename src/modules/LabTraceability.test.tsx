@@ -74,6 +74,54 @@ describe("LabTraceability", () => {
     expect(api.traceSupplyLot).toHaveBeenCalledTimes(1);
   });
 
+  it("usa o nome de arquivo do api nos dois CSV, mantém o aviso de registro e limpa erro velho", async () => {
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
+    const names: string[] = [];
+    const origCreate = document.createElement.bind(document);
+    vi.spyOn(document, "createElement").mockImplementation((tag: string, o?: ElementCreationOptions) => {
+      const el = origCreate(tag, o);
+      if (tag === "a") Object.defineProperty(el, "download", { set: (v: string) => { names.push(v); }, get: () => "" });
+      return el;
+    });
+    mocked(api.fetchSupplyLotTraceCsv).mockResolvedValueOnce({ ...CSV, filename: "rastreio-lote-r-778.csv" }).mockRejectedValueOnce(new api.ApiError(404, { error: "not_found" }, "404"));
+    mocked(api.fetchConsumptionCsv).mockResolvedValue({ ...CSV, filename: "consumo-2026-10.csv" });
+    renderWithProviders(<LabTraceability />);
+    const panel = await screen.findByRole("region", { name: "Rastreio por lote" });
+    await pickLot(panel);
+    fireEvent.click(within(panel).getByRole("button", { name: "Rastrear" }));
+    await within(panel).findByText("00000123");
+    expect(within(panel).getByText("cada consulta e cada CSV do rastreio ficam registrados")).not.toBeNull();
+    fireEvent.click(within(panel).getByRole("button", { name: "Baixar CSV do rastreio" }));
+    await waitFor(() => expect(names).toContain("rastreio-lote-r-778.csv"));
+    fireEvent.click(within(panel).getByRole("button", { name: "Baixar CSV do rastreio" }));
+    await within(panel).findByRole("alert");
+    mocked(api.fetchSupplyLotTraceCsv).mockResolvedValueOnce(CSV);
+    fireEvent.click(within(panel).getByRole("button", { name: "Baixar CSV do rastreio" }));
+    await waitFor(() => expect(within(panel).queryByRole("alert")).toBeNull());
+    const cons = screen.getByRole("region", { name: "Consumo estimado" });
+    await within(cons).findByText("+20,0%");
+    fireEvent.click(within(cons).getByRole("button", { name: "Baixar CSV do consumo" }));
+    await waitFor(() => expect(names).toContain("consumo-2026-10.csv"));
+    expect(click).toHaveBeenCalled();
+  });
+
+  it("descarta rastreio que chega depois da troca de lote", async () => {
+    mocked(api.listSupplyLots).mockResolvedValue([ supplyLot(), supplyLot({ id: "sl2", lot_number: "R-900" }) ]);
+    let resolve!: (t: typeof TRACE) => void;
+    mocked(api.traceSupplyLot).mockReturnValue(new Promise((r) => { resolve = r; }));
+    renderWithProviders(<LabTraceability />);
+    const panel = await screen.findByRole("region", { name: "Rastreio por lote" });
+    await pickLot(panel);
+    fireEvent.click(within(panel).getByRole("button", { name: "Rastrear" }));
+    await waitFor(() => expect(api.traceSupplyLot).toHaveBeenCalledWith("sl1"));
+    await within(panel).findByRole("option", { name: "R-900" });
+    fireEvent.change(within(panel).getByLabelText("Lote"), { target: { value: "sl2" } });
+    resolve(TRACE);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(within(panel).queryByText("00000123")).toBeNull();
+    expect(within(panel).queryByRole("button", { name: "Baixar CSV do rastreio" })).toBeNull();
+  });
+
   it("avisa quando o api cortou a lista em 5000", async () => {
     mocked(api.traceSupplyLot).mockResolvedValue({ ...TRACE, results_truncated: true, qc_values_truncated: true });
     renderWithProviders(<LabTraceability />);

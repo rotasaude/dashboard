@@ -54,18 +54,29 @@ function TracePanel({ providerId }: { providerId: string }) {
   const [ trace, setTrace ] = useState<LabLotTrace | null>(null);
   const [ error, setError ] = useState<string | null>(null);
   const busy = useRef(false);
+  const currentLot = useRef("");
   const lot = (lots.data ?? []).find((l) => l.id === lotId);
 
   async function run() {
     if (!lotId || busy.current) return;
     busy.current = true;
     setError(null);
-    try { setTrace(await traceSupplyLot(lotId)); } catch (err) { setTrace(null); setError(inventoryError(err)); } finally { busy.current = false; }
+    const asked = lotId;
+    try {
+      const result = await traceSupplyLot(asked);
+      // Resposta que chega depois da troca de lote é descartada.
+      if (currentLot.current === asked) setTrace(result);
+    } catch (err) {
+      if (currentLot.current === asked) { setTrace(null); setError(inventoryError(err)); }
+    } finally { busy.current = false; }
   }
+
+  function chooseLot(id: string) { currentLot.current = id; setLotId(id); setTrace(null); setError(null); }
 
   async function csv() {
     if (!lot) return;
-    try { saveFile(await fetchSupplyLotTraceCsv(lot.id), `rastreio-lote-${safeName(lot.lot_number)}.csv`); } catch (err) { setError(inventoryError(err)); }
+    setError(null);
+    try { const file = await fetchSupplyLotTraceCsv(lot.id); saveFile(file, file.filename || `rastreio-lote-${safeName(lot.lot_number)}.csv`); } catch (err) { setError(inventoryError(err)); }
   }
 
   return (
@@ -73,13 +84,13 @@ function TracePanel({ providerId }: { providerId: string }) {
       <div style={stack}>
         <div style={{ ...row, alignItems: "flex-end" }}>
           <label style={fieldLabel}>Item
-            <select value={supplyId} style={inputStyle} onChange={(e) => { setSupplyId(e.target.value); setLotId(""); setTrace(null); setError(null); }}>
+            <select value={supplyId} style={inputStyle} onChange={(e) => { setSupplyId(e.target.value); chooseLot(""); }}>
               <option value="">—</option>
               {(supplies.data ?? []).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
           </label>
           <label style={fieldLabel}>Lote
-            <select value={lotId} style={inputStyle} onChange={(e) => { setLotId(e.target.value); setTrace(null); setError(null); }}>
+            <select value={lotId} style={inputStyle} onChange={(e) => chooseLot(e.target.value)}>
               <option value="">—</option>
               {(lots.data ?? []).map((l) => <option key={l.id} value={l.id}>{l.lot_number}</option>)}
             </select>
@@ -114,7 +125,8 @@ function TracePanel({ providerId }: { providerId: string }) {
             />
           </>
         )}
-        {!trace && !error && <p style={muted}>escolha o item e o lote e clique em Rastrear (a consulta fica registrada)</p>}
+        {!trace && !error && <p style={muted}>escolha o item e o lote e clique em Rastrear</p>}
+        <p style={muted}>cada consulta e cada CSV do rastreio ficam registrados</p>
       </div>
     </Panel>
   );
@@ -136,7 +148,7 @@ function ConsumptionPanel({ providerId }: { providerId: string }) {
 
   async function csv() {
     setError(null);
-    try { saveFile(await fetchConsumptionCsv(q), `consumo-reagentes-${month}.csv`); } catch (err) { setError(inventoryError(err)); }
+    try { const file = await fetchConsumptionCsv(q); saveFile(file, file.filename || `consumo-${month}.csv`); } catch (err) { setError(inventoryError(err)); }
   }
 
   return (
