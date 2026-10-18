@@ -6,7 +6,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { getInventoryAlerts, type LabExpiringLot, type LabLowSupply } from "../../lib/api";
 import { INV_ALERTS_KEY, inventoryError } from "../../lib/inventory";
-import { todayInCity } from "../../lib/campaigns";
 import { fmtDay } from "../../lib/exams";
 import { Panel } from "../../components/Panel";
 import { DataTable } from "../../components/DataTable";
@@ -16,7 +15,6 @@ import { alert, muted, stack, title } from "../exams/styles";
 export const INV_ALERTS_REFRESH_MS = 60_000;
 
 export function AlertsPanel({ providerId }: { providerId: string }) {
-  const today = todayInCity();
   const alerts = useQuery({
     queryKey: [ INV_ALERTS_KEY, providerId ], queryFn: () => getInventoryAlerts(providerId), retry: false, refetchInterval: INV_ALERTS_REFRESH_MS
   });
@@ -34,7 +32,7 @@ export function AlertsPanel({ providerId }: { providerId: string }) {
           <DataTable<LabExpiringLot>
             cols={[
               { label: "Lote · item", w: "1.8fr", card: "title", render: (l) => `${l.lot_number} · ${l.supply_name}` },
-              { label: "Validade", w: "1fr", render: (l) => <>{fmtDay(l.expires_on)}{l.expires_on < today && <> <Tag tone="down">vencido</Tag></>}</> },
+              { label: "Validade", w: "1fr", render: (l) => <>{fmtDay(l.expires_on)}{l.expired && <> <Tag tone="down">vencido</Tag></>}</> },
               { label: "Saldo", w: "0.6fr", align: "right", render: (l) => String(l.balance) }
             ]}
             rows={data.expiring} rowKey={(l) => l.lot_id} empty="nenhum lote vencendo"

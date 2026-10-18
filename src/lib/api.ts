@@ -54,6 +54,11 @@ export interface SessionUser {
 }
 
 async function jsonFetch<T>(input: string, init?: RequestInit): Promise<T> {
+  return (await jsonFetchWithStatus<T>(input, init)).body;
+}
+
+// Igual ao jsonFetch, mas devolve também o status (200 x 201 muda o sentido da resposta).
+async function jsonFetchWithStatus<T>(input: string, init?: RequestInit): Promise<{ body: T; status: number }> {
   const res = await fetch(input, {
     ...init,
     credentials: "include",
@@ -69,8 +74,8 @@ async function jsonFetch<T>(input: string, init?: RequestInit): Promise<T> {
     if (text) { try { body = JSON.parse(text); } catch { /* deixa string */ } }
     throw new ApiError(res.status, body, `${res.status} on ${input}`);
   }
-  if (res.status === 204) return undefined as T;
-  return res.json() as Promise<T>;
+  if (res.status === 204) return { body: undefined as T, status: res.status };
+  return { body: await res.json() as T, status: res.status };
 }
 
 export async function adminFetch<T>(
@@ -3475,8 +3480,10 @@ export async function listInUse(instrumentId: string): Promise<LabSupplyInUse[]>
   return (await jsonFetch<{ in_use: LabSupplyInUse[] }>(labQuery(labPath("inventory", "in_use"), new URLSearchParams({ instrument_id: instrumentId })))).in_use;
 }
 // O mesmo lote já em uso no par aparelho × exame: 200 com o registro atual, nada encerrado (C-E6).
-export function setInUse(input: LabSupplyInUseInput): Promise<LabSupplyInUse> {
-  return jsonFetch(labPath("inventory", "in_use"), labPost(input));
+// 201 = criou (e encerrou o anterior, se havia); 200 = já era o corrente (in_use_controller.rb).
+export async function setInUse(input: LabSupplyInUseInput): Promise<{ in_use: LabSupplyInUse; created: boolean }> {
+  const { body, status } = await jsonFetchWithStatus<LabSupplyInUse>(labPath("inventory", "in_use"), labPost(input));
+  return { in_use: body, created: status === 201 };
 }
 // Sem trilha (contrato §5): pode ser relido periodicamente.
 export async function getInventoryAlerts(providerId: string): Promise<LabInventoryAlerts> {

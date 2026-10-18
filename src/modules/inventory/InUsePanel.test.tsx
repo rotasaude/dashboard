@@ -34,7 +34,7 @@ beforeEach(() => {
     supplyLot({ id: "sl4", supply_id: "su3", supply_name: "Colesterol CHOD-PAP", lot_number: "C-7" })
   ]);
   mocked(api.listInUse).mockResolvedValue([ inUse({ id: "iu0", lot_id: "sl8", lot_number: "R-700" }) ]);
-  mocked(api.setInUse).mockResolvedValue(inUse({ id: "iu2", lot_id: "sl1" }));
+  mocked(api.setInUse).mockResolvedValue({ in_use: inUse({ id: "iu2", lot_id: "sl1" }), created: true });
   mocked(api.getInventoryAlerts).mockResolvedValue({
     expiring: [
       { ...supplyLot({ expires_on: "2026-11-05", balance: 5 }), lot_id: "sl1" },
@@ -75,12 +75,24 @@ describe("InUsePanel", () => {
 
   it("o mesmo lote de novo (C-E6): diz que já estava em uso, sem falar em encerrar o anterior", async () => {
     mocked(api.listInUse).mockResolvedValue([ inUse() ]);
+    mocked(api.setInUse).mockResolvedValue({ in_use: inUse(), created: false });
     renderWithProviders(<InUsePanel providerId="pv9" exams={[ GLU_EXAM ]} />);
     const panel = await screen.findByRole("region", { name: "Lote em uso por aparelho" });
     await within(panel).findByText("R-778 · Glicose GOD-PAP 2×100 mL");
     pick(panel, "le1", "sl1");
     expect(await within(panel).findByText("Este lote já estava em uso neste aparelho e exame — nada mudou.")).not.toBeNull();
     expect(screen.queryByText(/encerrado/)).toBeNull();
+  });
+
+  it("lista velha (tela mostra A, outro operador pôs B): 201 não diz que nada mudou", async () => {
+    mocked(api.listInUse).mockResolvedValue([ inUse({ lot_id: "sl1" }) ]);
+    mocked(api.setInUse).mockResolvedValue({ in_use: inUse({ id: "iu3", lot_id: "sl1" }), created: true });
+    renderWithProviders(<InUsePanel providerId="pv9" exams={[ GLU_EXAM ]} />);
+    const panel = await screen.findByRole("region", { name: "Lote em uso por aparelho" });
+    await within(panel).findByText("R-778 · Glicose GOD-PAP 2×100 mL");
+    pick(panel, "le1", "sl1");
+    expect(await within(panel).findByText("Lote posto em uso.")).not.toBeNull();
+    expect(screen.queryByText(/nada mudou|encerrado/)).toBeNull();
   });
 
   it("sem lote anterior no par: diz só que o lote foi posto em uso", async () => {

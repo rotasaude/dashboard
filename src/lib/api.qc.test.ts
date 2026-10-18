@@ -204,10 +204,12 @@ describe("cliente do 21c (contrato §2–§5)", () => {
     expect(urlOf().pathname).toBe("/lab/inventory/in_use");
     expect(urlOf().searchParams.get("instrument_id")).toBe("in1");
     fetchMock.mockImplementationOnce(() => ok({ id: "iu2", lot_id: "sl1" }, { status: 201 }));
-    expect(await setInUse({ lot_id: "sl1", instrument_id: "in1", lab_exam_id: "le1" })).toEqual({ id: "iu2", lot_id: "sl1" });
+    expect(await setInUse({ lot_id: "sl1", instrument_id: "in1", lab_exam_id: "le1" })).toEqual({ in_use: { id: "iu2", lot_id: "sl1" }, created: true });
     expect(initOf(1).method).toBe("POST");
     expect(urlOf(1).search).toBe("");
     expect(bodyOf(1)).toEqual({ lot_id: "sl1", instrument_id: "in1", lab_exam_id: "le1" });
+    fetchMock.mockImplementationOnce(() => ok({ id: "iu2", lot_id: "sl1" }, { status: 200 }));
+    expect((await setInUse({ lot_id: "sl1", instrument_id: "in1", lab_exam_id: "le1" })).created).toBe(false);
   });
 
   it("alertas: lê por laboratório, mantém as chaves C-3 e normaliza o que falta", async () => {

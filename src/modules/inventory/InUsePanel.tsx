@@ -41,14 +41,16 @@ export function InUsePanel({ providerId, exams }: { providerId: string; exams: L
     if (!lotId) { setError("escolha o lote do reagente"); return; }
     setError(null);
     setNotice(null);
-    // Antes da chamada: o api responde 200 com o registro atual quando o lote já era o corrente (C-E6).
+    // Só o status da resposta diz o que o api fez (C-E6): 200 = já era o corrente; 201 = criou e encerrou o anterior.
     const before = (inUse.data ?? []).find((u) => u.lab_exam_id === examId);
     try {
-      const saved = await setInUse({ lot_id: lotId, instrument_id: instrumentId, lab_exam_id: examId });
+      const { in_use: saved, created } = await setInUse({ lot_id: lotId, instrument_id: instrumentId, lab_exam_id: examId });
       setLotId("");
-      setNotice(before && before.lot_id === saved.lot_id
+      setNotice(!created
         ? "Este lote já estava em uso neste aparelho e exame — nada mudou."
-        : before ? "Lote em uso trocado — o anterior deste aparelho e exame foi encerrado." : "Lote posto em uso.");
+        : before && before.lot_id !== saved.lot_id
+          ? "Lote em uso trocado — o anterior deste aparelho e exame foi encerrado."
+          : "Lote posto em uso.");
       void refreshInventory(queryClient).catch(() => undefined);
     } catch (err) {
       if (errorCode(err) === "not_found") void refreshInventory(queryClient).catch(() => undefined);
