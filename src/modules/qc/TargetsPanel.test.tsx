@@ -11,7 +11,6 @@ vi.mock("../../lib/api", async (importOriginal) => {
 import * as api from "../../lib/api";
 import { TargetsPanel } from "./TargetsPanel";
 import { DOT_IN_NUMBER } from "../../lib/lab";
-import { RT_ONLY } from "../../lib/qc";
 import { renderWithProviders } from "../../test/campaignFixtures";
 import { GLU_EXAM, instrument, qcLot, qcMaterial, qcSuggestion, qcTarget, qcUser } from "../../test/qcFixtures";
 
@@ -99,7 +98,7 @@ describe("TargetsPanel", () => {
     const box = await screen.findByRole("group", { name: "Sugestões do laboratório" });
     await within(box).findByText("20 corridas aprovadas");
     expect(within(box).queryByRole("button", { name: "Aceitar" })).toBeNull();
-    expect(within(box).getByText(RT_ONLY)).not.toBeNull();
+    expect(within(box).getByText("aceitar sugestão: só o RT ou o substituto")).not.toBeNull();
   });
 
   it("motivo e justificativa acima de 1000 são recusados antes do envio", async () => {
@@ -152,5 +151,16 @@ describe("TargetsPanel", () => {
     const panel = await screen.findByRole("region", { name: "Referências do lote L2026A" });
     await within(panel).findByText("v1 · bula");
     expect(within(panel).queryByRole("group", { name: "Referência da bula" })).toBeNull();
+  });
+
+  it("lote encerrado: sem formulário da bula nem Aceitar, só a frase", async () => {
+    mocked(api.listQcLots).mockResolvedValue([ qcLot({ status: "closed", closed_on: "2026-10-17" }) ]);
+    render(true);
+    const panel = await screen.findByRole("region", { name: "Referências do lote L2026A" });
+    const box = await within(panel).findByRole("group", { name: "Sugestões do laboratório" });
+    await within(box).findByText("20 corridas aprovadas");
+    expect(within(panel).queryByRole("group", { name: "Referência da bula" })).toBeNull();
+    expect(within(box).queryByRole("button", { name: "Aceitar" })).toBeNull();
+    expect(within(panel).getAllByText("lote encerrado: a referência não muda mais").length).toBeGreaterThan(0);
   });
 });

@@ -21,6 +21,9 @@ import { SensitiveAction } from "../../components/SensitiveAction";
 import { buttonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { alert, fieldLabel, fieldset, legend, list, muted, okText, row, stack } from "../exams/styles";
 
+const CLOSED_LOT = "lote encerrado: a referência não muda mais";
+const RT_ONLY_SHORT = "só o RT ou o substituto";
+
 export function TargetsPanel({ providerId, lotId, lead, admin = false, exams, onGoToSecurity }: {
   providerId: string; lotId: string; lead: boolean; admin?: boolean; exams: LabExamRef[]; onGoToSecurity?(): void;
 }) {
@@ -52,7 +55,9 @@ export function TargetsPanel({ providerId, lotId, lead, admin = false, exams, on
   const replacing = current.some((t) => t.level === draft.level && t.analyte_key === draft.analyteKey && t.instrument_id === draft.instrumentId);
   const mine = (suggestions.data ?? []).filter((s) => s.lot_id === lotId);
   const set = (patch: Partial<TargetDraft>) => setDraft((d) => ({ ...d, ...patch }));
-  const canSet = lead || admin;
+  const closed = lot?.status === "closed";
+  const canSet = (lead || admin) && !closed;
+  const canAccept = lead && !closed;
   const refresh = () => { void refreshQc(queryClient).catch(() => undefined); };
   // 404/409: a frase diz que a tela foi atualizada, então relê de fato.
   const failed = (err: unknown) => {
@@ -143,7 +148,7 @@ export function TargetsPanel({ providerId, lotId, lead, admin = false, exams, on
                 onCancel={() => setConfirming(false)} onGoToSecurity={onGoToSecurity} translateError={failed} />
             )}
           </fieldset>
-        ) : <p style={muted}>{RT_ONLY}</p>}
+        ) : <p style={muted}>{closed ? CLOSED_LOT : RT_ONLY}</p>}
         <fieldset role="group" aria-label="Sugestões do laboratório" style={fieldset}>
           <legend style={legend}>Sugestões do laboratório</legend>
           <p style={muted}>calculadas pelo sistema com 20 corridas aprovadas no lote; o RT aceita e vira a referência vigente</p>
@@ -153,14 +158,14 @@ export function TargetsPanel({ providerId, lotId, lead, admin = false, exams, on
               { label: "Aparelho", w: "1fr", render: (s) => instName(s.instrument_id) },
               { label: "Média · dp", w: "1fr", render: (s) => `${fmtDecimal(s.mean)} · ${fmtDecimal(s.sd)}` },
               { label: "Base", w: "1fr", render: (s) => `${s.runs} corridas aprovadas` },
-              { label: "", w: "auto", card: "actions", render: (s) => (lead ? (
+              { label: "", w: "auto", card: "actions", render: (s) => (canAccept ? (
                 <button type="button" style={secondaryButtonStyle}
                   onClick={() => { setAccepting(s); setAcceptConfirming(false); setReason(""); setAcceptError(null); setNotice(null); }}>Aceitar</button>
               ) : null) }
             ]}
             rows={mine} rowKey={(s) => `${s.level}:${s.analyte_key}:${s.instrument_id}`} empty={suggestions.isPending ? "carregando…" : "nenhuma sugestão para este lote"}
           />
-          {!lead && mine.length > 0 && <p style={muted}>{RT_ONLY}</p>}
+          {!canAccept && mine.length > 0 && <p style={muted}>{closed ? CLOSED_LOT : `aceitar sugestão: ${RT_ONLY_SHORT}`}</p>}
           {accepting && (
             <div style={stack}>
               <label style={fieldLabel}>Motivo do aceite
