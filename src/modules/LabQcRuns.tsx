@@ -82,7 +82,11 @@ function RunsBody({ providerId }: { providerId: string }) {
     void queryClient.invalidateQueries({ queryKey: [ QC_BLOCK_COUNT_KEY ] }).catch(() => undefined);
   }
 
-  const blocked = last.find((r) => r.block);
+  // O api devolve o bloqueio ativo em todo valor não reprovado e o recém-fechado no valor que o fecha:
+  // "reprovada" vem do desfecho do PRÓPRIO valor, nunca da presença do bloqueio.
+  const rejected = last.find((r) => r.value.outcome === "reject");
+  const closed = last.find((r) => r.block?.closed_at);
+  const stillOpen = last.find((r) => r.block && !r.block.closed_at && r.value.outcome !== "reject");
   const lastRun = last.length > 0 ? last[last.length - 1].run : null;
   const notice = last.some((r) => r.notice === "corrective_action_required");
 
@@ -100,17 +104,23 @@ function RunsBody({ providerId }: { providerId: string }) {
       </div>
       {error && <p role="alert" style={alert}>{error}</p>}
       {!instrumentId && <p style={muted}>escolha o aparelho para ver as corridas</p>}
-      {blocked && blocked.block && (
+      {rejected && (
         <p role="alert" aria-label="corrida reprovada" style={alert}>
-          {`Corrida reprovada (${rulesText(blocked.value.rules_fired)}): bloqueio aberto para ${analyte(blocked.block.analyte_key)} no ${instrument?.name ?? "aparelho"}. A liberação desse analito fica presa até a ação corretiva e uma corrida aprovada com todos os níveis.`}
+          {`Corrida reprovada (${rulesText(rejected.value.rules_fired)}): bloqueio aberto para ${analyte(rejected.value.analyte_key)} no ${instrument?.name ?? "aparelho"}. A liberação desse analito fica presa até a ação corretiva e uma corrida aprovada com todos os níveis.`}
         </p>
       )}
       {newRunNext && <p role="status" style={muted}>O próximo valor abre uma corrida nova.</p>}
       {notice && <p role="status" aria-label="ação corretiva pendente" style={alert}>{NOTICE}</p>}
-      {!blocked && lastRun && <p role="status" style={okText}>{`Valores gravados · corrida ${runStatusLabel(lastRun.status)}.`}</p>}
+      {!rejected && !notice && stillOpen?.block && (
+        <p role="status" aria-label="bloqueio ainda aberto" style={alert}>{`O bloqueio de ${analyte(stillOpen.block.analyte_key)} continua aberto: falta uma corrida aprovada com todos os níveis depois da ação corretiva.`}</p>
+      )}
+      {closed?.block && <p role="status" aria-label="bloqueio encerrado" style={okText}>{`Bloqueio encerrado para ${analyte(closed.block.analyte_key)}.`}</p>}
+      {!rejected && lastRun && <p role="status" style={okText}>{`Valores gravados · corrida ${runStatusLabel(lastRun.status)}.`}</p>}
       {instrumentId && date === today && (
         <QcValueForm instrumentId={instrumentId} runId={runId} lots={lots.data ?? []} materials={materialList} exams={examList}
-          onRecorded={recorded} onRunEnded={() => { setRunId(null); setNewRunNext(true); }} />
+          onRecorded={recorded} onStart={() => setLast([])}
+          onRunEnded={() => { setRunId(null); setNewRunNext(true); void runs.refetch(); }}
+          onStale={() => { void runs.refetch(); void lots.refetch(); void materials.refetch(); }} />
       )}
       {instrumentId && (
         <Panel title="Corridas do dia" sub={runId ? "corrida nova aberta — os próximos valores vão nela" : "a corrida do dia é a última do aparelho; abre sozinha no primeiro valor"}>

@@ -17,9 +17,9 @@ import { alert, fieldLabel, form, muted, row } from "../exams/styles";
 // Só aqui o 409 invalid_transition é da corrida (nas telas de cadastro é a frase genérica do 21b).
 const RUN_REJECTED = "esta corrida já foi reprovada — o próximo valor abre uma corrida nova";
 
-export function QcValueForm({ instrumentId, runId, lots, materials, exams, onRecorded, onRunEnded }: {
+export function QcValueForm({ instrumentId, runId, lots, materials, exams, onRecorded, onRunEnded, onStart, onStale }: {
   instrumentId: string; runId: string | null; lots: QcLot[]; materials: QcMaterial[]; exams: LabExamRef[];
-  onRecorded(results: QcValueResult[]): void; onRunEnded?(): void;
+  onRecorded(results: QcValueResult[]): void; onRunEnded?(): void; onStart?(): void; onStale?(): void;
 }) {
   const baseId = useId();
   const [ lotId, setLotId ] = useState("");
@@ -44,67 +44,69 @@ export function QcValueForm({ instrumentId, runId, lots, materials, exams, onRec
     setFieldErrors(problems);
     if (Object.keys(problems).length > 0) { setError("corrija os valores marcados"); return; }
     setError(null);
+    onStart?.();
     const results: QcValueResult[] = [];
-    let currentRun = runId;
     let ended = false;
+    let stale = false;
     for (const a of entries) {
       try {
         const result = await recordQcValue({
-          run_id: currentRun, instrument_id: instrumentId, lot_id: lot.id, level, analyte_key: a.analyte_key,
+          run_id: runId, instrument_id: instrumentId, lot_id: lot.id, level, analyte_key: a.analyte_key,
           value: normalizeNumber(values[a.analyte_key]) as string
         });
         results.push(result);
         setValues((v) => ({ ...v, [a.analyte_key]: "" }));
         if (result.run.status === "rejected") {
-          ended = true;
           if (entries.length > results.length) setError("corrida reprovada; os valores seguintes não foram enviados");
           break;
         }
       } catch (err) {
-        if (errorCode(err) === "invalid_transition") { ended = true; currentRun = null; }
+        if (errorCode(err) === "invalid_transition") ended = true;
+        if (errorCode(err) === "not_found") stale = true;
         setFieldErrors({ [a.analyte_key]: errorCode(err) === "invalid_transition" ? RUN_REJECTED : qcError(err) });
         setError(results.length > 0 ? `${results.length} ${results.length === 1 ? "valor gravado" : "valores gravados"}; o seguinte foi recusado` : "o valor foi recusado");
         break;
       }
     }
     if (ended) onRunEnded?.();
+    if (stale) onStale?.();
     if (results.length > 0) onRecorded(results);
   }
 
   return (
-    <Panel title="Digitar valores de controle" sub="um nível de um lote por vez; o aparelho também manda pela HL7">
-        <div style={form}>
-          <div style={row}>
-            <label style={fieldLabel}>Lote
-              <select value={lotId} style={inputStyle} onChange={(e) => { setLotId(e.target.value); setLevel(""); setValues({}); setFieldErrors({}); setError(null); }}>
-                <option value="">—</option>
-                {usable.map((l) => <option key={l.id} value={l.id}>{`${l.lot_number} · ${l.material_name}`}</option>)}
-              </select>
-            </label>
-            <label style={fieldLabel}>Nível
-              <select value={level} style={inputStyle} onChange={(e) => setLevel(e.target.value)}>
-                <option value="">—</option>
-                {(material?.levels ?? []).map((lv) => <option key={lv} value={lv}>{lv}</option>)}
-              </select>
-            </label>
-          </div>
-          {usable.length === 0 && <p style={muted}>nenhum lote de controle em uso e dentro da validade — cadastre em Controles e referências</p>}
-          {material && material.analytes.map((a) => {
-            const id = `${baseId}-${a.analyte_key}`;
-            const name = analyteName(exams, a.lab_exam_id, a.analyte_key);
-            return (
-              <div key={`${a.lab_exam_id}:${a.analyte_key}`} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                <label htmlFor={id} style={fieldLabel}>{name}</label>
-                <input id={id} value={values[a.analyte_key] ?? ""} inputMode="decimal" autoComplete="off" style={inputStyle}
-                  aria-describedby={fieldErrors[a.analyte_key] ? `${id}-err` : undefined}
-                  onChange={(e) => setValues((v) => ({ ...v, [a.analyte_key]: e.target.value }))} />
-                {fieldErrors[a.analyte_key] && <p id={`${id}-err`} style={alert}>{fieldErrors[a.analyte_key]}</p>}
-              </div>
-            );
-          })}
-          {error && <p role="alert" style={alert}>{error}</p>}
-          <div><ActionButton onClick={save}>Gravar valores</ActionButton></div>
+  <Panel title="Digitar valores de controle" sub="um nível de um lote por vez; o aparelho também manda pela HL7">
+      <div style={form}>
+        <div style={row}>
+          <label style={fieldLabel}>Lote
+            <select value={lotId} style={inputStyle} onChange={(e) => { setLotId(e.target.value); setLevel(""); setValues({}); setFieldErrors({}); setError(null); }}>
+              <option value="">—</option>
+              {usable.map((l) => <option key={l.id} value={l.id}>{`${l.lot_number} · ${l.material_name}`}</option>)}
+            </select>
+          </label>
+          <label style={fieldLabel}>Nível
+            <select value={level} style={inputStyle} onChange={(e) => setLevel(e.target.value)}>
+              <option value="">—</option>
+              {(material?.levels ?? []).map((lv) => <option key={lv} value={lv}>{lv}</option>)}
+            </select>
+          </label>
         </div>
+        {usable.length === 0 && <p style={muted}>nenhum lote de controle em uso e dentro da validade — cadastre em Controles e referências</p>}
+        {material && material.analytes.map((a) => {
+          const id = `${baseId}-${a.analyte_key}`;
+          const name = analyteName(exams, a.lab_exam_id, a.analyte_key);
+          return (
+            <div key={`${a.lab_exam_id}:${a.analyte_key}`} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <label htmlFor={id} style={fieldLabel}>{name}</label>
+              <input id={id} value={values[a.analyte_key] ?? ""} inputMode="decimal" autoComplete="off" style={inputStyle}
+                aria-describedby={fieldErrors[a.analyte_key] ? `${id}-err` : undefined}
+                onChange={(e) => setValues((v) => ({ ...v, [a.analyte_key]: e.target.value }))} />
+              {fieldErrors[a.analyte_key] && <p id={`${id}-err`} style={alert}>{fieldErrors[a.analyte_key]}</p>}
+            </div>
+          );
+        })}
+        {error && <p role="alert" style={alert}>{error}</p>}
+        <div><ActionButton onClick={save}>Gravar valores</ActionButton></div>
+      </div>
     </Panel>
   );
 }

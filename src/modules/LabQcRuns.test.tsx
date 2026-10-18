@@ -127,7 +127,11 @@ describe("LabQcRuns", () => {
     await save(form);
     await screen.findByRole("alert", { name: "corrida reprovada" });
     expect(api.recordQcValue).toHaveBeenCalledTimes(1);
+    expect(within(form).getByText("corrida reprovada; os valores seguintes não foram enviados")).not.toBeNull();
     expect((within(form).getByLabelText(CT) as HTMLInputElement).value).toBe("180");
+    await save(form);
+    await waitFor(() => expect(api.recordQcValue).toHaveBeenCalledTimes(2));
+    expect(mocked(api.recordQcValue).mock.calls[1][0].run_id).toBeNull();
   });
 
   it("aviso de ação corretiva pendente vem do notice, não de um código de erro", async () => {
@@ -136,6 +140,37 @@ describe("LabQcRuns", () => {
     fireEvent.change(within(form).getByLabelText(GLU), { target: { value: "98" } });
     await save(form);
     expect((await screen.findByRole("status", { name: "ação corretiva pendente" })).textContent).toContain("o bloqueio continua aberto");
+    expect(screen.queryByRole("alert", { name: "corrida reprovada" })).toBeNull();
+  });
+
+  it("valor aprovado com bloqueio ativo devolvido: não diz reprovada", async () => {
+    mocked(api.recordQcValue).mockResolvedValueOnce({ ...ok("glicose"), block: qcBlock({ corrective_action: "calibrado" }) });
+    const form = await openForm();
+    fireEvent.change(within(form).getByLabelText(GLU), { target: { value: "98" } });
+    await save(form);
+    expect(await screen.findByText("Valores gravados · corrida aprovada.")).not.toBeNull();
+    expect(screen.queryByRole("alert", { name: "corrida reprovada" })).toBeNull();
+    expect(screen.getByRole("status", { name: "bloqueio ainda aberto" })).not.toBeNull();
+  });
+
+  it("valor que fecha o bloqueio: bloqueio encerrado", async () => {
+    mocked(api.recordQcValue).mockResolvedValueOnce({ ...ok("glicose"), block: qcBlock({ closed_at: "2026-10-18T10:00:00-03:00", closed_by_run_id: "qr1" }) });
+    const form = await openForm();
+    fireEvent.change(within(form).getByLabelText(GLU), { target: { value: "98" } });
+    await save(form);
+    expect(await screen.findByRole("status", { name: "bloqueio encerrado" })).not.toBeNull();
+    expect(screen.queryByRole("alert", { name: "corrida reprovada" })).toBeNull();
+  });
+
+  it("série: a reprovação é do analito certo, não do primeiro com bloqueio", async () => {
+    mocked(api.recordQcValue)
+      .mockResolvedValueOnce({ ...ok("glicose"), block: qcBlock({ analyte_key: "glicose" }) })
+      .mockResolvedValueOnce({ value: qcValue({ analyte_key: "ct", outcome: "reject", rules_fired: [ "1_3s" ] }), run: qcRun({ status: "rejected" }), block: qcBlock({ id: "qb2", analyte_key: "ct" }) });
+    const form = await openForm();
+    fireEvent.change(within(form).getByLabelText(GLU), { target: { value: "98" } });
+    fireEvent.change(within(form).getByLabelText(CT), { target: { value: "300" } });
+    await save(form);
+    expect((await screen.findByRole("alert", { name: "corrida reprovada" })).textContent).toContain("bloqueio aberto para Colesterol total (Colesterol total e frações)");
   });
 
   it("409 invalid_transition zera a corrida: a frase explica e o valor seguinte vai sem run_id", async () => {
@@ -146,6 +181,7 @@ describe("LabQcRuns", () => {
     fireEvent.change(within(form).getByLabelText(GLU), { target: { value: "98" } });
     await save(form);
     expect(await within(form).findByText("esta corrida já foi reprovada — o próximo valor abre uma corrida nova")).not.toBeNull();
+    await waitFor(() => expect(api.listQcRuns).toHaveBeenCalledTimes(3));
     await save(form);
     await waitFor(() => expect(api.recordQcValue).toHaveBeenCalledTimes(2));
     expect(mocked(api.recordQcValue).mock.calls[1][0].run_id).toBeNull();
@@ -159,6 +195,7 @@ describe("LabQcRuns", () => {
     fireEvent.change(within(form).getByLabelText(GLU), { target: { value: "98" } });
     await save(form);
     expect(await within(form).findByText("não encontrado neste laboratório — a tela foi atualizada")).not.toBeNull();
+    await waitFor(() => expect(api.listQcRuns).toHaveBeenCalledTimes(2));
   });
 
   it("abrir corrida nova: os valores seguintes vão nela", async () => {
