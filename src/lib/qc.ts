@@ -110,7 +110,7 @@ export function reasonProblem(text: string, what: string, max: number = TEXT_MAX
   return t.length > max ? `${what}: no máximo ${max} caracteres` : null;
 }
 
-const tooLong = (value: string, max: number, label: string) => (value.trim().length > max ? `${label} com até ${max} caracteres` : null);
+export const tooLong = (value: string, max: number, label: string) => (value.trim().length > max ? `${label} com até ${max} caracteres` : null);
 
 // ─── aparelho ───
 export interface InstrumentDraft { name: string; manufacturer: string; model: string; serialNumber: string; sector: string; hl7EquipmentId: string; active: boolean }
