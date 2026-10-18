@@ -250,7 +250,7 @@ export function renderModule(active: ModuleId, setActive: (id: ModuleId) => void
     case "lab-reception": return <LabReception />;
     case "lab-worklist": return <LabWorklist />;
     case "lab-entry": return <LabEntry />;
-    case "lab-release": return <LabRelease onNavigate={setActive} />;
+    case "lab-release": return <LabRelease onNavigate={setActive} onGoToSecurity={() => setActive("security")} />;
     case "lab-admin": return <LabAdmin onGoToSecurity={() => setActive("security")} />;
     case "lab-reports": return <LabReports />;
     case "lab-qc-runs": return <LabQcRuns />;

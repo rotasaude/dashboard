@@ -4,7 +4,7 @@ import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/re
 vi.mock("../lib/api", async (importOriginal) => {
   const real = await importOriginal<typeof import("../lib/api")>();
   return { ...real, fetchCurrentSession: vi.fn(), getLabContext: vi.fn(), listQcBlocks: vi.fn(), recordCorrectiveAction: vi.fn(), listQcExceptions: vi.fn(),
-    listQcReviews: vi.fn(), decideQcReview: vi.fn(), listLabInstruments: vi.fn(), listLabExams: vi.fn(), listQcMaterials: vi.fn(), getReleaseRequisition: vi.fn() };
+    listQcReviews: vi.fn(), decideQcReview: vi.fn(), listLabInstruments: vi.fn(), listLabExams: vi.fn(), listQcMaterials: vi.fn(), getReleaseRequisition: vi.fn(), rectifyLabReport: vi.fn() };
 });
 
 import * as api from "../lib/api";
@@ -16,7 +16,7 @@ import { GLU_EXAM, NOW21C, instrument, qcBlock, qcContext, qcException, qcMateri
 
 const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
 const ALL = [ api.fetchCurrentSession, api.getLabContext, api.listQcBlocks, api.recordCorrectiveAction, api.listQcExceptions, api.listQcReviews,
-  api.decideQcReview, api.listLabInstruments, api.listLabExams, api.listQcMaterials, api.getReleaseRequisition ];
+  api.decideQcReview, api.listLabInstruments, api.listLabExams, api.listQcMaterials, api.getReleaseRequisition, api.rectifyLabReport ];
 
 const apiError = (status: number, code: string) => new api.ApiError(status, { error: code }, code);
 
@@ -142,6 +142,29 @@ describe("LabQcBlocks", () => {
     await waitFor(() => expect(api.decideQcReview).toHaveBeenCalledWith("rv1", { decision: "rectify" }));
     expect(await screen.findByRole("region", { name: "Conferência da requisição 00000123" })).not.toBeNull();
     expect(api.getReleaseRequisition).toHaveBeenCalledWith("rq1");
+  });
+
+  it("retificação aberta pela revisão cai no qc_blocked: o RT tem o botão da exceção (C-E19)", async () => {
+    mocked(api.decideQcReview).mockResolvedValue(qcReview({ decision: "rectify" }));
+    mocked(api.rectifyLabReport).mockRejectedValue(new api.ApiError(409, { error: "qc_blocked",
+      items: [ { item_id: "it2", block_id: "qb1", analyte_key: "glicose", instrument_id: "in1", instrument_name: "BS-200" } ] }, "x"));
+    renderWithProviders(<LabQcBlocks onNavigate={vi.fn()} />);
+    const panel = await reviewsPanel();
+    fireEvent.click(within(panel).getByRole("button", { name: "Retificar" }));
+    fireEvent.click(within(panel).getByRole("button", { name: "Revisar e retificar" }));
+    fireEvent.click(await within(panel).findByRole("button", { name: "Confirmar: retificar" }));
+    const review = await screen.findByRole("region", { name: "Conferência da requisição 00000123" });
+    fireEvent.click(within(review).getByRole("button", { name: "Retificar" }));
+    const form = within(review).getByRole("region", { name: "Retificar laudo v1" });
+    fireEvent.change(within(form).getByLabelText("Motivo da retificação"), { target: { value: "valor revisto depois do bloqueio" } });
+    fireEvent.click(within(form).getByRole("button", { name: "Incluir contato" }));
+    const contact = within(form).getByRole("group", { name: "Contato 1" });
+    fireEvent.change(within(contact).getByLabelText("Quem foi avisado"), { target: { value: "Dra. Ana" } });
+    fireEvent.change(within(contact).getByLabelText("Como"), { target: { value: "telefone" } });
+    fireEvent.change(within(form).getByLabelText("Código do autenticador"), { target: { value: "123456" } });
+    fireEvent.click(within(form).getByRole("button", { name: "Emitir laudo retificado" }));
+    const box = await within(form).findByRole("group", { name: "bloqueado pelo controle de qualidade" });
+    expect(within(box).getByRole("button", { name: "Liberar com exceção" })).not.toBeNull();
   });
 
   it("quem não é RT vê as revisões sem decidir", async () => {

@@ -135,8 +135,10 @@ export function movementBody(d: MovementDraft, lotId: string): LabSupplyMovement
 // antigo ou quem não é do laboratório: nada aparece. Com o estoque desligado
 // todo resultado viria null — a marca não aparece para não acender tudo.
 export function reagentLotMark(row: { reagent_lot?: ReagentLotRef | null }, inventoryOn: boolean): { text: string; untraced: boolean } | null {
+  // Estoque desligado: nenhuma marca (o 21b fica igual), nem o lote gravado antes.
+  if (!inventoryOn) return null;
   if (row.reagent_lot) return { text: `lote ${row.reagent_lot.lot_number}`, untraced: false };
-  if (row.reagent_lot === null && inventoryOn) return { text: UNTRACED, untraced: true };
+  if (row.reagent_lot === null) return { text: UNTRACED, untraced: true };
   return null;
 }
 

@@ -11,6 +11,7 @@ import { fmtDay } from "../../lib/exams";
 import { fmtDateTime } from "../../lib/format";
 import { ActionButton } from "../../components/ActionButton";
 import { Tag } from "../../components/Tag";
+import { ReagentLotTag } from "../inventory/ReagentLotTag";
 import { inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { alert, box, fieldLabel, form, list, muted, okText, row, title } from "../exams/styles";
 
@@ -129,6 +130,7 @@ export function ResultEntryForm({ item, onSaved, onStale, onClose }: { item: Lab
                       {rowText(r)}
                       {r.flag !== "normal" && <> <Tag tone={flagTone(r.flag)}>{flagLabel(r.flag)}</Tag></>}
                       {r.effective && <> <Tag tone="ok">vale</Tag></>}
+                      <ReagentLotTag row={r} spaced />
                     </li>
                   ))}
                 </ul>

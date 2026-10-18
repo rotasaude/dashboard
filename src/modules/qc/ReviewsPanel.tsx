@@ -144,6 +144,7 @@ export function ReviewsPanel({ providerId, lead, analyte, instrument, onNavigate
         {!deciding && error && <p role="alert" style={alert}>{error}</p>}
         {rectifyFor && !context.isPending && (
           <ReleaseReview key={rectifyFor} requisitionId={rectifyFor} council={context.data?.council ?? null} onNavigate={onNavigate}
+            qcLead={lead} onGoToSecurity={onGoToSecurity}
             onClose={() => setRectifyFor(null)} onReleased={rectified} onConflict={(text) => { setRectifyFor(null); setNotice(null); setError(text); }} />
         )}
       </div>

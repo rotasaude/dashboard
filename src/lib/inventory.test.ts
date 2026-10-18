@@ -85,6 +85,7 @@ describe("lote no resultado", () => {
     expect(reagentLotMark({ reagent_lot: { id: "sl1", lot_number: "R-778" } }, true)).toEqual({ text: "lote R-778", untraced: false });
     expect(reagentLotMark({ reagent_lot: null }, true)).toEqual({ text: UNTRACED, untraced: true });
     expect(reagentLotMark({ reagent_lot: null }, false)).toBeNull();
+    expect(reagentLotMark({ reagent_lot: { id: "sl1", lot_number: "R-778" } }, false)).toBeNull();
     expect(reagentLotMark({}, true)).toBeNull();
   });
 });

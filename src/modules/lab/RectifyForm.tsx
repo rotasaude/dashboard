@@ -5,7 +5,7 @@
 // assinatura digital); o código é apagado antes do envio e nunca guardado.
 // Os valores que entram são os escolhidos agora (digite o novo valor e escolha-o antes).
 import { useState } from "react";
-import { errorCode, rectifyLabReport, type LabReleaseItem, type LabReportSummary, type LabSignatureKind } from "../../lib/api";
+import { errorCode, rectifyLabReport, type LabReleaseItem, type LabReportSummary, type LabSignatureKind, type QcBlockedItem } from "../../lib/api";
 import { CHANNEL_OPTIONS, contactsBody, labError, onlyIcp, rectifyProblem, totpProblem, type ContactDraft } from "../../lib/lab";
 import { hasFeature } from "../../lib/features";
 import { useAuth } from "../../lib/auth";
@@ -13,15 +13,20 @@ import { ActionButton } from "../../components/ActionButton";
 import { inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { NO_ICP_FOR_DOCTOR, SignatureChoice } from "./SignatureChoice";
 import { cityNowLocal } from "./CriticalNoticeForm";
+import { QcBlockedPanel, blockedItems } from "../qc/QcBlockedPanel";
 import { alert, box, checkLabel, fieldLabel, fieldset, legend, muted, row } from "../exams/styles";
 
 // `guard`: a guarda de gravação da conferência (uma ação por vez — liberar,
 // escolher valor, avisar e retificar não correm juntas).
 export interface WriteGuard { begin(): boolean; end(): void; busy: boolean }
 
-export function RectifyForm({ report, items, council, guard, onDone, onConflict, onCancel }: {
-  report: LabReportSummary; items: LabReleaseItem[]; council: string | null; guard: WriteGuard;
-  onDone(r: LabReportSummary): void; onConflict(text: string): void; onCancel(): void;
+// 21c (C-E19): a retificação passa pelo mesmo bloqueio do CIQ (só os itens
+// que mudaram); `qcLead` (padrão false) mostra a exceção do RT. Não há
+// "sem os bloqueados": o item listado mudou, e desmarcá-lo daria
+// rectify_items_mismatch.
+export function RectifyForm({ report, items, council, guard, qcLead = false, onDone, onConflict, onCancel, onGoToSecurity }: {
+  report: LabReportSummary; items: LabReleaseItem[]; council: string | null; guard: WriteGuard; qcLead?: boolean;
+  onDone(r: LabReportSummary): void; onConflict(text: string): void; onCancel(): void; onGoToSecurity?(): void;
 }) {
   const { user } = useAuth();
   // Só os exames liberados que este laudo cobre (I2).
@@ -36,6 +41,8 @@ export function RectifyForm({ report, items, council, guard, onDone, onConflict,
   const [ error, setError ] = useState<string | null>(null);
   // rectify_items_mismatch: itens a desmarcar (sem alteração) e a marcar (alterados e não listados).
   const [ mismatch, setMismatch ] = useState<{ unchanged: string[]; unlisted: string[] }>({ unchanged: [], unlisted: [] });
+  const [ blocked, setBlocked ] = useState<QcBlockedItem[]>([]);
+  const [ excepted, setExcepted ] = useState<string[]>([]);
   const available = hasFeature(user, "digital_signature") && !icpRefused;
   const signature: LabSignatureKind = onlyIcp(council) ? "icp" : available ? (chosen ?? "icp") : "advanced";
   const noIcpForDoctor = onlyIcp(council) && !available;
@@ -52,6 +59,7 @@ export function RectifyForm({ report, items, council, guard, onDone, onConflict,
     if (!guard.begin()) return;
     setError(null);
     setMismatch({ unchanged: [], unlisted: [] });
+    setBlocked([]);
     const code = totp;
     setTotp("");
     let out: LabReportSummary;
@@ -65,6 +73,8 @@ export function RectifyForm({ report, items, council, guard, onDone, onConflict,
         const ids = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);
         setMismatch({ unchanged: ids(b?.unchanged), unlisted: ids(b?.unlisted) });
       }
+      const stuck = why === "qc_blocked" ? blockedItems(err) : [];
+      if (stuck.length > 0) { setBlocked(stuck); return; }
       if (why === "invalid_transition") { onConflict(labError(err)); return; }
       if (why === "icp_required" && available) setChosen("icp");
       if (why === "signature_unavailable") {
@@ -120,6 +130,12 @@ export function RectifyForm({ report, items, council, guard, onDone, onConflict,
       </div>
       <SignatureChoice council={council} kind={signature} onKind={(k) => { if (k === "icp") setTotp(""); setChosen(k); }}
         totp={totp} onTotp={setTotp} icpAvailable={available} />
+      {blocked.length > 0 && (
+        <QcBlockedPanel items={blocked} excepted={excepted} lead={qcLead} onGoToSecurity={onGoToSecurity}
+          itemLabel={(id) => items.find((i) => i.id === id)?.label ?? id}
+          analyteLabel={(id, key) => items.find((i) => i.id === id)?.results.find((x) => x.analyte_key === key)?.name ?? key}
+          onExcepted={(key) => setExcepted((x) => [ ...x, key ])} />
+      )}
       {error && <p role="alert" style={alert}>{error}</p>}
       <div style={row}>
         <ActionButton busy={guard.busy} onClick={submit} disabledReason={noIcpForDoctor ? "sem assinatura ICP o médico não consegue retificar" : null}>Emitir laudo retificado</ActionButton>

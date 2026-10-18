@@ -21,15 +21,15 @@ import { ReleaseReview } from "./lab/ReleaseReview";
 import { useLabContext } from "./lab/useLabContext";
 import { alert, fieldLabel, muted, okText, row, stack } from "./exams/styles";
 
-export function LabRelease({ onNavigate }: { onNavigate(id: ModuleId): void }) {
+export function LabRelease({ onNavigate, onGoToSecurity }: { onNavigate(id: ModuleId): void; onGoToSecurity?(): void }) {
   return (
     <LabGate title="Liberação de laudos" sub="laboratório municipal · conferir, assinar e liberar" allow={(r) => r.releaser}>
-      {(roles) => <LabScope roles={roles}>{(scope) => <ReleaseBody providerId={scope.providerId} onNavigate={onNavigate} />}</LabScope>}
+      {(roles) => <LabScope roles={roles}>{(scope) => <ReleaseBody providerId={scope.providerId} onNavigate={onNavigate} onGoToSecurity={onGoToSecurity} />}</LabScope>}
     </LabGate>
   );
 }
 
-function ReleaseBody({ providerId, onNavigate }: { providerId: string; onNavigate(id: ModuleId): void }) {
+function ReleaseBody({ providerId, onNavigate, onGoToSecurity }: { providerId: string; onNavigate(id: ModuleId): void; onGoToSecurity?(): void }) {
   const queryClient = useQueryClient();
   const context = useLabContext(true);
   const council = context.data?.council ?? null;
@@ -153,6 +153,7 @@ function ReleaseBody({ providerId, onNavigate }: { providerId: string; onNavigat
       {context.isError && <p role="alert" style={alert}>{labError(context.error)}</p>}
       {openId && !context.isPending && (
         <ReleaseReview key={openId} requisitionId={openId} council={council} onNavigate={onNavigate} onClose={() => setOpenId(null)}
+          qcLead={(context.data?.technical_lead_of ?? []).includes(providerId)} onGoToSecurity={onGoToSecurity}
           onReleased={released}
           onConflict={(text) => { setOpenId(null); setMessage({ kind: "error", text }); void queue.refetch(); }} />
       )}

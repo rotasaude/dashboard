@@ -9,7 +9,7 @@ import { Fragment, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   chooseLabResult, errorCode, getReleaseRequisition, releaseRequisition,
-  type LabReleaseItem, type LabReportSummary, type LabResultRow, type LabSignatureKind
+  type LabReleaseItem, type LabReportSummary, type LabResultRow, type LabSignatureKind, type QcBlockedItem
 } from "../../lib/api";
 import { LAB_CRITICALS_KEY, LAB_CRITICAL_COUNT_KEY, LAB_RELEASES_KEY, displayValue, flagLabel, flagTone, isCritical, itemStatusLabel, labError, onlyIcp, totpProblem } from "../../lib/lab";
 import { fmtDay } from "../../lib/exams";
@@ -23,8 +23,14 @@ import { secondaryButtonStyle } from "../../components/formStyles";
 import { CriticalNoticeForm } from "./CriticalNoticeForm";
 import { LabReportList } from "./LabReportList";
 import { RectifyForm } from "./RectifyForm";
+import { ReagentLotTag } from "../inventory/ReagentLotTag";
+import { QcBlockedPanel, blockedItems, stuckItemIds } from "../qc/QcBlockedPanel";
 import { NO_ICP_FOR_DOCTOR, SignatureChoice } from "./SignatureChoice";
 import { alert, box, checkLabel, list, muted, panel, row, title } from "../exams/styles";
+
+export const itemLabel = (items: LabReleaseItem[], id: string) => items.find((i) => i.id === id)?.label ?? id;
+export const analyteLabel = (items: LabReleaseItem[], id: string, key: string) =>
+  items.find((i) => i.id === id)?.results.find((x) => x.analyte_key === key)?.name ?? key;
 
 function byAnalyte(rows: LabResultRow[]): [ string, LabResultRow[] ][] {
   const groups = new Map<string, LabResultRow[]>();
@@ -32,9 +38,11 @@ function byAnalyte(rows: LabResultRow[]): [ string, LabResultRow[] ][] {
   return [ ...groups.entries() ];
 }
 
-export function ReleaseReview({ requisitionId, council, onReleased, onConflict, onNavigate, onClose }: {
-  requisitionId: string; council: string | null; onReleased(r: LabReportSummary): void; onConflict(text: string): void;
-  onNavigate(id: ModuleId): void; onClose(): void;
+// 21c: `qcLead` = a sessão é RT ou substituto do laboratório (C-E4) e pode
+// registrar a exceção do CIQ; padrão false — as telas do 21b que não passam ficam iguais.
+export function ReleaseReview({ requisitionId, council, qcLead = false, onReleased, onConflict, onNavigate, onClose, onGoToSecurity }: {
+  requisitionId: string; council: string | null; qcLead?: boolean; onReleased(r: LabReportSummary): void; onConflict(text: string): void;
+  onNavigate(id: ModuleId): void; onClose(): void; onGoToSecurity?(): void;
 }) {
   const query = useQuery({
     queryKey: [ LAB_RELEASES_KEY, "one", requisitionId ], queryFn: () => getReleaseRequisition(requisitionId), gcTime: 0, staleTime: 0, retry: false,
@@ -58,6 +66,9 @@ export function ReleaseReview({ requisitionId, council, onReleased, onConflict, 
   const releasedOnce = useRef(false);
   // L3: a ICP foi recusada como indisponível nesta sessão — some das opções.
   const [ icpRefused, setIcpRefused ] = useState(false);
+  // 21c: bloqueios do CIQ no último envio e os pares item:bloqueio que já têm exceção.
+  const [ blocked, setBlocked ] = useState<QcBlockedItem[]>([]);
+  const [ excepted, setExcepted ] = useState<string[]>([]);
   const r = query.data;
 
   // Uma releitura que falha não derruba a conferência: enquanto há dado, ele fica na tela.
@@ -128,6 +139,7 @@ export function ReleaseReview({ requisitionId, council, onReleased, onConflict, 
     setConfirming(false);
     setError(null);
     setCertificateLink(false);
+    setBlocked([]);
     const code = totp;
     setTotp("");
     try {
@@ -140,6 +152,8 @@ export function ReleaseReview({ requisitionId, council, onReleased, onConflict, 
       // Depois de um laudo criado, um erro tardio não substitui o sucesso.
       if (releasedOnce.current) return;
       const reason = errorCode(err);
+      const stuck = reason === "qc_blocked" ? blockedItems(err) : [];
+      if (stuck.length > 0) { setBlocked(stuck); return; }
       if (reason === "invalid_transition") { onConflict(labError(err)); return; }
       if (reason === "icp_required" && available) setKind("icp");
       if (reason === "signature_unavailable") {
@@ -169,6 +183,7 @@ export function ReleaseReview({ requisitionId, council, onReleased, onConflict, 
               <li key={x.id} style={row}>
                 <span>{`${displayValue(x.value)}${x.unit ? ` ${x.unit}` : ""} · ${x.source === "hl7" ? "aparelho — conferir" : `digitado${x.entered_by ? ` por ${x.entered_by}` : ""}`} · ${fmtDateTime(x.entered_at)}`}</span>
                 {x.flag !== "normal" && <Tag tone={flagTone(x.flag)}>{flagLabel(x.flag)}</Tag>}
+                <ReagentLotTag row={x} />
                 {x.effective ? <Tag tone="ok">vale</Tag> : rows.length > 1 && (
                   <ActionButton variant="secondary" busy={busy} onClick={() => choose(x)}>{`Usar ${displayValue(x.value)}`}</ActionButton>
                 )}
@@ -200,11 +215,23 @@ export function ReleaseReview({ requisitionId, council, onReleased, onConflict, 
       </div>
       <p style={muted}>{`${r.patient.display_name} · nascimento ${fmtDay(r.patient.birth_date)}`}</p>
       {r.items.map(itemBlock)}
+      {blocked.length > 0 && (
+        <QcBlockedPanel items={blocked} excepted={excepted} lead={qcLead} onGoToSecurity={onGoToSecurity}
+          itemLabel={(id) => itemLabel(r.items, id)} analyteLabel={(id, key) => analyteLabel(r.items, id, key)}
+          onExcepted={(key) => setExcepted((x) => [ ...x, key ])}
+          onSkip={() => {
+            const stuck = stuckItemIds(blocked, excepted);
+            setConfirming(false);
+            setSelected(chosenIds.filter((id) => !stuck.includes(id)));
+            setBlocked([]);
+          }} />
+      )}
       {r.reports.length > 0 && (
         <LabReportList reports={r.reports} onRectify={setRectifying} onExpired={() => void query.refetch()} />
       )}
       {rectifying && (
-        <RectifyForm key={rectifying.id} report={rectifying} items={r.items} council={council} guard={writeGuard} onCancel={() => setRectifying(null)}
+        <RectifyForm key={rectifying.id} report={rectifying} items={r.items} council={council} guard={writeGuard} qcLead={qcLead}
+          onGoToSecurity={onGoToSecurity} onCancel={() => setRectifying(null)}
           onConflict={onConflict} onDone={(rep) => { setRectifying(null); onReleased(rep); }} />
       )}
       {releasable.length > 0 && (
