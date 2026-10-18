@@ -24,6 +24,7 @@ import { LabAdmin } from "./modules/LabAdmin";
 import { LabReports } from "./modules/LabReports";
 import { LabInstruments } from "./modules/LabInstruments";
 import { LabInventory } from "./modules/LabInventory";
+import { LabTraceability } from "./modules/LabTraceability";
 import { LabQcSetup } from "./modules/LabQcSetup";
 import { LabEqa } from "./modules/LabEqa";
 import { LabQcRuns } from "./modules/LabQcRuns";
@@ -261,6 +262,7 @@ export function renderModule(active: ModuleId, setActive: (id: ModuleId) => void
     case "lab-qc-setup": return <LabQcSetup onGoToSecurity={() => setActive("security")} />;
     case "lab-eqa": return <LabEqa onGoToSecurity={() => setActive("security")} />;
     case "lab-inventory": return <LabInventory onGoToSecurity={() => setActive("security")} />;
+    case "lab-traceability": return <LabTraceability />;
     case "lab-instruments": return <LabInstruments onGoToSecurity={() => setActive("security")} />;
     default:               return <Placeholder title={labelFor(active)} />;
   }
