@@ -68,6 +68,7 @@ export default defineConfig({
       "/clinical_documents": proxy(TARGET),
       "/sncr": proxy(TARGET),
       "/exams": proxy(TARGET),
+      "/city_identity": proxy(TARGET),
       // Módulo 21b: laboratório municipal (requisição, amostra, remessa, mapa, digitação, liberação e admin).
       // Regex: não casa /labels nem outro caminho que só comece com "lab".
       "^/lab(/|$)": proxy(TARGET),
