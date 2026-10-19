@@ -1,5 +1,6 @@
 // src/lib/qc.test.ts
 import { describe, expect, it, vi } from "vitest";
+import { materialAnalyteName, staleAware } from "./qc";
 import { ApiError } from "./api";
 import {
   EMPTY_EQA_ITEM, EMPTY_EQA_ROUND, annualReportProblem, EMPTY_INSTRUMENT, EMPTY_TARGET, QC_DISABLED, adequacyRate, analyteName, decimalProblem, eqaBody, eqaProblem,
@@ -327,5 +328,27 @@ describe("recusas", () => {
     expect(keys).toContain("qcRuns");
     expect(keys).toContain("qcBlockCount");
     expect(keys).toContain("eqaRounds");
+  });
+});
+
+describe("staleAware", () => {
+  it("relê só nos códigos da tela e devolve a frase do tradutor", () => {
+    const refresh = vi.fn();
+    const failed = staleAware([ "not_found", "conflict" ], refresh);
+    expect(failed(new ApiError(404, { error: "not_found" }, "x"))).toBe(qcError(new ApiError(404, { error: "not_found" }, "x")));
+    expect(refresh).toHaveBeenCalledTimes(1);
+    failed(new ApiError(422, { error: "invalid_date" }, "x"));
+    failed(new Error("rede"));
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(staleAware([ "conflict" ], vi.fn(), () => "outra")(new ApiError(409, { error: "conflict" }, "x"))).toBe("outra");
+  });
+});
+
+describe("materialAnalyteName", () => {
+  it("resolve pelo material que carrega a chave; sem material, a própria chave", () => {
+    const m = qcMaterial();
+    const key = m.analytes[0].analyte_key;
+    expect(materialAnalyteName([ m ], [ GLU_EXAM ], key)).toBe(analyteName([ GLU_EXAM ], m.analytes[0].lab_exam_id, key));
+    expect(materialAnalyteName([], [ GLU_EXAM ], "zzz")).toBe("zzz");
   });
 });

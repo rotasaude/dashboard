@@ -4,7 +4,7 @@
 // step-up (C-E39). Nada do PDF vai para console, log ou storage.
 import { useEffect, useRef, useState } from "react";
 import { createEqaAnnualReport, errorCode, uploadEqaReport } from "../../lib/api";
-import { annualReportProblem, qcError, yearProblem } from "../../lib/qc";
+import { annualReportProblem, staleAware, yearProblem } from "../../lib/qc";
 import { SensitiveAction } from "../../components/SensitiveAction";
 import { buttonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { alert, box, fieldLabel, form, row } from "../exams/styles";
@@ -21,6 +21,7 @@ export function AnnualReportForm({ providerId, year, currentYear, onSaved, onCan
   const [ confirming, setConfirming ] = useState(false);
   // Se o envio deu certo e o registro falhou, uma nova tentativa na mesma confirmação reaproveita o envio.
   const uploaded = useRef<string | null>(null);
+  const stale = staleAware([ "already_recorded", "not_found", "conflict" ], () => onStale?.());
   // Mudou o ano: a confirmação aberta era de outro ano; volta à revisão (o PDF escolhido fica).
   useEffect(() => { setConfirming(false); }, [ year ]);
   const name = program === "outro" ? other.trim() : program;
@@ -78,11 +79,9 @@ export function AnnualReportForm({ providerId, year, currentYear, onSaved, onCan
           }}
           onDone={onSaved} onCancel={() => setConfirming(false)} onGoToSecurity={onGoToSecurity}
           translateError={(err) => {
-            const code = errorCode(err);
-            if (code === "already_recorded" || code === "not_found" || code === "conflict") onStale?.();
             // O registro foi recusado: o envio já consumido não vale para outra tentativa.
-            if (code === "invalid_file") uploaded.current = null;
-            return qcError(err);
+            if (errorCode(err) === "invalid_file") uploaded.current = null;
+            return stale(err);
           }} />
       )}
     </section>

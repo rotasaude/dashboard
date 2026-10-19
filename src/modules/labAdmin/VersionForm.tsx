@@ -2,9 +2,10 @@
 // salvamento cria versão nova e imutável (o laudo guarda a versão). Step-up
 // pelo SensitiveAction.
 import { useState } from "react";
-import { createLabExamVersion, type LabExam, type LabInstrument, type LabValueType } from "../../lib/api";
+import { createLabExamVersion, errorCode, type LabExam, type LabInstrument, type LabValueType } from "../../lib/api";
 import { EMPTY_RANGE, LIMITS, versionBody, versionDraft, versionProblem, type AgeUnit, type AnalyteDraft, type RangeDraft, type VersionDraft } from "../../lib/labAdmin";
 import { labError } from "../../lib/lab";
+import { VERSION_CONFLICT, staleAware } from "../../lib/qc";
 import { SensitiveAction } from "../../components/SensitiveAction";
 import { buttonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { alert, box, fieldLabel, fieldset, form, legend, muted, row } from "../exams/styles";
@@ -16,8 +17,8 @@ const VALUE_TYPES: { value: LabValueType; label: string }[] = [ { value: "numeri
 // `instruments` (21c, contrato §2): presente quando o CIQ ou o estoque estão ligados. Só aparelhos ativos
 // são oferecidos (o api recusa inativo com invalid_version); se a versão atual aponta um inativo, o campo
 // vem vazio, com aviso.
-export function VersionForm({ exam, instruments, onSaved, onCancel, onGoToSecurity }: {
-  exam: LabExam; instruments?: LabInstrument[]; onSaved(): void; onCancel(): void; onGoToSecurity?(): void;
+export function VersionForm({ exam, instruments, onSaved, onCancel, onGoToSecurity, onStale }: {
+  exam: LabExam; instruments?: LabInstrument[]; onSaved(): void; onCancel(): void; onGoToSecurity?(): void; onStale?(): void;
 }) {
   const active = instruments?.filter((i) => i.active);
   const currentInstrument = exam.current_version?.lab_instrument_id ?? "";
@@ -142,7 +143,7 @@ export function VersionForm({ exam, instruments, onSaved, onCancel, onGoToSecuri
           run={async () => { await createLabExamVersion(exam.id, versionBody(draft, instruments !== undefined)); }}
           onDone={() => { setConfirming(false); onSaved(); }}
           onCancel={() => setConfirming(false)} onGoToSecurity={onGoToSecurity}
-          translateError={(err) => labError(err)}
+          translateError={staleAware([ "conflict" ], () => onStale?.(), (err) => (errorCode(err) === "conflict" ? VERSION_CONFLICT : labError(err)))}
         />
       )}
     </section>

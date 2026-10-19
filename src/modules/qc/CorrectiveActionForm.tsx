@@ -3,8 +3,8 @@
 // fecha: o bloqueio fecha sozinho na corrida aprovada com todos os níveis. O
 // texto nunca vai a console, log ou storage.
 import { useState } from "react";
-import { errorCode, recordCorrectiveAction, type QcBlock } from "../../lib/api";
-import { qcError, reasonProblem } from "../../lib/qc";
+import { recordCorrectiveAction, type QcBlock } from "../../lib/api";
+import { reasonProblem, staleAware } from "../../lib/qc";
 import { ActionButton } from "../../components/ActionButton";
 import { inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { alert, fieldLabel, fieldset, legend, row } from "../exams/styles";
@@ -23,10 +23,8 @@ export function CorrectiveActionForm({ block, label, onDone, onCancel, onStale }
       await recordCorrectiveAction(block.id, text.trim());
       onDone();
     } catch (err) {
-      const code = errorCode(err);
       // 404/409: a frase diz que a tela foi atualizada, então relê de fato.
-      if (code === "not_found" || code === "conflict" || code === "invalid_transition") onStale?.();
-      setError(qcError(err));
+      setError(staleAware([ "not_found", "conflict", "invalid_transition" ], () => onStale?.())(err));
     }
   }
 

@@ -41,6 +41,7 @@ const QC_KEYS = [
 export const QC_DISABLED = "o controle de qualidade do laboratório está desligado nesta cidade";
 export const INSTRUMENTS_DISABLED = "o controle de qualidade e o estoque do laboratório estão desligados nesta cidade";
 export const QC_LEAD_ONLY = "só o administrador ou o responsável técnico (ou o substituto) cadastra materiais, lotes, referências e regras";
+export const VERSION_CONFLICT = "a versão vigente do exame mudou enquanto você salvava — a tela foi atualizada; confira e salve de novo";
 export const RT_ONLY = "só o responsável técnico ou o substituto faz isto";
 export const REASON_MIN = 10;
 // Texto livre do 21c (motivo, justificativa, nota, ação corretiva): o api recusa acima de 1000; a ação do CEQ, acima de 500.
@@ -419,6 +420,25 @@ export function qcError(err: unknown): string {
   const code = errorCode(err);
   if (code && ERRORS[code]) return ERRORS[code];
   return labError(err);
+}
+
+// Erro cuja frase diz que "a tela foi atualizada": se o código é um dos `codes`,
+// relê de fato (`refresh`) antes de devolver a frase. Um só lugar para a regra,
+// com o conjunto de códigos de cada tela passado por ela.
+export function staleAware(
+  codes: readonly string[], refresh: (err: unknown) => void, translate: (err: unknown) => string = qcError
+): (err: unknown) => string {
+  return (err) => {
+    const code = errorCode(err);
+    if (code && codes.includes(code)) refresh(err);
+    return translate(err);
+  };
+}
+
+// Analito pelo material que o carrega (primeiro com aquela chave); sem material, a própria chave.
+export function materialAnalyteName(materials: QcMaterial[], exams: LabExamRef[], key: string): string {
+  const ref = materials.flatMap((m) => m.analytes).find((a) => a.analyte_key === key);
+  return ref ? analyteName(exams, ref.lab_exam_id, key) : key;
 }
 
 export async function refreshQc(client: QueryClient): Promise<void> {

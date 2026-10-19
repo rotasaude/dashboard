@@ -3,11 +3,12 @@
 // cadastra; todos do laboratório veem o saldo.
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { createSupply, errorCode, listSupplies, updateSupply, type LabExamRef, type LabSupply } from "../../lib/api";
+import { createSupply, listSupplies, updateSupply, type LabExamRef, type LabSupply } from "../../lib/api";
 import {
   EMPTY_SUPPLY, INV_SUPPLIES_KEY, SUPPLY_KIND_LABEL, inventoryError, refreshInventory, supplyBody, supplyDraft, supplyKindLabel, supplyProblem,
   type SupplyDraft
 } from "../../lib/inventory";
+import { staleAware } from "../../lib/qc";
 import { Panel } from "../../components/Panel";
 import { DataTable, type Column } from "../../components/DataTable";
 import { Tag } from "../../components/Tag";
@@ -40,11 +41,7 @@ export function SuppliesPanel({ providerId, admin, exams, onGoToSecurity }: { pr
   }
 
   // 404/409: a frase diz que a tela foi atualizada, então relê de fato.
-  const failed = (err: unknown) => {
-    const code = errorCode(err);
-    if (code === "not_found" || code === "conflict") void refreshInventory(queryClient).catch(() => undefined);
-    return inventoryError(err);
-  };
+  const failed = staleAware([ "not_found", "conflict" ], () => { void refreshInventory(queryClient).catch(() => undefined); }, inventoryError);
 
   const cols: Column<LabSupply>[] = [
     { label: "Item", w: "1.6fr", card: "title", render: (s) => s.name },

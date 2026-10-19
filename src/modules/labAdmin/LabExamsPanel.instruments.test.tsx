@@ -1,15 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, screen } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import { QueryClient } from "@tanstack/react-query";
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const real = await importOriginal<typeof import("../../lib/api")>();
-  return { ...real, fetchCurrentSession: vi.fn(), listLabAdminExams: vi.fn(), listLabTemplates: vi.fn(), getLabAdminExam: vi.fn(), listAdminInstruments: vi.fn() };
+  return { ...real, fetchCurrentSession: vi.fn(), listLabAdminExams: vi.fn(), listLabTemplates: vi.fn(), getLabAdminExam: vi.fn(), listAdminInstruments: vi.fn(), createLabExamVersion: vi.fn() };
 });
 
 import * as api from "../../lib/api";
 import { LabExamsPanel } from "./LabExamsPanel";
 import { renderWithProviders } from "../../test/campaignFixtures";
-import { labExam } from "../../test/labFixtures";
+import { labExam, labVersion } from "../../test/labFixtures";
 import { instrument, qcUser } from "../../test/qcFixtures";
 
 const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
@@ -32,5 +33,18 @@ describe("LabExamsPanel: falha ao ler os aparelhos", () => {
     fireEvent.click(screen.getByRole("button", { name: "Tentar de novo" }));
     expect(await screen.findByRole("region", { name: "Nova versão de Glicose (atual v1)" })).not.toBeNull();
     expect(api.listAdminInstruments).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("LabExamsPanel: lista de exames do 21c", () => {
+  it("criar versão invalida a lista de exames do CIQ/CEQ/estoque (qcExams)", async () => {
+    mocked(api.listAdminInstruments).mockResolvedValue([ instrument() ]);
+    mocked(api.createLabExamVersion).mockResolvedValue(labVersion({ id: "ev2", version: 2 }));
+    const spy = vi.spyOn(QueryClient.prototype, "invalidateQueries");
+    renderWithProviders(<LabExamsPanel providerId="pv9" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Nova versão" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Revisar e salvar versão" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Criar versão 2" }));
+    await waitFor(() => expect(spy.mock.calls.some(([ f ]) => JSON.stringify((f as { queryKey?: unknown })?.queryKey) === JSON.stringify([ "qcExams" ]))).toBe(true));
   });
 });

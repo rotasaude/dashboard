@@ -8,7 +8,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createInstrument, listAdminInstruments, listLabInstruments, updateInstrument, type LabInstrument } from "../lib/api";
 import { SECTOR_LABEL, sectorLabel } from "../lib/lab";
 import {
-  EMPTY_INSTRUMENT, INSTRUMENTS_DISABLED, QC_INSTRUMENTS_KEY, instrumentBody, instrumentDraft, instrumentProblem, qcError, type InstrumentDraft
+  EMPTY_INSTRUMENT, INSTRUMENTS_DISABLED, QC_INSTRUMENTS_KEY, instrumentBody, instrumentDraft, instrumentProblem, qcError, staleAware, type InstrumentDraft
 } from "../lib/qc";
 import { Panel } from "../components/Panel";
 import { DataTable, type Column } from "../components/DataTable";
@@ -108,7 +108,7 @@ function InstrumentsBody({ providerId, admin, onGoToSecurity }: { providerId: st
                   if (editing === "new") await createInstrument(body); else await updateInstrument(editing.id, body);
                 }}
                 onDone={() => { setConfirming(false); setEditing(null); setNotice("Aparelho salvo."); void queryClient.invalidateQueries({ queryKey: [ QC_INSTRUMENTS_KEY ] }); }}
-                onCancel={() => setConfirming(false)} onGoToSecurity={onGoToSecurity} translateError={(err) => qcError(err)} />
+                onCancel={() => setConfirming(false)} onGoToSecurity={onGoToSecurity} translateError={staleAware([ "not_found", "invalid_transition" ], () => { void queryClient.invalidateQueries({ queryKey: [ QC_INSTRUMENTS_KEY ] }); })} />
             )}
           </section>
         )}

@@ -4,6 +4,7 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { adoptLabExam, getLabAdminExam, listAdminInstruments, listLabAdminExams, listLabTemplates, updateLabExam, type LabExam, type LabTemplate } from "../../lib/api";
+import { QC_EXAMS_KEY } from "../../lib/qc";
 import { LAB_ADMIN_EXAMS_KEY, LAB_TEMPLATES_KEY, SECTOR_LABEL, labError, refreshLab, sectorLabel } from "../../lib/lab";
 import { fmtDateTime } from "../../lib/format";
 import { useAuth } from "../../lib/auth";
@@ -39,7 +40,11 @@ export function LabExamsPanel({ providerId, onGoToSecurity }: { providerId: stri
   const [ error, setError ] = useState<string | null>(null);
   const [ notice, setNotice ] = useState<string | null>(null);
   const adopted = new Set((exams.data ?? []).map((e) => e.template_id));
-  const refresh = () => { void refreshLab(queryClient).catch(() => undefined); };
+  const refresh = () => {
+    void refreshLab(queryClient).catch(() => undefined);
+    // A lista de exames do CIQ/CEQ/estoque (21c) é outra consulta: adotar exame ou criar versão a muda.
+    void queryClient.invalidateQueries({ queryKey: [ QC_EXAMS_KEY ] }).catch(() => undefined);
+  };
 
   function closeAll() { setAdopting(null); setEditing(null); setVersioning(null); setConfirm(null); setError(null); setNotice(null); }
 
@@ -107,7 +112,7 @@ export function LabExamsPanel({ providerId, onGoToSecurity }: { providerId: stri
             )}
             {instrumentsOn && instruments.isPending && <p className="mono" style={muted}>carregando aparelhos…</p>}
             {(!instrumentsOn || instruments.data) && (
-              <VersionForm key={versioning.id} exam={versioning} instruments={instrumentsOn ? instruments.data : undefined}
+              <VersionForm key={versioning.id} exam={versioning} onStale={refresh} instruments={instrumentsOn ? instruments.data : undefined}
                 onGoToSecurity={onGoToSecurity} onCancel={() => setVersioning(null)}
                 onSaved={() => { setVersioning(null); setNotice("Versão nova criada."); refresh(); }} />
             )}

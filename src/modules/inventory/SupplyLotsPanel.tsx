@@ -9,6 +9,7 @@ import {
   EMPTY_LOT_ENTRY, EMPTY_MOVEMENT, INV_LOTS_KEY, INV_MOVEMENTS_KEY, INV_SUPPLIES_KEY, SUPPLY_ORIGIN_LABEL, inventoryError, fmtMovementQuantity, lotEntryBody,
   lotEntryProblem, movementBody, movementLabel, movementProblem, originLabel, refreshInventory, type LotEntryDraft, type MovementDraft
 } from "../../lib/inventory";
+import { staleAware } from "../../lib/qc";
 import { todayInCity } from "../../lib/campaigns";
 import { fmtDay } from "../../lib/exams";
 import { fmtDateTime } from "../../lib/format";
@@ -69,7 +70,7 @@ export function SupplyLotsPanel({ providerId, admin, onGoToSecurity }: { provide
               { label: "Fornecedor · origem", w: "1.4fr", render: (l) => `${l.supplier} · ${originLabel(l.origin)}` },
               { label: "Saldo", w: "0.7fr", align: "right", render: (l) => `${l.balance}${supply ? ` ${supply.unit}` : ""}` },
               { label: "", w: "auto", card: "actions", render: (l) => (
-                <button type="button" style={secondaryButtonStyle} aria-pressed={lotId === l.id} onClick={() => setLotId(l.id)}>Movimentos</button>
+                <button type="button" style={secondaryButtonStyle} title={`lote ${l.lot_number}`} aria-pressed={lotId === l.id} onClick={() => setLotId(l.id)}>Movimentos</button>
               ) }
             ]}
             rows={lots.data ?? []} rowKey={(l) => l.id} empty={lots.isPending ? "carregando…" : "nenhum lote cadastrado"}
@@ -116,11 +117,7 @@ function LotMovements({ lot, admin, onChanged, onStale, onGoToSecurity }: {
   const adjustment = draft.kind === "adjustment";
 
   // Saldo velho ou registro de outro laboratório: a frase diz que releu, então relê.
-  const failed = (err: unknown) => {
-    const code = errorCode(err);
-    if (code === "insufficient_balance" || code === "not_found") onStale();
-    return inventoryError(err);
-  };
+  const failed = staleAware([ "insufficient_balance", "not_found" ], () => onStale(), inventoryError);
 
   function check(): boolean {
     const problem = movementProblem(draft, lot.balance, admin);

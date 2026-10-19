@@ -52,7 +52,7 @@ export function QcBlockedPanel({ items, exams: examItems, excepted, lead, mode =
               <div style={row}>
                 <span>{`${itemLabel(examItems, b.item_id)} · ${analyteLabel(examItems, b.item_id, b.analyte_key)} · ${b.instrument_name || b.instrument_id}`}</span>
                 {excepted.includes(key) ? <Tag tone="ok">exceção registrada</Tag> : lead && formFor !== key && (
-                  <button type="button" style={secondaryButtonStyle} onClick={() => setFormFor(key)}>Liberar com exceção</button>
+                  <button type="button" style={secondaryButtonStyle} title={`${itemLabel(examItems, b.item_id)} · ${analyteLabel(examItems, b.item_id, b.analyte_key)}`} onClick={() => setFormFor(key)}>Liberar com exceção</button>
                 )}
               </div>
               {formFor === key && !excepted.includes(key) && (

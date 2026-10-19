@@ -3,8 +3,8 @@
 // Mudar é só do RT/substituto (C-E4: nem o admin); os outros só leem.
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { QC_RULES, errorCode, getQcRules, listLabInstruments, listQcMaterials, saveQcRules, type LabExamRef, type QcRule, type QcRuleSet } from "../../lib/api";
-import { QC_INSTRUMENTS_KEY, QC_MATERIALS_KEY, QC_RULES_KEY, RT_ONLY, analyteName, qcError, refreshQc, ruleLabel, rulesProblem } from "../../lib/qc";
+import { QC_RULES, getQcRules, listLabInstruments, listQcMaterials, saveQcRules, type LabExamRef, type QcRule, type QcRuleSet } from "../../lib/api";
+import { QC_INSTRUMENTS_KEY, QC_MATERIALS_KEY, QC_RULES_KEY, RT_ONLY, analyteName, qcError, refreshQc, ruleLabel, rulesProblem, staleAware } from "../../lib/qc";
 import { fmtDateTime } from "../../lib/format";
 import { Panel } from "../../components/Panel";
 import { SensitiveAction } from "../../components/SensitiveAction";
@@ -68,11 +68,7 @@ function RulesForm({ set, lead, onSaved, onStale, onGoToSecurity }: {
     setConfirming(true);
   }
 
-  const failed = (err: unknown) => {
-    const code = errorCode(err);
-    if (code === "not_found" || code === "invalid_transition") onStale();
-    return qcError(err);
-  };
+  const failed = staleAware([ "not_found", "invalid_transition" ], () => onStale());
 
   return (
     <fieldset style={fieldset}>

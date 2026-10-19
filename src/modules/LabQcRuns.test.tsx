@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { QueryClient } from "@tanstack/react-query";
 
 vi.mock("../lib/api", async (importOriginal) => {
   const real = await importOriginal<typeof import("../lib/api")>();
@@ -106,6 +107,15 @@ describe("LabQcRuns", () => {
     expect(api.recordQcValue).not.toHaveBeenCalled();
   });
 
+  it("abrir corrida com 404: a frase diz que a tela foi atualizada e as corridas relêem", async () => {
+    mocked(api.openQcRun).mockRejectedValueOnce(new api.ApiError(404, { error: "not_found" }, "x"));
+    await openForm();
+    const before = mocked(api.listQcRuns).mock.calls.length;
+    fireEvent.click(screen.getByRole("button", { name: "Abrir corrida nova" }));
+    expect(await screen.findByText(/a tela foi atualizada/)).not.toBeNull();
+    await waitFor(() => expect(mocked(api.listQcRuns).mock.calls.length).toBeGreaterThan(before));
+  });
+
   it("corrida reprovada abre bloqueio: avisa, relê as corridas e o próximo valor abre corrida nova", async () => {
     mocked(api.recordQcValue).mockResolvedValueOnce({
       value: qcValue({ z_score: 2.4, outcome: "reject", rules_fired: [ "2_2s" ] }), run: qcRun({ id: "qr2", status: "rejected" }), block: qcBlock()
@@ -141,6 +151,15 @@ describe("LabQcRuns", () => {
     await save(form);
     await waitFor(() => expect(api.recordQcValue).toHaveBeenCalledTimes(2));
     expect(mocked(api.recordQcValue).mock.calls[1][0].run_id).toBeNull();
+  });
+
+  it("gravar valor invalida também o gráfico (Levey-Jennings não mostra cache velho)", async () => {
+    mocked(api.recordQcValue).mockResolvedValueOnce(ok("glicose"));
+    const spy = vi.spyOn(QueryClient.prototype, "invalidateQueries");
+    const form = await openForm();
+    fireEvent.change(within(form).getByLabelText(GLU), { target: { value: "98" } });
+    await save(form);
+    await waitFor(() => expect(spy.mock.calls.some(([ f ]) => JSON.stringify((f as { queryKey?: unknown })?.queryKey) === JSON.stringify([ "qcChart" ]))).toBe(true));
   });
 
   it("aviso de ação corretiva pendente vem do notice, não de um código de erro", async () => {

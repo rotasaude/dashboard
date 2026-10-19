@@ -6,8 +6,8 @@
 // retificação acontece. Sem nome de paciente na lista; sem polling.
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { decideQcReview, errorCode, listQcReviews, type LabReportSummary, type QcReview } from "../../lib/api";
-import { QC_REVIEWS_KEY, RT_ONLY, TEXT_MAX, qcError, refreshQc } from "../../lib/qc";
+import { decideQcReview, listQcReviews, type LabReportSummary, type QcReview } from "../../lib/api";
+import { QC_REVIEWS_KEY, RT_ONLY, TEXT_MAX, qcError, refreshQc, staleAware } from "../../lib/qc";
 import { refreshLab } from "../../lib/lab";
 import { fmtDateTime } from "../../lib/format";
 import type { ModuleId } from "../../shell/modules";
@@ -54,14 +54,10 @@ export function ReviewsPanel({ providerId, lead, analyte, instrument, onNavigate
     setConfirming(true);
   }
 
-  const failed = (err: unknown) => {
-    const code = errorCode(err);
-    if (code === "not_found" || code === "invalid_transition") {
-      refresh(); setDeciding(null); setConfirming(false);
-      setError(qcError(err)); // o painel fecha, então a frase fica aqui
-    }
-    return qcError(err);
-  };
+  const failed = staleAware([ "not_found", "invalid_transition" ], (err) => {
+    refresh(); setDeciding(null); setConfirming(false);
+    setError(qcError(err)); // o painel fecha, então a frase fica aqui
+  });
 
   function decided() {
     if (!deciding) return;
@@ -103,8 +99,8 @@ export function ReviewsPanel({ providerId, lead, analyte, instrument, onNavigate
               { label: "Liberado", w: "1fr", render: (r) => fmtDateTime(r.released_at) },
               { label: "", w: "auto", card: "actions", render: (r) => (lead ? (
                 <div style={row}>
-                  <button type="button" style={secondaryButtonStyle} onClick={() => start(r, "kept")}>Manter</button>
-                  <button type="button" style={secondaryButtonStyle} onClick={() => start(r, "rectify")}>Retificar</button>
+                  <button type="button" style={secondaryButtonStyle} title={`requisição ${r.requisition_number}`} onClick={() => start(r, "kept")}>Manter</button>
+                  <button type="button" style={secondaryButtonStyle} title={`requisição ${r.requisition_number}`} onClick={() => start(r, "rectify")}>Retificar</button>
                 </div>
               ) : null) }
             ]}

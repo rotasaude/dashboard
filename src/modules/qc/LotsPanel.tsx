@@ -5,8 +5,8 @@
 // console, log ou storage.
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { closeQcLot, createQcLot, errorCode, listQcLots, listQcMaterials, type QcLot } from "../../lib/api";
-import { QC_LOTS_KEY, QC_MATERIALS_KEY, lotBody, lotProblem, lotStatusLabel, qcError, refreshQc, type LotDraft } from "../../lib/qc";
+import { closeQcLot, createQcLot, listQcLots, listQcMaterials, type QcLot } from "../../lib/api";
+import { QC_LOTS_KEY, QC_MATERIALS_KEY, lotBody, lotProblem, lotStatusLabel, qcError, refreshQc, staleAware, type LotDraft } from "../../lib/qc";
 import { fmtDay } from "../../lib/exams";
 import { todayInCity } from "../../lib/campaigns";
 import { Panel } from "../../components/Panel";
@@ -34,11 +34,7 @@ export function LotsPanel({ providerId, pickedId, onPick, onGoToSecurity }: {
   const levels = material?.levels ?? [];
   const refresh = () => { void refreshQc(queryClient).catch(() => undefined); };
   // 404/409: a frase diz que a tela foi atualizada, então relê de fato.
-  const failed = (err: unknown) => {
-    const code = errorCode(err);
-    if (code === "not_found" || code === "invalid_transition") refresh();
-    return qcError(err);
-  };
+  const failed = staleAware([ "not_found", "invalid_transition" ], refresh);
 
   function review() {
     const problem = lotProblem(draft, levels, todayInCity());
@@ -62,9 +58,9 @@ export function LotsPanel({ providerId, pickedId, onPick, onGoToSecurity }: {
               { label: "Situação", w: "0.7fr", render: (l) => <Tag tone={l.status === "in_use" ? "ok" : undefined}>{lotStatusLabel(l.status)}</Tag> },
               { label: "", w: "auto", card: "actions", render: (l) => (
                 <div style={row}>
-                  <button type="button" style={secondaryButtonStyle} aria-pressed={pickedId === l.id} onClick={() => onPick(l.id)}>Referências</button>
+                  <button type="button" style={secondaryButtonStyle} title={`lote ${l.lot_number}`} aria-pressed={pickedId === l.id} onClick={() => onPick(l.id)}>Referências</button>
                   {l.status === "in_use" && (
-                    <button type="button" style={secondaryButtonStyle} onClick={() => { setClosing(l); setCreating(false); setNotice(null); }}>Encerrar</button>
+                    <button type="button" style={secondaryButtonStyle} title={`lote ${l.lot_number}`} onClick={() => { setClosing(l); setCreating(false); setNotice(null); }}>Encerrar</button>
                   )}
                 </div>
               ) }

@@ -6,7 +6,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { listLabExams, listLabInstruments, listQcBlocks, listQcExceptions, listQcMaterials, type QcBlock, type QcException } from "../lib/api";
 import {
-  QC_BLOCKS_KEY, QC_DISABLED, QC_EXAMS_KEY, QC_EXCEPTIONS_KEY, QC_INSTRUMENTS_KEY, QC_MATERIALS_KEY, analyteName, qcError, refreshQc
+  QC_BLOCKS_KEY, QC_DISABLED, QC_EXAMS_KEY, QC_EXCEPTIONS_KEY, QC_INSTRUMENTS_KEY, QC_MATERIALS_KEY, materialAnalyteName, qcError, refreshQc
 } from "../lib/qc";
 import { todayInCity } from "../lib/campaigns";
 import { fmtDateTime } from "../lib/format";
@@ -49,10 +49,7 @@ function BlocksBody({ providerId, lead, onNavigate, onGoToSecurity }: {
   const [ acting, setActing ] = useState<QcBlock | null>(null);
   const [ notice, setNotice ] = useState<string | null>(null);
   const instrument = (id: string) => (instruments.data ?? []).find((i) => i.id === id)?.name ?? id;
-  const analyte = (key: string) => {
-    const ref = (materials.data ?? []).flatMap((m) => m.analytes).find((a) => a.analyte_key === key);
-    return ref ? analyteName(exams.data ?? [], ref.lab_exam_id, key) : key;
-  };
+  const analyte = (key: string) => materialAnalyteName(materials.data ?? [], exams.data ?? [], key);
   const label = (b: { instrument_id: string; analyte_key: string }) => `${instrument(b.instrument_id)} · ${analyte(b.analyte_key)}`;
   const refresh = () => { void refreshQc(queryClient).catch(() => undefined); };
 

@@ -7,12 +7,12 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  acceptQcSuggestion, createQcTarget, errorCode, getQcTargets, listLabInstruments, listQcLots, listQcMaterials, listQcSuggestions,
+  acceptQcSuggestion, createQcTarget, getQcTargets, listLabInstruments, listQcLots, listQcMaterials, listQcSuggestions,
   type LabExamRef, type QcSuggestion, type QcTarget
 } from "../../lib/api";
 import {
   EMPTY_TARGET, QC_INSTRUMENTS_KEY, QC_LOTS_KEY, QC_MATERIALS_KEY, QC_SUGGESTIONS_KEY, QC_TARGETS_KEY, RT_ONLY, analyteName, fmtDecimal,
-  qcError, reasonProblem, refreshQc, targetBody, targetProblem, targetSourceLabel, type TargetDraft
+  qcError, reasonProblem, refreshQc, staleAware, targetBody, targetProblem, targetSourceLabel, type TargetDraft
 } from "../../lib/qc";
 import { fmtDateTime } from "../../lib/format";
 import { Panel } from "../../components/Panel";
@@ -60,11 +60,7 @@ export function TargetsPanel({ providerId, lotId, lead, admin = false, exams, on
   const canAccept = lead && !closed;
   const refresh = () => { void refreshQc(queryClient).catch(() => undefined); };
   // 404/409: a frase diz que a tela foi atualizada, então relê de fato.
-  const failed = (err: unknown) => {
-    const code = errorCode(err);
-    if (code === "not_found" || code === "invalid_transition") refresh();
-    return qcError(err);
-  };
+  const failed = staleAware([ "not_found", "invalid_transition" ], refresh);
 
   function review() {
     const problem = targetProblem(draft, replacing);
@@ -159,7 +155,7 @@ export function TargetsPanel({ providerId, lotId, lead, admin = false, exams, on
               { label: "Média · dp", w: "1fr", render: (s) => `${fmtDecimal(s.mean)} · ${fmtDecimal(s.sd)}` },
               { label: "Base", w: "1fr", render: (s) => `${s.runs} corridas aprovadas` },
               { label: "", w: "auto", card: "actions", render: (s) => (canAccept ? (
-                <button type="button" style={secondaryButtonStyle}
+                <button type="button" style={secondaryButtonStyle} title={`${s.level} · ${s.analyte_key}`}
                   onClick={() => { setAccepting(s); setAcceptConfirming(false); setReason(""); setAcceptError(null); setNotice(null); }}>Aceitar</button>
               ) : null) }
             ]}

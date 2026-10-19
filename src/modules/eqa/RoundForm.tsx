@@ -4,8 +4,8 @@
 // vírgula. Salvar passa por step-up (C-E39). O relatório anual não é da
 // rodada: é registro próprio (AnnualReportForm, C-E24).
 import { useState } from "react";
-import { createEqaRound, errorCode, type LabExamRef } from "../../lib/api";
-import { EMPTY_EQA_ITEM, EMPTY_EQA_ROUND, eqaBody, eqaProblem, qcError, suggestAdequacy, type EqaItemDraft, type EqaRoundDraft } from "../../lib/qc";
+import { createEqaRound, type LabExamRef } from "../../lib/api";
+import { EMPTY_EQA_ITEM, EMPTY_EQA_ROUND, eqaBody, eqaProblem, staleAware, suggestAdequacy, type EqaItemDraft, type EqaRoundDraft } from "../../lib/qc";
 import { todayInCity } from "../../lib/campaigns";
 import { SensitiveAction } from "../../components/SensitiveAction";
 import { buttonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
@@ -105,11 +105,7 @@ export function RoundForm({ providerId, exams, onSaved, onCancel, onStale, onGoT
           requiresStepUp confirmLabel="Salvar rodada"
           run={async () => { await createEqaRound(eqaBody(draft, providerId)); }}
           onDone={onSaved} onCancel={() => setConfirming(false)} onGoToSecurity={onGoToSecurity}
-          translateError={(err) => {
-            const code = errorCode(err);
-            if (code === "not_found" || code === "conflict") onStale?.();
-            return qcError(err);
-          }} />
+          translateError={staleAware([ "not_found", "conflict" ], () => onStale?.())} />
       )}
     </section>
   );

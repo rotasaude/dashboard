@@ -9,7 +9,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { listLabExams, listLabInstruments, listQcLots, listQcMaterials, listQcRuns, openQcRun, type QcValueResult } from "../lib/api";
 import {
-  QC_BLOCK_COUNT_KEY, QC_DISABLED, QC_EXAMS_KEY, QC_INSTRUMENTS_KEY, QC_LOTS_KEY, QC_MATERIALS_KEY, QC_RUNS_KEY, analyteName, qcError, rulesText, runStatusLabel
+  QC_BLOCK_COUNT_KEY, QC_CHART_KEY, QC_DISABLED, QC_EXAMS_KEY, QC_INSTRUMENTS_KEY, QC_LOTS_KEY, QC_MATERIALS_KEY, QC_RUNS_KEY, materialAnalyteName, qcError, refreshQc, rulesText, runStatusLabel, staleAware
 } from "../lib/qc";
 import { todayInCity } from "../lib/campaigns";
 import { Panel } from "../components/Panel";
@@ -56,10 +56,7 @@ function RunsBody({ providerId }: { providerId: string }) {
   const [ error, setError ] = useState<string | null>(null);
   const examList = exams.data ?? [];
   const materialList = materials.data ?? [];
-  const analyte = (key: string) => {
-    const ref = materialList.flatMap((m) => m.analytes).find((a) => a.analyte_key === key);
-    return ref ? analyteName(examList, ref.lab_exam_id, key) : key;
-  };
+  const analyte = (key: string) => materialAnalyteName(materialList, examList, key);
 
   function reset() { setRunId(null); setLast([]); setNewRunNext(false); setError(null); }
 
@@ -71,7 +68,7 @@ function RunsBody({ providerId }: { providerId: string }) {
       setNewRunNext(false);
       void runs.refetch();
     } catch (err) {
-      setError(qcError(err));
+      setError(staleAware([ "not_found", "invalid_transition" ], () => { void refreshQc(queryClient).catch(() => undefined); })(err));
     }
   }
 
@@ -80,6 +77,7 @@ function RunsBody({ providerId }: { providerId: string }) {
     if (results.some((r) => r.run.status === "rejected")) { setRunId(null); setNewRunNext(true); }
     void runs.refetch();
     void queryClient.invalidateQueries({ queryKey: [ QC_BLOCK_COUNT_KEY ] }).catch(() => undefined);
+    void queryClient.invalidateQueries({ queryKey: [ QC_CHART_KEY ] }).catch(() => undefined);
   }
 
   // O api devolve o bloqueio ativo em todo valor não reprovado e o recém-fechado no valor que o fecha:

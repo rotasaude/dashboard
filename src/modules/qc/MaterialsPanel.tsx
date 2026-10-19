@@ -4,9 +4,9 @@
 // chave de analito não entra em dois exames (C-E12).
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { createQcMaterial, errorCode, listQcMaterials, updateQcMaterial, type LabExamRef, type QcMaterial } from "../../lib/api";
+import { createQcMaterial, listQcMaterials, updateQcMaterial, type LabExamRef, type QcMaterial } from "../../lib/api";
 import {
-  EMPTY_MATERIAL, QC_MATERIALS_KEY, analyteName, analyteToken, materialBody, materialDraft, materialProblem, qcError, refreshQc, tokenToAnalyte,
+  EMPTY_MATERIAL, QC_MATERIALS_KEY, analyteName, analyteToken, materialBody, materialDraft, materialProblem, qcError, refreshQc, staleAware, tokenToAnalyte,
   type MaterialDraft
 } from "../../lib/qc";
 import { Panel } from "../../components/Panel";
@@ -37,11 +37,7 @@ export function MaterialsPanel({ providerId, exams, onGoToSecurity }: { provider
   const pickedKeys = new Map(draft.analytes.map((t) => [ tokenToAnalyte(t).analyte_key, t ]));
 
   // 404/409: a frase diz que a tela foi atualizada, então relê de fato.
-  const failed = (err: unknown) => {
-    const code = errorCode(err);
-    if (code === "not_found" || code === "invalid_transition") void refreshQc(queryClient).catch(() => undefined);
-    return qcError(err);
-  };
+  const failed = staleAware([ "not_found", "invalid_transition" ], () => { void refreshQc(queryClient).catch(() => undefined); });
 
   function open(target: QcMaterial | "new") {
     setEditing(target);

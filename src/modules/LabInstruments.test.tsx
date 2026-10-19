@@ -48,6 +48,17 @@ describe("LabInstruments", () => {
     await waitFor(() => expect(api.listAdminInstruments).toHaveBeenCalledTimes(2));
   });
 
+  it("404 not_found ao salvar: a frase diz que a tela foi atualizada e a lista relê de fato", async () => {
+    mocked(api.createInstrument).mockRejectedValueOnce(new api.ApiError(404, { error: "not_found" }, "x"));
+    const form = await openNew();
+    fireEvent.change(within(form).getByLabelText("Nome"), { target: { value: "Yumizen" } });
+    fireEvent.change(within(form).getByLabelText("Setor"), { target: { value: "hematology" } });
+    fireEvent.click(within(form).getByRole("button", { name: "Revisar e salvar aparelho" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Salvar aparelho" }));
+    expect(await screen.findByText(/a tela foi atualizada/)).not.toBeNull();
+    await waitFor(() => expect(api.listAdminInstruments).toHaveBeenCalledTimes(2));
+  });
+
   it("identificador HL7 com espaço não abre a confirmação", async () => {
     const form = await openNew();
     fireEvent.change(within(form).getByLabelText("Nome"), { target: { value: "Yumizen" } });

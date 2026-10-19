@@ -57,4 +57,14 @@ describe("VersionForm", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Criar versão 2" }));
     expect(await screen.findByText("este código do aparelho já está em outro exame do laboratório")).not.toBeNull();
   });
+
+  it("409 conflict (vigente mudou, C-E44): frase própria e a tela relê", async () => {
+    mocked(api.createLabExamVersion).mockRejectedValueOnce(new api.ApiError(409, { error: "conflict" }, "x"));
+    const onStale = vi.fn();
+    renderWithProviders(<VersionForm exam={labExam()} onSaved={vi.fn()} onCancel={vi.fn()} onStale={onStale} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Revisar e salvar versão" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Criar versão 2" }));
+    expect(await screen.findByText(/a versão vigente do exame mudou enquanto você salvava/)).not.toBeNull();
+    expect(onStale).toHaveBeenCalledTimes(1);
+  });
 });
