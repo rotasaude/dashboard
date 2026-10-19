@@ -1,0 +1,81 @@
+/* Moldura de entrada (spec city-identity §5). ≥1024 px: duas metades, a
+   prefeitura no destaque do tema à esquerda e o rodapé "operado com Rota
+   Saúde" embaixo dela. Abaixo: a prefeitura vira faixa no topo e o rodapé
+   desce para o fim. Só tokens do tema; texto sobre --accent usa --on-accent. */
+
+.entry-frame {
+  min-height: 100vh; display: grid; background: var(--panel); color: var(--ink);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-areas: "city form" "foot form";
+}
+
+.entry-city {
+  grid-area: city; display: flex; flex-direction: column; justify-content: center; gap: 16px;
+  padding: 40px 48px; background: var(--accent); color: var(--on-accent);
+}
+.entry-city p { margin: 0; }
+.entry-crest {
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  width: 96px; height: 112px; border-radius: 8px; background: var(--panel); color: var(--ink);
+}
+.entry-crest img { max-width: 80%; max-height: 80%; object-fit: contain; }
+.entry-prefix { font-size: 14px; }
+.entry-city-name { font-size: 32px; font-weight: 700; line-height: 1.15; }
+.entry-city .entry-dept { font-size: 14px; margin-top: 4px; }
+
+.entry-operated {
+  grid-area: foot; display: flex; align-items: center; gap: 8px; margin: 0;
+  padding: 16px 48px 24px; font-size: 12px; background: var(--accent); color: var(--on-accent);
+}
+
+.entry-form { grid-area: form; display: flex; align-items: center; justify-content: center; padding: 40px 32px; }
+.entry-form-inner { width: 100%; max-width: 360px; display: flex; flex-direction: column; gap: 12px; }
+.entry-form-inner form { display: flex; flex-direction: column; gap: 12px; }
+.entry-form-inner p { margin: 0; }
+
+.entry-greeting { font-size: 24px; font-weight: 700; }
+.entry-title { margin: 0; font-size: 20px; font-weight: 700; }
+.entry-form-inner .entry-lead { font-size: 14px; color: var(--ink2); margin-bottom: 8px; }
+.entry-lead strong { color: var(--ink); }
+.entry-note { font-size: 13px; }
+
+.entry-field { display: block; font-size: 13px; color: var(--ink2); }
+.entry-field input {
+  display: block; width: 100%; margin-top: 4px; padding: 8px; font-size: 14px; border-radius: 6px;
+  border: 1px solid var(--rule2); background: var(--panel); color: var(--ink);
+}
+.entry-alert { font-size: 13px; color: var(--danger); }
+
+.entry-btn {
+  padding: 10px 12px; border-radius: 6px; font-size: 14px; cursor: pointer;
+  border: 1px solid var(--accent); background: var(--accent); color: var(--on-accent);
+}
+.entry-btn:disabled { cursor: default; }
+.entry-btn-secondary { background: var(--panel); color: var(--ink); border-color: var(--rule2); }
+.entry-link {
+  align-self: center; padding: 4px 0; font-size: 13px; cursor: pointer;
+  background: none; border: none; color: var(--accent); text-decoration: underline;
+}
+
+/* h1 só para leitor de tela (a saudação é o destaque visual, não o título). */
+.entry-sr {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; border: 0;
+  overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap;
+}
+
+@media (max-width: 1023px) {
+  .entry-frame {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    grid-template-areas: "city" "form" "foot";
+  }
+  .entry-city { flex-direction: row; align-items: center; justify-content: flex-start; gap: 12px; padding: 14px 16px; }
+  .entry-crest { width: 40px; height: 46px; border-radius: 6px; }
+  .entry-crest svg { width: 24px; height: 24px; }
+  .entry-prefix { font-size: 12px; }
+  .entry-city-name { font-size: 18px; }
+  .entry-city .entry-dept { display: none; }
+  .entry-form { align-items: flex-start; padding: 24px 16px; }
+  .entry-operated { justify-content: center; padding: 16px; background: var(--panel); color: var(--ink3); }
+}

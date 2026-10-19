@@ -36,5 +36,6 @@ function check(file: string, outsideSelectors: RegExp | null) {
 
 describe("CSS do ciclo de interface", () => {
   it("datatable.css", () => check("components/datatable.css", /^(\.dt|\.dt-row|\.dt > \.dt-row|@supports \(grid-template-columns: subgrid\)|\.dt-cell button|\.dt-cell(\[data-align="(right|center)"\])?)$/));
+  it("entry.css", () => check("modules/entry/entry.css", /^\.entry[\w-]*( [\w.-]+)?(:disabled)?$/));
   it.skipIf(!existsSync(join(src, "theme/responsive.css")))("responsive.css", () => check("theme/responsive.css", null));
 });

@@ -1,9 +1,14 @@
+// Login do dashboard dentro da moldura de entrada da cidade (spec
+// city-identity §5): quem começa o turno vê em que prefeitura está entrando.
 import { useState, type FormEvent } from "react";
 import { useAuth } from "../lib/auth";
 import { ApiError, requestPasswordReset, startGovBr } from "../lib/api";
+import { cityLabel, shiftGreeting, useCityIdentity } from "../lib/cityIdentity";
+import { EntryFrame } from "./entry/EntryFrame";
 
 export function Login({ expiredGrant = false }: { expiredGrant?: boolean }) {
   const auth = useAuth();
+  const identity = useCityIdentity();
   const [ mode, setMode ] = useState<"login" | "forgot">("login");
   const [ sent, setSent ] = useState(false);
   const [ email, setEmail ] = useState("");
@@ -39,87 +44,70 @@ export function Login({ expiredGrant = false }: { expiredGrant?: boolean }) {
     }
   }
 
-  const inputStyle = {
-    width: "100%", padding: 8, marginTop: 4, borderRadius: 6,
-    border: "1px solid var(--line, #ccc)"
-  } as const;
-
-  const btnStyle = {
-    padding: "8px 12px", borderRadius: 6, border: "none", cursor: "pointer",
-    background: "var(--accent, #2b59ff)", color: "var(--on-accent, #fff)", fontSize: 13
-  } as const;
+  // Saudação calculada no render, sem timer: no fuso da cidade quando há
+  // identidade, no do navegador enquanto ela carrega ou se falhou.
+  const greeting = shiftGreeting(new Date(), identity?.time_zone);
 
   if (mode === "forgot") {
     return (
-      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <div style={{ width: 320, display: "flex", flexDirection: "column", gap: 12, padding: 24,
-          border: "1px solid var(--line, #e6e6e6)", borderRadius: 10 }}>
-          <strong style={{ fontFamily: "var(--font-mono, monospace)", fontSize: 14 }}>
-            Esqueci minha senha
-          </strong>
-          {sent ? (
-            <>
-              <p style={{ fontSize: 12, margin: 0 }}>Se o e-mail existir, enviamos um link para redefinir a senha.</p>
-              <button type="button" onClick={() => { setMode("login"); setSent(false); }} style={btnStyle}>
-                Voltar ao login
-              </button>
-            </>
-          ) : (
-            <form onSubmit={onForgot} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              <label style={{ fontSize: 12, color: "var(--ink2, #444)" }}>
-                E-mail
-                <input type="email" value={email} onChange={e => setEmail(e.target.value)} required autoFocus style={inputStyle} />
-              </label>
-              <button type="submit" style={btnStyle}>Enviar link</button>
-              <button type="button" onClick={() => setMode("login")}
-                style={{ background: "none", border: "none", color: "var(--accent, #2b59ff)", cursor: "pointer", fontSize: 12, padding: 0 }}>
-                Voltar ao login
-              </button>
-            </form>
-          )}
-        </div>
-      </div>
+      <EntryFrame identity={identity}>
+        <h1 className="entry-title">Esqueci minha senha</h1>
+        {sent ? (
+          <>
+            <p className="entry-note">Se o e-mail existir, enviamos um link para redefinir a senha.</p>
+            <button type="button" className="entry-btn" onClick={() => { setMode("login"); setSent(false); }}>
+              Voltar ao login
+            </button>
+          </>
+        ) : (
+          <form onSubmit={onForgot}>
+            <label className="entry-field">
+              E-mail
+              <input type="email" value={email} onChange={e => setEmail(e.target.value)} required autoFocus />
+            </label>
+            <button type="submit" className="entry-btn">Enviar link</button>
+            <button type="button" className="entry-link" onClick={() => setMode("login")}>
+              Voltar ao login
+            </button>
+          </form>
+        )}
+      </EntryFrame>
     );
   }
 
   return (
-    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <form onSubmit={onSubmit}
-        style={{ width: 320, display: "flex", flexDirection: "column", gap: 12, padding: 24,
-          border: "1px solid var(--line, #e6e6e6)", borderRadius: 10 }}>
-        <strong style={{ fontFamily: "var(--font-mono, monospace)", fontSize: 14 }}>
-          Rota Saúde — Dashboard
-        </strong>
-        <label style={{ fontSize: 12, color: "var(--ink2, #444)" }}>
+    <EntryFrame identity={identity}>
+      <h1 className="entry-sr">{identity ? `Entrar no painel de ${identity.name}` : "Entrar no painel"}</h1>
+      <p className="entry-greeting">{greeting}</p>
+      {identity
+        ? <p className="entry-lead">Entre para começar o turno em <strong>{cityLabel(identity)}</strong>.</p>
+        : <p className="entry-lead">Entre para começar o turno.</p>}
+      <form onSubmit={onSubmit}>
+        <label className="entry-field">
           E-mail
-          <input type="email" value={email} onChange={e => setEmail(e.target.value)} required autoFocus style={inputStyle} />
+          <input type="email" value={email} onChange={e => setEmail(e.target.value)} required autoFocus />
         </label>
-        <label style={{ fontSize: 12, color: "var(--ink2, #444)" }}>
+        <label className="entry-field">
           Senha
-          <input type="password" value={password} onChange={e => setPassword(e.target.value)} required style={inputStyle} />
+          <input type="password" value={password} onChange={e => setPassword(e.target.value)} required />
         </label>
         {expiredGrant && (
-          <p role="alert" style={{ color: "var(--danger, #c0341d)", fontSize: 12, margin: 0 }}>
+          <p role="alert" className="entry-alert">
             O link de entrada expirou (vale 60 segundos). Entre com e-mail e senha, ou peça um novo acesso.
           </p>
         )}
-        {error && <p role="alert" style={{ color: "var(--danger, #c0341d)", fontSize: 12, margin: 0 }}>{error}</p>}
-        <button type="submit" disabled={busy}
-          style={{ padding: "8px 12px", borderRadius: 6, border: "none", cursor: busy ? "default" : "pointer",
-            background: "var(--accent, #2b59ff)", color: "var(--on-accent, #fff)", fontSize: 13 }}>
+        {error && <p role="alert" className="entry-alert">{error}</p>}
+        <button type="submit" className="entry-btn" disabled={busy}>
           {busy ? "Entrando…" : "Entrar"}
         </button>
-        <button type="button" onClick={() => setMode("forgot")}
-          style={{ background: "none", border: "none", color: "var(--accent, #2b59ff)", cursor: "pointer", fontSize: 12, padding: 0 }}>
-          Esqueci minha senha
-        </button>
-        <button type="button" onClick={() => { void goToGovBr(setError); }}
-          style={{ padding: "8px 12px", borderRadius: 6, border: "1px solid var(--line, #ccc)",
-            background: "transparent", color: "var(--ink, #222)", cursor: "pointer", fontSize: 13 }}>
+        <button type="button" className="entry-btn entry-btn-secondary" onClick={() => { void goToGovBr(setError); }}>
           Entrar com gov.br
         </button>
+        <button type="button" className="entry-link" onClick={() => setMode("forgot")}>
+          Esqueci minha senha
+        </button>
       </form>
-    </div>
+    </EntryFrame>
   );
 }
 
