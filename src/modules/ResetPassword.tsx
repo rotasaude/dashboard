@@ -1,5 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { resetPassword, ApiError } from "../lib/api";
+import { useCityIdentity } from "../lib/cityIdentity";
+import { EntryFrame } from "./entry/EntryFrame";
 
 export function ResetPassword({ token }: { token: string }) {
   const [ password, setPassword ] = useState("");
@@ -7,6 +9,7 @@ export function ResetPassword({ token }: { token: string }) {
   const [ error, setError ] = useState<string | null>(null);
   const [ busy, setBusy ] = useState(false);
   const [ done, setDone ] = useState(false);
+  const identity = useCityIdentity();
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -34,36 +37,28 @@ export function ResetPassword({ token }: { token: string }) {
     window.location.assign(window.location.pathname);
   }
 
-  const inputStyle = { width: "100%", padding: 8, marginTop: 4, borderRadius: 6, border: "1px solid var(--line, #ccc)" } as const;
-
   return (
-    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <div style={{ width: 320, display: "flex", flexDirection: "column", gap: 12, padding: 24,
-        border: "1px solid var(--line, #e6e6e6)", borderRadius: 10 }}>
-        <strong style={{ fontFamily: "var(--font-mono, monospace)", fontSize: 14 }}>Redefinir senha</strong>
-        {done ? (
-          <>
-            <p style={{ fontSize: 13, margin: 0 }}>Senha redefinida com sucesso.</p>
-            <button onClick={goToLogin} style={btnStyle}>Ir para o login</button>
-          </>
-        ) : (
-          <form onSubmit={onSubmit} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            <label style={{ fontSize: 12, color: "var(--ink2, #444)" }}>
-              Nova senha
-              <input type="password" value={password} onChange={e => setPassword(e.target.value)} required autoFocus style={inputStyle} />
-            </label>
-            <label style={{ fontSize: 12, color: "var(--ink2, #444)" }}>
-              Confirmar senha
-              <input type="password" value={confirm} onChange={e => setConfirm(e.target.value)} required style={inputStyle} />
-            </label>
-            {error && <p role="alert" style={{ color: "var(--danger, #c0341d)", fontSize: 12, margin: 0 }}>{error}</p>}
-            <button type="submit" disabled={busy} style={btnStyle}>{busy ? "Redefinindo…" : "Redefinir senha"}</button>
-          </form>
-        )}
-      </div>
-    </div>
+    <EntryFrame identity={identity}>
+      <h1 className="entry-title">Redefinir senha</h1>
+      {done ? (
+        <>
+          <p className="entry-note">Senha redefinida com sucesso.</p>
+          <button type="button" className="entry-btn" onClick={goToLogin}>Ir para o login</button>
+        </>
+      ) : (
+        <form onSubmit={onSubmit}>
+          <label className="entry-field">
+            Nova senha
+            <input type="password" value={password} onChange={e => setPassword(e.target.value)} required autoFocus />
+          </label>
+          <label className="entry-field">
+            Confirmar senha
+            <input type="password" value={confirm} onChange={e => setConfirm(e.target.value)} required />
+          </label>
+          {error && <p role="alert" className="entry-alert">{error}</p>}
+          <button type="submit" className="entry-btn" disabled={busy}>{busy ? "Redefinindo…" : "Redefinir senha"}</button>
+        </form>
+      )}
+    </EntryFrame>
   );
 }
-
-const btnStyle = { padding: "8px 12px", borderRadius: 6, border: "none", cursor: "pointer",
-  background: "var(--accent, #2b59ff)", color: "var(--on-accent, #fff)", fontSize: 13 } as const;

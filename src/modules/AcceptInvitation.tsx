@@ -5,6 +5,8 @@
 import { useState, type FormEvent } from "react";
 import { acceptInvitation, ApiError } from "../lib/api";
 import { useAuth } from "../lib/auth";
+import { useCityIdentity } from "../lib/cityIdentity";
+import { EntryFrame } from "./entry/EntryFrame";
 
 const MIN_PASSWORD_LENGTH = 12;
 const WEAK_PASSWORD = `A senha precisa ter pelo menos ${MIN_PASSWORD_LENGTH} caracteres.`;
@@ -21,6 +23,7 @@ function rejectionMessage(body: unknown): string {
 
 export function AcceptInvitation({ token, onDone }: { token: string; onDone: () => void }) {
   const auth = useAuth();
+  const identity = useCityIdentity();
   const [ password, setPassword ] = useState("");
   const [ confirmation, setConfirmation ] = useState("");
   const [ error, setError ] = useState<string | null>(null);
@@ -56,31 +59,23 @@ export function AcceptInvitation({ token, onDone }: { token: string; onDone: () 
   }
 
   return (
-    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <form onSubmit={onSubmit}
-        style={{ width: 320, display: "flex", flexDirection: "column", gap: 12, padding: 24,
-          border: "1px solid var(--line, #e6e6e6)", borderRadius: 10 }}>
-        <strong style={{ fontFamily: "var(--font-mono, monospace)", fontSize: 14 }}>
-          Definir senha de acesso
-        </strong>
-        <label style={{ fontSize: 12, color: "var(--ink2, #444)" }}>
+    <EntryFrame identity={identity}>
+      <h1 className="entry-title">Definir senha de acesso</h1>
+      <form onSubmit={onSubmit}>
+        <label className="entry-field">
           Senha
           <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required autoFocus
-            minLength={MIN_PASSWORD_LENGTH}
-            style={{ width: "100%", padding: 8, marginTop: 4, borderRadius: 6, border: "1px solid var(--line, #ccc)" }} />
+            minLength={MIN_PASSWORD_LENGTH} />
         </label>
-        <label style={{ fontSize: 12, color: "var(--ink2, #444)" }}>
+        <label className="entry-field">
           Confirmar senha
-          <input type="password" value={confirmation} onChange={(e) => setConfirmation(e.target.value)} required
-            style={{ width: "100%", padding: 8, marginTop: 4, borderRadius: 6, border: "1px solid var(--line, #ccc)" }} />
+          <input type="password" value={confirmation} onChange={(e) => setConfirmation(e.target.value)} required />
         </label>
-        {error && <p role="alert" style={{ color: "var(--danger, #c0341d)", fontSize: 12, margin: 0 }}>{error}</p>}
-        <button type="submit" disabled={busy}
-          style={{ padding: "8px 12px", borderRadius: 6, border: "none", cursor: busy ? "default" : "pointer",
-            background: "var(--accent, #2b59ff)", color: "var(--on-accent, #fff)", fontSize: 13 }}>
+        {error && <p role="alert" className="entry-alert">{error}</p>}
+        <button type="submit" className="entry-btn" disabled={busy}>
           {busy ? "Salvando…" : "Entrar"}
         </button>
       </form>
-    </div>
+    </EntryFrame>
   );
 }

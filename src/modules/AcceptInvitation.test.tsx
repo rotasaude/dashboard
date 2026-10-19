@@ -12,7 +12,7 @@ import { ApiError } from "../lib/api";
 import { AuthProvider } from "../lib/auth";
 import { AcceptInvitation } from "./AcceptInvitation";
 
-afterEach(cleanup);
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
 const STRONG = "senha-bem-longa-1";
@@ -89,5 +89,22 @@ describe("AcceptInvitation", () => {
     submit(STRONG);
 
     expect((await screen.findByRole("alert")).textContent).toBe("Muitas tentativas. Tente novamente em alguns minutos.");
+  });
+
+  it("fica dentro da moldura da cidade: brasão e rodapé da plataforma", async () => {
+    vi.stubGlobal("fetch", vi.fn((url: string) => {
+      if (url === "/city_identity") {
+        return Promise.resolve(new Response(JSON.stringify({
+          name: "Curitiba", uf: "PR", time_zone: "America/Sao_Paulo",
+          health_department_name: "Secretaria Municipal da Saúde",
+          coat_of_arms_url: "/city_identity/coat_of_arms?v=abc"
+        }), { status: 200 }));
+      }
+      throw new Error(`fetch inesperado: ${url}`);
+    }));
+    renderAccept();
+    expect(await screen.findByRole("img", { name: "Brasão de Curitiba" })).toBeTruthy();
+    expect(screen.getByText("operado com Rota Saúde")).toBeTruthy();
+    expect(screen.getByText("Definir senha de acesso", { selector: "h1" })).toBeTruthy();
   });
 });
