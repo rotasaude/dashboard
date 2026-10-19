@@ -4,7 +4,7 @@ import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-libra
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const real = await importOriginal<typeof import("../../lib/api")>();
-  return { ...real, fetchCurrentSession: vi.fn(), listConsultationDocuments: vi.fn(), issueDocument: vi.fn(), cancelDocument: vi.fn(),
+  return { ...real, fetchCurrentSession: vi.fn(), listConsultationDocuments: vi.fn(), listConsultationDocumentStatus: vi.fn(), issueDocument: vi.fn(), cancelDocument: vi.fn(),
     getPrescriptionRenewal: vi.fn(), fetchDocumentPdf: vi.fn(), searchMedications: vi.fn(), searchTerminology: vi.fn(),
     listNursingProtocols: vi.fn(), getSignature: vi.fn(), verifySignature: vi.fn() };
 });
@@ -45,7 +45,7 @@ describe("ConsultationDocuments", () => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: [ "Date" ] });
     vi.setSystemTime(new Date(NOW19C));
-    for (const fn of [ api.fetchCurrentSession, api.listConsultationDocuments, api.issueDocument, api.cancelDocument,
+    for (const fn of [ api.fetchCurrentSession, api.listConsultationDocuments, api.listConsultationDocumentStatus, api.issueDocument, api.cancelDocument,
       api.getPrescriptionRenewal, api.fetchDocumentPdf, api.searchMedications, api.searchTerminology, api.listNursingProtocols,
       api.getSignature, api.verifySignature ]) {
       mocked(fn).mockReset();
@@ -106,7 +106,9 @@ describe("ConsultationDocuments", () => {
     expect(await screen.findByText("documento cancelado")).not.toBeNull();
   });
 
-  it("assinatura pendente: a lista relê a cada 15 s; assentada, para", async () => {
+  // A46 nos documentos: a lista completa deixa trilha de leitura no api; o
+  // polling lê só o estado (sem trilha) e relê a lista quando ele muda.
+  it("assinatura pendente: relê só o estado a cada 15 s; a lista só quando ele muda; assentada, para", async () => {
     // shouldAdvanceTime: o polling do findBy continua andando com timers falsos;
     // só o intervalo que interessa avança à mão (o refetchInterval de verdade).
     // useRealTimers antes: um segundo useFakeTimers sobre o do beforeEach não troca os timers.
@@ -114,18 +116,32 @@ describe("ConsultationDocuments", () => {
     vi.useFakeTimers({ toFake: [ "Date", "setTimeout", "clearTimeout", "setInterval", "clearInterval" ], shouldAdvanceTime: true });
     vi.setSystemTime(new Date(NOW19C));
     const list = mocked(api.listConsultationDocuments);
-    list.mockResolvedValue([ prescriptionDoc({ issue_mode: "digital", signature: { mode: "pending", request_id: "sr1" } }) ]);
+    const status = mocked(api.listConsultationDocumentStatus);
+    const doc = prescriptionDoc({ issue_mode: "digital", signature: { mode: "pending", request_id: "sr1" } });
+    list.mockResolvedValue([ doc ]);
+    status.mockResolvedValue([ { id: doc.id, status: "issued", signature_mode: "pending" } ]);
     renderIt();
     expect(await screen.findByText("assinatura pendente")).not.toBeNull();
+    await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+    await waitFor(() => expect(status.mock.calls.length).toBeGreaterThanOrEqual(2));
+    expect(status).toHaveBeenCalledWith("cs1");
     expect(list.mock.calls).toHaveLength(1);
-    await act(async () => { await vi.advanceTimersByTimeAsync(15_000); });
-    await waitFor(() => expect(list.mock.calls).toHaveLength(2));
     list.mockResolvedValue([ prescriptionDoc({ issue_mode: "digital", signature: { mode: "digital", signature_id: "sg1", verification: "valid" } }) ]);
+    status.mockResolvedValue([ { id: doc.id, status: "issued", signature_mode: "digital" } ]);
     await act(async () => { await vi.advanceTimersByTimeAsync(15_000); });
     expect(await screen.findByText("assinada digitalmente")).not.toBeNull();
-    expect(list.mock.calls).toHaveLength(3);
+    expect(list.mock.calls).toHaveLength(2);
+    const settled = status.mock.calls.length;
     await act(async () => { await vi.advanceTimersByTimeAsync(45_000); });
-    expect(list.mock.calls).toHaveLength(3);
+    expect(status.mock.calls).toHaveLength(settled);
+    expect(list.mock.calls).toHaveLength(2);
+  });
+
+  it("sem assinatura pendente, não lê o estado", async () => {
+    mocked(api.listConsultationDocuments).mockResolvedValue([ sickNoteDoc() ]);
+    renderIt();
+    await screen.findAllByRole("row");
+    expect(api.listConsultationDocumentStatus).not.toHaveBeenCalled();
   });
 
   it("a leitura da lista não fica em cache depois que a aba sai (gcTime 0)", async () => {

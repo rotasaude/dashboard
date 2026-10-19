@@ -2078,6 +2078,12 @@ export async function listConsultationDocuments(consultationId: string): Promise
   return (await jsonFetch<{ items: ClinicalDocument[] }>(attendanceDocPath("consultations", consultationId, "documents"))).items;
 }
 
+// Estado da lista para o polling (A46): sem conteúdo e sem trilha de leitura.
+export interface DocumentStatusRow { id: string; status: DocumentStatus; signature_mode: string | null }
+export async function listConsultationDocumentStatus(consultationId: string): Promise<DocumentStatusRow[]> {
+  return (await jsonFetch<{ items: DocumentStatusRow[] }>(attendanceDocPath("consultations", consultationId, "documents", "status"))).items;
+}
+
 export function issueDocument(consultationId: string, input: DocumentInput, replacesDocumentId?: string): Promise<ClinicalDocument> {
   return jsonFetch(attendanceDocPath("consultations", consultationId, "documents"), postProfessional({
     kind: input.kind, content: input.content, ...(replacesDocumentId ? { replaces_document_id: replacesDocumentId } : {})

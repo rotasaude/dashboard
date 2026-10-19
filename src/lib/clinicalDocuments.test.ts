@@ -4,7 +4,7 @@ import { ApiError, issueDocument } from "./api";
 import {
   ANTIMICROBIAL_NOTE, backdateLimits, CANCEL_REASON_MAX, CONTROLLED_BLOCKED, CONTROLLED_DISABLED, DOCUMENTS_DISABLED, MIXED_CATEGORIES,
   PRESCRIBER_MISSING, EMPTY_EXTERNAL, PENDING_REFETCH_MS, addProtocolItem, canCancel,
-  canUseDocuments, cancelReasonProblem, declarationInput, declarationProblem, documentError, documentSituation, documentsRefetchInterval,
+  canUseDocuments, cancelReasonProblem, declarationInput, declarationProblem, documentError, documentSituation, documentsRefetchInterval, documentsStatusChanged,
   emptyDeclaration, emptyItem, itemFromProtocolItem, emptyProtocol, emptySickNote, externalChange, externalProblem, formatCnpj, hasAntimicrobial, isValidCnpj,
   issueModeLabel, issuedNotice, itemFromMedication, itemFromPrescription, kindLabel, kindsFor, medicationLine, prescriptionInput,
   prescriptionProblems, professionalKind, protocolDraftFrom, protocolInput, protocolLabel, protocolProblem, protocolVersionInput,
@@ -75,6 +75,18 @@ describe("quem emite o quê (espelho do api)", () => {
     expect(documentsRefetchInterval([ sickNoteDoc() ])).toBe(false);
     expect(documentsRefetchInterval([ sickNoteDoc({ signature: { mode: "pending", request_id: "sr1" } }) ])).toBe(PENDING_REFETCH_MS);
     expect(documentsRefetchInterval([ sickNoteDoc({ status: "cancelled", signature: { mode: "pending" } }) ])).toBe(false);
+  });
+
+  it("documentsStatusChanged: só id, status e modo da assinatura contam", () => {
+    const pending = sickNoteDoc({ signature: { mode: "pending", request_id: "sr1" } });
+    const row = { id: pending.id, status: "issued" as const, signature_mode: "pending" };
+    expect(documentsStatusChanged([ pending ], [ row ])).toBe(false);
+    expect(documentsStatusChanged([ pending ], [ { ...row, signature_mode: "digital" } ])).toBe(true);
+    expect(documentsStatusChanged([ pending ], [ { ...row, status: "cancelled" } ])).toBe(true);
+    expect(documentsStatusChanged([ pending ], [ row, { id: "doc9", status: "issued", signature_mode: null } ])).toBe(true);
+    expect(documentsStatusChanged([ pending ], [])).toBe(true);
+    expect(documentsStatusChanged([ sickNoteDoc() ], [ { id: "doc1", status: "issued", signature_mode: null } ])).toBe(false);
+    expect(documentsStatusChanged(undefined, [ row ])).toBe(false);
   });
 
   it("withDocument troca o que já existe e põe o novo no topo", () => {

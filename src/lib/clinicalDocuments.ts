@@ -7,7 +7,7 @@
 // repete texto clínico: só rótulos, posições ("item 2") e nomes de campo.
 import {
   ApiError, errorCode, type CatalogItemRef, type ClinicalDocument, type CodedOption, type CompanionReason, type DeclarationContent,
-  type DeclarationInput, type DeclarationPeriod, type DocumentKind, type ExamRequisitionContent, type MaxDose, type MedicationChange,
+  type DeclarationInput, type DeclarationPeriod, type DocumentKind, type DocumentStatusRow, type ExamRequisitionContent, type MaxDose, type MedicationChange,
   type MedicationRoute, type NursingProtocol, type NursingProtocolInput, type PatientMedication, type PrescriptionContent,
   type PrescriptionCategory, type PrescriptionInput, type PatientIdentification, type ProtocolItem, type PrescriptionItem, type ProtocolVersionInput, type RenewalItem, type SickNoteContent, type SickNoteInput, type SickNoteType
 } from "./api";
@@ -123,6 +123,18 @@ export function canCancel(doc: ClinicalDocument, userId: string | null | undefin
 
 export function documentsRefetchInterval(docs: ClinicalDocument[] | undefined): number | false {
   return (docs ?? []).some((d) => d.status === "issued" && d.signature?.mode === "pending") ? PENDING_REFETCH_MS : false;
+}
+
+// O estado lido no polling difere da lista na tela? Só id, status e modo da
+// assinatura contam; difere → a tela relê a lista (que deixa trilha).
+export function documentsStatusChanged(docs: ClinicalDocument[] | undefined, rows: DocumentStatusRow[]): boolean {
+  if (!docs) return false;
+  if (docs.length !== rows.length) return true;
+  const byId = new Map(docs.map((d) => [ d.id, d ]));
+  return rows.some((r) => {
+    const doc = byId.get(r.id);
+    return !doc || doc.status !== r.status || (doc.signature?.mode ?? null) !== r.signature_mode;
+  });
 }
 
 export function withDocument(list: ClinicalDocument[], doc: ClinicalDocument): ClinicalDocument[] {

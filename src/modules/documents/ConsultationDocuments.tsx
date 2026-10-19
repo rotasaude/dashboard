@@ -4,8 +4,9 @@
 // quatro tipos (pelo CBO da autora; o api confere), "Renovar receita" (não
 // para a enfermagem: a renovação não traz protocolo), Imprimir, Cancelar e
 // "Cancelar e emitir outro". Sem `issue` (Minhas consultas), só a lista.
-// Leitura com gcTime 0; com assinatura pendente, a lista relê a cada 15 s até
-// assentar. O modo (digital/papel) é o que o api devolve.
+// Leitura com gcTime 0; com assinatura pendente, lê só o estado a cada 15 s
+// (sem trilha, A46) e relê a lista quando ele muda, até assentar. O modo
+// (digital/papel) é o que o api devolve.
 // Módulo 19d (com `controlled_prescriptions`): "Notificação (papel)" para médico
 // e dentista; a receita de controle especial e a de antimicrobiano com número
 // SNCR; a frase depois de emitir diz o número ou por que saiu em papel (pelo que
@@ -14,14 +15,14 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  ApiError, errorCode, getPrescriptionRenewal, issueDocument, listConsultationDocuments, recordNotification, type ClinicalDocument,
+  ApiError, errorCode, getPrescriptionRenewal, issueDocument, listConsultationDocuments, listConsultationDocumentStatus, recordNotification, type ClinicalDocument,
   type DocumentInput, type DocumentKind, type NotificationRecordInput
 } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import { todayInCity } from "../../lib/campaigns";
 import { fmtDateTime } from "../../lib/format";
 import {
-  DOCUMENTS_KEY, MEDICATIONS_KEY, NO_EXAM_REQUESTS, canCancel, documentError, documentSituation, documentsRefetchInterval, emptyDeclaration, emptySickNote,
+  DOCUMENTS_KEY, MEDICATIONS_KEY, NO_EXAM_REQUESTS, canCancel, documentError, documentSituation, documentsRefetchInterval, documentsStatusChanged, emptyDeclaration, emptySickNote,
   issueModeLabel, itemFromPrescription, kindLabel, kindsFor, professionalKind, reissueDraft, withDocument, type ReissueDraft
 } from "../../lib/clinicalDocuments";
 import { SIMULATED_NOTICE, usesSimulatedPsc } from "../../lib/signature";
@@ -74,10 +75,18 @@ export function ConsultationDocuments({ consultationId, issue, draft, searchDela
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const key = [ DOCUMENTS_KEY, consultationId ];
-  const query = useQuery({
-    queryKey: key, queryFn: () => listConsultationDocuments(consultationId), gcTime: 0, retry: false,
-    refetchInterval: (q) => documentsRefetchInterval(q.state.data)
+  const query = useQuery({ queryKey: key, queryFn: () => listConsultationDocuments(consultationId), gcTime: 0, retry: false });
+  // A lista deixa trilha de leitura no api: o polling lê só o estado (A46).
+  const pollMs = documentsRefetchInterval(query.data);
+  const status = useQuery({
+    queryKey: [ ...key, "status" ], queryFn: () => listConsultationDocumentStatus(consultationId), gcTime: 0, retry: false,
+    enabled: pollMs !== false, refetchInterval: pollMs
   });
+  useEffect(() => {
+    if (status.data && documentsStatusChanged(query.data, status.data)) {
+      void queryClient.invalidateQueries({ queryKey: [ DOCUMENTS_KEY, consultationId ], exact: true });
+    }
+  }, [ status.data, query.data, queryClient, consultationId ]);
   const [ form, setForm ] = useState<OpenForm | null>(null);
   const seq = useRef(0);
   const [ cancelling, setCancelling ] = useState<{ doc: ClinicalDocument; reissue: boolean } | null>(null);
