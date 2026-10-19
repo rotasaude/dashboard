@@ -35,11 +35,20 @@ export function cityLabel(i: Pick<CityIdentity, "name" | "uf">): string {
   return i.uf ? `${i.name} · ${i.uf}` : i.name;
 }
 
-// Turno no fuso da cidade: 05–11 manhã, 12–17 tarde, 18–04 noite.
+// Turno no fuso da cidade: 05–11 manhã, 12–17 tarde, 18–04 noite. Fuso
+// inválido (RangeError do Intl) cai no fuso do navegador: a identidade nunca
+// pode derrubar a tela de login.
+function hourIn(now: Date, timeZone?: string): number {
+  return Number(new Intl.DateTimeFormat("pt-BR", { hour: "numeric", hourCycle: "h23", timeZone }).format(now));
+}
+
 export function shiftGreeting(now: Date, timeZone?: string): "Bom dia." | "Boa tarde." | "Boa noite." {
-  const hour = Number(
-    new Intl.DateTimeFormat("pt-BR", { hour: "numeric", hourCycle: "h23", timeZone }).format(now),
-  );
+  let hour: number;
+  try {
+    hour = hourIn(now, timeZone);
+  } catch {
+    hour = hourIn(now, undefined);
+  }
   if (hour >= 5 && hour < 12) return "Bom dia.";
   if (hour >= 12 && hour < 18) return "Boa tarde.";
   return "Boa noite.";

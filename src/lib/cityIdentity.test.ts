@@ -20,6 +20,14 @@ describe("shiftGreeting", () => {
   });
 });
 
+describe("shiftGreeting com fuso inválido", () => {
+  it.each(["Not/AZone", ""])("não lança com %j e usa o fuso do navegador", (tz) => {
+    const d = new Date("2026-10-19T12:00:00Z");
+    expect(() => shiftGreeting(d, tz)).not.toThrow();
+    expect(shiftGreeting(d, tz)).toBe(shiftGreeting(d, undefined));
+  });
+});
+
 describe("cityLabel", () => {
   it("com e sem UF", () => {
     expect(cityLabel({ name: "Curitiba", uf: "PR" })).toBe("Curitiba · PR");
