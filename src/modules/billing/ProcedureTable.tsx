@@ -5,7 +5,7 @@
 // o que o faturista precisa: paciente, estabelecimento, profissional e origem.
 import { useState } from "react";
 import { cancelProcedure, type PerformedProcedure } from "../../lib/api";
-import { billingError, characterLabel, establishmentLabel, isStale, reasonProblem, sourceLabel } from "../../lib/billing";
+import { billingError, characterLabel, patientName, establishmentLabel, isStale, reasonProblem, sourceLabel } from "../../lib/billing";
 import { fmtDay } from "../../lib/exams";
 import { DataTable, type Column } from "../../components/DataTable";
 import { ActionButton } from "../../components/ActionButton";
@@ -25,7 +25,7 @@ interface Props {
 export function ProcedureTable({ rows, billing = false, canCancel, onChanged, onStale }: Props) {
   const [ cancelling, setCancelling ] = useState<PerformedProcedure | null>(null);
   const billingCols: Column<PerformedProcedure>[] = billing ? [
-    { label: "Paciente", w: "1.2fr", render: (p) => p.patient.display_name },
+    { label: "Paciente", w: "1.2fr", render: (p) => patientName(p.patient) },
     { label: "Estabelecimento", w: "1.3fr", render: (p) => establishmentLabel(p.establishment) },
     { label: "Profissional", w: "1.3fr", render: (p) => `${p.professional.name}${p.professional.cbo_code ? ` · CBO ${p.professional.cbo_code}` : ""}` },
     { label: "Origem", w: "0.9fr", render: (p) => sourceLabel(p.source) }

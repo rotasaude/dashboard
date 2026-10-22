@@ -17,6 +17,9 @@ import { DEMOGRAPHICS_FIELD_LABEL, demographicsError } from "./demographics";
 export const BILLING_CLERK_ROLE = "billing_clerk";
 export const BILLING_DISABLED = "o faturamento de procedimentos está desligado nesta cidade";
 export const BILLING_NO_ROLE = "seu papel não permite usar o faturamento";
+export const NO_PATIENT_NAME = "paciente sem nome no cadastro";
+// O api manda display_name nulo para quem acabou de ser resolvido por par CPF verificado.
+export const patientName = (p: { display_name: string | null } | null | undefined): string => p?.display_name || NO_PATIENT_NAME;
 export const LATE_TEXT = "apresentação em atraso";
 
 export const PROCEDURES_KEY = "billingProcedures";

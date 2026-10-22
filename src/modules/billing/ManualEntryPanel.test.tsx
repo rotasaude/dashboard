@@ -138,4 +138,13 @@ describe("ManualEntrySection", () => {
     expect(client.getQueryCache().find({ queryKey: [ PROFESSIONALS_KEY, "health_unit:u7" ] })?.options.gcTime).toBe(0);
     act(() => { focusManager.setFocused(undefined); });
   });
+
+  it("paciente com display_name nulo: o lançamento mostra a frase, não \"null\"", async () => {
+    mocked(api.lookupBillingPatient).mockResolvedValue({ ...PATIENT, display_name: null });
+    const { panel } = open();
+    fireEvent.change(within(panel).getByLabelText("CPF do paciente"), { target: { value: VALID_CPF } });
+    fireEvent.click(within(panel).getByRole("button", { name: "Buscar paciente" }));
+    await within(panel).findByText("Paciente: paciente sem nome no cadastro · CPF ***.982.247-**");
+    expect(panel.textContent).not.toMatch(/null/);
+  });
 });

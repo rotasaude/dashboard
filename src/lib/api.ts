@@ -3540,7 +3540,7 @@ export interface BillingEstablishment { type: EstablishmentType; id: string; cne
 
 export interface PerformedProcedure {
   id: string;
-  patient: { id: string; display_name: string };
+  patient: { id: string; display_name: string | null };
   establishment: BillingEstablishment;
   professional: { user_id: string; name: string; cbo_code: string | null };
   performed_on: string; sigtap_code: string; label: string; sigtap_competence: string;
@@ -3571,7 +3571,7 @@ export interface SigtapProcedure {
   sex: string | null; age_min_months: number | null; age_max_months: number | null;
 }
 // Divergência B3.
-export interface BillingPatient { id: string; display_name: string; cpf_masked: string }
+export interface BillingPatient { id: string; display_name: string | null; cpf_masked: string }
 // Divergência B5.
 export interface BillingProfessional { user_id: string; name: string; cbo_codes: string[] }
 export interface BillingSummary { bpa_i_lines: number; bpa_c_lines: number; not_billable: Record<string, number>; pending: number }
@@ -3584,7 +3584,7 @@ export interface BillingPeriod {
 export interface PendingItem {
   procedure_id: string; reasons: string[]; fix: PendingFix | string;
   performed_on?: string; sigtap_code?: string; label?: string; late?: boolean;
-  patient?: { id: string; display_name: string }; professional?: { user_id: string; name: string };
+  patient?: { id: string; display_name: string | null }; professional?: { user_id: string; name: string };
 }
 export interface BillingExport {
   id: string; version: number; sha256: string; lines_bpa_i: number; lines_bpa_c: number; generated_at: string; generated_by: string;

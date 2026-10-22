@@ -6,7 +6,7 @@ import {
   establishmentKey, establishmentLabel, exportFileName, fallbackNotice, fixInfo, groupPending, isStale, manualProblem, normalizeCid,
   notBillableText, parseEstablishmentKey, periodStatusText, procedureBody, procedureProblem, procedureQuery, reasonLabel, reasonProblem,
   savedText, settingsBody, settingsComplete, settingsDraft, settingsProblem, showUnitProcedures, sigtapCompetence, sourceLabel, unitBills,
-  verdict
+  verdict, NO_PATIENT_NAME, patientName
 } from "./billing";
 import { demographicsError } from "./demographics";
 import { LAB_EST, SETTINGS, SUTURE, TODAY22, UPA, UBS, UPA_EST, URGENCY, billingExport, billingUser, pending, period, procedure } from "../test/billingFixtures";
@@ -309,3 +309,11 @@ describe("frases por código (decisão 6)", () => {
   });
 });
 
+describe("patientName", () => {
+  it("devolve o nome ou a frase de paciente sem nome", () => {
+    expect(patientName({ display_name: "Joana Lima" })).toBe("Joana Lima");
+    expect(patientName({ display_name: null })).toBe("paciente sem nome no cadastro");
+    expect(patientName({ display_name: "" })).toBe(NO_PATIENT_NAME);
+    expect(patientName(null)).toBe(NO_PATIENT_NAME);
+  });
+});

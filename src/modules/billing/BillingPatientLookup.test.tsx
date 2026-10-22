@@ -31,4 +31,10 @@ describe("BillingPatientLookup", () => {
     await waitFor(() => expect(onFound).toHaveBeenCalledWith(PATIENT));
     expect(api.lookupBillingPatient).toHaveBeenCalledTimes(1);
   });
+
+  it("paciente sem nome no cadastro: mostra a frase, nunca \"null\"", () => {
+    render(<BillingPatientLookup patient={{ ...PATIENT, display_name: null }} onFound={vi.fn()} />);
+    expect(screen.getByText("Paciente: paciente sem nome no cadastro · CPF ***.982.247-**")).not.toBeNull();
+    expect(document.body.textContent).not.toMatch(/null/);
+  });
 });

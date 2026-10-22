@@ -7,7 +7,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getPeriodPending, updatePatientDemographics, type BillingPeriod, type PendingItem } from "../../lib/api";
-import { LATE_TEXT, PENDING_KEY, billingError, demographicsMissingOf, establishmentLabel, fixInfo, groupPending, reasonLabel } from "../../lib/billing";
+import { LATE_TEXT, PENDING_KEY, patientName, billingError, demographicsMissingOf, establishmentLabel, fixInfo, groupPending, reasonLabel } from "../../lib/billing";
 import { competenceLabel } from "../../lib/competence";
 import { fmtDay } from "../../lib/exams";
 import { DataTable, type Column } from "../../components/DataTable";
@@ -25,7 +25,7 @@ const columns = (canFix: boolean, onFix: (i: PendingItem) => void): Column<Pendi
       {i.late && <> <Tag tone="info" mono={false}>{LATE_TEXT}</Tag></>}
     </>
   ) },
-  { label: "Paciente", w: "1.2fr", render: (i) => i.patient?.display_name ?? "—" },
+  { label: "Paciente", w: "1.2fr", render: (i) => i.patient ? patientName(i.patient) : "—" },
   { label: "Profissional", w: "1.2fr", render: (i) => i.professional?.name ?? "—" },
   { label: "Motivo", w: "2fr", render: (i) => i.reasons.map(reasonLabel).join("; ") },
   ...(canFix ? [ { label: "", w: "auto", align: "right" as const, card: "actions" as const, render: (i: PendingItem) => (
@@ -68,11 +68,11 @@ export function PendingPanel({ period, onClose, canFix = false }: { period: Bill
         );
       })}
       {fixing?.patient && (
-        <DemographicsForm key={fixing.procedure_id} title={`Completar dados de ${fixing.patient.display_name}`}
+        <DemographicsForm key={fixing.procedure_id} title={`Completar dados de ${patientName(fixing.patient)}`}
           missing={demographicsMissingOf(fixing.reasons)}
           save={(body) => updatePatientDemographics(fixing.patient!.id, body)}
           onSaved={() => {
-            setNotice(`Dados de ${fixing.patient!.display_name} salvos; as pendências foram conferidas de novo.`);
+            setNotice(`Dados de ${patientName(fixing.patient)} salvos; as pendências foram conferidas de novo.`);
             setFixing(null);
             void query.refetch();
           }}

@@ -60,6 +60,17 @@ describe("Pendência do faturista — dados do paciente (módulo 22, D-U1)", () 
     expect(within(box).queryByText("Rosa Lima")).toBeNull();
   });
 
+  it("paciente sem nome: a lista e o formulário usam a frase, nunca \"null\"", async () => {
+    mocked(api.getPeriodPending).mockResolvedValue([ pending({
+      procedure_id: "pp8", fix: "patient", reasons: [ "missing_race_color" ], patient: { id: "pa3", display_name: null }
+    }), NO_ID ]);
+    const box = await openPending();
+    expect(within(box).getByText("paciente sem nome no cadastro")).not.toBeNull();
+    fireEvent.click(within(box).getByRole("button", { name: "Completar dados" }));
+    expect(within(box).getByRole("region", { name: "Completar dados de paciente sem nome no cadastro" })).not.toBeNull();
+    expect(box.textContent).not.toMatch(/null/);
+  });
+
   it("422 invalid_zip vira frase e nada é relido; o admin não corrige", async () => {
     mocked(api.updatePatientDemographics).mockRejectedValueOnce(new api.ApiError(422, { error: "invalid_zip" }, "x"));
     const box = await openPending();
