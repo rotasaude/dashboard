@@ -32,7 +32,8 @@ import { CadsusCheck } from "./attendance/CadsusCheck";
 import { NamesFields } from "./attendance/NamesFields";
 import { EMPTY_NAMES, namesBody, namesProblem, type NamesDraft } from "../lib/citizenNames";
 import { hasFeature } from "../lib/features";
-import { canUseBilling } from "../lib/billing";
+import { canUseBilling, showUnitProcedures } from "../lib/billing";
+import { UnitProcedures } from "./billing/UnitProcedures";
 
 // Atendimento (spec 2026-09-24-citizen-presencial-verification, Task 6, e
 // 2026-09-25-citizen-appointments, Task 7): balcão de verificação presencial
@@ -135,6 +136,8 @@ export function Attendance({ onNavigate }: { onNavigate(id: ModuleId): void }) {
         />
         </div>
       )}
+      {/* Módulo 22: procedimento avulso, só do profissional com vínculo e nunca na UBS. */}
+      {unit && showUnitProcedures({ user, canCare, unit }) && <UnitProcedures key={unit.id} unit={unit} />}
       {canVerify && unit && <div id="sec-pedidos"><Requests unit={unit} /></div>}
       {canVerify && unit && <div id="sec-agenda"><Agenda unit={unit} /></div>}
       </div>
