@@ -6,7 +6,7 @@ import {
   IconFileBarcode, IconFilePencil, IconFileText, IconGavel, IconFlask, IconHeartbeat, IconHistory, IconIdBadge2, IconInbox, IconLayoutDashboard,
   IconKeyboard, IconListCheck, IconListDetails, IconLock, IconMapPin, IconMessages, IconMicroscope, IconNotes, IconPackageImport, IconPencil, IconPill, IconPlugConnected,
   IconReportAnalytics, IconRosetteDiscountCheck, IconServerCog, IconSettings, IconShieldCheck, IconSignature, IconSpeakerphone, IconStack2, IconStethoscope, IconTestPipe, IconTruck, IconTruckDelivery, IconUpload,
-  IconUser, IconUserCircle, IconUsers, IconUsersGroup
+  IconUser, IconUserCircle, IconUsers, IconUsersGroup, IconCalendarStats, IconFileInvoice, IconReceipt, IconReceiptTax
 } from "@tabler/icons-react";
 import type { Catalog } from "./types";
 
@@ -21,6 +21,7 @@ export const CATALOG: Catalog = {
     "Atendimento": { icon: IconStethoscope, description: "Agenda, prontuário e consultas" },
     "Exames":      { icon: IconMicroscope, description: "Pedidos, resultados e prestadores" },
     "Laboratório": { icon: IconFlask, description: "Amostras, laudos, controle de qualidade e estoque" },
+    "Faturamento": { icon: IconReceipt, description: "Procedimentos, competências e arquivo BPA" },
     "Comunicação": { icon: IconSpeakerphone, description: "Campanhas por SMS" },
     "Equipe":      { icon: IconUsers, description: "Pessoas, papéis e assinaturas" },
     "Cidade":      { icon: IconBuildingCommunity, description: "Território e documentos" },
@@ -72,6 +73,9 @@ export const CATALOG: Catalog = {
     "lab-instruments": { icon: IconDevices, description: "Aparelhos, setor e identificação na HL7" },
     "lab-admin": { icon: IconAdjustments, description: "Exames, versões, motivos e liberadores" },
     "lab-reports": { icon: IconChartBar, description: "Produção, rejeição e prazo de entrega" },
+    "billing-procedures": { icon: IconFileInvoice, description: "Procedimentos com a crítica SIGTAP e lançamento manual" },
+    "billing-periods": { icon: IconCalendarStats, description: "Fechamento por estabelecimento, pendências e arquivo" },
+    "billing-settings": { icon: IconReceiptTax, description: "Órgão de origem, destino e gestão do arquivo BPA" },
     "campaigns": { icon: IconSpeakerphone, description: "Criar e enviar campanhas por SMS" },
     "team": { icon: IconUsers, description: "Usuários, convites e papéis" },
     "professionals": { icon: IconIdBadge2, description: "Vínculos, CBO e turnos" },

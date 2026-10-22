@@ -14,7 +14,8 @@ export type ModuleId =
   | "exam-acknowledgements" | "exams-unit" | "exams-overdue" | "exam-regulation" | "exam-report" | "exams-admin" | "exam-provider"
   | "lab-requisitions" | "lab-collection" | "lab-shipments" | "lab-reception" | "lab-worklist" | "lab-entry" | "lab-release"
   | "lab-qc-runs" | "lab-qc-chart" | "lab-qc-blocks" | "lab-qc-setup" | "lab-eqa" | "lab-inventory" | "lab-traceability" | "lab-instruments"
-  | "lab-admin" | "lab-reports";
+  | "lab-admin" | "lab-reports"
+  | "billing-procedures" | "billing-periods" | "billing-settings";
 
 export interface NavItem { id: ModuleId; label: string; icon: string; }
 export interface NavGroupDef { label: string; items: NavItem[]; }
@@ -79,6 +80,11 @@ export const NAV_GROUPS: NavGroupDef[] = [
     { id: "lab-instruments", label: "Aparelhos", icon: "⌬" },
     { id: "lab-admin", label: "Exames e liberadores do laboratório", icon: "⚙" },
     { id: "lab-reports", label: "Relatórios do laboratório", icon: "▤" }
+  ]},
+  { label: "Faturamento", items: [
+    { id: "billing-procedures", label: "Procedimentos realizados", icon: "✚" },
+    { id: "billing-periods", label: "Competências e arquivo BPA", icon: "▥" },
+    { id: "billing-settings", label: "Configuração do faturamento", icon: "⚙" }
   ]},
   { label: "Comunicação", items: [
     { id: "campaigns", label: "Campanhas", icon: "✉" }
@@ -187,6 +193,11 @@ export function navGroupsFor(
   // (independentes; os dois exigem municipal_lab). Aparelhos servem aos dois.
   const qcOn = labOn && hasFeature(user, "lab_quality_control");
   const invOn = labOn && hasFeature(user, "lab_inventory");
+  // Módulo 22 (ADR 0039): faturamento com `procedure_billing`. O faturista
+  // opera; o municipal_admin lê e configura. O profissional registra no
+  // atendimento, não por este grupo.
+  const billingOn = !user?.operator && hasFeature(user, "procedure_billing");
+  const isBillingClerk = roles.includes("billing_clerk");
   return NAV_GROUPS.filter((group) => {
     if (group.label === "Conta") return !user?.operator;
     if (group.label === "Equipe") return isAdmin;
@@ -234,6 +245,8 @@ export function navGroupsFor(
       if (item.id === "lab-reception" || item.id === "lab-entry") return labOn && isLabStaff;
       if (item.id === "lab-worklist") return labOn && (isLabStaff || isReleaser);
       if (item.id === "lab-release") return labOn && isReleaser;
+      if (item.id === "billing-procedures" || item.id === "billing-periods") return billingOn && (isBillingClerk || isAdmin);
+      if (item.id === "billing-settings") return billingOn && isAdmin;
       if (item.id === "lab-admin") return labOn && isAdmin;
       if (item.id === "lab-reports") return labOn && (isAdmin || isReleaser);
       if (item.id === "lab-qc-runs" || item.id === "lab-qc-blocks") return qcOn && (isLabStaff || isReleaser);

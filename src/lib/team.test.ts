@@ -56,9 +56,9 @@ describe("reviewerCount", () => {
 const apiError = (status: number, body: unknown) => new ApiError(status, body, String(status));
 
 describe("convite", () => {
-  it("oferece os 12 papéis da cidade que se convidam pela Equipe", () => {
+  it("oferece os 13 papéis da cidade que se convidam pela Equipe", () => {
     expect(INVITE_ROLES.map((r) => r.role).sort()).toEqual([
-      "analyst", "campaign_manager", "citizen_verifier", "exam_regulator", "health_professional", "lab_releaser", "lab_staff",
+      "analyst", "billing_clerk", "campaign_manager", "citizen_verifier", "exam_regulator", "health_professional", "lab_releaser", "lab_staff",
       "municipal_admin", "protocol_author", "protocol_publisher", "protocol_reviewer", "viewer"
     ]);
     expect(INVITE_ROLES.find((r) => r.role === "exam_regulator")?.label).toBe("Regulador de exames");
@@ -67,6 +67,9 @@ describe("convite", () => {
     expect(INVITE_ROLES.find((r) => r.role === "lab_releaser")?.label).toBe("Liberador de laudos");
     expect(isPrivilegedRole("lab_staff")).toBe(true);
     expect(isPrivilegedRole("lab_releaser")).toBe(true);
+    // Módulo 22: o faturista baixa arquivo com dado de paciente — privilegiado (step-up no convite).
+    expect(INVITE_ROLES.find((r) => r.role === "billing_clerk")?.label).toBe("Faturista");
+    expect(isPrivilegedRole("billing_clerk")).toBe(true);
     // O exam_provider só entra pelo cadastro do prestador.
     expect(INVITE_ROLES.some((r) => r.role === "exam_provider")).toBe(false);
     expect(INVITE_ROLES.find((r) => r.role === "campaign_manager")?.label).toBe("Gestor de campanhas");
