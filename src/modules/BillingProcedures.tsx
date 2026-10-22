@@ -92,6 +92,8 @@ export function ProceduresBody({ clerk, today, headerActions }: {
             <label style={fieldLabel}>
               Competência
               <select value={draft.competence} style={inputStyle} onChange={(e) => set({ competence: e.target.value })}>
+                {/* Sem competência na consulta: o registro de UBS (establishment_is_aps) não tem competência. */}
+                <option value="">{ALL_COMPETENCES}</option>
                 {competenceOptions(today, draft.competence).map((c) => <option key={c} value={c}>{competenceLabel(c)}</option>)}
               </select>
             </label>
@@ -121,7 +123,7 @@ export function ProceduresBody({ clerk, today, headerActions }: {
           {establishments.isError && <p role="alert" style={alert}>{billingError(establishments.error)}</p>}
         </fieldset>
       </Panel>
-      <Panel title="Procedimentos" sub={`competência ${competenceLabel(applied.competence)}`}>
+      <Panel title="Procedimentos" sub={applied.competence ? `competência ${competenceLabel(applied.competence)}` : ALL_COMPETENCES}>
         <div style={{ ...stack, padding: 16 }}>
           {notice && <p role="status" style={statusStyle}>{notice}</p>}
           {query.isPending && <p className="mono" style={muted}>carregando…</p>}
@@ -143,5 +145,6 @@ export function ProceduresBody({ clerk, today, headerActions }: {
   );
 }
 
+const ALL_COMPETENCES = "todas as competências";
 const fieldsetStyle: CSSProperties = { display: "flex", flexDirection: "column", gap: 10, border: 0, margin: 0, padding: 16 };
 const statusStyle: CSSProperties = { margin: 0, fontSize: 12.5, fontWeight: 600 };

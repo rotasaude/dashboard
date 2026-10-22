@@ -158,4 +158,13 @@ describe("BillingProcedures", () => {
     await waitFor(() => expect(api.listProcedures).toHaveBeenCalledTimes(3));
     expect(api.listProcedures).toHaveBeenLastCalledWith({ competence: "202610", before: null });
   });
+
+  it("todas as competências: sem competence na consulta (único jeito de ver o registro de UBS, competência nula)", async () => {
+    renderWithProviders(<BillingProcedures today={TODAY22} />);
+    await screen.findByText("0202010473 — DOSAGEM DE GLICOSE");
+    fireEvent.change(screen.getByLabelText("Competência"), { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: "Filtrar" }));
+    await waitFor(() => expect(api.listProcedures).toHaveBeenLastCalledWith({ before: null }));
+    expect(screen.getByText("todas as competências", { selector: "span, p, div" })).not.toBeNull();
+  });
 });
