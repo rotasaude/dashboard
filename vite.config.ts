@@ -24,6 +24,7 @@ import react from "@vitejs/plugin-react";
 //   /clinical_documents → documentos clínicos da cidade (módulo 19c: CNPJ, REMUME e protocolos de enfermagem; municipal_admin).
 //   /exams      → exames (módulo 21a: pedido, guia, resultado, ciência, regulação, admin e portal do prestador).
 //   /lab        → laboratório municipal (módulo 21b).
+//   /billing    → faturamento de procedimentos (módulo 22: registro, críticas SIGTAP, competências e arquivo BPA).
 //   /sncr       → números do SNCR (módulo 19d: estoque, pedido pelo gov.br, retorno e painel do admin). O gov.br
 //                 devolve a pessoa a /dashboard/sncr/callback (base do Vite), que NÃO casa com este prefixo:
 //                 o retorno é do dashboard, e só o POST /sncr/oauth/callback vai ao api.
@@ -72,7 +73,9 @@ export default defineConfig({
       // Módulo 21b: laboratório municipal (requisição, amostra, remessa, mapa, digitação, liberação e admin).
       // Regex: não casa /labels nem outro caminho que só comece com "lab".
       "^/lab(/|$)": proxy(TARGET),
-      "^/v(/|$)": proxy(TARGET)
+      "^/v(/|$)": proxy(TARGET),
+      // Módulo 22: faturamento de procedimentos (BPA).
+      "/billing": proxy(TARGET)
     }
   }
 });

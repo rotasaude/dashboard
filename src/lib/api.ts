@@ -3514,3 +3514,180 @@ export async function getConsumption(q: LabConsumptionQuery): Promise<LabConsump
 export function fetchConsumptionCsv(q: LabConsumptionQuery): Promise<SignatureFile> {
   return binaryFetch(labQuery(labPath("inventory", "consumption.csv"), byProvider(q.providerId, { month: q.month })), "text/csv");
 }
+
+// ─── Faturamento de procedimentos (módulo 22, ADR 0039; contrato 2026-10-21) ───
+// Na URL só ids, tipo do estabelecimento, códigos (SIGTAP, motivo), competência
+// AAAAMM, o termo da busca SIGTAP e o cursor — nunca CPF, CNS, nome, motivo de
+// cancelamento ou de reabertura, nem CNPJ. CPF da busca e textos vão no corpo.
+// A crítica, o instrumento, as pendências e o arquivo são do api.
+
+const BILLING_BASE = import.meta.env.VITE_BILLING_BASE || "/billing";
+const billingPath = (...parts: string[]) => [ BILLING_BASE, ...parts.map(encodeURIComponent) ].join("/");
+const billingPost = (body: unknown): RequestInit => ({ method: "POST", body: JSON.stringify(body) });
+
+export type ProcedureSource = "attendance" | "consultation" | "lab_report" | "manual";
+export type BillingInstrument = "bpa_i" | "bpa_c" | "not_bpa";
+export type ProcedureCharacter = "elective" | "urgent";
+export type ProcedureStatus = "recorded" | "cancelled";
+export type BillingPeriodStatus = "open" | "closed";
+export type EstablishmentType = "health_unit" | "lab_provider";
+export type PendingFix = "professional" | "patient" | "establishment" | "procedure";
+
+export interface BillingEstablishment { type: EstablishmentType; id: string; cnes: string | null; name: string }
+
+export interface PerformedProcedure {
+  id: string;
+  patient: { id: string; display_name: string };
+  establishment: BillingEstablishment;
+  professional: { user_id: string; name: string; cbo_code: string | null };
+  performed_on: string; sigtap_code: string; label: string; sigtap_competence: string;
+  quantity: number; cid10: string | null; character: ProcedureCharacter | string;
+  source: ProcedureSource | string; source_ref: { type: string; id: string } | null;
+  instrument: BillingInstrument | string; billable: boolean; blocking_reasons: string[];
+  status: ProcedureStatus | string; cancel_reason: string | null;
+  billing_competence: string | null; sigtap_fallback: boolean;
+  // Divergência B7: apresentação em atraso (entrou na competência aberta seguinte). Ausente = false.
+  late?: boolean;
+}
+export interface ProcedurePage { procedures: PerformedProcedure[]; next_before: string | null }
+
+// Divergências B1 (patient_id opcional com atendimento ou consulta) e B5
+// (professional_user_id e cbo_code só no lançamento manual do faturista).
+export interface ProcedureInput {
+  patient_id?: string; establishment: { type: EstablishmentType; id: string };
+  performed_on: string; sigtap_code: string; quantity: number; cid10?: string; character?: ProcedureCharacter;
+  attendance_id?: string; consultation_id?: string; professional_user_id?: string; cbo_code?: string;
+}
+// Divergência B2: `attendanceId` lista os procedimentos do atendimento.
+export interface ProcedureQuery {
+  establishmentType?: EstablishmentType; establishmentId?: string; competence?: string; billable?: boolean;
+  reason?: string; patientId?: string; attendanceId?: string; before?: string | null;
+}
+export interface SigtapProcedure {
+  code: string; name: string; instruments: string[]; requires_cid: boolean;
+  sex: string | null; age_min_months: number | null; age_max_months: number | null;
+}
+// Divergência B3.
+export interface BillingPatient { id: string; display_name: string; cpf_masked: string }
+// Divergência B5.
+export interface BillingProfessional { user_id: string; name: string; cbo_codes: string[] }
+export interface BillingSummary { bpa_i_lines: number; bpa_c_lines: number; not_billable: Record<string, number>; pending: number }
+// `version` = versão do último arquivo gerado; 0 antes do primeiro fechamento (Divergência B11).
+export interface BillingPeriod {
+  id: string; establishment: BillingEstablishment; competence: string; status: BillingPeriodStatus | string; version: number;
+  closed_at: string | null; closed_by: string | null; reopened_reason: string | null; summary: BillingSummary;
+}
+// Divergência B6: o que a tela mostra de cada pendência (opcional em api sem a B6).
+export interface PendingItem {
+  procedure_id: string; reasons: string[]; fix: PendingFix | string;
+  performed_on?: string; sigtap_code?: string; label?: string;
+  patient?: { id: string; display_name: string }; professional?: { user_id: string; name: string };
+}
+export interface BillingExport {
+  id: string; version: number; sha256: string; lines_bpa_i: number; lines_bpa_c: number; generated_at: string; generated_by: string;
+}
+// Divergência B10: `origin_acronym` (sigla do órgão de origem, cbc-sgl do layout).
+export interface BillingSettings {
+  origin_name: string | null; origin_acronym: string | null; origin_cnpj: string | null;
+  destination_body: string | null; management: "M" | "E" | null;
+}
+export interface BillingSettingsInput {
+  origin_name: string; origin_acronym: string; origin_cnpj: string; destination_body: string; management: "M" | "E";
+}
+
+export const BILLING_PAGE_SIZE = 50;
+
+function procedureParams(q: ProcedureQuery): URLSearchParams {
+  const p = new URLSearchParams();
+  if (q.establishmentType && q.establishmentId) {
+    p.set("establishment_type", q.establishmentType);
+    p.set("establishment_id", q.establishmentId);
+  }
+  if (q.competence) p.set("competence", q.competence);
+  if (q.billable !== undefined) p.set("billable", String(q.billable));
+  if (q.reason) p.set("reason", q.reason);
+  if (q.patientId) p.set("patient_id", q.patientId);
+  if (q.attendanceId) p.set("attendance_id", q.attendanceId);
+  if (q.before) p.set("before", q.before);
+  p.set("limit", String(BILLING_PAGE_SIZE));
+  return p;
+}
+
+export async function searchBillingSigtap(q: string, competence: string): Promise<SigtapProcedure[]> {
+  const body = await jsonFetch<{ procedures?: SigtapProcedure[] }>(withQuery(billingPath("sigtap", "search"), new URLSearchParams({ q, competence })));
+  return body.procedures ?? [];
+}
+
+// Sempre grava (201); a crítica vem nos campos do procedimento.
+export function recordProcedure(input: ProcedureInput): Promise<PerformedProcedure> {
+  return jsonFetch(billingPath("procedures"), billingPost(input));
+}
+
+// A lista traz paciente: o api grava trilha (`billing_procedures.listed`, E19). Nunca
+// é relida sozinha (sem polling, sem releitura ao focar ou reconectar): só ao abrir,
+// filtrar ou depois de uma ação.
+export async function listProcedures(q: ProcedureQuery): Promise<ProcedurePage> {
+  const body = await jsonFetch<Partial<ProcedurePage>>(withQuery(billingPath("procedures"), procedureParams(q)));
+  return { procedures: body.procedures ?? [], next_before: body.next_before ?? null };
+}
+
+export function cancelProcedure(id: string, reason: string): Promise<PerformedProcedure> {
+  return jsonFetch(billingPath("procedures", id, "cancel"), billingPost({ reason }));
+}
+
+export async function lookupBillingPatient(cpf: string): Promise<BillingPatient> {
+  return (await jsonFetch<{ patient: BillingPatient }>(billingPath("patient_lookup"), billingPost({ cpf }))).patient;
+}
+
+export async function listBillingEstablishments(): Promise<BillingEstablishment[]> {
+  return (await jsonFetch<{ establishments?: BillingEstablishment[] }>(billingPath("establishments"))).establishments ?? [];
+}
+
+export async function listBillingProfessionals(est: { type: EstablishmentType; id: string }): Promise<BillingProfessional[]> {
+  const p = new URLSearchParams({ establishment_type: est.type, establishment_id: est.id });
+  return (await jsonFetch<{ professionals?: BillingProfessional[] }>(withQuery(billingPath("professionals"), p))).professionals ?? [];
+}
+
+// E18: `status: "open"` lista as abertas (de todas as competências, ou só da `competence`).
+export async function listBillingPeriods(competence: string | null, status?: "open"): Promise<BillingPeriod[]> {
+  const p = new URLSearchParams();
+  if (competence) p.set("competence", competence);
+  if (status) p.set("status", status);
+  return (await jsonFetch<{ periods?: BillingPeriod[] }>(withQuery(billingPath("periods"), p))).periods ?? [];
+}
+
+// Grava trilha (contém paciente): só no clique.
+export async function getPeriodPending(id: string): Promise<PendingItem[]> {
+  return (await jsonFetch<{ items?: PendingItem[] }>(billingPath("periods", id, "pending"))).items ?? [];
+}
+
+// Step-up: quem trata 401 mfa_required é o SensitiveAction.
+export async function closeBillingPeriod(id: string): Promise<void> {
+  await jsonFetch<unknown>(billingPath("periods", id, "close"), billingPost({}));
+}
+
+export async function reopenBillingPeriod(id: string, reason: string): Promise<void> {
+  await jsonFetch<unknown>(billingPath("periods", id, "reopen"), billingPost({ reason }));
+}
+
+export async function listPeriodExports(id: string): Promise<BillingExport[]> {
+  return (await jsonFetch<{ exports?: BillingExport[] }>(billingPath("periods", id, "exports"))).exports ?? [];
+}
+
+// Só billing_clerk; cada download vira `billing_export.downloaded` na trilha.
+export function fetchBillingExportFile(id: string): Promise<SignatureFile> {
+  return binaryFetch(billingPath("exports", id, "file"), "text/plain");
+}
+
+export async function getBillingSettings(): Promise<BillingSettings> {
+  const b = await jsonFetch<Partial<BillingSettings>>(billingPath("settings"));
+  return {
+    origin_name: b.origin_name ?? null, origin_acronym: b.origin_acronym ?? null, origin_cnpj: b.origin_cnpj ?? null,
+    destination_body: b.destination_body ?? null, management: b.management === "M" || b.management === "E" ? b.management : null
+  };
+}
+
+// Step-up (contrato §6): quem trata 401 mfa_required é o SensitiveAction.
+export function saveBillingSettings(input: BillingSettingsInput): Promise<BillingSettings> {
+  return jsonFetch(billingPath("settings"), { method: "PUT", body: JSON.stringify(input) });
+}

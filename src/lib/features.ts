@@ -8,7 +8,8 @@ import { ApiError } from "./api";
 export type FeatureKey =
   | "ledi_export" | "cadsus_lookup" | "clinical_record" | "digital_signature" | "clinical_documents" | "controlled_prescriptions"
   | "patient_timeline" | "exam_tracking" | "exam_fhir_inbound" | "exam_pec_bridge" | "fake_lab"
-  | "municipal_lab" | "lab_hl7_inbound" | "fake_middleware" | "lab_quality_control" | "lab_inventory";
+  | "municipal_lab" | "lab_hl7_inbound" | "fake_middleware" | "lab_quality_control" | "lab_inventory"
+  | "procedure_billing";
 
 export const FEATURE_DISABLED_MESSAGE = "esta funcionalidade está desligada para a cidade";
 
@@ -28,7 +29,9 @@ const FEATURE_LABEL: Record<string, string> = {
   lab_hl7_inbound: "Entrada de resultados de aparelhos (HL7)",
   fake_middleware: "Middleware de aparelhos simulado (fora de produção)",
   lab_quality_control: "Controle de qualidade do laboratório (CIQ e CEQ)",
-  lab_inventory: "Estoque do laboratório"
+  lab_inventory: "Estoque do laboratório",
+  // Módulo 22 (ADR 0039): sem pré-requisito de modo de prontuário.
+  procedure_billing: "Faturamento de procedimentos (BPA)"
 };
 
 export function sessionFeatures(user: { features?: unknown } | null | undefined): string[] {

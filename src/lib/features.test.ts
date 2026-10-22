@@ -66,3 +66,11 @@ describe("features da sessão (contratos §1)", () => {
     expect(hasFeature({ features: [ "lab_inventory" ] }, "lab_quality_control")).toBe(false);
   });
 });
+
+describe("módulo 22", () => {
+  it("procedure_billing tem nome e vem da sessão", () => {
+    expect(featureLabel("procedure_billing")).toBe("Faturamento de procedimentos (BPA)");
+    expect(hasFeature({ features: [ "procedure_billing" ] }, "procedure_billing")).toBe(true);
+    expect(hasFeature({ features: [ "municipal_lab" ] }, "procedure_billing")).toBe(false);
+  });
+});
