@@ -393,7 +393,8 @@ const ERRORS: Record<string, string> = {
 // Campos do layout/cadastro que o api aponta em `field` (too_long, invalid_demographics).
 const FIELD_LABEL: Record<string, string> = {
   origin_name: "nome do órgão de origem", origin_acronym: "sigla do órgão de origem", destination_body: "órgão de destino",
-  zip: "CEP", street: "logradouro", number: "número", district: "bairro", complement: "complemento",
+  address_zip: "CEP", address_street: "logradouro", address_number: "número", address_district: "bairro",
+  address_complement: "complemento",
   race_color: "raça/cor", ethnicity: "etnia"
 };
 

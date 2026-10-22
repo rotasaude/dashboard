@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   cancelProcedure, closeBillingPeriod, fetchBillingExportFile, getBillingSettings, getPeriodPending, listBillingEstablishments,
   listBillingPeriods, listBillingProfessionals, listPeriodExports, listProcedures, lookupBillingPatient, recordProcedure,
-  reopenBillingPeriod, saveBillingSettings, searchBillingSigtap
+  reopenBillingPeriod, saveBillingSettings, saveVerificationDemographics, searchBillingSigtap, updatePatientDemographics
 } from "./api";
 
 function ok(body: unknown, init: ResponseInit = {}): Promise<Response> {
@@ -147,5 +147,21 @@ describe("cliente do faturamento (contrato §3–§6)", () => {
     expect(initOf(1).method).toBe("PUT");
     expect(headersOf(1)["Content-Type"]).toBe("application/json");
     expect(bodyOf(1)).toEqual(input);
+  });
+
+  it("dados do paciente: PATCH com JSON, tudo no corpo, só o id na URL", async () => {
+    const input = { race_color: "05", ethnicity: "0001", address_zip: "80010000", address_street: "RUA XV DE NOVEMBRO",
+      address_number: "100", address_district: "CENTRO" };
+    await updatePatientDemographics("pa3", input);
+    expect(urlOf().pathname).toBe("/billing/patients/pa3/demographics");
+    expect(urlOf().search).toBe("");
+    expect(initOf().method).toBe("PATCH");
+    expect(headersOf()["Content-Type"]).toBe("application/json");
+    expect(bodyOf()).toEqual(input);
+    fetchMock.mockImplementationOnce(() => ok({ race_color_set: true, address_set: false }));
+    expect(await saveVerificationDemographics("v9", { race_color: "03" })).toEqual({ race_color_set: true, address_set: false });
+    expect(urlOf(1).pathname).toBe("/attendance/verifications/v9/names");
+    expect(initOf(1).method).toBe("POST");
+    expect(bodyOf(1)).toEqual({ race_color: "03" });
   });
 });

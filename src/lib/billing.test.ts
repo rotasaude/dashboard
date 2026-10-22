@@ -276,7 +276,10 @@ describe("frases por código (decisão 6)", () => {
   it("too_long e invalid_demographics usam o field", () => {
     expect(billingError(new ApiError(422, { error: "too_long", field: "origin_name" }, "422")))
       .toBe("nome do órgão de origem maior que a largura do arquivo BPA — abrevie");
-    expect(billingError(new ApiError(422, { error: "invalid_demographics", field: "zip" }, "422"))).toMatch(/CEP/);
+    expect(billingError(new ApiError(422, { error: "invalid_demographics", field: "address_zip" }, "422"))).toMatch(/CEP/);
+    for (const [ field, text ] of [ [ "address_street", "logradouro" ], [ "address_number", "número" ], [ "address_complement", "complemento" ], [ "address_district", "bairro" ], [ "race_color", "raça/cor" ], [ "ethnicity", "etnia" ] ]) {
+      expect(billingError(new ApiError(422, { error: "invalid_demographics", field }, "422"))).toContain(text);
+    }
     expect(billingError(new ApiError(422, { error: "too_long", field: "campo_novo" }, "422"))).toBe("campo_novo maior que a largura do arquivo BPA — abrevie");
   });
 

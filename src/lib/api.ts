@@ -394,7 +394,8 @@ export async function lookupCitizen(cpf: string, code: string): Promise<{ citize
 // Módulo 16 (contratos §5.4): `cadsus_confirmed` só vai quando a cidade tem a
 // consulta ao CADSUS ligada (o atendente decidiu, sim ou não). Sem `extra`, o
 // corpo é exatamente o de antes.
-export interface VerifyExtra { cadsus_confirmed?: boolean }
+// Módulo 22 (contrato §12, D-U1): os 7 campos do paciente, opcionais e planos no corpo da validação.
+export interface VerifyExtra extends PatientDemographicsInput { cadsus_confirmed?: boolean }
 
 export async function verifyCitizen(
   cpf: string, code: string, profile: VerifiedProfile & Partial<CitizenNamesInput>, extra: VerifyExtra = {}
@@ -3690,4 +3691,26 @@ export async function getBillingSettings(): Promise<BillingSettings> {
 // Step-up (contrato §6): quem trata 401 mfa_required é o SensitiveAction.
 export function saveBillingSettings(input: BillingSettingsInput): Promise<BillingSettings> {
   return jsonFetch(billingPath("settings"), { method: "PUT", body: JSON.stringify(input) });
+}
+
+// ─── Dados do paciente para o BPA-I (módulo 22; contrato §12, D-U1) ─────────
+// Raça/cor (01–05, sem 99), etnia (4 dígitos, só com 05) e endereço; só o
+// enviado muda. Tudo no corpo; na URL só o id. A recepção grava pela validação
+// do par; o faturista, pela pendência. O api nunca devolve o endereço.
+export interface PatientDemographicsInput {
+  race_color?: string; ethnicity?: string;
+  address_zip?: string; address_street?: string; address_number?: string; address_complement?: string; address_district?: string;
+}
+export interface DemographicsSaved { race_color_set: boolean; address_set: boolean }
+
+export async function updatePatientDemographics(patientId: string, input: PatientDemographicsInput): Promise<void> {
+  await jsonFetch<unknown>(billingPath("patients", patientId, "demographics"), { method: "PATCH", body: JSON.stringify(input) });
+}
+
+// No check-in: a rota de nomes do 19 aceita só os campos do paciente (sem nomes).
+export async function saveVerificationDemographics(verificationId: string, input: PatientDemographicsInput): Promise<DemographicsSaved> {
+  const body = await jsonFetch<Partial<DemographicsSaved>>(`${ATTENDANCE_BASE}/verifications/${encodeURIComponent(verificationId)}/names`, {
+    method: "POST", body: JSON.stringify(input)
+  });
+  return { race_color_set: body.race_color_set === true, address_set: body.address_set === true };
 }
