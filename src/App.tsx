@@ -30,6 +30,7 @@ import { LabEqa } from "./modules/LabEqa";
 import { LabQcRuns } from "./modules/LabQcRuns";
 import { LabQcChart } from "./modules/LabQcChart";
 import { LabQcBlocks } from "./modules/LabQcBlocks";
+import { BillingProcedures } from "./modules/BillingProcedures";
 import { ProviderPortal } from "./modules/ProviderPortal";
 import { AcknowledgementNotice } from "./modules/exams/AcknowledgementNotice";
 import { Shell } from "./shell/Shell";
@@ -264,6 +265,7 @@ export function renderModule(active: ModuleId, setActive: (id: ModuleId) => void
     case "lab-inventory": return <LabInventory onGoToSecurity={() => setActive("security")} />;
     case "lab-traceability": return <LabTraceability />;
     case "lab-instruments": return <LabInstruments onGoToSecurity={() => setActive("security")} />;
+    case "billing-procedures": return <BillingProcedures />;
     default:               return <Placeholder title={labelFor(active)} />;
   }
 }
