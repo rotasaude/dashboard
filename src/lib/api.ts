@@ -539,6 +539,8 @@ export interface CheckInCitizen {
   // Módulo 19, Divergência D2: nomes e a validação ativa do par validado, para
   // a recepção completar os nomes no check-in. Opcionais: api sem a D2 não manda.
   names?: CitizenNames; verification_id?: string | null;
+  // Módulo 22 (contrato §13 E3): o que já está no cadastro (nunca o valor). Ausentes = api antigo.
+  race_color_set?: boolean; address_set?: boolean;
 }
 export interface CheckInTriage { id: string; date: string; protocol_name: string; priority: number }
 export interface CheckInAppointment {
@@ -603,7 +605,7 @@ export async function searchCheckIn(
 
 export async function checkInByException(
   cpf: string, target: { triageId: string } | { appointmentId: string }, healthUnitId: string, reason: string
-): Promise<{ attendance: Attendance }> {
+): Promise<{ attendance: Attendance; verification_id?: string | null }> {
   const body: Record<string, unknown> = { cpf, health_unit_id: healthUnitId, reason };
   if ("triageId" in target) body.triage_id = target.triageId;
   else body.appointment_id = target.appointmentId;

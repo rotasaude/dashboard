@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   getMyProfessional, listActiveUnits, lookupCitizen, revokeVerification, verifyCitizen, listVerifications,
-  type AttendanceCitizen, type Sex, type AttendanceTriage, type HealthUnit, type VerificationRow
+  type AttendanceCitizen, type VerifyExtra, type Sex, type AttendanceTriage, type HealthUnit, type VerificationRow
 } from "../lib/api";
 import { ATTENDANCE_REFETCH_MS, attendanceError, currentUnitKey, isValidCpf, maskCpf, nivelLabel, onlyDigits } from "../lib/attendance";
 import { todayInCity } from "../lib/campaigns";
@@ -30,6 +30,8 @@ import { ErasureRequest } from "./attendance/ErasureRequest";
 import { ErasureRequests } from "./attendance/ErasureRequests";
 import { CadsusCheck } from "./attendance/CadsusCheck";
 import { NamesFields } from "./attendance/NamesFields";
+import { DemographicsFields } from "./attendance/DemographicsForm";
+import { EMPTY_DEMOGRAPHICS, demographicsBody, demographicsFilled, demographicsProblem, type DemographicsDraft } from "../lib/demographics";
 import { EMPTY_NAMES, namesBody, namesProblem, type NamesDraft } from "../lib/citizenNames";
 import { hasFeature } from "../lib/features";
 import { canUseBilling, showUnitProcedures } from "../lib/billing";
@@ -115,9 +117,9 @@ export function Attendance({ onNavigate }: { onNavigate(id: ModuleId): void }) {
       {/* Trocando de unidade, as seções da atual ficam escondidas, mas montadas:
           cancelar a troca devolve a escuta, a consulta e o que foi digitado (AT-16, I1). */}
       <div hidden={switchingUnit} style={switchingUnit ? undefined : { display: "contents" }}>
-      {canVerify && unit && <div id="sec-checkin"><CheckIn unit={unit} onUnitInvalid={onUnitInvalid} /></div>}
+      {canVerify && unit && <div id="sec-checkin"><CheckIn unit={unit} onUnitInvalid={onUnitInvalid} demographicsOn={hasFeature(user, "procedure_billing")} /></div>}
       {/* A validação presencial sobe para perto do check-in: é a tarefa mais comum do balcão (FC-10). */}
-      {canVerify && <div id="sec-balcao"><Counter cadsusOn={hasFeature(user, "cadsus_lookup")} /></div>}
+      {canVerify && <div id="sec-balcao"><Counter cadsusOn={hasFeature(user, "cadsus_lookup")} demographicsOn={hasFeature(user, "procedure_billing")} /></div>}
       {canCare && unit && <ScreeningQueue unit={unit} units={unitsQuery.data ?? []} />}
       {(canVerify || canCareRole) && unit && (
         <div id="sec-fila">
@@ -174,7 +176,9 @@ function PageIndex() {
 }
 
 // `cadsusOn` (módulo 16): a cidade tem `cadsus_lookup` ligado na sessão.
-function Counter({ cadsusOn }: { cadsusOn: boolean }) {
+// `demographicsOn` (módulo 22): raça/cor, etnia e endereço opcionais para o BPA-I, no mesmo POST da validação.
+function Counter({ cadsusOn, demographicsOn = false }: { cadsusOn: boolean; demographicsOn?: boolean }) {
+  const [ demographics, setDemographics ] = useState<DemographicsDraft>(EMPTY_DEMOGRAPHICS);
   const [ state, setState ] = useState<CounterState>("form");
   const [ cadsusConfirmed, setCadsusConfirmed ] = useState(false);
   const [ cpf, setCpf ] = useState("");
@@ -191,6 +195,7 @@ function Counter({ cadsusOn }: { cadsusOn: boolean }) {
     setProfile(initialProfileCheck(null));
     setNames(EMPTY_NAMES);
     setCadsusConfirmed(false);
+    setDemographics(EMPTY_DEMOGRAPHICS);
   }
 
   async function search() {
@@ -216,7 +221,9 @@ function Counter({ cadsusOn }: { cadsusOn: boolean }) {
   const profileProblem = profileCheckProblem(profile, todayInCity());
   // Módulo 19: nome completo obrigatório; social e mãe opcionais.
   const namesIssue = namesProblem(names);
-  const blocked = !checked || busy || profileProblem !== null || namesIssue !== null;
+  // Opcionais: vazios não bloqueiam; começados, precisam estar certos.
+  const demographicsIssue = demographicsOn && demographicsFilled(demographics) ? demographicsProblem(demographics) : null;
+  const blocked = !checked || busy || profileProblem !== null || namesIssue !== null || demographicsIssue !== null;
 
   async function validate() {
     if (blocked) return;
@@ -228,7 +235,9 @@ function Counter({ cadsusOn }: { cadsusOn: boolean }) {
         birth_date: profile.birthDate, sex: profile.sex as Sex, gender_identity: profile.genderIdentity || null,
         ...namesBody(names)
       };
-      if (cadsusOn) await verifyCitizen(cpf, code, profileBody, { cadsus_confirmed: cadsusConfirmed });
+      const extra: VerifyExtra = demographicsOn && demographicsFilled(demographics) ? demographicsBody(demographics) : {};
+      if (cadsusOn) extra.cadsus_confirmed = cadsusConfirmed;
+      if (Object.keys(extra).length > 0) await verifyCitizen(cpf, code, profileBody, extra);
       else await verifyCitizen(cpf, code, profileBody);
       setState("done");
     } catch (err) {
@@ -294,6 +303,7 @@ function Counter({ cadsusOn }: { cadsusOn: boolean }) {
 
             <ProfileCheck declared={found.citizen.profile ?? null} value={profile} today={todayInCity()} onChange={setProfile} />
             <NamesFields value={names} onChange={setNames} problem={namesIssue} />
+            {demographicsOn && <DemographicsFields value={demographics} onChange={setDemographics} problem={demographicsIssue} />}
             {cadsusOn && (
               <CadsusCheck cpf={cpf} code={code} confirmed={cadsusConfirmed} onConfirmedChange={setCadsusConfirmed} />
             )}

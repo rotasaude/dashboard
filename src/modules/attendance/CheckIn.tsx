@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import {
-  ApiError, checkIn, checkInByException, lookupCheckIn, searchCheckIn,
+  ApiError, checkIn, checkInByException, lookupCheckIn, saveVerificationDemographics, searchCheckIn,
   type CheckInAppointment, type CheckInCitizen, type CheckInTriage, type HealthUnit
 } from "../../lib/api";
 import { attendanceError, isValidCpf, maskCpf, nivelLabel, onlyDigits } from "../../lib/attendance";
@@ -14,6 +14,7 @@ import { EmptyState } from "../../components/EmptyState";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { FrozenTextNotice } from "../../components/FrozenTextNotice";
 import { CompleteNames } from "./CompleteNames";
+import { DemographicsForm } from "./DemographicsForm";
 import { ReasonHint } from "../../components/ReasonHint";
 
 // O código que não confere pode ser o do outro painel (FC-17): o cidadão tem
@@ -31,6 +32,8 @@ export function suggestOther(message: string, other: string): string {
 interface Props {
   unit: HealthUnit;
   onUnitInvalid(): void;
+  // Módulo 22 (contrato §12, D-U1): `procedure_billing` ligado na sessão.
+  demographicsOn?: boolean;
 }
 
 // O CPF é do painel, não do modo: trocar para "sem o código" não apaga (FC-06).
@@ -75,7 +78,7 @@ function invalidateAfterCheckIn(queryClient: QueryClient, unitId: string, isAppo
   }
 }
 
-export function CheckIn({ unit, onUnitInvalid }: Props) {
+export function CheckIn({ unit, onUnitInvalid, demographicsOn = false }: Props) {
   const [ mode, setMode ] = useState<Mode>("code");
   const [ cpf, setCpf ] = useState("");
 
@@ -90,13 +93,13 @@ export function CheckIn({ unit, onUnitInvalid }: Props) {
       }
     >
       {mode === "code"
-        ? <CodeFlow unit={unit} onUnitInvalid={onUnitInvalid} cpf={cpf} onCpf={setCpf} />
-        : <ExceptionFlow unit={unit} onUnitInvalid={onUnitInvalid} cpf={cpf} onCpf={setCpf} />}
+        ? <CodeFlow unit={unit} onUnitInvalid={onUnitInvalid} cpf={cpf} onCpf={setCpf} demographicsOn={demographicsOn} />
+        : <ExceptionFlow unit={unit} onUnitInvalid={onUnitInvalid} cpf={cpf} onCpf={setCpf} demographicsOn={demographicsOn} />}
     </Panel>
   );
 }
 
-function CodeFlow({ unit, onUnitInvalid, cpf, onCpf: setCpf }: FlowProps) {
+function CodeFlow({ unit, onUnitInvalid, cpf, onCpf: setCpf, demographicsOn = false }: FlowProps) {
   const queryClient = useQueryClient();
   const [ state, setState ] = useState<"form" | "found" | "done">("form");
   const [ code, setCode ] = useState("");
@@ -107,12 +110,14 @@ function CodeFlow({ unit, onUnitInvalid, cpf, onCpf: setCpf }: FlowProps) {
   const [ verified, setVerified ] = useState(false);
   // Módulo 19 (Divergência D2): validação ativa criada agora pelo check-in, para completar os nomes.
   const [ newVerificationId, setNewVerificationId ] = useState<string | null>(null);
+  // Módulo 22: raça/cor e endereço pela validação do par (POST /attendance/verifications/:id/names, só os campos do paciente).
+  const [ demographicsClosed, setDemographicsClosed ] = useState(false);
   const [ busy, setBusy ] = useState(false);
   const [ error, setError ] = useState<string | null>(null);
 
   function reset() {
     setState("form"); setCpf(""); setCode(""); setChecked(false); setFound(null); setVerified(false); setError(null);
-    setNewVerificationId(null);
+    setNewVerificationId(null); setDemographicsClosed(false);
   }
 
   async function search() {
@@ -231,6 +236,18 @@ function CodeFlow({ unit, onUnitInvalid, cpf, onCpf: setCpf }: FlowProps) {
           <p role="status" style={{ margin: 0, fontSize: 13, fontWeight: 600 }}>Atendimento iniciado</p>
           {verified && <p role="status" style={{ margin: 0, fontSize: 13, fontWeight: 600 }}>cadastro validado</p>}
           {newVerificationId && <CompleteNames verificationId={newVerificationId} />}
+          {(() => {
+            // Contrato §13 E3: só oferece quando o api diz que falta (flag false); ausente = api antigo, como hoje.
+            const verificationId = newVerificationId ?? found?.citizen.verification_id ?? null;
+            const missing = [ ...(found?.citizen.race_color_set === false ? [ "race_color" ] : []),
+              ...(found?.citizen.address_set === false ? [ "address" ] : []) ];
+            if (!demographicsOn || !verificationId || missing.length === 0 || demographicsClosed) return null;
+            return (
+              <DemographicsForm key={verificationId} title="Completar dados do paciente" missing={missing}
+                save={async (body) => { await saveVerificationDemographics(verificationId, body); }}
+                onCancel={() => setDemographicsClosed(true)} />
+            );
+          })()}
           <div>
             <button type="button" onClick={reset} style={buttonStyle}>Próximo atendimento</button>
           </div>
@@ -244,17 +261,21 @@ type ExceptionRow =
   | { kind: "appointment"; row: CheckInAppointment }
   | { kind: "triage"; row: CheckInTriage };
 
-function ExceptionFlow({ unit, onUnitInvalid, cpf, onCpf: setCpf }: FlowProps) {
+function ExceptionFlow({ unit, onUnitInvalid, cpf, onCpf: setCpf, demographicsOn = false }: FlowProps) {
   const queryClient = useQueryClient();
   const [ rows, setRows ] = useState<ExceptionRow[] | null>(null);
   const [ selected, setSelected ] = useState<ExceptionRow | null>(null);
   const [ reason, setReason ] = useState("");
   const [ done, setDone ] = useState(false);
+  // Contrato §13 E2: a validação do par, quando houver (null = par só declarado).
+  const [ verificationId, setVerificationId ] = useState<string | null>(null);
+  const [ demographicsClosed, setDemographicsClosed ] = useState(false);
   const [ busy, setBusy ] = useState(false);
   const [ error, setError ] = useState<string | null>(null);
 
   function reset() {
     setCpf(""); setRows(null); setSelected(null); setReason(""); setDone(false); setError(null);
+    setVerificationId(null); setDemographicsClosed(false);
   }
 
   async function search() {
@@ -285,7 +306,8 @@ function ExceptionFlow({ unit, onUnitInvalid, cpf, onCpf: setCpf }: FlowProps) {
     setBusy(true);
     try {
       const target = selected.kind === "appointment" ? { appointmentId: selected.row.id } : { triageId: selected.row.id };
-      await checkInByException(cpf, target, unit.id, reason);
+      const result = await checkInByException(cpf, target, unit.id, reason);
+      setVerificationId(result.verification_id ?? null);
       setDone(true);
       invalidateAfterCheckIn(queryClient, unit.id, selected.kind === "appointment");
     } catch (err) {
@@ -300,6 +322,11 @@ function ExceptionFlow({ unit, onUnitInvalid, cpf, onCpf: setCpf }: FlowProps) {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         <p role="status" style={{ margin: 0, fontSize: 13, fontWeight: 600 }}>Atendimento iniciado</p>
+        {demographicsOn && verificationId && !demographicsClosed && (
+          <DemographicsForm key={verificationId} title="Completar dados do paciente"
+            save={async (body) => { await saveVerificationDemographics(verificationId, body); }}
+            onCancel={() => setDemographicsClosed(true)} />
+        )}
         <div>
           <button type="button" onClick={reset} style={buttonStyle}>Próximo atendimento</button>
         </div>
