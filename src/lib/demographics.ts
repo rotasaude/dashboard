@@ -82,6 +82,7 @@ const ERRORS: Record<string, string> = {
   missing_role: "seu papel não permite alterar os dados do paciente",
   feature_disabled: "o faturamento de procedimentos está desligado nesta cidade",
   invalid_demographics: "dados do paciente inválidos — confira os campos",
+  already_revoked: "esta validação já foi desfeita — atualize a tela",
   not_found: "paciente ou atendimento não encontrado — atualize a tela"
 };
 

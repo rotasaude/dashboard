@@ -12,6 +12,7 @@ import {
 import { featureDisabledKey, hasFeature } from "./features";
 import { cnpjDigits, isValidCnpj } from "./clinicalDocuments";
 import { competenceLabel, competenceOf, recentCompetences } from "./competence";
+import { DEMOGRAPHICS_FIELD_LABEL, demographicsError } from "./demographics";
 
 export const BILLING_CLERK_ROLE = "billing_clerk";
 export const BILLING_DISABLED = "o faturamento de procedimentos está desligado nesta cidade";
@@ -371,7 +372,6 @@ const ERRORS: Record<string, string> = {
   // Contrato §12 (B1, B3, B10, D-L2).
   invalid_cpf: "CPF inválido",
   citizen_not_verified: "o cadastro desta pessoa ainda não foi validado na unidade — valide antes de registrar",
-  invalid_demographics: "dados do paciente inválidos — confira os campos",
   field_required: "preencha todos os campos da configuração do faturamento",
   too_many_sheets: "a competência passou de 999 folhas no arquivo — fale com o suporte",
   patient_not_found: "paciente não encontrado — confira o CPF",
@@ -384,16 +384,12 @@ const ERRORS: Record<string, string> = {
   invalid_character: "caráter do atendimento inválido — escolha eletivo ou urgência",
   invalid_query: `busca inválida — use de ${SIGTAP_QUERY_MIN} a ${SIGTAP_QUERY_MAX} caracteres`,
   terminology_unavailable: "a tabela SIGTAP está indisponível no momento — tente de novo em instantes",
-  invalid_filter: "filtro inválido — a lista foi reiniciada",
+  invalid_filter: "filtro inválido — confira os filtros ou use Limpar filtros",
   invalid_cursor: "a lista mudou enquanto você rolava — a tela foi atualizada",
   establishment_is_aps: "unidade de atenção primária — a produção vai pelo e-SUS APS, não pelo BPA",
   not_author: "só quem registrou o procedimento pode alterá-lo",
   missing_link: "falta o vínculo necessário para esta ação — confira o cadastro",
   already_revoked: "este registro já foi revogado — a tela foi atualizada",
-  invalid_race_color: "raça/cor inválida — escolha uma das opções",
-  invalid_ethnicity: "etnia inválida — escolha uma das opções",
-  ethnicity_required: "informe a etnia para raça/cor indígena",
-  invalid_zip: "CEP inválido — 8 dígitos",
   integrity_mismatch: "o arquivo não confere com o gerado; gere de novo reabrindo a competência",
   reason_required: `informe o motivo, de ${REASON_MIN} a ${REASON_MAX} caracteres`,
   already_exported: "este procedimento já está no arquivo de uma competência fechada — para cancelar, o faturista reabre a competência",
@@ -401,13 +397,14 @@ const ERRORS: Record<string, string> = {
   not_found: "registro não encontrado — a tela foi atualizada"
 };
 
-// Campos do layout/cadastro que o api aponta em `field` (too_long, invalid_demographics).
+// Campos do layout/cadastro que o api aponta em `field` (too_long, field_required); os do paciente vêm de demographics.
 const FIELD_LABEL: Record<string, string> = {
   origin_name: "nome do órgão de origem", origin_acronym: "sigla do órgão de origem", destination_body: "órgão de destino",
-  address_zip: "CEP", address_street: "logradouro", address_number: "número", address_district: "bairro",
-  address_complement: "complemento",
-  race_color: "raça/cor", ethnicity: "etnia"
+  ...DEMOGRAPHICS_FIELD_LABEL
 };
+
+// Recusas dos dados do paciente: frase de uma fonte só (demographics), a mesma da recepção.
+const PATIENT_DATA_CODES = new Set([ "invalid_race_color", "invalid_ethnicity", "ethnicity_required", "invalid_zip", "invalid_demographics" ]);
 
 function errorField(err: unknown): string | undefined {
   return err instanceof ApiError ? (err.body as { field?: string } | undefined)?.field : undefined;
@@ -420,7 +417,7 @@ export function billingError(err: unknown): string {
   const fieldText = field ? (FIELD_LABEL[field] ?? field) : null;
   if (code === "field_required" && fieldText) return `preencha: ${fieldText}`;
   if (code === "too_long" && fieldText) return `${fieldText} maior que a largura do arquivo BPA — abrevie`;
-  if (code === "invalid_demographics" && fieldText) return `dados do paciente inválidos: confira ${fieldText}`;
+  if (code && PATIENT_DATA_CODES.has(code)) return demographicsError(err);
   if (code && ERRORS[code]) return ERRORS[code];
   if (code) return code; // código novo do api aparece cru
   if (err instanceof ApiError && err.status === 404) return ERRORS.not_found;
@@ -431,5 +428,6 @@ export function billingError(err: unknown): string {
 // A lista mudou por outra pessoa (sumiu, mudou de situação, entrou num arquivo): quem chama relê.
 export function isStale(err: unknown): boolean {
   const code = errorCode(err);
-  return code === "not_found" || code === "invalid_transition" || code === "already_exported";
+  return code === "not_found" || code === "invalid_transition" || code === "already_exported" || code === "invalid_cursor" ||
+    code === "already_revoked";
 }

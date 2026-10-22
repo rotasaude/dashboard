@@ -8,6 +8,7 @@ import {
   savedText, settingsBody, settingsComplete, settingsDraft, settingsProblem, showUnitProcedures, sigtapCompetence, sourceLabel, unitBills,
   verdict
 } from "./billing";
+import { demographicsError } from "./demographics";
 import { LAB_EST, SETTINGS, SUTURE, TODAY22, UPA, UBS, UPA_EST, URGENCY, billingExport, billingUser, pending, period, procedure } from "../test/billingFixtures";
 
 const refusal = (status: number, error: string) => new ApiError(status, { error }, String(status));
@@ -244,6 +245,19 @@ describe("recusas", () => {
     expect(isStale(refusal(409, "invalid_transition"))).toBe(true);
     expect(isStale(refusal(409, "already_exported"))).toBe(true);
     expect(isStale(refusal(422, "invalid_date"))).toBe(false);
+    // As frases destes dizem "a tela foi atualizada": quem chama relê.
+    expect(isStale(refusal(422, "invalid_cursor"))).toBe(true);
+    expect(isStale(refusal(409, "already_revoked"))).toBe(true);
+  });
+
+  it("frase × comportamento: invalid_filter não promete reinício; dados do paciente com uma fonte só", () => {
+    expect(billingError(refusal(422, "invalid_filter"))).not.toMatch(/reiniciada/);
+    expect(billingError(refusal(422, "invalid_zip"))).toBe(demographicsError(refusal(422, "invalid_zip")));
+    expect(billingError(refusal(422, "invalid_ethnicity"))).toBe(demographicsError(refusal(422, "invalid_ethnicity")));
+    expect(billingError(new ApiError(422, { error: "invalid_demographics", field: "race_color" }, "422")))
+      .toBe(demographicsError(new ApiError(422, { error: "invalid_demographics", field: "race_color" }, "422")));
+    expect(demographicsError(refusal(409, "already_revoked"))).toBe("esta validação já foi desfeita — atualize a tela");
+    expect(demographicsError(refusal(422, "invalid_demographics"))).toBe("dados do paciente inválidos — confira os campos");
   });
 });
 
