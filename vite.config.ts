@@ -74,8 +74,8 @@ export default defineConfig({
       // Regex: não casa /labels nem outro caminho que só comece com "lab".
       "^/lab(/|$)": proxy(TARGET),
       "^/v(/|$)": proxy(TARGET),
-      // Módulo 22: faturamento de procedimentos (BPA).
-      "/billing": proxy(TARGET)
+      // Módulo 22: faturamento de procedimentos (BPA). Regex como os vizinhos: não casa /billingX.
+      "^/billing(/|$)": proxy(TARGET)
     }
   }
 });
