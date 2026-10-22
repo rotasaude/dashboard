@@ -51,7 +51,7 @@ describe("CheckIn — dados do paciente para o BPA-I (módulo 22)", () => {
     expect(within(form).getByRole("note").textContent).toMatch(/ajuda|faturamento/);
     fireEvent.change(within(form).getByLabelText("Raça/cor"), { target: { value: "03" } });
     fireEvent.click(within(form).getByRole("button", { name: "Salvar dados do paciente" }));
-    await waitFor(() => expect(api.saveVerificationDemographics).toHaveBeenCalledWith("v9", { race_color: "03" }));
+    await waitFor(() => expect(api.saveVerificationDemographics).toHaveBeenCalledWith("v9", { race_color: "03", ethnicity: "" }));
     expect(await within(form).findByText("Dados do paciente salvos.")).not.toBeNull();
     expect(within(form).queryByLabelText("Raça/cor")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Próximo atendimento" }));
@@ -66,7 +66,7 @@ describe("CheckIn — dados do paciente para o BPA-I (módulo 22)", () => {
     const form = screen.getByRole("region", { name: "Completar dados do paciente" });
     fireEvent.change(within(form).getByLabelText("Raça/cor"), { target: { value: "01" } });
     fireEvent.click(within(form).getByRole("button", { name: "Salvar dados do paciente" }));
-    await waitFor(() => expect(api.saveVerificationDemographics).toHaveBeenCalledWith("v10", { race_color: "01" }));
+    await waitFor(() => expect(api.saveVerificationDemographics).toHaveBeenCalledWith("v10", { race_color: "01", ethnicity: "" }));
     cleanup();
     renderCheckIn();
     await checkInByCode();
@@ -128,7 +128,7 @@ describe("CheckIn — dados do paciente para o BPA-I (módulo 22)", () => {
     const form = screen.getByRole("region", { name: "Completar dados do paciente" });
     fireEvent.change(within(form).getByLabelText("Raça/cor"), { target: { value: "02" } });
     fireEvent.click(within(form).getByRole("button", { name: "Salvar dados do paciente" }));
-    await waitFor(() => expect(api.saveVerificationDemographics).toHaveBeenCalledWith("v11", { race_color: "02" }));
+    await waitFor(() => expect(api.saveVerificationDemographics).toHaveBeenCalledWith("v11", { race_color: "02", ethnicity: "" }));
   });
 
   it("exceção com par só declarado (verification_id null) ou sem o interruptor: sem formulário", async () => {

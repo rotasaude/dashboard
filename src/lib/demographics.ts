@@ -54,8 +54,8 @@ export function demographicsBody(d: DemographicsDraft): PatientDemographicsInput
   const body: PatientDemographicsInput = {};
   if (d.raceColor) {
     body.race_color = d.raceColor;
-    // O api recusa etnia fora de 05.
-    if (d.raceColor === INDIGENOUS) body.ethnicity = d.ethnicity.trim();
+    // Etnia só com 05; fora dela vai vazia, e o api apaga a gravada (trocar de indígena para outra não trava).
+    body.ethnicity = d.raceColor === INDIGENOUS ? d.ethnicity.trim() : "";
   }
   if (addressStarted(d)) {
     body.address_zip = digits(d.zip);
@@ -81,19 +81,29 @@ const ERRORS: Record<string, string> = {
   too_long: "texto maior que a largura do arquivo BPA — abrevie",
   missing_role: "seu papel não permite alterar os dados do paciente",
   feature_disabled: "o faturamento de procedimentos está desligado nesta cidade",
+  invalid_demographics: "dados do paciente inválidos — confira os campos",
   not_found: "paciente ou atendimento não encontrado — atualize a tela"
 };
 
-const FIELD_TEXT: Record<string, string> = {
-  address_street: "logradouro", address_number: "número", address_complement: "complemento", address_district: "bairro"
+// Rótulos dos campos do paciente que o api aponta em `field` (fonte única; o faturamento reusa).
+export const DEMOGRAPHICS_FIELD_LABEL: Record<string, string> = {
+  race_color: "raça/cor", ethnicity: "etnia", address_zip: "CEP", address_street: "logradouro", address_number: "número",
+  address_complement: "complemento", address_district: "bairro"
 };
+
+// Recusas que só a validação dos dados do paciente produz: a recepção as traduz por aqui, não pelo genérico.
+const OWN_CODES = new Set([ "invalid_race_color", "invalid_ethnicity", "ethnicity_required", "invalid_zip", "too_long", "invalid_demographics" ]);
+export function isDemographicsError(err: unknown): boolean {
+  const code = errorCode(err);
+  return !!code && OWN_CODES.has(code);
+}
 
 export function demographicsError(err: unknown): string {
   const code = errorCode(err);
-  if (code === "too_long" && err instanceof ApiError) {
-    const field = (err.body as { field?: unknown } | null)?.field;
-    if (typeof field === "string" && FIELD_TEXT[field]) return `${FIELD_TEXT[field]} maior que a largura do arquivo BPA — abrevie`;
-  }
+  const field = err instanceof ApiError ? (err.body as { field?: unknown } | null)?.field : undefined;
+  const label = typeof field === "string" ? DEMOGRAPHICS_FIELD_LABEL[field] : undefined;
+  if (code === "too_long" && label) return `${label} maior que a largura do arquivo BPA — abrevie`;
+  if (code === "invalid_demographics" && label) return `dados do paciente inválidos: confira ${label}`;
   if (code && ERRORS[code]) return ERRORS[code];
   if (err instanceof ApiError) return `não foi possível salvar (${err.status}) — tente de novo`;
   return "sem conexão com o servidor — tente de novo";

@@ -31,7 +31,9 @@ import { ErasureRequests } from "./attendance/ErasureRequests";
 import { CadsusCheck } from "./attendance/CadsusCheck";
 import { NamesFields } from "./attendance/NamesFields";
 import { DemographicsFields } from "./attendance/DemographicsForm";
-import { EMPTY_DEMOGRAPHICS, demographicsBody, demographicsFilled, demographicsProblem, type DemographicsDraft } from "../lib/demographics";
+import {
+  EMPTY_DEMOGRAPHICS, demographicsBody, demographicsError, demographicsFilled, demographicsProblem, isDemographicsError, type DemographicsDraft
+} from "../lib/demographics";
 import { EMPTY_NAMES, namesBody, namesProblem, type NamesDraft } from "../lib/citizenNames";
 import { hasFeature } from "../lib/features";
 import { canUseBilling, showUnitProcedures } from "../lib/billing";
@@ -241,7 +243,8 @@ function Counter({ cadsusOn, demographicsOn = false }: { cadsusOn: boolean; demo
       else await verifyCitizen(cpf, code, profileBody);
       setState("done");
     } catch (err) {
-      setError(attendanceError(err));
+      // Recusa dos dados do paciente (módulo 22) tem frase do campo; o resto, a do balcão.
+      setError(isDemographicsError(err) ? demographicsError(err) : attendanceError(err));
     } finally {
       setBusy(false);
     }

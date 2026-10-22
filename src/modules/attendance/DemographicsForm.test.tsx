@@ -28,7 +28,7 @@ describe("DemographicsForm", () => {
     expect(within(form).getByRole("alert").textContent).toBe("preencha a raça/cor ou o endereço");
     fireEvent.change(within(form).getByLabelText("Raça/cor"), { target: { value: "03" } });
     fireEvent.click(within(form).getByRole("button", { name: "Salvar dados do paciente" }));
-    await waitFor(() => expect(save).toHaveBeenCalledWith({ race_color: "03" }));
+    await waitFor(() => expect(save).toHaveBeenCalledWith({ race_color: "03", ethnicity: "" }));
     expect((await within(form).findByRole("status")).textContent).toBe("Dados do paciente salvos.");
     expect(onSaved).toHaveBeenCalled();
   });

@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { ApiError } from "./api";
 import {
-  EMPTY_DEMOGRAPHICS, RACE_COLORS, demographicsBody, demographicsError, demographicsFilled, demographicsProblem, missingText
+  EMPTY_DEMOGRAPHICS, RACE_COLORS, demographicsBody, demographicsError, demographicsFilled, demographicsProblem, isDemographicsError, missingText
 } from "./demographics";
 
 const ADDRESS = { ...EMPTY_DEMOGRAPHICS, zip: "80010-000", street: "RUA XV DE NOVEMBRO", number: "100", district: "CENTRO" };
@@ -23,8 +23,8 @@ describe("dados do paciente para o BPA-I (contrato §12, D-U1)", () => {
     expect(demographicsProblem({ ...EMPTY_DEMOGRAPHICS, raceColor: "05" })).toBe("para indígena, informe a etnia: código de 4 dígitos da tabela do DATASUS");
     expect(demographicsProblem({ ...EMPTY_DEMOGRAPHICS, raceColor: "05", ethnicity: "12" })).toBe("para indígena, informe a etnia: código de 4 dígitos da tabela do DATASUS");
     expect(demographicsBody({ ...EMPTY_DEMOGRAPHICS, raceColor: "05", ethnicity: " 0001 " })).toEqual({ race_color: "05", ethnicity: "0001" });
-    // A etnia é recusada pelo api fora de 05: nem vai no corpo.
-    expect(demographicsBody({ ...EMPTY_DEMOGRAPHICS, raceColor: "03", ethnicity: "0001" })).toEqual({ race_color: "03" });
+    // Fora de 05, a etnia vai vazia: o api apaga a gravada (trocar de indígena para outra não trava).
+    expect(demographicsBody({ ...EMPTY_DEMOGRAPHICS, raceColor: "03", ethnicity: "0001" })).toEqual({ race_color: "03", ethnicity: "" });
   });
 
   it("endereço: começou, precisa de CEP com 8 dígitos, logradouro e bairro; larguras recusadas, nunca cortadas", () => {
@@ -53,6 +53,11 @@ describe("dados do paciente para o BPA-I (contrato §12, D-U1)", () => {
     expect(demographicsError(new ApiError(403, { error: "missing_role" }, "x"))).toBe("seu papel não permite alterar os dados do paciente");
     expect(demographicsError(new ApiError(422, { error: "too_long", field: "address_street" }, "x"))).toBe("logradouro maior que a largura do arquivo BPA — abrevie");
     expect(demographicsError(new ApiError(422, { error: "too_long", field: "outro" }, "x"))).toBe("texto maior que a largura do arquivo BPA — abrevie");
+    expect(demographicsError(new ApiError(422, { error: "invalid_ethnicity", field: "ethnicity" }, "x"))).toBe("para indígena, informe a etnia: código de 4 dígitos da tabela do DATASUS");
+    expect(demographicsError(new ApiError(422, { error: "invalid_demographics", field: "address_zip" }, "x"))).toBe("dados do paciente inválidos: confira CEP");
+    expect(demographicsError(new ApiError(422, { error: "invalid_demographics" }, "x"))).toBe("dados do paciente inválidos — confira os campos");
+    expect(isDemographicsError(new ApiError(422, { error: "invalid_race_color" }, "x"))).toBe(true);
+    expect(isDemographicsError(new ApiError(422, { error: "invalid_code" }, "x"))).toBe(false);
     expect(demographicsError(new ApiError(500, "", "x"))).toBe("não foi possível salvar (500) — tente de novo");
   });
 });

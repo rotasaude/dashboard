@@ -91,4 +91,16 @@ describe("Attendance — dados do paciente na validação (módulo 22)", () => {
     await fillValidation();
     expect(screen.queryByLabelText("Raça/cor")).toBeNull();
   });
+
+  it("recusa dos dados do paciente na validação vira a frase do campo, nunca o genérico", async () => {
+    mocked(api.fetchCurrentSession).mockResolvedValue(session([ "procedure_billing" ]));
+    mocked(api.verifyCitizen).mockRejectedValue(new api.ApiError(422, { error: "invalid_ethnicity", field: "ethnicity" }, "x"));
+    renderAttendance();
+    await fillValidation();
+    fireEvent.change(screen.getByLabelText("Raça/cor"), { target: { value: "03" } });
+    fireEvent.click(screen.getByRole("button", { name: "Validar cadastro" }));
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toBe("para indígena, informe a etnia: código de 4 dígitos da tabela do DATASUS");
+    expect(api.verifyCitizen).toHaveBeenCalledWith("529.982.247-25", "123456", PROFILE, { race_color: "03", ethnicity: "" });
+  });
 });
