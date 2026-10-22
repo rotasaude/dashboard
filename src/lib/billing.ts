@@ -406,6 +406,7 @@ export function billingError(err: unknown): string {
   const code = errorCode(err);
   const field = errorField(err);
   const fieldText = field ? (FIELD_LABEL[field] ?? field) : null;
+  if (code === "field_required" && fieldText) return `preencha: ${fieldText}`;
   if (code === "too_long" && fieldText) return `${fieldText} maior que a largura do arquivo BPA — abrevie`;
   if (code === "invalid_demographics" && fieldText) return `dados do paciente inválidos: confira ${fieldText}`;
   if (code && ERRORS[code]) return ERRORS[code];
