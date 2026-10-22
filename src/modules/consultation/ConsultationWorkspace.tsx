@@ -21,6 +21,8 @@ import { PatientPanel } from "./PatientPanel";
 import { MedicationsBlock } from "./MedicationsBlock";
 import { ConsultationEditor } from "./ConsultationEditor";
 import { ConsultationLoader, ConsultationView } from "./ConsultationView";
+import { ProceduresPanel } from "../billing/ProceduresPanel";
+import { canUseBilling, unitBills } from "../../lib/billing";
 
 interface Props {
   attendanceId: string;
@@ -61,6 +63,8 @@ export function ConsultationWorkspace(props: Props) {
   // Módulo 20: a aba "Linha do tempo" no painel do paciente, pelo atendimento (em contexto).
   const timelineOn = hasFeature(user, "patient_timeline");
   const examsOn = hasFeature(user, "exam_tracking");
+  // Módulo 22: procedimentos realizados no atendimento, nunca na UBS (ADR 0039).
+  const proceduresOn = canUseBilling(user) && unitBills(props.unit);
   // Aba Documentos: o editor continua montado (escondido) para o autosave não
   // perder o que foi digitado; os documentos só montam na primeira abertura da
   // aba e depois ficam montados (escondidos), para a volta à Consulta não perder
@@ -192,6 +196,11 @@ export function ConsultationWorkspace(props: Props) {
                   void rereadProblems(consultation.id);
                 }}
                 onClose={props.onClose} />
+            )}
+
+            {proceduresOn && (
+              <ProceduresPanel unit={props.unit} attendanceId={props.attendanceId} consultationId={consultation?.id ?? null}
+                patientId={record.data.patient.id} searchDelayMs={props.searchDelayMs} />
             )}
           </div>
 

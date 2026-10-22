@@ -32,6 +32,7 @@ import { CadsusCheck } from "./attendance/CadsusCheck";
 import { NamesFields } from "./attendance/NamesFields";
 import { EMPTY_NAMES, namesBody, namesProblem, type NamesDraft } from "../lib/citizenNames";
 import { hasFeature } from "../lib/features";
+import { canUseBilling } from "../lib/billing";
 
 // Atendimento (spec 2026-09-24-citizen-presencial-verification, Task 6, e
 // 2026-09-25-citizen-appointments, Task 7): balcão de verificação presencial
@@ -127,6 +128,7 @@ export function Attendance({ onNavigate }: { onNavigate(id: ModuleId): void }) {
           onGoToSecurity={goToSecurity}
           clinicalRecord={hasFeature(user, "clinical_record")}
           patientTimeline={hasFeature(user, "patient_timeline")}
+          procedureBilling={canUseBilling(user)}
           clinicalDocuments={hasFeature(user, "clinical_documents") && (canVerify || canCareRole)}
           professional={canCare}
           onClinicalRefused={() => void queryClient.invalidateQueries({ queryKey: [ "myProfessional", user.id ] })}

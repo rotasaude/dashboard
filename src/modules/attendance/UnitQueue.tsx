@@ -27,6 +27,8 @@ import { ConsultationWorkspace } from "../consultation/ConsultationWorkspace";
 import { DeclarationPanel } from "./DeclarationPanel";
 import { UnitDeclarations } from "./UnitDeclarations";
 import { PatientTimeline } from "../timeline/PatientTimeline";
+import { ProceduresPanel } from "../billing/ProceduresPanel";
+import { unitBills } from "../../lib/billing";
 
 // UnitQueue (Task 7) — a fila da unidade atual (spec §6 "Fila"), em duas
 // partes: "Aguardando" (ordenada pela API — prioridade, depois chegada — esta
@@ -54,6 +56,9 @@ interface Props {
   // Módulo 20: `patient_timeline` ligado na sessão. Sem o prontuário (modo
   // integrated), a linha do tempo abre pelo atendimento chamado.
   patientTimeline?: boolean;
+  // Módulo 22: `procedure_billing` ligado na sessão. Sem o prontuário (modo
+  // integrated), os procedimentos abrem pelo atendimento chamado; nunca na UBS.
+  procedureBilling?: boolean;
 }
 
 // Módulo 18: a escuta aberta no painel — a que veio na chamada, uma lida pelo
@@ -65,7 +70,9 @@ type ScreeningPanel =
   // Módulo 19: a consulta do atendimento chamado (traz a escuta do dia no painel do paciente).
   | { kind: "consultation"; attendanceId: string }
   // Módulo 20: a linha do tempo do atendimento chamado, quando não há prontuário.
-  | { kind: "timeline"; attendanceId: string };
+  | { kind: "timeline"; attendanceId: string }
+  // Módulo 22: os procedimentos do atendimento chamado, quando não há prontuário.
+  | { kind: "procedures"; attendanceId: string };
 
 // Vermelho no topo e destacado (spec §4); a ordem é do api.
 const redRow = (r: QueueRow) =>
@@ -83,7 +90,7 @@ function handleClinicalRefusal(code: string | undefined, reload: () => void, onC
 
 export function UnitQueue({
   unit, units, canCare, careBlocked, onClinicalRefused, now = () => new Date(), clinicalRecord = false, onGoToSecurity,
-  clinicalDocuments = false, professional = false, patientTimeline = false
+  clinicalDocuments = false, professional = false, patientTimeline = false, procedureBilling = false
 }: Props) {
   const queryClient = useQueryClient();
   const auth = useAuth();
@@ -101,6 +108,7 @@ export function UnitQueue({
   // Módulo 19c: a linha guardada aqui segura o painel mesmo que a pessoa saia da fila.
   const [ declaring, setDeclaring ] = useState<QueueRow | null>(null);
   const timelineButton = canCare && patientTimeline && !clinicalRecord;
+  const proceduresButton = canCare && procedureBilling && !clinicalRecord && unitBills(unit);
   const declarationButton = (r: QueueRow) => clinicalDocuments && (
     <button type="button" style={secondaryButtonStyle} onClick={() => setDeclaring(r)}>Declaração</button>
   );
@@ -328,6 +336,12 @@ export function UnitQueue({
                               Linha do tempo
                             </button>
                           )}
+                          {proceduresButton && (
+                            <button type="button" style={secondaryButtonStyle}
+                              onClick={() => setPanel({ kind: "procedures", attendanceId: r.id })}>
+                              Procedimentos
+                            </button>
+                          )}
                           {canCare && r.screening?.id && (
                             <button type="button" style={secondaryButtonStyle}
                               onClick={() => setPanel({ kind: "view", id: r.screening!.id })}>
@@ -395,6 +409,13 @@ export function UnitQueue({
           <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: 16, border: "1px solid var(--rule2)", borderRadius: 8 }}>
             <PatientTimeline key={panel.attendanceId} subject={{ attendanceId: panel.attendanceId }} />
             <div><button type="button" style={secondaryButtonStyle} onClick={() => setPanel(null)}>Fechar linha do tempo</button></div>
+          </div>
+        )}
+
+        {proceduresButton && panel?.kind === "procedures" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <ProceduresPanel key={panel.attendanceId} unit={unit} attendanceId={panel.attendanceId} />
+            <div><button type="button" style={secondaryButtonStyle} onClick={() => setPanel(null)}>Fechar procedimentos</button></div>
           </div>
         )}
 
