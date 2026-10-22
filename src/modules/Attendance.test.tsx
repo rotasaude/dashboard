@@ -762,4 +762,29 @@ describe("Attendance — nomes no balcão (módulo 19)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Validar cadastro" }));
     expect(await screen.findByText("confira o nome completo no documento (3 a 200 caracteres)")).not.toBeNull();
   });
+
+  it("procedimento avulso (módulo 22): na UBS, nunca, mesmo com o interruptor; na UPA com vínculo, sim", async () => {
+    const link = (unitId: string) => ({
+      professional: {} as api.Professional, shifts: [],
+      links: [ { id: "l1", health_unit_id: unitId, unit_name: "x", cbo_code: "225125", cbo_title: null,
+        started_at: "x", started_by: "a", ended_at: null, ended_by: null } ]
+    });
+    mocked(api.fetchCurrentSession).mockResolvedValue({ ...session("health_professional"), features: [ "procedure_billing" ] });
+    const ubs = { id: "ub1", name: "UBS Centro", kind: "ubs" };
+    localStorage.setItem(currentUnitKey("u1"), ubs.id);
+    mocked(api.listActiveUnits).mockResolvedValue([ ubs ]);
+    mocked(api.getMyProfessional).mockResolvedValue(link("ub1"));
+    renderAttendance();
+    expect(await screen.findByRole("region", { name: "Acolhimento" })).not.toBeNull();
+    expect(screen.queryByRole("region", { name: "Procedimento avulso" })).toBeNull();
+    cleanup();
+    localStorage.clear();
+
+    const upa = { id: "up1", name: "UPA Boa Vista", kind: "upa" };
+    localStorage.setItem(currentUnitKey("u1"), upa.id);
+    mocked(api.listActiveUnits).mockResolvedValue([ upa ]);
+    mocked(api.getMyProfessional).mockResolvedValue(link("up1"));
+    renderAttendance();
+    expect(await screen.findByRole("region", { name: "Procedimento avulso" })).not.toBeNull();
+  });
 });
