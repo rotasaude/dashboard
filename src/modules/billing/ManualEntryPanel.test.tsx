@@ -1,6 +1,7 @@
 // src/modules/billing/ManualEntryPanel.test.tsx
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { focusManager, onlineManager } from "@tanstack/react-query";
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const real = await importOriginal<typeof import("../../lib/api")>();
@@ -11,6 +12,7 @@ vi.mock("../../lib/api", async (importOriginal) => {
 import * as api from "../../lib/api";
 import { ManualEntryPanel, ManualEntrySection } from "./ManualEntryPanel";
 import { renderWithProviders } from "../../test/campaignFixtures";
+import { PROFESSIONALS_KEY } from "../../lib/billing";
 import { LAB_EST, PATIENT, PROFESSIONALS, TODAY22, UPA_EST, URGENCY, billingUser, procedure } from "../../test/billingFixtures";
 import { VALID_CPF } from "../../test/examFixtures";
 
@@ -120,5 +122,20 @@ describe("ManualEntrySection", () => {
       "Procedimento registrado — não faturável — profissional sem CNS no cadastro. O registro vale; o faturamento confere de novo no fechamento."
     ));
     expect(screen.queryByRole("region", { name: "Lançamento manual" })).toBeNull();
+  });
+
+  it("profissionais: sem releitura por foco ou rede, e sem cache guardado", async () => {
+    const { client } = renderWithProviders(
+      <ManualEntryPanel establishments={[ UPA_EST, LAB_EST ]} today={TODAY22} searchDelayMs={0} onSaved={vi.fn()} onClose={() => undefined} />
+    );
+    const panel = screen.getByRole("region", { name: "Lançamento manual" });
+    await choose(panel, "us1");
+    expect(api.listBillingProfessionals).toHaveBeenCalledTimes(1);
+    act(() => { focusManager.setFocused(false); focusManager.setFocused(true); });
+    act(() => { onlineManager.setOnline(false); onlineManager.setOnline(true); });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(api.listBillingProfessionals).toHaveBeenCalledTimes(1);
+    expect(client.getQueryCache().find({ queryKey: [ PROFESSIONALS_KEY, "health_unit:u7" ] })?.options.gcTime).toBe(0);
+    act(() => { focusManager.setFocused(undefined); });
   });
 });

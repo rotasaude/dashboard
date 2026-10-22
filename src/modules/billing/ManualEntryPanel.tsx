@@ -29,7 +29,9 @@ export function ManualEntryPanel({ establishments, today, searchDelayMs, onSaved
   const [ cbo, setCbo ] = useState("");
   const est = parseEstablishmentKey(estKey);
   const professionals = useQuery({
-    queryKey: [ PROFESSIONALS_KEY, estKey ], queryFn: () => listBillingProfessionals(est!), enabled: !!est, retry: false
+    queryKey: [ PROFESSIONALS_KEY, estKey ], queryFn: () => listBillingProfessionals(est!), enabled: !!est, retry: false,
+    // Como as demais leituras do faturamento: nada relê sozinho.
+    gcTime: 0, refetchOnWindowFocus: false, refetchOnReconnect: false
   });
   const professional = professionals.data?.find((p) => p.user_id === professionalId) ?? null;
   const cboOptions = professional?.cbo_codes ?? [];
