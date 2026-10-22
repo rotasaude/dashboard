@@ -5,9 +5,9 @@
 // de o faturista completar raça/cor ou endereço (ação explícita; contrato §12,
 // D-U1) — nunca sozinha. Corrigido o cadastro, a pendência sai sem relançar (spec §2).
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getPeriodPending, updatePatientDemographics, type BillingPeriod, type PendingItem } from "../../lib/api";
-import { LATE_TEXT, PENDING_KEY, patientName, billingError, demographicsMissingOf, establishmentLabel, fixInfo, groupPending, reasonLabel } from "../../lib/billing";
+import { LATE_TEXT, PENDING_KEY, PERIODS_KEY, patientName, billingError, demographicsMissingOf, establishmentLabel, fixInfo, groupPending, reasonLabel } from "../../lib/billing";
 import { competenceLabel } from "../../lib/competence";
 import { fmtDay } from "../../lib/exams";
 import { DataTable, type Column } from "../../components/DataTable";
@@ -38,6 +38,7 @@ export function PendingPanel({ period, onClose, canFix = false }: { period: Bill
   const query = useQuery({
     queryKey: [ PENDING_KEY, period.id ], queryFn: () => getPeriodPending(period.id), gcTime: 0, staleTime: 0, retry: false, refetchOnWindowFocus: false, refetchOnReconnect: false
   });
+  const queryClient = useQueryClient();
   const [ fixing, setFixing ] = useState<PendingItem | null>(null);
   const [ notice, setNotice ] = useState<string | null>(null);
   const cols = columns(canFix, (i) => { setNotice(null); setFixing(i); });
@@ -75,6 +76,8 @@ export function PendingPanel({ period, onClose, canFix = false }: { period: Bill
             setNotice(`Dados de ${patientName(fixing.patient)} salvos; as pendências foram conferidas de novo.`);
             setFixing(null);
             void query.refetch();
+            // O resumo da competência (linhas, não faturáveis, pendências) também muda: releitura explícita, nunca sozinha.
+            void queryClient.invalidateQueries({ queryKey: [ PERIODS_KEY ] });
           }}
           onCancel={() => setFixing(null)} />
       )}

@@ -56,6 +56,7 @@ describe("Pendência do faturista — dados do paciente (módulo 22, D-U1)", () 
     }));
     expect((await within(box).findByRole("status")).textContent).toBe("Dados de Rosa Lima salvos; as pendências foram conferidas de novo.");
     await waitFor(() => expect(api.getPeriodPending).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(api.listBillingPeriods).toHaveBeenCalledTimes(2));
     expect(await within(box).findByText("Cadastro do paciente · 1")).not.toBeNull();
     expect(within(box).queryByText("Rosa Lima")).toBeNull();
   });
