@@ -20,12 +20,17 @@ import { alert, fieldLabel, muted, row, stack } from "./exams/styles";
 import { BillingGate } from "./billing/BillingGate";
 import { BillingPatientLookup } from "./billing/BillingPatientLookup";
 import { ProcedureTable } from "./billing/ProcedureTable";
+import { ManualEntrySection } from "./billing/ManualEntryPanel";
 
 export function BillingProcedures({ today = todayInCity() }: { today?: string } = {}) {
   return (
     <BillingGate title="Procedimentos realizados" sub="faturamento · crítica SIGTAP, cancelamento e lançamento manual"
       allow={(r) => r.clerk || r.admin}>
-      {(roles) => <ProceduresBody clerk={roles.clerk} today={today} />}
+      {(roles) => (
+        <ProceduresBody clerk={roles.clerk} today={today} headerActions={roles.clerk ? ({ establishments, onSaved }) => (
+          <ManualEntrySection establishments={establishments} today={today} onSaved={onSaved} />
+        ) : undefined} />
+      )}
     </BillingGate>
   );
 }

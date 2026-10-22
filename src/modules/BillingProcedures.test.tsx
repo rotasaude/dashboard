@@ -110,4 +110,14 @@ describe("BillingProcedures", () => {
     renderWithProviders(<BillingProcedures today={TODAY22} />);
     expect((await screen.findByRole("alert")).textContent).toBe("seu papel não permite esta ação no faturamento");
   });
+
+  it("só o faturista vê o lançamento manual", async () => {
+    renderWithProviders(<BillingProcedures today={TODAY22} />);
+    expect(await screen.findByRole("button", { name: "Lançamento manual" })).not.toBeNull();
+    cleanup();
+    mocked(api.fetchCurrentSession).mockResolvedValue(billingUser([ "municipal_admin" ]));
+    renderWithProviders(<BillingProcedures today={TODAY22} />);
+    await screen.findByText("0202010473 — DOSAGEM DE GLICOSE");
+    expect(screen.queryByRole("button", { name: "Lançamento manual" })).toBeNull();
+  });
 });
