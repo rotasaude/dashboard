@@ -78,7 +78,6 @@ const ERRORS: Record<string, string> = {
   ethnicity_required: ETHNICITY_TEXT,
   invalid_ethnicity: ETHNICITY_TEXT,
   invalid_zip: "CEP inválido — confira os 8 dígitos",
-  address_incomplete: "endereço incompleto: CEP, logradouro e bairro",
   too_long: "texto maior que a largura do arquivo BPA — abrevie",
   missing_role: "seu papel não permite alterar os dados do paciente",
   feature_disabled: "o faturamento de procedimentos está desligado nesta cidade",

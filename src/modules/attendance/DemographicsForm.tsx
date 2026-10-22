@@ -3,7 +3,7 @@
 // §12, D-U1). `DemographicsFields` é só os campos (a validação presencial os
 // manda junto); `DemographicsForm` salva sozinho (check-in e pendência do
 // faturista). Opcionais, com incentivo visual; nada de "sem informação".
-import { useState, type CSSProperties } from "react";
+import { useRef, useState, type CSSProperties } from "react";
 import type { PatientDemographicsInput } from "../../lib/api";
 import {
   DEMOGRAPHICS_INCENTIVE, EMPTY_DEMOGRAPHICS, INDIGENOUS, RACE_COLORS, demographicsBody, demographicsError, demographicsFilled,
@@ -61,23 +61,27 @@ export function DemographicsForm({ title, missing, save, onSaved, onCancel }: {
   const [ error, setError ] = useState<string | null>(null);
   const [ saved, setSaved ] = useState(false);
   const [ busy, setBusy ] = useState(false);
+  const running = useRef(false);
 
   async function submit() {
-    if (busy) return;
+    if (running.current) return;
     setError(null);
     if (!demographicsFilled(draft)) { setError("preencha a raça/cor ou o endereço"); return; }
     const problem = demographicsProblem(draft);
     if (problem) { setError(problem); return; }
+    running.current = true;
     setBusy(true);
     try {
       await save(demographicsBody(draft));
-      setSaved(true);
-      onSaved?.();
     } catch (err) {
       setError(demographicsError(err));
+      return;
     } finally {
+      running.current = false;
       setBusy(false);
     }
+    setSaved(true);
+    onSaved?.();
   }
 
   return (

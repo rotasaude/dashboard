@@ -47,4 +47,14 @@ describe("DemographicsForm", () => {
     expect((await within(form).findByRole("alert")).textContent).toBe("CEP inválido — confira os 8 dígitos");
     expect((within(form).getByLabelText("Logradouro") as HTMLInputElement).value).toBe("RUA XV DE NOVEMBRO");
   });
+
+  it("duplo clique síncrono salva uma vez só", async () => {
+    const save = vi.fn().mockReturnValue(new Promise(() => {}));
+    const { form } = open(save);
+    fireEvent.change(within(form).getByLabelText("Raça/cor"), { target: { value: "03" } });
+    const button = within(form).getByRole("button", { name: "Salvar dados do paciente" });
+    fireEvent.click(button);
+    fireEvent.click(button);
+    expect(save).toHaveBeenCalledTimes(1);
+  });
 });
