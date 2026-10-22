@@ -21,12 +21,14 @@ export const TIMELINE_KINDS: { key: TimelineKind; label: string }[] = [
   { key: "clinical_document", label: "Documento" },
   { key: "controlled_notification", label: "Notificação de receita" },
   { key: "campaign", label: "Campanha" },
-  { key: "exam", label: "Exame" }
+  { key: "exam", label: "Exame" },
+  { key: "procedure", label: "Procedimento" }
 ];
 
-// O tipo Exame só existe com o rastreamento de exames ligado (módulo 21a).
-export function timelineKinds(examTracking: boolean): typeof TIMELINE_KINDS {
-  return examTracking ? TIMELINE_KINDS : TIMELINE_KINDS.filter((k) => k.key !== "exam");
+// O tipo Exame só existe com o rastreamento de exames ligado (módulo 21a); o
+// Procedimento, com o faturamento de procedimentos (módulo 22).
+export function timelineKinds(examTracking: boolean, procedureBilling = false): typeof TIMELINE_KINDS {
+  return TIMELINE_KINDS.filter((k) => (k.key !== "exam" || examTracking) && (k.key !== "procedure" || procedureBilling));
 }
 
 export const ALL_FILTERS: TimelineFilters = { kinds: [], from: "", to: "" };
@@ -147,7 +149,9 @@ const STATUS_LABEL: Record<string, string> = {
   collected: "coletado",
   resulted: "resultado registrado",
   acknowledged: "ciência dada",
-  external: "resultado externo"
+  external: "resultado externo",
+  // Módulo 22 (contrato §1): procedimento realizado (cancelled já está acima).
+  recorded: "registrado"
 };
 
 export function statusLabel(status: string | null, apiLabel?: string | null): string {

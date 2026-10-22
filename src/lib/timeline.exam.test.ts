@@ -8,7 +8,7 @@ describe("linha do tempo — exames (módulo 21a; contrato §10)", () => {
 
   it("tipo e situações em português", () => {
     expect(timelineKindLabel("exam")).toBe("Exame");
-    expect(TIMELINE_KINDS[TIMELINE_KINDS.length - 1]).toEqual({ key: "exam", label: "Exame" });
+    expect(TIMELINE_KINDS.find((k) => k.key === "exam")).toEqual({ key: "exam", label: "Exame" });
     expect(statusLabel("awaiting_schedule")).toBe("a agendar");
     expect(statusLabel("resulted")).toBe("resultado registrado");
     expect(statusLabel("acknowledged")).toBe("ciência dada");
@@ -29,7 +29,7 @@ describe("linha do tempo — exames (módulo 21a; contrato §10)", () => {
   it("sem o rastreamento de exames, o tipo Exame não existe nos filtros nem vai no pedido", () => {
     const kinds = timelineKinds(false);
     expect(kinds.some((k) => k.key === "exam")).toBe(false);
-    expect(timelineKinds(true)).toEqual(TIMELINE_KINDS);
+    expect(timelineKinds(true, true)).toEqual(TIMELINE_KINDS);
     expect(filtersFrom(EMPTY_DRAFT, kinds).kinds).toEqual([]);
     expect(filtersFrom(toggleKind(EMPTY_DRAFT, "campaign"), kinds).kinds).toEqual([
       "triage", "attendance", "screening", "appointment", "consultation", "clinical_document", "controlled_notification"

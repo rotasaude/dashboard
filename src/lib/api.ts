@@ -2291,7 +2291,7 @@ export async function getLastPatientIdentification(consultationId: string): Prom
 
 export type TimelineKind =
   | "triage" | "attendance" | "screening" | "appointment" | "consultation"
-  | "clinical_document" | "controlled_notification" | "campaign" | "exam";
+  | "clinical_document" | "controlled_notification" | "campaign" | "exam" | "procedure";
 
 export interface TimelineDetailRef { type: string; id: string }
 export interface TimelineEntry {
