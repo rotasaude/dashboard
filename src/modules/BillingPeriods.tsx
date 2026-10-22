@@ -95,7 +95,7 @@ function PeriodsBody({ clerk, today, onGoToSecurity }: { clerk: boolean; today: 
           {list.isSuccess && list.data.length > 0 && <DataTable<BillingPeriod> cols={cols} rows={list.data} rowKey={(p) => p.id} />}
         </div>
       </Panel>
-      {opened?.kind === "pending" && <PendingPanel key={opened.period.id} period={opened.period} onClose={() => setOpened(null)} />}
+      {opened?.kind === "pending" && <PendingPanel key={opened.period.id} period={opened.period} canFix={clerk} onClose={() => setOpened(null)} />}
       {opened?.kind === "exports" && (
         <ExportsPanel key={opened.period.id} period={opened.period} canDownload={clerk} onClose={() => setOpened(null)} />
       )}

@@ -68,7 +68,10 @@ const REASON_LABEL: Record<string, string> = {
   missing_professional_cbo: "profissional sem CBO no vínculo",
   missing_patient_id: "paciente sem CPF nem CNS",
   missing_required_patient_field: "falta dado obrigatório do paciente no cadastro",
-  missing_establishment_cnes: "estabelecimento sem CNES"
+  missing_establishment_cnes: "estabelecimento sem CNES",
+  // Contrato §12, D-U1: dados do paciente que o BPA-I exige.
+  missing_race_color: "paciente sem raça/cor",
+  missing_address: "paciente sem CEP ou endereço"
 };
 export const REASON_CODES = Object.keys(REASON_LABEL);
 
@@ -278,7 +281,7 @@ export function closeDescription(p: BillingPeriod): string {
 // ─── Pendências ─────────────────────────────────────────────────────────────
 const FIX_INFO: Record<string, { title: string; hint: string }> = {
   professional: { title: "Cadastro do profissional", hint: "CNS ou CBO do profissional — a administração corrige em Equipe → Profissionais" },
-  patient: { title: "Cadastro do paciente", hint: "CPF, CNS ou dado obrigatório do paciente — corrigido na validação presencial do Atendimento" },
+  patient: { title: "Cadastro do paciente", hint: "CPF ou CNS na validação presencial do Atendimento; raça/cor e endereço o faturista completa aqui" },
   establishment: { title: "Cadastro do estabelecimento", hint: "CNES da unidade ou do laboratório — a administração corrige no cadastro da unidade ou do prestador" },
   procedure: { title: "Regra da SIGTAP", hint: "o procedimento não passa na SIGTAP — se foi registrado errado, cancele e registre de novo" }
 };
@@ -286,6 +289,14 @@ export const FIX_ORDER = [ "professional", "patient", "establishment", "procedur
 
 export function fixInfo(fix: string): { title: string; hint: string } {
   return FIX_INFO[fix] ?? { title: fix, hint: "" };
+}
+
+// Motivos que o faturista corrige pela pendência (PATCH /billing/patients/:id/demographics).
+export function demographicsMissingOf(reasons: string[]): string[] {
+  const out: string[] = [];
+  if (reasons.includes("missing_race_color")) out.push("race_color");
+  if (reasons.includes("missing_address")) out.push("address");
+  return out;
 }
 
 export function groupPending(items: PendingItem[]): { fix: string; items: PendingItem[] }[] {

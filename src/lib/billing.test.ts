@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { ApiError } from "./api";
 import {
-  BILLING_DISABLED, EMPTY_FILTERS, sigtapQueryProblem, billingError, billingRoles, canUseBilling, cidHint, closeDescription, closingCompetence, emptyProcedure,
+  BILLING_DISABLED, EMPTY_FILTERS, sigtapQueryProblem, billingError, billingRoles, canUseBilling, cidHint, closeDescription, closingCompetence, demographicsMissingOf, emptyProcedure,
   establishmentKey, establishmentLabel, exportFileName, fallbackNotice, fixInfo, groupPending, isStale, manualProblem, normalizeCid,
   notBillableText, parseEstablishmentKey, periodStatusText, procedureBody, procedureProblem, procedureQuery, reasonLabel, reasonProblem,
   savedText, settingsBody, settingsComplete, settingsDraft, settingsProblem, showUnitProcedures, sigtapCompetence, sourceLabel, unitBills,
@@ -39,6 +39,13 @@ describe("quem usa", () => {
 });
 
 describe("veredito da crítica", () => {
+  it("motivos dos dados do paciente (contrato §12, D-U1)", () => {
+    expect(reasonLabel("missing_race_color")).toBe("paciente sem raça/cor");
+    expect(reasonLabel("missing_address")).toBe("paciente sem CEP ou endereço");
+    expect(demographicsMissingOf([ "missing_address", "missing_patient_id", "missing_race_color" ])).toEqual([ "race_color", "address" ]);
+    expect(demographicsMissingOf([ "missing_patient_id" ])).toEqual([]);
+  });
+
   it("faturável com o instrumento; não faturável com os motivos em português; cancelado", () => {
     expect(verdict(procedure())).toEqual({ tone: "ok", text: "faturável · BPA-I" });
     expect(verdict(procedure({ billable: false, instrument: "bpa_i", blocking_reasons: [ "cid_required", "missing_professional_cns" ] })))
