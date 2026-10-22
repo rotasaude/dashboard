@@ -31,6 +31,7 @@ import { LabQcRuns } from "./modules/LabQcRuns";
 import { LabQcChart } from "./modules/LabQcChart";
 import { LabQcBlocks } from "./modules/LabQcBlocks";
 import { BillingProcedures } from "./modules/BillingProcedures";
+import { BillingPeriods } from "./modules/BillingPeriods";
 import { ProviderPortal } from "./modules/ProviderPortal";
 import { AcknowledgementNotice } from "./modules/exams/AcknowledgementNotice";
 import { Shell } from "./shell/Shell";
@@ -266,6 +267,7 @@ export function renderModule(active: ModuleId, setActive: (id: ModuleId) => void
     case "lab-traceability": return <LabTraceability />;
     case "lab-instruments": return <LabInstruments onGoToSecurity={() => setActive("security")} />;
     case "billing-procedures": return <BillingProcedures />;
+    case "billing-periods": return <BillingPeriods />;
     default:               return <Placeholder title={labelFor(active)} />;
   }
 }

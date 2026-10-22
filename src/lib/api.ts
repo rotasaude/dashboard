@@ -3580,7 +3580,7 @@ export interface BillingPeriod {
 // Divergência B6: o que a tela mostra de cada pendência (opcional em api sem a B6).
 export interface PendingItem {
   procedure_id: string; reasons: string[]; fix: PendingFix | string;
-  performed_on?: string; sigtap_code?: string; label?: string;
+  performed_on?: string; sigtap_code?: string; label?: string; late?: boolean;
   patient?: { id: string; display_name: string }; professional?: { user_id: string; name: string };
 }
 export interface BillingExport {
