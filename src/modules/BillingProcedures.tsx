@@ -9,7 +9,7 @@ import { useState, type CSSProperties, type ReactNode } from "react";
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { listBillingEstablishments, listProcedures, type BillingEstablishment, type BillingPatient } from "../lib/api";
 import {
-  EMPTY_FILTERS, ESTABLISHMENTS_KEY, PROCEDURES_KEY, REASON_CODES, billingError, establishmentKey, establishmentLabel, procedureQuery,
+  EMPTY_FILTERS, ESTABLISHMENTS_KEY, PROCEDURES_KEY, REASON_CODES, billingError, establishmentKey, establishmentLabel, isStale, procedureQuery,
   reasonLabel, type ProcedureFilters
 } from "../lib/billing";
 import { competenceLabel, competenceOptions } from "../lib/competence";
@@ -55,7 +55,14 @@ export function ProceduresBody({ clerk, today, headerActions }: {
     gcTime: 0, staleTime: 0, retry: false, refetchOnWindowFocus: false, refetchOnReconnect: false
   });
   const rows = (query.data?.pages ?? []).flatMap((p) => p.procedures);
-  const reload = () => void queryClient.invalidateQueries({ queryKey: [ PROCEDURES_KEY ] });
+  // E19: cada leitura grava trilha. Depois de uma ação, volta à 1ª página (reset), sem reler as páginas já carregadas.
+  const reload = () => void queryClient.resetQueries({ queryKey: [ PROCEDURES_KEY ] });
+
+  // invalid_cursor: a lista mudou enquanto se rolava — recomeça da 1ª página, como a frase diz.
+  async function loadMore() {
+    const result = await query.fetchNextPage();
+    if (result.isError && isStale(result.error)) { setNotice(billingError(result.error)); reload(); }
+  }
 
   function apply() {
     setNotice(null);
@@ -125,7 +132,7 @@ export function ProceduresBody({ clerk, today, headerActions }: {
           )}
           {query.hasNextPage && (
             <div>
-              <button type="button" style={secondaryButtonStyle} disabled={query.isFetchingNextPage} onClick={() => void query.fetchNextPage()}>
+              <button type="button" style={secondaryButtonStyle} disabled={query.isFetchingNextPage} onClick={() => void loadMore()}>
                 Carregar mais
               </button>
             </div>

@@ -1,6 +1,7 @@
 // src/modules/BillingProcedures.test.tsx
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { focusManager, onlineManager } from "@tanstack/react-query";
 
 vi.mock("../lib/api", async (importOriginal) => {
   const real = await importOriginal<typeof import("../lib/api")>();
@@ -119,5 +120,42 @@ describe("BillingProcedures", () => {
     renderWithProviders(<BillingProcedures today={TODAY22} />);
     await screen.findByText("0202010473 — DOSAGEM DE GLICOSE");
     expect(screen.queryByRole("button", { name: "Lançamento manual" })).toBeNull();
+  });
+
+  it("E19: uma ação relê só a 1ª página (uma trilha); foco e rede não releem", async () => {
+    mocked(api.listProcedures)
+      .mockResolvedValueOnce({ procedures: [ procedure() ], next_before: "c1" })
+      .mockResolvedValueOnce({ procedures: [ LAB_ROW ], next_before: null })
+      .mockResolvedValue({ procedures: [ procedure(), LAB_ROW ], next_before: "c2" });
+    mocked(api.cancelProcedure).mockResolvedValue({ ...procedure(), status: "cancelled" });
+    renderWithProviders(<BillingProcedures today={TODAY22} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Carregar mais" }));
+    await screen.findByText("0202010473 — DOSAGEM DE GLICOSE");
+    expect(api.listProcedures).toHaveBeenCalledTimes(2);
+    act(() => { focusManager.setFocused(false); focusManager.setFocused(true); });
+    act(() => { onlineManager.setOnline(false); onlineManager.setOnline(true); });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(api.listProcedures).toHaveBeenCalledTimes(2);
+    fireEvent.click(screen.getAllByRole("button", { name: "Cancelar procedimento" })[0]);
+    fireEvent.change(screen.getByLabelText("Motivo do cancelamento"), { target: { value: "registrado em duplicidade" } });
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar cancelamento" }));
+    await screen.findByText(/cancelado\./);
+    await waitFor(() => expect(api.listProcedures).toHaveBeenCalledTimes(3));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(api.listProcedures).toHaveBeenCalledTimes(3);
+    expect(api.listProcedures).toHaveBeenLastCalledWith({ competence: "202610", before: null });
+    act(() => { focusManager.setFocused(undefined); });
+  });
+
+  it("invalid_cursor no Carregar mais: avisa e recomeça da 1ª página", async () => {
+    mocked(api.listProcedures)
+      .mockResolvedValueOnce({ procedures: [ procedure() ], next_before: "c1" })
+      .mockRejectedValueOnce(new api.ApiError(422, { error: "invalid_cursor" }, "x"))
+      .mockResolvedValue({ procedures: [ procedure() ], next_before: null });
+    renderWithProviders(<BillingProcedures today={TODAY22} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Carregar mais" }));
+    expect(await screen.findByText("a lista mudou enquanto você rolava — a tela foi atualizada")).not.toBeNull();
+    await waitFor(() => expect(api.listProcedures).toHaveBeenCalledTimes(3));
+    expect(api.listProcedures).toHaveBeenLastCalledWith({ competence: "202610", before: null });
   });
 });
