@@ -8,7 +8,7 @@
 // Nada relê sozinho: só ao abrir, ao trocar a competência e depois de uma ação.
 import { useState, type CSSProperties } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ApiError, closeBillingPeriod, errorCode, listBillingPeriods, reopenBillingPeriod, type BillingPeriod } from "../lib/api";
+import { closeBillingPeriod, errorCode, listBillingPeriods, reopenBillingPeriod, type BillingPeriod } from "../lib/api";
 import {
   EXPORTS_KEY, PERIODS_KEY, billingError, closeDescription, closingCompetence, establishmentLabel, isStale, notBillableText, periodStatusText,
   reasonProblem
@@ -21,7 +21,7 @@ import { EmptyState } from "../components/EmptyState";
 import { Tag } from "../components/Tag";
 import { SensitiveAction } from "../components/SensitiveAction";
 import { buttonStyle, inputStyle, secondaryButtonStyle } from "../components/formStyles";
-import { alert, muted, row, stack } from "./exams/styles";
+import { alert, fieldLabel, muted, panel, row, stack } from "./exams/styles";
 import { BillingGate } from "./billing/BillingGate";
 import { ExportsPanel } from "./billing/ExportsPanel";
 import { PendingPanel } from "./billing/PendingPanel";
@@ -119,30 +119,64 @@ function PeriodsBody({ clerk, today, onGoToSecurity }: { clerk: boolean; today: 
         />
       )}
       {clerk && opened?.kind === "reopen" && (
-        <SensitiveAction
-          key={`reopen:${opened.period.id}`}
-          title={`Reabrir ${nameOf(opened.period)}`}
-          description={`A versão ${opened.period.version} do arquivo fica no histórico; o próximo fechamento gera a versão ${opened.period.version + 1}. O motivo fica na trilha.`}
-          requiresStepUp
-          confirmLabel="Confirmar reabertura"
-          fields={[ { name: "reason", label: "Motivo da reabertura", required: true, multiline: true } ]}
-          run={async (values) => {
-            const reason = values.reason ?? "";
-            // Recusar em vez de cortar: fora de 10..500, o api nem é chamado.
-            if (reasonProblem(reason)) throw new ApiError(422, { error: "reason_required" }, "local");
-            await reopenBillingPeriod(opened.period.id, reason.trim());
-          }}
+        <ReopenAction key={`reopen:${opened.period.id}`} period={opened.period} title={`Reabrir ${nameOf(opened.period)}`}
           onDone={() => {
             setNotice(`Competência reaberta. O próximo fechamento gera a versão ${opened.period.version + 1}.`);
             setOpened(null);
             reload();
           }}
-          onCancel={() => setOpened(null)}
-          onGoToSecurity={onGoToSecurity}
-          translateError={translate}
-        />
+          onCancel={() => setOpened(null)} onGoToSecurity={onGoToSecurity} translateError={translate} />
       )}
     </div>
+  );
+}
+
+// Motivo revisado ANTES do step-up (padrão "Revisar" da configuração): fora de
+// 10..500, nem se pede o código do autenticador, e o api nem é chamado.
+function ReopenAction({ period, title, onDone, onCancel, onGoToSecurity, translateError }: {
+  period: BillingPeriod; title: string; onDone(): void; onCancel(): void; onGoToSecurity?(): void; translateError(err: unknown): string | null;
+}) {
+  const [ reason, setReason ] = useState("");
+  const [ error, setError ] = useState<string | null>(null);
+  const [ confirming, setConfirming ] = useState(false);
+  const history = `A versão ${period.version} do arquivo fica no histórico; o próximo fechamento gera a versão ${period.version + 1}. O motivo fica na trilha.`;
+
+  function review() {
+    const problem = reasonProblem(reason);
+    setError(problem);
+    if (!problem) setConfirming(true);
+  }
+
+  if (confirming) {
+    return (
+      <SensitiveAction
+        title={title}
+        description={`${history} Motivo: ${reason.trim()}`}
+        requiresStepUp
+        confirmLabel="Confirmar reabertura"
+        run={async () => { await reopenBillingPeriod(period.id, reason.trim()); }}
+        onDone={onDone}
+        onCancel={() => setConfirming(false)}
+        onGoToSecurity={onGoToSecurity}
+        translateError={translateError}
+      />
+    );
+  }
+
+  return (
+    <section aria-label={title} style={panel}>
+      <strong>{title}</strong>
+      <p style={muted}>{history}</p>
+      <label style={fieldLabel}>
+        Motivo da reabertura
+        <textarea value={reason} rows={3} style={inputStyle} onChange={(e) => { setError(null); setReason(e.target.value); }} />
+      </label>
+      {error && <p role="alert" style={alert}>{error}</p>}
+      <div style={row}>
+        <button type="button" style={buttonStyle} onClick={review}>Revisar</button>
+        <button type="button" style={secondaryButtonStyle} onClick={onCancel}>Cancelar</button>
+      </div>
+    </section>
   );
 }
 

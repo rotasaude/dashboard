@@ -75,19 +75,39 @@ describe("BillingPeriods — fechamento, reabertura e arquivo", () => {
     await waitFor(() => expect(api.listBillingPeriods).toHaveBeenCalledTimes(2));
   });
 
-  it("reabrir exige motivo de 10 a 500 caracteres; com motivo, reabre e diz a próxima versão", async () => {
+  it("reabrir: motivo de 10 a 500 caracteres revisado antes do step-up; com motivo, reabre e diz a próxima versão", async () => {
     renderWithProviders(<BillingPeriods today={TODAY22} />);
     fireEvent.click(await screen.findByRole("button", { name: "Reabrir" }));
+    const form = screen.getByRole("region", { name: "Reabrir 09/2026 · Laboratório Municipal" });
+    expect(within(form).getByText(/A versão 1 do arquivo fica no histórico; o próximo fechamento gera a versão 2/)).not.toBeNull();
+    fireEvent.change(within(form).getByLabelText("Motivo da reabertura"), { target: { value: "curto" } });
+    fireEvent.click(within(form).getByRole("button", { name: "Revisar" }));
+    expect(within(form).getByRole("alert").textContent).toBe("motivo com pelo menos 10 caracteres");
+    expect(within(form).queryByRole("button", { name: "Confirmar reabertura" })).toBeNull();
+    fireEvent.change(within(form).getByLabelText("Motivo da reabertura"), { target: { value: "CNS do profissional corrigido no cadastro" } });
+    fireEvent.click(within(form).getByRole("button", { name: "Revisar" }));
     const dialog = screen.getByRole("region", { name: "Reabrir 09/2026 · Laboratório Municipal" });
-    expect(within(dialog).getByText(/A versão 1 do arquivo fica no histórico; o próximo fechamento gera a versão 2/)).not.toBeNull();
-    fireEvent.change(within(dialog).getByLabelText("Motivo da reabertura"), { target: { value: "curto" } });
-    fireEvent.click(within(dialog).getByRole("button", { name: "Confirmar reabertura" }));
-    expect((await within(dialog).findByRole("alert")).textContent).toBe("informe o motivo, de 10 a 500 caracteres");
-    expect(api.reopenBillingPeriod).not.toHaveBeenCalled();
-    fireEvent.change(within(dialog).getByLabelText("Motivo da reabertura"), { target: { value: "CNS do profissional corrigido no cadastro" } });
+    expect(within(dialog).getByText(/Motivo: CNS do profissional corrigido no cadastro/)).not.toBeNull();
     fireEvent.click(within(dialog).getByRole("button", { name: "Confirmar reabertura" }));
     await waitFor(() => expect(api.reopenBillingPeriod).toHaveBeenCalledWith("bp2", "CNS do profissional corrigido no cadastro"));
     expect((await screen.findByRole("status")).textContent).toBe("Competência reaberta. O próximo fechamento gera a versão 2.");
+  });
+
+  it("motivo curto não chega a pedir o código do autenticador", async () => {
+    mocked(api.fetchCurrentSession).mockResolvedValue(billingUser([ "billing_clerk" ], { mfa_verified_at: null }));
+    renderWithProviders(<BillingPeriods today={TODAY22} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Reabrir" }));
+    const form = screen.getByRole("region", { name: "Reabrir 09/2026 · Laboratório Municipal" });
+    expect(within(form).queryByLabelText("Código do autenticador")).toBeNull();
+    fireEvent.change(within(form).getByLabelText("Motivo da reabertura"), { target: { value: "curto" } });
+    fireEvent.click(within(form).getByRole("button", { name: "Revisar" }));
+    expect(within(form).getByRole("alert").textContent).toBe("motivo com pelo menos 10 caracteres");
+    expect(screen.queryByLabelText("Código do autenticador")).toBeNull();
+    expect(api.stepUpMfa).not.toHaveBeenCalled();
+    expect(api.reopenBillingPeriod).not.toHaveBeenCalled();
+    fireEvent.change(within(form).getByLabelText("Motivo da reabertura"), { target: { value: "CNS do profissional corrigido no cadastro" } });
+    fireEvent.click(within(form).getByRole("button", { name: "Revisar" }));
+    expect(screen.getByLabelText("Código do autenticador")).not.toBeNull();
   });
 
   it("versões: o faturista baixa com o nome do api ou o de reserva; o admin vê sem baixar", async () => {
