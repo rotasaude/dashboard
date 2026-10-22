@@ -267,7 +267,7 @@ export function renderModule(active: ModuleId, setActive: (id: ModuleId) => void
     case "lab-traceability": return <LabTraceability />;
     case "lab-instruments": return <LabInstruments onGoToSecurity={() => setActive("security")} />;
     case "billing-procedures": return <BillingProcedures />;
-    case "billing-periods": return <BillingPeriods />;
+    case "billing-periods": return <BillingPeriods onGoToSecurity={() => setActive("security")} />;
     default:               return <Placeholder title={labelFor(active)} />;
   }
 }

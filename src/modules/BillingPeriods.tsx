@@ -2,28 +2,35 @@
 // Competências por estabelecimento faturante (contrato §5; spec §5.4–§5.6):
 // unidades não-APS e laboratório municipal com produção na competência, com o
 // resumo da última conferência (BPA-I, BPA-C, não faturáveis por motivo,
-// pendências). As pendências, recalculadas na hora, só no clique. Abre na
-// competência anterior (a que se fecha no começo do mês). Nada relê sozinho.
+// pendências). As pendências, recalculadas na hora, só no clique. O faturista
+// fecha (gera o arquivo, nova versão a cada fechamento) e reabre com motivo,
+// os dois com step-up; o municipal_admin lê. Abre na competência anterior.
+// Nada relê sozinho: só ao abrir, ao trocar a competência e depois de uma ação.
 import { useState, type CSSProperties } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { listBillingPeriods, type BillingPeriod } from "../lib/api";
-import { PERIODS_KEY, billingError, closingCompetence, establishmentLabel, notBillableText, periodStatusText } from "../lib/billing";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { ApiError, closeBillingPeriod, errorCode, listBillingPeriods, reopenBillingPeriod, type BillingPeriod } from "../lib/api";
+import {
+  EXPORTS_KEY, PERIODS_KEY, billingError, closeDescription, closingCompetence, establishmentLabel, isStale, notBillableText, periodStatusText,
+  reasonProblem
+} from "../lib/billing";
 import { competenceLabel, competenceOptions } from "../lib/competence";
 import { todayInCity } from "../lib/campaigns";
 import { Panel } from "../components/Panel";
 import { DataTable, type Column } from "../components/DataTable";
 import { EmptyState } from "../components/EmptyState";
 import { Tag } from "../components/Tag";
-import { inputStyle, secondaryButtonStyle } from "../components/formStyles";
+import { SensitiveAction } from "../components/SensitiveAction";
+import { buttonStyle, inputStyle, secondaryButtonStyle } from "../components/formStyles";
 import { alert, muted, row, stack } from "./exams/styles";
 import { BillingGate } from "./billing/BillingGate";
+import { ExportsPanel } from "./billing/ExportsPanel";
 import { PendingPanel } from "./billing/PendingPanel";
 
-export function BillingPeriods({ today = todayInCity() }: { today?: string } = {}) {
+export function BillingPeriods({ onGoToSecurity, today = todayInCity() }: { onGoToSecurity?(): void; today?: string } = {}) {
   return (
     <BillingGate title="Competências e arquivo BPA" sub="faturamento · fechamento por estabelecimento (CNES), pendências e arquivo do BPA Magnético"
       allow={(r) => r.clerk || r.admin}>
-      {() => <PeriodsBody today={today} />}
+      {(roles) => <PeriodsBody clerk={roles.clerk} today={today} onGoToSecurity={onGoToSecurity} />}
     </BillingGate>
   );
 }
@@ -31,15 +38,25 @@ export function BillingPeriods({ today = todayInCity() }: { today?: string } = {
 // Filtro "abertas" (E18): todas as competências abertas, de qualquer mês.
 const OPEN = "open";
 
-type Opened = { kind: "pending"; period: BillingPeriod };
+type Opened = { kind: "pending" | "exports" | "close" | "reopen"; period: BillingPeriod };
 
-function PeriodsBody({ today }: { today: string }) {
+function PeriodsBody({ clerk, today, onGoToSecurity }: { clerk: boolean; today: string; onGoToSecurity?(): void }) {
+  const queryClient = useQueryClient();
   const [ competence, setCompetence ] = useState(() => closingCompetence(today));
   const [ opened, setOpened ] = useState<Opened | null>(null);
+  const [ notice, setNotice ] = useState<string | null>(null);
   const list = useQuery({
      queryKey: [ PERIODS_KEY, competence ], queryFn: () => (competence === OPEN ? listBillingPeriods(null, "open") : listBillingPeriods(competence)),
     gcTime: 0, retry: false, refetchOnWindowFocus: false, refetchOnReconnect: false
   });
+  const reload = () => void queryClient.invalidateQueries({ queryKey: [ PERIODS_KEY ] });
+  const open = (kind: Opened["kind"], period: BillingPeriod) => { setNotice(null); setOpened({ kind, period }); };
+  const nameOf = (p: BillingPeriod) => `${competenceLabel(p.competence)} · ${p.establishment.name}`;
+  // Recusa que diz que a competência mudou por outra pessoa: relê a lista.
+  const translate = (err: unknown) => {
+    if (isStale(err)) reload();
+    return errorCode(err) ? billingError(err) : null;
+  };
 
   const cols: Column<BillingPeriod>[] = [
     { label: "Competência", w: "0.8fr", render: (p) => competenceLabel(p.competence) },
@@ -51,7 +68,10 @@ function PeriodsBody({ today }: { today: string }) {
     { label: "Pendências", w: "0.8fr", align: "right", render: (p) => String(p.summary.pending) },
     { label: "", w: "auto", align: "right", card: "actions", render: (p) => (
       <div data-row-actions style={row}>
-        <button type="button" style={secondaryButtonStyle} onClick={() => setOpened({ kind: "pending", period: p })}>Pendências</button>
+        <button type="button" style={secondaryButtonStyle} onClick={() => open("pending", p)}>Pendências</button>
+        <button type="button" style={secondaryButtonStyle} onClick={() => open("exports", p)}>Versões</button>
+        {clerk && p.status === "open" && <button type="button" style={buttonStyle} onClick={() => open("close", p)}>Fechar e gerar arquivo</button>}
+        {clerk && p.status === "closed" && <button type="button" style={secondaryButtonStyle} onClick={() => open("reopen", p)}>Reabrir</button>}
       </div>
     ) }
   ];
@@ -61,13 +81,14 @@ function PeriodsBody({ today }: { today: string }) {
       <Panel title="Estabelecimentos" sub="não-APS e laboratório municipal com produção na competência" right={
         <label style={selectLabel}>
           Competência
-          <select value={competence} style={inputStyle} onChange={(e) => { setOpened(null); setCompetence(e.target.value); }}>
+          <select value={competence} style={inputStyle} onChange={(e) => { setOpened(null); setNotice(null); setCompetence(e.target.value); }}>
             <option value={OPEN}>abertas</option>
             {competenceOptions(today, competence === OPEN ? null : competence).map((c) => <option key={c} value={c}>{competenceLabel(c)}</option>)}
           </select>
         </label>
       }>
         <div style={{ ...stack, padding: 16 }}>
+          {notice && <p role="status" style={statusStyle}>{notice}</p>}
           {list.isPending && <p className="mono" style={muted}>carregando…</p>}
           {list.isError && <p role="alert" style={alert}>{billingError(list.error)}</p>}
           {list.isSuccess && list.data.length === 0 && <EmptyState title="nenhum estabelecimento com produção nesta competência" />}
@@ -75,8 +96,55 @@ function PeriodsBody({ today }: { today: string }) {
         </div>
       </Panel>
       {opened?.kind === "pending" && <PendingPanel key={opened.period.id} period={opened.period} onClose={() => setOpened(null)} />}
+      {opened?.kind === "exports" && (
+        <ExportsPanel key={opened.period.id} period={opened.period} canDownload={clerk} onClose={() => setOpened(null)} />
+      )}
+      {clerk && opened?.kind === "close" && (
+        <SensitiveAction
+          key={`close:${opened.period.id}`}
+          title={`Fechar ${nameOf(opened.period)}`}
+          description={closeDescription(opened.period)}
+          requiresStepUp
+          confirmLabel="Confirmar fechamento"
+          run={async () => { await closeBillingPeriod(opened.period.id); }}
+          onDone={() => {
+            setNotice(`Competência ${competenceLabel(opened.period.competence)} fechada para ${opened.period.establishment.name}; o arquivo está em Versões.`);
+            setOpened(null);
+            reload();
+            void queryClient.invalidateQueries({ queryKey: [ EXPORTS_KEY ] });
+          }}
+          onCancel={() => setOpened(null)}
+          onGoToSecurity={onGoToSecurity}
+          translateError={translate}
+        />
+      )}
+      {clerk && opened?.kind === "reopen" && (
+        <SensitiveAction
+          key={`reopen:${opened.period.id}`}
+          title={`Reabrir ${nameOf(opened.period)}`}
+          description={`A versão ${opened.period.version} do arquivo fica no histórico; o próximo fechamento gera a versão ${opened.period.version + 1}. O motivo fica na trilha.`}
+          requiresStepUp
+          confirmLabel="Confirmar reabertura"
+          fields={[ { name: "reason", label: "Motivo da reabertura", required: true, multiline: true } ]}
+          run={async (values) => {
+            const reason = values.reason ?? "";
+            // Recusar em vez de cortar: fora de 10..500, o api nem é chamado.
+            if (reasonProblem(reason)) throw new ApiError(422, { error: "reason_required" }, "local");
+            await reopenBillingPeriod(opened.period.id, reason.trim());
+          }}
+          onDone={() => {
+            setNotice(`Competência reaberta. O próximo fechamento gera a versão ${opened.period.version + 1}.`);
+            setOpened(null);
+            reload();
+          }}
+          onCancel={() => setOpened(null)}
+          onGoToSecurity={onGoToSecurity}
+          translateError={translate}
+        />
+      )}
     </div>
   );
 }
 
 const selectLabel: CSSProperties = { display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--ink2)" };
+const statusStyle: CSSProperties = { margin: 0, fontSize: 12.5, fontWeight: 600 };
