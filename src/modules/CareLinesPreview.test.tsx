@@ -100,6 +100,21 @@ describe("CareLinesPreview", () => {
     await waitFor(() => expect(api.getCarePreview).toHaveBeenCalledTimes(12));
   });
 
+  it("recalcular a mesma equipe mostra 'calculando…' enquanto lê, sem perder o resultado anterior", async () => {
+    renderWithProviders(<CareLinesPreview />);
+    await calculate();
+    await waitFor(() => expect(screen.queryAllByText("calculando…")).toHaveLength(0));
+    const releases: (() => void)[] = [];
+    mocked(api.getCarePreview).mockImplementation((_team: string, indicator: string) =>
+      new Promise((resolve) => { releases.push(() => resolve(preview(indicator))); }));
+    fireEvent.click(screen.getByRole("button", { name: "Calcular prévia" }));
+    expect(await screen.findAllByText("calculando…")).toHaveLength(6);
+    expect(screen.getAllByText("Pontuação estimada").length).toBeGreaterThan(0);
+    await waitFor(() => expect(releases).toHaveLength(6));
+    releases.forEach((release) => release());
+    await waitFor(() => expect(screen.queryAllByText("calculando…")).toHaveLength(0));
+  });
+
   it("equipe sem elegíveis: diz que não há população elegível", async () => {
     mocked(api.getCarePreview).mockImplementation((_team: string, indicator: string) =>
       Promise.resolve(preview(indicator, { denominator: 0, score: null, concept: null, practices: [], excluded_practices: [] })));

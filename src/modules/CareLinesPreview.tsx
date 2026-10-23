@@ -66,7 +66,7 @@ function PreviewBody() {
           {askedTeam && <p style={muted}>{`Resultado da equipe ${askedTeam.name} · INE ${askedTeam.ine}`}</p>}
           <div style={cards}>
             {INDICATORS.map((ind, i) => (
-              <PreviewCard key={ind.key} indicator={ind.key} data={results[i].data} error={results[i].error} pending={results[i].isPending} />
+              <PreviewCard key={ind.key} indicator={ind.key} data={results[i].data} error={results[i].error} pending={results[i].isFetching} />
             ))}
           </div>
         </>

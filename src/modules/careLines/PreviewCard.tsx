@@ -31,7 +31,7 @@ export function PreviewCard({ indicator, data, error, pending }: {
   return (
     <Panel title={`${indicator} — ${indicatorLabel(indicator)}`} sub="estimativa">
       <div style={{ ...stack, padding: 16 }}>
-        {pending && !error && <p className="mono" style={muted}>calculando…</p>}
+        {pending && <p className="mono" style={muted}>calculando…</p>}
         {error ? <p role="alert" style={alert}>{careLineError(error)}</p> : null}
         {data && (data.denominator === 0 ? <EmptyState title="nenhuma pessoa elegível nesta equipe" /> : (
           <>
