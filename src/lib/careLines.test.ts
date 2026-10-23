@@ -4,7 +4,7 @@ import { ApiError } from "./api";
 import {
   CARE_DISABLED, CARE_NO_ROLE, COUNT_QUERY, NOMINAL_QUERY, UNTRACKED_TEXT, anchorProblem, canUseCareLines, careLineError, careLineRoles,
   codeList, contactProblem, customLineBody, customLineProblem, decimalBr, draftOfLine, emptyCustomLine, emptyPractice, endProblem, fmtDay,
-  isStaleCare, newerVersion, originText, personName, personStatus, practiceText, reasonProblem, ruleText, slugKey, sourceLabel, statusLabel,
+  isStaleCare, knownCareLineError, newerVersion, originText, personName, personStatus, practiceText, reasonProblem, ruleText, slugKey, sourceLabel, statusLabel,
   statusTone, worstStatus, type CustomLineDraft, type PracticeDraft
 } from "./careLines";
 import { DIABETES_TEMPLATE, TODAY23, cityLine, practice } from "../test/careLineFixtures";
@@ -366,6 +366,18 @@ describe("consultas e recusas", () => {
   it("nominal nunca relê sozinha; contador relê por minuto", () => {
     expect(NOMINAL_QUERY).toMatchObject({ refetchInterval: false, refetchOnWindowFocus: false, refetchOnReconnect: false, gcTime: 0 });
     expect(COUNT_QUERY.refetchInterval).toBe(60_000);
+  });
+
+  it("knownCareLineError: frase só de código conhecido; o resto é null", () => {
+    const refusal = (status: number, error: string, extra: object = {}) => new ApiError(status, { error, ...extra }, "x");
+    expect(knownCareLineError(refusal(422, "duplicate_template"))).toBe("esta linha do catálogo já foi adotada pela cidade");
+    expect(knownCareLineError(refusal(403, "feature_disabled", { feature: "care_lines" }))).toBe(CARE_DISABLED);
+    expect(knownCareLineError(refusal(401, "unauthenticated"))).toBeNull();
+    expect(knownCareLineError(refusal(403, "operator_read_only"))).toBeNull();
+    expect(knownCareLineError(refusal(415, "json_required"))).toBeNull();
+    expect(knownCareLineError(refusal(422, "constructor"))).toBeNull();
+    expect(knownCareLineError(new ApiError(500, "", "x"))).toBeNull();
+    expect(knownCareLineError(new TypeError("fetch"))).toBeNull();
   });
 
   it("frases das recusas; código novo cru; stale relê", () => {

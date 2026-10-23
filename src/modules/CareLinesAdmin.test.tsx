@@ -104,6 +104,59 @@ describe("CareLinesAdmin", () => {
     fireEvent.click((await screen.findAllByRole("button", { name: "Adotar" }))[1]);
     fireEvent.click(screen.getByRole("button", { name: "Adotar linha" }));
     expect((await screen.findByRole("alert")).textContent).toBe("esta linha do catálogo já foi adotada pela cidade");
+    // A frase diz "já adotada": a tela relê as linhas e o catálogo de fato.
+    await waitFor(() => expect(api.listCityCareLines).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(api.listCareTemplates).toHaveBeenCalledTimes(2));
+  });
+
+  it("template_not_found: a frase da recusa e a tela relê", async () => {
+    mocked(api.adoptCareLine).mockRejectedValueOnce(new api.ApiError(422, { error: "template_not_found" }, "x"));
+    renderWithProviders(<CareLinesAdmin />);
+    fireEvent.click(await screen.findByRole("button", { name: "Adotar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Adotar linha" }));
+    expect((await screen.findByRole("alert")).textContent).toBe("versão do catálogo não encontrada — atualize a tela");
+    await waitFor(() => expect(api.listCityCareLines).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(api.listCareTemplates).toHaveBeenCalledTimes(2));
+  });
+
+  it("recusa de outra natureza não relê; código desconhecido nunca aparece cru", async () => {
+    mocked(api.adoptCareLine).mockRejectedValueOnce(new api.ApiError(401, { error: "unauthenticated" }, "x"));
+    renderWithProviders(<CareLinesAdmin />);
+    fireEvent.click(await screen.findByRole("button", { name: "Adotar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Adotar linha" }));
+    const alertText = (await screen.findByRole("alert")).textContent;
+    expect(alertText).toBe("sessão expirada — entre de novo");
+    expect(alertText).not.toMatch(/unauthenticated/);
+  });
+
+  it("operator_read_only (403): frase padrão do papel, não o código", async () => {
+    mocked(api.updateCareLine).mockRejectedValueOnce(new api.ApiError(403, { error: "operator_read_only" }, "x"));
+    renderWithProviders(<CareLinesAdmin />);
+    fireEvent.click(await screen.findByRole("button", { name: "Desativar" }));
+    const confirm = screen.getByRole("region", { name: "Desativar Pessoa com diabetes" });
+    fireEvent.click(within(confirm).getByRole("button", { name: "Desativar linha" }));
+    const alertText = (await within(confirm).findByRole("alert")).textContent;
+    expect(alertText).toBe("seu papel não permite esta ação");
+    expect(alertText).not.toMatch(/operator_read_only/);
+    expect(api.listCityCareLines).toHaveBeenCalledTimes(1);
+  });
+
+  it("enquanto as linhas da cidade não chegam, o catálogo não afirma nem oferece Adotar", async () => {
+    mocked(api.listCityCareLines).mockReturnValue(new Promise(() => undefined));
+    renderWithProviders(<CareLinesAdmin />);
+    expect(await screen.findByText("Gestante e puérpera")).not.toBeNull();
+    expect(within(templatesTable()).queryByText("não adotada")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Adotar" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Adotar versão/ })).toBeNull();
+  });
+
+  it("linhas da cidade com erro: o catálogo também não oferece Adotar", async () => {
+    mocked(api.listCityCareLines).mockRejectedValue(new api.ApiError(500, "", "x"));
+    renderWithProviders(<CareLinesAdmin />);
+    expect(await screen.findByText("Gestante e puérpera")).not.toBeNull();
+    await screen.findAllByRole("alert");
+    expect(screen.queryByRole("button", { name: "Adotar" })).toBeNull();
+    expect(within(templatesTable()).queryByText("não adotada")).toBeNull();
   });
 
   it("profissional não vê a tela; sem o interruptor, nada é lido", async () => {

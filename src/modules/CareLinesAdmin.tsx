@@ -7,7 +7,7 @@
 import { useState, type CSSProperties } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { adoptCareLine, errorCode, listCareTemplates, listCityCareLines, updateCareLine, type CareLine, type CareLineTemplate } from "../lib/api";
-import { LINES_KEY, STATIC_QUERY, TEMPLATES_KEY, careLineError, conditionLabel, newerVersion, originText } from "../lib/careLines";
+import { LINES_KEY, STATIC_QUERY, TEMPLATES_KEY, careLineError, conditionLabel, knownCareLineError, newerVersion, originText } from "../lib/careLines";
 import { Panel } from "../components/Panel";
 import { DataTable } from "../components/DataTable";
 import { Tag } from "../components/Tag";
@@ -78,9 +78,11 @@ function AdminBody({ onGoToSecurity }: { onGoToSecurity?(): void }) {
                 { label: "Indicador", w: "90px", render: (t) => t.indicator },
                 { label: "Linha", w: "2fr", card: "title", render: (t) => t.name },
                 { label: "Versão", w: "80px", render: (t) => `v${t.version}` },
-                { label: "Na cidade", w: "1.2fr", render: (t) => { const l = adopted.get(t.key); return l ? `adotada · v${l.template_version ?? "—"}` : "não adotada"; } },
+                { label: "Na cidade", w: "1.2fr", render: (t) => { if (!lines.data) return "—"; const l = adopted.get(t.key); return l ? `adotada · v${l.template_version ?? "—"}` : "não adotada"; } },
                 {
                   label: "Ação", w: "1.2fr", card: "actions", render: (t) => {
+                    // Sem a lista da cidade o catálogo não sabe o que já foi adotado: nada a oferecer.
+                    if (!lines.data) return null;
                     const l = adopted.get(t.key);
                     if (!l) return <button type="button" style={buttonStyle} onClick={() => start({ kind: "adopt", template: t })}>Adotar</button>;
                     const newer = newerVersion(l, templates.data ?? []);
@@ -134,7 +136,15 @@ function AdminBody({ onGoToSecurity }: { onGoToSecurity?(): void }) {
           }}
           onCancel={() => setPending(null)}
           onGoToSecurity={onGoToSecurity}
-          translateError={(err) => (errorCode(err) ? careLineError(err) : null)}
+          translateError={(err) => {
+            // A frase diz "já adotada"/"atualize a tela": a tela relê de fato.
+            const code = errorCode(err);
+            if (code === "duplicate_template" || code === "template_not_found") {
+              void queryClient.invalidateQueries({ queryKey: [ LINES_KEY ] });
+              void queryClient.invalidateQueries({ queryKey: [ TEMPLATES_KEY ] });
+            }
+            return knownCareLineError(err);
+          }}
         />
       )}
     </div>

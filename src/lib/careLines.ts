@@ -548,6 +548,14 @@ export function careLineError(err: unknown): string {
   return "sem conexão com o servidor — tente de novo";
 }
 
+// Só a frase de um código conhecido; os demais (unauthenticated, operator_read_only, json_required...) ficam
+// para o padrão do SensitiveAction/describeActionError, que nunca mostra código cru.
+export function knownCareLineError(err: unknown): string | null {
+  if (featureDisabledKey(err) !== null) return CARE_DISABLED;
+  const code = errorCode(err);
+  return code && Object.prototype.hasOwnProperty.call(ERRORS, code) ? ERRORS[code] : null;
+}
+
 // A lista mudou por outra pessoa: quem chama relê.
 export function isStaleCare(err: unknown): boolean {
   const code = errorCode(err);
