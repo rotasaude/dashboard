@@ -6,7 +6,8 @@ import {
   IconFileBarcode, IconFilePencil, IconFileText, IconGavel, IconFlask, IconHeartbeat, IconHistory, IconIdBadge2, IconInbox, IconLayoutDashboard,
   IconKeyboard, IconListCheck, IconListDetails, IconLock, IconMapPin, IconMessages, IconMicroscope, IconNotes, IconPackageImport, IconPencil, IconPill, IconPlugConnected,
   IconReportAnalytics, IconRosetteDiscountCheck, IconServerCog, IconSettings, IconShieldCheck, IconSignature, IconSpeakerphone, IconStack2, IconStethoscope, IconTestPipe, IconTruck, IconTruckDelivery, IconUpload,
-  IconUser, IconUserCircle, IconUsers, IconUsersGroup, IconCalendarStats, IconFileInvoice, IconReceipt, IconReceiptTax
+  IconUser, IconUserCircle, IconUsers, IconUsersGroup, IconCalendarStats, IconFileInvoice, IconReceipt, IconReceiptTax,
+  IconHeartHandshake, IconUserSearch, IconGauge, IconRoute
 } from "@tabler/icons-react";
 import type { Catalog } from "./types";
 
@@ -19,6 +20,7 @@ export const CATALOG: Catalog = {
     "Governança":  { icon: IconFileCertificate, description: "Protocolos e auditoria" },
     "Operação":    { icon: IconServerCog, description: "Filas e saúde do sistema" },
     "Atendimento": { icon: IconStethoscope, description: "Agenda, prontuário e consultas" },
+    "Linhas de cuidado": { icon: IconHeartHandshake, description: "Busca ativa, sugestões e prévia dos indicadores" },
     "Exames":      { icon: IconMicroscope, description: "Pedidos, resultados e prestadores" },
     "Laboratório": { icon: IconFlask, description: "Amostras, laudos, controle de qualidade e estoque" },
     "Faturamento": { icon: IconReceipt, description: "Procedimentos, competências e arquivo BPA" },
@@ -76,6 +78,9 @@ export const CATALOG: Catalog = {
     "billing-procedures": { icon: IconFileInvoice, description: "Procedimentos com a crítica SIGTAP e lançamento manual" },
     "billing-periods": { icon: IconCalendarStats, description: "Fechamento por estabelecimento, pendências e arquivo" },
     "billing-settings": { icon: IconReceiptTax, description: "Órgão de origem, destino e gestão do arquivo BPA" },
+    "care-lines-team": { icon: IconUserSearch, description: "Quem procurar, sugestões e inscrições da equipe" },
+    "care-lines-preview": { icon: IconGauge, description: "Estimativa de C2 a C7 por equipe" },
+    "care-lines-admin": { icon: IconRoute, description: "Adotar linhas do catálogo e criar linhas próprias" },
     "campaigns": { icon: IconSpeakerphone, description: "Criar e enviar campanhas por SMS" },
     "team": { icon: IconUsers, description: "Usuários, convites e papéis" },
     "professionals": { icon: IconIdBadge2, description: "Vínculos, CBO e turnos" },

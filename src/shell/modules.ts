@@ -4,6 +4,7 @@
 import { hasFeature } from "../lib/features";
 import { canSeeSignatureOverview, canSign } from "../lib/signature";
 import { canRequestSncr, canSeeSncrOverview } from "../lib/controlled";
+import { canUseCareLines } from "../lib/careLines";
 export type ModuleId =
   | "overview" | "ingestion" | "conversations" | "consent"
   | "triages" | "classification" | "reports" | "protocols" | "events"
@@ -15,7 +16,8 @@ export type ModuleId =
   | "lab-requisitions" | "lab-collection" | "lab-shipments" | "lab-reception" | "lab-worklist" | "lab-entry" | "lab-release"
   | "lab-qc-runs" | "lab-qc-chart" | "lab-qc-blocks" | "lab-qc-setup" | "lab-eqa" | "lab-inventory" | "lab-traceability" | "lab-instruments"
   | "lab-admin" | "lab-reports"
-  | "billing-procedures" | "billing-periods" | "billing-settings";
+  | "billing-procedures" | "billing-periods" | "billing-settings"
+  | "care-lines-team" | "care-lines-preview" | "care-lines-admin";
 
 export interface NavItem { id: ModuleId; label: string; icon: string; }
 export interface NavGroupDef { label: string; items: NavItem[]; }
@@ -52,6 +54,11 @@ export const NAV_GROUPS: NavGroupDef[] = [
     { id: "my-consultations", label: "Minhas consultas", icon: "☰" },
     { id: "professional-consultations", label: "Consultas por profissional", icon: "☷" },
     { id: "open-drafts", label: "Rascunhos abertos", icon: "✎" }
+  ]},
+  { label: "Linhas de cuidado", items: [
+    { id: "care-lines-team", label: "Acompanhamento da equipe", icon: "♡" },
+    { id: "care-lines-preview", label: "Prévia dos indicadores", icon: "◑" },
+    { id: "care-lines-admin", label: "Linhas da cidade", icon: "⚙" }
   ]},
   { label: "Exames", items: [
     { id: "exam-acknowledgements", label: "Resultados aguardando ciência", icon: "⚑" },
@@ -198,6 +205,12 @@ export function navGroupsFor(
   // atendimento, não por este grupo.
   const billingOn = !user?.operator && hasFeature(user, "procedure_billing");
   const isBillingClerk = roles.includes("billing_clerk");
+  // Módulo 23 (ADR 0040; P9): linhas de cuidado com `care_lines` E
+  // `clinical_record` (regra única em canUseCareLines). O painel nominal é do
+  // profissional (o api confere o vínculo na unidade da equipe); a prévia
+  // agregada, do admin e do analyst; adotar e criar linhas, só do admin.
+  const careOn = canUseCareLines(user);
+  const isAnalyst = roles.includes("analyst");
   return NAV_GROUPS.filter((group) => {
     if (group.label === "Conta") return !user?.operator;
     if (group.label === "Equipe") return isAdmin;
@@ -258,6 +271,9 @@ export function navGroupsFor(
       // Rastreio e consumo: qualquer membro do laboratório e o admin (C-E41).
       if (item.id === "lab-traceability") return invOn && (isAdmin || isLabStaff || isReleaser);
       if (item.id === "lab-instruments") return (qcOn || invOn) && (isAdmin || isLabStaff || isReleaser);
+      if (item.id === "care-lines-team") return careOn && isProfessional;
+      if (item.id === "care-lines-preview") return careOn && (isAdmin || isAnalyst);
+      if (item.id === "care-lines-admin") return careOn && isAdmin;
       if (item.id === "integrations" || item.id === "cnes") return canIntegrations;
       if (item.id === "production") return canProduction;
       return true;
