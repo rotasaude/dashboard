@@ -3756,7 +3756,8 @@ export interface CarePractice {
   all_of?: { source: string; window_days?: number }[][] | null;
 }
 export interface CareLineTemplate {
-  key: string; name: string; indicator: CareIndicator | string; version: number; eligibility: CareEligibility; practices: CarePractice[];
+  key: string; name: string; indicator: CareIndicator | string; version: number; declared_condition?: DeclaredCondition | null;
+  eligibility: CareEligibility; practices: CarePractice[];
 }
 // T5: `latest_template_version` oferece "Adotar versão N"; nulo na linha própria.
 export interface CareLine {
@@ -3784,7 +3785,7 @@ export interface CarePracticeStatus {
 // L12: o histórico de contatos só no detalhe; `last_contact` nunca traz a nota.
 export interface CareContact {
   id?: string; channel: ContactChannel | string; outcome: ContactOutcome | string; note: string | null;
-  recorded_by: { id: string; name: string } | null; recorded_at: string;
+  recorded_by: { id: string; name: string | null }; recorded_at: string;
 }
 export interface CareEnrollment {
   id: string; person: CarePerson; care_line: CareLineRef; team: { id: string; ine: string; name: string };
@@ -3823,10 +3824,10 @@ export interface CarePersonLookup {
   patient_id: string | null; citizen_id: string; display_name: string | null; cpf_masked: string; verified: true;
 }
 // T4/P16: o pedido de agendamento (módulo 17) que o atalho abre (201 criado, 200
-// reaproveitado). O api tira a `note` do item (chega ausente, não null). `can_book`: quem pode marcar pelo BookPanel; sem
+// reaproveitado). O api tira a `note` do item (`.except(:note)`: a chave não vem). `can_book`: quem pode marcar pelo BookPanel; sem
 // ele o pedido só aguarda a recepção. Erros: 409 already_scheduled /
 // invalid_transition / citizen_not_verified, 422 invalid_unit, 404 outra equipe.
-export interface CareAppointmentTarget { request: RequestRow; unit: HealthUnit; can_book: boolean }
+export interface CareAppointmentTarget { request: Omit<RequestRow, "note">; unit: HealthUnit; can_book: boolean }
 
 export const CARE_PAGE_SIZE = 50;
 

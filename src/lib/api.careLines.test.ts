@@ -5,6 +5,7 @@ import {
   endCareEnrollment, enrollCare, getCareContext, getCareEnrollment, getCarePreview, listCareEnrollments, listCareSuggestions,
   listCareTemplates, listCityCareLines, lookupCarePerson, openCareAppointment, recordCareContact, updateCareLine
 } from "./api";
+import { careRequestItem } from "../test/careLineFixtures";
 
 function ok(body: unknown, init: ResponseInit = {}): Promise<Response> {
   return Promise.resolve(new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" }, ...init }));
@@ -154,6 +155,14 @@ describe("cliente das linhas de cuidado (contrato §3–§6)", () => {
     };
     fetchMock.mockImplementationOnce(() => ok(body));
     expect(await getCarePreview("tm1", "C2")).toEqual(body);
+  });
+
+  it("atalho do agendamento: o item não traz `note` (o api a retira)", async () => {
+    const item = careRequestItem();
+    fetchMock.mockImplementationOnce(() => ok({ request: item, unit: { id: "u1", name: "UBS Vila Verde", kind: "ubs" }, can_book: false }));
+    const target = await openCareAppointment("en1");
+    expect("note" in target.request).toBe(false);
+    expect(target.request.kind).toBe("care_line");
   });
 
   it("atalho do agendamento: can_book decide a tela; erros do api sobem como ApiError com o código", async () => {

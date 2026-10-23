@@ -56,7 +56,7 @@ export function suggestion(over: Partial<CareSuggestion> = {}): CareSuggestion {
 
 const MD_NURSE = [ "2231", "2251", "2252", "2253", "2235" ];
 export const DIABETES_TEMPLATE: CareLineTemplate = {
-  key: "diabetes_c4", name: "Pessoa com diabetes", indicator: "C4", version: 2,
+  key: "diabetes_c4", name: "Pessoa com diabetes", indicator: "C4", version: 2, declared_condition: "diabetes",
   eligibility: { problems: { ciap2: [ "T89", "T90" ], cid10: [ "E10", "E11", "E14" ] }, declared: [ "diabetes" ], requires_anchor: null },
   practices: [
     { key: "c4_a", label: "Consulta com médico ou enfermeiro", citizen_label: "consulta com a equipe", source: "consultation",
@@ -66,7 +66,7 @@ export const DIABETES_TEMPLATE: CareLineTemplate = {
   ]
 };
 export const PREGNANCY_TEMPLATE: CareLineTemplate = {
-  key: "pregnancy_c3", name: "Gestante e puérpera", indicator: "C3", version: 1,
+  key: "pregnancy_c3", name: "Gestante e puérpera", indicator: "C3", version: 1, declared_condition: "pregnancy",
   eligibility: { problems: { ciap2: [ "W78" ], cid10: [ "Z34", "Z35" ] }, declared: [ "pregnancy" ], requires_anchor: "lmp" },
   practices: [
     { key: "c3_b", label: "Consultas de pré-natal", citizen_label: "consulta de pré-natal", source: "consultation", window_start_days: 0,
@@ -103,4 +103,10 @@ export function requestRow(over: Partial<RequestRow> = {}): RequestRow {
     reschedule_requested: false, reschedule_reason_code: null, preferred_period: null, reschedule_count: 0, needs_reschedule: false,
     target_unit_id: "u1", appointment: null, ...over
   };
+}
+
+// O item que o atalho do agendamento devolve: o api tira a `note` (`.except(:note)`).
+export function careRequestItem(over: Partial<Omit<RequestRow, "note">> = {}): Omit<RequestRow, "note"> {
+  const { note: _note, ...row } = requestRow({ kind: "care_line", origin: "care_line", appointment_type_key: "retorno", appointment_type_name: "Retorno", priority: "routine" });
+  return { ...row, ...over };
 }
