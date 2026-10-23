@@ -75,6 +75,12 @@ describe("situação e boa prática", () => {
     expect(ruleText(DIABETES_TEMPLATE.practices[0])).toBe("1× em 183 dias · janela móvel · só médico ou enfermeiro · 20 pontos");
     expect(ruleText({ ...DIABETES_TEMPLATE.practices[0], min_count: 7, window_days: 294, schedule: "proportional", anchor: "lmp", cbo_filter: null,
       points: null })).toBe("7× em 294 dias, proporcional ao tempo · desde a DUM");
+    expect(ruleText({ ...DIABETES_TEMPLATE.practices[0], cbo_filter: [ "2235", "2231", "2253", "2252", "2251" ], points: null }))
+      .toBe("1× em 183 dias · janela móvel · só médico ou enfermeiro");
+    expect(ruleText({ ...DIABETES_TEMPLATE.practices[0], cbo_filter: [ "2251", "2235", "251510" ], points: null }))
+      .toBe("1× em 183 dias · janela móvel · só CBO 2251, 2235, 251510");
+    expect(ruleText({ ...DIABETES_TEMPLATE.practices[0], cbo_filter: [ "2251", "2235" ], points: null }))
+      .toBe("1× em 183 dias · janela móvel · só CBO 2251, 2235");
     expect(ruleText({ ...DIABETES_TEMPLATE.practices[0], window_start_days: 196, window_days: 294, anchor: "lmp", cbo_filter: null, points: 9 }))
       .toBe("1× do dia 196 ao 294 · desde a DUM · 9 pontos");
   });
@@ -192,7 +198,7 @@ describe("linha própria", () => {
     });
     expect(customLineBody(filled({ declaredCondition: "", ageMaxYears: "64" })).eligibility).toMatchObject({ age_max_years: 64 });
     expect("declared" in customLineBody(filled({ declaredCondition: "" })).eligibility).toBe(false); // D-01: nunca lista vazia
-    expect("declared_condition" in customLineBody(filled({ declaredCondition: "" }))).toBe(false);
+    expect(customLineBody(filled({ declaredCondition: "" })).declared_condition).toBeNull();
   });
 
   it("recusa o que o Rules do api recusaria (exame 02, pontos, proporcional, all_of, CBO, janela)", () => {
@@ -249,10 +255,10 @@ describe("linha própria", () => {
     expect(onlyCid.eligibility.problems).toEqual({ cid10: [ "F32" ] });
   });
 
-  it("editar a linha da semente (CBO 251510 etc.) não perde o que a tela não edita (D-02)", () => {
+  it("campos avançados (início de janela, filtros, all_of, pontos, idade em dias) voltam iguais na edição (D-02)", () => {
     const seed = cityLine({
       source: "custom", template_key: null, template_version: null, indicator: null, name: "Saúde mental", declared_condition: "mental_health",
-      eligibility: { exclude_problems: { ciap2: [ "P99" ], cid10: [] }, age_min_days: 6570, gender_identities_excluded: [ "trans_man" ],
+      eligibility: { exclude_problems: { ciap2: [ "P99" ] }, age_min_days: 6570, gender_identities_excluded: [ "trans_man" ],
         declared: [ "mental_health" ] },
       practices: [
         { key: "consulta", label: "Consulta", citizen_label: "consulta com a equipe", source: "consultation", window_start_days: 30,
@@ -270,10 +276,61 @@ describe("linha própria", () => {
     expect(customLineProblem(draft)).toBeNull();
     const body = customLineBody(draft);
     expect(body.practices).toEqual(seed.practices);
-    expect(body.eligibility).toMatchObject({ exclude_problems: { ciap2: [ "P99" ], cid10: [] }, age_min_days: 6570,
+    expect(body.eligibility).toMatchObject({ exclude_problems: { ciap2: [ "P99" ] }, age_min_days: 6570,
       gender_identities_excluded: [ "trans_man" ], declared: [ "mental_health" ] });
     expect("problems" in body.eligibility).toBe(false);
     expect(body.declared_condition).toBe("mental_health");
+  });
+
+  // Forma que o api grava (Rules normaliza: práticas com todos os campos, nulos explícitos; elegibilidade sem nulos nem terminologia vazia).
+  const SEED_MENTAL = () => cityLine({
+    source: "custom", template_key: null, template_version: null, indicator: null, name: "Saúde mental — acompanhamento",
+    declared_condition: "mental_health",
+    eligibility: { problems: { ciap2: [ "P74", "P76" ], cid10: [ "F32", "F33", "F41" ] }, declared: [ "mental_health" ] },
+    practices: [ { key: "sm_a", label: "Consulta de acompanhamento a cada 3 meses", citizen_label: "Consulta de acompanhamento",
+      source: "consultation", anchor: "rolling", window_start_days: 0, window_days: 92, min_count: 1, schedule: "end_of_window",
+      cbo_filter: [ "2251", "2235", "251510" ], code_filter: null, applies_to: null, all_of: null, points: null } ]
+  });
+
+  it("linha de saúde mental da semente (forma do Rules): ida e volta sem perder o CBO 251510 (D-02)", () => {
+    const seed = SEED_MENTAL();
+    const draft = draftOfLine(seed);
+    expect(customLineProblem(draft)).toBeNull();
+    const body = customLineBody(draft);
+    expect(body.practices[0].cbo_filter).toEqual([ "2251", "2235", "251510" ]);
+    expect(body.practices[0]).toEqual({
+      key: "sm_a", label: "Consulta de acompanhamento a cada 3 meses", citizen_label: "Consulta de acompanhamento", source: "consultation",
+      anchor: "rolling", window_start_days: 0, window_days: 92, min_count: 1, schedule: "end_of_window", cbo_filter: [ "2251", "2235", "251510" ]
+    });
+    expect(body.eligibility).toEqual({ problems: { ciap2: [ "P74", "P76" ], cid10: [ "F32", "F33", "F41" ] }, declared: [ "mental_health" ],
+      age_min_years: null, age_max_years: null, sex: null, requires_anchor: null });
+    expect(body.declared_condition).toBe("mental_health");
+  });
+
+  it("limpar a condição declarada na edição manda declared_condition null e nenhum declared", () => {
+    const draft = { ...draftOfLine(SEED_MENTAL()), declaredCondition: "" as const };
+    expect(customLineProblem(draft)).toBeNull();
+    const body = customLineBody(draft);
+    expect(body.declared_condition).toBeNull();
+    expect("declared" in body.eligibility).toBe(false);
+  });
+
+  it("declared: troca só a condição editada e preserva as outras e o critério sem declared_condition", () => {
+    const base = SEED_MENTAL();
+    const many = draftOfLine({ ...base, eligibility: { ...base.eligibility, declared: [ "hypertension", "mental_health" ] } });
+    expect(customLineBody(many).eligibility.declared).toEqual([ "hypertension", "mental_health" ]);
+    expect(customLineBody({ ...many, declaredCondition: "" }).eligibility.declared).toEqual([ "hypertension" ]);
+    expect(customLineBody({ ...many, declaredCondition: "diabetes" }).eligibility.declared).toEqual([ "hypertension", "diabetes" ]);
+    expect(customLineBody({ ...many, declaredCondition: "hypertension" }).eligibility.declared).toEqual([ "hypertension" ]);
+    // linha com `declared` e sem `declared_condition`: o critério sobrevive à edição
+    const loose = draftOfLine({ ...base, declared_condition: null, eligibility: { declared: [ "pregnancy" ] } });
+    expect(loose.declaredCondition).toBe("");
+    const body = customLineBody(loose);
+    expect(body.eligibility.declared).toEqual([ "pregnancy" ]);
+    expect(body.declared_condition).toBeNull();
+    expect(customLineProblem(loose)).toBeNull(); // o critério declarado basta
+    // nova linha: a condição escolhida entra sozinha
+    expect(customLineBody({ ...emptyCustomLine(), name: "x", declaredCondition: "diabetes" }).eligibility.declared).toEqual([ "diabetes" ]);
   });
 
   it("a caixa 'só médico ou enfermeiro' só troca o CBO quando mexem nela", () => {
@@ -318,7 +375,7 @@ describe("consultas e recusas", () => {
     expect(careLineError(refusal(403, "cbo_not_allowed"))).toBe("só médico ou enfermeiro confirma a inscrição");
     expect(careLineError(refusal(422, "anchor_required"))).toBe("informe a DUM para inscrever na linha da gestante");
     expect(careLineError(refusal(409, "already_enrolled"))).toBe("a pessoa já está inscrita nesta linha");
-    expect(careLineError(refusal(409, "citizen_not_verified"))).toBe("o cadastro ainda não foi validado no posto — valide antes de inscrever");
+    expect(careLineError(refusal(409, "citizen_not_verified"))).toBe("o cadastro desta pessoa ainda não foi validado no posto — valide na recepção");
     expect(careLineError(refusal(422, "duplicate_template"))).toBe("esta linha do catálogo já foi adotada pela cidade");
     expect(careLineError(refusal(422, "brand_new_code"))).toBe("brand_new_code");
     expect(careLineError(new ApiError(404, "", "x"))).toBe("registro não encontrado — atualize a tela");

@@ -3766,7 +3766,7 @@ export interface CareLine {
   declared_condition: DeclaredCondition | string | null; active: boolean; latest_template_version: number | null;
 }
 export interface CareLineInput {
-  name: string; eligibility: CareEligibility; practices: CarePractice[]; declared_condition?: DeclaredCondition;
+  name: string; eligibility: CareEligibility; practices: CarePractice[]; declared_condition?: DeclaredCondition | null;
 }
 export type CareLinePatch = Partial<CareLineInput> & { active?: boolean; template_version?: number; declared_condition?: DeclaredCondition | null };
 // `GET /care_lines/teams` (L10). `can_confirm` por equipe (D2/T2): médico ou

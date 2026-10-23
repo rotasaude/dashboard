@@ -128,11 +128,14 @@ const ANCHOR_LABEL: Record<string, string> = {
 };
 export function anchorLabel(code: string): string { return ANCHOR_LABEL[code] ?? code; }
 
+// O conjunto, não a existência do filtro: a linha da semente restringe a 2251, 2235 e 251510 (psicólogo).
+const isDoctorNurse = (cbo: string[]): boolean => cbo.length === DOCTOR_NURSE_CBO.length && DOCTOR_NURSE_CBO.every((c) => cbo.includes(c));
+
 export function ruleText(p: CarePractice): string {
   const span = p.window_start_days ? `do dia ${p.window_start_days} ao ${p.window_days}` : `em ${p.window_days} dias`;
   const count = `${p.min_count}× ${span}${p.schedule === "proportional" ? ", proporcional ao tempo" : ""}`;
   const parts = [ count, anchorLabel(p.anchor) ];
-  if (p.cbo_filter && p.cbo_filter.length > 0) parts.push("só médico ou enfermeiro");
+  if (p.cbo_filter && p.cbo_filter.length > 0) parts.push(isDoctorNurse(p.cbo_filter) ? "só médico ou enfermeiro" : `só CBO ${p.cbo_filter.join(", ")}`);
   if (typeof p.points === "number") parts.push(`${p.points} pontos`);
   return parts.join(" · ");
 }
@@ -285,6 +288,7 @@ export interface CustomLineDraft {
   name: string; declaredCondition: "" | DeclaredCondition; ciap: string; cid10: string; ageMinYears: string; ageMaxYears: string;
   sex: "" | "female" | "male"; practices: PracticeDraft[];
   declared: string[]; // lista original de eligibility.declared (a tela edita só a condição declarada)
+  baseCondition: string; // declared_condition original: é a única entrada de `declared` que a tela troca
   extra: Partial<EligibilityExtra>;
 }
 
@@ -294,7 +298,7 @@ export function emptyPractice(): PracticeDraft {
 }
 export function emptyCustomLine(): CustomLineDraft {
   return { name: "", declaredCondition: "", ciap: "", cid10: "", ageMinYears: "", ageMaxYears: "", sex: "", practices: [ emptyPractice() ],
-    declared: [], extra: {} };
+    declared: [], baseCondition: "", extra: {} };
 }
 
 function present<T extends object>(source: T, keys: (keyof T)[]): Partial<T> {
@@ -321,6 +325,7 @@ export function draftOfLine(line: CareLine): CustomLineDraft {
     ageMinYears: e.age_min_years == null ? "" : String(e.age_min_years),
     ageMaxYears: e.age_max_years == null ? "" : String(e.age_max_years),
     sex: e.sex ?? "", practices: (line.practices ?? []).map(practiceDraftOf), declared: e.declared ?? [],
+    baseCondition: line.declared_condition ?? "",
     extra: present(e, [ "exclude_problems", "age_min_days", "age_max_days", "gender_identities_included", "gender_identities_excluded",
       "requires_anchor" ])
   };
@@ -380,9 +385,13 @@ function cboOf(p: PracticeDraft): string[] | null {
   return p.doctorOrNurse ? [ ...DOCTOR_NURSE_CBO ] : null;
 }
 
+// A tela troca só a condição que ela edita (a original); as outras entradas de `declared` e o
+// critério de uma linha sem `declared_condition` ficam como vieram.
 function declaredOf(d: CustomLineDraft): string[] {
-  if (!d.declaredCondition) return [];
-  return d.declared.includes(d.declaredCondition) ? d.declared : [ d.declaredCondition ];
+  const rest = d.declared.filter((x) => x !== d.baseCondition);
+  if (!d.declaredCondition) return rest;
+  if (d.declared.includes(d.baseCondition)) return [ ...new Set(d.declared.map((x) => (x === d.baseCondition ? d.declaredCondition : x))) ];
+  return rest.includes(d.declaredCondition) ? rest : [ ...rest, d.declaredCondition ];
 }
 
 function practiceProblem(p: PracticeDraft, n: string, seen: Set<string>): string | null {
@@ -483,7 +492,8 @@ export function customLineBody(d: CustomLineDraft): CareLineInput {
     ...(declared.length > 0 ? { declared } : {}), requires_anchor: d.extra.requires_anchor ?? null
   };
   return {
-    name: d.name.trim(), eligibility, practices, ...(d.declaredCondition ? { declared_condition: d.declaredCondition } : {})
+    // Sempre manda a condição: ausente = "manter a antiga" no api (e limpar vira invalid_eligibility).
+    name: d.name.trim(), eligibility, practices, declared_condition: d.declaredCondition || null
   };
 }
 
@@ -506,7 +516,7 @@ const ERRORS: Record<string, string> = {
   invalid_filter: "filtro inválido — atualize a tela",
   invalid_indicator: "indicador inválido — use C2 a C7",
   already_enrolled: "a pessoa já está inscrita nesta linha",
-  citizen_not_verified: "o cadastro ainda não foi validado no posto — valide antes de inscrever",
+  citizen_not_verified: "o cadastro desta pessoa ainda não foi validado no posto — valide na recepção",
   invalid_practices: "boas práticas inválidas — confira os campos",
   invalid_eligibility: "regras de elegibilidade inválidas — confira os códigos e as idades",
   duplicate_template: "esta linha do catálogo já foi adotada pela cidade",
