@@ -110,36 +110,8 @@ export function excludedLabel(code: string): string { return EXCLUDED_LABEL[code
 const CONCEPT_LABEL: Record<string, string> = { optimal: "ótimo", good: "bom", sufficient: "suficiente", regular: "regular" };
 export function conceptLabel(code: string | null | undefined): string { return code ? CONCEPT_LABEL[code] ?? code : "—"; }
 
-const SOURCE_LABEL: Record<string, string> = {
-  consultation: "consulta finalizada", blood_pressure: "pressão arterial (escuta ou consulta)",
-  weight_height: "peso e altura (escuta ou consulta)", acs_visit: `visita do ACS — ${UNTRACKED_TEXT}`,
-  oral_health: `saúde bucal — ${UNTRACKED_TEXT}`
-};
-export function sourceLabel(source: string): string {
-  if (SOURCE_LABEL[source]) return SOURCE_LABEL[source];
-  const [ kind, code ] = source.split(":");
-  if (kind === "exam" && code) return `exame SIGTAP ${code} (pedido ou resultado)`;
-  if (kind === "procedure" && code) return `procedimento SIGTAP ${code}`;
-  if (kind === "vaccine" && code) return `vacina ${code} — ${UNTRACKED_TEXT}`;
-  return source;
-}
-
-const ANCHOR_LABEL: Record<string, string> = {
-  enrollment: "desde a inscrição", birth: "desde o nascimento", lmp: "desde a DUM", rolling: "janela móvel"
-};
-export function anchorLabel(code: string): string { return ANCHOR_LABEL[code] ?? code; }
-
 // O conjunto, não a existência do filtro: a linha da semente restringe a 2251, 2235 e 251510 (psicólogo).
 export const isDoctorNurse = (cbo: string[]): boolean => cbo.length === DOCTOR_NURSE_CBO.length && DOCTOR_NURSE_CBO.every((c) => cbo.includes(c));
-
-export function ruleText(p: CarePractice): string {
-  const span = p.window_start_days ? `do dia ${p.window_start_days} ao ${p.window_days}` : `em ${p.window_days} dias`;
-  const count = `${p.min_count}× ${span}${p.schedule === "proportional" ? ", proporcional ao tempo" : ""}`;
-  const parts = [ count, anchorLabel(p.anchor) ];
-  if (p.cbo_filter && p.cbo_filter.length > 0) parts.push(isDoctorNurse(p.cbo_filter) ? "só médico ou enfermeiro" : `só CBO ${p.cbo_filter.join(", ")}`);
-  if (typeof p.points === "number") parts.push(`${p.points} pontos`);
-  return parts.join(" · ");
-}
 
 export function originText(line: Pick<CareLine, "source" | "indicator" | "template_version">): string {
   return line.source === "custom" ? "própria da cidade" : `catálogo ${line.indicator ?? "—"} · versão ${line.template_version ?? "—"}`;

@@ -4,7 +4,7 @@ import { ApiError } from "./api";
 import {
   CARE_DISABLED, CARE_NO_ROLE, COUNT_QUERY, DOCTOR_NURSE_CBO, NOMINAL_QUERY, UNTRACKED_TEXT, anchorProblem, canUseCareLines, careLineError, careLineRoles,
   codeList, contactProblem, customLineBody, customLineProblem, decimalBr, draftOfLine, emptyCustomLine, emptyPractice, endProblem, fmtDay,
-  isDoctorNurse, isStaleCare, knownCareLineError, newerVersion, originText, personName, personStatus, practiceText, reasonProblem, ruleText, slugKey, sourceLabel, statusLabel,
+  isDoctorNurse, isStaleCare, knownCareLineError, newerVersion, originText, personName, personStatus, practiceText, reasonProblem, slugKey, statusLabel,
   statusTone, worstStatus, type CustomLineDraft, type PracticeDraft
 } from "./careLines";
 import { DIABETES_TEMPLATE, TODAY23, cityLine, practice } from "../test/careLineFixtures";
@@ -57,7 +57,7 @@ describe("situação e boa prática", () => {
     expect(personStatus({ worst_status: "ok", practices: [ practice({ status: "overdue" }) ] })).toBe("ok");
   });
 
-  it("datas sem fuso, vírgula decimal e fontes", () => {
+  it("datas sem fuso e vírgula decimal", () => {
     expect(fmtDay("2026-10-22")).toBe("22/10/2026");
     expect(fmtDay("2026-10-22T08:00:00-03:00")).toBe("22/10/2026");
     expect(fmtDay(null)).toBe("—");
@@ -67,22 +67,6 @@ describe("situação e boa prática", () => {
     expect(decimalBr(null)).toBe("—");
     expect(decimalBr("37.5")).toBe("37,5");
     expect(decimalBr("")).toBe("—");
-    expect(sourceLabel("exam:0202010503")).toBe("exame SIGTAP 0202010503 (pedido ou resultado)");
-    expect(sourceLabel("procedure:0301100039")).toBe("procedimento SIGTAP 0301100039");
-    expect(sourceLabel("vaccine:9")).toBe(`vacina 9 — ${UNTRACKED_TEXT}`);
-    expect(sourceLabel("acs_visit")).toBe(`visita do ACS — ${UNTRACKED_TEXT}`);
-    expect(sourceLabel("teleconsulta")).toBe("teleconsulta");
-    expect(ruleText(DIABETES_TEMPLATE.practices[0])).toBe("1× em 183 dias · janela móvel · só médico ou enfermeiro · 20 pontos");
-    expect(ruleText({ ...DIABETES_TEMPLATE.practices[0], min_count: 7, window_days: 294, schedule: "proportional", anchor: "lmp", cbo_filter: null,
-      points: null })).toBe("7× em 294 dias, proporcional ao tempo · desde a DUM");
-    expect(ruleText({ ...DIABETES_TEMPLATE.practices[0], cbo_filter: [ "2235", "2231", "2253", "2252", "2251" ], points: null }))
-      .toBe("1× em 183 dias · janela móvel · só médico ou enfermeiro");
-    expect(ruleText({ ...DIABETES_TEMPLATE.practices[0], cbo_filter: [ "2251", "2235", "251510" ], points: null }))
-      .toBe("1× em 183 dias · janela móvel · só CBO 2251, 2235, 251510");
-    expect(ruleText({ ...DIABETES_TEMPLATE.practices[0], cbo_filter: [ "2251", "2235" ], points: null }))
-      .toBe("1× em 183 dias · janela móvel · só CBO 2251, 2235");
-    expect(ruleText({ ...DIABETES_TEMPLATE.practices[0], window_start_days: 196, window_days: 294, anchor: "lmp", cbo_filter: null, points: 9 }))
-      .toBe("1× do dia 196 ao 294 · desde a DUM · 9 pontos");
   });
 
   it("origem e versão nova", () => {

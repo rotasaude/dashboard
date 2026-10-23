@@ -2,7 +2,7 @@
 // Acompanhamento da equipe (contrato §4–§5; spec §6 "Equipe"): o profissional
 // com vínculo ativo na unidade da equipe vê, pessoa a pessoa, a situação de
 // cada boa prática, filtra a busca ativa (alguma vencida), registra contato,
-// agenda, inscreve e encerra; as sugestões ficam na aba própria (Task 9).
+// agenda, inscreve e encerra; as sugestões ficam na aba própria.
 // A lista é NOMINAL e GRAVA trilha (clinical_record.viewed, access: care_line):
 // lida só ao abrir, ao filtrar, ao trocar de aba ou depois de uma ação —
 // nunca sozinha. Só os contadores (/count, sem trilha) releem por minuto.

@@ -1,7 +1,7 @@
 // src/modules/CareLinesAdmin.tsx
 // Linhas da cidade (contrato §3): o municipal_admin adota as linhas do
 // catálogo-base (C2–C7), adota a versão nova de uma linha já adotada,
-// ativa/desativa e cria ou edita linha própria (Task 5). Toda escrita com
+// ativa/desativa e cria ou edita linha própria. Toda escrita com
 // step-up. Versão nova do catálogo não muda as inscrições até a cidade adotá-la
 // (spec §4): adotar a versão é o que muda a avaliação. Nada aqui inscreve ninguém.
 import { useState, type CSSProperties } from "react";
