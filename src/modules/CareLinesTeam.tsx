@@ -113,7 +113,7 @@ function TeamBody({ today }: { today: string }) {
           </button>
         ))}
         <button type="button" aria-pressed={tab === "suggestions"} style={tab === "suggestions" ? buttonStyle : secondaryButtonStyle}
-          onClick={() => { setNotice(null); setTab("suggestions"); }}>
+          onClick={() => { setNotice(null); setOpenId(null); setTab("suggestions"); }}>
           {typeof suggestionCount.data === "number" ? `Sugestões (${suggestionCount.data})` : "Sugestões"}
         </button>
       </div>

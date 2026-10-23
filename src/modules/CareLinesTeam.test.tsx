@@ -28,6 +28,7 @@ beforeEach(() => {
   mocked(api.countOverdueEnrollments).mockResolvedValue(12);
   mocked(api.countCareSuggestions).mockResolvedValue(3);
   mocked(api.listCareSuggestions).mockResolvedValue({ suggestions: [], next_before: null });
+  mocked(api.getCareEnrollment).mockResolvedValue(enrollment());
 });
 
 const NAME = "Maria das Dores · 58 anos";
@@ -130,5 +131,16 @@ describe("CareLinesTeam — painel nominal", () => {
     renderWithProviders(<CareLinesTeam today={TODAY23} />);
     const list = await screen.findByRole("region", { name: "Pessoas da equipe" });
     expect(await within(list).findByText("ninguém nesta lista")).not.toBeNull();
+  });
+
+  it("ao entrar na aba Sugestões fecha o detalhe aberto e não relê a lista de inscrições", async () => {
+    renderWithProviders(<CareLinesTeam today={TODAY23} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Abrir Maria das Dores" }));
+    expect(await screen.findByRole("region", { name: "Inscrição de Maria das Dores" })).not.toBeNull();
+    mocked(api.listCareEnrollments).mockClear();
+    fireEvent.click(screen.getByRole("button", { name: /^Sugestões/ }));
+    await screen.findByRole("region", { name: "Sugestões a confirmar" });
+    expect(screen.queryByRole("region", { name: "Inscrição de Maria das Dores" })).toBeNull();
+    expect(api.listCareEnrollments).toHaveBeenCalledTimes(0);
   });
 });
