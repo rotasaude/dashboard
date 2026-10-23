@@ -18,6 +18,7 @@ import react from "@vitejs/plugin-react";
 //   /triage_catalog → catálogo de triagens da cidade (módulo 15; leitura para papéis de protocolo, escrita do municipal_admin).
 //   /integrations, /cnes, /production → módulo 16 (credenciais, CNES e produção e-SUS).
 //   /clinical_record → prontuário fora do atendimento (módulo 19: abertura justificada e relatório).
+//   /care_lines → linhas de cuidado (módulo 23: linhas da cidade, painel da equipe, sugestões e prévia).
 //   /signature  → assinatura digital (módulo 19b). O prestador devolve a pessoa a
 //                 /dashboard/signature/callback (base do Vite), que NÃO casa com este
 //                 prefixo: o retorno é do dashboard, e só o POST /signature/oauth/callback vai ao api.
@@ -75,7 +76,9 @@ export default defineConfig({
       "^/lab(/|$)": proxy(TARGET),
       "^/v(/|$)": proxy(TARGET),
       // Módulo 22: faturamento de procedimentos (BPA). Regex como os vizinhos: não casa /billingX.
-      "^/billing(/|$)": proxy(TARGET)
+      "^/billing(/|$)": proxy(TARGET),
+      // Módulo 23: linhas de cuidado. Regex como os vizinhos.
+      "^/care_lines(/|$)": proxy(TARGET)
     }
   }
 });

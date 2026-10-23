@@ -74,3 +74,11 @@ describe("módulo 22", () => {
     expect(hasFeature({ features: [ "municipal_lab" ] }, "procedure_billing")).toBe(false);
   });
 });
+
+describe("módulo 23", () => {
+  it("care_lines tem nome e vem da sessão", () => {
+    expect(featureLabel("care_lines")).toBe("Linhas de cuidado");
+    expect(hasFeature({ features: [ "clinical_record", "care_lines" ] }, "care_lines")).toBe(true);
+    expect(hasFeature({ features: [ "clinical_record" ] }, "care_lines")).toBe(false);
+  });
+});

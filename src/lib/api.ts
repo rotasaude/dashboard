@@ -647,7 +647,7 @@ export async function closeAttendance(
 // `priority` é a prioridade do pedido (rotina/prioritária); a da triagem é
 // `triage_priority`.
 export interface RequestRow {
-  id: string; kind: "return" | "referral" | "triage" | "screening"; origin: "attendance" | "triage";
+  id: string; kind: "return" | "referral" | "triage" | "screening" | "care_line"; origin: "attendance" | "triage" | "care_line";
   origin_unit_name: string | null; created_at: string; cpf_masked: string; note: string | null;
   reopened_reason: "expired" | "no_show" | null;
   appointment_type_key: string; appointment_type_name: string; priority: SchedulingPriority; due_on: string;
@@ -3715,4 +3715,228 @@ export async function saveVerificationDemographics(verificationId: string, input
     method: "POST", body: JSON.stringify(input)
   });
   return { race_color_set: body.race_color_set === true, address_set: body.address_set === true };
+}
+
+// ─── Linhas de cuidado (módulo 23, ADR 0040; contrato 2026-10-22) ───
+// Na URL só ids (equipe, linha, inscrição, sugestão), o filtro de situação,
+// o indicador e o cursor — nunca CPF, nome, nota de contato ou motivo. CPF da
+// busca e textos vão no corpo. Elegibilidade, situação de cada boa prática,
+// pior situação, quem confirma e a prévia são do api. Escritas e detalhe devolvem
+// o objeto PURO (sem envelope); só as listas vêm em envelope.
+
+const CARE_BASE = import.meta.env.VITE_CARE_LINES_BASE || "/care_lines";
+const carePath = (...parts: string[]) => [ CARE_BASE, ...parts.map(encodeURIComponent) ].join("/");
+const carePost = (body: unknown): RequestInit => ({ method: "POST", body: JSON.stringify(body) });
+
+export type CareStatus = "ok" | "due_soon" | "overdue" | "untracked";
+export type CareSchedule = "proportional" | "end_of_window";
+export type CareAnchor = "enrollment" | "birth" | "lmp" | "rolling";
+export type SuggestionReason = "problem" | "age_sex" | "declared" | "resolved_problem";
+export type EndReason = "discharge" | "death" | "moved" | "pregnancy_ended" | "other";
+export type ContactChannel = "phone" | "home_visit" | "wpda_message" | "in_person";
+export type ContactOutcome = "reached" | "no_answer" | "scheduled" | "refused";
+export type DeclaredCondition = "diabetes" | "hypertension" | "pregnancy" | "mental_health" | "none";
+export type CareIndicator = "C2" | "C3" | "C4" | "C5" | "C6" | "C7";
+
+// Elegibilidade (L2 do plano do api): códigos casados por prefixo, CID sem
+// ponto; idade em dias ou anos; tudo opcional menos `problems`.
+export interface CareEligibility {
+  problems: { ciap2: string[]; cid10: string[] };
+  exclude_problems?: { ciap2: string[]; cid10: string[] };
+  age_min_days?: number | null; age_max_days?: number | null; age_min_years?: number | null; age_max_years?: number | null;
+  sex?: "female" | "male" | null; gender_identities_included?: string[]; gender_identities_excluded?: string[];
+  declared?: string[]; requires_anchor?: "lmp" | null;
+}
+// Boa prática (contrato §2 com L1): `points` no catálogo-base; os campos
+// avançados (all_of, code_filter, applies_to) só vêm das linhas do catálogo.
+export interface CarePractice {
+  key: string; label: string; citizen_label?: string | null; source: string; window_start_days?: number | null; window_days: number;
+  min_count: number; schedule: CareSchedule | string; anchor: CareAnchor | string; cbo_filter: string[] | null; points?: number | null;
+  code_filter?: { ciap2?: string[]; cid10?: string[] } | null; applies_to?: { age_min_years?: number; age_max_years?: number; sex?: string } | null;
+  all_of?: { source: string; window_days?: number }[][] | null;
+}
+export interface CareLineTemplate {
+  key: string; name: string; indicator: CareIndicator | string; version: number; eligibility: CareEligibility; practices: CarePractice[];
+}
+// T5: `latest_template_version` oferece "Adotar versão N"; nulo na linha própria.
+export interface CareLine {
+  id: string; name: string; source: "template" | "custom" | string; template_key: string | null; template_version: number | null;
+  indicator: string | null; eligibility: CareEligibility; practices: CarePractice[];
+  declared_condition: DeclaredCondition | string | null; active: boolean; latest_template_version: number | null;
+}
+export interface CareLineInput {
+  name: string; eligibility: CareEligibility; practices: CarePractice[]; declared_condition?: DeclaredCondition;
+}
+export type CareLinePatch = Partial<CareLineInput> & { active?: boolean; template_version?: number; declared_condition?: DeclaredCondition | null };
+// `GET /care_lines/teams` (L10). `can_confirm` por equipe (D2/T2): médico ou
+// enfermeiro com vínculo na unidade dela. Profissional sem vínculo: 403 missing_role.
+export interface CareTeam { id: string; ine: string; name: string; unit: { id: string; name: string }; can_confirm: boolean }
+// `GET /care_lines/lines` (L10): `requires_anchor` "lmp" = a linha pede a DUM.
+// Dentro de inscrição e sugestão (P3) a referência traz só { id, name, requires_anchor }.
+export interface CareLineRef { id: string; name: string; indicator?: string | null; requires_anchor: "lmp" | string | null }
+// O contexto do painel: as duas listas de apoio, lidas juntas.
+export interface CareContext { teams: CareTeam[]; lines: CareLineRef[] }
+export interface CarePerson { patient_id: string | null; citizen_id: string | null; display_name: string | null; age: number | null }
+export interface CarePracticeStatus {
+  key: string; label: string; status: CareStatus | string; done_at: string | null; due_on: string | null;
+  count: number | null; expected: number | null;
+}
+// L12: o histórico de contatos só no detalhe; `last_contact` nunca traz a nota.
+export interface CareContact {
+  id?: string; channel: ContactChannel | string; outcome: ContactOutcome | string; note: string | null;
+  recorded_by: { id: string; name: string } | null; recorded_at: string;
+}
+export interface CareEnrollment {
+  id: string; person: CarePerson; care_line: CareLineRef; team: { id: string; ine: string; name: string };
+  anchor_date: string | null; status: "active" | "ended" | string; enrolled_at: string; worst_status: CareStatus | string | null;
+  ended_reason: EndReason | string | null; ended_at: string | null;
+  practices: CarePracticeStatus[]; last_contact: { channel: string; outcome: string; at: string } | null; contacts?: CareContact[];
+}
+export interface CareEnrollmentPage { enrollments: CareEnrollment[]; next_before: string | null }
+export interface EnrollmentQuery { teamId: string; careLineId?: string; status: "overdue" | "due_soon" | "all"; before?: string | null }
+// L5/P3: a sugestão nasce numa equipe (`team_id`); `enrollment_id` só na de encerramento.
+export interface CareSuggestion {
+  id: string; person: CarePerson; care_line: CareLineRef; reason: SuggestionReason | string; created_at: string;
+  team_id: string | null; enrollment_id: string | null;
+}
+export interface CareSuggestionPage { suggestions: CareSuggestion[]; next_before: string | null }
+export interface SuggestionQuery { teamId: string; careLineId?: string; before?: string | null }
+// L8/P17: `score` e `weight` em texto com uma casa e ponto (a tela mostra vírgula);
+// `score`/`concept` nulos = "sem dados". A prática sem ninguém no denominador
+// (`no_eligible`) vem em `practices` com weight "0.0", achieved 0 e denominator 0.
+export type CareConcept = "optimal" | "good" | "sufficient" | "regular";
+export interface CarePreviewPractice {
+  key: string; label: string; tracked: boolean; points: number | null; weight: string; achieved: number; denominator: number;
+}
+export interface CarePreview {
+  indicator: string; team: { id: string; ine?: string; name?: string }; template_version: number | null; denominator: number;
+  score: string | null; max_score: number; concept: CareConcept | string | null;
+  practices: CarePreviewPractice[];
+  // `excluded`: famílias de fonte sem dado no sistema (acs_visit, vaccine…);
+  // `excluded_practices`: por prática, o motivo de ficar fora da conta.
+  excluded: string[]; excluded_practices: { key: string; reason: "untracked" | "no_eligible" | string }[]; estimate: true;
+}
+// T3/P1: `POST /care_lines/person_lookup` { cpf }. Erros: 422 invalid_cpf, 409
+// citizen_not_verified (par só declarado), 404 person_not_found, 403 missing_role,
+// 429 too_many_requests. `verified` é sempre true (o ramo falso virou o 409).
+export interface CarePersonLookup {
+  patient_id: string | null; citizen_id: string; display_name: string | null; cpf_masked: string; verified: true;
+}
+// T4/P16: o pedido de agendamento (módulo 17) que o atalho abre (201 criado, 200
+// reaproveitado). O api tira a `note` do item (chega ausente, não null). `can_book`: quem pode marcar pelo BookPanel; sem
+// ele o pedido só aguarda a recepção. Erros: 409 already_scheduled /
+// invalid_transition / citizen_not_verified, 422 invalid_unit, 404 outra equipe.
+export interface CareAppointmentTarget { request: RequestRow; unit: HealthUnit; can_book: boolean }
+
+export const CARE_PAGE_SIZE = 50;
+
+// As duas listas de apoio (L10), sem trilha: equipes que a pessoa vê e linhas ativas.
+export async function getCareContext(): Promise<CareContext> {
+  const [ teams, lines ] = await Promise.all([
+    jsonFetch<{ teams?: CareTeam[] }>(carePath("teams")), jsonFetch<{ lines?: CareLineRef[] }>(carePath("lines"))
+  ]);
+  return { teams: teams.teams ?? [], lines: lines.lines ?? [] };
+}
+
+export async function listCareTemplates(): Promise<CareLineTemplate[]> {
+  return (await jsonFetch<{ templates?: CareLineTemplate[] }>(carePath("admin", "templates"))).templates ?? [];
+}
+
+export async function listCityCareLines(): Promise<CareLine[]> {
+  return (await jsonFetch<{ lines?: CareLine[] }>(carePath("admin", "lines"))).lines ?? [];
+}
+
+// Step-up (contrato §3): quem trata 401 mfa_required é o SensitiveAction.
+export async function adoptCareLine(templateKey: string, version: number): Promise<CareLine> {
+  return jsonFetch<CareLine>(carePath("admin", "lines"), carePost({ template_key: templateKey, template_version: version }));
+}
+
+export async function createCustomCareLine(input: CareLineInput): Promise<CareLine> {
+  return jsonFetch<CareLine>(carePath("admin", "lines"), carePost(input));
+}
+
+export async function updateCareLine(id: string, patch: CareLinePatch): Promise<CareLine> {
+  return jsonFetch<CareLine>(carePath("admin", "lines", id), { method: "PATCH", body: JSON.stringify(patch) });
+}
+
+function teamParams(teamId: string, careLineId?: string): URLSearchParams {
+  const p = new URLSearchParams({ team_id: teamId });
+  if (careLineId) p.set("care_line_id", careLineId);
+  return p;
+}
+
+// Nominal: o api grava trilha a cada leitura; nunca é relida sozinha.
+export async function listCareSuggestions(q: SuggestionQuery): Promise<CareSuggestionPage> {
+  const p = teamParams(q.teamId, q.careLineId);
+  if (q.before) p.set("before", q.before);
+  p.set("limit", String(CARE_PAGE_SIZE));
+  const b = await jsonFetch<Partial<CareSuggestionPage>>(withQuery(carePath("suggestions"), p));
+  return { suggestions: b.suggestions ?? [], next_before: b.next_before ?? null };
+}
+
+// Sugestão de encerramento (L5): `{}` encerra com discharge.
+export async function acceptCareSuggestion(id: string, body: { team_id?: string; anchor_date?: string }): Promise<void> {
+  await jsonFetch<unknown>(carePath("suggestions", id, "accept"), carePost(body));
+}
+
+export async function dismissCareSuggestion(id: string, reason: string): Promise<void> {
+  await jsonFetch<unknown>(carePath("suggestions", id, "dismiss"), carePost({ reason }));
+}
+
+export async function enrollCare(body: {
+  patient_id?: string; citizen_id?: string; care_line_id: string; team_id: string; anchor_date?: string;
+}): Promise<CareEnrollment> {
+  return jsonFetch<CareEnrollment>(carePath("enrollments"), carePost(body));
+}
+
+// Nota vazia não vai.
+export async function endCareEnrollment(id: string, reason: EndReason, note: string): Promise<void> {
+  const text = note.trim();
+  await jsonFetch<unknown>(carePath("enrollments", id, "end"), carePost(text ? { reason, note: text } : { reason }));
+}
+
+export async function listCareEnrollments(q: EnrollmentQuery): Promise<CareEnrollmentPage> {
+  const p = teamParams(q.teamId, q.careLineId);
+  p.set("status", q.status);
+  if (q.before) p.set("before", q.before);
+  p.set("limit", String(CARE_PAGE_SIZE));
+  const b = await jsonFetch<Partial<CareEnrollmentPage>>(withQuery(carePath("enrollments"), p));
+  return { enrollments: b.enrollments ?? [], next_before: b.next_before ?? null };
+}
+
+export async function getCareEnrollment(id: string): Promise<CareEnrollment> {
+  return jsonFetch<CareEnrollment>(carePath("enrollments", id));
+}
+
+export async function recordCareContact(id: string, body: { channel: ContactChannel; outcome: ContactOutcome; note: string }): Promise<void> {
+  const note = body.note.trim();
+  await jsonFetch<unknown>(carePath("enrollments", id, "contacts"),
+    carePost(note ? { channel: body.channel, outcome: body.outcome, note } : { channel: body.channel, outcome: body.outcome }));
+}
+
+// Contadores (contrato §5): sem trilha; podem reler a cada minuto.
+export async function countCareSuggestions(teamId: string): Promise<number> {
+  return (await jsonFetch<{ count?: number }>(withQuery(carePath("suggestions", "count"), teamParams(teamId)))).count ?? 0;
+}
+
+export async function countOverdueEnrollments(teamId: string): Promise<number> {
+  return (await jsonFetch<{ count?: number }>(withQuery(carePath("enrollments", "overdue", "count"), teamParams(teamId)))).count ?? 0;
+}
+
+// Agregado, sem nome (contrato §6). `estimate` é sempre true para a tela.
+export async function getCarePreview(teamId: string, indicator: CareIndicator): Promise<CarePreview> {
+  const b = await jsonFetch<Partial<CarePreview>>(withQuery(carePath("preview"), new URLSearchParams({ team_id: teamId, indicator })));
+  return {
+    indicator: b.indicator ?? indicator, team: b.team ?? { id: teamId }, template_version: b.template_version ?? null,
+    denominator: b.denominator ?? 0, score: b.score ?? null, max_score: b.max_score ?? 100, concept: b.concept ?? null,
+    practices: b.practices ?? [], excluded: b.excluded ?? [], excluded_practices: b.excluded_practices ?? [], estimate: true
+  };
+}
+
+export async function lookupCarePerson(cpf: string): Promise<CarePersonLookup> {
+  return (await jsonFetch<{ person: CarePersonLookup }>(carePath("person_lookup"), carePost({ cpf }))).person;
+}
+
+export function openCareAppointment(enrollmentId: string): Promise<CareAppointmentTarget> {
+  return jsonFetch(carePath("enrollments", enrollmentId, "appointment_request"), carePost({}));
 }
