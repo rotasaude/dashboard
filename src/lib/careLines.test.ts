@@ -400,6 +400,19 @@ describe("consultas e recusas", () => {
     expect(knownCareLineError(new TypeError("fetch"))).toBeNull();
   });
 
+  it("todo código de recusa da inscrição manual (person_lookup e enroll) tem frase própria", () => {
+    const refusal = (status: number, error: string) => new ApiError(status, { error }, "x");
+    const codes: [ number, string ][] = [
+      [ 422, "invalid_cpf" ], [ 409, "citizen_not_verified" ], [ 404, "person_not_found" ], [ 403, "missing_role" ], [ 429, "too_many_requests" ],
+      [ 403, "out_of_scope" ], [ 403, "cbo_not_allowed" ], [ 422, "invalid_care_line" ], [ 422, "invalid_person" ], [ 409, "line_inactive" ],
+      [ 422, "anchor_required" ], [ 422, "invalid_anchor" ], [ 409, "already_enrolled" ], [ 409, "invalid_transition" ], [ 404, "not_found" ]
+    ];
+    for (const [ status, code ] of codes) {
+      expect(knownCareLineError(refusal(status, code)), code).not.toBeNull();
+      expect(careLineError(refusal(status, code)), code).not.toContain(code);
+    }
+  });
+
   it("frases das recusas; código desconhecido nunca cru; stale relê", () => {
     const refusal = (status: number, error: string, extra: object = {}) => new ApiError(status, { error, ...extra }, "x");
     expect(careLineError(refusal(403, "feature_disabled", { feature: "care_lines" }))).toBe(CARE_DISABLED);

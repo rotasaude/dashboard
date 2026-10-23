@@ -22,6 +22,7 @@ import { CareLinesGate } from "./careLines/CareLinesGate";
 import { EnrollmentList } from "./careLines/EnrollmentList";
 import { EnrollmentDetail } from "./careLines/EnrollmentDetail";
 import { SuggestionsPanel } from "./careLines/SuggestionsPanel";
+import { ManualEnrollPanel } from "./careLines/ManualEnrollPanel";
 
 export function CareLinesTeam({ today = todayInCity() }: { today?: string } = {}) {
   return (
@@ -41,6 +42,7 @@ function TeamBody({ today }: { today: string }) {
   const [ tab, setTab ] = useState<TeamTab>("overdue");
   const [ notice, setNotice ] = useState<string | null>(null);
   const [ openId, setOpenId ] = useState<string | null>(null);
+  const [ enrolling, setEnrolling ] = useState(false);
   const teams = context.data?.teams ?? [];
   const teamId = teamChoice || teams[0]?.id || "";
   // D2: médico ou enfermeiro com vínculo na unidade desta equipe. Ausente
@@ -116,8 +118,15 @@ function TeamBody({ today }: { today: string }) {
           onClick={() => { setNotice(null); setOpenId(null); setTab("suggestions"); }}>
           {typeof suggestionCount.data === "number" ? `Sugestões (${suggestionCount.data})` : "Sugestões"}
         </button>
+        {canConfirm && (
+          <button type="button" style={secondaryButtonStyle} onClick={() => { setNotice(null); setEnrolling(true); }}>Inscrever pessoa</button>
+        )}
       </div>
       {notice && <p role="status" style={statusStyle}>{notice}</p>}
+      {enrolling && (
+        <ManualEnrollPanel teamId={teamId} teams={teams} lines={context.data?.lines ?? []} today={today}
+          onEnrolled={(message) => { setEnrolling(false); changed(message); }} onCancel={() => setEnrolling(false)} />
+      )}
       {openId && (
         <EnrollmentDetail key={openId} enrollmentId={openId} onClose={() => setOpenId(null)}
           onChanged={(message, close) => { if (close) closeIfOpen(openId); changed(message); }} />
