@@ -11,7 +11,7 @@ import { dangerButtonStyle, inputStyle, secondaryButtonStyle } from "../../compo
 import { alert, box, fieldLabel, form, muted, row } from "../exams/styles";
 import { useCareSubmit } from "./useCareSubmit";
 
-export const CLOSES_REQUEST_WARNING = "O pedido de agendamento aberto por esta linha também será fechado, e o horário marcado nele, cancelado.";
+export const CLOSES_REQUEST_WARNING = "Se houver pedido de agendamento aberto por esta linha, ele também será fechado, e o horário marcado nele, cancelado.";
 const CLOSES_REQUEST: EndReason[] = [ "death", "moved" ];
 
 export function EndEnrollmentForm({ enrollmentId, person, initialReason, onEnded, onStale, onCancel }: {

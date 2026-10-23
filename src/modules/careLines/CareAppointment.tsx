@@ -37,7 +37,9 @@ export function CareAppointment({ enrollmentId, onBooked, onStale }: {
         <section aria-label="Pedido de agendamento" style={box}>
           <strong>{ownRequest ? "Pedido enviado à recepção da unidade" : `já há pedido aberto (${requestKindLabel(request)})`}</strong>
           <p style={muted}>{summary}</p>
-          {!ownRequest && <p style={muted}>A recepção da unidade marca o horário desse pedido.</p>}
+          {!ownRequest && (
+            <p style={muted}>{target.can_book ? "Marque pela fila da recepção da unidade." : "A recepção da unidade marca o horário desse pedido."}</p>
+          )}
           <div style={row}><button type="button" style={secondaryButtonStyle} onClick={back}>Voltar</button></div>
         </section>
       );

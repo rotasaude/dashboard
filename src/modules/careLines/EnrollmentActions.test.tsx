@@ -83,7 +83,21 @@ describe("Agendar (atalho para o módulo 17)", () => {
     await clickAgendar();
     const info = await screen.findByRole("region", { name: "Pedido de agendamento" });
     expect(within(info).getByText("já há pedido aberto (Encaminhado de UPA Norte)")).not.toBeNull();
+    expect(within(info).getByText("Marque pela fila da recepção da unidade.")).not.toBeNull();
     expect(screen.queryByText("Pedido enviado à recepção da unidade")).toBeNull();
+    expect(screen.queryByRole("region", { name: BOOK_REGION })).toBeNull();
+  });
+
+  it("pedido de OUTRO tipo sem can_book: a recepção da unidade marca", async () => {
+    mocked(api.openCareAppointment).mockResolvedValue(target({
+      can_book: false, request: careRequestItem({ kind: "referral", origin: "attendance", origin_unit_name: "UPA Norte" })
+    }));
+    renderDetail();
+    await clickAgendar();
+    const info = await screen.findByRole("region", { name: "Pedido de agendamento" });
+    expect(within(info).getByText("já há pedido aberto (Encaminhado de UPA Norte)")).not.toBeNull();
+    expect(within(info).getByText("A recepção da unidade marca o horário desse pedido.")).not.toBeNull();
+    expect(within(info).queryByText("Marque pela fila da recepção da unidade.")).toBeNull();
     expect(screen.queryByRole("region", { name: BOOK_REGION })).toBeNull();
   });
 
@@ -136,7 +150,7 @@ describe("Encerrar inscrição", () => {
     renderDetail();
     fireEvent.click(await screen.findByRole("button", { name: "Encerrar inscrição" }));
     const endForm = screen.getByRole("region", { name: "Encerrar a inscrição de Maria das Dores" });
-    const warning = "O pedido de agendamento aberto por esta linha também será fechado, e o horário marcado nele, cancelado.";
+    const warning = "Se houver pedido de agendamento aberto por esta linha, ele também será fechado, e o horário marcado nele, cancelado.";
     expect(within(endForm).queryByText(warning)).toBeNull();
     for (const [ reason, shown ] of [ [ "death", true ], [ "moved", true ], [ "discharge", false ], [ "pregnancy_ended", false ], [ "other", false ] ] as const) {
       fireEvent.change(within(endForm).getByLabelText("Motivo do encerramento"), { target: { value: reason } });
