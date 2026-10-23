@@ -88,7 +88,7 @@ describe("CheckIn", () => {
     expect(screen.getByText("(**) *****-5432")).not.toBeNull();
     expect(screen.getByText("declarado")).not.toBeNull();
     expect(screen.getByText("triage-respiratoria")).not.toBeNull();
-    expect(screen.getByText("prioridade 2")).not.toBeNull();
+    expect(screen.getByText("2")).not.toBeNull();
   });
 
   it("cartão mostra o agendamento com hora, tipo e prioridade quando vier appointment", async () => {
@@ -98,7 +98,7 @@ describe("CheckIn", () => {
     fireEvent.change(screen.getByLabelText("Código de check-in"), { target: { value: "123456" } });
     fireEvent.click(screen.getByRole("button", { name: "Buscar check-in" }));
     expect(await screen.findByText(/Agendamento \d{2}:\d{2} · Retorno/)).not.toBeNull();
-    expect(screen.getByText("prioridade 2")).not.toBeNull();
+    expect(screen.getByText("2")).not.toBeNull();
   });
 
   it("cartão mostra encaminhamento quando o kind do agendamento é referral", async () => {

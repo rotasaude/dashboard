@@ -6,7 +6,6 @@ import {
 } from "../../lib/api";
 import { attendanceError, isValidCpf, maskCpf, nivelLabel, onlyDigits } from "../../lib/attendance";
 import { fmtDateTime, fmtHourMinute } from "../../lib/format";
-import { priorityLabel } from "../../lib/queueLabels";
 import { requestKindLabel } from "../../lib/scheduling";
 import { Panel } from "../../components/Panel";
 import { DataTable } from "../../components/DataTable";
@@ -48,6 +47,11 @@ type Mode = "code" | "exception";
 
 function isInvalidUnit(err: unknown): boolean {
   return err instanceof ApiError && (err.body as { error?: string } | undefined)?.error === "invalid_unit";
+}
+
+// Prioridade como número puro; o pedido de linha de cuidado não tem triagem raiz e vem sem ela.
+function priorityText(p: number | null): string {
+  return p === null ? "—" : String(p);
 }
 
 function appointmentKindLabel(kind: CheckInAppointment["kind"]): string {
@@ -196,7 +200,7 @@ function CodeFlow({ unit, onUnitInvalid, cpf, onCpf: setCpf, demographicsOn = fa
               <>
                 <KeyValue k="Data" v={fmtDateTime(found.triage.date)} />
                 <KeyValue k="Protocolo" v={found.triage.protocol_name} />
-                <KeyValue k="Prioridade" v={priorityLabel(found.triage.priority)} />
+                <KeyValue k="Prioridade" v={priorityText(found.triage.priority)} />
               </>
             )}
             {found.appointment && (
@@ -205,7 +209,7 @@ function CodeFlow({ unit, onUnitInvalid, cpf, onCpf: setCpf, demographicsOn = fa
                   k="Agendamento"
                   v={`Agendamento ${fmtHourMinute(found.appointment.scheduled_at)} · ${appointmentKindLabel(found.appointment.kind)}`}
                 />
-                <KeyValue k="Prioridade" v={priorityLabel(found.appointment.priority)} />
+                <KeyValue k="Prioridade" v={priorityText(found.appointment.priority)} />
               </>
             )}
           </div>
@@ -361,7 +365,7 @@ function ExceptionFlow({ unit, onUnitInvalid, cpf, onCpf: setCpf, demographicsOn
                   : fmtDateTime(r.row.date)
               },
               { label: "Protocolo", w: "2fr", render: (r) => r.row.protocol_name ?? "—" },
-              { label: "Prioridade", w: "1fr", render: (r) => priorityLabel(r.row.priority) }
+              { label: "Prioridade", w: "1fr", render: (r) => priorityText(r.row.priority) }
             ]}
             rows={rows}
             rowKey={(r) => `${r.kind}-${r.row.id}`}
