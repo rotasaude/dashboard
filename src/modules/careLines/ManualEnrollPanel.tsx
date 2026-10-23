@@ -28,10 +28,19 @@ export function ManualEnrollPanel({ teamId, teams, lines, today, onEnrolled, onC
   const line = lines.find((l) => l.id === lineId) ?? null;
   const needAnchor = forcedAnchor || line?.requires_anchor === "lmp";
 
+  // Nova busca ou CPF editado: a pessoa anterior (e o que se escolheu para ela) sai
+  // da tela, para nunca inscrever quem já não é o CPF do campo.
+  function forget() {
+    setPerson(null);
+    setLineId("");
+    setLmp("");
+    setForcedAnchor(false);
+  }
+
   async function find() {
+    forget();
     if (!isValidCpf(cpf)) { setError("CPF inválido"); return; }
     const digits = onlyDigits(cpf);
-    setPerson(null);
     // Recusa de "stale" (not_found) cai na mesma frase do campo.
     await submit(async () => {
       const found = await lookupCarePerson(digits);
@@ -66,7 +75,7 @@ export function ManualEnrollPanel({ teamId, teams, lines, today, onEnrolled, onC
         <div style={{ ...row, alignItems: "flex-end" }}>
           <label style={fieldLabel}>
             CPF da pessoa
-            <input value={cpf} inputMode="numeric" autoComplete="off" style={inputStyle} onChange={(e) => { setError(null); setCpf(e.target.value); }} />
+            <input value={cpf} inputMode="numeric" autoComplete="off" style={inputStyle} onChange={(e) => { setError(null); forget(); setCpf(e.target.value); }} />
           </label>
           <button type="button" style={secondaryButtonStyle} disabled={busy} onClick={() => void find()}>Buscar</button>
         </div>

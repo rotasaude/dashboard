@@ -111,6 +111,28 @@ describe("ManualEnrollPanel", () => {
     spies.forEach((s) => s.mockRestore());
   });
 
+  it("digitar outro CPF (ou buscar um inválido) esquece a pessoa, a linha e a DUM da anterior", async () => {
+    const panel = await openPanel();
+    await find(panel);
+    await within(panel).findByText("Benedita Ramos · CPF ***.982.247-**");
+    fireEvent.change(within(panel).getByLabelText("Linha"), { target: { value: "cl3" } });
+    fireEvent.change(within(panel).getByLabelText("DUM (data da última menstruação)"), { target: { value: "2026-07-15" } });
+    // editar o campo já esquece a pessoa
+    fireEvent.change(within(panel).getByLabelText("CPF da pessoa"), { target: { value: "111.444.777-3" } });
+    expect(within(panel).queryByRole("button", { name: "Inscrever" })).toBeNull();
+    expect(within(panel).queryByText(/Benedita Ramos/)).toBeNull();
+    // achar de novo e buscar um CPF inválido: a pessoa não volta nem fica a anterior
+    await find(panel);
+    await within(panel).findByText("Benedita Ramos · CPF ***.982.247-**");
+    expect((within(panel).getByLabelText("Linha") as HTMLSelectElement).value).toBe("");
+    expect(within(panel).queryByLabelText("DUM (data da última menstruação)")).toBeNull();
+    fireEvent.click(within(panel).getByRole("button", { name: "Buscar" }));
+    expect(within(panel).getByRole("alert").textContent).toBe("CPF inválido");
+    expect(within(panel).queryByRole("button", { name: "Inscrever" })).toBeNull();
+    expect(within(panel).queryByText(/Benedita Ramos/)).toBeNull();
+    expect(api.enrollCare).not.toHaveBeenCalled();
+  });
+
   it("CPF inválido não busca; sem can_confirm não há Inscrever pessoa", async () => {
     const panel = await openPanel();
     await find(panel, "529.982.247-24");
