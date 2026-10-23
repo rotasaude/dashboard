@@ -9,6 +9,7 @@ import {
   type CarePracticeStatus, type CareSchedule, type CareStatus, type ContactChannel, type ContactOutcome, type DeclaredCondition,
   type EndReason
 } from "./api";
+import { describeActionError } from "./actionErrors";
 import { featureDisabledKey, hasFeature } from "./features";
 
 export const CARE_DISABLED = "as linhas de cuidado estão desligadas nesta cidade";
@@ -543,7 +544,11 @@ export function careLineError(err: unknown): string {
   if (featureDisabledKey(err) !== null) return CARE_DISABLED;
   const code = errorCode(err);
   if (code && ERRORS[code]) return ERRORS[code];
-  if (code) return code;
+  // Código fora do mapa: o padrão do SensitiveAction (frase, nunca o código cru).
+  if (code && err instanceof ApiError) {
+    const described = describeActionError(err);
+    return "message" in described ? described.message : `não foi possível concluir (${err.status}) — tente de novo`;
+  }
   if (err instanceof ApiError && err.status === 404) return ERRORS.not_found;
   if (err instanceof ApiError) return `não foi possível concluir (${err.status}) — tente de novo`;
   return "sem conexão com o servidor — tente de novo";

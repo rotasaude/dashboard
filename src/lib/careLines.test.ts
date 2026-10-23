@@ -400,7 +400,7 @@ describe("consultas e recusas", () => {
     expect(knownCareLineError(new TypeError("fetch"))).toBeNull();
   });
 
-  it("frases das recusas; código novo cru; stale relê", () => {
+  it("frases das recusas; código desconhecido nunca cru; stale relê", () => {
     const refusal = (status: number, error: string, extra: object = {}) => new ApiError(status, { error, ...extra }, "x");
     expect(careLineError(refusal(403, "feature_disabled", { feature: "care_lines" }))).toBe(CARE_DISABLED);
     expect(careLineError(refusal(403, "missing_role"))).toBe(CARE_NO_ROLE);
@@ -409,7 +409,10 @@ describe("consultas e recusas", () => {
     expect(careLineError(refusal(409, "already_enrolled"))).toBe("a pessoa já está inscrita nesta linha");
     expect(careLineError(refusal(409, "citizen_not_verified"))).toBe("o cadastro desta pessoa ainda não foi validado no posto — valide na recepção");
     expect(careLineError(refusal(422, "duplicate_template"))).toBe("esta linha do catálogo já foi adotada pela cidade");
-    expect(careLineError(refusal(422, "brand_new_code"))).toBe("brand_new_code");
+    expect(careLineError(refusal(401, "unauthenticated"))).toBe("sessão expirada — entre de novo");
+    expect(careLineError(refusal(422, "json_required"))).toBe("a API recusou a ação");
+    expect(careLineError(refusal(422, "brand_new_code"))).not.toMatch(/brand_new_code/);
+    expect(careLineError(refusal(403, "operator_read_only"))).toBe("seu papel não permite esta ação");
     expect(careLineError(new ApiError(404, "", "x"))).toBe("registro não encontrado — atualize a tela");
     expect(careLineError(new TypeError("fetch"))).toBe("sem conexão com o servidor — tente de novo");
     expect(careLineError(refusal(403, "out_of_scope"))).toBe("você não tem vínculo ativo na unidade desta equipe");
@@ -421,7 +424,7 @@ describe("consultas e recusas", () => {
     expect(careLineError(refusal(503, "catalog_not_loaded"))).toBe("o catálogo de linhas ainda não foi carregado — fale com o suporte");
     expect(careLineError(refusal(401, "mfa_required"))).toBe("confirme sua identidade com o código do autenticador e tente de novo");
     expect(careLineError(refusal(422, "invalid_condition"))).toBe("condição declarada desconhecida — atualize a tela");
-    expect(careLineError(refusal(422, "no_open_slot_unit"))).toBe("no_open_slot_unit");
+    expect(careLineError(refusal(422, "no_open_slot_unit"))).toBe("a API recusou a ação");
     expect(careLineError(new ApiError(500, null, "x"))).toBe("não foi possível concluir (500) — tente de novo");
     expect(careLineError(refusal(422, "invalid_anchor"))).toBe("DUM fora do prazo (até 48 semanas atrás) ou em linha que não pede DUM");
     expect(isStaleCare(refusal(409, "invalid_transition"))).toBe(true);
