@@ -129,7 +129,7 @@ const ANCHOR_LABEL: Record<string, string> = {
 export function anchorLabel(code: string): string { return ANCHOR_LABEL[code] ?? code; }
 
 // O conjunto, não a existência do filtro: a linha da semente restringe a 2251, 2235 e 251510 (psicólogo).
-const isDoctorNurse = (cbo: string[]): boolean => cbo.length === DOCTOR_NURSE_CBO.length && DOCTOR_NURSE_CBO.every((c) => cbo.includes(c));
+export const isDoctorNurse = (cbo: string[]): boolean => cbo.length === DOCTOR_NURSE_CBO.length && DOCTOR_NURSE_CBO.every((c) => cbo.includes(c));
 
 export function ruleText(p: CarePractice): string {
   const span = p.window_start_days ? `do dia ${p.window_start_days} ao ${p.window_days}` : `em ${p.window_days} dias`;
@@ -279,7 +279,7 @@ export type EligibilityExtra = Pick<
 export interface PracticeDraft {
   key: string; label: string; citizenLabel: string; sourceKind: PracticeSourceKind | string; sigtap: string; windowDays: string;
   minCount: string; schedule: CareSchedule | string; anchor: string;
-  // Caixa "só médico ou enfermeiro": só troca o CBO original quando mexem nela (`baseCbo` guarda o original).
+  // Caixa "só médico ou enfermeiro": marcada só se o original é o conjunto médico/enfermeiro; só troca o CBO quando mexem nela (`baseCbo` guarda o original).
   doctorOrNurse: boolean; baseCbo: string[] | null;
   points: string; // "" = sem pontos
   extra: Partial<PracticeExtra>;
@@ -311,7 +311,7 @@ function practiceDraftOf(p: CarePractice): PracticeDraft {
   const [ kind, code ] = p.source.split(":");
   return {
     key: p.key, label: p.label, citizenLabel: p.citizen_label ?? "", sourceKind: kind, sigtap: code ?? "", windowDays: String(p.window_days),
-    minCount: String(p.min_count), schedule: p.schedule, anchor: p.anchor, doctorOrNurse: !!p.cbo_filter && p.cbo_filter.length > 0,
+    minCount: String(p.min_count), schedule: p.schedule, anchor: p.anchor, doctorOrNurse: !!p.cbo_filter && isDoctorNurse(p.cbo_filter),
     baseCbo: p.cbo_filter ?? null, points: typeof p.points === "number" ? String(p.points) : "",
     extra: present(p, [ "window_start_days", "code_filter", "applies_to", "all_of" ])
   };
@@ -377,11 +377,12 @@ function sourceOf(p: PracticeDraft): string {
   return isSigtapKind(p.sourceKind) || (p.sourceKind === "vaccine" && code) ? `${p.sourceKind}:${code}` : p.sourceKind;
 }
 
-// CBO que o corpo manda: o original, até mexerem na caixa; só em consulta.
+// CBO que o corpo manda: o original, até mexerem na caixa; só em consulta. A caixa nasce marcada só quando
+// o original é exatamente o conjunto médico/enfermeiro; com outro conjunto ela nasce desmarcada e o original fica.
 function cboOf(p: PracticeDraft): string[] | null {
   if (p.sourceKind !== "consultation") return null;
-  const baseOn = !!p.baseCbo && p.baseCbo.length > 0;
-  if (p.doctorOrNurse === baseOn) return baseOn ? p.baseCbo : null;
+  const base = p.baseCbo && p.baseCbo.length > 0 ? p.baseCbo : null;
+  if (p.doctorOrNurse === (!!base && isDoctorNurse(base))) return base;
   return p.doctorOrNurse ? [ ...DOCTOR_NURSE_CBO ] : null;
 }
 

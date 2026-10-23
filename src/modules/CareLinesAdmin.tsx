@@ -16,6 +16,7 @@ import { SensitiveAction } from "../components/SensitiveAction";
 import { buttonStyle, secondaryButtonStyle } from "../components/formStyles";
 import { alert, muted, row, stack } from "./exams/styles";
 import { CareLinesGate } from "./careLines/CareLinesGate";
+import { CustomLineForm } from "./careLines/CustomLineForm";
 
 type Pending =
   | { kind: "adopt"; template: CareLineTemplate }
@@ -60,6 +61,8 @@ function AdminBody({ onGoToSecurity }: { onGoToSecurity?(): void }) {
   const lines = useQuery({ queryKey: [ LINES_KEY ], queryFn: listCityCareLines, ...STATIC_QUERY });
   const [ pending, setPending ] = useState<Pending>(null);
   const [ notice, setNotice ] = useState<string | null>(null);
+  // Linha própria em edição: "new" para criar, a linha para editar.
+  const [ editing, setEditing ] = useState<CareLine | "new" | null>(null);
   const cityLines = lines.data ?? [];
   const adopted = new Map(cityLines.filter((l) => l.template_key).map((l) => [ l.template_key as string, l ]));
   const start = (next: Pending) => { setNotice(null); setPending(next); };
@@ -96,7 +99,8 @@ function AdminBody({ onGoToSecurity }: { onGoToSecurity?(): void }) {
           )}
         </div>
       </Panel>
-      <Panel title="Linhas da cidade" sub="as que o painel das equipes e as sugestões usam">
+      <Panel title="Linhas da cidade" sub="as que o painel das equipes e as sugestões usam"
+        right={<button type="button" style={secondaryButtonStyle} onClick={() => { setNotice(null); setPending(null); setEditing("new"); }}>Nova linha própria</button>}>
         <div style={{ ...stack, padding: 16 }}>
           {lines.isPending && <p className="mono" style={muted}>carregando…</p>}
           {lines.isError && <p role="alert" style={alert}>{careLineError(lines.error)}</p>}
@@ -113,6 +117,11 @@ function AdminBody({ onGoToSecurity }: { onGoToSecurity?(): void }) {
                       <button type="button" style={secondaryButtonStyle} onClick={() => start({ kind: "toggle", line: l })}>
                         {l.active ? "Desativar" : "Ativar"}
                       </button>
+                      {l.source === "custom" && (
+                        <button type="button" style={secondaryButtonStyle} onClick={() => { setNotice(null); setPending(null); setEditing(l); }}>
+                          Editar
+                        </button>
+                      )}
                     </div>
                   )
                 }
@@ -122,6 +131,18 @@ function AdminBody({ onGoToSecurity }: { onGoToSecurity?(): void }) {
           ))}
         </div>
       </Panel>
+      {editing && (
+        <CustomLineForm
+          key={editing === "new" ? "new" : editing.id}
+          line={editing === "new" ? null : editing}
+          onSaved={(message) => {
+            setEditing(null); setNotice(message);
+            void queryClient.invalidateQueries({ queryKey: [ LINES_KEY ] });
+          }}
+          onCancel={() => setEditing(null)}
+          onGoToSecurity={onGoToSecurity}
+        />
+      )}
       {pending && confirm && (
         <SensitiveAction
           key={confirm.title}

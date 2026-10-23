@@ -2,9 +2,9 @@
 import { describe, expect, it } from "vitest";
 import { ApiError } from "./api";
 import {
-  CARE_DISABLED, CARE_NO_ROLE, COUNT_QUERY, NOMINAL_QUERY, UNTRACKED_TEXT, anchorProblem, canUseCareLines, careLineError, careLineRoles,
+  CARE_DISABLED, CARE_NO_ROLE, COUNT_QUERY, DOCTOR_NURSE_CBO, NOMINAL_QUERY, UNTRACKED_TEXT, anchorProblem, canUseCareLines, careLineError, careLineRoles,
   codeList, contactProblem, customLineBody, customLineProblem, decimalBr, draftOfLine, emptyCustomLine, emptyPractice, endProblem, fmtDay,
-  isStaleCare, knownCareLineError, newerVersion, originText, personName, personStatus, practiceText, reasonProblem, ruleText, slugKey, sourceLabel, statusLabel,
+  isDoctorNurse, isStaleCare, knownCareLineError, newerVersion, originText, personName, personStatus, practiceText, reasonProblem, ruleText, slugKey, sourceLabel, statusLabel,
   statusTone, worstStatus, type CustomLineDraft, type PracticeDraft
 } from "./careLines";
 import { DIABETES_TEMPLATE, TODAY23, cityLine, practice } from "../test/careLineFixtures";
@@ -225,10 +225,10 @@ describe("linha própria", () => {
     expect(one({ extra: { all_of: two } })).toBeNull();
     expect(one({ extra: { code_filter: { ciap2: [ "T90" ] } }, sourceKind: "procedure", sigtap: "0301080232" }))
       .toBe("boa prática 1: filtro de código só vale em consulta");
-    expect(one({ baseCbo: [ "251" ], doctorOrNurse: true })).toBe("boa prática 1: CBO de 4 a 6 dígitos");
-    expect(one({ baseCbo: [ "2515101" ], doctorOrNurse: true })).toBe("boa prática 1: CBO de 4 a 6 dígitos");
-    expect(one({ baseCbo: [ "25151" ], doctorOrNurse: true })).toBeNull();
-    expect(one({ baseCbo: [ "251510" ], doctorOrNurse: true })).toBeNull();
+    expect(one({ baseCbo: [ "251" ], doctorOrNurse: false })).toBe("boa prática 1: CBO de 4 a 6 dígitos");
+    expect(one({ baseCbo: [ "2515101" ], doctorOrNurse: false })).toBe("boa prática 1: CBO de 4 a 6 dígitos");
+    expect(one({ baseCbo: [ "25151" ], doctorOrNurse: false })).toBeNull();
+    expect(one({ baseCbo: [ "251510" ], doctorOrNurse: false })).toBeNull();
     expect(one({}, { practices: Array.from({ length: 21 }, () => ({ ...emptyPractice(), label: "x" })) })).toBe("no máximo 20 boas práticas");
     expect(customLineProblem(filled({ practices: [
       { ...emptyPractice(), label: "A", key: "mesma" }, { ...emptyPractice(), label: "B", key: "mesma" } ] })))
@@ -272,7 +272,7 @@ describe("linha própria", () => {
     const draft = draftOfLine(seed);
     expect(draft.ciap).toBe("");
     expect(draft.cid10).toBe("");
-    expect(draft.practices[0].doctorOrNurse).toBe(true);
+    expect(draft.practices[0].doctorOrNurse).toBe(false); // 251510 não é o conjunto médico/enfermeiro
     expect(customLineProblem(draft)).toBeNull();
     const body = customLineBody(draft);
     expect(body.practices).toEqual(seed.practices);
@@ -338,13 +338,33 @@ describe("linha própria", () => {
       practices: [ { key: "c", label: "C", source: "consultation", window_days: 90, min_count: 1, schedule: "end_of_window", anchor: "rolling",
         cbo_filter: [ "251510" ] } ] });
     const draft = draftOfLine(seed);
+    // Outro conjunto: caixa desmarcada, e o corpo preserva os CBOs reais.
+    expect(draft.practices[0].doctorOrNurse).toBe(false);
     expect(customLineBody(draft).practices[0].cbo_filter).toEqual([ "251510" ]);
-    const off = { ...draft, practices: [ { ...draft.practices[0], doctorOrNurse: false } ] };
-    expect(customLineBody(off).practices[0].cbo_filter).toBeNull();
+    // Marcar troca pelo conjunto médico/enfermeiro.
+    const on = { ...draft, practices: [ { ...draft.practices[0], doctorOrNurse: true } ] };
+    expect(customLineBody(on).practices[0].cbo_filter).toEqual(DOCTOR_NURSE_CBO);
     const switched = { ...draft, practices: [ { ...draft.practices[0], sourceKind: "procedure", sigtap: "0301080232" } ] };
     expect(customLineBody(switched).practices[0]).toMatchObject({ source: "procedure:0301080232", cbo_filter: null });
     const fresh = customLineBody({ ...filled(), practices: [ { ...emptyPractice(), label: "Nova", doctorOrNurse: false } ] });
     expect(fresh.practices[0].cbo_filter).toBeNull();
+  });
+
+  it("a caixa vem marcada só quando o cbo_filter é exatamente o conjunto médico/enfermeiro (isDoctorNurse)", () => {
+    const withCbo = (cbo: string[] | null) => draftOfLine(cityLine({ practices: [ { key: "c", label: "C", source: "consultation",
+      window_days: 90, min_count: 1, schedule: "end_of_window", anchor: "rolling", cbo_filter: cbo } ] })).practices[0];
+    expect(isDoctorNurse(DOCTOR_NURSE_CBO)).toBe(true);
+    expect(isDoctorNurse([ ...DOCTOR_NURSE_CBO ].reverse())).toBe(true);
+    expect(isDoctorNurse([ "2251", "2235", "251510" ])).toBe(false);
+    expect(isDoctorNurse([])).toBe(false);
+    expect(withCbo([ ...DOCTOR_NURSE_CBO ]).doctorOrNurse).toBe(true);
+    expect(withCbo([ "2251", "2235", "251510" ]).doctorOrNurse).toBe(false);
+    expect(withCbo(null).doctorOrNurse).toBe(false);
+    // Desmarcar o conjunto médico/enfermeiro tira o filtro; religar volta ao conjunto.
+    const base = withCbo([ ...DOCTOR_NURSE_CBO ]);
+    const line = (p: typeof base) => customLineBody({ ...filled(), practices: [ p ] }).practices[0].cbo_filter;
+    expect(line(base)).toEqual(DOCTOR_NURSE_CBO);
+    expect(line({ ...base, doctorOrNurse: false })).toBeNull();
   });
 
   it("pontos digitados entram no corpo como inteiro", () => {
