@@ -8,9 +8,10 @@
 // nunca sozinha. Só os contadores (/count, sem trilha) releem por minuto.
 import { useState, type CSSProperties } from "react";
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
-import { countOverdueEnrollments, getCareContext, listCareEnrollments } from "../lib/api";
+import { countCareSuggestions, countOverdueEnrollments, getCareContext, listCareEnrollments } from "../lib/api";
 import {
-  CONTEXT_KEY, COUNT_QUERY, ENROLLMENTS_KEY, ENROLLMENT_FILTERS, NOMINAL_QUERY, OVERDUE_COUNT_KEY, STATIC_QUERY, careLineError, isStaleCare
+  CONTEXT_KEY, COUNT_QUERY, ENROLLMENTS_KEY, ENROLLMENT_FILTERS, NOMINAL_QUERY, OVERDUE_COUNT_KEY, STATIC_QUERY, SUGGESTIONS_KEY,
+  SUGGESTION_COUNT_KEY, careLineError, isStaleCare
 } from "../lib/careLines";
 import { todayInCity } from "../lib/campaigns";
 import { Panel } from "../components/Panel";
@@ -20,6 +21,7 @@ import { alert, fieldLabel, muted, row, stack } from "./exams/styles";
 import { CareLinesGate } from "./careLines/CareLinesGate";
 import { EnrollmentList } from "./careLines/EnrollmentList";
 import { EnrollmentDetail } from "./careLines/EnrollmentDetail";
+import { SuggestionsPanel } from "./careLines/SuggestionsPanel";
 
 export function CareLinesTeam({ today = todayInCity() }: { today?: string } = {}) {
   return (
@@ -29,7 +31,7 @@ export function CareLinesTeam({ today = todayInCity() }: { today?: string } = {}
   );
 }
 
-export type TeamTab = "overdue" | "due_soon" | "all";
+export type TeamTab = "overdue" | "due_soon" | "all" | "suggestions";
 
 function TeamBody({ today }: { today: string }) {
   const queryClient = useQueryClient();
@@ -41,22 +43,32 @@ function TeamBody({ today }: { today: string }) {
   const [ openId, setOpenId ] = useState<string | null>(null);
   const teams = context.data?.teams ?? [];
   const teamId = teamChoice || teams[0]?.id || "";
+  // D2: médico ou enfermeiro com vínculo na unidade desta equipe. Ausente
+  // (api sem o campo) = a tela oferece e o api recusa com cbo_not_allowed.
+  const canConfirm = teams.find((t) => t.id === teamId)?.can_confirm !== false;
   const overdueCount = useQuery({
     queryKey: [ OVERDUE_COUNT_KEY, teamId ], queryFn: () => countOverdueEnrollments(teamId), enabled: !!teamId, ...COUNT_QUERY
   });
+  const suggestionCount = useQuery({
+    queryKey: [ SUGGESTION_COUNT_KEY, teamId ], queryFn: () => countCareSuggestions(teamId), enabled: !!teamId, ...COUNT_QUERY
+  });
   const query = useInfiniteQuery({
     queryKey: [ ENROLLMENTS_KEY, teamId, lineId, tab ],
-    queryFn: ({ pageParam }) => listCareEnrollments({ teamId, careLineId: lineId || undefined, status: tab, before: pageParam }),
+    queryFn: ({ pageParam }) => listCareEnrollments({
+      teamId, careLineId: lineId || undefined, status: tab === "suggestions" ? "all" : tab, before: pageParam
+    }),
     initialPageParam: null as string | null,
     getNextPageParam: (last) => last.next_before ?? undefined,
-    enabled: !!teamId,
+    enabled: !!teamId && tab !== "suggestions",
     ...NOMINAL_QUERY
   });
   const rows = (query.data?.pages ?? []).flatMap((p) => p.enrollments);
   // Depois de uma ação: volta à 1ª página (reset) e relê os contadores.
   const reload = () => {
     void queryClient.resetQueries({ queryKey: [ ENROLLMENTS_KEY ] });
+    void queryClient.resetQueries({ queryKey: [ SUGGESTIONS_KEY ] });
     void queryClient.invalidateQueries({ queryKey: [ OVERDUE_COUNT_KEY ] });
+    void queryClient.invalidateQueries({ queryKey: [ SUGGESTION_COUNT_KEY ] });
   };
   const changed = (message: string) => { setNotice(message); reload(); };
   // Só fecha se o detalhe aberto ainda for o de quem pediu (resposta tardia não fecha outra inscrição).
@@ -66,7 +78,6 @@ function TeamBody({ today }: { today: string }) {
     const result = await query.fetchNextPage();
     if (result.isError && isStaleCare(result.error)) { setNotice(careLineError(result.error)); reload(); }
   }
-  void today; // usado nas Tasks 9 e 10
 
   const tabLabel = (key: TeamTab, label: string) =>
     key === "overdue" && typeof overdueCount.data === "number" ? `${label} (${overdueCount.data})` : label;
@@ -101,12 +112,20 @@ function TeamBody({ today }: { today: string }) {
             {tabLabel(f.key, f.label)}
           </button>
         ))}
+        <button type="button" aria-pressed={tab === "suggestions"} style={tab === "suggestions" ? buttonStyle : secondaryButtonStyle}
+          onClick={() => { setNotice(null); setTab("suggestions"); }}>
+          {typeof suggestionCount.data === "number" ? `Sugestões (${suggestionCount.data})` : "Sugestões"}
+        </button>
       </div>
       {notice && <p role="status" style={statusStyle}>{notice}</p>}
       {openId && (
         <EnrollmentDetail key={openId} enrollmentId={openId} onClose={() => setOpenId(null)}
           onChanged={(message, close) => { if (close) closeIfOpen(openId); changed(message); }} />
       )}
+      {tab === "suggestions" ? (
+        <SuggestionsPanel teamId={teamId} careLineId={lineId} teams={teams} canConfirm={canConfirm} today={today}
+          onChanged={changed} />
+      ) : (
       <Panel title="Pessoas da equipe" sub={tab === "overdue" ? "busca ativa: alguma boa prática vencida" : tab === "due_soon" ? "alguma boa prática vence em até 30 dias" : "todas as inscrições ativas"}>
         <div style={{ ...stack, padding: 16 }}>
           {query.isPending && <p className="mono" style={muted}>carregando…</p>}
@@ -124,6 +143,7 @@ function TeamBody({ today }: { today: string }) {
           )}
         </div>
       </Panel>
+      )}
     </div>
   );
 }
