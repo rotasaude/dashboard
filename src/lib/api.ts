@@ -3739,10 +3739,10 @@ export type DeclaredCondition = "diabetes" | "hypertension" | "pregnancy" | "men
 export type CareIndicator = "C2" | "C3" | "C4" | "C5" | "C6" | "C7";
 
 // Elegibilidade (L2 do plano do api): códigos casados por prefixo, CID sem
-// ponto; idade em dias ou anos; tudo opcional menos `problems`.
+// ponto; idade em dias ou anos; tudo opcional (`problems` pode faltar ou ter só uma terminologia).
 export interface CareEligibility {
-  problems: { ciap2: string[]; cid10: string[] };
-  exclude_problems?: { ciap2: string[]; cid10: string[] };
+  problems?: { ciap2?: string[]; cid10?: string[] };
+  exclude_problems?: { ciap2?: string[]; cid10?: string[] };
   age_min_days?: number | null; age_max_days?: number | null; age_min_years?: number | null; age_max_years?: number | null;
   sex?: "female" | "male" | null; gender_identities_included?: string[]; gender_identities_excluded?: string[];
   declared?: string[]; requires_anchor?: "lmp" | null;
