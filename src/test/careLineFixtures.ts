@@ -31,9 +31,10 @@ export function practice(over: Partial<CarePracticeStatus> = {}): CarePracticeSt
     count: null, expected: null, ...over };
 }
 
+// O api zera `citizen_id` quando há `patient_id` (care_lines/json.rb, person): paciente traz só o patient_id.
 export function enrollment(over: Partial<CareEnrollment> = {}): CareEnrollment {
   return {
-    id: "en1", person: { patient_id: "pa1", citizen_id: "ci1", display_name: "Maria das Dores", age: 58 }, care_line: DIABETES_REF,
+    id: "en1", person: { patient_id: "pa1", citizen_id: null, display_name: "Maria das Dores", age: 58 }, care_line: DIABETES_REF,
     team: { id: TEAM_A.id, ine: TEAM_A.ine, name: TEAM_A.name }, anchor_date: null, status: "active",
     enrolled_at: "2026-03-02T10:00:00-03:00", worst_status: "overdue",
     practices: [
@@ -49,7 +50,7 @@ export function enrollment(over: Partial<CareEnrollment> = {}): CareEnrollment {
 
 export function suggestion(over: Partial<CareSuggestion> = {}): CareSuggestion {
   return {
-    id: "sg1", person: { patient_id: "pa2", citizen_id: "ci2", display_name: "João Batista", age: 63 }, care_line: DIABETES_REF,
+    id: "sg1", person: { patient_id: "pa2", citizen_id: null, display_name: "João Batista", age: 63 }, care_line: DIABETES_REF,
     reason: "problem", created_at: "2026-10-21T06:00:00-03:00", team_id: TEAM_A.id, enrollment_id: null, ...over
   };
 }

@@ -118,7 +118,7 @@ describe("EnrollmentDetail", () => {
   });
 
   it("fechar/trocar o detalhe durante o envio: a resposta tardia de A não fecha B nem relê A", async () => {
-    const rosa = enrollment({ id: "en2", person: { patient_id: "pa9", citizen_id: "ci9", display_name: "Rosa Lima", age: 71 } });
+    const rosa = enrollment({ id: "en2", person: { patient_id: "pa9", citizen_id: null, display_name: "Rosa Lima", age: 71 } });
     mocked(api.listCareEnrollments).mockResolvedValue({ enrollments: [ enrollment(), rosa ], next_before: null });
     mocked(api.getCareEnrollment).mockImplementation(async (id: string) => (id === "en2" ? rosa : WITH_CONTACTS));
     let rejectA: (e: unknown) => void = () => {};

@@ -85,7 +85,7 @@ describe("CareLinesTeam — painel nominal", () => {
   it("Carregar mais pede a próxima página pelo cursor e não relê as anteriores", async () => {
     mocked(api.listCareEnrollments)
       .mockResolvedValueOnce({ enrollments: [ enrollment() ], next_before: "c2" })
-      .mockResolvedValueOnce({ enrollments: [ enrollment({ id: "en2", person: { patient_id: "pa9", citizen_id: "ci9", display_name: "Rosa Lima", age: 71 } }) ], next_before: null });
+      .mockResolvedValueOnce({ enrollments: [ enrollment({ id: "en2", person: { patient_id: "pa9", citizen_id: null, display_name: "Rosa Lima", age: 71 } }) ], next_before: null });
     renderWithProviders(<CareLinesTeam today={TODAY23} />);
     await screen.findByText(NAME);
     fireEvent.click(screen.getByRole("button", { name: "Carregar mais" }));
