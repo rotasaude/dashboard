@@ -99,10 +99,11 @@ describe("EnrollmentDetail", () => {
   });
 
   it("o detalhe não relê sozinho (trilha por registro): foco, volta da rede e tempo não disparam leitura", async () => {
-    const detail = await openDetail();
-    await within(detail).findByText("Hemoglobina glicada");
+    // Relógio falso ANTES do render: o setInterval de um refetchInterval nasce já no relógio falso.
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
+      const detail = await openDetail();
+      await within(detail).findByText("Hemoglobina glicada");
       await act(async () => {
         focusManager.setFocused(false); focusManager.setFocused(true);
         onlineManager.setOnline(false); onlineManager.setOnline(true);
