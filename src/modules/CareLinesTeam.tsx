@@ -94,7 +94,7 @@ function TeamBody({ today }: { today: string }) {
         <div style={{ ...row, alignItems: "flex-end", padding: 16 }}>
           <label style={fieldLabel}>
             Equipe
-            <select value={teamId} style={inputStyle} onChange={(e) => { setNotice(null); setTeamChoice(e.target.value); }}>
+            <select value={teamId} style={inputStyle} onChange={(e) => { setNotice(null); setOpenId(null); setEnrolling(false); setTeamChoice(e.target.value); }}>
               {teams.map((t) => <option key={t.id} value={t.id}>{`${t.name} · INE ${t.ine} · ${t.unit.name}`}</option>)}
             </select>
           </label>

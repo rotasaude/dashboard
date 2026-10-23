@@ -133,6 +133,36 @@ describe("ManualEnrollPanel", () => {
     expect(api.enrollCare).not.toHaveBeenCalled();
   });
 
+  it("durante a busca o CPF e o botão ficam desabilitados: resposta tardia não aparece depois de um CPF novo", async () => {
+    let resolve!: (v: typeof BENEDITA) => void;
+    mocked(api.lookupCarePerson).mockReturnValueOnce(new Promise((r) => { resolve = r; }));
+    const panel = await openPanel();
+    await find(panel);
+    expect((within(panel).getByLabelText("CPF da pessoa") as HTMLInputElement).disabled).toBe(true);
+    expect((within(panel).getByRole("button", { name: "Buscar" }) as HTMLButtonElement).disabled).toBe(true);
+    resolve(BENEDITA);
+    await within(panel).findByText("Benedita Ramos · CPF ***.982.247-**");
+    expect((within(panel).getByLabelText("CPF da pessoa") as HTMLInputElement).disabled).toBe(false);
+    expect((within(panel).getByRole("button", { name: "Buscar" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("durante a inscrição a linha, a equipe e a DUM ficam desabilitadas", async () => {
+    let resolve!: (v: unknown) => void;
+    mocked(api.enrollCare).mockReturnValueOnce(new Promise((r) => { resolve = r; }));
+    const panel = await openPanel();
+    await find(panel);
+    await within(panel).findByText("Benedita Ramos · CPF ***.982.247-**");
+    fireEvent.change(within(panel).getByLabelText("Linha"), { target: { value: "cl3" } });
+    fireEvent.change(within(panel).getByLabelText("DUM (data da última menstruação)"), { target: { value: "2026-07-15" } });
+    fireEvent.click(within(panel).getByRole("button", { name: "Inscrever" }));
+    await waitFor(() => expect((within(panel).getByLabelText("Linha") as HTMLSelectElement).disabled).toBe(true));
+    expect((within(panel).getByLabelText("Equipe de referência") as HTMLSelectElement).disabled).toBe(true);
+    expect((within(panel).getByLabelText("DUM (data da última menstruação)") as HTMLInputElement).disabled).toBe(true);
+    expect((within(panel).getByLabelText("CPF da pessoa") as HTMLInputElement).disabled).toBe(true);
+    resolve(enrollment({ id: "en9" }));
+    await waitFor(() => expect(screen.queryByRole("region", { name: "Inscrever pessoa" })).toBeNull());
+  });
+
   it("CPF inválido não busca; sem can_confirm não há Inscrever pessoa", async () => {
     const panel = await openPanel();
     await find(panel, "529.982.247-24");

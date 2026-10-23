@@ -105,6 +105,7 @@ function CloseForm({ suggestion, onDone, onCancel }: { suggestion: CareSuggestio
   return (
     <section aria-label={`Encerrar a inscrição de ${name}`} style={box}>
       <div style={form}>
+        <strong>{`${name} · ${suggestion.care_line.name} · ${reasonLabel(suggestion.reason)}`}</strong>
         <p style={muted}>
           O problema que trouxe a pessoa para {suggestion.care_line.name} foi resolvido. Encerrar dá alta da linha; o histórico fica.
         </p>
@@ -149,6 +150,7 @@ function AcceptForm({ suggestion, teams, teamId, today, onDone, onCancel }: {
   return (
     <section aria-label={`Aceitar ${name} em ${suggestion.care_line.name}`} style={box}>
       <div style={form}>
+        <strong>{`${name} · ${suggestion.care_line.name} · ${reasonLabel(suggestion.reason)}`}</strong>
         <p style={muted}>A inscrição é um ato clínico: confirme depois de conferir o motivo da sugestão.</p>
         <label style={fieldLabel}>
           Equipe de referência
@@ -189,6 +191,7 @@ function DismissForm({ suggestion, onDone, onCancel }: { suggestion: CareSuggest
   return (
     <section aria-label={keep ? `Manter a inscrição de ${name}` : `Recusar a sugestão de ${name}`} style={box}>
       <div style={form}>
+        <strong>{`${name} · ${suggestion.care_line.name} · ${reasonLabel(suggestion.reason)}`}</strong>
         <label style={fieldLabel}>
           {keep ? "Por que manter a inscrição" : "Motivo da recusa"}
           <textarea rows={2} value={reason} style={inputStyle} onChange={(e) => { setError(null); setReason(e.target.value); }} />

@@ -6,7 +6,9 @@
 // consultou vira paciente no api (Patients::Resolve): sem patient_id, vai o
 // citizen_id. A linha da gestante pede a DUM. A tela guarda só ids, o nome de
 // exibição e o CPF mascarado; o CPF digitado sai do campo assim que a busca
-// responde (e some com o painel). Sem query: nada de CPF em queryKey.
+// responde (e some com o painel). Durante a busca o CPF e o botão ficam
+// desabilitados, e durante a inscrição também linha, equipe e DUM: uma resposta
+// tardia nunca aparece depois de um CPF novo ou de uma escolha trocada. Sem query: nada de CPF em queryKey.
 import { useState } from "react";
 import { enrollCare, errorCode, lookupCarePerson, type CareLineRef, type CarePersonLookup, type CareTeam } from "../../lib/api";
 import { isValidCpf, onlyDigits } from "../../lib/attendance";
@@ -75,7 +77,7 @@ export function ManualEnrollPanel({ teamId, teams, lines, today, onEnrolled, onC
         <div style={{ ...row, alignItems: "flex-end" }}>
           <label style={fieldLabel}>
             CPF da pessoa
-            <input value={cpf} inputMode="numeric" autoComplete="off" style={inputStyle} onChange={(e) => { setError(null); forget(); setCpf(e.target.value); }} />
+            <input value={cpf} inputMode="numeric" autoComplete="off" disabled={busy} style={inputStyle} onChange={(e) => { setError(null); forget(); setCpf(e.target.value); }} />
           </label>
           <button type="button" style={secondaryButtonStyle} disabled={busy} onClick={() => void find()}>Buscar</button>
         </div>
@@ -87,21 +89,21 @@ export function ManualEnrollPanel({ teamId, teams, lines, today, onEnrolled, onC
             <div style={row}>
               <label style={fieldLabel}>
                 Linha
-                <select value={lineId} style={inputStyle} onChange={(e) => { setError(null); setForcedAnchor(false); setLineId(e.target.value); }}>
+                <select value={lineId} disabled={busy} style={inputStyle} onChange={(e) => { setError(null); setForcedAnchor(false); setLineId(e.target.value); }}>
                   <option value="">escolha</option>
                   {lines.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
                 </select>
               </label>
               <label style={fieldLabel}>
                 Equipe de referência
-                <select value={team} style={inputStyle} onChange={(e) => { setError(null); setTeam(e.target.value); }}>
+                <select value={team} disabled={busy} style={inputStyle} onChange={(e) => { setError(null); setTeam(e.target.value); }}>
                   {teams.map((t) => <option key={t.id} value={t.id}>{`${t.name} · INE ${t.ine}`}</option>)}
                 </select>
               </label>
               {needAnchor && (
                 <label style={fieldLabel}>
                   DUM (data da última menstruação)
-                  <input type="date" value={lmp} style={inputStyle} onChange={(e) => { setError(null); setLmp(e.target.value); }} />
+                  <input type="date" value={lmp} disabled={busy} style={inputStyle} onChange={(e) => { setError(null); setLmp(e.target.value); }} />
                 </label>
               )}
             </div>

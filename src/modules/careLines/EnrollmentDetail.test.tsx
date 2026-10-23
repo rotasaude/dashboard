@@ -170,4 +170,14 @@ describe("EnrollmentDetail", () => {
     expect(within(contactForm).getByRole("alert").textContent).not.toContain("note_too_long");
     await waitFor(() => expect((within(contactForm).getByRole("button", { name: "Salvar contato" }) as HTMLButtonElement).disabled).toBe(false));
   });
+
+  it("trocar a equipe no topo fecha o detalhe aberto e o painel de inscrição", async () => {
+    const detail = await openDetail();
+    expect(detail).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Inscrever pessoa" }));
+    expect(screen.getByRole("region", { name: "Inscrever pessoa" })).not.toBeNull();
+    fireEvent.change(screen.getByLabelText("Equipe"), { target: { value: "tm2" } });
+    expect(screen.queryByRole("region", { name: "Inscrição de Maria das Dores" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Inscrever pessoa" })).toBeNull();
+  });
 });

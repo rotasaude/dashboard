@@ -157,6 +157,27 @@ describe("SuggestionsPanel", () => {
     expect((await screen.findByRole("status")).textContent).toBe("Inscrição de João Batista mantida.");
   });
 
+  it("cada formulário mostra, como texto visível, a pessoa, a linha e o motivo da sugestão", async () => {
+    mocked(api.listCareSuggestions).mockResolvedValue({
+      suggestions: [ suggestion(), suggestion({ id: "sg3", reason: "resolved_problem", enrollment_id: "en1" }) ], next_before: null
+    });
+    const panel = await openSuggestions();
+    const header = /João Batista · Pessoa com diabetes · /;
+    const visible = (form: HTMLElement) => within(form).getByText(header, { selector: "strong" });
+    fireEvent.click((await within(panel).findAllByRole("button", { name: "Aceitar sugestão de João Batista" }))[0]);
+    expect(visible(within(panel).getByRole("region", { name: "Aceitar João Batista em Pessoa com diabetes" })).textContent)
+      .toBe("João Batista · Pessoa com diabetes · problema ativo na lista de problemas");
+    fireEvent.click(within(panel).getAllByRole("button", { name: "Recusar sugestão de João Batista" })[0]);
+    expect(visible(within(panel).getByRole("region", { name: "Recusar a sugestão de João Batista" })).textContent)
+      .toBe("João Batista · Pessoa com diabetes · problema ativo na lista de problemas");
+    fireEvent.click(within(panel).getByRole("button", { name: "Manter inscrição de João Batista" }));
+    expect(visible(within(panel).getByRole("region", { name: "Manter a inscrição de João Batista" })).textContent)
+      .toBe("João Batista · Pessoa com diabetes · problema resolvido — sugestão de encerrar");
+    fireEvent.click(within(panel).getByRole("button", { name: "Encerrar inscrição de João Batista" }));
+    expect(visible(within(panel).getByRole("region", { name: "Encerrar a inscrição de João Batista" })).textContent)
+      .toBe("João Batista · Pessoa com diabetes · problema resolvido — sugestão de encerrar");
+  });
+
   it("a aba de sugestões não vira status=suggestions nas inscrições", async () => {
     const panel = await openSuggestions();
     expect(panel).not.toBeNull();
