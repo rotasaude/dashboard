@@ -5,7 +5,7 @@
 // ação, nunca sozinha. Inscrição encerrada fica só leitura.
 import { useState, type CSSProperties } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { getCareEnrollment, type CareContact, type CarePracticeStatus } from "../../lib/api";
+import { getCareEnrollment, type CareContact, type CarePracticeStatus, type ContactOutcome } from "../../lib/api";
 import {
   ENROLLMENT_KEY, NOMINAL_QUERY, careLineError, channelLabel, endReasonLabel, fmtDay, outcomeLabel, personName, personStatus, statusLabel,
   statusTone
@@ -17,8 +17,10 @@ import { KeyValue } from "../../components/KeyValue";
 import { secondaryButtonStyle } from "../../components/formStyles";
 import { alert, grid, list, muted, row, stack } from "../exams/styles";
 import { ContactForm } from "./ContactForm";
+import { EndEnrollmentForm } from "./EndEnrollmentForm";
+import { CareAppointment } from "./CareAppointment";
 
-export type DetailAction = "contact" | null;
+export type DetailAction = "contact" | "end" | null;
 
 const NO_RECORDER = "profissional sem nome no cadastro";
 const contactLine = (c: CareContact) =>
@@ -30,6 +32,8 @@ export function EnrollmentDetail({ enrollmentId, onChanged, onClose }: {
   const query = useQuery({ queryKey: [ ENROLLMENT_KEY, enrollmentId ], queryFn: () => getCareEnrollment(enrollmentId), ...NOMINAL_QUERY });
   const [ action, setAction ] = useState<DetailAction>(null);
   const [ notice, setNotice ] = useState<string | null>(null);
+  // Depois de marcar horário, o contato já vem com "agendou".
+  const [ contactOutcome, setContactOutcome ] = useState<ContactOutcome | undefined>(undefined);
   const e = query.data;
   const active = e?.status === "active";
   const contacts = [ ...(e?.contacts ?? []) ].sort((a, b) => b.recorded_at.localeCompare(a.recorded_at));
@@ -82,12 +86,23 @@ export function EnrollmentDetail({ enrollmentId, onChanged, onClose }: {
             </section>
             {active && action === null && (
               <div style={row}>
-                <button type="button" style={secondaryButtonStyle} onClick={() => { setNotice(null); setAction("contact"); }}>Registrar contato</button>
+                <button type="button" style={secondaryButtonStyle}
+                  onClick={() => { setNotice(null); setContactOutcome(undefined); setAction("contact"); }}>Registrar contato</button>
+                <CareAppointment enrollmentId={e.id} onStale={(m) => done(m, true)} onBooked={() => {
+                  setNotice("Horário marcado. Registre o contato como “agendou”.");
+                  setContactOutcome("scheduled");
+                  setAction("contact");
+                }} />
+                <button type="button" style={secondaryButtonStyle} onClick={() => { setNotice(null); setAction("end"); }}>Encerrar inscrição</button>
               </div>
             )}
             {active && action === "contact" && (
-              <ContactForm enrollmentId={e.id} onSaved={() => done("Contato registrado.")} onStale={(m) => done(m, true)}
-                onCancel={() => setAction(null)} />
+              <ContactForm key={contactOutcome ?? "blank"} enrollmentId={e.id} initialOutcome={contactOutcome}
+                onSaved={() => done("Contato registrado.")} onStale={(m) => done(m, true)} onCancel={() => setAction(null)} />
+            )}
+            {active && action === "end" && (
+              <EndEnrollmentForm enrollmentId={e.id} person={personName(e.person)} onEnded={(m) => done(m, true)}
+                onStale={(m) => done(m, true)} onCancel={() => setAction(null)} />
             )}
           </>
         )}
