@@ -544,8 +544,9 @@ export interface CheckInCitizen {
 }
 export interface CheckInTriage { id: string; date: string; protocol_name: string; priority: number }
 export interface CheckInAppointment {
-  id: string; scheduled_at: string; kind: "return" | "referral"; unit_name: string;
-  protocol_name: string; priority: number;
+  // Pedido de linha de cuidado (módulo 23) não tem triagem raiz: kind "care_line", sem protocolo nem prioridade.
+  id: string; scheduled_at: string; kind: "return" | "referral" | "care_line"; unit_name: string;
+  protocol_name: string | null; priority: number | null;
 }
 
 export interface Attendance {

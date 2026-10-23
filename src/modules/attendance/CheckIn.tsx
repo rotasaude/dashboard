@@ -6,6 +6,8 @@ import {
 } from "../../lib/api";
 import { attendanceError, isValidCpf, maskCpf, nivelLabel, onlyDigits } from "../../lib/attendance";
 import { fmtDateTime, fmtHourMinute } from "../../lib/format";
+import { priorityLabel } from "../../lib/queueLabels";
+import { requestKindLabel } from "../../lib/scheduling";
 import { Panel } from "../../components/Panel";
 import { DataTable } from "../../components/DataTable";
 import { KeyValue } from "../../components/KeyValue";
@@ -48,8 +50,8 @@ function isInvalidUnit(err: unknown): boolean {
   return err instanceof ApiError && (err.body as { error?: string } | undefined)?.error === "invalid_unit";
 }
 
-function appointmentKindLabel(kind: "return" | "referral"): string {
-  return kind === "return" ? "Retorno" : "Encaminhamento";
+function appointmentKindLabel(kind: CheckInAppointment["kind"]): string {
+  return requestKindLabel({ kind, origin_unit_name: null });
 }
 
 // wrong_unit e not_today no lookup de check-in (agendamento) têm mensagens
@@ -194,7 +196,7 @@ function CodeFlow({ unit, onUnitInvalid, cpf, onCpf: setCpf, demographicsOn = fa
               <>
                 <KeyValue k="Data" v={fmtDateTime(found.triage.date)} />
                 <KeyValue k="Protocolo" v={found.triage.protocol_name} />
-                <KeyValue k="Prioridade" v={String(found.triage.priority)} />
+                <KeyValue k="Prioridade" v={priorityLabel(found.triage.priority)} />
               </>
             )}
             {found.appointment && (
@@ -203,7 +205,7 @@ function CodeFlow({ unit, onUnitInvalid, cpf, onCpf: setCpf, demographicsOn = fa
                   k="Agendamento"
                   v={`Agendamento ${fmtHourMinute(found.appointment.scheduled_at)} · ${appointmentKindLabel(found.appointment.kind)}`}
                 />
-                <KeyValue k="Prioridade" v={String(found.appointment.priority)} />
+                <KeyValue k="Prioridade" v={priorityLabel(found.appointment.priority)} />
               </>
             )}
           </div>
@@ -358,8 +360,8 @@ function ExceptionFlow({ unit, onUnitInvalid, cpf, onCpf: setCpf, demographicsOn
                   ? `Agendamento ${fmtHourMinute(r.row.scheduled_at)}`
                   : fmtDateTime(r.row.date)
               },
-              { label: "Protocolo", w: "2fr", render: (r) => r.row.protocol_name },
-              { label: "Prioridade", w: "1fr", render: (r) => String(r.row.priority) }
+              { label: "Protocolo", w: "2fr", render: (r) => r.row.protocol_name ?? "—" },
+              { label: "Prioridade", w: "1fr", render: (r) => priorityLabel(r.row.priority) }
             ]}
             rows={rows}
             rowKey={(r) => `${r.kind}-${r.row.id}`}

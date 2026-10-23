@@ -88,7 +88,7 @@ describe("CheckIn", () => {
     expect(screen.getByText("(**) *****-5432")).not.toBeNull();
     expect(screen.getByText("declarado")).not.toBeNull();
     expect(screen.getByText("triage-respiratoria")).not.toBeNull();
-    expect(screen.getByText("2")).not.toBeNull();
+    expect(screen.getByText("prioridade 2")).not.toBeNull();
   });
 
   it("cartão mostra o agendamento com hora, tipo e prioridade quando vier appointment", async () => {
@@ -98,7 +98,7 @@ describe("CheckIn", () => {
     fireEvent.change(screen.getByLabelText("Código de check-in"), { target: { value: "123456" } });
     fireEvent.click(screen.getByRole("button", { name: "Buscar check-in" }));
     expect(await screen.findByText(/Agendamento \d{2}:\d{2} · Retorno/)).not.toBeNull();
-    expect(screen.getByText("2")).not.toBeNull();
+    expect(screen.getByText("prioridade 2")).not.toBeNull();
   });
 
   it("cartão mostra encaminhamento quando o kind do agendamento é referral", async () => {
@@ -111,6 +111,39 @@ describe("CheckIn", () => {
     fireEvent.change(screen.getByLabelText("Código de check-in"), { target: { value: "123456" } });
     fireEvent.click(screen.getByRole("button", { name: "Buscar check-in" }));
     expect(await screen.findByText(/Agendamento \d{2}:\d{2} · Encaminhamento/)).not.toBeNull();
+  });
+
+  it("pedido de linha de cuidado no cartão: rótulo próprio, sem null e sem Encaminhamento", async () => {
+    mocked(api.lookupCheckIn).mockResolvedValue({
+      ...foundAppointment,
+      appointment: {
+        id: "ap9", scheduled_at: "2026-09-25T13:00:00Z", kind: "care_line" as const,
+        unit_name: "UBS Centro", protocol_name: null, priority: null
+      }
+    });
+    renderCheckIn();
+    fireEvent.change(screen.getByLabelText("CPF do cidadão (check-in)"), { target: { value: "52998224725" } });
+    fireEvent.change(screen.getByLabelText("Código de check-in"), { target: { value: "123456" } });
+    fireEvent.click(screen.getByRole("button", { name: "Buscar check-in" }));
+    expect(await screen.findByText(/Agendamento \d{2}:\d{2} · Linha de cuidado/)).not.toBeNull();
+    const text = document.body.textContent ?? "";
+    expect(text).not.toContain("null");
+    expect(text).not.toContain("Encaminhamento");
+  });
+
+  it("exceção: pedido de linha de cuidado na lista, sem null no protocolo nem na prioridade", async () => {
+    mocked(api.searchCheckIn).mockResolvedValue({
+      triages: [],
+      appointments: [
+        { id: "ap9", scheduled_at: "2026-09-25T13:00:00Z", kind: "care_line", unit_name: "UBS Centro", protocol_name: null, priority: null }
+      ]
+    });
+    renderCheckIn();
+    fireEvent.click(screen.getByRole("button", { name: "Cidadão sem o código" }));
+    fireEvent.change(screen.getByLabelText("CPF do cidadão (exceção)"), { target: { value: "52998224725" } });
+    fireEvent.click(screen.getByRole("button", { name: "Buscar triagens" }));
+    expect(await screen.findByText(/Agendamento \d{2}:\d{2}/)).not.toBeNull();
+    expect(document.body.textContent ?? "").not.toContain("null");
   });
 
   it("para declarado, mostra a caixa de conferência e manda documentChecked conforme marcada", async () => {
