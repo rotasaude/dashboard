@@ -19,6 +19,7 @@ import { buttonStyle, inputStyle, secondaryButtonStyle } from "../components/for
 import { alert, fieldLabel, muted, row, stack } from "./exams/styles";
 import { CareLinesGate } from "./careLines/CareLinesGate";
 import { EnrollmentList } from "./careLines/EnrollmentList";
+import { EnrollmentDetail } from "./careLines/EnrollmentDetail";
 
 export function CareLinesTeam({ today = todayInCity() }: { today?: string } = {}) {
   return (
@@ -37,6 +38,7 @@ function TeamBody({ today }: { today: string }) {
   const [ lineId, setLineId ] = useState("");
   const [ tab, setTab ] = useState<TeamTab>("overdue");
   const [ notice, setNotice ] = useState<string | null>(null);
+  const [ openId, setOpenId ] = useState<string | null>(null);
   const teams = context.data?.teams ?? [];
   const teamId = teamChoice || teams[0]?.id || "";
   const overdueCount = useQuery({
@@ -62,7 +64,7 @@ function TeamBody({ today }: { today: string }) {
     const result = await query.fetchNextPage();
     if (result.isError && isStaleCare(result.error)) { setNotice(careLineError(result.error)); reload(); }
   }
-  void today; void changed; // usados nas Tasks 7–10
+  void today; // usado nas Tasks 9 e 10
 
   const tabLabel = (key: TeamTab, label: string) =>
     key === "overdue" && typeof overdueCount.data === "number" ? `${label} (${overdueCount.data})` : label;
@@ -99,6 +101,10 @@ function TeamBody({ today }: { today: string }) {
         ))}
       </div>
       {notice && <p role="status" style={statusStyle}>{notice}</p>}
+      {openId && (
+        <EnrollmentDetail key={openId} enrollmentId={openId} onClose={() => setOpenId(null)}
+          onChanged={(message, close) => { if (close) setOpenId(null); changed(message); }} />
+      )}
       <Panel title="Pessoas da equipe" sub={tab === "overdue" ? "busca ativa: alguma boa prática vencida" : tab === "due_soon" ? "alguma boa prática vence em até 30 dias" : "todas as inscrições ativas"}>
         <div style={{ ...stack, padding: 16 }}>
           {query.isPending && <p className="mono" style={muted}>carregando…</p>}
@@ -106,7 +112,7 @@ function TeamBody({ today }: { today: string }) {
           {/* L6: a busca ativa pode devolver página curta (ou vazia) com next_before — carrega sob demanda, sem laço. */}
           {query.data && (rows.length === 0 && query.hasNextPage
             ? <p style={muted}>Nada nesta parte da lista; carregue mais para continuar a busca.</p>
-            : <EnrollmentList rows={rows} />)}
+            : <EnrollmentList rows={rows} onOpen={(e) => { setNotice(null); setOpenId(e.id); }} />)}
           {query.hasNextPage && (
             <div>
               <button type="button" style={secondaryButtonStyle} disabled={query.isFetchingNextPage} onClick={() => void loadMore()}>
