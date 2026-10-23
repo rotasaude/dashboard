@@ -64,6 +64,18 @@ describe("Requests", () => {
     expect(screen.getByText("faltou")).not.toBeNull();
   });
 
+  it("pedido aberto pela linha de cuidado: rótulo próprio, sem prioridade de triagem", async () => {
+    mocked(api.listUnitRequests).mockResolvedValue([
+      requestRow({ id: "r4", kind: "care_line", origin: "care_line", origin_unit_name: "UBS Centro", cpf_masked: "***.555.666-**", note: null,
+        appointment_type_key: "retorno", appointment_type_name: "Retorno", triage_priority: null })
+    ]);
+    renderRequests();
+    expect(await screen.findByText("***.555.666-**")).not.toBeNull();
+    expect(screen.getByText("Linha de cuidado")).not.toBeNull();
+    expect(screen.queryByText(/Encaminhado de/)).toBeNull();
+    expect(screen.getByText("Retorno")).not.toBeNull();
+  });
+
   it("nota do cidadão só no detalhe, com motivo, período e quantas vezes pediu", async () => {
     mocked(api.listUnitRequests).mockResolvedValue([ rows[2] ]);
     mocked(api.getRequest).mockResolvedValue({ ...rows[2], reschedule_note: "não consigo sair do trabalho de manhã" });

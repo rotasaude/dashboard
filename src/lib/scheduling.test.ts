@@ -209,6 +209,11 @@ describe("rótulo do pedido", () => {
   it("pedido nascido no acolhimento (módulo 18)", () => {
     expect(requestKindLabel({ kind: "screening", origin_unit_name: null })).toBe("Acolhimento");
   });
+
+  it("pedido aberto pela linha de cuidado (módulo 23), com ou sem unidade de origem", () => {
+    expect(requestKindLabel({ kind: "care_line", origin_unit_name: "UBS Centro" })).toBe("Linha de cuidado");
+    expect(requestKindLabel({ kind: "care_line", origin_unit_name: null })).toBe("Linha de cuidado");
+  });
 });
 
 describe("estado do horário", () => {

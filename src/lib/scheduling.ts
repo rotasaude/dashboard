@@ -214,6 +214,7 @@ export function requestKindLabel(row: { kind: RequestRow["kind"]; origin_unit_na
   if (row.kind === "return") return "Retorno";
   if (row.kind === "triage") return "Triagem";
   if (row.kind === "screening") return "Acolhimento";
+  if (row.kind === "care_line") return "Linha de cuidado";
   return row.origin_unit_name ? `Encaminhado de ${row.origin_unit_name}` : "Encaminhamento";
 }
 
