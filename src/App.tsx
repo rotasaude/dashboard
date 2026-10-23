@@ -34,6 +34,7 @@ import { BillingProcedures } from "./modules/BillingProcedures";
 import { BillingPeriods } from "./modules/BillingPeriods";
 import { BillingSettings } from "./modules/BillingSettings";
 import { CareLinesAdmin } from "./modules/CareLinesAdmin";
+import { CareLinesTeam } from "./modules/CareLinesTeam";
 import { ProviderPortal } from "./modules/ProviderPortal";
 import { AcknowledgementNotice } from "./modules/exams/AcknowledgementNotice";
 import { Shell } from "./shell/Shell";
@@ -271,6 +272,7 @@ export function renderModule(active: ModuleId, setActive: (id: ModuleId) => void
     case "billing-procedures": return <BillingProcedures />;
     case "billing-periods": return <BillingPeriods onGoToSecurity={() => setActive("security")} />;
     case "billing-settings": return <BillingSettings onGoToSecurity={() => setActive("security")} />;
+    case "care-lines-team": return <CareLinesTeam />;
     case "care-lines-admin": return <CareLinesAdmin onGoToSecurity={() => setActive("security")} />;
     default:               return <Placeholder title={labelFor(active)} />;
   }
