@@ -3772,7 +3772,8 @@ export interface CareLineInput {
 export type CareLinePatch = Partial<CareLineInput> & { active?: boolean; template_version?: number; declared_condition?: DeclaredCondition | null };
 // `GET /care_lines/teams` (L10). `can_confirm` por equipe (D2/T2): médico ou
 // enfermeiro com vínculo na unidade dela. Profissional sem vínculo: 403 missing_role.
-export interface CareTeam { id: string; ine: string; name: string; unit: { id: string; name: string }; can_confirm: boolean }
+// `panel` (P22): a equipe abre o painel nominal (mesma regra de escopo dele); a prévia usa todas. Ausente = api antigo.
+export interface CareTeam { id: string; ine: string; name: string; unit: { id: string; name: string }; can_confirm: boolean; panel?: boolean }
 // `GET /care_lines/lines` (L10): `requires_anchor` "lmp" = a linha pede a DUM.
 // Dentro de inscrição e sugestão (P3) a referência traz só { id, name, requires_anchor }.
 export interface CareLineRef { id: string; name: string; indicator?: string | null; requires_anchor: "lmp" | string | null }

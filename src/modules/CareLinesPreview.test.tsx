@@ -11,7 +11,7 @@ import * as api from "../lib/api";
 import { CareLinesPreview } from "./CareLinesPreview";
 import { CARE_NO_ROLE, ESTIMATE_NOTICE } from "../lib/careLines";
 import { renderWithProviders } from "../test/campaignFixtures";
-import { careContext, careUser, preview } from "../test/careLineFixtures";
+import { TEAM_A, TEAM_B, careContext, careUser, preview } from "../test/careLineFixtures";
 
 const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
 afterEach(cleanup);
@@ -145,5 +145,15 @@ describe("CareLinesPreview", () => {
     mocked(api.fetchCurrentSession).mockResolvedValue(careUser([ "municipal_admin" ]));
     renderWithProviders(<CareLinesPreview />);
     expect(await screen.findByRole("button", { name: "Calcular prévia" })).not.toBeNull();
+  });
+
+  it("a prévia lista todas as equipes, mesmo as que não abrem o painel nominal", async () => {
+    mocked(api.fetchCurrentSession).mockResolvedValue(careUser([ "health_professional", "municipal_admin" ]));
+    mocked(api.getCareContext).mockResolvedValue({
+      ...careContext(), teams: [ { ...TEAM_A, panel: true }, { ...TEAM_B, panel: false } ]
+    });
+    renderWithProviders(<CareLinesPreview />);
+    const select = (await screen.findByLabelText("Equipe")) as HTMLSelectElement;
+    expect(Array.from(select.options).map((o) => o.value)).toEqual([ "tm1", "tm2" ]);
   });
 });

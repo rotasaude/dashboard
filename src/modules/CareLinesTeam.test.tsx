@@ -7,7 +7,7 @@ vi.mock("../lib/api", async (importOriginal) => {
   const real = await importOriginal<typeof import("../lib/api")>();
   return {
     ...real, fetchCurrentSession: vi.fn(), getCareContext: vi.fn(), listCareEnrollments: vi.fn(), countOverdueEnrollments: vi.fn(),
-    countCareSuggestions: vi.fn(), listCareSuggestions: vi.fn(), getCareEnrollment: vi.fn()
+    countCareSuggestions: vi.fn(), listCareSuggestions: vi.fn(), getCareEnrollment: vi.fn(), lookupCarePerson: vi.fn()
   };
 });
 
@@ -15,7 +15,7 @@ import * as api from "../lib/api";
 import { CareLinesTeam } from "./CareLinesTeam";
 import { CARE_NO_ROLE, UNTRACKED_TEXT } from "../lib/careLines";
 import { renderWithProviders } from "../test/campaignFixtures";
-import { TODAY23, careContext, careUser, enrollment } from "../test/careLineFixtures";
+import { TEAM_A, TEAM_B, TODAY23, careContext, careUser, enrollment, suggestion } from "../test/careLineFixtures";
 
 const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
 afterEach(() => { cleanup(); vi.useRealTimers(); });
@@ -142,5 +142,51 @@ describe("CareLinesTeam — painel nominal", () => {
     await screen.findByRole("region", { name: "Sugestões a confirmar" });
     expect(screen.queryByRole("region", { name: "Inscrição de Maria das Dores" })).toBeNull();
     expect(api.listCareEnrollments).toHaveBeenCalledTimes(0);
+  });
+});
+
+describe("CareLinesTeam — equipes do painel (P22)", () => {
+  // Secretário médico: o api devolve todas as equipes, mas só a dele abre o painel nominal.
+  const teamsOf = (panels: Record<string, boolean | undefined>) => ({
+    ...careContext(), teams: [ TEAM_B, TEAM_A ].map((t) => ({ ...t, panel: panels[t.id] }))
+  });
+  const optionsOf = (el: HTMLElement) => Array.from((el as HTMLSelectElement).options).map((o) => o.value);
+
+  it("o painel oferece só as equipes com panel: seletor, equipe padrão, inscrição manual e aceite", async () => {
+    mocked(api.fetchCurrentSession).mockResolvedValue(careUser([ "health_professional", "municipal_admin" ]));
+    mocked(api.getCareContext).mockResolvedValue(teamsOf({ tm2: false, tm1: true }));
+    mocked(api.listCareSuggestions).mockResolvedValue({ suggestions: [ suggestion() ], next_before: null });
+    mocked(api.lookupCarePerson).mockResolvedValue({
+      patient_id: null, citizen_id: "ci3", display_name: "Benedita Ramos", cpf_masked: "***.982.247-**", verified: true
+    });
+    renderWithProviders(<CareLinesTeam today={TODAY23} />);
+    await screen.findByText(NAME);
+    expect(optionsOf(screen.getByLabelText("Equipe"))).toEqual([ "tm1" ]);
+    expect(api.listCareEnrollments).toHaveBeenCalledWith({ teamId: "tm1", careLineId: undefined, status: "overdue", before: null });
+    fireEvent.click(screen.getByRole("button", { name: "Inscrever pessoa" }));
+    const manual = screen.getByRole("region", { name: "Inscrever pessoa" });
+    fireEvent.change(within(manual).getByLabelText("CPF da pessoa"), { target: { value: "529.982.247-25" } });
+    fireEvent.click(within(manual).getByRole("button", { name: "Buscar" }));
+    await within(manual).findByText("Benedita Ramos · CPF ***.982.247-**");
+    expect(optionsOf(within(manual).getByLabelText("Equipe de referência"))).toEqual([ "tm1" ]);
+    fireEvent.click(within(manual).getByRole("button", { name: "Fechar" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Sugestões/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Aceitar sugestão de João Batista" }));
+    const accept = screen.getByRole("region", { name: "Aceitar João Batista em Pessoa com diabetes" });
+    expect(optionsOf(within(accept).getByLabelText("Equipe de referência"))).toEqual([ "tm1" ]);
+  });
+
+  it("api sem o campo panel: todas as equipes, como antes", async () => {
+    mocked(api.getCareContext).mockResolvedValue(teamsOf({}));
+    renderWithProviders(<CareLinesTeam today={TODAY23} />);
+    await screen.findByText(NAME);
+    expect(optionsOf(screen.getByLabelText("Equipe"))).toEqual([ "tm2", "tm1" ]);
+  });
+
+  it("nenhuma equipe com panel: estado vazio, sem leitura nominal", async () => {
+    mocked(api.getCareContext).mockResolvedValue(teamsOf({ tm2: false, tm1: false }));
+    renderWithProviders(<CareLinesTeam today={TODAY23} />);
+    expect(await screen.findByText("você não está em nenhuma equipe com vínculo ativo na unidade")).not.toBeNull();
+    expect(api.listCareEnrollments).not.toHaveBeenCalled();
   });
 });

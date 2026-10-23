@@ -43,7 +43,9 @@ function TeamBody({ today }: { today: string }) {
   const [ notice, setNotice ] = useState<string | null>(null);
   const [ openId, setOpenId ] = useState<string | null>(null);
   const [ enrolling, setEnrolling ] = useState(false);
-  const teams = context.data?.teams ?? [];
+  // P22: o painel nominal só abre as equipes do escopo do profissional (`panel`); api sem o campo = todas.
+  // A prévia (CareLinesPreview) continua com todas as equipes do contexto.
+  const teams = (context.data?.teams ?? []).filter((t) => t.panel !== false);
   const teamId = teamChoice || teams[0]?.id || "";
   // D2: médico ou enfermeiro com vínculo na unidade desta equipe. Ausente
   // (api sem o campo) = a tela oferece e o api recusa com cbo_not_allowed.
