@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const real = await importOriginal<typeof import("../../lib/api")>();
@@ -9,6 +9,7 @@ vi.mock("../../lib/api", async (importOriginal) => {
   };
 });
 
+import { focusManager, onlineManager } from "@tanstack/react-query";
 import * as api from "../../lib/api";
 import { CareLinesTeam } from "../CareLinesTeam";
 import { renderWithProviders } from "../../test/campaignFixtures";
@@ -100,11 +101,41 @@ describe("EnrollmentDetail", () => {
   it("o detalhe não relê sozinho (trilha por registro): foco, volta da rede e tempo não disparam leitura", async () => {
     const detail = await openDetail();
     await within(detail).findByText("Hemoglobina glicada");
-    window.dispatchEvent(new Event("focus"));
-    window.dispatchEvent(new Event("online"));
-    document.dispatchEvent(new Event("visibilitychange"));
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      await act(async () => {
+        focusManager.setFocused(false); focusManager.setFocused(true);
+        onlineManager.setOnline(false); onlineManager.setOnline(true);
+      });
+      await act(async () => { await vi.advanceTimersByTimeAsync(125_000); });
+    } finally {
+      vi.useRealTimers();
+      focusManager.setFocused(undefined);
+      onlineManager.setOnline(true);
+    }
     expect(api.getCareEnrollment).toHaveBeenCalledTimes(1);
+  });
+
+  it("fechar/trocar o detalhe durante o envio: a resposta tardia de A não fecha B nem relê A", async () => {
+    const rosa = enrollment({ id: "en2", person: { patient_id: "pa9", citizen_id: "ci9", display_name: "Rosa Lima", age: 71 } });
+    mocked(api.listCareEnrollments).mockResolvedValue({ enrollments: [ enrollment(), rosa ], next_before: null });
+    mocked(api.getCareEnrollment).mockImplementation(async (id: string) => (id === "en2" ? rosa : WITH_CONTACTS));
+    let rejectA: (e: unknown) => void = () => {};
+    mocked(api.recordCareContact).mockImplementationOnce(() => new Promise((_, reject) => { rejectA = reject; }));
+    const detail = await openDetail();
+    fireEvent.click(await within(detail).findByRole("button", { name: "Registrar contato" }));
+    const contactForm = within(detail).getByRole("region", { name: "Registrar contato" });
+    fireEvent.change(within(contactForm).getByLabelText("Como foi o contato"), { target: { value: "phone" } });
+    fireEvent.change(within(contactForm).getByLabelText("Resultado"), { target: { value: "reached" } });
+    fireEvent.click(within(contactForm).getByRole("button", { name: "Salvar contato" }));
+    await waitFor(() => expect(api.recordCareContact).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole("button", { name: "Abrir Rosa Lima" }));
+    expect(await screen.findByRole("region", { name: "Inscrição de Rosa Lima" })).not.toBeNull();
+    await act(async () => { rejectA(new api.ApiError(409, { error: "invalid_transition" }, "x")); await new Promise((r) => setTimeout(r, 20)); });
+    expect(screen.getByRole("region", { name: "Inscrição de Rosa Lima" })).not.toBeNull();
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(mocked(api.getCareEnrollment).mock.calls.filter(([ id ]) => id === "en1")).toHaveLength(1);
+    expect(api.listCareEnrollments).toHaveBeenCalledTimes(1);
   });
 
   it("rotula DUM na gestante e 'Data de referência' nas outras; quem registrou sem nome tem frase", async () => {

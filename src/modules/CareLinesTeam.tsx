@@ -59,6 +59,8 @@ function TeamBody({ today }: { today: string }) {
     void queryClient.invalidateQueries({ queryKey: [ OVERDUE_COUNT_KEY ] });
   };
   const changed = (message: string) => { setNotice(message); reload(); };
+  // Só fecha se o detalhe aberto ainda for o de quem pediu (resposta tardia não fecha outra inscrição).
+  const closeIfOpen = (id: string) => setOpenId((cur) => (cur === id ? null : cur));
 
   async function loadMore() {
     const result = await query.fetchNextPage();
@@ -103,7 +105,7 @@ function TeamBody({ today }: { today: string }) {
       {notice && <p role="status" style={statusStyle}>{notice}</p>}
       {openId && (
         <EnrollmentDetail key={openId} enrollmentId={openId} onClose={() => setOpenId(null)}
-          onChanged={(message, close) => { if (close) setOpenId(null); changed(message); }} />
+          onChanged={(message, close) => { if (close) closeIfOpen(openId); changed(message); }} />
       )}
       <Panel title="Pessoas da equipe" sub={tab === "overdue" ? "busca ativa: alguma boa prática vencida" : tab === "due_soon" ? "alguma boa prática vence em até 30 dias" : "todas as inscrições ativas"}>
         <div style={{ ...stack, padding: 16 }}>

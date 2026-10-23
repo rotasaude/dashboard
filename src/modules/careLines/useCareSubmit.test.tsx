@@ -60,4 +60,34 @@ describe("useCareSubmit", () => {
     await act(async () => { await result.current.submit(async () => {}, vi.fn()); });
     expect(result.current.error).toBeNull();
   });
+
+  it("desmontado com a ação pendente: resolver não devolve true, não faz setState nem chama nada", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { result, unmount } = renderHook(() => useCareSubmit());
+    let release: () => void = () => {};
+    const onStale = vi.fn();
+    let outcome: Promise<boolean> = Promise.resolve(true);
+    act(() => { outcome = result.current.submit(() => new Promise<void>((resolve) => { release = resolve; }), onStale); });
+    unmount();
+    release();
+    expect(await outcome).toBe(false);
+    expect(onStale).not.toHaveBeenCalled();
+    expect(errors).not.toHaveBeenCalled();
+    errors.mockRestore();
+  });
+
+  it("desmontado com a ação pendente: rejeitar (stale ou outro erro) não chama onStale nem faz setState", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { result, unmount } = renderHook(() => useCareSubmit());
+    let reject: (e: unknown) => void = () => {};
+    const onStale = vi.fn();
+    let outcome: Promise<boolean> = Promise.resolve(true);
+    act(() => { outcome = result.current.submit(() => new Promise<void>((_, rej) => { reject = rej; }), onStale); });
+    unmount();
+    reject(new ApiError(409, { error: "invalid_transition" }, "x"));
+    expect(await outcome).toBe(false);
+    expect(onStale).not.toHaveBeenCalled();
+    expect(errors).not.toHaveBeenCalled();
+    errors.mockRestore();
+  });
 });

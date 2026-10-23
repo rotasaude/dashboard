@@ -5,7 +5,11 @@
 // se falhou, ou manda a frase a `onStale` (registro já decidido/encerrado por
 // outra pessoa: o chamador fecha e relê) ou a deixa em `error` (fica no
 // formulário). A frase vem sempre de `careLineError`, nunca o código cru.
-import { useCallback, useRef, useState } from "react";
+// Desmontagem (detalhe fechado ou trocado durante o envio): quando a ação
+// termina, o hook NÃO faz setState, NÃO chama `onStale` e devolve false — o
+// chamador, portanto, não chama `onSaved` e nada relê nem fecha tela alheia
+// (relê o detalhe = nova trilha de acesso de um registro que ninguém vê).
+import { useCallback, useEffect, useRef, useState } from "react";
 import { careLineError, isStaleCare } from "../../lib/careLines";
 
 export interface CareSubmit {
@@ -19,6 +23,8 @@ export function useCareSubmit(): CareSubmit {
   const [ busy, setBusy ] = useState(false);
   const [ error, setError ] = useState<string | null>(null);
   const running = useRef(false);
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
 
   const submit = useCallback(async (action: () => Promise<unknown>, onStale: (message: string) => void): Promise<boolean> => {
     if (running.current) return false;
@@ -27,14 +33,15 @@ export function useCareSubmit(): CareSubmit {
     setError(null);
     try {
       await action();
-      return true;
+      return mounted.current;
     } catch (err) {
+      if (!mounted.current) return false;
       if (isStaleCare(err)) onStale(careLineError(err));
       else setError(careLineError(err));
       return false;
     } finally {
       running.current = false;
-      setBusy(false);
+      if (mounted.current) setBusy(false);
     }
   }, []);
 
