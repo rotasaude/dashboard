@@ -545,7 +545,8 @@ export interface CheckInCitizen {
 export interface CheckInTriage { id: string; date: string; protocol_name: string; priority: number }
 export interface CheckInAppointment {
   // Pedido de linha de cuidado (módulo 23) não tem triagem raiz: kind "care_line", sem protocolo nem prioridade.
-  id: string; scheduled_at: string; kind: "return" | "referral" | "care_line"; unit_name: string;
+  // Os kinds seguem AppointmentRequest::KINDS do api; o rótulo vem de requestKindLabel, o mesmo da fila.
+  id: string; scheduled_at: string; kind: "return" | "referral" | "triage" | "screening" | "care_line"; unit_name: string;
   protocol_name: string | null; priority: number | null;
 }
 
