@@ -56,12 +56,14 @@ export function familyLine(f: Family): string {
 
 // Coluna "Família" dos moradores (PROVA-5): responsável, membro da família de
 // quem (o responsável vem das famílias do domicílio já na tela) ou sem família.
-// Família que a tela não conhece (lida antes de uma gravação): "membro".
+// Família que a tela não conhece (lida antes de uma gravação): "membro";
+// membro ainda ativo de família que se mudou: "(mudou-se)".
 export function familyOf(r: Registration, families: Family[]): string {
   if (r.is_responsible) return "responsável";
   if (!r.family_id) return "sem família";
   const f = families.find((x) => x.id === r.family_id);
-  return f ? `família de ${f.responsible.display_name ?? NO_NAME}` : "membro";
+  if (!f) return "membro";
+  return `família de ${f.responsible.display_name ?? NO_NAME}${f.moved_out ? " (mudou-se)" : ""}`;
 }
 
 export function HouseholdDetail({ householdId, onBack, today }: { householdId: string; onBack(): void; today?: string }) {

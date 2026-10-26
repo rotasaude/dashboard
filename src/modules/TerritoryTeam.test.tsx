@@ -87,7 +87,11 @@ describe("TerritoryTeam", () => {
     // Família que a tela não conhece (lida antes de uma gravação): "membro", nunca vazio.
     const OUTRA = registration({ id: "rg9", is_responsible: false, family_id: "fa9",
       patient: { ...JOSE.patient, id: "pa9", display_name: "Lia Alves", full_name: "Lia Alves" } });
-    mocked(api.listRegistrations).mockResolvedValue([ registration(), JOSE, SEM, OUTRA ]);
+    const PEDRO = registration({ id: "rg11", is_responsible: false, family_id: "fa2",
+      patient: { ...JOSE.patient, id: "pa11", display_name: "Bia Alves", full_name: "Bia Alves" } });
+    mocked(api.getHousehold).mockResolvedValue(household({ families: [ family(),
+      family({ id: "fa2", moved_out: true, responsible: { patient_id: "pa5", display_name: "Pedro Alves" } }) ] }));
+    mocked(api.listRegistrations).mockResolvedValue([ registration(), JOSE, SEM, OUTRA, PEDRO ]);
     renderWithProviders(<TerritoryTeam today={TODAY24} />);
     await openHousehold();
     const residents = screen.getByRole("region", { name: "Moradores" });
@@ -95,6 +99,8 @@ describe("TerritoryTeam", () => {
     expect(within(residents).getByText("família de Maria das Dores")).not.toBeNull();
     expect(within(residents).getByText("sem família")).not.toBeNull();
     expect(within(residents).getByText("membro")).not.toBeNull();
+    // Membro ainda ativo de família que se mudou (m5).
+    expect(within(residents).getByText("família de Pedro Alves (mudou-se)")).not.toBeNull();
   });
 
   it("morador com a identidade atualizada no posto: a marca 'revisar e salvar' na lista (L24)", async () => {
