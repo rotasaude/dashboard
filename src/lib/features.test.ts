@@ -82,3 +82,11 @@ describe("módulo 23", () => {
     expect(hasFeature({ features: [ "clinical_record" ] }, "care_lines")).toBe(false);
   });
 });
+
+describe("módulo 24a", () => {
+  it("territory_registry tem rótulo em português e vem da sessão", () => {
+    expect(featureLabel("territory_registry")).toBe("Cadastro individual e domiciliar");
+    expect(hasFeature({ features: [ "clinical_record", "territory_registry" ] }, "territory_registry")).toBe(true);
+    expect(hasFeature({ features: [ "clinical_record" ] }, "territory_registry")).toBe(false);
+  });
+});

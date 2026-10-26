@@ -3944,3 +3944,271 @@ export async function lookupCarePerson(cpf: string): Promise<CarePersonLookup> {
 export function openCareAppointment(enrollmentId: string): Promise<CareAppointmentTarget> {
   return jsonFetch(carePath("enrollments", enrollmentId, "appointment_request"), carePost({}));
 }
+
+// ─── Cadastro territorial (módulo 24a, ADR 0042; contrato 2026-10-23) ───
+// Formas do api REAL (§14 L1–L25, §15). Na URL só ids (equipe, microárea,
+// domicílio, família, cadastro, paciente), o filtro de situação, o cursor e o
+// limite — nunca CPF, CNS, nome, nascimento, mãe, endereço, moradia, condições
+// de saúde ou recusa: CPF da busca, nome dos duplicados e as fichas vão no
+// corpo. Listas vêm em envelope (ausente = vazio); escritas e detalhe devolvem
+// o objeto PURO, inclusive a pessoa do CPF (L3, sem envelope). Mesmo prefixo
+// do módulo 11 (TERRITORY_BASE, já no proxy de dev).
+
+const territoryPath = (...parts: string[]) => [ TERRITORY_BASE, ...parts.map(encodeURIComponent) ].join("/");
+const territoryWrite = (method: "POST" | "PATCH", body: unknown): RequestInit => ({ method, body: JSON.stringify(body) });
+
+export const TERRITORY_PAGE_SIZE = 50;
+
+// Situação do cadastro (Validity, nesta ordem): exited → refused →
+// missing_identifier (sem CPF e sem CNS: a ficha não nasce, L19) → expired
+// (24 meses ou mais) → due_soon (até 60 dias) → valid; missing = sem cadastro.
+export type RegistryStatus = "valid" | "due_soon" | "expired" | "missing" | "missing_identifier" | "refused" | "exited";
+// Os filtros da lista de validade (exited nunca é população).
+export type RegistryListStatus = Exclude<RegistryStatus, "exited">;
+export type ExitReason = "moved" | "death";
+export type PatientSex = "male" | "female";
+
+// Seção da ficha (§15): chave do dicionário em snake_case → código (inteiro),
+// lista de códigos, booleano, texto/dígitos/data, contagem ou objeto
+// (instituicao_permanencia). Código desconhecido aparece cru, nunca some.
+export type CodedValue = number | number[] | boolean | string | null | CodedSection;
+export type CodedSection = { [key: string]: CodedValue };
+
+export interface TerritoryTeamRef { id: string; ine: string; name: string }
+export interface MicroArea {
+  id: string; team: TerritoryTeamRef; code: string; name: string;
+  acs: { professional_id: string; name: string } | null; active: boolean;
+}
+// Código de 2 dígitos, nome 1–60; acs_professional_id null tira o ACS.
+export interface MicroAreaInput { team_id: string; code: string; name: string; acs_professional_id?: string | null }
+export interface MicroAreaPatch { name?: string; acs_professional_id?: string | null; active?: boolean }
+// L2: equipes 70/76 ativas da cidade e os ACS (CBO 515105) ativos DA EQUIPE.
+export interface TerritoryAdminTeam extends TerritoryTeamRef {
+  kind: string; unit: { id: string; name: string };
+  acs_candidates: { professional_id: string; name: string; has_cns: boolean }[];
+}
+// L2: equipes do vínculo do profissional, com as microáreas ATIVAS e se ele
+// grava as duas fichas nelas (o ACS só na dele).
+export interface TerritoryTeam extends TerritoryTeamRef {
+  unit: { id: string; name: string };
+  micro_areas: (MicroArea & { can_register: boolean })[];
+}
+export interface TerritoryContext { teams: TerritoryTeam[] }
+
+// Endereço (TerritoryRegistry::Address): exatamente estas chaves. street_type
+// é o código DNE em texto ("081" = Rua) e o nome não o repete; number nulo com
+// no_number; sem neighborhood_id utilizável, district (texto) é obrigatório.
+export interface HouseholdAddress {
+  zip: string; street_type: string; street: string; number: string | null; no_number: boolean; complement: string | null;
+  neighborhood_id: string | null; district: string | null; reference: string | null;
+}
+// Domicílio recusado sem endereço: o api devolve `{}`.
+export type NoAddress = { [K in keyof HouseholdAddress]?: never };
+export interface Family {
+  id: string; responsible: { patient_id: string; display_name: string };
+  // Renda: código do domínio renda_familiar em texto ("3"); living_since "AAAA-MM".
+  income_band: string | null; members_count: number | null; living_since: string | null; moved_out: boolean;
+}
+export interface Household {
+  id: string; micro_area: { id: string; code: string }; address: HouseholdAddress | NoAddress;
+  // tipoDeImovel em texto ("1" = Domicílio … "99").
+  property_type: string;
+  // Só no detalhe (a lista não traz).
+  living_conditions?: CodedSection;
+  contact_phone: string | null; refused: boolean; status: "active" | "inactive"; version: number;
+  registered_at: string; registered_by: { name: string | null }; families: Family[];
+}
+// Endereço obrigatório sem recusa; `status` só no PATCH (inativo só sem família ativa).
+export interface HouseholdInput {
+  micro_area_id: string; address?: HouseholdAddress | null; property_type: string; living_conditions?: CodedSection | null;
+  contact_phone: string | null; refused: boolean; status?: "active" | "inactive";
+}
+export interface HouseholdQuery { microAreaId: string; before?: string | null }
+// next_before: cursor opaco do api; repasse como veio.
+export interface HouseholdPage { households: Household[]; next_before: string | null }
+// O responsável só na criação (nunca muda); a família nasce morando e a
+// mudança (moved_out: true) é definitiva.
+export interface FamilyInput {
+  responsible?: { patient_id: string }; income_band: string | null; members_count: number | null; living_since: string | null;
+  moved_out?: boolean;
+}
+
+export interface DuplicateQuery { full_name: string; birth_date: string; mother_name?: string | null }
+export interface DuplicateCandidate { patient_id: string; display_name: string; birth_date: string; has_cpf: boolean }
+// L3: a pessoa pelo CPF — paciente (com o cadastro ativo, se houver) ou par
+// validado sem paciente. Ninguém → 404 person_not_found; par só declarado →
+// 409 citizen_not_verified.
+export interface TerritoryPerson { patient_id: string | null; citizen_id: string | null; display_name: string; registration_id: string | null }
+
+// Identidade digitada de paciente EXISTENTE (`patient`, L4): só sem par
+// validado; com par, valor diferente → 422 identity_locked.
+export interface PatientIdentity {
+  full_name?: string; social_name?: string | null; birth_date?: string; sex?: PatientSex; mother_name?: string | null;
+}
+// Paciente novo (Patients::CreateTyped): só textos; CPF ou justificativa
+// (código "2".."13"), nunca os dois; CNS opcional. Raça/cor NÃO vai aqui.
+export interface NewPatient {
+  full_name: string; social_name?: string | null; birth_date: string; sex: PatientSex; mother_name?: string | null;
+  cpf?: string | null; no_cpf_reason?: string | null; cns?: string | null;
+}
+// Raça/cor e etnia no código do paciente (BPA: "01".."05"; etnia só com "05").
+export interface PatientDemographics { race_color: string | null; ethnicity: string | null }
+export interface RegistrationPatient {
+  id: string; display_name: string; full_name: string; mother_name: string | null; birth_date: string; sex: PatientSex;
+  has_cpf: boolean; no_cpf_reason: string | null; cns_masked: string | null;
+  // Par validado: nome, nascimento, sexo e mãe só leitura.
+  identity_locked: boolean;
+}
+export interface RegistrationExit { reason: ExitReason; on: string; death_on: string | null; death_certificate: string | null }
+export interface Registration {
+  id: string; patient: RegistrationPatient; patient_demographics: PatientDemographics;
+  household_id: string | null; family_id: string | null; is_responsible: boolean;
+  team: TerritoryTeamRef; micro_area: { id: string; code: string } | null;
+  identification: CodedSection; sociodemographic: CodedSection; health_conditions: CodedSection; street_situation: CodedSection | null;
+  refused: boolean; exit: RegistrationExit | null; status: RegistryStatus; version: number;
+  registered_at: string; registered_by: { name: string | null };
+  identity_changed_at: string | null;
+  // L24: identidade atualizada no posto depois da última gravação — revisar e salvar.
+  identity_review_pending: boolean;
+}
+// Corpo comum do POST e do PATCH. Paciente existente: `patient` (identidade
+// digitada), `cpf` (quem não tinha) e `cns` na raiz. Lugar: household_id
+// (+ family_id; is_responsible bate com o responsável) ou, fora de área,
+// team_id. Com recusa, as seções não vão.
+export interface RegistrationBody {
+  patient?: PatientIdentity; cpf?: string | null; cns?: string | null; patient_demographics?: Partial<PatientDemographics>;
+  household_id?: string | null; family_id?: string | null; team_id?: string | null; is_responsible?: boolean;
+  identification?: CodedSection; sociodemographic?: CodedSection; health_conditions?: CodedSection;
+  street_situation?: CodedSection | null; refused?: boolean;
+}
+// POST: a pessoa é uma das três; com new_patient, `patient`/`cpf`/`cns` não vão.
+export type RegistrationInput = ({ patient_id: string } | { citizen_id: string } | { new_patient: NewPatient }) & RegistrationBody;
+// PATCH: a pessoa é a do cadastro (patient_id, se vier, tem de ser o mesmo).
+export type RegistrationUpdate = RegistrationBody & { patient_id?: string };
+export type RegistrationQuery = { patientId: string } | { householdId: string };
+// death_on obrigatório com óbito e proibido com mudança; DO (9 dígitos) opcional, só no óbito.
+export type ExitInput =
+  | { reason: "moved"; on: string }
+  | { reason: "death"; on: string; death_on: string; death_certificate?: string | null };
+
+export interface PersonRow {
+  patient_id: string | null; citizen_id: string | null; display_name: string | null; age: number | null; micro_area_code: string | null;
+  status: RegistryListStatus; registered_at: string | null; registration_id: string | null; identity_review_pending: boolean;
+}
+// Com microárea, a população é só quem tem cadastro nela (missing vem vazio);
+// o ACS só lê a própria microárea.
+export interface RegistryStatusQuery { teamId: string; microAreaId?: string | null; status?: RegistryListStatus | null; before?: string | null }
+// next_before: person_ref ("patient:<uuid>" | "citizen:<uuid>").
+export interface RegistryStatusPage { people: PersonRow[]; next_before: string | null }
+// refused fica fora das contagens.
+export interface RegistryCounts { valid: number; due_soon: number; expired: number; missing: number; missing_identifier: number }
+
+// ── Microáreas (municipal_admin; escrita com step-up, contrato §3) ──
+export async function listTerritoryAdminTeams(): Promise<TerritoryAdminTeam[]> {
+  return (await jsonFetch<{ teams?: TerritoryAdminTeam[] }>(territoryPath("admin", "teams"))).teams ?? [];
+}
+
+export async function listMicroAreas(teamId: string): Promise<MicroArea[]> {
+  const url = withQuery(territoryPath("admin", "micro_areas"), new URLSearchParams({ team_id: teamId }));
+  return (await jsonFetch<{ micro_areas?: MicroArea[] }>(url)).micro_areas ?? [];
+}
+
+export function createMicroArea(input: MicroAreaInput): Promise<MicroArea> {
+  return jsonFetch<MicroArea>(territoryPath("admin", "micro_areas"), territoryWrite("POST", input));
+}
+
+export function updateMicroArea(id: string, patch: MicroAreaPatch): Promise<MicroArea> {
+  return jsonFetch<MicroArea>(territoryPath("admin", "micro_areas", id), territoryWrite("PATCH", patch));
+}
+
+// ── Contexto do profissional (L2; sem trilha) ──
+export async function getTerritoryContext(): Promise<TerritoryContext> {
+  return { teams: (await jsonFetch<Partial<TerritoryContext>>(territoryPath("teams"))).teams ?? [] };
+}
+
+// ── Domicílios e famílias (contrato §4; leitura nominal com trilha) ──
+export async function listHouseholds(q: HouseholdQuery): Promise<HouseholdPage> {
+  const p = new URLSearchParams({ micro_area_id: q.microAreaId });
+  if (q.before) p.set("before", q.before);
+  p.set("limit", String(TERRITORY_PAGE_SIZE));
+  const b = await jsonFetch<Partial<HouseholdPage>>(withQuery(territoryPath("households"), p));
+  return { households: b.households ?? [], next_before: b.next_before ?? null };
+}
+
+export function getHousehold(id: string): Promise<Household> {
+  return jsonFetch<Household>(territoryPath("households", id));
+}
+
+export function createHousehold(input: HouseholdInput): Promise<Household> {
+  return jsonFetch<Household>(territoryPath("households"), territoryWrite("POST", input));
+}
+
+// `version`: a versão esperada do domicílio (outra → 409 stale_version).
+export function updateHousehold(id: string, input: HouseholdInput, version: number): Promise<Household> {
+  return jsonFetch<Household>(territoryPath("households", id), territoryWrite("PATCH", { ...input, version }));
+}
+
+// A família grava a versão seguinte do DOMICÍLIO: `version` é a dele, e a
+// resposta é o domicílio inteiro.
+export function addFamily(householdId: string, input: FamilyInput & { responsible: { patient_id: string } }, version: number): Promise<Household> {
+  return jsonFetch<Household>(territoryPath("households", householdId, "families"), territoryWrite("POST", { ...input, version }));
+}
+
+export function updateFamily(id: string, input: FamilyInput, version: number): Promise<Household> {
+  return jsonFetch<Household>(territoryPath("families", id), territoryWrite("PATCH", { ...input, version }));
+}
+
+// ── Pessoa (contrato §5, L3): tudo no corpo; 30 por minuto (429) ──
+export async function findDuplicates(q: DuplicateQuery): Promise<DuplicateCandidate[]> {
+  return (await jsonFetch<{ candidates?: DuplicateCandidate[] }>(territoryPath("patients", "duplicates"), territoryWrite("POST", q)))
+    .candidates ?? [];
+}
+
+export function lookupTerritoryPerson(cpf: string): Promise<TerritoryPerson> {
+  return jsonFetch<TerritoryPerson>(territoryPath("person_lookup"), territoryWrite("POST", { cpf }));
+}
+
+// ── Cadastro individual (contrato §5; leitura nominal com trilha) ──
+export function createRegistration(input: RegistrationInput): Promise<Registration> {
+  return jsonFetch<Registration>(territoryPath("registrations"), territoryWrite("POST", input));
+}
+
+export function updateRegistration(id: string, input: RegistrationUpdate, version: number): Promise<Registration> {
+  return jsonFetch<Registration>(territoryPath("registrations", id), territoryWrite("PATCH", { ...input, version }));
+}
+
+// Sem `version`: saída concorrente → 409 stale_version; já saiu ou recusado → 422 invalid_transition.
+export function exitRegistration(id: string, input: ExitInput): Promise<Registration> {
+  return jsonFetch<Registration>(territoryPath("registrations", id, "exit"), territoryWrite("POST", input));
+}
+
+export function getRegistration(id: string): Promise<Registration> {
+  return jsonFetch<Registration>(territoryPath("registrations", id));
+}
+
+// Por domicílio: só os ativos legíveis; por paciente: [] sem cadastro legível.
+export async function listRegistrations(q: RegistrationQuery): Promise<Registration[]> {
+  const p = "patientId" in q ? new URLSearchParams({ patient_id: q.patientId }) : new URLSearchParams({ household_id: q.householdId });
+  return (await jsonFetch<{ registrations?: Registration[] }>(withQuery(territoryPath("registrations"), p))).registrations ?? [];
+}
+
+// ── Validade (contrato §6, L12/L19) ──
+// Nominal (grava trilha por pessoa): nunca relida sozinha.
+export async function listRegistryStatus(q: RegistryStatusQuery): Promise<RegistryStatusPage> {
+  const p = new URLSearchParams({ team_id: q.teamId });
+  if (q.microAreaId) p.set("micro_area_id", q.microAreaId);
+  if (q.status) p.set("status", q.status);
+  if (q.before) p.set("before", q.before);
+  p.set("limit", String(TERRITORY_PAGE_SIZE));
+  const b = await jsonFetch<Partial<RegistryStatusPage>>(withQuery(territoryPath("registry_status"), p));
+  return { people: b.people ?? [], next_before: b.next_before ?? null };
+}
+
+// Sem trilha: pode reler a cada minuto.
+export async function countRegistryStatus(teamId: string, microAreaId?: string | null): Promise<RegistryCounts> {
+  const p = new URLSearchParams({ team_id: teamId });
+  if (microAreaId) p.set("micro_area_id", microAreaId);
+  const b = await jsonFetch<Partial<RegistryCounts>>(withQuery(territoryPath("registry_status", "count"), p));
+  return { valid: b.valid ?? 0, due_soon: b.due_soon ?? 0, expired: b.expired ?? 0, missing: b.missing ?? 0,
+    missing_identifier: b.missing_identifier ?? 0 };
+}
