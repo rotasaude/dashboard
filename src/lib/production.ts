@@ -52,7 +52,12 @@ export const GENERATION_REASON: Record<string, string> = {
   unknown_ciap2: "CIAP-2 fora da terminologia ativa",
   // api#52: o adendo não chegou à ficha da consulta.
   regeneration_refused: "o reenvio da ficha recusada não foi aceito",
-  still_sending: "a ficha seguia em envio; gere de novo"
+  still_sending: "a ficha seguia em envio; gere de novo",
+  // Módulo 24a (cadastro individual e domiciliar): o que falta na origem da ficha.
+  patient_without_identifier: "paciente sem CPF nem CNS",
+  responsible_without_identifier: "responsável pela família sem CPF nem CNS",
+  cbo_not_in_ledi_table: "CBO do profissional fora da tabela do LEDI",
+  city_profile_incomplete: "perfil da cidade incompleto (UF ou código IBGE)"
 };
 export const SOURCE_LABEL: Record<string, string> = { Screening: "escuta inicial", Consultation: "consulta" };
 

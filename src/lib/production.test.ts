@@ -120,5 +120,11 @@ describe("Produção — erros", () => {
     expect(reasonsLabel([ "regeneration_refused", "still_sending" ]))
       .toBe("o reenvio da ficha recusada não foi aceito, a ficha seguia em envio; gere de novo");
   });
+
+  it("rótulos dos motivos do módulo 24a (cadastro individual e domiciliar)", () => {
+    expect(reasonsLabel([ "patient_without_identifier", "responsible_without_identifier", "cbo_not_in_ledi_table", "city_profile_incomplete" ]))
+      .toBe("paciente sem CPF nem CNS, responsável pela família sem CPF nem CNS, CBO do profissional fora da tabela do LEDI, "
+        + "perfil da cidade incompleto (UF ou código IBGE)");
+  });
 });
 
