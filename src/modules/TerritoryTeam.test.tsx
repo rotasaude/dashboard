@@ -290,12 +290,16 @@ describe("TerritoryTeam", () => {
     fireEvent.click(screen.getByRole("button", { name: "Salvar cadastro" }));
     expect(await screen.findByText("Rita de Souza · nascido em 10/01/1990 · sem CPF")).not.toBeNull();
     expect(screen.getByText(DUPLICATE_SUSPECTED_TEXT)).not.toBeNull();
+    // A busca volta acima da ficha (fora da tela no celular): o bloco é revelado de novo.
+    expect((document.activeElement as HTMLElement).textContent).toBe("Adicionar morador");
     fireEvent.click(screen.getByRole("button", { name: "É esta pessoa" }));
+    // Candidato sem CPF: o CPF digitado vem em "Informar CPF" e vai na raiz.
+    expect((screen.getByLabelText("Informar CPF") as HTMLInputElement).value).toBe("529.982.247-25");
     fillIdentification();
     fireEvent.click(screen.getByRole("button", { name: "Salvar cadastro" }));
     await waitFor(() => expect(api.createRegistration).toHaveBeenCalledTimes(2));
     const body = mocked(api.createRegistration).mock.calls[1][0];
-    expect(body).toEqual(expect.objectContaining({ patient_id: "pa7", household_id: "hh1" }));
+    expect(body).toEqual(expect.objectContaining({ patient_id: "pa7", household_id: "hh1", cpf: "52998224725" }));
     expect(body).not.toHaveProperty("new_patient");
     expect(body).not.toHaveProperty("duplicates_reviewed");
   });

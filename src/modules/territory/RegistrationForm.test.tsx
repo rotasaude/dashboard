@@ -107,6 +107,37 @@ describe("RegistrationForm", () => {
     expect(onRestart).toHaveBeenCalledWith({ query: { full_name: "José das Dores", birth_date: "2026-09-30", mother_name: "Maria das Dores" } });
   });
 
+  it("pessoa nova com CPF que passou pela busca (volta do 409): identidade só leitura; Corrigir volta à busca com o CPF", async () => {
+    const onRestart = vi.fn();
+    renderWithProviders(<RegistrationForm today={TODAY24} household={HOUSE} onRestart={onRestart} onSaved={vi.fn()} onCancel={vi.fn()}
+      choice={{ kind: "new", identity: { full_name: "Rita de Souza", birth_date: "1990-01-10" }, cpf: "52998224725", duplicatesReviewed: true }} />);
+    expect(screen.queryByLabelText("Nome completo")).toBeNull();
+    expect(screen.queryByLabelText("Data de nascimento")).toBeNull();
+    expect(screen.queryByLabelText("Nome da mãe")).toBeNull();
+    expect(screen.getByText("Rita de Souza")).not.toBeNull();
+    pick("Sexo", "female");
+    pick("Raça/cor", "01");
+    fillIdentification();
+    fireEvent.click(screen.getByLabelText("Não sabe o nome da mãe"));
+    save();
+    await waitFor(() => expect(api.createRegistration).toHaveBeenCalledTimes(1));
+    expect(created()).toEqual(expect.objectContaining({ duplicates_reviewed: true,
+      new_patient: expect.objectContaining({ full_name: "Rita de Souza", birth_date: "1990-01-10", cpf: "52998224725" }) }));
+    fireEvent.click(screen.getByRole("button", { name: "Corrigir (refaz a busca)" }));
+    expect(onRestart).toHaveBeenCalledWith({ query: { full_name: "Rita de Souza", birth_date: "1990-01-10" }, cpf: "52998224725" });
+  });
+
+  it("candidato sem CPF escolhido na volta do 409: o CPF digitado vem em 'Informar CPF', editável, e vai na raiz", async () => {
+    renderWithProviders(<RegistrationForm today={TODAY24} household={HOUSE} onSaved={vi.fn()} onCancel={vi.fn()}
+      choice={{ kind: "patient", patientId: "pa7", registrationId: null, hasCpf: false, cpf: "52998224725" }} />);
+    expect((screen.getByLabelText("Informar CPF") as HTMLInputElement).value).toBe("529.982.247-25");
+    pick("Raça/cor", "03");
+    fillIdentification();
+    save();
+    await waitFor(() => expect(api.createRegistration).toHaveBeenCalledTimes(1));
+    expect(created()).toEqual(expect.objectContaining({ patient_id: "pa7", cpf: "52998224725" }));
+  });
+
   it("pessoa nova sem passar pela busca não manda duplicates_reviewed; 409 duplicate_suspected volta à busca com o digitado (L28)", async () => {
     mocked(api.createRegistration).mockRejectedValue(new api.ApiError(409, { error: "duplicate_suspected" }, "409"));
     const onRestart = vi.fn();

@@ -40,7 +40,8 @@ import { REGISTRATION_EXITED, REGISTRATION_SAVED, RegistrationForm } from "./Reg
 export const FAMILY_SAVED = "Família salva. Nova versão do domicílio enviada ao e-SUS.";
 type Editing =
   | { kind: "household" } | { kind: "status" } | { kind: "newFamily" } | { kind: "family"; family: Family }
-  | { kind: "resident"; choice: PersonChoice | null; restart?: PersonRestart } | { kind: "registration"; id: string; name: string } | null;
+  // `round`: cada volta à busca revela o bloco de novo (a busca fica acima da ficha).
+  | { kind: "resident"; choice: PersonChoice | null; restart?: PersonRestart; round?: number } | { kind: "registration"; id: string; name: string } | null;
 
 export function familyLine(f: Family): string {
   const name = f.responsible.display_name ?? NO_NAME;
@@ -111,14 +112,14 @@ export function HouseholdDetail({ householdId, onBack, today }: { householdId: s
               </Reveal>
             )}
             {editing?.kind === "resident" && (
-              <Reveal style={box}>
+              <Reveal key={editing.round ?? 0} style={box}>
                 <strong>Adicionar morador</strong>
                 {editing.choice ? (
                   <RegistrationForm today={today} choice={editing.choice} onCancel={() => setEditing(null)} onSaved={saved(REGISTRATION_SAVED)}
-                    household={{ id: h.id, families: h.families }} onRestart={(restart) => setEditing({ kind: "resident", choice: null, restart })} />
+                    household={{ id: h.id, families: h.families }} onRestart={(restart) => setEditing({ kind: "resident", choice: null, restart, round: (editing.round ?? 0) + 1 })} />
                 ) : (
                   <PersonStart today={today} initial={editing.restart} onCancel={() => setEditing(null)}
-                    onChoose={(choice) => setEditing({ kind: "resident", choice })} />
+                    onChoose={(choice) => setEditing({ kind: "resident", choice, round: editing.round })} />
                 )}
               </Reveal>
             )}

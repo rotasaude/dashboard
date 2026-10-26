@@ -89,6 +89,24 @@ describe("PersonStart", () => {
     expect(api.findDuplicates).not.toHaveBeenCalled();
   });
 
+  it("volta do 409 com CPF: 'É esta pessoa' leva o CPF digitado só ao candidato sem CPF", async () => {
+    mocked(api.findDuplicates).mockResolvedValue([
+      { patient_id: "pa7", display_name: "Rita de Souza", birth_date: "1990-01-10", has_cpf: false },
+      { patient_id: "pa8", display_name: "Rita de Souza", birth_date: "1990-01-10", has_cpf: true }
+    ]);
+    const onChoose = vi.fn();
+    renderWithProviders(<PersonStart today={TODAY24} onChoose={onChoose} onCancel={vi.fn()}
+      initial={{ query: { full_name: "Rita de Souza", birth_date: "1990-01-10" }, cpf: "52998224725", search: true }} />);
+    const buttons = await screen.findAllByRole("button", { name: "É esta pessoa" });
+    fireEvent.click(buttons[0]);
+    expect(onChoose).toHaveBeenLastCalledWith({ kind: "patient", patientId: "pa7", registrationId: null, displayName: "Rita de Souza", hasCpf: false,
+      identity: {}, cpf: "52998224725" });
+    fireEvent.click(buttons[1]);
+    expect(onChoose).toHaveBeenLastCalledWith({ kind: "patient", patientId: "pa8", registrationId: null, displayName: "Rita de Souza", hasCpf: true,
+      identity: {} });
+    expect(onChoose.mock.calls[1][0]).not.toHaveProperty("cpf");
+  });
+
   it("a volta vale até trocar o 'Tem CPF?': trocar recomeça em branco e não busca sozinho de novo", async () => {
     mocked(api.findDuplicates).mockResolvedValue([]);
     renderWithProviders(<PersonStart today={TODAY24} onChoose={vi.fn()} onCancel={vi.fn()}

@@ -27,7 +27,9 @@ import { alert, checkLabel, fieldLabel, fieldset, form, legend, list, muted, row
 // e, com CPF, o CPF (só dígitos); `duplicatesReviewed`: passou pela busca de
 // duplicados e confirmou que é outra pessoa (L28).
 export type PersonChoice =
-  | { kind: "patient"; patientId: string; registrationId: string | null; displayName?: string | null; hasCpf?: boolean; identity?: PatientIdentity }
+  | { kind: "patient"; patientId: string; registrationId: string | null; displayName?: string | null; hasCpf?: boolean; identity?: PatientIdentity;
+      // Volta do 409 com CPF e candidato sem CPF: o CPF digitado vem para "Informar CPF" (editável).
+      cpf?: string }
   | { kind: "citizen"; citizenId: string; displayName?: string | null }
   | { kind: "new"; identity: PatientIdentity; cpf?: string; duplicatesReviewed?: boolean };
 // Volta à busca de duplicados: o que foi buscado (ou digitado), o CPF da
@@ -205,7 +207,7 @@ function WithoutCpf({ today, onChoose, initial }: { today: string; onChoose(choi
                   <span id={`candidate-${c.patient_id}`}>{candidateLine(c)}</span>
                   <button type="button" style={secondaryButtonStyle} aria-describedby={`candidate-${c.patient_id}`}
                     onClick={() => onChoose({ kind: "patient", patientId: c.patient_id, registrationId: null, displayName: c.display_name, hasCpf: c.has_cpf,
-                      identity: current.query.mother_name ? { mother_name: current.query.mother_name } : {} })}>
+                      identity: current.query.mother_name ? { mother_name: current.query.mother_name } : {}, ...(cpf && !c.has_cpf ? { cpf } : {}) })}>
                     É esta pessoa
                   </button>
                 </li>

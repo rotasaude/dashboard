@@ -94,7 +94,7 @@ const SEX_LABEL: Record<PatientSex, string> = { female: "Feminino", male: "Mascu
 
 type Subject =
   | { kind: "new"; cpf?: string; duplicatesReviewed?: boolean }
-  | { kind: "patient"; patientId: string; displayName?: string | null; hasCpf?: boolean }
+  | { kind: "patient"; patientId: string; displayName?: string | null; hasCpf?: boolean; cpf?: string }
   | { kind: "citizen"; citizenId: string; displayName?: string | null }
   | { kind: "edit"; registration: Registration };
 // O corpo sem o que é só de paciente existente (com new_patient, patient/cpf/cns não vão).
@@ -126,7 +126,7 @@ export function RegistrationForm({ today = todayInCity(), household, teamId, cho
   if (!choice) return null;
   const subject: Subject = choice.kind === "new" ? { kind: "new", cpf: choice.cpf, duplicatesReviewed: choice.duplicatesReviewed }
     : choice.kind === "citizen" ? { kind: "citizen", citizenId: choice.citizenId, displayName: choice.displayName }
-    : { kind: "patient", patientId: choice.patientId, displayName: choice.displayName, hasCpf: choice.hasCpf };
+    : { kind: "patient", patientId: choice.patientId, displayName: choice.displayName, hasCpf: choice.hasCpf, cpf: choice.cpf };
   const identity = choice.kind === "citizen" ? {} : choice.identity ?? {};
   return <FormBody subject={subject} identity={identity} onOpen={setOpenId} {...common} />;
 }
@@ -167,8 +167,10 @@ function FormBody({ subject, identity: given, today, household, teamId, onSaved,
   // com par validado, o api recusa o diferente — identity_locked com o campo).
   const fill = subject.kind === "patient";
   const typedIdentity = subject.kind === "new" || fill || (r !== null && !locked);
-  // Pessoa nova sem CPF: o que a busca de duplicados procurou não muda aqui (I1).
-  const searched = subject.kind === "new" && !subject.cpf;
+  // Pessoa nova que passou pela busca de duplicados (sem CPF, ou com CPF na
+  // volta do 409): o que a busca procurou não muda aqui (I1) — duplicates_reviewed
+  // só vale para a identidade revisada.
+  const searched = subject.kind === "new" && (!subject.cpf || !!subject.duplicatesReviewed);
   const idPrefix = subject.kind === "new" ? "new_patient" : "patient";
 
   const [ person, setPerson ] = useState<Identity>({ full_name: given.full_name ?? "", birth_date: given.birth_date ?? "", sex: given.sex ?? "",
@@ -176,7 +178,8 @@ function FormBody({ subject, identity: given, today, household, teamId, onSaved,
   const [ socialName, setSocialName ] = useState("");
   const [ noCpfReason, setNoCpfReason ] = useState("");
   const [ cns, setCns ] = useState("");
-  const [ newCpf, setNewCpf ] = useState("");
+  // CPF digitado antes da volta do 409, para o candidato sem CPF: visível e editável.
+  const [ newCpf, setNewCpf ] = useState(subject.kind === "patient" && subject.cpf ? maskCpf(subject.cpf) : "");
   const [ race, setRace ] = useState(r?.patient_demographics.race_color ?? "");
   const [ ethnicity, setEthnicity ] = useState(r?.patient_demographics.ethnicity ?? "");
   const [ sections, setSections ] = useState<Record<Section, Draft>>(() => ({
@@ -443,7 +446,10 @@ function FormBody({ subject, identity: given, today, household, teamId, onSaved,
             <div style={row}>
               <p style={muted}>{SEARCHED_TEXT}</p>
               {onRestart && (
-                <button type="button" style={secondaryButtonStyle} onClick={() => onRestart({ query: searchQuery() })}>Corrigir (refaz a busca)</button>
+                <button type="button" style={secondaryButtonStyle}
+                  onClick={() => onRestart({ query: searchQuery(), ...(subject.kind === "new" && subject.cpf ? { cpf: subject.cpf } : {}) })}>
+                  Corrigir (refaz a busca)
+                </button>
               )}
             </div>
             <div style={row}>
