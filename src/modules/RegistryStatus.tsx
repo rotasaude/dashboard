@@ -15,7 +15,8 @@
 // "Cadastrar"/"Atualizar" abrem a ficha individual nesta tela (Task 12):
 // quem tem cadastro, pelo cadastro; paciente ou par validado sem cadastro,
 // pela pessoa, com a equipe escolhida — sem domicílio, a ficha vai fora de
-// área (team_id, A11). Salvar relê a lista e os números uma vez.
+// área (team_id, A11). Salvar relê a lista e os números uma vez; a ficha e
+// a linha somem, e o foco vai para a mensagem (PROVA-4), nunca para o body.
 import { useState } from "react";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { countRegistryStatus, getTerritoryContext, listRegistryStatus, type PersonRow, type RegistryListStatus } from "../lib/api";
@@ -31,11 +32,12 @@ import { StatTile } from "../components/StatTile";
 import { Tag } from "../components/Tag";
 import { SegmentedControl } from "../shell/SegmentedControl";
 import { inputStyle, secondaryButtonStyle } from "../components/formStyles";
-import { alert, fieldLabel, muted, okText, row, stack } from "./exams/styles";
+import { alert, fieldLabel, muted, row, stack } from "./exams/styles";
 import { TerritoryGate } from "./territory/TerritoryGate";
 import { REGISTRATION_EXITED, REGISTRATION_SAVED, RegistrationForm } from "./territory/RegistrationForm";
 import type { PersonChoice } from "./territory/PersonStart";
 import { Reveal } from "./territory/Reveal";
+import { Notice } from "./territory/Notice";
 
 export const MISSING_NEEDS_TEAM = "Com uma microárea escolhida, a lista e os números são só de quem tem cadastro nela — quem ainda não tem cadastro não tem microárea.";
 
@@ -185,7 +187,7 @@ function StatusBody({ today }: { today?: string }) {
         <StatTile label="Sem identificador (CPF ou CNS)" value={c?.missing_identifier} tone="warn" />
         <StatTile label="Sem cadastro" value={microAreaId ? "—" : c?.missing} tone="down" hint={microAreaId ? "só na equipe toda" : undefined} />
       </KpiGrid>
-      {notice && <p role="status" style={okText}>{notice}</p>}
+      {notice && <Notice text={notice} />}
       {open && (
         <Reveal key={open.key}>
           <Panel title="Cadastro individual" sub={open.name}>

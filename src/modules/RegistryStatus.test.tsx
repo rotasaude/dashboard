@@ -6,7 +6,7 @@ import { focusManager, onlineManager } from "@tanstack/react-query";
 vi.mock("../lib/api", async (importOriginal) => {
   const real = await importOriginal<typeof import("../lib/api")>();
   return { ...real, fetchCurrentSession: vi.fn(), getTerritoryContext: vi.fn(), listRegistryStatus: vi.fn(), countRegistryStatus: vi.fn(),
-    createRegistration: vi.fn(), getRegistration: vi.fn(), exitRegistration: vi.fn() };
+    createRegistration: vi.fn(), updateRegistration: vi.fn(), getRegistration: vi.fn(), exitRegistration: vi.fn() };
 });
 
 import * as api from "../lib/api";
@@ -29,7 +29,7 @@ const statuses = () => mocked(api.listRegistryStatus).mock.calls.map((c) => (c[0
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 beforeEach(() => {
   for (const fn of [ api.fetchCurrentSession, api.getTerritoryContext, api.listRegistryStatus, api.countRegistryStatus, api.createRegistration,
-    api.getRegistration, api.exitRegistration ]) mocked(fn).mockReset();
+    api.updateRegistration, api.getRegistration, api.exitRegistration ]) mocked(fn).mockReset();
   mocked(api.createRegistration).mockResolvedValue(registration({ household_id: null, family_id: null, micro_area: null }));
   mocked(api.getRegistration).mockResolvedValue(registration({ id: "rg3" }));
   mocked(api.fetchCurrentSession).mockResolvedValue(territoryUser());
@@ -162,6 +162,9 @@ describe("RegistryStatus", () => {
     expect(body).toEqual(expect.objectContaining({ citizen_id: "ci4", team_id: "tm1", is_responsible: false }));
     expect(body).not.toHaveProperty("household_id");
     expect(screen.queryByRole("form", { name: "Novo cadastro individual" })).toBeNull();
+    // A linha e a ficha somem: o foco vai para a mensagem, nunca para o body (PROVA-4).
+    expect(document.activeElement).not.toBe(document.body);
+    expect((document.activeElement as HTMLElement).textContent).toBe("Cadastro salvo. Nova versão enviada ao e-SUS.");
     await waitFor(() => expect(mocked(api.listRegistryStatus).mock.calls.length).toBe(lists + 1));
     await waitFor(() => expect(mocked(api.countRegistryStatus).mock.calls.length).toBe(counts + 1));
   });
@@ -179,7 +182,22 @@ describe("RegistryStatus", () => {
     fireEvent.click(screen.getByRole("button", { name: "Confirmar saída" }));
     expect(await screen.findByText("Saída registrada. Nova versão enviada ao e-SUS.")).not.toBeNull();
     expect(screen.queryByRole("button", { name: "Salvar cadastro" })).toBeNull();
+    expect((document.activeElement as HTMLElement).textContent).toBe("Saída registrada. Nova versão enviada ao e-SUS.");
     await waitFor(() => expect(api.listRegistryStatus).toHaveBeenCalledTimes(2));
+  });
+
+  it("Atualizar em cada aba (Vencidos, A vencer, Sem identificador, Recusou) → Salvar: o foco vai para a mensagem (PROVA-4)", async () => {
+    mocked(api.updateRegistration).mockResolvedValue(registration({ id: "rg3", version: 2 }));
+    renderWithProviders(<RegistryStatus today={TODAY24} />);
+    for (const tab of [ "Vencidos (31)", "A vencer (8)", "Sem identificador (5)", "Recusou" ]) {
+      fireEvent.click(await screen.findByRole("tab", { name: tab }));
+      fireEvent.click(await screen.findByRole("button", { name: "Atualizar Joaquim Ribeiro" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Salvar cadastro" }));
+      await screen.findByText("Cadastro salvo. Nova versão enviada ao e-SUS.");
+      expect(document.activeElement).not.toBe(document.body);
+      expect((document.activeElement as HTMLElement).textContent).toBe("Cadastro salvo. Nova versão enviada ao e-SUS.");
+    }
+    expect(api.updateRegistration).toHaveBeenCalledTimes(4);
   });
 
   it("a ficha aberta fora da tela (celular): rola até o título e o foca", async () => {
