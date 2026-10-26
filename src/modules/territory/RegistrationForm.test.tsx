@@ -178,6 +178,21 @@ describe("RegistrationForm", () => {
     expect(created()).not.toHaveProperty("new_patient");
   });
 
+  it("paciente escolhido sem cadastro: a ficha pede o CNS (sem ele e sem CPF a ficha não chega ao e-SUS); vai na raiz, em branco não vai (m6)", async () => {
+    renderWithProviders(<RegistrationForm today={TODAY24} household={HOUSE} choice={{ kind: "patient", patientId: "pa7", registrationId: null, hasCpf: false }}
+      onSaved={vi.fn()} onCancel={vi.fn()} />);
+    pick("Raça/cor", "03");
+    fillIdentification();
+    save();
+    await waitFor(() => expect(api.createRegistration).toHaveBeenCalledTimes(1));
+    expect(created()).not.toHaveProperty("cns");
+    typeIn("CNS", "7000 0000 0000 005");
+    save();
+    await waitFor(() => expect(api.createRegistration).toHaveBeenCalledTimes(2));
+    expect(mocked(api.createRegistration).mock.calls[1][0]).toEqual(expect.objectContaining({ patient_id: "pa7", cns: CNS }));
+    expect(mocked(api.createRegistration).mock.calls[1][0]).not.toHaveProperty("new_patient");
+  });
+
   it("paciente escolhido: recusa do api em patient.birth_date foca o nascimento", async () => {
     mocked(api.createRegistration).mockRejectedValue(new api.ApiError(422, { error: "invalid_registration", path: "patient.birth_date" }, "422"));
     renderWithProviders(<RegistrationForm today={TODAY24} household={HOUSE} choice={{ kind: "patient", patientId: "pa1", registrationId: null }}

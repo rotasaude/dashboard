@@ -209,7 +209,9 @@ function FormBody({ subject, identity: given, today, household, teamId, onSaved,
   const pregnancyUnknown = known.sex === undefined || known.birth === undefined;
   const hasCpf = r ? r.patient.has_cpf : subject.kind === "patient" ? subject.hasCpf : undefined;
   const askCpf = hasCpf === false;
-  const askCns = subject.kind === "new" || (r !== null && !r.patient.cns_masked);
+  // CNS: pessoa nova, cadastro sem CNS ou paciente escolhido sem cadastro (a
+  // busca não diz se ele tem CNS; em branco não muda nada, como no FILL_TEXT).
+  const askCns = subject.kind === "new" || fill || (r !== null && !r.patient.cns_masked);
 
   function visible(section: Section, key: string): boolean {
     const d = sections[section];
@@ -281,7 +283,7 @@ function FormBody({ subject, identity: given, today, household, teamId, onSaved,
       if (filled) extra.patient = filled;
     }
     if (askCpf && newCpf.trim()) extra.cpf = onlyDigits(newCpf);
-    if (r && askCns && cns.trim()) extra.cns = cns.replace(/\s/g, "");
+    if (subject.kind !== "new" && askCns && cns.trim()) extra.cns = cns.replace(/\s/g, "");
     if (subject.kind === "patient") return { patient_id: subject.patientId, ...extra, ...common };
     if (subject.kind === "citizen") return { citizen_id: subject.citizenId, ...extra, ...common };
     return { ...extra, ...common };
