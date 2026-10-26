@@ -3,6 +3,11 @@
 // moradores com a situação do cadastro de cada um. O domicílio e os moradores
 // são leituras NOMINAIS com trilha: uma vez cada ao abrir, nunca sozinhas.
 // Moradores = só os cadastros ativos do domicílio que o usuário pode ler (C16).
+// Fichas (Task 11): "Editar domicílio"; "Nova família" só em domicílio (tipo
+// 01) sem recusa, com responsável entre os moradores que ainda não respondem
+// por família; "Editar família" só da família que não se mudou (a mudança é
+// definitiva). Salvar relê o domicílio uma vez (ação do usuário).
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getHousehold, listRegistrations, type Family, type Registration } from "../../lib/api";
 import {
@@ -14,10 +19,15 @@ import { DataTable } from "../../components/DataTable";
 import { Tag } from "../../components/Tag";
 import { KeyValue } from "../../components/KeyValue";
 import { secondaryButtonStyle } from "../../components/formStyles";
-import { alert, grid, list, muted, row, stack } from "../exams/styles";
-import { addressLine, householdStatus } from "./HouseholdList";
+import { allowsFamilies, dictLabel } from "../../lib/territoryDictionaries";
+import { alert, box, grid, list, muted, okText, row, stack } from "../exams/styles";
+import { HOUSEHOLD_SAVED, addressLine, householdStatus } from "./HouseholdList";
+import { HouseholdForm } from "./HouseholdForm";
+import { FamilyForm } from "./FamilyForm";
 
 const NO_NAME = "sem nome no cadastro";
+export const FAMILY_SAVED = "Família salva. Nova versão do domicílio enviada ao e-SUS.";
+type Editing = { kind: "household" } | { kind: "newFamily" } | { kind: "family"; family: Family } | null;
 
 export function familyLine(f: Family): string {
   const name = f.responsible.display_name ?? `pessoa ${NO_NAME}`;
@@ -25,13 +35,21 @@ export function familyLine(f: Family): string {
   return `Responsável: ${name} · ${f.members_count} ${f.members_count === 1 ? "pessoa" : "pessoas"}`;
 }
 
-export function HouseholdDetail({ householdId, onBack }: { householdId: string; onBack(): void }) {
+export function HouseholdDetail({ householdId, onBack, today }: { householdId: string; onBack(): void; today?: string }) {
+  const [ editing, setEditing ] = useState<Editing>(null);
+  const [ notice, setNotice ] = useState<string | null>(null);
   const household = useQuery({ queryKey: [ HOUSEHOLD_KEY, householdId ], queryFn: () => getHousehold(householdId), ...NOMINAL_QUERY });
   const residents = useQuery({
     queryKey: [ RESIDENTS_KEY, householdId ], queryFn: () => listRegistrations({ householdId }), ...NOMINAL_QUERY
   });
   const h = household.data;
   const status = h && householdStatus(h);
+  const open = (next: Editing) => { setNotice(null); setEditing(next); };
+  const saved = (text: string) => () => { setEditing(null); setNotice(text); };
+  const responsibles = new Set((h?.families ?? []).filter((f) => !f.moved_out).map((f) => f.responsible.patient_id));
+  const candidates = (residents.data ?? []).filter((r) => !responsibles.has(r.patient.id))
+    .map((r) => ({ patient_id: r.patient.id, display_name: r.patient.display_name }));
+  const familyName = (f: Family) => f.responsible.display_name ?? `pessoa ${NO_NAME}`;
 
   return (
     <Panel title={h ? addressLine(h.address) : "Domicílio"} sub={h ? `microárea ${h.micro_area.code}` : undefined}
@@ -44,10 +62,31 @@ export function HouseholdDetail({ householdId, onBack }: { householdId: string; 
             <div style={grid}>
               {h.address.complement && <KeyValue k="Complemento" v={h.address.complement} mono={false} />}
               <KeyValue k="Ponto de referência" v={h.address.reference || "—"} mono={false} />
-              <KeyValue k="Tipo de imóvel" v={h.property_type} />
+              <KeyValue k="Tipo de imóvel" v={dictLabel("tipo_de_imovel", h.property_type)} mono={false} />
               <KeyValue k="Situação" v={<Tag tone={status.tone}>{status.label}</Tag>} />
               <KeyValue k="Cadastrado em" v={`${fmtDay(h.registered_at)}${h.registered_by.name ? ` · ${h.registered_by.name}` : ""}`} mono={false} />
             </div>
+            {notice && <p role="status" style={okText}>{notice}</p>}
+            {editing?.kind === "household" ? (
+              <div style={box}>
+                <strong>Editar domicílio</strong>
+                <HouseholdForm microAreaId={h.micro_area.id} initial={h} onCancel={() => setEditing(null)} onSaved={saved(HOUSEHOLD_SAVED)} />
+              </div>
+            ) : !editing && (
+              <div style={row}>
+                <button type="button" style={secondaryButtonStyle} onClick={() => open({ kind: "household" })}>Editar domicílio</button>
+                {allowsFamilies(h.property_type) && !h.refused && (
+                  <button type="button" style={secondaryButtonStyle} onClick={() => open({ kind: "newFamily" })}>Nova família</button>
+                )}
+              </div>
+            )}
+            {(editing?.kind === "newFamily" || editing?.kind === "family") && (
+              <div style={box}>
+                <strong>{editing.kind === "family" ? "Editar família" : "Nova família"}</strong>
+                <FamilyForm household={h} initial={editing.kind === "family" ? editing.family : undefined} candidates={candidates}
+                  today={today} onCancel={() => setEditing(null)} onSaved={saved(FAMILY_SAVED)} />
+              </div>
+            )}
             <section aria-label="Famílias" style={stack}>
               <strong>Famílias</strong>
               {h.families.length === 0 ? <p style={muted}>nenhuma família</p> : (
@@ -55,7 +94,10 @@ export function HouseholdDetail({ householdId, onBack }: { householdId: string; 
                   {h.families.map((f) => (
                     <li key={f.id} style={row}>
                       <span>{familyLine(f)}</span>
-                      {f.moved_out && <Tag tone="neutral">mudou-se</Tag>}
+                      {f.moved_out ? <Tag tone="neutral">mudou-se</Tag> : !editing && (
+                        <button type="button" style={secondaryButtonStyle} aria-label={`Editar família de ${familyName(f)}`}
+                          onClick={() => open({ kind: "family", family: f })}>Editar família</button>
+                      )}
                     </li>
                   ))}
                 </ul>

@@ -1,11 +1,12 @@
 // src/modules/TerritoryTeam.test.tsx
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import { focusManager, onlineManager } from "@tanstack/react-query";
 
 vi.mock("../lib/api", async (importOriginal) => {
   const real = await importOriginal<typeof import("../lib/api")>();
-  return { ...real, fetchCurrentSession: vi.fn(), getTerritoryContext: vi.fn(), listHouseholds: vi.fn(), getHousehold: vi.fn(), listRegistrations: vi.fn() };
+  return { ...real, fetchCurrentSession: vi.fn(), getTerritoryContext: vi.fn(), listHouseholds: vi.fn(), getHousehold: vi.fn(), listRegistrations: vi.fn(),
+    createHousehold: vi.fn(), updateHousehold: vi.fn(), addFamily: vi.fn(), updateFamily: vi.fn(), listPanelNeighborhoods: vi.fn() };
 });
 
 import * as api from "../lib/api";
@@ -23,7 +24,12 @@ const JOSE = registration({ id: "rg2", is_responsible: false, status: "expired",
 
 afterEach(cleanup);
 beforeEach(() => {
-  for (const fn of [ api.fetchCurrentSession, api.getTerritoryContext, api.listHouseholds, api.getHousehold, api.listRegistrations ]) mocked(fn).mockReset();
+  for (const fn of [ api.fetchCurrentSession, api.getTerritoryContext, api.listHouseholds, api.getHousehold, api.listRegistrations,
+    api.createHousehold, api.updateHousehold, api.addFamily, api.updateFamily, api.listPanelNeighborhoods ]) mocked(fn).mockReset();
+  mocked(api.listPanelNeighborhoods).mockResolvedValue([ { id: "nb1", name: "Vila Verde", active: true } ]);
+  mocked(api.createHousehold).mockResolvedValue(household());
+  mocked(api.updateFamily).mockResolvedValue(household({ version: 3 }));
+  mocked(api.addFamily).mockResolvedValue(household({ version: 3 }));
   mocked(api.fetchCurrentSession).mockResolvedValue(territoryUser());
   mocked(api.getTerritoryContext).mockResolvedValue(territoryContext());
   // A lista não traz living_conditions (C6).
@@ -74,6 +80,70 @@ describe("TerritoryTeam", () => {
     expect(await screen.findByText("sem nome no cadastro")).not.toBeNull();
     expect(screen.getByText("nenhuma família")).not.toBeNull();
     expect(document.body.textContent).not.toMatch(/undefined|null/);
+  });
+
+  it("rótulos do dicionário: tipo de logradouro e tipo de imóvel", async () => {
+    renderWithProviders(<TerritoryTeam today={TODAY24} />);
+    expect(await screen.findByText("Rua das Flores, 120")).not.toBeNull();
+    expect(screen.getByText("Domicílio")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Abrir Rua das Flores, 120" }));
+    expect(await screen.findByText("José das Dores")).not.toBeNull();
+    expect(screen.getAllByText("Domicílio").length).toBe(2);
+  });
+
+  it("Novo domicílio: a ficha abre, salva, avisa e relê a lista uma vez", async () => {
+    renderWithProviders(<TerritoryTeam today={TODAY24} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Novo domicílio" }));
+    fireEvent.change(screen.getByLabelText("CEP"), { target: { value: "81020000" } });
+    fireEvent.change(screen.getByLabelText("Logradouro"), { target: { value: "das Flores" } });
+    fireEvent.change(screen.getByLabelText("Número"), { target: { value: "121" } });
+    fireEvent.change(screen.getByLabelText("Bairro"), { target: { value: "" } });
+    fireEvent.change(screen.getByLabelText("Bairro (texto)"), { target: { value: "Vila Verde" } });
+    fireEvent.change(screen.getByLabelText("Tipo de imóvel"), { target: { value: "2" } });
+    fireEvent.click(screen.getByRole("button", { name: "Salvar domicílio" }));
+    expect(await screen.findByText("Domicílio salvo. Nova versão enviada ao e-SUS.")).not.toBeNull();
+    expect(mocked(api.createHousehold).mock.calls[0][0].micro_area_id).toBe("ma1");
+    expect(screen.queryByLabelText("CEP")).toBeNull();
+    await waitFor(() => expect(api.listHouseholds).toHaveBeenCalledTimes(2));
+  });
+
+  it("detalhe: editar domicílio, nova família (moradores que não respondem por família) e editar família", async () => {
+    renderWithProviders(<TerritoryTeam today={TODAY24} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Abrir Rua das Flores, 120" }));
+    await screen.findByText("José das Dores");
+    fireEvent.click(screen.getByRole("button", { name: "Editar domicílio" }));
+    expect((screen.getByLabelText("Logradouro") as HTMLInputElement).value).toBe("das Flores");
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Nova família" }));
+    const options = Array.from((screen.getByLabelText("Responsável") as HTMLSelectElement).options).map((o) => o.textContent);
+    expect(options).toEqual([ "— escolha —", "José das Dores" ]);
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Editar família de Maria das Dores" }));
+    expect(screen.getByText("Responsável: Maria das Dores")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Salvar família" }));
+    expect(await screen.findByText("Família salva. Nova versão do domicílio enviada ao e-SUS.")).not.toBeNull();
+    expect(api.updateFamily).toHaveBeenCalledWith("fa1", { income_band: "3", members_count: 3, living_since: "2019-05", moved_out: false }, 2);
+    await waitFor(() => expect(api.getHousehold).toHaveBeenCalledTimes(2));
+  });
+
+  it("sem Nova família fora do tipo 01 ou com recusa; família que se mudou não se edita", async () => {
+    mocked(api.getHousehold).mockResolvedValue(household({ property_type: "2", living_conditions: undefined, families: [] }));
+    renderWithProviders(<TerritoryTeam today={TODAY24} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Abrir Rua das Flores, 120" }));
+    expect(await screen.findByRole("button", { name: "Editar domicílio" })).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Nova família" })).toBeNull();
+    cleanup();
+    mocked(api.getHousehold).mockResolvedValue(household({ refused: true, living_conditions: undefined, families: [] }));
+    renderWithProviders(<TerritoryTeam today={TODAY24} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Abrir Rua das Flores, 120" }));
+    expect(await screen.findByRole("button", { name: "Editar domicílio" })).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Nova família" })).toBeNull();
+    cleanup();
+    mocked(api.getHousehold).mockResolvedValue(household({ families: [ family({ moved_out: true }) ] }));
+    renderWithProviders(<TerritoryTeam today={TODAY24} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Abrir Rua das Flores, 120" }));
+    expect(await screen.findByText("mudou-se")).not.toBeNull();
+    expect(screen.queryByRole("button", { name: /Editar família/ })).toBeNull();
   });
 
   it("só as microáreas em que o profissional cadastra (a de outro ACS não aparece)", async () => {

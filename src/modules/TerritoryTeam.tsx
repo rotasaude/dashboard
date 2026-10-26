@@ -17,16 +17,16 @@ import { TerritoryGate } from "./territory/TerritoryGate";
 import { HouseholdList } from "./territory/HouseholdList";
 import { HouseholdDetail } from "./territory/HouseholdDetail";
 
-// `today` (padrão: o dia da cidade) fica para as fichas das Tasks 11–13; a navegação não depende do dia.
-export function TerritoryTeam(_props: { today?: string } = {}) {
+// `today` (padrão: o dia da cidade) vai para as fichas ("reside desde" não passa deste mês); a navegação não depende do dia.
+export function TerritoryTeam({ today }: { today?: string } = {}) {
   return (
     <TerritoryGate title="Território da equipe" sub="cadastro territorial · domicílios, famílias e moradores" allow={(r) => r.professional}>
-      {() => <TeamBody />}
+      {() => <TeamBody today={today} />}
     </TerritoryGate>
   );
 }
 
-function TeamBody() {
+function TeamBody({ today }: { today?: string }) {
   const context = useQuery({ queryKey: [ TERRITORY_CONTEXT_KEY ], queryFn: getTerritoryContext, ...STATIC_QUERY });
   const [ teamChoice, setTeamChoice ] = useState("");
   const [ areaChoice, setAreaChoice ] = useState("");
@@ -61,7 +61,7 @@ function TeamBody() {
           </label>
         </div>
       </Panel>
-      {openId && <HouseholdDetail key={openId} householdId={openId} onBack={() => setOpenId(null)} />}
+      {openId && <HouseholdDetail key={openId} householdId={openId} today={today} onBack={() => setOpenId(null)} />}
       <Panel title="Domicílios" sub={`microárea ${area.code} · do último salvo ao mais antigo`}>
         <div style={{ padding: 16 }}>
           <HouseholdList key={area.id} microAreaId={area.id} onOpen={setOpenId} />
