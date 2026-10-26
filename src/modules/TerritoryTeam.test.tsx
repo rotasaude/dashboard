@@ -12,7 +12,7 @@ vi.mock("../lib/api", async (importOriginal) => {
 
 import * as api from "../lib/api";
 import { TerritoryTeam } from "./TerritoryTeam";
-import { IDENTITY_REVIEW_TEXT, TERRITORY_DISABLED, TERRITORY_NO_ROLE } from "../lib/territoryRegistry";
+import { IDENTITY_REVIEW_TEXT, STALE_TEXT, TERRITORY_DISABLED, TERRITORY_NO_ROLE } from "../lib/territoryRegistry";
 import { renderWithProviders } from "../test/campaignFixtures";
 import {
   TEAM_EAP, TODAY24, family, household, microArea, profilelessRegistration, registration, territoryContext, territoryUser
@@ -278,6 +278,65 @@ describe("TerritoryTeam", () => {
     expect(await screen.findByText("Saída registrada. Nova versão enviada ao e-SUS.")).not.toBeNull();
     expect(screen.queryByRole("button", { name: "Salvar cadastro" })).toBeNull();
     expect(api.exitRegistration).toHaveBeenCalledWith("rg2", { reason: "moved", on: "2026-10-20" });
+  });
+
+  it("Inativar domicílio: só sem família morando; a confirmação explica; PATCH com status e o domicílio como está", async () => {
+    const moved = household({ families: [ family({ moved_out: true }) ] });
+    mocked(api.getHousehold).mockResolvedValue(moved);
+    mocked(api.updateHousehold).mockResolvedValue({ ...moved, status: "inactive", version: 3 });
+    renderWithProviders(<TerritoryTeam today={TODAY24} />);
+    await openHousehold();
+    fireEvent.click(screen.getByRole("button", { name: "Inativar domicílio" }));
+    const confirm = screen.getByRole("group", { name: "Inativar domicílio" });
+    expect(confirm.textContent).toMatch(/ficha domiciliar vai ao e-SUS como inativa/);
+    fireEvent.click(within(confirm).getByRole("button", { name: "Confirmar inativação" }));
+    expect(await screen.findByText("Domicílio inativado. Nova versão enviada ao e-SUS.")).not.toBeNull();
+    const { micro_area, address, property_type, living_conditions, contact_phone, refused } = moved;
+    expect(api.updateHousehold).toHaveBeenCalledWith("hh1", { micro_area_id: micro_area.id, address, property_type, living_conditions, contact_phone,
+      refused, status: "inactive" }, 2);
+    // A resposta (inativo) entra na tela: sem morador nem família novos; Reativar no lugar.
+    expect(screen.getByText("inativo")).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Adicionar morador" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Nova família" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Reativar domicílio" })).not.toBeNull();
+    expect(api.getHousehold).toHaveBeenCalledTimes(1);
+  });
+
+  it("com família morando não há Inativar; Reativar volta como ativo; Cancelar não envia", async () => {
+    renderWithProviders(<TerritoryTeam today={TODAY24} />);
+    await openHousehold();
+    expect(screen.queryByRole("button", { name: "Inativar domicílio" })).toBeNull();
+    cleanup();
+    const inactive = household({ status: "inactive", families: [] });
+    mocked(api.getHousehold).mockResolvedValue(inactive);
+    mocked(api.updateHousehold).mockResolvedValue({ ...inactive, status: "active", version: 3 });
+    renderWithProviders(<TerritoryTeam today={TODAY24} />);
+    await openHousehold();
+    fireEvent.click(screen.getByRole("button", { name: "Reativar domicílio" }));
+    fireEvent.click(within(screen.getByRole("group", { name: "Reativar domicílio" })).getByRole("button", { name: "Cancelar" }));
+    expect(api.updateHousehold).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Reativar domicílio" }));
+    const confirm = screen.getByRole("group", { name: "Reativar domicílio" });
+    expect(confirm.textContent).toMatch(/volta ao e-SUS como ativa/);
+    fireEvent.click(within(confirm).getByRole("button", { name: "Confirmar reativação" }));
+    expect(await screen.findByText("Domicílio reativado. Nova versão enviada ao e-SUS.")).not.toBeNull();
+    expect(mocked(api.updateHousehold).mock.calls[0][1]).toEqual(expect.objectContaining({ status: "active" }));
+    expect(screen.getByRole("button", { name: "Adicionar morador" })).not.toBeNull();
+  });
+
+  it("inativar recusado pelo api (família ainda morando, 409 de versão): frase; versão velha pede Recarregar", async () => {
+    mocked(api.getHousehold).mockResolvedValue(household({ families: [] }));
+    mocked(api.updateHousehold).mockRejectedValueOnce(new api.ApiError(422, { error: "invalid_household", path: "status" }, "422"));
+    renderWithProviders(<TerritoryTeam today={TODAY24} />);
+    await openHousehold();
+    fireEvent.click(screen.getByRole("button", { name: "Inativar domicílio" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar inativação" }));
+    expect(await screen.findByText("o domicílio ainda tem famílias morando — registre a mudança delas antes de inativar")).not.toBeNull();
+    mocked(api.updateHousehold).mockRejectedValueOnce(new api.ApiError(409, { error: "stale_version" }, "409"));
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar inativação" }));
+    expect(await screen.findByText(STALE_TEXT)).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Recarregar" }));
+    await waitFor(() => expect(api.getHousehold).toHaveBeenCalledTimes(2));
   });
 
   it("domicílio inativo não recebe morador novo", async () => {

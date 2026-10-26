@@ -74,6 +74,15 @@ function addressBody(a: AddressDraft): HouseholdAddress {
 const addressBlank = (a: AddressDraft) =>
   !a.no_number && [ a.zip, a.street, a.number, a.complement, a.neighborhood_id, a.district, a.reference ].every((v) => !v.trim());
 
+// O domicílio como está gravado, no corpo do PATCH (inativar/reativar) e para
+// conferir as regras dele com uma família no lugar.
+export function householdAsInput(h: Household): HouseholdInput {
+  return {
+    micro_area_id: h.micro_area.id, address: h.address.street ? (h.address as HouseholdAddress) : null, property_type: h.property_type,
+    living_conditions: h.living_conditions ?? null, contact_phone: h.contact_phone, refused: h.refused
+  };
+}
+
 export function HouseholdForm({ microAreaId, initial, onSaved, onCancel }: {
   microAreaId: string; initial?: Household; onSaved(h: Household): void; onCancel(): void;
 }) {

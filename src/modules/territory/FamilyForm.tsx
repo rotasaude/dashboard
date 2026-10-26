@@ -10,13 +10,14 @@
 // corrigir o domicílio. Sem rascunho; 409 stale_version como no domicílio.
 import { useState, type FormEvent } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { addFamily, errorCode, updateFamily, type Family, type FamilyInput, type Household, type HouseholdAddress } from "../../lib/api";
+import { addFamily, errorCode, updateFamily, type Family, type FamilyInput, type Household } from "../../lib/api";
 import { todayInCity } from "../../lib/campaigns";
 import { DOMAINS, familyProblem, householdProblem } from "../../lib/territoryDictionaries";
 import { HOUSEHOLDS_KEY, HOUSEHOLD_KEY, NO_NAME, RESIDENTS_KEY, STALE_TEXT, errorPath, isStale, territoryError } from "../../lib/territoryRegistry";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { alert, checkLabel, fieldLabel, form, muted, row } from "../exams/styles";
 import { useFieldFocus } from "./fieldFocus";
+import { householdAsInput } from "./HouseholdForm";
 
 export interface FamilyCandidate { patient_id: string; display_name: string | null }
 
@@ -28,14 +29,6 @@ const HOUSEHOLD_PATH_TEXT: Record<string, string> = {
   families: "o domicílio não aceita esta família (recusa, tipo de imóvel ou responsável repetido) — confira o domicílio"
 };
 const FAMILY_FIELDS = [ "responsible.patient_id", "income_band", "members_count", "living_since", "moved_out" ];
-
-// O domicílio como está gravado, para conferir as regras dele com a família no lugar.
-function householdAsInput(h: Household) {
-  return {
-    micro_area_id: h.micro_area.id, address: h.address.street ? (h.address as HouseholdAddress) : null, property_type: h.property_type,
-    living_conditions: h.living_conditions ?? null, contact_phone: h.contact_phone, refused: h.refused
-  };
-}
 
 export function FamilyForm({ household, initial, candidates, onSaved, onCancel, today = todayInCity() }: {
   household: Household; initial?: Family; candidates: FamilyCandidate[]; onSaved(h: Household): void; onCancel(): void; today?: string;

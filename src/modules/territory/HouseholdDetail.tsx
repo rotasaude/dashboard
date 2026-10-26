@@ -8,6 +8,8 @@
 // por família; "Editar família" só da família que não se mudou (a mudança é
 // definitiva). Salvar usa a resposta (o domicílio inteiro) sem reler o
 // domicílio; a família relê os moradores (o responsável muda, L28).
+// "Inativar domicílio" só sem família morando; inativo, "Reativar" — e nem
+// morador nem família novos.
 // Ficha individual (Task 12): "Adicionar morador" (domicílio ativo) escolhe a
 // família (a única morando já vem escolhida; "sem família" vale), acha a
 // pessoa (PersonStart) e abre a ficha com o domicílio; "Abrir cadastro" de um
@@ -29,12 +31,13 @@ import { alert, box, fieldLabel, grid, list, muted, okText, row, stack } from ".
 import { HOUSEHOLD_SAVED, addressLine, householdStatus } from "./HouseholdList";
 import { HouseholdForm } from "./HouseholdForm";
 import { FamilyForm } from "./FamilyForm";
+import { HouseholdStatusForm, canInactivate } from "./HouseholdStatusForm";
 import { PersonStart, type PersonChoice } from "./PersonStart";
 import { REGISTRATION_EXITED, REGISTRATION_SAVED, RegistrationForm } from "./RegistrationForm";
 
 export const FAMILY_SAVED = "Família salva. Nova versão do domicílio enviada ao e-SUS.";
 type Editing =
-  | { kind: "household" } | { kind: "newFamily" } | { kind: "family"; family: Family }
+  | { kind: "household" } | { kind: "status" } | { kind: "newFamily" } | { kind: "family"; family: Family }
   | { kind: "resident"; familyId: string; choice: PersonChoice | null } | { kind: "registration"; id: string; name: string } | null;
 
 export function familyLine(f: Family): string {
@@ -85,7 +88,7 @@ export function HouseholdDetail({ householdId, onBack, today }: { householdId: s
             ) : !editing && (
               <div style={row}>
                 <button type="button" style={secondaryButtonStyle} onClick={() => open({ kind: "household" })}>Editar domicílio</button>
-                {allowsFamilies(h.property_type) && !h.refused && (
+                {allowsFamilies(h.property_type) && !h.refused && h.status === "active" && (
                   <button type="button" style={secondaryButtonStyle} onClick={() => open({ kind: "newFamily" })}>Nova família</button>
                 )}
                 {h.status === "active" && (
@@ -94,7 +97,15 @@ export function HouseholdDetail({ householdId, onBack, today }: { householdId: s
                     Adicionar morador
                   </button>
                 )}
+                {(canInactivate(h) || h.status === "inactive") && (
+                  <button type="button" style={secondaryButtonStyle} onClick={() => open({ kind: "status" })}>
+                    {h.status === "active" ? "Inativar domicílio" : "Reativar domicílio"}
+                  </button>
+                )}
               </div>
+            )}
+            {editing?.kind === "status" && (
+              <HouseholdStatusForm household={h} onCancel={() => setEditing(null)} onDone={(text) => saved(text)()} />
             )}
             {editing?.kind === "resident" && (
               <div style={box}>
