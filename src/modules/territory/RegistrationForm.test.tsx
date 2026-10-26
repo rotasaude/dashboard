@@ -124,17 +124,19 @@ describe("RegistrationForm", () => {
     expect(Object.keys(body).filter((k) => [ "new_patient", "patient", "cpf", "cns", "citizen_id", "team_id" ].includes(k))).toEqual([]);
   });
 
-  it("duplicado escolhido: o digitado na busca (com a mãe) vai em `patient`; o que fica em branco não vai", async () => {
+  it("duplicado escolhido: a mãe digitada na busca vai em `patient`; nome e nascimento não (já casaram); o que fica em branco não vai", async () => {
     renderWithProviders(<RegistrationForm today={TODAY24} household={HOUSE} choice={{ kind: "patient", patientId: "pa7", registrationId: null,
-      displayName: "José das Dores", hasCpf: false, identity: { full_name: "José das Dores", birth_date: "2026-09-30", mother_name: "Maria das Dores" } }}
+      displayName: "José das Dores", hasCpf: false, identity: { mother_name: "Maria das Dores" } }}
       onSaved={vi.fn()} onCancel={vi.fn()} />);
     expect((screen.getByLabelText("Nome da mãe") as HTMLInputElement).value).toBe("Maria das Dores");
+    expect((screen.getByLabelText("Nome completo") as HTMLInputElement).value).toBe("");
+    expect((screen.getByLabelText("Data de nascimento") as HTMLInputElement).value).toBe("");
     expect(screen.getByLabelText("Informar CPF")).not.toBeNull();
     pick("Raça/cor", "03");
     fillIdentification();
     save();
     await waitFor(() => expect(api.createRegistration).toHaveBeenCalledTimes(1));
-    expect(created().patient).toEqual({ full_name: "José das Dores", birth_date: "2026-09-30", mother_name: "Maria das Dores" });
+    expect(created().patient).toEqual({ mother_name: "Maria das Dores" });
     expect(created()).not.toHaveProperty("cpf");
     expect(created()).not.toHaveProperty("new_patient");
   });

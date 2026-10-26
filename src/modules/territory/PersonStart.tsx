@@ -18,8 +18,9 @@ import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } fr
 import { alert, checkLabel, fieldLabel, fieldset, form, legend, list, muted, row } from "../exams/styles";
 
 // A pessoa escolhida. `displayName`/`hasCpf`: o que a busca mostrou (a ficha
-// não relê o paciente); `identity` do paciente: o digitado na busca de
-// duplicados (completa o que faltar no paciente). `new`: a identidade digitada
+// não relê o paciente); `identity` do paciente: só a mãe digitada na busca de
+// duplicados (nome e nascimento já casaram com o candidato — mandá-los
+// regravaria o nome em acento ou caixa). `new`: a identidade digitada
 // e, com CPF, o CPF (só dígitos).
 export type PersonChoice =
   | { kind: "patient"; patientId: string; registrationId: string | null; displayName?: string | null; hasCpf?: boolean; identity?: PatientIdentity }
@@ -180,7 +181,7 @@ function WithoutCpf({ today, onChoose }: { today: string; onChoose(choice: Perso
                   <span id={`candidate-${c.patient_id}`}>{candidateLine(c)}</span>
                   <button type="button" style={secondaryButtonStyle} aria-describedby={`candidate-${c.patient_id}`}
                     onClick={() => onChoose({ kind: "patient", patientId: c.patient_id, registrationId: null, displayName: c.display_name, hasCpf: c.has_cpf,
-                      identity: { ...current.query } })}>
+                      identity: current.query.mother_name ? { mother_name: current.query.mother_name } : {} })}>
                     É esta pessoa
                   </button>
                 </li>
