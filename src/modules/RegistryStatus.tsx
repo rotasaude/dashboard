@@ -35,6 +35,7 @@ import { alert, fieldLabel, muted, okText, row, stack } from "./exams/styles";
 import { TerritoryGate } from "./territory/TerritoryGate";
 import { REGISTRATION_EXITED, REGISTRATION_SAVED, RegistrationForm } from "./territory/RegistrationForm";
 import type { PersonChoice } from "./territory/PersonStart";
+import { Reveal } from "./territory/Reveal";
 
 export const MISSING_NEEDS_TEAM = "Com uma microárea escolhida, a lista e os números são só de quem tem cadastro nela — quem ainda não tem cadastro não tem microárea.";
 
@@ -186,13 +187,15 @@ function StatusBody({ today }: { today?: string }) {
       </KpiGrid>
       {notice && <p role="status" style={okText}>{notice}</p>}
       {open && (
-        <Panel title="Cadastro individual" sub={open.name}>
-          <div style={{ padding: 16 }}>
-            <RegistrationForm key={open.key} today={today} teamId={open.teamId} registrationId={open.registrationId} choice={open.choice}
-              onCancel={() => setOpen(null)} onSaved={() => { setOpen(null); setNotice(REGISTRATION_SAVED); }}
-              onExited={() => { setOpen(null); setNotice(REGISTRATION_EXITED); }} />
-          </div>
-        </Panel>
+        <Reveal key={open.key}>
+          <Panel title="Cadastro individual" sub={open.name}>
+            <div style={{ padding: 16 }}>
+              <RegistrationForm today={today} teamId={open.teamId} registrationId={open.registrationId} choice={open.choice}
+                onCancel={() => setOpen(null)} onSaved={() => { setOpen(null); setNotice(REGISTRATION_SAVED); }}
+                onExited={() => { setOpen(null); setNotice(REGISTRATION_EXITED); }} />
+            </div>
+          </Panel>
+        </Reveal>
       )}
       <SegmentedControl<Tab> options={tabs} value={tab} onChange={setTabChoice} />
       <Panel title="Pessoas" sub={TAB_SUB[tab]}>

@@ -87,6 +87,35 @@ describe("TerritoryTeam", () => {
     expect(within(residents).getAllByText(IDENTITY_REVIEW_TEXT).length).toBe(1);
   });
 
+  it("peças abertas fora da tela (celular): o detalhe e cada bloco de edição rolam até o título e o focam", async () => {
+    const scroll = vi.fn();
+    const original = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = scroll;
+    try {
+      renderWithProviders(<TerritoryTeam today={TODAY24} />);
+      await openHousehold();
+      const active = () => document.activeElement as HTMLElement;
+      expect(active().tagName).toBe("H2");
+      expect(active().textContent).toBe("Rua das Flores, 120");
+      expect(active().tabIndex).toBe(-1);
+      expect(scroll).toHaveBeenCalledTimes(1);
+      fireEvent.click(screen.getByRole("button", { name: "Editar domicílio" }));
+      expect(active().textContent).toBe("Editar domicílio");
+      fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+      fireEvent.click(screen.getByRole("button", { name: "Abrir cadastro de José das Dores" }));
+      expect(active().textContent).toBe("Cadastro de José das Dores");
+      fireEvent.click(await screen.findByRole("button", { name: "Cancelar" }));
+      fireEvent.click(screen.getByRole("button", { name: "Nova família" }));
+      expect(active().textContent).toBe("Nova família");
+      fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+      fireEvent.click(screen.getByRole("button", { name: "Adicionar morador" }));
+      expect(active().textContent).toBe("Adicionar morador");
+      expect(scroll).toHaveBeenCalledTimes(5);
+    } finally {
+      Element.prototype.scrollIntoView = original;
+    }
+  });
+
   it("família de uma pessoa no singular; mudou-se vira marca", async () => {
     mocked(api.getHousehold).mockResolvedValue(household({ families: [
       family({ members_count: 1, moved_out: true }),

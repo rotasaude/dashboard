@@ -16,6 +16,7 @@ import { alert, fieldLabel, muted, row, stack } from "./exams/styles";
 import { TerritoryGate } from "./territory/TerritoryGate";
 import { HouseholdList } from "./territory/HouseholdList";
 import { HouseholdDetail } from "./territory/HouseholdDetail";
+import { Reveal } from "./territory/Reveal";
 
 // `today` (padrão: o dia da cidade) vai para as fichas ("reside desde" não passa deste mês); a navegação não depende do dia.
 export function TerritoryTeam({ today }: { today?: string } = {}) {
@@ -61,7 +62,11 @@ function TeamBody({ today }: { today?: string }) {
           </label>
         </div>
       </Panel>
-      {openId && <HouseholdDetail key={openId} householdId={openId} today={today} onBack={() => setOpenId(null)} />}
+      {openId && (
+        <Reveal key={openId}>
+          <HouseholdDetail householdId={openId} today={today} onBack={() => setOpenId(null)} />
+        </Reveal>
+      )}
       <Panel title="Domicílios" sub={`microárea ${area.code} · do último salvo ao mais antigo`}>
         <div style={{ padding: 16 }}>
           <HouseholdList key={area.id} microAreaId={area.id} onOpen={setOpenId} />

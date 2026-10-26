@@ -32,6 +32,7 @@ import { HOUSEHOLD_SAVED, addressLine, householdStatus } from "./HouseholdList";
 import { HouseholdForm } from "./HouseholdForm";
 import { FamilyForm } from "./FamilyForm";
 import { HouseholdStatusForm, canInactivate } from "./HouseholdStatusForm";
+import { Reveal } from "./Reveal";
 import { PersonStart, type PersonChoice } from "./PersonStart";
 import { REGISTRATION_EXITED, REGISTRATION_SAVED, RegistrationForm } from "./RegistrationForm";
 
@@ -81,10 +82,10 @@ export function HouseholdDetail({ householdId, onBack, today }: { householdId: s
             </div>
             {notice && <p role="status" style={okText}>{notice}</p>}
             {editing?.kind === "household" ? (
-              <div style={box}>
+              <Reveal style={box}>
                 <strong>Editar domicílio</strong>
                 <HouseholdForm microAreaId={h.micro_area.id} initial={h} onCancel={() => setEditing(null)} onSaved={saved(HOUSEHOLD_SAVED)} />
-              </div>
+              </Reveal>
             ) : !editing && (
               <div style={row}>
                 <button type="button" style={secondaryButtonStyle} onClick={() => open({ kind: "household" })}>Editar domicílio</button>
@@ -105,10 +106,12 @@ export function HouseholdDetail({ householdId, onBack, today }: { householdId: s
               </div>
             )}
             {editing?.kind === "status" && (
-              <HouseholdStatusForm household={h} onCancel={() => setEditing(null)} onDone={(text) => saved(text)()} />
+              <Reveal>
+                <HouseholdStatusForm household={h} onCancel={() => setEditing(null)} onDone={(text) => saved(text)()} />
+              </Reveal>
             )}
             {editing?.kind === "resident" && (
-              <div style={box}>
+              <Reveal style={box}>
                 <strong>Adicionar morador</strong>
                 {living.length > 0 && (
                   <label style={fieldLabel}>
@@ -126,21 +129,21 @@ export function HouseholdDetail({ householdId, onBack, today }: { householdId: s
                 ) : (
                   <PersonStart today={today} onCancel={() => setEditing(null)} onChoose={(choice) => setEditing({ ...editing, choice })} />
                 )}
-              </div>
+              </Reveal>
             )}
             {editing?.kind === "registration" && (
-              <div style={box}>
+              <Reveal key={editing.id} style={box}>
                 <strong>{`Cadastro de ${editing.name}`}</strong>
                 <RegistrationForm today={today} registrationId={editing.id} onCancel={() => setEditing(null)} onSaved={saved(REGISTRATION_SAVED)}
                   onExited={saved(REGISTRATION_EXITED)} />
-              </div>
+              </Reveal>
             )}
             {(editing?.kind === "newFamily" || editing?.kind === "family") && (
-              <div style={box}>
+              <Reveal key={editing.kind === "family" ? editing.family.id : "new"} style={box}>
                 <strong>{editing.kind === "family" ? "Editar família" : "Nova família"}</strong>
                 <FamilyForm household={h} initial={editing.kind === "family" ? editing.family : undefined} candidates={candidates}
                   today={today} onCancel={() => setEditing(null)} onSaved={saved(FAMILY_SAVED)} />
-              </div>
+              </Reveal>
             )}
             <section aria-label="Famílias" style={stack}>
               <strong>Famílias</strong>

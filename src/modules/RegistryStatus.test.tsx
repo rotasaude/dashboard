@@ -182,6 +182,22 @@ describe("RegistryStatus", () => {
     await waitFor(() => expect(api.listRegistryStatus).toHaveBeenCalledTimes(2));
   });
 
+  it("a ficha aberta fora da tela (celular): rola até o título e o foca", async () => {
+    const scroll = vi.fn();
+    const original = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = scroll;
+    try {
+      renderWithProviders(<RegistryStatus today={TODAY24} />);
+      fireEvent.click(await screen.findByRole("button", { name: "Atualizar Joaquim Ribeiro" }));
+      const active = document.activeElement as HTMLElement;
+      expect(active.tagName).toBe("H2");
+      expect(active.textContent).toBe("Cadastro individual");
+      expect(scroll).toHaveBeenCalledTimes(1);
+    } finally {
+      Element.prototype.scrollIntoView = original;
+    }
+  });
+
   it("Carregar mais segue o next_before", async () => {
     mocked(api.listRegistryStatus)
       .mockResolvedValueOnce({ people: [ personRow() ], next_before: "patient:00000000-0000-0000-0000-0000000000a3" })
