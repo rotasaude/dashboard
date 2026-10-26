@@ -5,10 +5,11 @@
 // A lista é NOMINAL e GRAVA trilha (uma por pessoa mostrada): lida ao abrir,
 // ao trocar de aba ou de filtro e em "Carregar mais", nunca sozinha
 // (NOMINAL_QUERY). Só a contagem (/count, sem trilha) relê por minuto.
-// Escopo (preflight C17/C18): o ACS só lê a microárea dele (sem ela o api
+// Escopo (preflight C17/C18; L27): o ACS só lê a microárea dele (sem ela o api
 // responde 403, na lista e na contagem); "todas as microáreas" só aparece
-// quando o profissional grava em todas (enfermeiro/médico) e há pelo menos
-// duas — com uma só, ela pode ser a do ACS. Com microárea escolhida a
+// quando o api diz que o profissional lê a equipe toda (`reads_whole_team`,
+// a regra do próprio registry_status), mesmo com uma microárea só; o ACS
+// de todas as microáreas continua preso à primeira. Com microárea escolhida a
 // população é só quem tem cadastro nela: "sem cadastro" vem sempre vazio,
 // então a aba sai e a tela explica.
 // "Cadastrar"/"Atualizar" abrem a ficha individual nesta tela (Task 12):
@@ -88,7 +89,7 @@ function StatusBody({ today }: { today?: string }) {
 
   const teams = (context.data?.teams ?? []).map((t) => {
     const areas = t.micro_areas.filter((m) => m.can_register);
-    return { ...t, areas, teamWide: areas.length >= 2 && areas.length === t.micro_areas.length };
+    return { ...t, areas, teamWide: t.reads_whole_team === true };
   }).filter((t) => t.areas.length > 0);
   const team = teams.find((t) => t.id === teamChoice) ?? teams[0];
   const teamId = team?.id ?? "";

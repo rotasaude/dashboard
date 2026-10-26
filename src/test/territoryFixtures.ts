@@ -25,9 +25,9 @@ export function adminTeam(over: Partial<TerritoryAdminTeam> = {}): TerritoryAdmi
     acs_candidates: [ { ...ACS_ANA, has_cns: true }, { professional_id: "pr2", name: "Bruno Lima", has_cns: false } ], ...over };
 }
 
-// A microárea 02 é de outro ACS (can_register false para a Ana).
+// A microárea 02 é de outro ACS (can_register false para a Ana); a Ana não lê a equipe toda (L27).
 export function territoryContext(over: Partial<TerritoryContext> = {}): TerritoryContext {
-  return { teams: [ { ...TEAM_ESF, unit: { id: "u1", name: "UBS Vila Verde" },
+  return { teams: [ { ...TEAM_ESF, unit: { id: "u1", name: "UBS Vila Verde" }, reads_whole_team: false,
     micro_areas: [ { ...microArea(), can_register: true },
       { ...microArea({ id: "ma2", code: "02", name: "Vila Verde de baixo", acs: { professional_id: "pr3", name: "Carla Mendes" } }), can_register: false } ]
   } ], ...over };

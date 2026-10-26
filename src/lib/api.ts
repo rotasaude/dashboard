@@ -4015,6 +4015,8 @@ export interface TerritoryAdminTeam extends TerritoryTeamRef {
 // grava as duas fichas nelas (o ACS só na dele).
 export interface TerritoryTeam extends TerritoryTeamRef {
   unit: { id: string; name: string };
+  // L27: lê a validade da equipe toda (sem microárea) — a mesma regra do registry_status.
+  reads_whole_team: boolean;
   micro_areas: (MicroArea & { can_register: boolean })[];
 }
 export interface TerritoryContext { teams: TerritoryTeam[] }

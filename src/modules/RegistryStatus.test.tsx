@@ -17,10 +17,10 @@ import { renderWithProviders } from "../test/campaignFixtures";
 import { TODAY24, personRow, registration, territoryContext, territoryUser } from "../test/territoryFixtures";
 
 const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
-// Enfermeiro/médico: grava em todas as microáreas da equipe → pode ver a equipe toda.
+// Enfermeiro/médico: grava em todas as microáreas da equipe e o api diz que lê a equipe toda (L27).
 function nurseContext(): TerritoryContext {
   const base = territoryContext();
-  return { teams: base.teams.map((t) => ({ ...t, micro_areas: t.micro_areas.map((m) => ({ ...m, can_register: true })) })) };
+  return { teams: base.teams.map((t) => ({ ...t, reads_whole_team: true, micro_areas: t.micro_areas.map((m) => ({ ...m, can_register: true })) })) };
 }
 const MISSING = personRow({ status: "missing", registered_at: null, registration_id: null, patient_id: null, citizen_id: "ci4",
   display_name: null, micro_area_code: null });
@@ -97,13 +97,29 @@ describe("RegistryStatus", () => {
     expect(mocked(api.countRegistryStatus).mock.calls.every((c) => c[1] === "ma1")).toBe(true);
   });
 
-  it("equipe com uma microárea só: sem 'todas' (pode ser a do ACS)", async () => {
+  it("enfermeiro em equipe com uma microárea só: o api diz que lê a equipe toda → 'todas' e 'Sem cadastro' (L27)", async () => {
     const base = nurseContext();
     mocked(api.getTerritoryContext).mockResolvedValue({ teams: base.teams.map((t) => ({ ...t, micro_areas: t.micro_areas.slice(0, 1) })) });
     renderWithProviders(<RegistryStatus today={TODAY24} />);
+    expect(await screen.findByRole("tab", { name: "Sem cadastro (44)" })).not.toBeNull();
+    const select = screen.getByLabelText("Microárea") as HTMLSelectElement;
+    expect(select.value).toBe("");
+    expect(Array.from(select.options).map((o) => o.value)).toEqual([ "", "ma1" ]);
+    expect(api.countRegistryStatus).toHaveBeenCalledWith("tm1", undefined);
+  });
+
+  it("ACS responsável por todas as microáreas da equipe: o api diz que não lê a equipe toda → presa à própria (L27)", async () => {
+    const base = territoryContext();
+    mocked(api.getTerritoryContext).mockResolvedValue({ teams: base.teams.map((t) => ({ ...t, reads_whole_team: false,
+      micro_areas: t.micro_areas.map((m) => ({ ...m, can_register: true })) })) });
+    renderWithProviders(<RegistryStatus today={TODAY24} />);
     expect(await screen.findByText("Joaquim Ribeiro")).not.toBeNull();
-    expect(Array.from((screen.getByLabelText("Microárea") as HTMLSelectElement).options).map((o) => o.value)).toEqual([ "ma1" ]);
-    expect(api.countRegistryStatus).toHaveBeenCalledWith("tm1", "ma1");
+    const select = screen.getByLabelText("Microárea") as HTMLSelectElement;
+    expect(select.value).toBe("ma1");
+    expect(Array.from(select.options).map((o) => o.value)).toEqual([ "ma1", "ma2" ]);
+    expect(screen.queryByRole("tab", { name: /Sem cadastro/ })).toBeNull();
+    expect(statuses().every((q) => q.microAreaId === "ma1")).toBe(true);
+    expect(mocked(api.countRegistryStatus).mock.calls.every((c) => c[1] === "ma1")).toBe(true);
   });
 
   it("equipe sem nome no CNES: 'equipe sem nome', nunca 'null'", async () => {
