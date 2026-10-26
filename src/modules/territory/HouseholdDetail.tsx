@@ -15,7 +15,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getHousehold, listRegistrations, type Family, type Registration } from "../../lib/api";
 import {
-  HOUSEHOLD_KEY, NOMINAL_QUERY, RESIDENTS_KEY, fmtDay, registryStatusLabel, registryStatusTone, territoryError
+  HOUSEHOLD_KEY, NOMINAL_QUERY, NO_NAME, RESIDENTS_KEY, fmtDay, registryStatusLabel, registryStatusTone, territoryError
 } from "../../lib/territoryRegistry";
 import { patientDocument } from "../../lib/patientDocument";
 import { Panel } from "../../components/Panel";
@@ -31,14 +31,13 @@ import { FamilyForm } from "./FamilyForm";
 import { PersonStart, type PersonChoice } from "./PersonStart";
 import { REGISTRATION_EXITED, REGISTRATION_SAVED, RegistrationForm } from "./RegistrationForm";
 
-const NO_NAME = "sem nome no cadastro";
 export const FAMILY_SAVED = "Família salva. Nova versão do domicílio enviada ao e-SUS.";
 type Editing =
   | { kind: "household" } | { kind: "newFamily" } | { kind: "family"; family: Family }
   | { kind: "resident"; familyId: string; choice: PersonChoice | null } | { kind: "registration"; id: string; name: string } | null;
 
 export function familyLine(f: Family): string {
-  const name = f.responsible.display_name ?? `pessoa ${NO_NAME}`;
+  const name = f.responsible.display_name ?? NO_NAME;
   if (f.members_count === null) return `Responsável: ${name}`;
   return `Responsável: ${name} · ${f.members_count} ${f.members_count === 1 ? "pessoa" : "pessoas"}`;
 }
@@ -57,7 +56,7 @@ export function HouseholdDetail({ householdId, onBack, today }: { householdId: s
   const responsibles = new Set((h?.families ?? []).filter((f) => !f.moved_out).map((f) => f.responsible.patient_id));
   const candidates = (residents.data ?? []).filter((r) => !responsibles.has(r.patient.id))
     .map((r) => ({ patient_id: r.patient.id, display_name: r.patient.display_name }));
-  const familyName = (f: Family) => f.responsible.display_name ?? `pessoa ${NO_NAME}`;
+  const familyName = (f: Family) => f.responsible.display_name ?? NO_NAME;
   const living = (h?.families ?? []).filter((f) => !f.moved_out);
   const residentName = (r: Registration) => r.patient.display_name ?? NO_NAME;
 

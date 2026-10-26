@@ -3997,7 +3997,8 @@ export type PatientSex = "male" | "female";
 export type CodedValue = number | number[] | boolean | string | null | CodedSection;
 export type CodedSection = { [key: string]: CodedValue };
 
-export interface TerritoryTeamRef { id: string; ine: string; name: string }
+// O nome da equipe pode faltar no CNES (coluna aceita nulo): a tela usa teamName.
+export interface TerritoryTeamRef { id: string; ine: string; name: string | null }
 export interface MicroArea {
   id: string; team: TerritoryTeamRef; code: string; name: string;
   acs: { professional_id: string; name: string } | null; active: boolean;

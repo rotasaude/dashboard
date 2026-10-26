@@ -33,7 +33,7 @@ import {
 } from "../../lib/territoryDictionaries";
 import { FIELD_LABELS, sectionFieldLabel } from "../../lib/territoryLabels";
 import {
-  IDENTITY_REVIEW_TEXT, NOMINAL_QUERY, REGISTRATION_KEY, REGISTRY_COUNT_KEY, REGISTRY_STATUS_KEY, RESIDENTS_KEY, STALE_TEXT, errorPath, fmtDay,
+  IDENTITY_REVIEW_TEXT, NOMINAL_QUERY, NO_NAME, REGISTRATION_KEY, REGISTRY_COUNT_KEY, REGISTRY_STATUS_KEY, RESIDENTS_KEY, STALE_TEXT, errorPath, fmtDay,
   isStale, territoryError
 } from "../../lib/territoryRegistry";
 import { Tag } from "../../components/Tag";
@@ -388,7 +388,7 @@ function FormBody({ subject, identity: given, today, household, teamId, onSaved,
           <>
             {fill && (
               <>
-                <div style={grid}><KeyValue k="Pessoa" v={subject.displayName ?? "pessoa sem nome no cadastro"} mono={false} /></div>
+                <div style={grid}><KeyValue k="Pessoa" v={subject.displayName ?? NO_NAME} mono={false} /></div>
                 <p style={muted}>{FILL_TEXT}</p>
               </>
             )}
@@ -425,7 +425,7 @@ function FormBody({ subject, identity: given, today, household, teamId, onSaved,
                   <KeyValue k="Documento" v={patientDocument(r.patient).v} />
                 </>
               ) : (
-                <KeyValue k="Pessoa" v={(subject.kind === "citizen" ? subject.displayName : null) ?? "pessoa sem nome no cadastro"} mono={false} />
+                <KeyValue k="Pessoa" v={(subject.kind === "citizen" ? subject.displayName : null) ?? NO_NAME} mono={false} />
               )}
               <span><Tag tone="ok" mono={false}>{LOCKED_TEXT}</Tag></span>
             </div>

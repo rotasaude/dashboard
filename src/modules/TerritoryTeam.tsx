@@ -8,7 +8,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getTerritoryContext } from "../lib/api";
-import { STATIC_QUERY, TERRITORY_CONTEXT_KEY, territoryError } from "../lib/territoryRegistry";
+import { STATIC_QUERY, TERRITORY_CONTEXT_KEY, teamName, territoryError } from "../lib/territoryRegistry";
 import { Panel } from "../components/Panel";
 import { EmptyState } from "../components/EmptyState";
 import { inputStyle } from "../components/formStyles";
@@ -49,7 +49,7 @@ function TeamBody({ today }: { today?: string }) {
             <label style={fieldLabel}>
               Equipe
               <select value={team.id} style={inputStyle} onChange={(e) => { setOpenId(null); setAreaChoice(""); setTeamChoice(e.target.value); }}>
-                {teams.map((t) => <option key={t.id} value={t.id}>{`${t.name} · INE ${t.ine} · ${t.unit.name}`}</option>)}
+                {teams.map((t) => <option key={t.id} value={t.id}>{`${teamName(t)} · INE ${t.ine} · ${t.unit.name}`}</option>)}
               </select>
             </label>
           )}

@@ -11,7 +11,7 @@ import {
   type MicroArea, type MicroAreaInput, type TerritoryAdminTeam
 } from "../lib/api";
 import {
-  ADMIN_TEAMS_KEY, MICRO_AREAS_KEY, MICRO_AREA_NAME_MAX, STATIC_QUERY, microAreaCodeProblem, microAreaNameProblem, territoryError
+  ADMIN_TEAMS_KEY, MICRO_AREAS_KEY, MICRO_AREA_NAME_MAX, STATIC_QUERY, microAreaCodeProblem, microAreaNameProblem, teamName, territoryError
 } from "../lib/territoryRegistry";
 import { Panel } from "../components/Panel";
 import { DataTable } from "../components/DataTable";
@@ -45,7 +45,7 @@ export function TerritoryMicroAreas({ onGoToSecurity }: { onGoToSecurity?: () =>
   );
 }
 
-const teamLabel = (t: TerritoryAdminTeam) => `${t.name} · INE ${t.ine}`;
+const teamLabel = (t: TerritoryAdminTeam) => `${teamName(t)} · INE ${t.ine}`;
 
 // O que cada confirmação diz e faz (spec 6a §3.5: dizer antes do Confirmar).
 function confirmation(p: Exclude<Pending, null>, team: TerritoryAdminTeam | undefined): {
@@ -55,7 +55,7 @@ function confirmation(p: Exclude<Pending, null>, team: TerritoryAdminTeam | unde
     (id ? team?.acs_candidates.find((c) => c.professional_id === id)?.name ?? "o ACS escolhido" : "nenhum");
   if (p.kind === "create") return {
     title: `Criar a microárea ${p.input.code}`,
-    description: `${p.input.name}, na equipe ${team?.name ?? "selecionada"}. ACS responsável: ${acsName(p.input.acs_professional_id)}. O código não muda depois de criado.`,
+    description: `${p.input.name}, na equipe ${team ? teamName(team) : "selecionada"}. ACS responsável: ${acsName(p.input.acs_professional_id)}. O código não muda depois de criado.`,
     confirmLabel: "Criar microárea", run: () => createMicroArea(p.input), done: `Microárea ${p.input.code} criada.`
   };
   if (p.kind === "rename") return {

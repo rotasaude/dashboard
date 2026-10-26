@@ -100,7 +100,8 @@ describe("TerritoryTeam", () => {
     renderWithProviders(<TerritoryTeam today={TODAY24} />);
     expect(await screen.findByText("recusou o cadastro")).not.toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Abrir domicílio sem endereço" }));
-    expect(await screen.findByText("sem nome no cadastro")).not.toBeNull();
+    expect(await screen.findByText("pessoa sem nome no cadastro")).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Abrir cadastro de pessoa sem nome no cadastro" })).not.toBeNull();
     expect(screen.getByText("nenhuma família")).not.toBeNull();
     expect(document.body.textContent).not.toMatch(/undefined|null/);
   });
@@ -294,6 +295,16 @@ describe("TerritoryTeam", () => {
     fireEvent.change(screen.getByLabelText("Equipe"), { target: { value: "tm2" } });
     expect(await screen.findByRole("option", { name: "07 · Boqueirão norte" })).not.toBeNull();
     expect(api.listHouseholds).toHaveBeenLastCalledWith({ microAreaId: "ma9", before: null });
+  });
+
+  it("equipe sem nome no CNES: 'equipe sem nome', nunca 'null'", async () => {
+    const base = territoryContext().teams[0];
+    mocked(api.getTerritoryContext).mockResolvedValue({ teams: [ { ...base, name: null }, { ...TEAM_EAP, unit: { id: "u2", name: "UBS Boqueirão" },
+      micro_areas: [ { ...microArea({ id: "ma9", code: "07", name: "Boqueirão norte", team: TEAM_EAP }), can_register: true } ] } ] });
+    renderWithProviders(<TerritoryTeam today={TODAY24} />);
+    await screen.findByText("Rua das Flores, 120");
+    expect(screen.getByRole("option", { name: "equipe sem nome · INE 0001234567 · UBS Vila Verde" })).not.toBeNull();
+    expect(document.body.textContent).not.toMatch(/null/);
   });
 
   it("nenhuma microárea em que cadastra: aviso e nenhuma leitura nominal", async () => {

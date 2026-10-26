@@ -62,7 +62,7 @@ describe("RegistryStatus", () => {
     renderWithProviders(<RegistryStatus today={TODAY24} />);
     fireEvent.click(await screen.findByRole("tab", { name: "Sem cadastro (44)" }));
     await waitFor(() => expect(api.listRegistryStatus).toHaveBeenLastCalledWith({ teamId: "tm1", microAreaId: undefined, status: "missing", before: null }));
-    fireEvent.click(await screen.findByRole("button", { name: "Cadastrar cidadão sem nome no cadastro" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Cadastrar pessoa sem nome no cadastro" }));
     const sheet = screen.getByRole("form", { name: "Novo cadastro individual" });
     expect(within(sheet).getByText("validados no posto")).not.toBeNull();
     fireEvent.click(within(sheet).getByRole("button", { name: "Cancelar" }));
@@ -106,6 +106,15 @@ describe("RegistryStatus", () => {
     expect(api.countRegistryStatus).toHaveBeenCalledWith("tm1", "ma1");
   });
 
+  it("equipe sem nome no CNES: 'equipe sem nome', nunca 'null'", async () => {
+    const base = nurseContext().teams[0];
+    mocked(api.getTerritoryContext).mockResolvedValue({ teams: [ { ...base, name: null }, { ...base, id: "tm2", ine: "0001234575", name: "EAP Boqueirão" } ] });
+    renderWithProviders(<RegistryStatus today={TODAY24} />);
+    await screen.findByText("Joaquim Ribeiro");
+    expect(screen.getByRole("option", { name: "equipe sem nome · INE 0001234567 · UBS Vila Verde" })).not.toBeNull();
+    expect(document.body.textContent).not.toMatch(/null/);
+  });
+
   it("identidade atualizada no posto vira marca; nulos viram —", async () => {
     mocked(api.listRegistryStatus).mockResolvedValue({ people: [
       personRow({ identity_review_pending: true }),
@@ -113,15 +122,15 @@ describe("RegistryStatus", () => {
     ], next_before: null });
     renderWithProviders(<RegistryStatus today={TODAY24} />);
     expect(await screen.findByText(IDENTITY_REVIEW_TEXT)).not.toBeNull();
-    expect(screen.getByText("cidadão sem nome no cadastro")).not.toBeNull();
-    expect(screen.getByRole("button", { name: "Atualizar cidadão sem nome no cadastro" })).not.toBeNull();
+    expect(screen.getByText("pessoa sem nome no cadastro")).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Atualizar pessoa sem nome no cadastro" })).not.toBeNull();
     expect(document.body.textContent).not.toMatch(/undefined|null|NaN/);
   });
 
   it("sem cadastro e fora de domicílio: a ficha vai com a equipe (team_id), avisa e relê a lista e os números", async () => {
     renderWithProviders(<RegistryStatus today={TODAY24} />);
     fireEvent.click(await screen.findByRole("tab", { name: "Sem cadastro (44)" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Cadastrar cidadão sem nome no cadastro" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Cadastrar pessoa sem nome no cadastro" }));
     const lists = mocked(api.listRegistryStatus).mock.calls.length;
     const counts = mocked(api.countRegistryStatus).mock.calls.length;
     fireEvent.change(screen.getByLabelText("Raça/cor"), { target: { value: "03" } });

@@ -13,7 +13,7 @@ import { useMutation } from "@tanstack/react-query";
 import { errorCode, findDuplicates, lookupTerritoryPerson, type DuplicateCandidate, type DuplicateQuery, type PatientIdentity, type TerritoryPerson } from "../../lib/api";
 import { maskCpf, onlyDigits } from "../../lib/attendance";
 import { todayInCity } from "../../lib/campaigns";
-import { cpfProblem, duplicateQueryProblem, fmtDay, territoryError } from "../../lib/territoryRegistry";
+import { NO_NAME, cpfProblem, duplicateQueryProblem, fmtDay, territoryError } from "../../lib/territoryRegistry";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { alert, checkLabel, fieldLabel, fieldset, form, legend, list, muted, row } from "../exams/styles";
 
@@ -27,7 +27,6 @@ export type PersonChoice =
   | { kind: "citizen"; citizenId: string; displayName?: string | null }
   | { kind: "new"; identity: PatientIdentity; cpf?: string };
 
-const NO_NAME = "pessoa sem nome no cadastro";
 const sameQuery = (a: DuplicateQuery | null, b: DuplicateQuery) =>
   !!a && a.full_name === b.full_name && a.birth_date === b.birth_date && (a.mother_name ?? "") === (b.mother_name ?? "");
 

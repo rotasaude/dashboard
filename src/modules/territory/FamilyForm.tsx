@@ -13,14 +13,13 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { addFamily, errorCode, updateFamily, type Family, type FamilyInput, type Household, type HouseholdAddress } from "../../lib/api";
 import { todayInCity } from "../../lib/campaigns";
 import { DOMAINS, familyProblem, householdProblem } from "../../lib/territoryDictionaries";
-import { HOUSEHOLDS_KEY, HOUSEHOLD_KEY, STALE_TEXT, errorPath, isStale, territoryError } from "../../lib/territoryRegistry";
+import { HOUSEHOLDS_KEY, HOUSEHOLD_KEY, NO_NAME, STALE_TEXT, errorPath, isStale, territoryError } from "../../lib/territoryRegistry";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { alert, checkLabel, fieldLabel, form, muted, row } from "../exams/styles";
 import { useFieldFocus } from "./fieldFocus";
 
 export interface FamilyCandidate { patient_id: string; display_name: string | null }
 
-const NO_NAME = "pessoa sem nome no cadastro";
 const FIX_HOUSEHOLD = "edite o domicílio antes de salvar a família";
 const MOVED_OUT_WARNING = "a mudança é definitiva: a família sai do domicílio e não volta nem muda mais";
 // Recusas do domicílio vindas da gravação da família (C19).

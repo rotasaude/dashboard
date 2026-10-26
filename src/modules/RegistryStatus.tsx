@@ -19,8 +19,8 @@ import { useState } from "react";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { countRegistryStatus, getTerritoryContext, listRegistryStatus, type PersonRow, type RegistryListStatus } from "../lib/api";
 import {
-  COUNT_QUERY, IDENTITY_REVIEW_TEXT, NOMINAL_QUERY, REGISTRY_COUNT_KEY, REGISTRY_STATUS_KEY, STATIC_QUERY, TERRITORY_CONTEXT_KEY, fmtDay,
-  registryStatusLabel, registryStatusTone, territoryError
+  COUNT_QUERY, IDENTITY_REVIEW_TEXT, NOMINAL_QUERY, NO_NAME, REGISTRY_COUNT_KEY, REGISTRY_STATUS_KEY, STATIC_QUERY, TERRITORY_CONTEXT_KEY, fmtDay,
+  registryStatusLabel, registryStatusTone, teamName, territoryError
 } from "../lib/territoryRegistry";
 import { Panel } from "../components/Panel";
 import { EmptyState } from "../components/EmptyState";
@@ -35,7 +35,6 @@ import { TerritoryGate } from "./territory/TerritoryGate";
 import { REGISTRATION_EXITED, REGISTRATION_SAVED, RegistrationForm } from "./territory/RegistrationForm";
 import type { PersonChoice } from "./territory/PersonStart";
 
-const NO_NAME = "cidadão sem nome no cadastro";
 export const MISSING_NEEDS_TEAM = "Com uma microárea escolhida, a lista e os números são só de quem tem cadastro nela — quem ainda não tem cadastro não tem microárea.";
 
 type Tab = Exclude<RegistryListStatus, "valid">;
@@ -156,7 +155,7 @@ function StatusBody({ today }: { today?: string }) {
               <label style={fieldLabel}>
                 Equipe
                 <select value={team.id} style={inputStyle} onChange={(e) => { setAreaChoice(null); setTeamChoice(e.target.value); }}>
-                  {teams.map((t) => <option key={t.id} value={t.id}>{`${t.name} · INE ${t.ine} · ${t.unit.name}`}</option>)}
+                  {teams.map((t) => <option key={t.id} value={t.id}>{`${teamName(t)} · INE ${t.ine} · ${t.unit.name}`}</option>)}
                 </select>
               </label>
             )}

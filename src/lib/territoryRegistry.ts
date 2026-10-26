@@ -20,6 +20,11 @@ export const STALE_TEXT = "outra pessoa salvou enquanto você editava — recarr
 // L24: o posto atualizou a identidade do paciente depois do último cadastro.
 export const IDENTITY_REVIEW_TEXT = "identidade atualizada no posto, revisar e salvar";
 
+// Texto único para pessoa sem nome (paciente de par validado sem perfil) e equipe sem nome no CNES.
+export const NO_NAME = "pessoa sem nome no cadastro";
+export const NO_TEAM_NAME = "equipe sem nome";
+export function teamName(team: { name: string | null }): string { return team.name ?? NO_TEAM_NAME; }
+
 export const TERRITORY_CONTEXT_KEY = "territoryContext";
 export const MICRO_AREAS_KEY = "territoryMicroAreas";
 export const ADMIN_TEAMS_KEY = "territoryAdminTeams";

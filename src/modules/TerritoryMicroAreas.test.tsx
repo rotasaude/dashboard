@@ -35,6 +35,18 @@ describe("TerritoryMicroAreas", () => {
     expect(api.listMicroAreas).toHaveBeenCalledWith("tm1");
   });
 
+  it("equipe sem nome no CNES: 'equipe sem nome', nunca 'null'", async () => {
+    mocked(api.listTerritoryAdminTeams).mockResolvedValue([ adminTeam({ name: null }) ]);
+    renderWithProviders(<TerritoryMicroAreas />);
+    expect(await screen.findByRole("option", { name: "equipe sem nome · INE 0001234567" })).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Nova microárea" }));
+    typeIn("Código", "02");
+    typeIn("Nome", "Rua das Flores");
+    fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
+    expect(await screen.findByText(/na equipe equipe sem nome\./)).not.toBeNull();
+    expect(document.body.textContent).not.toMatch(/null/);
+  });
+
   it("cria com step-up; código ruim é recusado antes de abrir a confirmação", async () => {
     renderWithProviders(<TerritoryMicroAreas />);
     fireEvent.click(await screen.findByRole("button", { name: "Nova microárea" }));
