@@ -7,7 +7,7 @@ vi.mock("../lib/api", async (importOriginal) => {
   const real = await importOriginal<typeof import("../lib/api")>();
   return { ...real, fetchCurrentSession: vi.fn(), getTerritoryContext: vi.fn(), listHouseholds: vi.fn(), getHousehold: vi.fn(), listRegistrations: vi.fn(),
     createHousehold: vi.fn(), updateHousehold: vi.fn(), addFamily: vi.fn(), updateFamily: vi.fn(), listPanelNeighborhoods: vi.fn(),
-    findDuplicates: vi.fn(), lookupTerritoryPerson: vi.fn(), createRegistration: vi.fn(), updateRegistration: vi.fn(), getRegistration: vi.fn() };
+    findDuplicates: vi.fn(), lookupTerritoryPerson: vi.fn(), createRegistration: vi.fn(), updateRegistration: vi.fn(), getRegistration: vi.fn(), exitRegistration: vi.fn() };
 });
 
 import * as api from "../lib/api";
@@ -27,7 +27,7 @@ afterEach(cleanup);
 beforeEach(() => {
   for (const fn of [ api.fetchCurrentSession, api.getTerritoryContext, api.listHouseholds, api.getHousehold, api.listRegistrations,
     api.createHousehold, api.updateHousehold, api.addFamily, api.updateFamily, api.listPanelNeighborhoods, api.findDuplicates, api.lookupTerritoryPerson,
-    api.createRegistration, api.updateRegistration, api.getRegistration ]) mocked(fn).mockReset();
+    api.createRegistration, api.updateRegistration, api.getRegistration, api.exitRegistration ]) mocked(fn).mockReset();
   mocked(api.findDuplicates).mockResolvedValue([]);
   mocked(api.createRegistration).mockResolvedValue(registration({ id: "rg9" }));
   mocked(api.updateRegistration).mockResolvedValue(registration({ id: "rg2", version: 2 }));
@@ -217,6 +217,22 @@ describe("TerritoryTeam", () => {
     fireEvent.click(screen.getByRole("button", { name: "Abrir cadastro de Maria das Dores" }));
     fireEvent.click(await screen.findByRole("button", { name: "Cancelar" }));
     expect(screen.queryByRole("button", { name: "Salvar cadastro" })).toBeNull();
+  });
+
+  it("Registrar saída de um morador: a ficha fecha e a tela avisa a saída", async () => {
+    mocked(api.exitRegistration).mockResolvedValue({ ...JOSE, status: "exited" });
+    renderWithProviders(<TerritoryTeam today={TODAY24} />);
+    await openHousehold();
+    fireEvent.click(screen.getByRole("button", { name: "Abrir cadastro de José das Dores" }));
+    await screen.findByLabelText("Nome completo");
+    fireEvent.click(screen.getByRole("button", { name: "Registrar saída" }));
+    fireEvent.click(screen.getByLabelText("mudou de território"));
+    typeIn("Data da saída", "2026-10-20");
+    fireEvent.click(screen.getByRole("button", { name: "Registrar saída" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar saída" }));
+    expect(await screen.findByText("Saída registrada. Nova versão enviada ao e-SUS.")).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Salvar cadastro" })).toBeNull();
+    expect(api.exitRegistration).toHaveBeenCalledWith("rg2", { reason: "moved", on: "2026-10-20" });
   });
 
   it("domicílio inativo não recebe morador novo", async () => {

@@ -44,10 +44,10 @@ describe("ExitForm", () => {
     const { onDone } = open();
     fireEvent.click(screen.getByLabelText("óbito"));
     expect(screen.getByText(DEATH_SENTENCE)).not.toBeNull();
-    typeIn("Data", "2026-10-24");
+    typeIn("Data da saída", "2026-10-24");
     submit();
     expect(screen.getByRole("alert").textContent).toBe("data depois de hoje");
-    typeIn("Data", "2026-10-20");
+    typeIn("Data da saída", "2026-10-20");
     submit();
     expect(screen.getByRole("alert").textContent).toBe("informe a data do óbito");
     expect(document.activeElement).toBe(screen.getByLabelText("Data do óbito"));
@@ -67,7 +67,7 @@ describe("ExitForm", () => {
   it("óbito: a DO é opcional, vai só com 9 dígitos e sem separadores", async () => {
     open();
     fireEvent.click(screen.getByLabelText("óbito"));
-    typeIn("Data", "2026-10-20");
+    typeIn("Data da saída", "2026-10-20");
     typeIn("Data do óbito", "2026-10-19");
     typeIn("Número da DO (opcional)", "12345");
     submit();
@@ -82,7 +82,7 @@ describe("ExitForm", () => {
   it("óbito antes do nascimento é recusado na tela", () => {
     open();
     fireEvent.click(screen.getByLabelText("óbito"));
-    typeIn("Data", "2026-10-20");
+    typeIn("Data da saída", "2026-10-20");
     typeIn("Data do óbito", "1960-01-01");
     submit();
     expect(screen.getByRole("alert").textContent).toBe("data do óbito antes do nascimento");
@@ -98,7 +98,7 @@ describe("ExitForm", () => {
     expect(screen.getByText(MOVED_SENTENCE)).not.toBeNull();
     expect(screen.queryByText(DEATH_SENTENCE)).toBeNull();
     expect(screen.queryByLabelText("Data do óbito")).toBeNull();
-    typeIn("Data", "2026-10-20");
+    typeIn("Data da saída", "2026-10-20");
     submit();
     confirm();
     await waitFor(() => expect(body()).toEqual([ "rg1", { reason: "moved", on: "2026-10-20" } ]));
@@ -111,17 +111,17 @@ describe("ExitForm", () => {
     fireEvent.click(screen.getByLabelText("mudou de território"));
     submit();
     expect(screen.getByRole("alert").textContent).toBe("informe a data da saída");
-    expect(document.activeElement).toBe(screen.getByLabelText("Data"));
+    expect(document.activeElement).toBe(screen.getByLabelText("Data da saída"));
     expect(api.exitRegistration).not.toHaveBeenCalled();
   });
 
   it("Voltar na confirmação devolve o formulário com o que foi digitado", () => {
     open();
     fireEvent.click(screen.getByLabelText("mudou de território"));
-    typeIn("Data", "2026-10-20");
+    typeIn("Data da saída", "2026-10-20");
     submit();
     fireEvent.click(screen.getByRole("button", { name: "Voltar" }));
-    expect((screen.getByLabelText("Data") as HTMLInputElement).value).toBe("2026-10-20");
+    expect((screen.getByLabelText("Data da saída") as HTMLInputElement).value).toBe("2026-10-20");
     expect(api.exitRegistration).not.toHaveBeenCalled();
   });
 
@@ -136,7 +136,7 @@ describe("ExitForm", () => {
     mocked(api.exitRegistration).mockRejectedValue(new api.ApiError(422, { error: "invalid_registration", path: "death_on" }, "422"));
     open();
     fireEvent.click(screen.getByLabelText("óbito"));
-    typeIn("Data", "2026-10-20");
+    typeIn("Data da saída", "2026-10-20");
     typeIn("Data do óbito", "2026-10-19");
     submit();
     confirm();
@@ -150,7 +150,7 @@ describe("ExitForm", () => {
     mocked(api.exitRegistration).mockRejectedValue(new api.ApiError(422, { error: "invalid_transition" }, "422"));
     const { onDone } = open();
     fireEvent.click(screen.getByLabelText("mudou de território"));
-    typeIn("Data", "2026-10-20");
+    typeIn("Data da saída", "2026-10-20");
     submit();
     confirm();
     expect((await screen.findByRole("alert")).textContent).toBe("esta ação não vale para a situação atual do cadastro (já saiu ou recusou)");
@@ -162,7 +162,7 @@ describe("ExitForm", () => {
     const { onCancel, client } = open();
     const invalidate = vi.spyOn(client, "invalidateQueries");
     fireEvent.click(screen.getByLabelText("mudou de território"));
-    typeIn("Data", "2026-10-20");
+    typeIn("Data da saída", "2026-10-20");
     submit();
     confirm();
     expect((await screen.findByRole("alert")).textContent).toBe(STALE_TEXT);
@@ -177,7 +177,7 @@ describe("ExitForm", () => {
     const { client } = open();
     const invalidate = vi.spyOn(client, "invalidateQueries");
     fireEvent.click(screen.getByLabelText("mudou de território"));
-    typeIn("Data", "2026-10-20");
+    typeIn("Data da saída", "2026-10-20");
     submit();
     confirm();
     await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: [ "territoryRegistryStatus" ] }));

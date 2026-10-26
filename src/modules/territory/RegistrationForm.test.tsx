@@ -433,7 +433,7 @@ describe("RegistrationForm", () => {
       expect(screen.getByRole("form", { name: "Saída do cadastro" })).not.toBeNull();
       expect(screen.getByLabelText("Nome completo")).not.toBeNull();
       fireEvent.click(screen.getByLabelText("mudou de território"));
-      fireEvent.change(screen.getByLabelText("Data"), { target: { value: "2026-10-20" } });
+      fireEvent.change(screen.getByLabelText("Data da saída"), { target: { value: "2026-10-20" } });
       fireEvent.click(screen.getByRole("button", { name: "Registrar saída" }));
       fireEvent.click(screen.getByRole("button", { name: "Confirmar saída" }));
       await waitFor(() => expect(api.exitRegistration).toHaveBeenCalledWith("rg2", { reason: "moved", on: "2026-10-20" }));
@@ -449,7 +449,7 @@ describe("RegistrationForm", () => {
       await screen.findByLabelText("Nome completo");
       fireEvent.click(exitButton()!);
       fireEvent.click(screen.getByLabelText("mudou de território"));
-      fireEvent.change(screen.getByLabelText("Data"), { target: { value: "2026-10-20" } });
+      fireEvent.change(screen.getByLabelText("Data da saída"), { target: { value: "2026-10-20" } });
       fireEvent.click(screen.getByRole("button", { name: "Registrar saída" }));
       fireEvent.click(screen.getByRole("button", { name: "Confirmar saída" }));
       await waitFor(() => expect(onSaved).toHaveBeenCalled());

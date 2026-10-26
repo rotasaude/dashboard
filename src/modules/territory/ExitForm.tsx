@@ -124,7 +124,7 @@ export function ExitForm({ registration, today, onDone, onCancel }: {
       </fieldset>
       {reason && <p style={muted}>{EXIT_EFFECT[reason]}</p>}
       <label style={fieldLabel}>
-        Data
+        Data da saída
         <input ref={focus.reg("on")} type="date" value={on} max={today} style={inputStyle} aria-invalid={focus.invalid("on")}
           onChange={(e) => setOn(e.target.value)} />
       </label>

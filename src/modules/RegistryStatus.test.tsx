@@ -6,7 +6,7 @@ import { focusManager, onlineManager } from "@tanstack/react-query";
 vi.mock("../lib/api", async (importOriginal) => {
   const real = await importOriginal<typeof import("../lib/api")>();
   return { ...real, fetchCurrentSession: vi.fn(), getTerritoryContext: vi.fn(), listRegistryStatus: vi.fn(), countRegistryStatus: vi.fn(),
-    createRegistration: vi.fn(), getRegistration: vi.fn() };
+    createRegistration: vi.fn(), getRegistration: vi.fn(), exitRegistration: vi.fn() };
 });
 
 import * as api from "../lib/api";
@@ -29,7 +29,7 @@ const statuses = () => mocked(api.listRegistryStatus).mock.calls.map((c) => (c[0
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 beforeEach(() => {
   for (const fn of [ api.fetchCurrentSession, api.getTerritoryContext, api.listRegistryStatus, api.countRegistryStatus, api.createRegistration,
-    api.getRegistration ]) mocked(fn).mockReset();
+    api.getRegistration, api.exitRegistration ]) mocked(fn).mockReset();
   mocked(api.createRegistration).mockResolvedValue(registration({ household_id: null, family_id: null, micro_area: null }));
   mocked(api.getRegistration).mockResolvedValue(registration({ id: "rg3" }));
   mocked(api.fetchCurrentSession).mockResolvedValue(territoryUser());
@@ -139,6 +139,22 @@ describe("RegistryStatus", () => {
     expect(screen.queryByRole("form", { name: "Novo cadastro individual" })).toBeNull();
     await waitFor(() => expect(mocked(api.listRegistryStatus).mock.calls.length).toBe(lists + 1));
     await waitFor(() => expect(mocked(api.countRegistryStatus).mock.calls.length).toBe(counts + 1));
+  });
+
+  it("Atualizar → Registrar saída: a ficha fecha, a tela avisa a saída e relê a lista", async () => {
+    mocked(api.exitRegistration).mockResolvedValue(registration({ id: "rg3", status: "exited" }));
+    renderWithProviders(<RegistryStatus today={TODAY24} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Atualizar Joaquim Ribeiro" }));
+    await screen.findByRole("button", { name: "Salvar cadastro" });
+    fireEvent.click(screen.getByRole("button", { name: "Registrar saída" }));
+    fireEvent.click(screen.getByLabelText("óbito"));
+    fireEvent.change(screen.getByLabelText("Data da saída"), { target: { value: "2026-10-20" } });
+    fireEvent.change(screen.getByLabelText("Data do óbito"), { target: { value: "2026-10-19" } });
+    fireEvent.click(screen.getByRole("button", { name: "Registrar saída" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar saída" }));
+    expect(await screen.findByText("Saída registrada. Nova versão enviada ao e-SUS.")).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Salvar cadastro" })).toBeNull();
+    await waitFor(() => expect(api.listRegistryStatus).toHaveBeenCalledTimes(2));
   });
 
   it("Carregar mais segue o next_before", async () => {
