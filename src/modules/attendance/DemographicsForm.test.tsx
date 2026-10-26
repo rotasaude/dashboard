@@ -95,5 +95,12 @@ describe("DemographicsForm — endereço do cadastro domiciliar (módulo 24a)", 
     fireEvent.change(screen.getByLabelText("Bairro"), { target: { value: "Vila Verde" } });
     fireEvent.click(screen.getByRole("button", { name: "Salvar dados do paciente" }));
     expect((await screen.findByRole("alert")).textContent).toBe(ADDRESS_FROM_HOUSEHOLD);
+    // Reserva do L26: o endereço trava (sem campos, com a nota) e a próxima tentativa não o manda.
+    expect(screen.queryByLabelText("CEP")).toBeNull();
+    expect(screen.getAllByText(ADDRESS_FROM_HOUSEHOLD).length).toBe(2);
+    save.mockResolvedValue(undefined);
+    fireEvent.change(screen.getByLabelText("Raça/cor"), { target: { value: "03" } });
+    fireEvent.click(screen.getByRole("button", { name: "Salvar dados do paciente" }));
+    await waitFor(() => expect(save).toHaveBeenLastCalledWith({ race_color: "03", ethnicity: "" }));
   });
 });

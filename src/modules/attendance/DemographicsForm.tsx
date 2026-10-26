@@ -4,7 +4,7 @@
 // manda junto); `DemographicsForm` salva sozinho (check-in e pendência do
 // faturista). Opcionais, com incentivo visual; nada de "sem informação".
 import { useRef, useState, type CSSProperties } from "react";
-import type { PatientDemographicsInput } from "../../lib/api";
+import { errorCode, type PatientDemographicsInput } from "../../lib/api";
 import {
   ADDRESS_FROM_HOUSEHOLD, DEMOGRAPHICS_INCENTIVE, EMPTY_DEMOGRAPHICS, INDIGENOUS, RACE_COLORS, demographicsBody, demographicsError, demographicsFilled,
   demographicsProblem, missingText, type DemographicsDraft
@@ -58,14 +58,17 @@ export function DemographicsFields({ value, onChange, problem = null, missing, a
   );
 }
 
-export function DemographicsForm({ title, missing, addressLocked = false, save, onSaved, onCancel }: {
+// Reserva do L26: sem a flag, o 422 address_from_household trava o endereço aqui mesmo.
+export function DemographicsForm({ title, missing, addressLocked: lockedByApi = false, save, onSaved, onCancel }: {
   title: string; missing?: string[]; addressLocked?: boolean; save(body: PatientDemographicsInput): Promise<void>; onSaved?(): void; onCancel?(): void;
 }) {
   const [ draft, setDraft ] = useState<DemographicsDraft>(EMPTY_DEMOGRAPHICS);
   const [ error, setError ] = useState<string | null>(null);
   const [ saved, setSaved ] = useState(false);
   const [ busy, setBusy ] = useState(false);
+  const [ addressRefused, setAddressRefused ] = useState(false);
   const running = useRef(false);
+  const addressLocked = lockedByApi || addressRefused;
 
   async function submit() {
     if (running.current) return;
@@ -79,6 +82,7 @@ export function DemographicsForm({ title, missing, addressLocked = false, save, 
     try {
       await save(demographicsBody(draft, opts));
     } catch (err) {
+      if (errorCode(err) === "address_from_household") setAddressRefused(true);
       setError(demographicsError(err));
       return;
     } finally {

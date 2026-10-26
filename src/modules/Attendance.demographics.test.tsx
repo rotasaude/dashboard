@@ -15,6 +15,7 @@ vi.mock("../lib/api", async (importOriginal) => {
 import * as api from "../lib/api";
 import { AuthProvider } from "../lib/auth";
 import { Attendance } from "./Attendance";
+import { ADDRESS_FROM_HOUSEHOLD } from "../lib/demographics";
 
 afterEach(() => { cleanup(); localStorage.clear(); });
 const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
@@ -90,6 +91,35 @@ describe("Attendance — dados do paciente na validação (módulo 22)", () => {
     renderAttendance();
     await fillValidation();
     expect(screen.queryByLabelText("Raça/cor")).toBeNull();
+  });
+
+  it("endereço do cadastro domiciliar (lookup, L26): sem campos de endereço antes do formulário; só a raça/cor vai", async () => {
+    mocked(api.fetchCurrentSession).mockResolvedValue(session([ "procedure_billing" ]));
+    mocked(api.lookupCitizen).mockResolvedValue({ ...found, citizen: { ...found.citizen, race_color_set: false, address_set: true,
+      address_from_household: true } });
+    renderAttendance();
+    await fillValidation();
+    expect(screen.queryByLabelText("CEP")).toBeNull();
+    expect(screen.getByText(ADDRESS_FROM_HOUSEHOLD)).not.toBeNull();
+    fireEvent.change(screen.getByLabelText("Raça/cor"), { target: { value: "03" } });
+    fireEvent.click(screen.getByRole("button", { name: "Validar cadastro" }));
+    await waitFor(() => expect(api.verifyCitizen).toHaveBeenCalledWith("529.982.247-25", "123456", PROFILE, { race_color: "03", ethnicity: "" }));
+  });
+
+  it("422 address_from_household (reserva): a frase, o endereço trava e a nova tentativa vai sem endereço", async () => {
+    mocked(api.fetchCurrentSession).mockResolvedValue(session([ "procedure_billing" ]));
+    mocked(api.verifyCitizen).mockRejectedValueOnce(new api.ApiError(422, { error: "address_from_household", field: "address_zip" }, "x"));
+    renderAttendance();
+    await fillValidation();
+    fireEvent.change(screen.getByLabelText("Raça/cor"), { target: { value: "03" } });
+    fireEvent.change(screen.getByLabelText("CEP"), { target: { value: "80010-000" } });
+    fireEvent.change(screen.getByLabelText("Logradouro"), { target: { value: "RUA XV DE NOVEMBRO" } });
+    fireEvent.change(screen.getByLabelText("Bairro"), { target: { value: "CENTRO" } });
+    fireEvent.click(screen.getByRole("button", { name: "Validar cadastro" }));
+    expect((await screen.findByRole("alert")).textContent).toBe(ADDRESS_FROM_HOUSEHOLD);
+    expect(screen.queryByLabelText("CEP")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Validar cadastro" }));
+    await waitFor(() => expect(api.verifyCitizen).toHaveBeenLastCalledWith("529.982.247-25", "123456", PROFILE, { race_color: "03", ethnicity: "" }));
   });
 
   it("recusa dos dados do paciente na validação vira a frase do campo, nunca o genérico", async () => {

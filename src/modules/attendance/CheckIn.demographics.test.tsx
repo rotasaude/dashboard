@@ -148,6 +148,21 @@ describe("CheckIn — dados do paciente para o BPA-I (módulo 22)", () => {
     await waitFor(() => expect(api.saveVerificationDemographics).toHaveBeenCalledWith("v11", { race_color: "02", ethnicity: "" }));
   });
 
+  it("exceção com as flags do paciente (L26): endereço do domicílio sem campos; nada a completar, sem formulário", async () => {
+    mocked(api.checkInByException).mockResolvedValue({ attendance: { id: "at3" }, verification_id: "v11",
+      citizen: { id: "c2", race_color_set: false, address_set: true, address_from_household: true } });
+    await exceptionCheckIn();
+    const form = screen.getByRole("region", { name: "Completar dados do paciente" });
+    expect(within(form).queryByLabelText("CEP")).toBeNull();
+    expect(within(form).getByText(ADDRESS_FROM_HOUSEHOLD)).not.toBeNull();
+    expect(within(form).getByRole("note").textContent).toMatch(/^Falta: raça\/cor\./);
+    cleanup();
+    mocked(api.checkInByException).mockResolvedValue({ attendance: { id: "at4" }, verification_id: "v11",
+      citizen: { id: "c2", race_color_set: true, address_set: true, address_from_household: true } });
+    await exceptionCheckIn();
+    expect(screen.queryByRole("region", { name: "Completar dados do paciente" })).toBeNull();
+  });
+
   it("exceção com par só declarado (verification_id null) ou sem o interruptor: sem formulário", async () => {
     mocked(api.checkInByException).mockResolvedValue({ attendance: { id: "at3" }, verification_id: null });
     await exceptionCheckIn();

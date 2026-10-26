@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import {
   ApiError, checkIn, checkInByException, lookupCheckIn, saveVerificationDemographics, searchCheckIn,
-  type CheckInAppointment, type CheckInCitizen, type CheckInTriage, type HealthUnit
+  type CheckInAppointment, type CheckInCitizen, type CheckInExceptionCitizen, type CheckInTriage, type HealthUnit
 } from "../../lib/api";
 import { attendanceError, isValidCpf, maskCpf, nivelLabel, onlyDigits } from "../../lib/attendance";
 import { fmtDateTime, fmtHourMinute } from "../../lib/format";
@@ -277,13 +277,15 @@ function ExceptionFlow({ unit, onUnitInvalid, cpf, onCpf: setCpf, demographicsOn
   const [ done, setDone ] = useState(false);
   // Contrato §13 E2: a validação do par, quando houver (null = par só declarado).
   const [ verificationId, setVerificationId ] = useState<string | null>(null);
+  // §14 L26: as flags do paciente vêm na resposta (ausentes = api antigo, formulário como antes).
+  const [ flags, setFlags ] = useState<CheckInExceptionCitizen | null>(null);
   const [ demographicsClosed, setDemographicsClosed ] = useState(false);
   const [ busy, setBusy ] = useState(false);
   const [ error, setError ] = useState<string | null>(null);
 
   function reset() {
     setCpf(""); setRows(null); setSelected(null); setReason(""); setDone(false); setError(null);
-    setVerificationId(null); setDemographicsClosed(false);
+    setVerificationId(null); setFlags(null); setDemographicsClosed(false);
   }
 
   async function search() {
@@ -316,6 +318,7 @@ function ExceptionFlow({ unit, onUnitInvalid, cpf, onCpf: setCpf, demographicsOn
       const target = selected.kind === "appointment" ? { appointmentId: selected.row.id } : { triageId: selected.row.id };
       const result = await checkInByException(cpf, target, unit.id, reason);
       setVerificationId(result.verification_id ?? null);
+      setFlags(result.citizen ?? null);
       setDone(true);
       invalidateAfterCheckIn(queryClient, unit.id, selected.kind === "appointment");
     } catch (err) {
@@ -327,11 +330,17 @@ function ExceptionFlow({ unit, onUnitInvalid, cpf, onCpf: setCpf, demographicsOn
   }
 
   if (done) {
+    // Como no check-in com código (§13 E3): com as flags, só o que falta; o endereço do domicílio não se completa aqui.
+    const addressLocked = flags?.address_from_household === true;
+    const known = flags?.race_color_set !== undefined || flags?.address_set !== undefined;
+    const missing = [ ...(flags?.race_color_set === false ? [ "race_color" ] : []),
+      ...(flags?.address_set === false && !addressLocked ? [ "address" ] : []) ];
+    const offer = demographicsOn && verificationId && !demographicsClosed && (!known || missing.length > 0);
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         <p role="status" style={{ margin: 0, fontSize: 13, fontWeight: 600 }}>Atendimento iniciado</p>
-        {demographicsOn && verificationId && !demographicsClosed && (
-          <DemographicsForm key={verificationId} title="Completar dados do paciente"
+        {offer && verificationId && (
+          <DemographicsForm key={verificationId} title="Completar dados do paciente" missing={known ? missing : undefined} addressLocked={addressLocked}
             save={async (body) => { await saveVerificationDemographics(verificationId, body); }}
             onCancel={() => setDemographicsClosed(true)} />
         )}

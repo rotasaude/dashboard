@@ -378,6 +378,9 @@ export interface AttendanceCitizen {
   // Módulo 19 (contratos §2): se o nome completo já foi conferido e o nome de
   // exibição; nunca os três nomes. Opcional: api anterior não manda.
   names?: CitizenNames;
+  // Módulo 22/24a (contrato §13 E2, §14 L26): o que o paciente já tem (nunca o
+  // valor) e se o endereço vem do cadastro domiciliar. Ausentes = api antigo.
+  race_color_set?: boolean; address_set?: boolean; address_from_household?: boolean;
 }
 // O que o atendente conferiu no documento (spec §5.4).
 export interface VerifiedProfile { birth_date: string; sex: Sex; gender_identity: GenderIdentity | null }
@@ -607,9 +610,12 @@ export async function searchCheckIn(
   });
 }
 
+// §14 L26: as flags do paciente no mesmo formato do lookup (ausente = api antigo).
+export interface CheckInExceptionCitizen { id: string; race_color_set?: boolean; address_set?: boolean; address_from_household?: boolean }
+
 export async function checkInByException(
   cpf: string, target: { triageId: string } | { appointmentId: string }, healthUnitId: string, reason: string
-): Promise<{ attendance: Attendance; verification_id?: string | null }> {
+): Promise<{ attendance: Attendance; verification_id?: string | null; citizen?: CheckInExceptionCitizen }> {
   const body: Record<string, unknown> = { cpf, health_unit_id: healthUnitId, reason };
   if ("triageId" in target) body.triage_id = target.triageId;
   else body.appointment_id = target.appointmentId;

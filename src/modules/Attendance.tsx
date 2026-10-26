@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  getMyProfessional, listActiveUnits, lookupCitizen, revokeVerification, verifyCitizen, listVerifications,
+  errorCode, getMyProfessional, listActiveUnits, lookupCitizen, revokeVerification, verifyCitizen, listVerifications,
   type AttendanceCitizen, type VerifyExtra, type Sex, type AttendanceTriage, type HealthUnit, type VerificationRow
 } from "../lib/api";
 import { ATTENDANCE_REFETCH_MS, attendanceError, currentUnitKey, isValidCpf, maskCpf, nivelLabel, onlyDigits } from "../lib/attendance";
@@ -181,6 +181,8 @@ function PageIndex() {
 // `demographicsOn` (módulo 22): raça/cor, etnia e endereço opcionais para o BPA-I, no mesmo POST da validação.
 function Counter({ cadsusOn, demographicsOn = false }: { cadsusOn: boolean; demographicsOn?: boolean }) {
   const [ demographics, setDemographics ] = useState<DemographicsDraft>(EMPTY_DEMOGRAPHICS);
+  // Módulo 24a (L26): o 422 address_from_household trava o endereço mesmo sem a flag do lookup.
+  const [ addressRefused, setAddressRefused ] = useState(false);
   const [ state, setState ] = useState<CounterState>("form");
   const [ cadsusConfirmed, setCadsusConfirmed ] = useState(false);
   const [ cpf, setCpf ] = useState("");
@@ -198,6 +200,7 @@ function Counter({ cadsusOn, demographicsOn = false }: { cadsusOn: boolean; demo
     setNames(EMPTY_NAMES);
     setCadsusConfirmed(false);
     setDemographics(EMPTY_DEMOGRAPHICS);
+    setAddressRefused(false);
   }
 
   async function search() {
@@ -209,6 +212,7 @@ function Counter({ cadsusOn, demographicsOn = false }: { cadsusOn: boolean; demo
     try {
       const result = await lookupCitizen(cpf, code);
       setFound(result);
+      setAddressRefused(false);
       setCadsusConfirmed(false);
       setProfile(initialProfileCheck(result.citizen.profile ?? null));
       setState("found");
@@ -224,7 +228,9 @@ function Counter({ cadsusOn, demographicsOn = false }: { cadsusOn: boolean; demo
   // Módulo 19: nome completo obrigatório; social e mãe opcionais.
   const namesIssue = namesProblem(names);
   // Opcionais: vazios não bloqueiam; começados, precisam estar certos.
-  const demographicsIssue = demographicsOn && demographicsFilled(demographics) ? demographicsProblem(demographics) : null;
+  // Endereço do cadastro domiciliar (L26): sai dos campos e do corpo.
+  const demographicsOpts = { addressLocked: found?.citizen.address_from_household === true || addressRefused };
+  const demographicsIssue = demographicsOn && demographicsFilled(demographics, demographicsOpts) ? demographicsProblem(demographics, demographicsOpts) : null;
   const blocked = !checked || busy || profileProblem !== null || namesIssue !== null || demographicsIssue !== null;
 
   async function validate() {
@@ -237,13 +243,14 @@ function Counter({ cadsusOn, demographicsOn = false }: { cadsusOn: boolean; demo
         birth_date: profile.birthDate, sex: profile.sex as Sex, gender_identity: profile.genderIdentity || null,
         ...namesBody(names)
       };
-      const extra: VerifyExtra = demographicsOn && demographicsFilled(demographics) ? demographicsBody(demographics) : {};
+      const extra: VerifyExtra = demographicsOn && demographicsFilled(demographics, demographicsOpts) ? demographicsBody(demographics, demographicsOpts) : {};
       if (cadsusOn) extra.cadsus_confirmed = cadsusConfirmed;
       if (Object.keys(extra).length > 0) await verifyCitizen(cpf, code, profileBody, extra);
       else await verifyCitizen(cpf, code, profileBody);
       setState("done");
     } catch (err) {
       // Recusa dos dados do paciente (módulo 22) tem frase do campo; o resto, a do balcão.
+      if (errorCode(err) === "address_from_household") setAddressRefused(true);
       setError(isDemographicsError(err) ? demographicsError(err) : attendanceError(err));
     } finally {
       setBusy(false);
@@ -306,7 +313,9 @@ function Counter({ cadsusOn, demographicsOn = false }: { cadsusOn: boolean; demo
 
             <ProfileCheck declared={found.citizen.profile ?? null} value={profile} today={todayInCity()} onChange={setProfile} />
             <NamesFields value={names} onChange={setNames} problem={namesIssue} />
-            {demographicsOn && <DemographicsFields value={demographics} onChange={setDemographics} problem={demographicsIssue} />}
+            {demographicsOn && (
+              <DemographicsFields value={demographics} onChange={setDemographics} problem={demographicsIssue} addressLocked={demographicsOpts.addressLocked} />
+            )}
             {cadsusOn && (
               <CadsusCheck cpf={cpf} code={code} confirmed={cadsusConfirmed} onConfirmedChange={setCadsusConfirmed} />
             )}
