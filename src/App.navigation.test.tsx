@@ -4,6 +4,7 @@ import type { ReactElement } from "react";
 import { renderModule, shellGroups } from "./App";
 import { NAV_GROUPS, navGroupsFor } from "./shell/modules";
 import { TerritoryMicroAreas } from "./modules/TerritoryMicroAreas";
+import { TerritoryTeam } from "./modules/TerritoryTeam";
 
 type El = ReactElement<Record<string, (id?: string) => void>>;
 
@@ -34,6 +35,10 @@ describe("atalhos entre telas", () => {
 
   it("territory-micro-areas abre a tela de microáreas", () => {
     expect((renderModule("territory-micro-areas", vi.fn()) as ReactElement).type).toBe(TerritoryMicroAreas);
+  });
+
+  it("territory-team abre o território da equipe", () => {
+    expect((renderModule("territory-team", vi.fn()) as ReactElement).type).toBe(TerritoryTeam);
   });
 });
 
