@@ -56,6 +56,9 @@ describe("ExitForm", () => {
     // Definitiva: nada saiu antes da confirmação.
     expect(api.exitRegistration).not.toHaveBeenCalled();
     expect(screen.getByText("Esta ação não pode ser desfeita.")).not.toBeNull();
+    // O botão que tinha o foco sumiu: o foco vai para o título da confirmação, nunca para o body.
+    expect((document.activeElement as HTMLElement).tagName).toBe("STRONG");
+    expect((document.activeElement as HTMLElement).textContent).toBe("Confirmar saída");
     confirm();
     await waitFor(() => expect(api.exitRegistration).toHaveBeenCalledWith("rg1", { reason: "death", on: "2026-10-20", death_on: "2026-10-19" }));
     expect(Object.keys(body()[1] as object)).not.toContain("version");
@@ -154,6 +157,8 @@ describe("ExitForm", () => {
     submit();
     confirm();
     expect((await screen.findByRole("alert")).textContent).toBe("esta ação não vale para a situação atual do cadastro (já saiu ou recusou)");
+    // Recusa sem campo: o foco vai para a frase.
+    expect(document.activeElement).toBe(screen.getByRole("alert"));
     expect(onDone).not.toHaveBeenCalled();
   });
 
@@ -166,6 +171,7 @@ describe("ExitForm", () => {
     submit();
     confirm();
     expect((await screen.findByRole("alert")).textContent).toBe(STALE_TEXT);
+    expect(document.activeElement).toBe(screen.getByRole("alert"));
     expect(api.exitRegistration).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole("button", { name: "Recarregar" }));
     expect(invalidate).toHaveBeenCalledWith({ queryKey: [ "territoryRegistration", "rg1" ] });

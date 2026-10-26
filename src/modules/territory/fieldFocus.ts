@@ -27,3 +27,21 @@ export function useFieldFocus() {
     mark: (path: string | null) => setMarked((m) => ({ path, at: m.at + 1 }))
   };
 }
+
+// Foco fora dos campos (m3 da revisão da prova): quando o botão que tinha o
+// foco some (edição → confirmação, recusa sem campo, versão velha), o foco vai
+// para um alvo nomeado — o título da confirmação ou a frase da recusa
+// (tabIndex -1) —, nunca para o body. `at` refaz o foco quando o alvo repete.
+export function useFocusTarget() {
+  const refs = useRef(new Map<string, HTMLElement>());
+  const [ wanted, setWanted ] = useState<{ name: string | null; at: number }>({ name: null, at: 0 });
+
+  useEffect(() => {
+    if (wanted.name) refs.current.get(wanted.name)?.focus();
+  }, [ wanted ]);
+
+  return {
+    ref: (name: string) => (el: HTMLElement | null) => { if (el) refs.current.set(name, el); else refs.current.delete(name); },
+    focus: (name: string) => setWanted((w) => ({ name, at: w.at + 1 }))
+  };
+}

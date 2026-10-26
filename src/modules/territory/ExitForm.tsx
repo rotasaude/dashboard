@@ -18,7 +18,7 @@ import {
 } from "../../lib/territoryRegistry";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { alert, box, checkLabel, fieldLabel, fieldset, form, legend, muted, row } from "../exams/styles";
-import { useFieldFocus } from "./fieldFocus";
+import { useFieldFocus, useFocusTarget } from "./fieldFocus";
 
 export const EXIT_EFFECT = {
   moved: "A pessoa sai da equipe pelo cadastro; consulta recente e bairro continuam valendo.",
@@ -26,6 +26,8 @@ export const EXIT_EFFECT = {
 } as const;
 
 type Reason = "moved" | "death";
+// Campos da tela: recusa do api com outro path (ou sem) foca a frase.
+const FIELDS = [ "reason", "on", "death_on", "death_certificate" ];
 // Separadores digitados na DO saem; letra fica para a regra recusar.
 const digitsOnly = (value: string) => value.replace(/[\s.-]/g, "");
 
@@ -34,6 +36,7 @@ export function ExitForm({ registration, today, onDone, onCancel }: {
 }) {
   const client = useQueryClient();
   const focus = useFieldFocus();
+  const target = useFocusTarget();
   const [ reason, setReason ] = useState<Reason | "">("");
   const [ on, setOn ] = useState("");
   const [ deathOn, setDeathOn ] = useState("");
@@ -63,10 +66,12 @@ export function ExitForm({ registration, today, onDone, onCancel }: {
       onDone(saved);
     },
     onError: (err) => {
-      if (isStale(err)) { setProblem(null); focus.mark(null); setStale(true); return; }
+      if (isStale(err)) { setProblem(null); focus.mark(null); setStale(true); target.focus("stale"); return; }
       setStep("edit");
       setProblem(territoryError(err));
-      focus.mark(errorPath(err));
+      const path = errorPath(err);
+      if (path && FIELDS.includes(path)) focus.mark(path);
+      else { focus.mark(null); target.focus("problem"); }
     }
   });
 
@@ -78,6 +83,7 @@ export function ExitForm({ registration, today, onDone, onCancel }: {
     setProblem(null);
     focus.mark(null);
     setStep("confirm");
+    target.focus("title");
   }
 
   function reload() {
@@ -89,7 +95,7 @@ export function ExitForm({ registration, today, onDone, onCancel }: {
     const body = input();
     return (
       <div style={box} role="group" aria-label="Confirmar saída">
-        <strong>Confirmar saída</strong>
+        <strong ref={target.ref("title")} tabIndex={-1}>Confirmar saída</strong>
         <p style={{ margin: 0, fontSize: 12.5 }}>{EXIT_EFFECT[reason]}</p>
         <p style={muted}>
           {`Motivo: ${exitReasonLabel(reason)} · saída em ${fmtDay(on)}`}
@@ -98,7 +104,7 @@ export function ExitForm({ registration, today, onDone, onCancel }: {
         <p style={{ margin: 0, fontSize: 12.5, fontWeight: 600 }}>Esta ação não pode ser desfeita.</p>
         {stale ? (
           <div style={row}>
-            <p role="alert" style={alert}>{STALE_TEXT}</p>
+            <p ref={target.ref("stale")} tabIndex={-1} role="alert" style={alert}>{STALE_TEXT}</p>
             <button type="button" style={secondaryButtonStyle} onClick={reload}>Recarregar</button>
           </div>
         ) : (
@@ -147,7 +153,7 @@ export function ExitForm({ registration, today, onDone, onCancel }: {
           <p style={muted}>A declaração de óbito tem 9 dígitos. Sem o número, a saída vale do mesmo jeito.</p>
         </>
       )}
-      {problem && <p role="alert" style={alert}>{problem}</p>}
+      {problem && <p ref={target.ref("problem")} tabIndex={-1} role="alert" style={alert}>{problem}</p>}
       <div style={row}>
         <button type="submit" style={buttonStyle}>Registrar saída</button>
         <button type="button" style={secondaryButtonStyle} onClick={onCancel}>Cancelar saída</button>
