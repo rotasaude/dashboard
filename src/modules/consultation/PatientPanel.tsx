@@ -71,7 +71,7 @@ export function PatientPanel({ record, onOpenConsultation, besideProblems, timel
         <KeyValue k="Nome" v={patient.display_name} mono={false} />
         <KeyValue k="Idade" v={ageLabel(patient.age)} />
         <KeyValue k="Sexo" v={sexLabel(patient.sex)} />
-        <KeyValue k={doc.k} v={doc.v} />
+        <KeyValue k="Documento" v={doc.v} />
       </div>
 
       {tabs.length > 1 && (

@@ -67,7 +67,7 @@ export function OpeningsReport({ today = todayInCity() }: { today?: string }) {
             cols={[
               { label: "Quando", w: "1fr", render: (r) => fmtDateTime(r.created_at) },
               { label: "Quem", w: "1.4fr", render: (r) => r.user_name },
-              { label: "CPF", w: "1fr", render: (r) => <span className="mono">{patientDocument(r).v}</span> },
+              { label: "Documento", w: "1fr", render: (r) => <span className="mono">{patientDocument(r).v}</span> },
               { label: "Tipo", w: "1.2fr", render: (r) => OPENING_KIND_LABEL[r.kind] ?? r.kind },
               { label: "Motivo", w: "1.2fr", render: (r) => reasonLabel(r.reason_code) },
               { label: "Válida até", w: "0.8fr", render: (r) => (r.expires_at ? fmtHourMinute(r.expires_at) : "—") }

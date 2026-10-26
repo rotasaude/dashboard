@@ -47,6 +47,8 @@ describe("OpeningsReport", () => {
     renderIt();
     const table = await screen.findByRole("table");
     expect(within(table).getByText("sem CPF · CNS *** **** **** 1234")).not.toBeNull();
+    expect(within(table).getByRole("columnheader", { name: "Documento" })).not.toBeNull();
+    expect(within(table).queryByRole("columnheader", { name: "CPF" })).toBeNull();
     expect(table.textContent).not.toMatch(/undefined|null/);
   });
 

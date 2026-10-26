@@ -34,6 +34,9 @@ describe("PatientPanel", () => {
     render(<PatientPanel record={record()} onOpenConsultation={vi.fn()} />);
     const panel = screen.getByRole("region", { name: "Paciente" });
     expect(within(panel).getByText("***.982.247-**")).not.toBeNull();
+    // Rótulo único para CPF e "sem CPF · CNS …" (o valor já diz qual é).
+    expect(within(panel).getByText("Documento")).not.toBeNull();
+    expect(within(panel).queryByText("CPF")).toBeNull();
   });
 
   it("paciente sem CPF mostra 'sem CPF' e o CNS (módulo 24a)", () => {
@@ -42,6 +45,8 @@ describe("PatientPanel", () => {
       onOpenConsultation={vi.fn()} />);
     const panel = screen.getByRole("region", { name: "Paciente" });
     expect(within(panel).getByText("sem CPF · CNS *** **** **** 1234")).not.toBeNull();
+    expect(within(panel).getByText("Documento")).not.toBeNull();
+    expect(within(panel).queryByText("CNS")).toBeNull();
     expect(panel.textContent).not.toMatch(/undefined|null/);
   });
 
