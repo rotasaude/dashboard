@@ -89,6 +89,18 @@ describe("PersonStart", () => {
     expect(api.findDuplicates).not.toHaveBeenCalled();
   });
 
+  it("a volta vale até trocar o 'Tem CPF?': trocar recomeça em branco e não busca sozinho de novo", async () => {
+    mocked(api.findDuplicates).mockResolvedValue([]);
+    renderWithProviders(<PersonStart today={TODAY24} onChoose={vi.fn()} onCancel={vi.fn()}
+      initial={{ query: { full_name: "Rita de Souza", birth_date: "1990-01-10" }, cpf: "52998224725", search: true }} />);
+    expect(await screen.findByText("Nenhum paciente parecido.")).not.toBeNull();
+    fireEvent.click(screen.getByLabelText("Tem CPF"));
+    fireEvent.click(screen.getByLabelText("Não tem CPF"));
+    expect((screen.getByLabelText("Nome completo") as HTMLInputElement).value).toBe("");
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(api.findDuplicates).toHaveBeenCalledTimes(1);
+  });
+
   it("volta do 409 duplicate_suspected: a frase, a busca já feita com os candidatos; com CPF, 'é outra pessoa' cria com o CPF", async () => {
     mocked(api.findDuplicates).mockResolvedValue([ { patient_id: "pa7", display_name: "Rita de Souza", birth_date: "1990-01-10", has_cpf: false } ]);
     const onChoose = vi.fn();

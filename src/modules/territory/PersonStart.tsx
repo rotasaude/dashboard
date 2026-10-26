@@ -45,16 +45,19 @@ export function PersonStart({ today = todayInCity(), onChoose, onCancel, initial
   today?: string; onChoose(choice: PersonChoice): void; onCancel(): void; initial?: PersonRestart;
 }) {
   const [ hasCpf, setHasCpf ] = useState(!initial);
+  // A volta vale só até trocar o "Tem CPF?" (trocar recomeça em branco, sem buscar sozinho de novo).
+  const [ restart, setRestart ] = useState(initial);
+  const choose = (value: boolean) => { setRestart(undefined); setHasCpf(value); };
   return (
     <div style={form}>
       <fieldset style={fieldset}>
         <legend style={legend}>Tem CPF?</legend>
         <div style={row}>
-          <label style={checkLabel}><input type="radio" name="person-has-cpf" checked={hasCpf} onChange={() => setHasCpf(true)} />Tem CPF</label>
-          <label style={checkLabel}><input type="radio" name="person-has-cpf" checked={!hasCpf} onChange={() => setHasCpf(false)} />Não tem CPF</label>
+          <label style={checkLabel}><input type="radio" name="person-has-cpf" checked={hasCpf} onChange={() => choose(true)} />Tem CPF</label>
+          <label style={checkLabel}><input type="radio" name="person-has-cpf" checked={!hasCpf} onChange={() => choose(false)} />Não tem CPF</label>
         </div>
       </fieldset>
-      {hasCpf ? <ByCpf onChoose={onChoose} /> : <WithoutCpf today={today} onChoose={onChoose} initial={initial} />}
+      {hasCpf ? <ByCpf onChoose={onChoose} /> : <WithoutCpf today={today} onChoose={onChoose} initial={restart} />}
       <div style={row}>
         <button type="button" style={secondaryButtonStyle} onClick={onCancel}>Cancelar</button>
       </div>
@@ -180,7 +183,10 @@ function WithoutCpf({ today, onChoose, initial }: { today: string; onChoose(choi
 
   return (
     <form style={form} onSubmit={submit} noValidate aria-label="Buscar possíveis duplicados">
-      <p style={muted}>Antes de criar uma pessoa sem CPF, procure quem já é paciente com o mesmo nome, nascimento e mãe.</p>
+      <p style={muted}>
+        {cpf ? "Antes de criar a pessoa nova com o CPF informado, confira quem já é paciente com o mesmo nome, nascimento e mãe."
+          : "Antes de criar uma pessoa sem CPF, procure quem já é paciente com o mesmo nome, nascimento e mãe."}
+      </p>
       <div style={row}>
         {field("Nome completo", fullName, setFullName)}
         {field("Data de nascimento", birth, setBirth, "date")}
