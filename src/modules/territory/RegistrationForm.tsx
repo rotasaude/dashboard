@@ -43,8 +43,10 @@ import { alert, checkLabel, fieldLabel, fieldset, form, grid, legend, muted, row
 import { useFieldFocus } from "./fieldFocus";
 import { fromDraft, toDraft, type Draft } from "./sectionDraft";
 import type { PersonChoice } from "./PersonStart";
+import { ExitForm } from "./ExitForm";
 
 export const REGISTRATION_SAVED = "Cadastro salvo. Nova versão enviada ao e-SUS.";
+export const REGISTRATION_EXITED = "Saída registrada. Nova versão enviada ao e-SUS.";
 export const LOCKED_TEXT = "validados no posto";
 // O id vem da busca pelo CPF ou do already_registered e aponta um cadastro
 // ativo: 404 aqui é escopo (a busca é da cidade; a leitura, da microárea).
@@ -104,14 +106,14 @@ function yearsOld(birth: string, today: string): number | null {
   return y - by - (m > bm || (m === bm && d >= bd) ? 0 : 1);
 }
 
-export function RegistrationForm({ today = todayInCity(), household, teamId, choice, registrationId, onSaved, onCancel }: {
+export function RegistrationForm({ today = todayInCity(), household, teamId, choice, registrationId, onSaved, onExited, onCancel }: {
   today?: string; household?: RegistrationPlace; teamId?: string; choice?: PersonChoice; registrationId?: string;
-  onSaved(r: Registration): void; onCancel(): void;
+  onSaved(r: Registration): void; onExited?(r: Registration): void; onCancel(): void;
 }) {
   const initialId = registrationId ?? (choice?.kind === "patient" ? choice.registrationId : null) ?? null;
   // "Abrir cadastro" (already_registered com o id) troca a criação pela edição do ativo.
   const [ openId, setOpenId ] = useState<string | null>(initialId);
-  const common = { today, household, teamId, onSaved, onCancel };
+  const common = { today, household, teamId, onSaved, onExited, onCancel };
   if (openId) return <EditLoader id={openId} {...common} />;
   if (!choice) return null;
   const subject: Subject = choice.kind === "new" ? { kind: "new", cpf: choice.cpf }
@@ -121,7 +123,9 @@ export function RegistrationForm({ today = todayInCity(), household, teamId, cho
   return <FormBody subject={subject} identity={identity} onOpen={setOpenId} {...common} />;
 }
 
-type Common = { today: string; household?: RegistrationPlace; teamId?: string; onSaved(r: Registration): void; onCancel(): void };
+type Common = {
+  today: string; household?: RegistrationPlace; teamId?: string; onSaved(r: Registration): void; onExited?(r: Registration): void; onCancel(): void;
+};
 
 function EditLoader({ id, ...common }: Common & { id: string }) {
   const query = useQuery({ queryKey: [ REGISTRATION_KEY, id ], queryFn: () => getRegistration(id), ...NOMINAL_QUERY });
@@ -142,7 +146,7 @@ function EditLoader({ id, ...common }: Common & { id: string }) {
     {...common} />;
 }
 
-function FormBody({ subject, identity: given, today, household, teamId, onSaved, onCancel, onOpen, onReload }: Common & {
+function FormBody({ subject, identity: given, today, household, teamId, onSaved, onExited, onCancel, onOpen, onReload }: Common & {
   subject: Subject; identity: PatientIdentity; onOpen?(id: string): void; onReload?(): void;
 }) {
   const client = useQueryClient();
@@ -173,6 +177,7 @@ function FormBody({ subject, identity: given, today, household, teamId, onSaved,
   const [ refused, setRefused ] = useState(r?.refused ?? false);
   const [ closed, setClosed ] = useState<Set<Section>>(new Set());
   const [ problem, setProblem ] = useState<string | null>(null);
+  const [ exiting, setExiting ] = useState(false);
   const [ activeId, setActiveId ] = useState<string | null>(null);
   const [ stale, setStale ] = useState(false);
 
@@ -360,7 +365,12 @@ function FormBody({ subject, identity: given, today, household, teamId, onSaved,
     </label>
   );
 
+  // Saída: só de cadastro ativo e sem termo de recusa (o LEDI proíbe motivo de
+  // saída com recusa; o api devolve invalid_transition). A ficha segue na tela.
+  const canExit = r !== null && r.status !== "exited" && !r.refused;
+
   return (
+    <>
     <form style={form} onSubmit={submit} noValidate aria-label={r ? "Atualizar cadastro individual" : "Novo cadastro individual"}>
       {r?.identity_review_pending && (
         <div style={row}>
@@ -485,8 +495,11 @@ function FormBody({ subject, identity: given, today, household, teamId, onSaved,
       <div style={row}>
         <button type="submit" style={save.isPending ? disabledButtonStyle : buttonStyle} disabled={save.isPending}>Salvar cadastro</button>
         <button type="button" style={secondaryButtonStyle} onClick={onCancel}>Cancelar</button>
+        {canExit && !exiting && <button type="button" style={secondaryButtonStyle} onClick={() => setExiting(true)}>Registrar saída</button>}
       </div>
     </form>
+    {r && canExit && exiting && <ExitForm registration={r} today={today} onCancel={() => setExiting(false)} onDone={onExited ?? onSaved} />}
+    </>
   );
 }
 

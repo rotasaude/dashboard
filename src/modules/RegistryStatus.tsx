@@ -32,7 +32,7 @@ import { SegmentedControl } from "../shell/SegmentedControl";
 import { inputStyle, secondaryButtonStyle } from "../components/formStyles";
 import { alert, fieldLabel, muted, okText, row, stack } from "./exams/styles";
 import { TerritoryGate } from "./territory/TerritoryGate";
-import { REGISTRATION_SAVED, RegistrationForm } from "./territory/RegistrationForm";
+import { REGISTRATION_EXITED, REGISTRATION_SAVED, RegistrationForm } from "./territory/RegistrationForm";
 import type { PersonChoice } from "./territory/PersonStart";
 
 const NO_NAME = "cidadão sem nome no cadastro";
@@ -189,7 +189,8 @@ function StatusBody({ today }: { today?: string }) {
         <Panel title="Cadastro individual" sub={open.name}>
           <div style={{ padding: 16 }}>
             <RegistrationForm key={open.key} today={today} teamId={open.teamId} registrationId={open.registrationId} choice={open.choice}
-              onCancel={() => setOpen(null)} onSaved={() => { setOpen(null); setNotice(REGISTRATION_SAVED); }} />
+              onCancel={() => setOpen(null)} onSaved={() => { setOpen(null); setNotice(REGISTRATION_SAVED); }}
+              onExited={() => { setOpen(null); setNotice(REGISTRATION_EXITED); }} />
           </div>
         </Panel>
       )}

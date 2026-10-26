@@ -29,7 +29,7 @@ import { HOUSEHOLD_SAVED, addressLine, householdStatus } from "./HouseholdList";
 import { HouseholdForm } from "./HouseholdForm";
 import { FamilyForm } from "./FamilyForm";
 import { PersonStart, type PersonChoice } from "./PersonStart";
-import { REGISTRATION_SAVED, RegistrationForm } from "./RegistrationForm";
+import { REGISTRATION_EXITED, REGISTRATION_SAVED, RegistrationForm } from "./RegistrationForm";
 
 const NO_NAME = "sem nome no cadastro";
 export const FAMILY_SAVED = "Família salva. Nova versão do domicílio enviada ao e-SUS.";
@@ -120,7 +120,8 @@ export function HouseholdDetail({ householdId, onBack, today }: { householdId: s
             {editing?.kind === "registration" && (
               <div style={box}>
                 <strong>{`Cadastro de ${editing.name}`}</strong>
-                <RegistrationForm today={today} registrationId={editing.id} onCancel={() => setEditing(null)} onSaved={saved(REGISTRATION_SAVED)} />
+                <RegistrationForm today={today} registrationId={editing.id} onCancel={() => setEditing(null)} onSaved={saved(REGISTRATION_SAVED)}
+                  onExited={saved(REGISTRATION_EXITED)} />
               </div>
             )}
             {(editing?.kind === "newFamily" || editing?.kind === "family") && (

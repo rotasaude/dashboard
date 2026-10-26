@@ -11,7 +11,7 @@ import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/re
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const real = await importOriginal<typeof import("../../lib/api")>();
-  return { ...real, fetchCurrentSession: vi.fn(), createRegistration: vi.fn(), updateRegistration: vi.fn(), getRegistration: vi.fn() };
+  return { ...real, fetchCurrentSession: vi.fn(), createRegistration: vi.fn(), updateRegistration: vi.fn(), getRegistration: vi.fn(), exitRegistration: vi.fn() };
 });
 
 import * as api from "../../lib/api";
@@ -36,7 +36,7 @@ const UNLOCKED: RegistrationPatient = { id: "pa2", display_name: "José das Dore
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 beforeEach(() => {
-  for (const fn of [ api.fetchCurrentSession, api.createRegistration, api.updateRegistration, api.getRegistration ]) mocked(fn).mockReset();
+  for (const fn of [ api.fetchCurrentSession, api.createRegistration, api.updateRegistration, api.getRegistration, api.exitRegistration ]) mocked(fn).mockReset();
   mocked(api.fetchCurrentSession).mockResolvedValue(territoryUser());
   mocked(api.createRegistration).mockResolvedValue(registration());
   mocked(api.updateRegistration).mockResolvedValue(registration({ version: 2 }));
@@ -417,5 +417,74 @@ describe("RegistrationForm", () => {
     await waitFor(() => expect((screen.getByLabelText("Nome completo") as HTMLInputElement).value).toBe("José Lima das Dores"));
     expect(api.getRegistration).toHaveBeenCalledTimes(2);
     expect(screen.queryByText(STALE_TEXT)).toBeNull();
+  });
+
+  describe("Registrar saída", () => {
+    const exitButton = () => screen.queryByRole("button", { name: "Registrar saída" });
+
+    it("cadastro ativo: o botão abre a saída ao lado da ficha; sair avisa o chamador e não salva a ficha", async () => {
+      const onExited = vi.fn();
+      const onSaved = vi.fn();
+      mocked(api.exitRegistration).mockResolvedValue(registration({ id: "rg2", status: "exited" }));
+      renderWithProviders(<RegistrationForm today={TODAY24} registrationId="rg2" onSaved={onSaved} onExited={onExited} onCancel={vi.fn()} />);
+      await screen.findByLabelText("Nome completo");
+      fireEvent.click(exitButton()!);
+      // O botão de entrada dá lugar ao formulário da saída; a ficha continua na tela.
+      expect(screen.getByRole("form", { name: "Saída do cadastro" })).not.toBeNull();
+      expect(screen.getByLabelText("Nome completo")).not.toBeNull();
+      fireEvent.click(screen.getByLabelText("mudou de território"));
+      fireEvent.change(screen.getByLabelText("Data"), { target: { value: "2026-10-20" } });
+      fireEvent.click(screen.getByRole("button", { name: "Registrar saída" }));
+      fireEvent.click(screen.getByRole("button", { name: "Confirmar saída" }));
+      await waitFor(() => expect(api.exitRegistration).toHaveBeenCalledWith("rg2", { reason: "moved", on: "2026-10-20" }));
+      await waitFor(() => expect(onExited).toHaveBeenCalled());
+      expect(onSaved).not.toHaveBeenCalled();
+      expect(api.updateRegistration).not.toHaveBeenCalled();
+    });
+
+    it("sem onExited, a saída cai no onSaved", async () => {
+      const onSaved = vi.fn();
+      mocked(api.exitRegistration).mockResolvedValue(registration({ id: "rg2", status: "exited" }));
+      renderWithProviders(<RegistrationForm today={TODAY24} registrationId="rg2" onSaved={onSaved} onCancel={vi.fn()} />);
+      await screen.findByLabelText("Nome completo");
+      fireEvent.click(exitButton()!);
+      fireEvent.click(screen.getByLabelText("mudou de território"));
+      fireEvent.change(screen.getByLabelText("Data"), { target: { value: "2026-10-20" } });
+      fireEvent.click(screen.getByRole("button", { name: "Registrar saída" }));
+      fireEvent.click(screen.getByRole("button", { name: "Confirmar saída" }));
+      await waitFor(() => expect(onSaved).toHaveBeenCalled());
+    });
+
+    it("cancelar a saída devolve o botão", async () => {
+      renderWithProviders(<RegistrationForm today={TODAY24} registrationId="rg2" onSaved={vi.fn()} onCancel={vi.fn()} />);
+      await screen.findByLabelText("Nome completo");
+      fireEvent.click(exitButton()!);
+      expect(exitButton()).not.toBeNull(); // o submit do formulário da saída
+      fireEvent.click(screen.getByRole("button", { name: "Cancelar saída" }));
+      expect(screen.queryByRole("form", { name: "Saída do cadastro" })).toBeNull();
+      expect(exitButton()).not.toBeNull();
+    });
+
+    it("cadastro recusado não oferece Registrar saída (LEDI: saída vazia com termo de recusa)", async () => {
+      mocked(api.getRegistration).mockResolvedValue(registration({ id: "rg2", refused: true, patient: UNLOCKED }));
+      renderWithProviders(<RegistrationForm today={TODAY24} registrationId="rg2" onSaved={vi.fn()} onCancel={vi.fn()} />);
+      await screen.findByLabelText("Nome completo");
+      expect(exitButton()).toBeNull();
+    });
+
+    it("cadastro que já saiu não oferece Registrar saída", async () => {
+      mocked(api.getRegistration).mockResolvedValue(registration({
+        id: "rg2", status: "exited", exit: { reason: "moved", on: "2026-10-01", death_on: null, death_certificate: null }, patient: UNLOCKED
+      }));
+      renderWithProviders(<RegistrationForm today={TODAY24} registrationId="rg2" onSaved={vi.fn()} onCancel={vi.fn()} />);
+      await screen.findByLabelText("Nome completo");
+      expect(exitButton()).toBeNull();
+    });
+
+    it("cadastro novo não tem Registrar saída", async () => {
+      renderWithProviders(<RegistrationForm today={TODAY24} household={HOUSE} choice={NEW} onSaved={vi.fn()} onCancel={vi.fn()} />);
+      await screen.findByLabelText("Nome completo");
+      expect(exitButton()).toBeNull();
+    });
   });
 });
