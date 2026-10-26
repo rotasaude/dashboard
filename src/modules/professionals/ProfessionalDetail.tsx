@@ -5,7 +5,7 @@ import {
   listScheduleTemplates, openProfessionalLink, scheduleShift, setLinkDefaultType, setShiftTemplate, updateProfessional,
   type AppointmentType, type CboEntry, type HealthUnit, type ProfessionalLink, type ProfessionalShift, type ScheduleTemplate
 } from "../../lib/api";
-import { professionalError, professionalErrorOrNull, shiftWindow } from "../../lib/professionals";
+import { councilText, professionalError, professionalErrorOrNull, shiftWindow } from "../../lib/professionals";
 import { cityIsoDate, fmtDateTime } from "../../lib/format";
 import { addDaysIso as addDays, ddmm, typeLabel, typeServes } from "../../lib/scheduling";
 import { PageHeader } from "../../components/PageHeader";
@@ -82,7 +82,7 @@ export function ProfessionalDetail({ professionalId, onBack }: Props) {
 
       <Panel title="Perfil">
         <div style={{ display: "flex", gap: 24, flexWrap: "wrap", marginBottom: 12 }}>
-          <KeyValue k="Conselho" v={`${professional.council}-${professional.council_state} ${professional.registration_number}`} />
+          <KeyValue k="Conselho" v={councilText(professional)} />
           <KeyValue k="CNS" v={professional.cns_masked} />
         </div>
         <ProfileForm initial={professional} submitLabel="Salvar perfil"

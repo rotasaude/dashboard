@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getMyProfessional, updateMyProfessional, type ProfessionalLink, type ProfessionalShift } from "../lib/api";
-import { professionalError } from "../lib/professionals";
+import { councilText, professionalError } from "../lib/professionals";
 import { fmtDateTime } from "../lib/format";
 import { useAuth } from "../lib/auth";
 import { PageHeader } from "../components/PageHeader";
@@ -38,7 +38,7 @@ export function MyProfile() {
       <PageHeader title="Meu perfil" sub={professional.email_address} />
       <Panel title="Dados conferidos pela prefeitura">
         <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
-          <KeyValue k="Conselho" v={`${professional.council}-${professional.council_state} ${professional.registration_number}`} />
+          <KeyValue k="Conselho" v={councilText(professional)} />
           <KeyValue k="CNS" v={professional.cns_masked} />
         </div>
       </Panel>

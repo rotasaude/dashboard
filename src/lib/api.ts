@@ -698,9 +698,10 @@ export interface Professional {
   user_id: string;
   email_address: string;
   professional_name: string;
-  council: string;
-  council_state: string;
-  registration_number: string;
+  // Nulos juntos: ACS (515105) e agente de endemias (515140) não têm conselho (módulo 24a).
+  council: string | null;
+  council_state: string | null;
+  registration_number: string | null;
   cns_masked: string;
   cns?: string;
   phone?: string | null;

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createProfessional, listPendingProfessionals, listProfessionals, type PendingProfessional } from "../lib/api";
-import { STATUS_LABEL, professionalError } from "../lib/professionals";
+import { STATUS_LABEL, councilText, professionalError } from "../lib/professionals";
 import { PageHeader } from "../components/PageHeader";
 import { Panel } from "../components/Panel";
 import { DataTable } from "../components/DataTable";
@@ -124,7 +124,7 @@ function People() {
                     {p.professional_name}
                   </button>
                 ) },
-                { label: "Conselho", w: "1fr", render: (p) => `${p.council}-${p.council_state} ${p.registration_number}` },
+                { label: "Conselho", w: "1fr", render: (p) => councilText(p) },
                 { label: "Vínculos ativos", w: "3fr", render: (p) => {
                   const active = p.links.filter((l) => !l.ended_at);
                   if (active.length === 0) return <Tag tone="warn">{STATUS_LABEL.missing_link}</Tag>;

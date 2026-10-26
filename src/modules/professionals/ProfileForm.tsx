@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import type { Professional, ProfessionalFields } from "../../lib/api";
-import { COUNCILS, UFS, isValidCns, professionalError } from "../../lib/professionals";
+import { COUNCILS, NO_COUNCIL, UFS, isValidCns, professionalError } from "../../lib/professionals";
 import { buttonStyle, disabledButtonStyle, inputStyle } from "../../components/formStyles";
 
 // Formulário do perfil (spec §5). `selfService` mostra só nome e contato
@@ -16,7 +16,7 @@ const onlyDigits = (s: string) => s.replace(/\D/g, "");
 
 export function ProfileForm({ initial = {}, submitLabel, selfService = false, onSubmit }: Props) {
   const [ name, setName ] = useState(initial.professional_name ?? "");
-  const [ council, setCouncil ] = useState(initial.council ?? "CRM");
+  const [ council, setCouncil ] = useState(initial.council === null && initial.id ? NO_COUNCIL : initial.council ?? "CRM");
   const [ uf, setUf ] = useState(initial.council_state ?? "PR");
   const [ registration, setRegistration ] = useState(initial.registration_number ?? "");
   const [ cns, setCns ] = useState("");
@@ -37,7 +37,8 @@ export function ProfileForm({ initial = {}, submitLabel, selfService = false, on
         if (!isValidCns(cns)) { setError("CNS inválido: confira os 15 dígitos"); return; }
         fields.cns = onlyDigits(cns);
       }
-      Object.assign(fields, { council, council_state: uf, registration_number: onlyDigits(registration) });
+      if (council === NO_COUNCIL) Object.assign(fields, { council: null, council_state: null, registration_number: null });
+      else Object.assign(fields, { council, council_state: uf, registration_number: onlyDigits(registration) });
     }
     setBusy(true);
     try {
@@ -63,17 +64,22 @@ export function ProfileForm({ initial = {}, submitLabel, selfService = false, on
             <label style={{ ...labelStyle, flex: 1 }}>Conselho
               <select value={council} onChange={(e) => setCouncil(e.target.value)} style={inputStyle}>
                 {COUNCILS.map((c) => <option key={c} value={c}>{c}</option>)}
+                <option value={NO_COUNCIL}>Sem conselho (ACS ou agente de endemias)</option>
               </select>
             </label>
-            <label style={{ ...labelStyle, width: 90 }}>UF do conselho
-              <select value={uf} onChange={(e) => setUf(e.target.value)} style={inputStyle}>
-                {UFS.map((u) => <option key={u} value={u}>{u}</option>)}
-              </select>
-            </label>
+            {council !== NO_COUNCIL && (
+              <label style={{ ...labelStyle, width: 90 }}>UF do conselho
+                <select value={uf} onChange={(e) => setUf(e.target.value)} style={inputStyle}>
+                  {UFS.map((u) => <option key={u} value={u}>{u}</option>)}
+                </select>
+              </label>
+            )}
           </div>
-          <label style={labelStyle}>Número do registro
-            <input value={registration} onChange={(e) => setRegistration(e.target.value)} style={inputStyle} inputMode="numeric" />
-          </label>
+          {council !== NO_COUNCIL && (
+            <label style={labelStyle}>Número do registro
+              <input value={registration} onChange={(e) => setRegistration(e.target.value)} style={inputStyle} inputMode="numeric" />
+            </label>
+          )}
           <label style={labelStyle}>CNS
             <input value={cns} onChange={(e) => setCns(e.target.value)} style={inputStyle} inputMode="numeric"
               placeholder={initial.cns_masked ? `${initial.cns_masked} (em branco mantém)` : "15 dígitos"} />

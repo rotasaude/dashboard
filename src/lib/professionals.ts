@@ -7,6 +7,13 @@ import { addDaysIso, BLOCK_DETAIL_MESSAGE, type BlockProblem } from "./schedulin
 export const COUNCILS = [ "CRM", "COREN", "CRO", "CRF", "CRP", "CREFITO", "CRN", "CRFa", "CRESS", "CRBM", "CREF", "CRMV" ];
 export const UFS = [ "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG", "PA", "PB", "PR", "PE",
   "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO" ];
+// Valor do select do perfil para "sem conselho" (nunca vai ao api: vira council/UF/número nulos).
+export const NO_COUNCIL = "none";
+
+export function councilText(p: { council: string | null; council_state: string | null; registration_number: string | null }): string {
+  if (!p.council) return "sem conselho (ACS ou agente de endemias)";
+  return `${p.council}-${p.council_state ?? "?"} ${p.registration_number ?? ""}`.trim();
+}
 export const STATUS_LABEL = { missing_profile: "sem perfil", missing_link: "sem vínculo" } as const;
 
 const digits = (s: string) => s.replace(/\D/g, "");

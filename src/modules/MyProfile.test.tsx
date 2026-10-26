@@ -51,6 +51,16 @@ describe("MyProfile", () => {
     expect(screen.queryByLabelText("Conselho")).toBeNull();
   });
 
+  it("ACS sem conselho: mostra a frase, não 'null-null null'", async () => {
+    const base = (await api.getMyProfessional())!;
+    mocked(api.getMyProfessional).mockResolvedValue({
+      ...base, professional: { ...base.professional, council: null, council_state: null, registration_number: null }
+    });
+    renderIt();
+    expect(await screen.findByText("sem conselho (ACS ou agente de endemias)")).toBeTruthy();
+    expect(screen.queryByText(/null/)).toBeNull();
+  });
+
   it("edita só nome e contato", async () => {
     mocked(api.updateMyProfessional).mockResolvedValue({} as api.Professional);
     renderIt();
