@@ -42,6 +42,14 @@ describe("OpeningsReport", () => {
     expect(api.listOpenings).toHaveBeenCalledWith({ from: "2026-09-07", to: "2026-10-07", userId: "" });
   });
 
+  it("leitura de paciente sem CPF: 'sem CPF' e o CNS, nunca null (módulo 24a)", async () => {
+    m(api.listOpenings).mockResolvedValue([ adminReadRow({ cpf_masked: null, has_cpf: false, cns_masked: "*** **** **** 1234" }) ]);
+    renderIt();
+    const table = await screen.findByRole("table");
+    expect(within(table).getByText("sem CPF · CNS *** **** **** 1234")).not.toBeNull();
+    expect(table.textContent).not.toMatch(/undefined|null/);
+  });
+
   it("filtra por profissional (cada pessoa uma vez) e período", async () => {
     renderIt();
     await screen.findByRole("table");

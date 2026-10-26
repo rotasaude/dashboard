@@ -37,4 +37,10 @@ describe("BillingPatientLookup", () => {
     expect(screen.getByText("Paciente: paciente sem nome no cadastro · CPF ***.982.247-**")).not.toBeNull();
     expect(document.body.textContent).not.toMatch(/null/);
   });
+
+  it("paciente sem CPF: 'sem CPF' e o CNS, nunca null (módulo 24a)", () => {
+    render(<BillingPatientLookup patient={{ ...PATIENT, cpf_masked: null, has_cpf: false, cns_masked: "*** **** **** 1234" }} onFound={vi.fn()} />);
+    expect(screen.getByText("Paciente: Joana Lima · sem CPF · CNS *** **** **** 1234")).not.toBeNull();
+    expect(document.body.textContent).not.toMatch(/undefined|null/);
+  });
 });

@@ -29,6 +29,30 @@ describe("PatientPanel", () => {
     expect(screen.getByText("nenhum problema ativo")).not.toBeNull();
     expect(screen.getByText("nenhuma consulta anterior")).not.toBeNull();
   });
+
+  it("paciente com CPF: a máscara de hoje", () => {
+    render(<PatientPanel record={record()} onOpenConsultation={vi.fn()} />);
+    const panel = screen.getByRole("region", { name: "Paciente" });
+    expect(within(panel).getByText("***.982.247-**")).not.toBeNull();
+  });
+
+  it("paciente sem CPF mostra 'sem CPF' e o CNS (módulo 24a)", () => {
+    const base = record();
+    render(<PatientPanel record={record({ patient: { ...base.patient, cpf_masked: null, has_cpf: false, cns_masked: "*** **** **** 1234" } })}
+      onOpenConsultation={vi.fn()} />);
+    const panel = screen.getByRole("region", { name: "Paciente" });
+    expect(within(panel).getByText("sem CPF · CNS *** **** **** 1234")).not.toBeNull();
+    expect(panel.textContent).not.toMatch(/undefined|null/);
+  });
+
+  it("paciente sem CPF e sem CNS: só 'sem CPF'", () => {
+    const base = record();
+    render(<PatientPanel record={record({ patient: { ...base.patient, cpf_masked: null, has_cpf: false, cns_masked: null } })}
+      onOpenConsultation={vi.fn()} />);
+    const panel = screen.getByRole("region", { name: "Paciente" });
+    expect(within(panel).getByText("sem CPF")).not.toBeNull();
+    expect(panel.textContent).not.toMatch(/undefined|null/);
+  });
 });
 
 describe("PatientPanel sem chaves opcionais (o api omite os nulos)", () => {

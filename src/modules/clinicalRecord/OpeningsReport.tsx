@@ -7,6 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 import { listMemberships, listOpenings, type OpeningRow } from "../../lib/api";
 import { OPENINGS_REPORT_LIMIT, OPENING_KIND_LABEL, reasonLabel } from "../../lib/clinicalRecord";
 import { consultationError } from "../../lib/consultation";
+import { patientDocument } from "../../lib/patientDocument";
 import { addDays, todayInCity } from "../../lib/campaigns";
 import { fmtDateTime, fmtHourMinute } from "../../lib/format";
 import { Panel } from "../../components/Panel";
@@ -66,7 +67,7 @@ export function OpeningsReport({ today = todayInCity() }: { today?: string }) {
             cols={[
               { label: "Quando", w: "1fr", render: (r) => fmtDateTime(r.created_at) },
               { label: "Quem", w: "1.4fr", render: (r) => r.user_name },
-              { label: "CPF", w: "1fr", render: (r) => <span className="mono">{r.cpf_masked}</span> },
+              { label: "CPF", w: "1fr", render: (r) => <span className="mono">{patientDocument(r).v}</span> },
               { label: "Tipo", w: "1.2fr", render: (r) => OPENING_KIND_LABEL[r.kind] ?? r.kind },
               { label: "Motivo", w: "1.2fr", render: (r) => reasonLabel(r.reason_code) },
               { label: "Válida até", w: "0.8fr", render: (r) => (r.expires_at ? fmtHourMinute(r.expires_at) : "—") }

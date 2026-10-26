@@ -5,6 +5,7 @@ import { useRef, useState } from "react";
 import { lookupBillingPatient, type BillingPatient } from "../../lib/api";
 import { isValidCpf, maskCpf, onlyDigits } from "../../lib/attendance";
 import { billingError, patientName } from "../../lib/billing";
+import { documentText } from "../../lib/patientDocument";
 import { inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { alert, fieldLabel, row } from "../exams/styles";
 
@@ -35,7 +36,7 @@ export function BillingPatientLookup({ patient, onFound }: { patient: BillingPat
   if (patient) {
     return (
       <div style={row}>
-        <span>{`Paciente: ${patientName(patient)} · CPF ${patient.cpf_masked}`}</span>
+        <span>{`Paciente: ${patientName(patient)} · ${documentText(patient)}`}</span>
         <button type="button" style={secondaryButtonStyle} onClick={() => onFound(null)}>Trocar paciente</button>
       </div>
     );

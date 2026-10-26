@@ -210,7 +210,7 @@ export function ConsultationWorkspace(props: Props) {
                 onGoToSecurity={props.onGoToSecurity} draft={consultation.status === "draft"}
                 issue={user?.id === consultation.author.id ? {
                   // O CPF vai mascarado (do prontuário), nunca completo.
-                  cboCode: consultation.cbo_code, unitId: props.unit.id, patientCpfMasked: record.data.patient.cpf_masked
+                  cboCode: consultation.cbo_code, unitId: props.unit.id, patientCpfMasked: record.data.patient.cpf_masked ?? undefined
                 } : undefined} />
             </div>
           )}

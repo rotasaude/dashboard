@@ -7,6 +7,7 @@ import type { Addendum, ClinicalRecord, ConsultationSummary, VitalSigns } from "
 import { ageLabel, onsetLabel } from "../../lib/consultation";
 import { COLOR_LABEL, COLOR_TONE, GLUCOSE_MOMENT_LABEL, VITALS, alertLabel } from "../../lib/screening";
 import { sexLabel } from "../../lib/profile";
+import { patientDocument } from "../../lib/patientDocument";
 import { fmtDateTime, fmtNumber } from "../../lib/format";
 import { KeyValue } from "../../components/KeyValue";
 import { Tag } from "../../components/Tag";
@@ -46,6 +47,7 @@ export function PatientPanel({ record, onOpenConsultation, besideProblems, timel
   exams?: PatientExamsProps;
 }) {
   const { patient, problems, consultations } = record;
+  const doc = patientDocument(patient);
   const active = problems.filter((p) => p.status === "active");
   const rev = record.today_screening?.current_revision ?? null;
   // A linha do tempo só lê na primeira abertura da aba e depois fica montada
@@ -69,7 +71,7 @@ export function PatientPanel({ record, onOpenConsultation, besideProblems, timel
         <KeyValue k="Nome" v={patient.display_name} mono={false} />
         <KeyValue k="Idade" v={ageLabel(patient.age)} />
         <KeyValue k="Sexo" v={sexLabel(patient.sex)} />
-        <KeyValue k="CPF" v={patient.cpf_masked} />
+        <KeyValue k={doc.k} v={doc.v} />
       </div>
 
       {tabs.length > 1 && (

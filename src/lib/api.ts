@@ -1641,8 +1641,11 @@ export interface ConsultationSummary {
   id: string; finalized_at: string; author_name: string; cbo_label: string; care_type_label: string;
   problems: EvaluatedProblem[]; addenda_count: number;
 }
+// Módulo 24a (L8; api `Patients::IdentifierJson`): paciente sem CPF vem com
+// `cpf_masked: null`, `has_cpf: false` e o CNS mascarado — a tela usa `patientDocument`.
 export interface RecordPatient {
-  id: string; display_name: string; full_name: string; social_name: string | null; age: number; sex: Sex; cpf_masked: string;
+  id: string; display_name: string; full_name: string; social_name: string | null; age: number; sex: Sex; cpf_masked: string | null;
+  has_cpf?: boolean; cns_masked?: string | null;
 }
 export interface ClinicalRecord {
   patient: RecordPatient; access: RecordAccess; problems: PatientProblem[];
@@ -1663,8 +1666,10 @@ export interface OpeningInput { cpf: string; reason_code: OpeningReason; reason_
 export interface Opening { opening_id: string; patient_id: string | null; expires_at: string }
 export type OpeningKind = "justified_opening" | "administrative_read";
 export interface OpeningRow {
-  kind: OpeningKind; id: string; user_name: string; cpf_masked: string; reason_code: OpeningReason | null;
+  kind: OpeningKind; id: string; user_name: string; cpf_masked: string | null; reason_code: OpeningReason | null;
   consultation_id: string | null; created_at: string; expires_at: string | null;
+  // Módulo 24a (L8): a leitura administrativa pode ser de paciente sem CPF.
+  has_cpf?: boolean; cns_masked?: string | null;
 }
 export interface ConsultationListItem {
   id: string; finalized_at: string; patient: { id: string; display_name: string };
@@ -2433,7 +2438,8 @@ export interface ExamOrderQuery {
 }
 export const EXAM_PAGE_SIZE = 50;
 
-export interface ExamPatient { id: string; display_name: string; cpf_masked: string }
+// Módulo 24a (L8): `has_cpf` e o CNS mascarado (`Patients::IdentifierJson`).
+export interface ExamPatient { id: string; display_name: string; cpf_masked: string | null; has_cpf?: boolean; cns_masked?: string | null }
 export interface ExamCatalogEntry { sigtap_code: string; label: string; result_fields: ExamResultField[] }
 export interface ExamProviderRef { id: string; name: string }
 export interface ExamRequester { user_id: string; name: string }
@@ -3543,7 +3549,8 @@ export interface BillingEstablishment { type: EstablishmentType; id: string; cne
 
 export interface PerformedProcedure {
   id: string;
-  patient: { id: string; display_name: string | null };
+  // Módulo 24a (L8): o api manda `has_cpf` e o CNS mascarado, sem `cpf_masked`.
+  patient: { id: string; display_name: string | null; has_cpf?: boolean; cns_masked?: string | null };
   establishment: BillingEstablishment;
   professional: { user_id: string; name: string; cbo_code: string | null };
   performed_on: string; sigtap_code: string; label: string; sigtap_competence: string;
@@ -3574,7 +3581,8 @@ export interface SigtapProcedure {
   sex: string | null; age_min_months: number | null; age_max_months: number | null;
 }
 // Divergência B3.
-export interface BillingPatient { id: string; display_name: string | null; cpf_masked: string }
+// Módulo 24a (L8): `has_cpf` e o CNS mascarado (`Patients::IdentifierJson`).
+export interface BillingPatient { id: string; display_name: string | null; cpf_masked: string | null; has_cpf?: boolean; cns_masked?: string | null }
 // Divergência B5.
 export interface BillingProfessional { user_id: string; name: string; cbo_codes: string[] }
 export interface BillingSummary { bpa_i_lines: number; bpa_c_lines: number; not_billable: Record<string, number>; pending: number }
@@ -3781,7 +3789,11 @@ export interface CareTeam { id: string; ine: string; name: string; unit: { id: s
 export interface CareLineRef { id: string; name: string; indicator?: string | null; requires_anchor: "lmp" | string | null }
 // O contexto do painel: as duas listas de apoio, lidas juntas.
 export interface CareContext { teams: CareTeam[]; lines: CareLineRef[] }
-export interface CarePerson { patient_id: string | null; citizen_id: string | null; display_name: string | null; age: number | null }
+// Módulo 24a (L8): o api manda `has_cpf` e o CNS mascarado, sem `cpf_masked`.
+export interface CarePerson {
+  patient_id: string | null; citizen_id: string | null; display_name: string | null; age: number | null;
+  has_cpf?: boolean; cns_masked?: string | null;
+}
 export interface CarePracticeStatus {
   key: string; label: string; status: CareStatus | string; done_at: string | null; due_on: string | null;
   count: number | null; expected: number | null;
