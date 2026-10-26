@@ -4067,7 +4067,9 @@ export interface FamilyInput {
 }
 
 export interface DuplicateQuery { full_name: string; birth_date: string; mother_name?: string | null }
-export interface DuplicateCandidate { patient_id: string; display_name: string; birth_date: string; has_cpf: boolean }
+// L29: registration_id = o cadastro ATIVO do paciente, só quando o usuário o
+// lê (fora do alcance, saído ou sem cadastro: null).
+export interface DuplicateCandidate { patient_id: string; display_name: string; birth_date: string; has_cpf: boolean; registration_id: string | null }
 // L3: a pessoa pelo CPF — paciente (com o cadastro ativo, se houver) ou par
 // validado sem paciente. Ninguém → 404 person_not_found; par só declarado →
 // 409 citizen_not_verified.

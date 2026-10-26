@@ -275,7 +275,7 @@ describe("TerritoryTeam", () => {
   it("pessoa nova com CPF e 409 duplicate_suspected: volta à busca com a frase e os candidatos; 'é esta pessoa' segue pelo paciente (L28)", async () => {
     mocked(api.lookupTerritoryPerson).mockRejectedValue(new api.ApiError(404, { error: "person_not_found" }, "404"));
     mocked(api.createRegistration).mockRejectedValueOnce(new api.ApiError(409, { error: "duplicate_suspected" }, "409"));
-    mocked(api.findDuplicates).mockResolvedValue([ { patient_id: "pa7", display_name: "Rita de Souza", birth_date: "1990-01-10", has_cpf: false } ]);
+    mocked(api.findDuplicates).mockResolvedValue([ { patient_id: "pa7", display_name: "Rita de Souza", birth_date: "1990-01-10", has_cpf: false, registration_id: null } ]);
     renderWithProviders(<TerritoryTeam today={TODAY24} />);
     await openHousehold();
     fireEvent.click(screen.getByRole("button", { name: "Adicionar morador" }));
@@ -302,6 +302,47 @@ describe("TerritoryTeam", () => {
     expect(body).toEqual(expect.objectContaining({ patient_id: "pa7", household_id: "hh1", cpf: "52998224725" }));
     expect(body).not.toHaveProperty("new_patient");
     expect(body).not.toHaveProperty("duplicates_reviewed");
+  });
+
+  it("Adicionar morador sem CPF, candidato com cadastro ativo (L29): abre o cadastro dele, sem ficha nova", async () => {
+    mocked(api.findDuplicates).mockResolvedValue([
+      { patient_id: "pa2", display_name: "José das Dores", birth_date: "2026-09-30", has_cpf: false, registration_id: "rg2" }
+    ]);
+    renderWithProviders(<TerritoryTeam today={TODAY24} />);
+    await openHousehold();
+    fireEvent.click(screen.getByRole("button", { name: "Adicionar morador" }));
+    fireEvent.click(screen.getByLabelText("Não tem CPF"));
+    typeIn("Nome completo", "José das Dores");
+    typeIn("Data de nascimento", "2026-09-30");
+    fireEvent.click(screen.getByRole("button", { name: "Buscar possíveis duplicados" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Já tem cadastro — abrir" }));
+    // O mesmo caminho do "Abrir cadastro" do 409: lê o cadastro e edita a versão gravada.
+    expect(await screen.findByRole("form", { name: "Atualizar cadastro individual" })).not.toBeNull();
+    expect(api.getRegistration).toHaveBeenCalledWith("rg2");
+    expect(screen.queryByRole("form", { name: "Novo cadastro individual" })).toBeNull();
+    expect((screen.getByLabelText("Nome completo") as HTMLInputElement).value).toBe("José das Dores");
+    fireEvent.click(screen.getByRole("button", { name: "Salvar cadastro" }));
+    expect(await screen.findByText("Cadastro salvo. Nova versão enviada ao e-SUS.")).not.toBeNull();
+    expect(mocked(api.updateRegistration).mock.calls[0][0]).toBe("rg2");
+    expect(api.createRegistration).not.toHaveBeenCalled();
+  });
+
+  it("Adicionar morador sem CPF, candidato sem cadastro: 'É esta pessoa' abre a ficha nova (como antes)", async () => {
+    mocked(api.findDuplicates).mockResolvedValue([
+      { patient_id: "pa7", display_name: "Rita de Souza", birth_date: "1990-01-10", has_cpf: false, registration_id: null }
+    ]);
+    renderWithProviders(<TerritoryTeam today={TODAY24} />);
+    await openHousehold();
+    fireEvent.click(screen.getByRole("button", { name: "Adicionar morador" }));
+    fireEvent.click(screen.getByLabelText("Não tem CPF"));
+    typeIn("Nome completo", "Rita de Souza");
+    typeIn("Data de nascimento", "1990-01-10");
+    fireEvent.click(screen.getByRole("button", { name: "Buscar possíveis duplicados" }));
+    expect(await screen.findByText("Rita de Souza · nascido em 10/01/1990 · sem CPF")).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Já tem cadastro — abrir" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "É esta pessoa" }));
+    expect(screen.getByRole("form", { name: "Novo cadastro individual" })).not.toBeNull();
+    expect(api.getRegistration).not.toHaveBeenCalled();
   });
 
   it("Adicionar morador pelo CPF: o responsável da família escolhida entra como responsável; sem família, não", async () => {

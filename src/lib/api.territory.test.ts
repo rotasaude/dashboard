@@ -117,10 +117,10 @@ describe("cliente do cadastro territorial (contrato §3–§6)", () => {
   it("duplicados e busca por CPF: tudo no corpo de um POST; a pessoa vem sem envelope (L3)", async () => {
     const person = { patient_id: "pa1", citizen_id: null, display_name: "Maria das Dores", registration_id: "rg1" };
     fetchMock
-      .mockImplementationOnce(() => ok({ candidates: [ { patient_id: "pa7", display_name: "Maria da Silva", birth_date: "1960-02-01", has_cpf: false } ] }))
+      .mockImplementationOnce(() => ok({ candidates: [ { patient_id: "pa7", display_name: "Maria da Silva", birth_date: "1960-02-01", has_cpf: false, registration_id: "rg7" } ] }))
       .mockImplementationOnce(() => ok(person));
     expect(await findDuplicates({ full_name: "Maria da Silva", birth_date: "1960-02-01", mother_name: "Ana da Silva" }))
-      .toEqual([ { patient_id: "pa7", display_name: "Maria da Silva", birth_date: "1960-02-01", has_cpf: false } ]);
+      .toEqual([ { patient_id: "pa7", display_name: "Maria da Silva", birth_date: "1960-02-01", has_cpf: false, registration_id: "rg7" } ]);
     expect(urlOf(0).pathname + urlOf(0).search).toBe("/territory/patients/duplicates");
     expect(initOf(0).method).toBe("POST");
     expect(bodyOf(0)).toEqual({ full_name: "Maria da Silva", birth_date: "1960-02-01", mother_name: "Ana da Silva" });

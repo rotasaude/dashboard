@@ -35,7 +35,7 @@ const CREATE = "Criar pessoa sem CPF";
 
 describe("PersonStart", () => {
   it("sem CPF: só cria depois da busca; escolher o candidato manda patient_id", async () => {
-    mocked(api.findDuplicates).mockResolvedValue([ { patient_id: "pa7", display_name: "José das Dores", birth_date: "2026-09-30", has_cpf: false } ]);
+    mocked(api.findDuplicates).mockResolvedValue([ { patient_id: "pa7", display_name: "José das Dores", birth_date: "2026-09-30", has_cpf: false, registration_id: null } ]);
     const onChoose = vi.fn();
     renderWithProviders(<PersonStart today={TODAY24} onChoose={onChoose} onCancel={vi.fn()} />);
     fillNoCpf();
@@ -48,6 +48,25 @@ describe("PersonStart", () => {
     fireEvent.click(screen.getByRole("button", { name: "É esta pessoa" }));
     // Só a mãe digitada vai junto (nome e nascimento já casaram com o candidato).
     expect(onChoose).toHaveBeenCalledWith({ kind: "patient", patientId: "pa7", registrationId: null, displayName: "José das Dores", hasCpf: false,
+      identity: { mother_name: "Maria das Dores" } });
+  });
+
+  it("candidato com cadastro ativo (L29): 'já tem cadastro — abrir' leva o registration_id; sem cadastro, 'É esta pessoa' como antes", async () => {
+    mocked(api.findDuplicates).mockResolvedValue([
+      { patient_id: "pa7", display_name: "José das Dores", birth_date: "2026-09-30", has_cpf: false, registration_id: "rg7" },
+      { patient_id: "pa8", display_name: "José das Dores", birth_date: "2026-09-30", has_cpf: true, registration_id: null }
+    ]);
+    const onChoose = vi.fn();
+    renderWithProviders(<PersonStart today={TODAY24} onChoose={onChoose} onCancel={vi.fn()} />);
+    fillNoCpf();
+    fireEvent.click(screen.getByRole("button", { name: "Buscar possíveis duplicados" }));
+    const open = await screen.findByRole("button", { name: "Já tem cadastro — abrir" });
+    // Só o candidato sem cadastro tem "É esta pessoa".
+    expect(screen.getAllByRole("button", { name: "É esta pessoa" })).toHaveLength(1);
+    fireEvent.click(open);
+    expect(onChoose).toHaveBeenLastCalledWith({ kind: "patient", patientId: "pa7", registrationId: "rg7", displayName: "José das Dores", hasCpf: false });
+    fireEvent.click(screen.getByRole("button", { name: "É esta pessoa" }));
+    expect(onChoose).toHaveBeenLastCalledWith({ kind: "patient", patientId: "pa8", registrationId: null, displayName: "José das Dores", hasCpf: true,
       identity: { mother_name: "Maria das Dores" } });
   });
 
@@ -91,8 +110,8 @@ describe("PersonStart", () => {
 
   it("volta do 409 com CPF: 'É esta pessoa' leva o CPF digitado só ao candidato sem CPF", async () => {
     mocked(api.findDuplicates).mockResolvedValue([
-      { patient_id: "pa7", display_name: "Rita de Souza", birth_date: "1990-01-10", has_cpf: false },
-      { patient_id: "pa8", display_name: "Rita de Souza", birth_date: "1990-01-10", has_cpf: true }
+      { patient_id: "pa7", display_name: "Rita de Souza", birth_date: "1990-01-10", has_cpf: false, registration_id: null },
+      { patient_id: "pa8", display_name: "Rita de Souza", birth_date: "1990-01-10", has_cpf: true, registration_id: null }
     ]);
     const onChoose = vi.fn();
     renderWithProviders(<PersonStart today={TODAY24} onChoose={onChoose} onCancel={vi.fn()}
@@ -120,7 +139,7 @@ describe("PersonStart", () => {
   });
 
   it("volta do 409 duplicate_suspected: a frase, a busca já feita com os candidatos; com CPF, 'é outra pessoa' cria com o CPF", async () => {
-    mocked(api.findDuplicates).mockResolvedValue([ { patient_id: "pa7", display_name: "Rita de Souza", birth_date: "1990-01-10", has_cpf: false } ]);
+    mocked(api.findDuplicates).mockResolvedValue([ { patient_id: "pa7", display_name: "Rita de Souza", birth_date: "1990-01-10", has_cpf: false, registration_id: null } ]);
     const onChoose = vi.fn();
     renderWithProviders(<PersonStart today={TODAY24} onChoose={onChoose} onCancel={vi.fn()}
       initial={{ query: { full_name: "Rita de Souza", birth_date: "1990-01-10" }, cpf: "52998224725", search: true }} />);

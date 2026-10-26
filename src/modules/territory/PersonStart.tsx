@@ -7,7 +7,9 @@
 // pessoa sem CPF" só aparece depois de uma busca que voltou para exatamente o
 // que está digitado (mudou qualquer um dos três → buscar de novo). As duas
 // buscas são mutações no clique (gravam trilha), nunca reações ao que se
-// digita; tudo vai no corpo, nada em storage, URL ou log.
+// digita; tudo vai no corpo, nada em storage, URL ou log. Candidato que já
+// tem cadastro ativo (registration_id, L29) abre esse cadastro em vez da ficha
+// nova; o 409 already_registered segue como rede de segurança.
 // Volta da ficha (I1, L28): "Corrigir (refaz a busca)" reabre a busca sem CPF
 // com o que foi buscado; o 409 duplicate_suspected reabre com a frase e a
 // busca já feita (o clique foi o Salvar), levando o CPF da pessoa nova, se havia.
@@ -38,6 +40,9 @@ export interface PersonRestart { query: DuplicateQuery; cpf?: string; search?: b
 
 const sameQuery = (a: DuplicateQuery | null, b: DuplicateQuery) =>
   !!a && a.full_name === b.full_name && a.birth_date === b.birth_date && (a.mother_name ?? "") === (b.mother_name ?? "");
+
+// Candidato com cadastro ativo legível (L29): a ação abre o cadastro dele.
+export const REGISTERED_OPEN = "Já tem cadastro — abrir";
 
 export function candidateLine(c: DuplicateCandidate): string {
   return `${c.display_name} · nascido em ${fmtDay(c.birth_date)} · ${c.has_cpf ? "com CPF" : "sem CPF"}`;
@@ -205,11 +210,20 @@ function WithoutCpf({ today, onChoose, initial }: { today: string; onChoose(choi
               {current.candidates.map((c) => (
                 <li key={c.patient_id} style={row}>
                   <span id={`candidate-${c.patient_id}`}>{candidateLine(c)}</span>
-                  <button type="button" style={secondaryButtonStyle} aria-describedby={`candidate-${c.patient_id}`}
-                    onClick={() => onChoose({ kind: "patient", patientId: c.patient_id, registrationId: null, displayName: c.display_name, hasCpf: c.has_cpf,
-                      identity: current.query.mother_name ? { mother_name: current.query.mother_name } : {}, ...(cpf && !c.has_cpf ? { cpf } : {}) })}>
-                    É esta pessoa
-                  </button>
+                  {c.registration_id ? (
+                    // L29: já tem cadastro ativo que o usuário lê — abre o cadastro (o caminho do "Abrir cadastro" do 409).
+                    <button type="button" style={secondaryButtonStyle} aria-describedby={`candidate-${c.patient_id}`}
+                      onClick={() => onChoose({ kind: "patient", patientId: c.patient_id, registrationId: c.registration_id, displayName: c.display_name,
+                        hasCpf: c.has_cpf })}>
+                      {REGISTERED_OPEN}
+                    </button>
+                  ) : (
+                    <button type="button" style={secondaryButtonStyle} aria-describedby={`candidate-${c.patient_id}`}
+                      onClick={() => onChoose({ kind: "patient", patientId: c.patient_id, registrationId: null, displayName: c.display_name, hasCpf: c.has_cpf,
+                        identity: current.query.mother_name ? { mother_name: current.query.mother_name } : {}, ...(cpf && !c.has_cpf ? { cpf } : {}) })}>
+                      É esta pessoa
+                    </button>
+                  )}
                 </li>
               ))}
             </ul>
