@@ -5,6 +5,7 @@ import { renderModule, shellGroups } from "./App";
 import { NAV_GROUPS, navGroupsFor } from "./shell/modules";
 import { TerritoryMicroAreas } from "./modules/TerritoryMicroAreas";
 import { TerritoryTeam } from "./modules/TerritoryTeam";
+import { RegistryStatus } from "./modules/RegistryStatus";
 
 type El = ReactElement<Record<string, (id?: string) => void>>;
 
@@ -39,6 +40,10 @@ describe("atalhos entre telas", () => {
 
   it("territory-team abre o território da equipe", () => {
     expect((renderModule("territory-team", vi.fn()) as ReactElement).type).toBe(TerritoryTeam);
+  });
+
+  it("registry-status abre a validade dos cadastros", () => {
+    expect((renderModule("registry-status", vi.fn()) as ReactElement).type).toBe(RegistryStatus);
   });
 });
 
