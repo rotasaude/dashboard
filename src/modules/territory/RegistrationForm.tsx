@@ -46,6 +46,11 @@ import type { PersonChoice } from "./PersonStart";
 
 export const REGISTRATION_SAVED = "Cadastro salvo. Nova versão enviada ao e-SUS.";
 export const LOCKED_TEXT = "validados no posto";
+// O id vem da busca pelo CPF ou do already_registered e aponta um cadastro
+// ativo: 404 aqui é escopo (a busca é da cidade; a leitura, da microárea).
+export const OUT_OF_REACH = "O cadastro ativo desta pessoa é de uma microárea que você não alcança. Peça ao ACS dessa microárea ou ao " +
+  "enfermeiro/médico da equipe para atualizar ou registrar a saída por mudança.";
+export const FILL_TEXT = "Dados do paciente: preencha só o que falta ou está errado; o que ficar em branco não muda.";
 
 // Domicílio do morador; responsiblePatientId = o responsável da família escolhida.
 export interface RegistrationPlace { id: string; familyId: string | null; responsiblePatientId?: string | null }
@@ -112,7 +117,7 @@ export function RegistrationForm({ today = todayInCity(), household, teamId, cho
   const subject: Subject = choice.kind === "new" ? { kind: "new", cpf: choice.cpf }
     : choice.kind === "citizen" ? { kind: "citizen", citizenId: choice.citizenId, displayName: choice.displayName }
     : { kind: "patient", patientId: choice.patientId, displayName: choice.displayName, hasCpf: choice.hasCpf };
-  const identity = choice.kind === "new" ? choice.identity : {};
+  const identity = choice.kind === "citizen" ? {} : choice.identity ?? {};
   return <FormBody subject={subject} identity={identity} onOpen={setOpenId} {...common} />;
 }
 
@@ -124,7 +129,7 @@ function EditLoader({ id, ...common }: Common & { id: string }) {
   if (query.isError) {
     return (
       <div style={row}>
-        <p role="alert" style={alert}>{territoryError(query.error)}</p>
+        <p role="alert" style={alert}>{errorCode(query.error) === "not_found" ? OUT_OF_REACH : territoryError(query.error)}</p>
         <button type="button" style={secondaryButtonStyle} onClick={common.onCancel}>Fechar</button>
       </div>
     );
@@ -144,8 +149,11 @@ function FormBody({ subject, identity: given, today, household, teamId, onSaved,
   const focus = useFieldFocus();
   const r = subject.kind === "edit" ? subject.registration : null;
   const locked = r ? r.patient.identity_locked : subject.kind === "citizen";
-  // Identidade na tela: pessoa nova, ou cadastro de paciente sem par validado.
-  const typedIdentity = subject.kind === "new" || (r !== null && !locked);
+  // Identidade na tela: pessoa nova, cadastro de paciente sem par validado ou
+  // paciente escolhido sem cadastro (`fill`: só o preenchido vai em `patient`;
+  // com par validado, o api recusa o diferente — identity_locked com o campo).
+  const fill = subject.kind === "patient";
+  const typedIdentity = subject.kind === "new" || fill || (r !== null && !locked);
   const idPrefix = subject.kind === "new" ? "new_patient" : "patient";
 
   const [ person, setPerson ] = useState<Identity>({ full_name: given.full_name ?? "", birth_date: given.birth_date ?? "", sex: given.sex ?? "",
@@ -169,13 +177,17 @@ function FormBody({ subject, identity: given, today, household, teamId, onSaved,
   const [ stale, setStale ] = useState(false);
 
   // ─── O que a tela sabe da pessoa (visibilidade; a regra usa patientFacts) ──
-  const known: Known = typedIdentity
+  const known: Known = fill
+    ? { sex: (person.sex || undefined) as PatientSex | undefined, birth: person.birth_date || undefined, motherPresent: person.mother_name.trim() ? true : undefined }
+    : typedIdentity
     ? { sex: (person.sex || null) as PatientSex | null, birth: person.birth_date || null, motherPresent: !!person.mother_name.trim() }
     : r ? { sex: r.patient.sex, birth: r.patient.birth_date, motherPresent: !!r.patient.mother_name }
     : { sex: undefined, birth: undefined, motherPresent: undefined };
   const place = placeOf(subject, household, teamId);
   const years = known.birth ? yearsOld(known.birth, today) : null;
   const pregnancy = known.sex !== "male" && (known.birth === undefined || canBePregnant(known.sex, known.birth, today));
+  // Fato desconhecido: gestante vira —/Sim/Não (— não vai), nunca um "não" por desmarcar.
+  const pregnancyUnknown = known.sex === undefined || known.birth === undefined;
   const hasCpf = r ? r.patient.has_cpf : subject.kind === "patient" ? subject.hasCpf : undefined;
   const askCpf = hasCpf === false;
   const askCns = subject.kind === "new" || (r !== null && !r.patient.cns_masked);
@@ -244,6 +256,10 @@ function FormBody({ subject, identity: given, today, household, teamId, onSaved,
     if (r && typedIdentity) {
       const changed = changedIdentity(person, r);
       if (changed) extra.patient = changed;
+    }
+    if (fill) {
+      const filled = filledIdentity(person, socialName);
+      if (filled) extra.patient = filled;
     }
     if (askCpf && newCpf.trim()) extra.cpf = onlyDigits(newCpf);
     if (r && askCns && cns.trim()) extra.cns = cns.replace(/\s/g, "");
@@ -331,7 +347,7 @@ function FormBody({ subject, identity: given, today, household, teamId, onSaved,
     .filter((spec) => !skip.includes(spec.key) && visible(name, spec.key))
     .map((spec) => (
       <Field key={spec.key} spec={spec} path={`${name}.${spec.key}`} label={sectionFieldLabel(name, spec.key)} value={sections[name][spec.key]}
-        onChange={(v) => setField(name, spec.key, v)} focus={focus} />
+        onChange={(v) => setField(name, spec.key, v)} focus={focus} asSelect={spec.key === "status_eh_gestante" && pregnancyUnknown} />
     ));
 
   const motherUnknown = visible("identification", "desconhece_nome_mae") && (
@@ -360,9 +376,15 @@ function FormBody({ subject, identity: given, today, household, teamId, onSaved,
       <CollapsibleSection title={SECTION_TITLE.identification} closed={closed.has("identification")} onToggle={() => toggle("identification")}>
         {typedIdentity ? (
           <>
+            {fill && (
+              <>
+                <div style={grid}><KeyValue k="Pessoa" v={subject.displayName ?? "pessoa sem nome no cadastro"} mono={false} /></div>
+                <p style={muted}>{FILL_TEXT}</p>
+              </>
+            )}
             <div style={row}>
               {text("Nome completo", `${idPrefix}.full_name`, person.full_name, (v) => setPerson((p) => ({ ...p, full_name: v })))}
-              {subject.kind === "new" && text("Nome social", "new_patient.social_name", socialName, setSocialName)}
+              {(subject.kind === "new" || fill) && text("Nome social", `${idPrefix}.social_name`, socialName, setSocialName)}
             </div>
             <div style={row}>
               {text("Data de nascimento", `${idPrefix}.birth_date`, person.birth_date, (v) => setPerson((p) => ({ ...p, birth_date: v })), "date")}
@@ -393,15 +415,11 @@ function FormBody({ subject, identity: given, today, household, teamId, onSaved,
                   <KeyValue k="Documento" v={patientDocument(r.patient).v} />
                 </>
               ) : (
-                <KeyValue k="Pessoa" v={(subject.kind === "patient" || subject.kind === "citizen" ? subject.displayName : null) ?? "pessoa sem nome no cadastro"}
-                  mono={false} />
+                <KeyValue k="Pessoa" v={(subject.kind === "citizen" ? subject.displayName : null) ?? "pessoa sem nome no cadastro"} mono={false} />
               )}
-              {locked && <span><Tag tone="ok" mono={false}>{LOCKED_TEXT}</Tag></span>}
+              <span><Tag tone="ok" mono={false}>{LOCKED_TEXT}</Tag></span>
             </div>
-            <p style={muted}>
-              {locked ? "Nome, nascimento, sexo e mãe vêm da validação presencial e não se alteram aqui."
-                : "Nome, nascimento, sexo e mãe são os do cadastro do paciente; depois de salvar, abra o cadastro para corrigi-los."}
-            </p>
+            <p style={muted}>Nome, nascimento, sexo e mãe vêm da validação presencial e não se alteram aqui.</p>
             {motherUnknown && <div style={row}>{motherUnknown}</div>}
           </>
         )}
@@ -488,6 +506,17 @@ function placeOf(subject: Subject, household: RegistrationPlace | undefined, tea
   return { ...(team ? { team_id: team } : {}), is_responsible: false };
 }
 
+// Paciente escolhido sem cadastro: só o preenchido (em branco não muda nada).
+function filledIdentity(person: Identity, socialName: string): PatientIdentity | null {
+  const out: PatientIdentity = {};
+  if (squish(person.full_name)) out.full_name = squish(person.full_name);
+  if (squish(socialName)) out.social_name = squish(socialName);
+  if (person.birth_date) out.birth_date = person.birth_date;
+  if (person.sex) out.sex = person.sex as PatientSex;
+  if (squish(person.mother_name)) out.mother_name = squish(person.mother_name);
+  return Object.keys(out).length > 0 ? out : null;
+}
+
 // Só o que mudou na identidade (o api grava no paciente sem par validado).
 function changedIdentity(person: Identity, r: Registration): PatientIdentity | null {
   const p = r.patient;
@@ -516,8 +545,8 @@ function CollapsibleSection({ title, closed, onToggle, children }: { title: stri
 
 type Focus = ReturnType<typeof useFieldFocus>;
 
-function Field({ spec, path, label, value, onChange, focus }: {
-  spec: FieldSpec; path: string; label: string; value: unknown; onChange(v: unknown): void; focus: Focus;
+function Field({ spec, path, label, value, onChange, focus, asSelect = false }: {
+  spec: FieldSpec; path: string; label: string; value: unknown; onChange(v: unknown): void; focus: Focus; asSelect?: boolean;
 }) {
   const name = useId();
   const current = typeof value === "string" ? value : "";
@@ -559,7 +588,7 @@ function Field({ spec, path, label, value, onChange, focus }: {
       </fieldset>
     );
   }
-  if (spec.type === "bool" && !QUESTIONS.includes(key)) {
+  if (spec.type === "bool" && !QUESTIONS.includes(key) && !asSelect) {
     return (
       <label style={checkLabel}>
         <input ref={focus.reg(path)} type="checkbox" checked={current === "true"} aria-invalid={focus.invalid(path)}

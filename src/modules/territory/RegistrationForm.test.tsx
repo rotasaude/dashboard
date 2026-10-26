@@ -16,7 +16,7 @@ vi.mock("../../lib/api", async (importOriginal) => {
 
 import * as api from "../../lib/api";
 import type { RegistrationPatient } from "../../lib/api";
-import { RegistrationForm } from "./RegistrationForm";
+import { FILL_TEXT, OUT_OF_REACH, RegistrationForm } from "./RegistrationForm";
 import { STALE_TEXT } from "../../lib/territoryRegistry";
 import { renderWithProviders } from "../../test/campaignFixtures";
 import { TODAY24, registration, territoryUser } from "../../test/territoryFixtures";
@@ -110,7 +110,8 @@ describe("RegistrationForm", () => {
     renderWithProviders(<RegistrationForm today={TODAY24} household={HOUSE}
       choice={{ kind: "patient", patientId: "pa1", registrationId: null, displayName: "Maria das Dores", hasCpf: true }} onSaved={vi.fn()} onCancel={vi.fn()} />);
     expect(screen.getByText("Maria das Dores")).not.toBeNull();
-    expect(screen.queryByLabelText("Nome completo")).toBeNull();
+    expect(screen.getByText(FILL_TEXT)).not.toBeNull();
+    expect((screen.getByLabelText("Nome completo") as HTMLInputElement).value).toBe("");
     expect(screen.queryByLabelText("Informar CPF")).toBeNull();
     pick("Raça/cor", "05");
     typeIn("Etnia (código)", "0001");
@@ -121,6 +122,82 @@ describe("RegistrationForm", () => {
     expect(body).toEqual(expect.objectContaining({ patient_id: "pa1", household_id: "hh1", family_id: "fa1", is_responsible: true,
       patient_demographics: { race_color: "05", ethnicity: "0001" } }));
     expect(Object.keys(body).filter((k) => [ "new_patient", "patient", "cpf", "cns", "citizen_id", "team_id" ].includes(k))).toEqual([]);
+  });
+
+  it("duplicado escolhido: o digitado na busca (com a mãe) vai em `patient`; o que fica em branco não vai", async () => {
+    renderWithProviders(<RegistrationForm today={TODAY24} household={HOUSE} choice={{ kind: "patient", patientId: "pa7", registrationId: null,
+      displayName: "José das Dores", hasCpf: false, identity: { full_name: "José das Dores", birth_date: "2026-09-30", mother_name: "Maria das Dores" } }}
+      onSaved={vi.fn()} onCancel={vi.fn()} />);
+    expect((screen.getByLabelText("Nome da mãe") as HTMLInputElement).value).toBe("Maria das Dores");
+    expect(screen.getByLabelText("Informar CPF")).not.toBeNull();
+    pick("Raça/cor", "03");
+    fillIdentification();
+    save();
+    await waitFor(() => expect(api.createRegistration).toHaveBeenCalledTimes(1));
+    expect(created().patient).toEqual({ full_name: "José das Dores", birth_date: "2026-09-30", mother_name: "Maria das Dores" });
+    expect(created()).not.toHaveProperty("cpf");
+    expect(created()).not.toHaveProperty("new_patient");
+  });
+
+  it("paciente escolhido: recusa do api em patient.birth_date foca o nascimento", async () => {
+    mocked(api.createRegistration).mockRejectedValue(new api.ApiError(422, { error: "invalid_registration", path: "patient.birth_date" }, "422"));
+    renderWithProviders(<RegistrationForm today={TODAY24} household={HOUSE} choice={{ kind: "patient", patientId: "pa1", registrationId: null }}
+      onSaved={vi.fn()} onCancel={vi.fn()} />);
+    pick("Raça/cor", "03");
+    fillIdentification();
+    save();
+    expect(await screen.findByText("confira o campo destacado")).not.toBeNull();
+    const field = screen.getByLabelText("Data de nascimento");
+    expect(document.activeElement).toBe(field);
+    expect(field.getAttribute("aria-invalid")).toBe("true");
+  });
+
+  it("sexo ou nascimento desconhecidos: gestante é —/Sim/Não e o — não vai", async () => {
+    renderWithProviders(<RegistrationForm today={TODAY24} household={HOUSE} choice={{ kind: "patient", patientId: "pa1", registrationId: null }}
+      onSaved={vi.fn()} onCancel={vi.fn()} />);
+    const pregnant = screen.getByLabelText("Está gestante") as HTMLSelectElement;
+    expect(pregnant.tagName).toBe("SELECT");
+    pick("Está gestante", "true");
+    pick("Está gestante", "");
+    pick("Raça/cor", "03");
+    fillIdentification();
+    save();
+    await waitFor(() => expect(api.createRegistration).toHaveBeenCalledTimes(1));
+    expect(created().health_conditions).toEqual({});
+    pick("Está gestante", "true");
+    save();
+    await waitFor(() => expect(api.createRegistration).toHaveBeenCalledTimes(2));
+    expect(mocked(api.createRegistration).mock.calls[1][0].health_conditions).toEqual({ status_eh_gestante: true });
+    // Com sexo e nascimento sabidos, volta a marcação; masculino, some.
+    pick("Sexo", "female");
+    typeIn("Data de nascimento", "1990-01-10");
+    expect((screen.getByLabelText("Está gestante") as HTMLInputElement).type).toBe("checkbox");
+    pick("Sexo", "male");
+    expect(screen.queryByLabelText("Está gestante")).toBeNull();
+  });
+
+  it("cadastro ativo fora do alcance (busca pelo CPF → atualizar): 404 vira a frase do escopo", async () => {
+    mocked(api.getRegistration).mockRejectedValue(new api.ApiError(404, { error: "not_found" }, "404"));
+    const onCancel = vi.fn();
+    renderWithProviders(<RegistrationForm today={TODAY24} household={HOUSE} choice={{ kind: "patient", patientId: "pa8", registrationId: "rg8" }}
+      onSaved={vi.fn()} onCancel={onCancel} />);
+    expect(await screen.findByText(OUT_OF_REACH)).not.toBeNull();
+    expect(api.getRegistration).toHaveBeenCalledWith("rg8");
+    fireEvent.click(screen.getByRole("button", { name: "Fechar" }));
+    expect(onCancel).toHaveBeenCalled();
+  });
+
+  it("cadastro ativo fora do alcance (already_registered → Abrir cadastro): 404 vira a frase do escopo", async () => {
+    mocked(api.createRegistration).mockRejectedValue(new api.ApiError(409, { error: "already_registered", registration_id: "rg8" }, "409"));
+    mocked(api.getRegistration).mockRejectedValue(new api.ApiError(404, { error: "not_found" }, "404"));
+    renderWithProviders(<RegistrationForm today={TODAY24} household={HOUSE} choice={{ kind: "patient", patientId: "pa8", registrationId: null }}
+      onSaved={vi.fn()} onCancel={vi.fn()} />);
+    pick("Raça/cor", "03");
+    fillIdentification();
+    save();
+    fireEvent.click(await screen.findByRole("button", { name: "Abrir cadastro" }));
+    expect(await screen.findByText(OUT_OF_REACH)).not.toBeNull();
+    expect(screen.queryByText("não encontrado — recarregue")).toBeNull();
   });
 
   it("par validado fora de área (validade, sem cadastro): citizen_id e team_id; raça/cor sem etnia fora de 05", async () => {

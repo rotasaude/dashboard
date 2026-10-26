@@ -45,7 +45,9 @@ describe("PersonStart", () => {
     // Com candidato, "é outra pessoa" também existe — depois da busca.
     expect(screen.getByRole("button", { name: CREATE })).not.toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "É esta pessoa" }));
-    expect(onChoose).toHaveBeenCalledWith({ kind: "patient", patientId: "pa7", registrationId: null, displayName: "José das Dores", hasCpf: false });
+    // O digitado na busca vai junto: completa o que faltar no paciente.
+    expect(onChoose).toHaveBeenCalledWith({ kind: "patient", patientId: "pa7", registrationId: null, displayName: "José das Dores", hasCpf: false,
+      identity: { full_name: "José das Dores", birth_date: "2026-09-30", mother_name: "Maria das Dores" } });
   });
 
   it("sem candidato: 'criar sem CPF' leva os dados digitados; trocar nome, nascimento ou mãe pede nova busca", async () => {
