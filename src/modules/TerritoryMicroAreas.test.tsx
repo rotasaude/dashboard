@@ -47,6 +47,30 @@ describe("TerritoryMicroAreas", () => {
     expect(document.body.textContent).not.toMatch(/null/);
   });
 
+  it("renomear para o mesmo nome ou trocar pelo mesmo ACS: 'nada mudou' antes do step-up; nada é enviado", async () => {
+    renderWithProviders(<TerritoryMicroAreas />);
+    fireEvent.click(await screen.findByRole("button", { name: "Renomear 01" }));
+    typeIn("Novo nome", "  Vila Verde de cima ");
+    fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
+    expect(screen.getByRole("alert").textContent).toBe("nada mudou: o nome é o mesmo");
+    expect(screen.queryByRole("button", { name: "Renomear microárea" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Trocar ACS 01" }));
+    expect((screen.getByLabelText("ACS responsável") as HTMLSelectElement).value).toBe("pr1");
+    fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
+    expect(screen.getByRole("alert").textContent).toBe("nada mudou: o ACS é o mesmo");
+    expect(screen.queryByRole("button", { name: "Trocar ACS" })).toBeNull();
+    expect(api.updateMicroArea).not.toHaveBeenCalled();
+  });
+
+  it("microárea sem ACS confirmada 'sem ACS' também não muda nada", async () => {
+    mocked(api.listMicroAreas).mockResolvedValue([ microArea({ acs: null }) ]);
+    renderWithProviders(<TerritoryMicroAreas />);
+    fireEvent.click(await screen.findByRole("button", { name: "Trocar ACS 01" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
+    expect(screen.getByRole("alert").textContent).toBe("nada mudou: o ACS é o mesmo");
+  });
+
   it("cria com step-up; código ruim é recusado antes de abrir a confirmação", async () => {
     renderWithProviders(<TerritoryMicroAreas />);
     fireEvent.click(await screen.findByRole("button", { name: "Nova microárea" }));
@@ -138,8 +162,10 @@ describe("TerritoryMicroAreas", () => {
 
   it("acs_not_in_team vira a frase da equipe", async () => {
     mocked(api.updateMicroArea).mockRejectedValue(new api.ApiError(422, { error: "acs_not_in_team" }, "422"));
+    mocked(api.listMicroAreas).mockResolvedValue([ microArea({ acs: { professional_id: "pr3", name: "Carla Mendes" } }) ]);
     renderWithProviders(<TerritoryMicroAreas />);
     fireEvent.click(await screen.findByRole("button", { name: "Trocar ACS 01" }));
+    fireEvent.change(screen.getByLabelText("ACS responsável"), { target: { value: "pr1" } });
     fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
     fireEvent.click(await screen.findByRole("button", { name: "Trocar ACS" }));
     expect(await screen.findByText("o ACS escolhido não é agente comunitário ativo desta equipe")).not.toBeNull();

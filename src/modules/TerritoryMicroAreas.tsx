@@ -45,6 +45,8 @@ export function TerritoryMicroAreas({ onGoToSecurity }: { onGoToSecurity?: () =>
   );
 }
 
+const NOTHING_CHANGED = { name: "nada mudou: o nome é o mesmo", acs: "nada mudou: o ACS é o mesmo" };
+const squish = (value: string) => value.replace(/\s+/g, " ").trim();
 const teamLabel = (t: TerritoryAdminTeam) => `${teamName(t)} · INE ${t.ine}`;
 
 // O que cada confirmação diz e faz (spec 6a §3.5: dizer antes do Confirmar).
@@ -114,9 +116,13 @@ function MicroAreasBody({ onGoToSecurity }: { onGoToSecurity?(): void }) {
     } else if (editor.kind === "rename") {
       const problem = microAreaNameProblem(editor.name);
       if (problem) { setFormError(problem); return; }
+      // O api compara sem espaços repetidos: o mesmo nome não pede step-up nem diz "renomeada".
+      if (squish(editor.name) === squish(editor.area.name)) { setFormError(NOTHING_CHANGED.name); return; }
       setPending({ kind: "rename", area: editor.area, name: editor.name.trim() });
     } else {
-      setPending({ kind: "acs", area: editor.area, id: editor.acs || null });
+      const id = editor.acs || null;
+      if (id === (editor.area.acs?.professional_id ?? null)) { setFormError(NOTHING_CHANGED.acs); return; }
+      setPending({ kind: "acs", area: editor.area, id });
     }
   }
 
