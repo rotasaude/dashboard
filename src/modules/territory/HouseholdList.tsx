@@ -24,13 +24,16 @@ export function streetTypeLabel(code: string): string {
   return dictLabel("tipo_logradouro", code).toLocaleLowerCase("pt-BR").replace(/(^|\s)\p{L}/gu, (c) => c.toLocaleUpperCase("pt-BR"));
 }
 
-// "Rua das Flores, 120" / "Rua das Flores, s/n"; recusa sem endereço ({}) → NO_ADDRESS.
+// "Rua das Flores, 120" / "Rua das Flores, s/n", com o complemento quando há
+// ("Rua das Flores, 120 · apto 12": apartamentos do mesmo número não se
+// confundem no título, no cartão nem no nome do botão); recusa sem endereço
+// ({}) → NO_ADDRESS.
 export function addressLine(address: Household["address"]): string {
   if (!address.street) return NO_ADDRESS;
   const type = address.street_type ? streetTypeLabel(address.street_type) : "";
   const street = type ? `${type} ${address.street}` : address.street;
-  if (address.no_number) return `${street}, s/n`;
-  return address.number ? `${street}, ${address.number}` : street;
+  const line = address.no_number ? `${street}, s/n` : address.number ? `${street}, ${address.number}` : street;
+  return address.complement ? `${line} · ${address.complement}` : line;
 }
 
 export function householdStatus(h: Pick<Household, "refused" | "status">): { label: string; tone: string } {

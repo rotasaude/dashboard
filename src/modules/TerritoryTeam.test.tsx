@@ -105,6 +105,20 @@ describe("TerritoryTeam", () => {
     expect(document.body.textContent).not.toMatch(/undefined|null/);
   });
 
+  it("apartamentos do mesmo número: o complemento entra no endereço (lista, botão e título)", async () => {
+    const base = household();
+    const apt = (id: string, complement: string) => household({ id, address: { ...base.address, complement } as api.HouseholdAddress });
+    mocked(api.listHouseholds).mockResolvedValue({ households: [ apt("hh1", "apto 12"), apt("hh2", "apto 21") ], next_before: null });
+    mocked(api.getHousehold).mockResolvedValue(apt("hh2", "apto 21"));
+    renderWithProviders(<TerritoryTeam today={TODAY24} />);
+    expect(await screen.findByText("Rua das Flores, 120 · apto 12")).not.toBeNull();
+    expect(screen.getByText("Rua das Flores, 120 · apto 21")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Abrir Rua das Flores, 120 · apto 21" }));
+    await screen.findByText("José das Dores");
+    expect(api.getHousehold).toHaveBeenCalledWith("hh2");
+    expect(screen.getAllByText("Rua das Flores, 120 · apto 21").length).toBe(2);
+  });
+
   it("rótulos do dicionário: tipo de logradouro e tipo de imóvel", async () => {
     renderWithProviders(<TerritoryTeam today={TODAY24} />);
     expect(await screen.findByText("Rua das Flores, 120")).not.toBeNull();
