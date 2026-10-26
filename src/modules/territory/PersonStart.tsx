@@ -211,10 +211,11 @@ function WithoutCpf({ today, onChoose, initial }: { today: string; onChoose(choi
                 <li key={c.patient_id} style={row}>
                   <span id={`candidate-${c.patient_id}`}>{candidateLine(c)}</span>
                   {c.registration_id ? (
-                    // L29: já tem cadastro ativo que o usuário lê — abre o cadastro (o caminho do "Abrir cadastro" do 409).
+                    // L29: já tem cadastro ativo que o usuário lê — abre o cadastro (o caminho do "Abrir cadastro" do 409);
+                    // na volta do 409 com CPF, o CPF digitado vai junto para o candidato sem CPF (I2).
                     <button type="button" style={secondaryButtonStyle} aria-describedby={`candidate-${c.patient_id}`}
                       onClick={() => onChoose({ kind: "patient", patientId: c.patient_id, registrationId: c.registration_id, displayName: c.display_name,
-                        hasCpf: c.has_cpf })}>
+                        hasCpf: c.has_cpf, ...(cpf && !c.has_cpf ? { cpf } : {}) })}>
                       {REGISTERED_OPEN}
                     </button>
                   ) : (

@@ -46,7 +46,7 @@ export const FAMILY_SAVED = "Família salva. Nova versão do domicílio enviada 
 type Editing =
   | { kind: "household" } | { kind: "status" } | { kind: "newFamily" } | { kind: "family"; family: Family } | { kind: "replace"; family: Family }
   // `round`: cada volta à busca revela o bloco de novo (a busca fica acima da ficha).
-  | { kind: "resident"; choice: PersonChoice | null; restart?: PersonRestart; round?: number } | { kind: "registration"; id: string; name: string } | null;
+  | { kind: "resident"; choice: PersonChoice | null; restart?: PersonRestart; round?: number } | { kind: "registration"; id: string; name: string; cpf?: string } | null;
 
 export function familyLine(f: Family): string {
   const name = f.responsible.display_name ?? NO_NAME;
@@ -134,14 +134,17 @@ export function HouseholdDetail({ householdId, onBack, today }: { householdId: s
                     household={{ id: h.id, families: h.families }} onRestart={(restart) => setEditing({ kind: "resident", choice: null, restart, round: (editing.round ?? 0) + 1 })} />
                 ) : (
                   <PersonStart today={today} initial={editing.restart} onCancel={() => setEditing(null)}
-                    onChoose={(choice) => setEditing({ kind: "resident", choice, round: editing.round })} />
+                    onChoose={(choice) => setEditing(choice.kind === "patient" && choice.registrationId
+                      // Pessoa que já tem cadastro (duplicado ou CPF): o painel do cadastro, como pela linha do morador (PROVA-6).
+                      ? { kind: "registration", id: choice.registrationId, name: choice.displayName ?? NO_NAME, cpf: choice.cpf }
+                      : { kind: "resident", choice, round: editing.round })} />
                 )}
               </Reveal>
             )}
             {editing?.kind === "registration" && (
               <Reveal key={editing.id} style={box}>
                 <strong>{`Cadastro de ${editing.name}`}</strong>
-                <RegistrationForm today={today} registrationId={editing.id} household={{ id: h.id, families: h.families }}
+                <RegistrationForm today={today} registrationId={editing.id} cpf={editing.cpf} household={{ id: h.id, families: h.families }}
                   onCancel={() => setEditing(null)} onSaved={saved(REGISTRATION_SAVED)} onExited={saved(REGISTRATION_EXITED)} />
               </Reveal>
             )}

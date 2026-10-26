@@ -96,7 +96,7 @@ type Subject =
   | { kind: "new"; cpf?: string; duplicatesReviewed?: boolean }
   | { kind: "patient"; patientId: string; displayName?: string | null; hasCpf?: boolean; cpf?: string }
   | { kind: "citizen"; citizenId: string; displayName?: string | null }
-  | { kind: "edit"; registration: Registration };
+  | { kind: "edit"; registration: Registration; cpf?: string };
 // O corpo sem o que é só de paciente existente (com new_patient, patient/cpf/cns não vão).
 type Shared = Omit<RegistrationBody, "patient" | "cpf" | "cns">;
 type Identity = { full_name: string; birth_date: string; sex: string; mother_name: string };
@@ -114,15 +114,18 @@ function yearsOld(birth: string, today: string): number | null {
   return y - by - (m > bm || (m === bm && d >= bd) ? 0 : 1);
 }
 
-export function RegistrationForm({ today = todayInCity(), household, teamId, choice, registrationId, onSaved, onExited, onCancel, onRestart }: {
-  today?: string; household?: RegistrationPlace; teamId?: string; choice?: PersonChoice; registrationId?: string;
+// `cpf`: CPF digitado na volta do 409 duplicate_suspected para quem já tem
+// cadastro e não tem CPF (I2): pré-preenche "Informar CPF" (visível e editável).
+export function RegistrationForm({ today = todayInCity(), household, teamId, choice, registrationId, cpf, onSaved, onExited, onCancel, onRestart }: {
+  today?: string; household?: RegistrationPlace; teamId?: string; choice?: PersonChoice; registrationId?: string; cpf?: string;
   onSaved(r: Registration): void; onExited?(r: Registration): void; onCancel(): void; onRestart?(restart: PersonRestart): void;
 }) {
   const initialId = registrationId ?? (choice?.kind === "patient" ? choice.registrationId : null) ?? null;
   // "Abrir cadastro" (already_registered com o id) troca a criação pela edição do ativo.
   const [ openId, setOpenId ] = useState<string | null>(initialId);
   const common = { today, household, teamId, onSaved, onExited, onCancel, onRestart };
-  if (openId) return <EditLoader id={openId} {...common} />;
+  const typedCpf = cpf ?? (choice?.kind === "patient" ? choice.cpf : undefined);
+  if (openId) return <EditLoader id={openId} cpf={typedCpf} {...common} />;
   if (!choice) return null;
   const subject: Subject = choice.kind === "new" ? { kind: "new", cpf: choice.cpf, duplicatesReviewed: choice.duplicatesReviewed }
     : choice.kind === "citizen" ? { kind: "citizen", citizenId: choice.citizenId, displayName: choice.displayName }
@@ -136,7 +139,7 @@ type Common = {
   onRestart?(restart: PersonRestart): void;
 };
 
-function EditLoader({ id, ...common }: Common & { id: string }) {
+function EditLoader({ id, cpf, ...common }: Common & { id: string; cpf?: string }) {
   const query = useQuery({ queryKey: [ REGISTRATION_KEY, id ], queryFn: () => getRegistration(id), ...NOMINAL_QUERY });
   if (query.isPending) return <p className="mono" style={muted}>carregando…</p>;
   if (query.isError) {
@@ -151,7 +154,7 @@ function EditLoader({ id, ...common }: Common & { id: string }) {
   const identity: PatientIdentity = { full_name: r.patient.full_name ?? undefined, birth_date: r.patient.birth_date ?? undefined,
     sex: r.patient.sex ?? undefined, mother_name: r.patient.mother_name };
   // Relida (Recarregar) ou salva: o formulário renasce da versão do servidor.
-  return <FormBody key={query.dataUpdatedAt} subject={{ kind: "edit", registration: r }} identity={identity} onReload={() => void query.refetch()}
+  return <FormBody key={query.dataUpdatedAt} subject={{ kind: "edit", registration: r, cpf }} identity={identity} onReload={() => void query.refetch()}
     {...common} />;
 }
 
@@ -179,7 +182,9 @@ function FormBody({ subject, identity: given, today, household, teamId, onSaved,
   const [ noCpfReason, setNoCpfReason ] = useState("");
   const [ cns, setCns ] = useState("");
   // CPF digitado antes da volta do 409, para o candidato sem CPF: visível e editável.
-  const [ newCpf, setNewCpf ] = useState(subject.kind === "patient" && subject.cpf ? maskCpf(subject.cpf) : "");
+  // O mesmo para o cadastro aberto sem CPF (I2); com CPF, "Informar CPF" nem aparece.
+  const [ newCpf, setNewCpf ] = useState(subject.kind === "patient" && subject.cpf ? maskCpf(subject.cpf)
+    : subject.kind === "edit" && subject.cpf && !subject.registration.patient.has_cpf ? maskCpf(subject.cpf) : "");
   const [ race, setRace ] = useState(r?.patient_demographics.race_color ?? "");
   const [ ethnicity, setEthnicity ] = useState(r?.patient_demographics.ethnicity ?? "");
   const [ sections, setSections ] = useState<Record<Section, Draft>>(() => ({

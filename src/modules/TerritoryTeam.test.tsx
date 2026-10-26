@@ -344,6 +344,53 @@ describe("TerritoryTeam", () => {
     expect(api.createRegistration).not.toHaveBeenCalled();
   });
 
+  it("'Já tem cadastro — abrir' abre o painel como a linha do morador: título 'Cadastro de <nome>' com o foco (PROVA-6)", async () => {
+    mocked(api.findDuplicates).mockResolvedValue([
+      { patient_id: "pa2", display_name: "José das Dores", birth_date: "2026-09-30", has_cpf: false, registration_id: "rg2" }
+    ]);
+    renderWithProviders(<TerritoryTeam today={TODAY24} />);
+    await openHousehold();
+    fireEvent.click(screen.getByRole("button", { name: "Adicionar morador" }));
+    fireEvent.click(screen.getByLabelText("Não tem CPF"));
+    typeIn("Nome completo", "José das Dores");
+    typeIn("Data de nascimento", "2026-09-30");
+    fireEvent.click(screen.getByRole("button", { name: "Buscar possíveis duplicados" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Já tem cadastro — abrir" }));
+    const active = document.activeElement as HTMLElement;
+    expect(active.tagName).toBe("STRONG");
+    expect(active.textContent).toBe("Cadastro de José das Dores");
+    expect(screen.queryByText("Adicionar morador", { selector: "strong" })).toBeNull();
+    expect(await screen.findByRole("form", { name: "Atualizar cadastro individual" })).not.toBeNull();
+  });
+
+  it("volta do 409 com CPF → 'Já tem cadastro — abrir' num candidato sem CPF: 'Informar CPF' vem preenchido e o PATCH leva o CPF (I2)", async () => {
+    mocked(api.lookupTerritoryPerson).mockRejectedValue(new api.ApiError(404, { error: "person_not_found" }, "404"));
+    mocked(api.createRegistration).mockRejectedValueOnce(new api.ApiError(409, { error: "duplicate_suspected" }, "409"));
+    mocked(api.findDuplicates).mockResolvedValue([
+      { patient_id: "pa2", display_name: "José das Dores", birth_date: "2026-09-30", has_cpf: false, registration_id: "rg2" }
+    ]);
+    renderWithProviders(<TerritoryTeam today={TODAY24} />);
+    await openHousehold();
+    fireEvent.click(screen.getByRole("button", { name: "Adicionar morador" }));
+    typeIn("CPF", "529.982.247-25");
+    fireEvent.click(screen.getByRole("button", { name: "Buscar pelo CPF" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Cadastrar pessoa nova com este CPF" }));
+    typeIn("Nome completo", "José das Dores");
+    typeIn("Data de nascimento", "2026-09-30");
+    typeIn("Sexo", "male");
+    fillIdentification();
+    fireEvent.click(screen.getByLabelText("Não sabe o nome da mãe"));
+    fireEvent.click(screen.getByRole("button", { name: "Salvar cadastro" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Já tem cadastro — abrir" }));
+    // O cadastro aberto (José, sem CPF) recebe o CPF digitado, visível e editável.
+    expect(((await screen.findByLabelText("Informar CPF")) as HTMLInputElement).value).toBe("529.982.247-25");
+    fireEvent.click(screen.getByRole("button", { name: "Salvar cadastro" }));
+    await waitFor(() => expect(api.updateRegistration).toHaveBeenCalledTimes(1));
+    expect(mocked(api.updateRegistration).mock.calls[0][0]).toBe("rg2");
+    expect(mocked(api.updateRegistration).mock.calls[0][1]).toEqual(expect.objectContaining({ cpf: "52998224725" }));
+    expect(api.createRegistration).toHaveBeenCalledTimes(1);
+  });
+
   it("Adicionar morador sem CPF, candidato sem cadastro: 'É esta pessoa' abre a ficha nova (como antes)", async () => {
     mocked(api.findDuplicates).mockResolvedValue([
       { patient_id: "pa7", display_name: "Rita de Souza", birth_date: "1990-01-10", has_cpf: false, registration_id: null }
