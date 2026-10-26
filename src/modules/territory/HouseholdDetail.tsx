@@ -158,7 +158,8 @@ export function HouseholdDetail({ householdId, onBack, today }: { householdId: s
             {editing?.kind === "replace" && (
               <Reveal key={editing.family.id} style={box}>
                 <strong>Trocar responsável</strong>
-                <ReplaceResponsibleForm household={h} family={editing.family} residents={residents.data ?? []}
+                <ReplaceResponsibleForm household={h} family={editing.family} residents={residents.data}
+                  residentsError={residents.isError ? residents.error : undefined}
                   onCancel={() => setEditing(null)} onSaved={saved(RESPONSIBLE_REPLACED)} />
               </Reveal>
             )}
