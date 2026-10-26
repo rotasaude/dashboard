@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { ApiError } from "../../lib/api";
-import { DEMOGRAPHICS_INCENTIVE } from "../../lib/demographics";
+import { ADDRESS_FROM_HOUSEHOLD, DEMOGRAPHICS_INCENTIVE } from "../../lib/demographics";
 import { DemographicsForm } from "./DemographicsForm";
 
 afterEach(cleanup);
@@ -56,5 +56,44 @@ describe("DemographicsForm", () => {
     fireEvent.click(button);
     fireEvent.click(button);
     expect(save).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("DemographicsForm — endereço do cadastro domiciliar (módulo 24a)", () => {
+  it("com cadastro ativo: sem campos de endereço, com a nota; salva só a raça/cor", async () => {
+    const save = vi.fn().mockResolvedValue(undefined);
+    render(<DemographicsForm title="Completar dados" missing={[ "race_color" ]} addressLocked save={save} />);
+    expect(screen.queryByLabelText("CEP")).toBeNull();
+    expect(screen.queryByLabelText("Logradouro")).toBeNull();
+    expect(screen.getByText(ADDRESS_FROM_HOUSEHOLD)).not.toBeNull();
+    fireEvent.change(screen.getByLabelText("Raça/cor"), { target: { value: "03" } });
+    fireEvent.click(screen.getByRole("button", { name: "Salvar dados do paciente" }));
+    // Etnia vazia fora de 05 é o comportamento do 22 (o api apaga a gravada); endereço nunca vai.
+    await waitFor(() => expect(save).toHaveBeenCalledWith({ race_color: "03", ethnicity: "" }));
+  });
+
+  it("com cadastro ativo e nada escolhido: pede só a raça/cor", () => {
+    const save = vi.fn();
+    render(<DemographicsForm title="Completar dados" addressLocked save={save} />);
+    fireEvent.click(screen.getByRole("button", { name: "Salvar dados do paciente" }));
+    expect(screen.getByRole("alert").textContent).toBe("preencha a raça/cor");
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  it("sem cadastro: continua como hoje (campos de endereço)", () => {
+    render(<DemographicsForm title="Completar dados" save={vi.fn()} />);
+    expect(screen.getByLabelText("CEP")).not.toBeNull();
+    expect(screen.queryByText(ADDRESS_FROM_HOUSEHOLD)).toBeNull();
+  });
+
+  it("422 address_from_household vira a frase do cadastro domiciliar", async () => {
+    const save = vi.fn().mockRejectedValue(new ApiError(422, { error: "address_from_household", field: "address_zip" }, "422"));
+    render(<DemographicsForm title="Completar dados" save={save} />);
+    fireEvent.change(screen.getByLabelText("CEP"), { target: { value: "81020000" } });
+    fireEvent.change(screen.getByLabelText("Logradouro"), { target: { value: "Rua das Flores" } });
+    fireEvent.change(screen.getByLabelText("Número"), { target: { value: "120" } });
+    fireEvent.change(screen.getByLabelText("Bairro"), { target: { value: "Vila Verde" } });
+    fireEvent.click(screen.getByRole("button", { name: "Salvar dados do paciente" }));
+    expect((await screen.findByRole("alert")).textContent).toBe(ADDRESS_FROM_HOUSEHOLD);
   });
 });

@@ -6,15 +6,17 @@
 import { useRef, useState, type CSSProperties } from "react";
 import type { PatientDemographicsInput } from "../../lib/api";
 import {
-  DEMOGRAPHICS_INCENTIVE, EMPTY_DEMOGRAPHICS, INDIGENOUS, RACE_COLORS, demographicsBody, demographicsError, demographicsFilled,
+  ADDRESS_FROM_HOUSEHOLD, DEMOGRAPHICS_INCENTIVE, EMPTY_DEMOGRAPHICS, INDIGENOUS, RACE_COLORS, demographicsBody, demographicsError, demographicsFilled,
   demographicsProblem, missingText, type DemographicsDraft
 } from "../../lib/demographics";
 import { Tag } from "../../components/Tag";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { alert, box, fieldLabel, muted, row } from "../exams/styles";
 
-export function DemographicsFields({ value, onChange, problem = null, missing }: {
-  value: DemographicsDraft; onChange(d: DemographicsDraft): void; problem?: string | null; missing?: string[];
+// Módulo 24a (contrato §14 L6): `addressLocked` = endereço do cadastro
+// domiciliar; os campos de endereço saem e fica a nota de onde alterá-lo.
+export function DemographicsFields({ value, onChange, problem = null, missing, addressLocked = false }: {
+  value: DemographicsDraft; onChange(d: DemographicsDraft): void; problem?: string | null; missing?: string[]; addressLocked?: boolean;
 }) {
   const set = (patch: Partial<DemographicsDraft>) => onChange({ ...value, ...patch });
   const text = (label: string, key: keyof DemographicsDraft, extra: { inputMode?: "numeric" } = {}) => (
@@ -42,20 +44,22 @@ export function DemographicsFields({ value, onChange, problem = null, missing }:
         </label>
         {value.raceColor === INDIGENOUS && text("Etnia (código)", "ethnicity", { inputMode: "numeric" })}
       </div>
-      <div style={row}>
-        {text("CEP", "zip", { inputMode: "numeric" })}
-        {text("Logradouro", "street")}
-        {text("Número", "number")}
-        {text("Complemento", "complement")}
-        {text("Bairro", "district")}
-      </div>
+      {addressLocked ? <p style={muted}>{ADDRESS_FROM_HOUSEHOLD}</p> : (
+        <div style={row}>
+          {text("CEP", "zip", { inputMode: "numeric" })}
+          {text("Logradouro", "street")}
+          {text("Número", "number")}
+          {text("Complemento", "complement")}
+          {text("Bairro", "district")}
+        </div>
+      )}
       {problem && <p role="alert" style={alert}>{problem}</p>}
     </fieldset>
   );
 }
 
-export function DemographicsForm({ title, missing, save, onSaved, onCancel }: {
-  title: string; missing?: string[]; save(body: PatientDemographicsInput): Promise<void>; onSaved?(): void; onCancel?(): void;
+export function DemographicsForm({ title, missing, addressLocked = false, save, onSaved, onCancel }: {
+  title: string; missing?: string[]; addressLocked?: boolean; save(body: PatientDemographicsInput): Promise<void>; onSaved?(): void; onCancel?(): void;
 }) {
   const [ draft, setDraft ] = useState<DemographicsDraft>(EMPTY_DEMOGRAPHICS);
   const [ error, setError ] = useState<string | null>(null);
@@ -66,13 +70,14 @@ export function DemographicsForm({ title, missing, save, onSaved, onCancel }: {
   async function submit() {
     if (running.current) return;
     setError(null);
-    if (!demographicsFilled(draft)) { setError("preencha a raça/cor ou o endereço"); return; }
-    const problem = demographicsProblem(draft);
+    const opts = { addressLocked };
+    if (!demographicsFilled(draft, opts)) { setError(addressLocked ? "preencha a raça/cor" : "preencha a raça/cor ou o endereço"); return; }
+    const problem = demographicsProblem(draft, opts);
     if (problem) { setError(problem); return; }
     running.current = true;
     setBusy(true);
     try {
-      await save(demographicsBody(draft));
+      await save(demographicsBody(draft, opts));
     } catch (err) {
       setError(demographicsError(err));
       return;
@@ -89,7 +94,7 @@ export function DemographicsForm({ title, missing, save, onSaved, onCancel }: {
       <strong>{title}</strong>
       {saved ? <p role="status" style={statusStyle}>Dados do paciente salvos.</p> : (
         <>
-          <DemographicsFields value={draft} onChange={(d) => { setError(null); setDraft(d); }} missing={missing} />
+          <DemographicsFields value={draft} onChange={(d) => { setError(null); setDraft(d); }} missing={missing} addressLocked={addressLocked} />
           {error && <p role="alert" style={alert}>{error}</p>}
           <div style={row}>
             {/* Botão simples: o nome acessível não muda durante o envio (ActionButton acrescenta " …"). */}

@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { ApiError } from "./api";
 import {
-  EMPTY_DEMOGRAPHICS, RACE_COLORS, demographicsBody, demographicsError, demographicsFilled, demographicsProblem, isDemographicsError, missingText
+  ADDRESS_FROM_HOUSEHOLD, EMPTY_DEMOGRAPHICS, RACE_COLORS, demographicsBody, demographicsError, demographicsFilled, demographicsProblem, isDemographicsError, missingText
 } from "./demographics";
 
 const ADDRESS = { ...EMPTY_DEMOGRAPHICS, zip: "80010-000", street: "RUA XV DE NOVEMBRO", number: "100", district: "CENTRO" };
@@ -59,5 +59,26 @@ describe("dados do paciente para o BPA-I (contrato §12, D-U1)", () => {
     expect(isDemographicsError(new ApiError(422, { error: "invalid_race_color" }, "x"))).toBe(true);
     expect(isDemographicsError(new ApiError(422, { error: "invalid_code" }, "x"))).toBe(false);
     expect(demographicsError(new ApiError(500, "", "x"))).toBe("não foi possível salvar (500) — tente de novo");
+  });
+});
+
+describe("endereço do cadastro domiciliar (módulo 24a, contrato §14 L6)", () => {
+  it("travado: o corpo nunca leva address_*; 'preenchido' só olha a raça/cor", () => {
+    expect(demographicsBody({ ...EMPTY_DEMOGRAPHICS, raceColor: "01", zip: "81020000" }, { addressLocked: true })).toEqual({ race_color: "01", ethnicity: "" });
+    expect(demographicsBody(ADDRESS, { addressLocked: true })).toEqual({});
+    expect(demographicsFilled(ADDRESS, { addressLocked: true })).toBe(false);
+    expect(demographicsFilled({ ...EMPTY_DEMOGRAPHICS, raceColor: "03" }, { addressLocked: true })).toBe(true);
+    expect(demographicsProblem({ ...EMPTY_DEMOGRAPHICS, zip: "1" }, { addressLocked: true })).toBeNull();
+    // Sem a trava, nada muda.
+    expect(demographicsBody(ADDRESS)).toEqual({
+      address_zip: "80010000", address_street: "RUA XV DE NOVEMBRO", address_number: "100", address_district: "CENTRO"
+    });
+  });
+
+  it("422 address_from_household (com ou sem field) vira a frase, também no balcão", () => {
+    expect(ADDRESS_FROM_HOUSEHOLD).toBe("Endereço: do cadastro domiciliar — altere pelo domicílio, no Cadastro territorial.");
+    expect(demographicsError(new ApiError(422, { error: "address_from_household", field: "address_zip" }, "x"))).toBe(ADDRESS_FROM_HOUSEHOLD);
+    expect(demographicsError(new ApiError(422, { error: "address_from_household" }, "x"))).toBe(ADDRESS_FROM_HOUSEHOLD);
+    expect(isDemographicsError(new ApiError(422, { error: "address_from_household", field: "address_street" }, "x"))).toBe(true);
   });
 });

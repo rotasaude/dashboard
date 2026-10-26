@@ -15,6 +15,11 @@ export const STREET_MAX = 30;
 export const NUMBER_MAX = 5;
 export const COMPLEMENT_MAX = 10;
 export const DISTRICT_MAX = 30;
+// Módulo 24a (contrato §14 L6): paciente com cadastro individual ativo em
+// domicílio tem o endereço do cadastro domiciliar — só leitura aqui; raça/cor
+// e etnia continuam livres. Fonte: `address_from_household` do api.
+export const ADDRESS_FROM_HOUSEHOLD = "Endereço: do cadastro domiciliar — altere pelo domicílio, no Cadastro territorial.";
+export interface DemographicsOptions { addressLocked?: boolean }
 export const DEMOGRAPHICS_INCENTIVE =
   "Raça/cor e endereço completam o cadastro e evitam pendência no faturamento. Não é obrigatório: pergunte à pessoa.";
 
@@ -26,17 +31,19 @@ export const EMPTY_DEMOGRAPHICS: DemographicsDraft = { raceColor: "", ethnicity:
 const digits = (s: string) => s.replace(/\D/g, "");
 const ETHNICITY_TEXT = "para indígena, informe a etnia: código de 4 dígitos da tabela do DATASUS";
 
-function addressStarted(d: DemographicsDraft): boolean {
+function addressStarted(d: DemographicsDraft, opts: DemographicsOptions = {}): boolean {
+  if (opts.addressLocked) return false;
   return [ d.zip, d.street, d.number, d.complement, d.district ].some((v) => v.trim() !== "");
 }
 
-export function demographicsFilled(d: DemographicsDraft): boolean {
-  return d.raceColor !== "" || addressStarted(d);
+export function demographicsFilled(d: DemographicsDraft, opts: DemographicsOptions = {}): boolean {
+  return d.raceColor !== "" || addressStarted(d, opts);
 }
 
-export function demographicsProblem(d: DemographicsDraft): string | null {
+export function demographicsProblem(d: DemographicsDraft, opts: DemographicsOptions = {}): string | null {
   if (d.raceColor && !RACE_COLORS.some((r) => r.code === d.raceColor)) return "raça/cor inválida";
   if (d.raceColor === INDIGENOUS && !/^\d{4}$/.test(d.ethnicity.trim())) return ETHNICITY_TEXT;
+  if (opts.addressLocked) return null;
   if (addressStarted(d)) {
     if (digits(d.zip).length !== 8) return "CEP com 8 dígitos";
     if (!d.street.trim()) return "informe o logradouro";
@@ -50,14 +57,15 @@ export function demographicsProblem(d: DemographicsDraft): string | null {
 }
 
 // Só o preenchido vai no corpo; o que não foi perguntado não apaga o que o cadastro já tem.
-export function demographicsBody(d: DemographicsDraft): PatientDemographicsInput {
+// Com o endereço do cadastro domiciliar, nenhum `address_*` (o api recusaria: address_from_household).
+export function demographicsBody(d: DemographicsDraft, opts: DemographicsOptions = {}): PatientDemographicsInput {
   const body: PatientDemographicsInput = {};
   if (d.raceColor) {
     body.race_color = d.raceColor;
     // Etnia só com 05; fora dela vai vazia, e o api apaga a gravada (trocar de indígena para outra não trava).
     body.ethnicity = d.raceColor === INDIGENOUS ? d.ethnicity.trim() : "";
   }
-  if (addressStarted(d)) {
+  if (addressStarted(d, opts)) {
     body.address_zip = digits(d.zip);
     body.address_street = d.street.trim();
     // Sem número, "SN" (padrão do campo prd_num_pcnte do layout).
@@ -83,7 +91,8 @@ const ERRORS: Record<string, string> = {
   feature_disabled: "o faturamento de procedimentos está desligado nesta cidade",
   invalid_demographics: "dados do paciente inválidos — confira os campos",
   already_revoked: "esta validação já foi desfeita — atualize a tela",
-  not_found: "paciente ou atendimento não encontrado — atualize a tela"
+  not_found: "paciente ou atendimento não encontrado — atualize a tela",
+  address_from_household: ADDRESS_FROM_HOUSEHOLD
 };
 
 // Rótulos dos campos do paciente que o api aponta em `field` (fonte única; o faturamento reusa).
@@ -93,7 +102,7 @@ export const DEMOGRAPHICS_FIELD_LABEL: Record<string, string> = {
 };
 
 // Recusas que só a validação dos dados do paciente produz: a recepção as traduz por aqui, não pelo genérico.
-const OWN_CODES = new Set([ "invalid_race_color", "invalid_ethnicity", "ethnicity_required", "invalid_zip", "too_long", "invalid_demographics" ]);
+const OWN_CODES = new Set([ "invalid_race_color", "invalid_ethnicity", "ethnicity_required", "invalid_zip", "too_long", "invalid_demographics", "address_from_household" ]);
 export function isDemographicsError(err: unknown): boolean {
   const code = errorCode(err);
   return !!code && OWN_CODES.has(code);

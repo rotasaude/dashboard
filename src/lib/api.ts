@@ -541,6 +541,8 @@ export interface CheckInCitizen {
   names?: CitizenNames; verification_id?: string | null;
   // Módulo 22 (contrato §13 E3): o que já está no cadastro (nunca o valor). Ausentes = api antigo.
   race_color_set?: boolean; address_set?: boolean;
+  // Módulo 24a (contrato §14 L6): endereço do cadastro domiciliar (só leitura). Ausente = api antigo.
+  address_from_household?: boolean;
 }
 export interface CheckInTriage { id: string; date: string; protocol_name: string; priority: number }
 export interface CheckInAppointment {
@@ -3595,7 +3597,9 @@ export interface BillingPeriod {
 export interface PendingItem {
   procedure_id: string; reasons: string[]; fix: PendingFix | string;
   performed_on?: string; sigtap_code?: string; label?: string; late?: boolean;
-  patient?: { id: string; display_name: string | null }; professional?: { user_id: string; name: string };
+  // Módulo 24a: L8 (`has_cpf`, CNS mascarado) e L6 (`address_from_household`: endereço do cadastro domiciliar).
+  patient?: { id: string; display_name: string | null; has_cpf?: boolean; cns_masked?: string | null; address_from_household?: boolean };
+  professional?: { user_id: string; name: string };
 }
 export interface BillingExport {
   id: string; version: number; sha256: string; lines_bpa_i: number; lines_bpa_c: number; generated_at: string; generated_by: string;
@@ -3714,10 +3718,15 @@ export interface PatientDemographicsInput {
   race_color?: string; ethnicity?: string;
   address_zip?: string; address_street?: string; address_number?: string; address_complement?: string; address_district?: string;
 }
-export interface DemographicsSaved { race_color_set: boolean; address_set: boolean }
+// Módulo 24a (L6): `address_from_household` — o endereço vem do cadastro domiciliar (422 se enviado).
+export interface DemographicsSaved { race_color_set: boolean; address_set: boolean; address_from_household?: boolean }
+// Resposta do PATCH do faturamento (Billing::PatientsController): o paciente (sem o dado) e as flags.
+export interface BillingDemographicsSaved extends DemographicsSaved {
+  patient: { id: string; display_name: string | null; has_cpf?: boolean; cns_masked?: string | null };
+}
 
-export async function updatePatientDemographics(patientId: string, input: PatientDemographicsInput): Promise<void> {
-  await jsonFetch<unknown>(billingPath("patients", patientId, "demographics"), { method: "PATCH", body: JSON.stringify(input) });
+export async function updatePatientDemographics(patientId: string, input: PatientDemographicsInput): Promise<BillingDemographicsSaved> {
+  return jsonFetch<BillingDemographicsSaved>(billingPath("patients", patientId, "demographics"), { method: "PATCH", body: JSON.stringify(input) });
 }
 
 // No check-in: a rota de nomes do 19 aceita só os campos do paciente (sem nomes).
@@ -3725,7 +3734,8 @@ export async function saveVerificationDemographics(verificationId: string, input
   const body = await jsonFetch<Partial<DemographicsSaved>>(`${ATTENDANCE_BASE}/verifications/${encodeURIComponent(verificationId)}/names`, {
     method: "POST", body: JSON.stringify(input)
   });
-  return { race_color_set: body.race_color_set === true, address_set: body.address_set === true };
+  return { race_color_set: body.race_color_set === true, address_set: body.address_set === true,
+    address_from_household: body.address_from_household === true };
 }
 
 // ─── Linhas de cuidado (módulo 23, ADR 0040; contrato 2026-10-22) ───

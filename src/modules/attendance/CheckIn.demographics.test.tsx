@@ -12,6 +12,7 @@ vi.mock("../../lib/api", async (importOriginal) => {
 
 import * as api from "../../lib/api";
 import { CheckIn } from "./CheckIn";
+import { ADDRESS_FROM_HOUSEHOLD } from "../../lib/demographics";
 
 afterEach(cleanup);
 const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
@@ -106,6 +107,22 @@ describe("CheckIn — dados do paciente para o BPA-I (módulo 22)", () => {
     await checkInByCode();
     const form = screen.getByRole("region", { name: "Completar dados do paciente" });
     expect(within(form).getByRole("note").textContent).toMatch(/Falta: CEP e endereço/);
+  });
+
+  it("endereço do cadastro domiciliar: sem campos de endereço; só a raça/cor falta ou nenhum formulário", async () => {
+    mocked(api.lookupCheckIn).mockResolvedValue({ ...found, citizen: { ...found.citizen, address_from_household: true } });
+    renderCheckIn();
+    await checkInByCode();
+    const form = screen.getByRole("region", { name: "Completar dados do paciente" });
+    expect(within(form).queryByLabelText("CEP")).toBeNull();
+    expect(within(form).getByText(ADDRESS_FROM_HOUSEHOLD)).not.toBeNull();
+    expect(within(form).getByRole("note").textContent).toMatch(/^Falta: raça\/cor\./);
+    cleanup();
+    // Raça/cor já gravada: o endereço que falta é do domicílio, nada a completar aqui.
+    mocked(api.lookupCheckIn).mockResolvedValue({ ...found, citizen: { ...found.citizen, race_color_set: true, address_from_household: true } });
+    renderCheckIn();
+    await checkInByCode();
+    expect(screen.queryByRole("region", { name: "Completar dados do paciente" })).toBeNull();
   });
 
   async function exceptionCheckIn() {

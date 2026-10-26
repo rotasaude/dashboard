@@ -245,11 +245,13 @@ function CodeFlow({ unit, onUnitInvalid, cpf, onCpf: setCpf, demographicsOn = fa
           {(() => {
             // Contrato §13 E3: só oferece quando o api diz que falta (flag false); ausente = api antigo, como hoje.
             const verificationId = newVerificationId ?? found?.citizen.verification_id ?? null;
+            // Módulo 24a (L6): endereço do cadastro domiciliar não se completa aqui.
+            const addressLocked = found?.citizen.address_from_household === true;
             const missing = [ ...(found?.citizen.race_color_set === false ? [ "race_color" ] : []),
-              ...(found?.citizen.address_set === false ? [ "address" ] : []) ];
+              ...(found?.citizen.address_set === false && !addressLocked ? [ "address" ] : []) ];
             if (!demographicsOn || !verificationId || missing.length === 0 || demographicsClosed) return null;
             return (
-              <DemographicsForm key={verificationId} title="Completar dados do paciente" missing={missing}
+              <DemographicsForm key={verificationId} title="Completar dados do paciente" missing={missing} addressLocked={addressLocked}
                 save={async (body) => { await saveVerificationDemographics(verificationId, body); }}
                 onCancel={() => setDemographicsClosed(true)} />
             );

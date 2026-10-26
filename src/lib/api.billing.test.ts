@@ -159,9 +159,18 @@ describe("cliente do faturamento (contrato §3–§6)", () => {
     expect(headersOf()["Content-Type"]).toBe("application/json");
     expect(bodyOf()).toEqual(input);
     fetchMock.mockImplementationOnce(() => ok({ race_color_set: true, address_set: false }));
-    expect(await saveVerificationDemographics("v9", { race_color: "03" })).toEqual({ race_color_set: true, address_set: false });
+    expect(await saveVerificationDemographics("v9", { race_color: "03" })).toEqual({ race_color_set: true, address_set: false, address_from_household: false });
     expect(urlOf(1).pathname).toBe("/attendance/verifications/v9/names");
     expect(initOf(1).method).toBe("POST");
     expect(bodyOf(1)).toEqual({ race_color: "03" });
+  });
+
+  it("dados do paciente (módulo 24a, L6): a resposta do PATCH traz o paciente e address_from_household", async () => {
+    const saved = { patient: { id: "pa1", display_name: "Joana Lima", has_cpf: false, cns_masked: "*** **** **** 1234" },
+      race_color_set: true, address_set: true, address_from_household: true };
+    fetchMock.mockImplementationOnce(() => ok(saved));
+    expect(await updatePatientDemographics("pa1", { race_color: "03", ethnicity: "" })).toEqual(saved);
+    fetchMock.mockImplementationOnce(() => ok({ race_color_set: true, address_set: true, address_from_household: true }));
+    expect((await saveVerificationDemographics("v9", { race_color: "03" })).address_from_household).toBe(true);
   });
 });

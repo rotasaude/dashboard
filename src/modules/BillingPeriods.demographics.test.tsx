@@ -8,6 +8,7 @@ vi.mock("../lib/api", async (importOriginal) => {
 
 import * as api from "../lib/api";
 import { BillingPeriods } from "./BillingPeriods";
+import { ADDRESS_FROM_HOUSEHOLD } from "../lib/demographics";
 import { renderWithProviders } from "../test/campaignFixtures";
 import { TODAY22, billingUser, pending, period } from "../test/billingFixtures";
 
@@ -85,5 +86,22 @@ describe("Pendência do faturista — dados do paciente (módulo 22, D-U1)", () 
     mocked(api.fetchCurrentSession).mockResolvedValue(billingUser([ "municipal_admin" ]));
     const adminBox = await openPending();
     expect(within(adminBox).queryByRole("button", { name: "Completar dados" })).toBeNull();
+  });
+
+  it("paciente com cadastro domiciliar ativo: o formulário da pendência sem endereço, com a nota", async () => {
+    mocked(api.getPeriodPending).mockResolvedValue([ pending({
+      procedure_id: "pp8", fix: "patient", reasons: [ "missing_race_color", "missing_address" ],
+      patient: { id: "pa1", display_name: "Joana Lima", has_cpf: true, cns_masked: null, address_from_household: true }
+    }), NO_ID ]);
+    const box = await openPending();
+    fireEvent.click(within(box).getByRole("button", { name: "Completar dados" }));
+    const form = within(box).getByRole("region", { name: "Completar dados de Joana Lima" });
+    expect(within(form).queryByLabelText("CEP")).toBeNull();
+    expect(within(form).getByText(ADDRESS_FROM_HOUSEHOLD)).not.toBeNull();
+    // "address" sai do que falta: o faturista não o corrige aqui.
+    expect(within(form).getByRole("note").textContent).toMatch(/^Falta: raça\/cor\./);
+    fireEvent.change(within(form).getByLabelText("Raça/cor"), { target: { value: "03" } });
+    fireEvent.click(within(form).getByRole("button", { name: "Salvar dados do paciente" }));
+    await waitFor(() => expect(api.updatePatientDemographics).toHaveBeenCalledWith("pa1", { race_color: "03", ethnicity: "" }));
   });
 });

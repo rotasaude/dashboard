@@ -69,9 +69,11 @@ export function PendingPanel({ period, onClose, canFix = false }: { period: Bill
         );
       })}
       {fixing?.patient && (
+        // Módulo 24a (L6): endereço do cadastro domiciliar só leitura; o faturista completa só raça/cor.
         <DemographicsForm key={fixing.procedure_id} title={`Completar dados de ${patientName(fixing.patient)}`}
-          missing={demographicsMissingOf(fixing.reasons)}
-          save={(body) => updatePatientDemographics(fixing.patient!.id, body)}
+          addressLocked={fixing.patient.address_from_household === true}
+          missing={demographicsMissingOf(fixing.reasons).filter((m) => !(m === "address" && fixing.patient?.address_from_household === true))}
+          save={async (body) => { await updatePatientDemographics(fixing.patient!.id, body); }}
           onSaved={() => {
             setNotice(`Dados de ${patientName(fixing.patient)} salvos; as pendências foram conferidas de novo.`);
             setFixing(null);
