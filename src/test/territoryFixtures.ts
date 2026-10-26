@@ -35,7 +35,7 @@ export function territoryContext(over: Partial<TerritoryContext> = {}): Territor
 
 export function family(over: Partial<Family> = {}): Family {
   return { id: "fa1", responsible: { patient_id: "pa1", display_name: "Maria das Dores" }, income_band: "3", members_count: 3,
-    living_since: "2019-05", moved_out: false, ...over };
+    living_since: "2019-05", moved_out: false, responsible_exited: false, ...over };
 }
 
 export function household(over: Partial<Household> = {}): Household {

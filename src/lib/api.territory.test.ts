@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   addFamily, countRegistryStatus, createHousehold, createMicroArea, createRegistration, exitRegistration, findDuplicates, getHousehold,
   getRegistration, getTerritoryContext, listHouseholds, listMicroAreas, listRegistrations, listRegistryStatus, listTerritoryAdminTeams,
-  lookupTerritoryPerson, TERRITORY_PAGE_SIZE, updateFamily, updateHousehold, updateMicroArea, updateRegistration
+  lookupTerritoryPerson, replaceResponsible, TERRITORY_PAGE_SIZE, updateFamily, updateHousehold, updateMicroArea, updateRegistration
 } from "./api";
 import type { HouseholdInput, RegistrationInput } from "./api";
 import { household, personRow, profilelessRegistration, registration, territoryContext, territoryUser } from "../test/territoryFixtures";
@@ -108,10 +108,17 @@ describe("cliente do cadastro territorial (contrato §3–§6)", () => {
     expect(urlOf(5).pathname).toBe("/territory/families/fa1");
     expect(initOf(5).method).toBe("PATCH");
     expect(bodyOf(5)).toEqual({ income_band: null, members_count: null, living_since: null, moved_out: true, version: 4 });
+    // Troca do responsável (L29): o id é o da família ANTIGA e a versão é a do domicílio.
+    await replaceResponsible("fa1", "pa2", 4);
+    expect(urlOf(6).pathname).toBe("/territory/families/fa1/replace_responsible");
+    expect(initOf(6).method).toBe("POST");
+    expect(headersOf(6)["Content-Type"]).toBe("application/json");
+    expect(bodyOf(6)).toEqual({ responsible: { patient_id: "pa2" }, version: 4 });
+    expect(urlOf(6).search).toBe("");
     // Primeira página: sem before.
     await listHouseholds({ microAreaId: "ma1", before: null });
-    expect(urlOf(6).search).toBe(`?micro_area_id=ma1&limit=${TERRITORY_PAGE_SIZE}`);
-    for (let i = 0; i < 7; i++) expect(urlOf(i).search).not.toMatch(SENSITIVE);
+    expect(urlOf(7).search).toBe(`?micro_area_id=ma1&limit=${TERRITORY_PAGE_SIZE}`);
+    for (let i = 0; i < 8; i++) expect(urlOf(i).search).not.toMatch(SENSITIVE);
   });
 
   it("duplicados e busca por CPF: tudo no corpo de um POST; a pessoa vem sem envelope (L3)", async () => {

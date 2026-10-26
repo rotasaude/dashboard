@@ -4041,6 +4041,9 @@ export interface Family {
   id: string; responsible: { patient_id: string; display_name: string | null };
   // Renda: código do domínio renda_familiar em texto ("3"); living_since "AAAA-MM".
   income_band: string | null; members_count: number | null; living_since: string | null; moved_out: boolean;
+  // L29: família ATIVA cujo responsável saiu (óbito, ou mudança deste
+  // domicílio sem outro cadastro ativo aqui); em mudança é sempre false.
+  responsible_exited: boolean;
 }
 export interface Household {
   id: string; micro_area: { id: string; code: string }; address: HouseholdAddress | NoAddress;
@@ -4200,6 +4203,14 @@ export function addFamily(householdId: string, input: FamilyInput & { responsibl
 
 export function updateFamily(id: string, input: FamilyInput, version: number): Promise<Household> {
   return jsonFetch<Household>(territoryPath("families", id), territoryWrite("PATCH", { ...input, version }));
+}
+
+// L29: troca o responsável que saiu. `familyId` é o da família ANTIGA e
+// `version` a do DOMICÍLIO; nasce uma família nova (a antiga fica em mudança)
+// e a resposta (201) é o domicílio inteiro.
+export function replaceResponsible(familyId: string, patientId: string, version: number): Promise<Household> {
+  return jsonFetch<Household>(territoryPath("families", familyId, "replace_responsible"),
+    territoryWrite("POST", { responsible: { patient_id: patientId }, version }));
 }
 
 // ── Pessoa (contrato §5, L3): tudo no corpo; 30 por minuto (429) ──

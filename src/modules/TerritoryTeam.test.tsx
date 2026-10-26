@@ -7,7 +7,8 @@ vi.mock("../lib/api", async (importOriginal) => {
   const real = await importOriginal<typeof import("../lib/api")>();
   return { ...real, fetchCurrentSession: vi.fn(), getTerritoryContext: vi.fn(), listHouseholds: vi.fn(), getHousehold: vi.fn(), listRegistrations: vi.fn(),
     createHousehold: vi.fn(), updateHousehold: vi.fn(), addFamily: vi.fn(), updateFamily: vi.fn(), listPanelNeighborhoods: vi.fn(),
-    findDuplicates: vi.fn(), lookupTerritoryPerson: vi.fn(), createRegistration: vi.fn(), updateRegistration: vi.fn(), getRegistration: vi.fn(), exitRegistration: vi.fn() };
+    findDuplicates: vi.fn(), lookupTerritoryPerson: vi.fn(), createRegistration: vi.fn(), updateRegistration: vi.fn(), getRegistration: vi.fn(), exitRegistration: vi.fn(),
+    replaceResponsible: vi.fn() };
 });
 
 import * as api from "../lib/api";
@@ -28,7 +29,7 @@ afterEach(cleanup);
 beforeEach(() => {
   for (const fn of [ api.fetchCurrentSession, api.getTerritoryContext, api.listHouseholds, api.getHousehold, api.listRegistrations,
     api.createHousehold, api.updateHousehold, api.addFamily, api.updateFamily, api.listPanelNeighborhoods, api.findDuplicates, api.lookupTerritoryPerson,
-    api.createRegistration, api.updateRegistration, api.getRegistration, api.exitRegistration ]) mocked(fn).mockReset();
+    api.createRegistration, api.updateRegistration, api.getRegistration, api.exitRegistration, api.replaceResponsible ]) mocked(fn).mockReset();
   mocked(api.findDuplicates).mockResolvedValue([]);
   mocked(api.createRegistration).mockResolvedValue(registration({ id: "rg9" }));
   mocked(api.updateRegistration).mockResolvedValue(registration({ id: "rg2", version: 2 }));
@@ -517,6 +518,116 @@ describe("TerritoryTeam", () => {
     expect(await screen.findByText(STALE_TEXT)).not.toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Recarregar" }));
     await waitFor(() => expect(api.getHousehold).toHaveBeenCalledTimes(2));
+  });
+
+  // PROVA-2 (L29): a responsável Maria saiu; José e Rita moram na família dela, Lia em outra família, Davi sem família.
+  const EXITED = household({ families: [ family({ responsible_exited: true }),
+    family({ id: "fa2", responsible: { patient_id: "pa5", display_name: "Pedro Alves" }, members_count: 1 }) ] });
+  const RITA = registration({ id: "rg5", is_responsible: false, status: "refused", refused: true,
+    patient: { ...JOSE.patient, id: "pa6", display_name: "Rita das Dores", full_name: "Rita das Dores" } });
+  const LIA = registration({ id: "rg6", is_responsible: false, family_id: "fa2",
+    patient: { ...JOSE.patient, id: "pa7", display_name: "Lia Alves", full_name: "Lia Alves" } });
+  const DAVI = registration({ id: "rg7", is_responsible: false, family_id: null,
+    patient: { ...JOSE.patient, id: "pa8", display_name: "Davi Souza", full_name: "Davi Souza" } });
+  const REPLACED = household({ version: 3, families: [ family({ moved_out: true }),
+    family({ id: "fa2", responsible: { patient_id: "pa5", display_name: "Pedro Alves" }, members_count: 1 }),
+    family({ id: "fa3", responsible: { patient_id: "pa2", display_name: "José das Dores" }, members_count: 2 }) ] });
+  const EFFECT = "Nasce uma família nova com José das Dores como responsável; os moradores passam para ela e a família antiga fica encerrada. " +
+    "O parentesco de cada morador precisa ser informado de novo.";
+
+  async function openReplace() {
+    mocked(api.getHousehold).mockResolvedValue(EXITED);
+    mocked(api.listRegistrations).mockResolvedValue([ registration(), JOSE, RITA, LIA, DAVI ]);
+    renderWithProviders(<TerritoryTeam today={TODAY24} />);
+    await openHousehold();
+    fireEvent.click(screen.getByRole("button", { name: "Trocar responsável da família de Maria das Dores" }));
+  }
+
+  it("responsável que saiu: a marca e 'Trocar responsável' só nessa família; sem a marca, nada de troca", async () => {
+    mocked(api.getHousehold).mockResolvedValue(EXITED);
+    renderWithProviders(<TerritoryTeam today={TODAY24} />);
+    await openHousehold();
+    expect(screen.getAllByText("Responsável saiu — escolha o novo responsável")).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "Trocar responsável da família de Maria das Dores" })).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Trocar responsável da família de Pedro Alves" })).toBeNull();
+    cleanup();
+    // Família em mudança nunca oferece troca (o api manda false, mas a tela não confia).
+    mocked(api.getHousehold).mockResolvedValue(household({ families: [ family({ moved_out: true, responsible_exited: true }) ] }));
+    renderWithProviders(<TerritoryTeam today={TODAY24} />);
+    await openHousehold();
+    expect(screen.queryByText("Responsável saiu — escolha o novo responsável")).toBeNull();
+    expect(screen.queryByRole("button", { name: /Trocar responsável/ })).toBeNull();
+  });
+
+  it("Trocar responsável: só moradores com cadastro ativo da família, sem quem saiu; confirma o efeito; corpo exato; a resposta entra e avisa", async () => {
+    mocked(api.replaceResponsible).mockResolvedValue(REPLACED);
+    await openReplace();
+    const select = screen.getByLabelText("Novo responsável") as HTMLSelectElement;
+    expect(Array.from(select.options).map((o) => o.textContent)).toEqual([ "— escolha —", "José das Dores", "Rita das Dores" ]);
+    // Sem escolha, não segue.
+    fireEvent.click(screen.getByRole("button", { name: "Trocar responsável" }));
+    expect(screen.queryByRole("group", { name: "Confirmar troca de responsável" })).toBeNull();
+    expect(document.activeElement).toBe(select);
+    fireEvent.change(select, { target: { value: "pa2" } });
+    fireEvent.click(screen.getByRole("button", { name: "Trocar responsável" }));
+    const confirm = screen.getByRole("group", { name: "Confirmar troca de responsável" });
+    expect(confirm.textContent).toContain(EFFECT);
+    expect(api.replaceResponsible).not.toHaveBeenCalled();
+    fireEvent.click(within(confirm).getByRole("button", { name: "Confirmar troca" }));
+    expect(await screen.findByText("Responsável trocado. Nova versão enviada ao e-SUS.")).not.toBeNull();
+    expect(api.replaceResponsible).toHaveBeenCalledWith("fa1", "pa2", 2);
+    expect((document.activeElement as HTMLElement).textContent).toBe("Responsável trocado. Nova versão enviada ao e-SUS.");
+    // A resposta (versão 3) entra sem reler o domicílio: família antiga mudou-se, a nova com José; moradores e lista releem.
+    expect(screen.getByText("Responsável: José das Dores · 2 pessoas")).not.toBeNull();
+    expect(screen.queryByText("Responsável saiu — escolha o novo responsável")).toBeNull();
+    expect(api.getHousehold).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(api.listRegistrations).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(api.listHouseholds).toHaveBeenCalledTimes(2));
+  });
+
+  it("Trocar responsável: Voltar e Cancelar não enviam; sem morador da família, a tela explica", async () => {
+    await openReplace();
+    fireEvent.change(screen.getByLabelText("Novo responsável"), { target: { value: "pa2" } });
+    fireEvent.click(screen.getByRole("button", { name: "Trocar responsável" }));
+    fireEvent.click(within(screen.getByRole("group", { name: "Confirmar troca de responsável" })).getByRole("button", { name: "Voltar" }));
+    expect((screen.getByLabelText("Novo responsável") as HTMLSelectElement).value).toBe("pa2");
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+    expect(screen.queryByLabelText("Novo responsável")).toBeNull();
+    expect(api.replaceResponsible).not.toHaveBeenCalled();
+    cleanup();
+    mocked(api.getHousehold).mockResolvedValue(EXITED);
+    mocked(api.listRegistrations).mockResolvedValue([ LIA, DAVI ]);
+    renderWithProviders(<TerritoryTeam today={TODAY24} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Abrir Rua das Flores, 120" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Trocar responsável da família de Maria das Dores" }));
+    expect(await screen.findByText("nenhum morador desta família com cadastro ativo — cadastre o novo responsável antes")).not.toBeNull();
+  });
+
+  it("Trocar responsável: 409 stale_version pede Recarregar; 422 invalid_family com path foca o campo ou diz a frase", async () => {
+    mocked(api.replaceResponsible).mockRejectedValueOnce(new api.ApiError(409, { error: "stale_version" }, "409"));
+    await openReplace();
+    fireEvent.change(screen.getByLabelText("Novo responsável"), { target: { value: "pa2" } });
+    fireEvent.click(screen.getByRole("button", { name: "Trocar responsável" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar troca" }));
+    expect(await screen.findByText(STALE_TEXT)).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Recarregar" }));
+    await waitFor(() => expect(api.getHousehold).toHaveBeenCalledTimes(2));
+    expect(screen.queryByLabelText("Novo responsável")).toBeNull();
+
+    mocked(api.replaceResponsible).mockRejectedValueOnce(new api.ApiError(422, { error: "invalid_family", path: "responsible.patient_id" }, "422"));
+    fireEvent.click(await screen.findByRole("button", { name: "Trocar responsável da família de Maria das Dores" }));
+    fireEvent.change(screen.getByLabelText("Novo responsável"), { target: { value: "pa6" } });
+    fireEvent.click(screen.getByRole("button", { name: "Trocar responsável" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar troca" }));
+    expect(await screen.findByText("confira o campo destacado")).not.toBeNull();
+    const select = screen.getByLabelText("Novo responsável");
+    expect(document.activeElement).toBe(select);
+    expect(select.getAttribute("aria-invalid")).toBe("true");
+
+    mocked(api.replaceResponsible).mockRejectedValueOnce(new api.ApiError(422, { error: "invalid_family", path: "moved_out" }, "422"));
+    fireEvent.click(screen.getByRole("button", { name: "Trocar responsável" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar troca" }));
+    expect(await screen.findByText("esta família já se mudou — recarregue o domicílio")).not.toBeNull();
   });
 
   it("domicílio inativo não recebe morador novo", async () => {

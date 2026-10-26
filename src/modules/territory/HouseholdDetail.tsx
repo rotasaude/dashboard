@@ -15,6 +15,9 @@
 // cadastro" de um morador abre a ficha dele, também com as famílias. A ficha
 // escolhe a família (a dele; a de que é responsável; para quem chega, a única
 // morando). Salvar relê os moradores uma vez.
+// Responsável que saiu (L29, PROVA-2): a família com `responsible_exited`
+// ganha a marca e "Trocar responsável" (só nesse caso). Toda gravação termina
+// com a mensagem focada (Notice), porque o bloco que tinha o foco some.
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getHousehold, listRegistrations, type Family, type Registration } from "../../lib/api";
@@ -28,7 +31,7 @@ import { Tag } from "../../components/Tag";
 import { KeyValue } from "../../components/KeyValue";
 import { secondaryButtonStyle } from "../../components/formStyles";
 import { allowsFamilies, dictLabel } from "../../lib/territoryDictionaries";
-import { alert, box, grid, list, muted, okText, row, stack } from "../exams/styles";
+import { alert, box, grid, list, muted, row, stack } from "../exams/styles";
 import { HOUSEHOLD_SAVED, addressLine, householdStatus } from "./HouseholdList";
 import { HouseholdForm } from "./HouseholdForm";
 import { FamilyForm } from "./FamilyForm";
@@ -36,10 +39,12 @@ import { HouseholdStatusForm, canInactivate } from "./HouseholdStatusForm";
 import { Reveal } from "./Reveal";
 import { PersonStart, type PersonChoice, type PersonRestart } from "./PersonStart";
 import { REGISTRATION_EXITED, REGISTRATION_SAVED, RegistrationForm } from "./RegistrationForm";
+import { RESPONSIBLE_EXITED_TEXT, RESPONSIBLE_REPLACED, ReplaceResponsibleForm } from "./ReplaceResponsibleForm";
+import { Notice } from "./Notice";
 
 export const FAMILY_SAVED = "Família salva. Nova versão do domicílio enviada ao e-SUS.";
 type Editing =
-  | { kind: "household" } | { kind: "status" } | { kind: "newFamily" } | { kind: "family"; family: Family }
+  | { kind: "household" } | { kind: "status" } | { kind: "newFamily" } | { kind: "family"; family: Family } | { kind: "replace"; family: Family }
   // `round`: cada volta à busca revela o bloco de novo (a busca fica acima da ficha).
   | { kind: "resident"; choice: PersonChoice | null; restart?: PersonRestart; round?: number } | { kind: "registration"; id: string; name: string } | null;
 
@@ -81,7 +86,7 @@ export function HouseholdDetail({ householdId, onBack, today }: { householdId: s
               <KeyValue k="Situação" v={<Tag tone={status.tone}>{status.label}</Tag>} />
               <KeyValue k="Cadastrado em" v={`${fmtDay(h.registered_at)}${h.registered_by.name ? ` · ${h.registered_by.name}` : ""}`} mono={false} />
             </div>
-            {notice && <p role="status" style={okText}>{notice}</p>}
+            {notice && <Notice text={notice} />}
             {editing?.kind === "household" ? (
               <Reveal style={box}>
                 <strong>Editar domicílio</strong>
@@ -137,6 +142,13 @@ export function HouseholdDetail({ householdId, onBack, today }: { householdId: s
                   today={today} onCancel={() => setEditing(null)} onSaved={saved(FAMILY_SAVED)} />
               </Reveal>
             )}
+            {editing?.kind === "replace" && (
+              <Reveal key={editing.family.id} style={box}>
+                <strong>Trocar responsável</strong>
+                <ReplaceResponsibleForm household={h} family={editing.family} residents={residents.data ?? []}
+                  onCancel={() => setEditing(null)} onSaved={saved(RESPONSIBLE_REPLACED)} />
+              </Reveal>
+            )}
             <section aria-label="Famílias" style={stack}>
               <strong>Famílias</strong>
               {h.families.length === 0 ? <p style={muted}>nenhuma família</p> : (
@@ -144,9 +156,19 @@ export function HouseholdDetail({ householdId, onBack, today }: { householdId: s
                   {h.families.map((f) => (
                     <li key={f.id} style={row}>
                       <span>{familyLine(f)}</span>
-                      {f.moved_out ? <Tag tone="neutral">mudou-se</Tag> : !editing && (
-                        <button type="button" style={secondaryButtonStyle} aria-label={`Editar família de ${familyName(f)}`}
-                          onClick={() => open({ kind: "family", family: f })}>Editar família</button>
+                      {f.moved_out ? <Tag tone="neutral">mudou-se</Tag> : (
+                        <>
+                          {f.responsible_exited && <Tag tone="warn" mono={false}>{RESPONSIBLE_EXITED_TEXT}</Tag>}
+                          {!editing && (
+                            <button type="button" style={secondaryButtonStyle} aria-label={`Editar família de ${familyName(f)}`}
+                              onClick={() => open({ kind: "family", family: f })}>Editar família</button>
+                          )}
+                          {/* Ruling: a troca só quando o responsável saiu (o api aceita qualquer família ativa). */}
+                          {f.responsible_exited && !editing && (
+                            <button type="button" style={secondaryButtonStyle} aria-label={`Trocar responsável da família de ${familyName(f)}`}
+                              onClick={() => open({ kind: "replace", family: f })}>Trocar responsável</button>
+                          )}
+                        </>
                       )}
                     </li>
                   ))}
