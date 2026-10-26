@@ -54,6 +54,16 @@ export function familyLine(f: Family): string {
   return `Responsável: ${name} · ${f.members_count} ${f.members_count === 1 ? "pessoa" : "pessoas"}`;
 }
 
+// Coluna "Família" dos moradores (PROVA-5): responsável, membro da família de
+// quem (o responsável vem das famílias do domicílio já na tela) ou sem família.
+// Família que a tela não conhece (lida antes de uma gravação): "membro".
+export function familyOf(r: Registration, families: Family[]): string {
+  if (r.is_responsible) return "responsável";
+  if (!r.family_id) return "sem família";
+  const f = families.find((x) => x.id === r.family_id);
+  return f ? `família de ${f.responsible.display_name ?? NO_NAME}` : "membro";
+}
+
 export function HouseholdDetail({ householdId, onBack, today }: { householdId: string; onBack(): void; today?: string }) {
   const [ editing, setEditing ] = useState<Editing>(null);
   const [ notice, setNotice ] = useState<string | null>(null);
@@ -195,7 +205,7 @@ export function HouseholdDetail({ householdId, onBack, today }: { householdId: s
                     </span>
                   )
                 },
-                { label: "Família", w: "130px", render: (r) => (r.is_responsible ? "responsável" : "—") },
+                { label: "Família", w: "1.4fr", render: (r) => familyOf(r, h?.families ?? []) },
                 {
                   label: "Ação", w: "140px", card: "actions",
                   render: (r) => !editing && (

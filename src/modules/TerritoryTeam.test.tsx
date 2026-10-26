@@ -81,6 +81,22 @@ describe("TerritoryTeam", () => {
     expect(document.body.textContent).not.toMatch(/undefined|null|status_tem_diabetes|nu_comodos/);
   });
 
+  it("coluna Família dos moradores: responsável, família de <responsável> e sem família (PROVA-5)", async () => {
+    const SEM = registration({ id: "rg8", is_responsible: false, family_id: null,
+      patient: { ...JOSE.patient, id: "pa8", display_name: "Davi Souza", full_name: "Davi Souza" } });
+    // Família que a tela não conhece (lida antes de uma gravação): "membro", nunca vazio.
+    const OUTRA = registration({ id: "rg9", is_responsible: false, family_id: "fa9",
+      patient: { ...JOSE.patient, id: "pa9", display_name: "Lia Alves", full_name: "Lia Alves" } });
+    mocked(api.listRegistrations).mockResolvedValue([ registration(), JOSE, SEM, OUTRA ]);
+    renderWithProviders(<TerritoryTeam today={TODAY24} />);
+    await openHousehold();
+    const residents = screen.getByRole("region", { name: "Moradores" });
+    expect(within(residents).getByText("responsável")).not.toBeNull();
+    expect(within(residents).getByText("família de Maria das Dores")).not.toBeNull();
+    expect(within(residents).getByText("sem família")).not.toBeNull();
+    expect(within(residents).getByText("membro")).not.toBeNull();
+  });
+
   it("morador com a identidade atualizada no posto: a marca 'revisar e salvar' na lista (L24)", async () => {
     mocked(api.listRegistrations).mockResolvedValue([ registration(), { ...JOSE, identity_review_pending: true } ]);
     renderWithProviders(<TerritoryTeam today={TODAY24} />);
