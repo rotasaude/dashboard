@@ -68,6 +68,18 @@ export function registration(over: Partial<Registration> = {}): Registration {
   };
 }
 
+// Paciente criado pelo CPF a partir de par validado sem perfil (Patients::Resolve):
+// sem nome, nascimento e sexo. As telas mostram o que houver, sem quebrar.
+export function profilelessRegistration(over: Partial<Registration> = {}): Registration {
+  const base = registration();
+  return registration({
+    id: "rg4", status: "valid", is_responsible: false, family_id: null,
+    patient: { ...base.patient, id: "pa4", display_name: null, full_name: null, mother_name: null, birth_date: null, sex: null,
+      has_cpf: true, cns_masked: null, identity_locked: true },
+    ...over
+  });
+}
+
 export function personRow(over: Partial<PersonRow> = {}): PersonRow {
   return { patient_id: "pa3", citizen_id: null, display_name: "Joaquim Ribeiro", age: 71, micro_area_code: "01", status: "expired",
     registered_at: "2024-09-01T10:00:00-03:00", registration_id: "rg3", identity_review_pending: false, ...over };

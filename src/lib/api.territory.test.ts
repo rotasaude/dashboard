@@ -9,7 +9,7 @@ import {
   lookupTerritoryPerson, TERRITORY_PAGE_SIZE, updateFamily, updateHousehold, updateMicroArea, updateRegistration
 } from "./api";
 import type { HouseholdInput, RegistrationInput } from "./api";
-import { household, personRow, registration, territoryContext, territoryUser } from "../test/territoryFixtures";
+import { household, personRow, profilelessRegistration, registration, territoryContext, territoryUser } from "../test/territoryFixtures";
 
 function ok(body: unknown): Promise<Response> {
   return Promise.resolve(new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } }));
@@ -206,6 +206,22 @@ describe("dados de teste do cadastro territorial (formas do api real)", () => {
     expect(rg.identity_review_pending).toBe(false);
     expect(rg.team.id).toBe("tm1");
     expect(personRow().identity_review_pending).toBe(false);
+  });
+
+  it("paciente sem perfil (par validado sem nome, nascimento e sexo): os campos chegam nulos", () => {
+    const p = profilelessRegistration().patient;
+    expect([ p.display_name, p.full_name, p.birth_date, p.sex ]).toEqual([ null, null, null, null ]);
+    expect(p.has_cpf).toBe(true);
+  });
+
+  it("new_patient não aceita patient, cpf nem cns no mesmo corpo (o api recusa)", () => {
+    const np = { full_name: "José Souza", birth_date: "2026-09-30", sex: "male" as const, no_cpf_reason: "3" };
+    // @ts-expect-error — cpf na raiz só para paciente existente
+    const withCpf: RegistrationInput = { new_patient: np, cpf: "52998224725", team_id: "tm1" };
+    // @ts-expect-error — identidade digitada só para paciente existente
+    const withPatient: RegistrationInput = { new_patient: np, patient: { full_name: "José Souza" }, team_id: "tm1" };
+    const existing: RegistrationInput = { patient_id: "pa1", cpf: "52998224725", cns: null, team_id: "tm1" };
+    expect([ withCpf, withPatient, existing ].length).toBe(3);
   });
 
   it("sessão e contexto: interruptor ligado e microárea de outro ACS sem gravação", () => {

@@ -4005,7 +4005,8 @@ export interface HouseholdAddress {
 // Domicílio recusado sem endereço: o api devolve `{}`.
 export type NoAddress = { [K in keyof HouseholdAddress]?: never };
 export interface Family {
-  id: string; responsible: { patient_id: string; display_name: string };
+  // Paciente nascido de par validado sem nome tem display_name nulo.
+  id: string; responsible: { patient_id: string; display_name: string | null };
   // Renda: código do domínio renda_familiar em texto ("3"); living_since "AAAA-MM".
   income_band: string | null; members_count: number | null; living_since: string | null; moved_out: boolean;
 }
@@ -4038,7 +4039,7 @@ export interface DuplicateCandidate { patient_id: string; display_name: string; 
 // L3: a pessoa pelo CPF — paciente (com o cadastro ativo, se houver) ou par
 // validado sem paciente. Ninguém → 404 person_not_found; par só declarado →
 // 409 citizen_not_verified.
-export interface TerritoryPerson { patient_id: string | null; citizen_id: string | null; display_name: string; registration_id: string | null }
+export interface TerritoryPerson { patient_id: string | null; citizen_id: string | null; display_name: string | null; registration_id: string | null }
 
 // Identidade digitada de paciente EXISTENTE (`patient`, L4): só sem par
 // validado; com par, valor diferente → 422 identity_locked.
@@ -4053,8 +4054,11 @@ export interface NewPatient {
 }
 // Raça/cor e etnia no código do paciente (BPA: "01".."05"; etnia só com "05").
 export interface PatientDemographics { race_color: string | null; ethnicity: string | null }
+// Nome, nascimento e sexo podem faltar: o Patients::Resolve cria o paciente
+// pelo CPF e copia do par validado só o que houver (validação sem perfil).
 export interface RegistrationPatient {
-  id: string; display_name: string; full_name: string; mother_name: string | null; birth_date: string; sex: PatientSex;
+  id: string; display_name: string | null; full_name: string | null; mother_name: string | null; birth_date: string | null;
+  sex: PatientSex | null;
   has_cpf: boolean; no_cpf_reason: string | null; cns_masked: string | null;
   // Par validado: nome, nascimento, sexo e mãe só leitura.
   identity_locked: boolean;
@@ -4082,7 +4086,9 @@ export interface RegistrationBody {
   street_situation?: CodedSection | null; refused?: boolean;
 }
 // POST: a pessoa é uma das três; com new_patient, `patient`/`cpf`/`cns` não vão.
-export type RegistrationInput = ({ patient_id: string } | { citizen_id: string } | { new_patient: NewPatient }) & RegistrationBody;
+export type RegistrationInput = (
+  { patient_id: string } | { citizen_id: string } | { new_patient: NewPatient; patient?: never; cpf?: never; cns?: never }
+) & RegistrationBody;
 // PATCH: a pessoa é a do cadastro (patient_id, se vier, tem de ser o mesmo).
 export type RegistrationUpdate = RegistrationBody & { patient_id?: string };
 export type RegistrationQuery = { patientId: string } | { householdId: string };
