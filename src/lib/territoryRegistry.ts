@@ -18,6 +18,9 @@ export const TERRITORY_NO_ROLE = "seu papel não permite usar o cadastro territo
 export const STALE_TEXT = "outra pessoa salvou enquanto você editava — recarregue para ver a versão nova";
 // L24: o posto atualizou a identidade do paciente depois do último cadastro.
 export const IDENTITY_REVIEW_TEXT = "identidade atualizada no posto, revisar e salvar";
+// L28: o api recusa paciente novo com nome e nascimento de outro sem `duplicates_reviewed` (sem nomes na frase).
+export const DUPLICATE_SUSPECTED_TEXT =
+  "já existe paciente com o mesmo nome e nascimento — confira os possíveis duplicados: escolha a pessoa ou confirme que é outra";
 
 // Texto único para pessoa sem nome (paciente de par validado sem perfil) e equipe sem nome no CNES.
 export const NO_NAME = "pessoa sem nome no cadastro";
@@ -97,6 +100,7 @@ const ERRORS: Record<string, string> = {
   acs_without_cns: "o ACS precisa ter CNS no cadastro de profissionais para ser responsável pela microárea",
   team_kind_not_allowed: "só equipes de saúde da família (70) e de atenção primária (76) têm microáreas",
   invalid_code: CODE_PROBLEM,
+  duplicate_suspected: DUPLICATE_SUSPECTED_TEXT,
   already_registered: "esta pessoa já tem cadastro individual ativo — abra o cadastro dela para atualizar",
   cpf_taken: "este CPF já pertence a outro paciente — confira o número; a junção de pacientes ainda não existe",
   cns_taken: "este CNS já pertence a outro paciente — confira o número",

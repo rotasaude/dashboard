@@ -12,7 +12,8 @@ vi.mock("../lib/api", async (importOriginal) => {
 
 import * as api from "../lib/api";
 import { TerritoryTeam } from "./TerritoryTeam";
-import { IDENTITY_REVIEW_TEXT, STALE_TEXT, TERRITORY_DISABLED, TERRITORY_NO_ROLE } from "../lib/territoryRegistry";
+
+import { DUPLICATE_SUSPECTED_TEXT, IDENTITY_REVIEW_TEXT, STALE_TEXT, TERRITORY_DISABLED, TERRITORY_NO_ROLE } from "../lib/territoryRegistry";
 import { renderWithProviders } from "../test/campaignFixtures";
 import {
   TEAM_EAP, TODAY24, family, household, microArea, profilelessRegistration, registration, territoryContext, territoryUser
@@ -233,6 +234,9 @@ describe("TerritoryTeam", () => {
     typeIn("Nome da mãe", "Maria das Dores");
     fireEvent.click(screen.getByRole("button", { name: "Buscar possíveis duplicados" }));
     fireEvent.click(await screen.findByRole("button", { name: "Criar pessoa sem CPF" }));
+    // Nome, nascimento e mãe são os buscados: só leitura (I1).
+    expect(screen.queryByLabelText("Nome completo")).toBeNull();
+    expect(screen.getByText("Ana das Dores")).not.toBeNull();
     // Uma família morando: já escolhida na ficha; "sem família" também vale.
     const families = screen.getByLabelText("Família") as HTMLSelectElement;
     expect(families.value).toBe("fa1");
@@ -243,9 +247,57 @@ describe("TerritoryTeam", () => {
     fireEvent.click(screen.getByRole("button", { name: "Salvar cadastro" }));
     expect(await screen.findByText("Cadastro salvo. Nova versão enviada ao e-SUS.")).not.toBeNull();
     expect(mocked(api.createRegistration).mock.calls[0][0]).toEqual(expect.objectContaining({ household_id: "hh1", family_id: "fa1", is_responsible: false,
+      duplicates_reviewed: true,
       new_patient: { full_name: "Ana das Dores", birth_date: "2026-09-30", sex: "female", mother_name: "Maria das Dores", no_cpf_reason: "3" } }));
     expect(screen.queryByLabelText("Família")).toBeNull();
     await waitFor(() => expect(api.listRegistrations).toHaveBeenCalledTimes(2));
+  });
+
+  it("sem CPF, 'Corrigir (refaz a busca)' volta à busca com os valores; só cria depois de buscar de novo (I1)", async () => {
+    renderWithProviders(<TerritoryTeam today={TODAY24} />);
+    await openHousehold();
+    fireEvent.click(screen.getByRole("button", { name: "Adicionar morador" }));
+    fireEvent.click(screen.getByLabelText("Não tem CPF"));
+    typeIn("Nome completo", "Ana das Dores");
+    typeIn("Data de nascimento", "2026-09-30");
+    fireEvent.click(screen.getByRole("button", { name: "Buscar possíveis duplicados" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Criar pessoa sem CPF" }));
+    fireEvent.click(screen.getByRole("button", { name: "Corrigir (refaz a busca)" }));
+    expect((screen.getByLabelText("Nome completo") as HTMLInputElement).value).toBe("Ana das Dores");
+    expect(screen.queryByRole("button", { name: "Criar pessoa sem CPF" })).toBeNull();
+    typeIn("Nome completo", "Ana Maria das Dores");
+    fireEvent.click(screen.getByRole("button", { name: "Buscar possíveis duplicados" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Criar pessoa sem CPF" }));
+    expect(screen.getByText("Ana Maria das Dores")).not.toBeNull();
+    expect(api.findDuplicates).toHaveBeenCalledTimes(2);
+  });
+
+  it("pessoa nova com CPF e 409 duplicate_suspected: volta à busca com a frase e os candidatos; 'é esta pessoa' segue pelo paciente (L28)", async () => {
+    mocked(api.lookupTerritoryPerson).mockRejectedValue(new api.ApiError(404, { error: "person_not_found" }, "404"));
+    mocked(api.createRegistration).mockRejectedValueOnce(new api.ApiError(409, { error: "duplicate_suspected" }, "409"));
+    mocked(api.findDuplicates).mockResolvedValue([ { patient_id: "pa7", display_name: "Rita de Souza", birth_date: "1990-01-10", has_cpf: false } ]);
+    renderWithProviders(<TerritoryTeam today={TODAY24} />);
+    await openHousehold();
+    fireEvent.click(screen.getByRole("button", { name: "Adicionar morador" }));
+    typeIn("CPF", "529.982.247-25");
+    fireEvent.click(screen.getByRole("button", { name: "Buscar pelo CPF" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Cadastrar pessoa nova com este CPF" }));
+    typeIn("Nome completo", "Rita de Souza");
+    typeIn("Data de nascimento", "1990-01-10");
+    typeIn("Sexo", "female");
+    fillIdentification();
+    fireEvent.click(screen.getByLabelText("Não sabe o nome da mãe"));
+    fireEvent.click(screen.getByRole("button", { name: "Salvar cadastro" }));
+    expect(await screen.findByText("Rita de Souza · nascido em 10/01/1990 · sem CPF")).not.toBeNull();
+    expect(screen.getByText(DUPLICATE_SUSPECTED_TEXT)).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "É esta pessoa" }));
+    fillIdentification();
+    fireEvent.click(screen.getByRole("button", { name: "Salvar cadastro" }));
+    await waitFor(() => expect(api.createRegistration).toHaveBeenCalledTimes(2));
+    const body = mocked(api.createRegistration).mock.calls[1][0];
+    expect(body).toEqual(expect.objectContaining({ patient_id: "pa7", household_id: "hh1" }));
+    expect(body).not.toHaveProperty("new_patient");
+    expect(body).not.toHaveProperty("duplicates_reviewed");
   });
 
   it("Adicionar morador pelo CPF: o responsável da família escolhida entra como responsável; sem família, não", async () => {

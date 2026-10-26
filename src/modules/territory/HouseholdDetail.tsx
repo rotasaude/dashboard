@@ -34,13 +34,13 @@ import { HouseholdForm } from "./HouseholdForm";
 import { FamilyForm } from "./FamilyForm";
 import { HouseholdStatusForm, canInactivate } from "./HouseholdStatusForm";
 import { Reveal } from "./Reveal";
-import { PersonStart, type PersonChoice } from "./PersonStart";
+import { PersonStart, type PersonChoice, type PersonRestart } from "./PersonStart";
 import { REGISTRATION_EXITED, REGISTRATION_SAVED, RegistrationForm } from "./RegistrationForm";
 
 export const FAMILY_SAVED = "Família salva. Nova versão do domicílio enviada ao e-SUS.";
 type Editing =
   | { kind: "household" } | { kind: "status" } | { kind: "newFamily" } | { kind: "family"; family: Family }
-  | { kind: "resident"; choice: PersonChoice | null } | { kind: "registration"; id: string; name: string } | null;
+  | { kind: "resident"; choice: PersonChoice | null; restart?: PersonRestart } | { kind: "registration"; id: string; name: string } | null;
 
 export function familyLine(f: Family): string {
   const name = f.responsible.display_name ?? NO_NAME;
@@ -115,9 +115,10 @@ export function HouseholdDetail({ householdId, onBack, today }: { householdId: s
                 <strong>Adicionar morador</strong>
                 {editing.choice ? (
                   <RegistrationForm today={today} choice={editing.choice} onCancel={() => setEditing(null)} onSaved={saved(REGISTRATION_SAVED)}
-                    household={{ id: h.id, families: h.families }} />
+                    household={{ id: h.id, families: h.families }} onRestart={(restart) => setEditing({ kind: "resident", choice: null, restart })} />
                 ) : (
-                  <PersonStart today={today} onCancel={() => setEditing(null)} onChoose={(choice) => setEditing({ ...editing, choice })} />
+                  <PersonStart today={today} initial={editing.restart} onCancel={() => setEditing(null)}
+                    onChoose={(choice) => setEditing({ kind: "resident", choice })} />
                 )}
               </Reveal>
             )}

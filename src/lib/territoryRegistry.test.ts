@@ -74,6 +74,7 @@ describe("recusas do api (contrato §3–§5; api 17175a8)", () => {
     [ 422, "acs_without_cns", "o ACS precisa ter CNS no cadastro de profissionais para ser responsável pela microárea" ],
     [ 422, "team_kind_not_allowed", "só equipes de saúde da família (70) e de atenção primária (76) têm microáreas" ],
     [ 422, "invalid_code", "código de 01 a 99, com dois dígitos" ],
+    [ 409, "duplicate_suspected", "já existe paciente com o mesmo nome e nascimento — confira os possíveis duplicados: escolha a pessoa ou confirme que é outra" ],
     [ 409, "already_registered", "esta pessoa já tem cadastro individual ativo — abra o cadastro dela para atualizar" ],
     [ 409, "cpf_taken", "este CPF já pertence a outro paciente — confira o número; a junção de pacientes ainda não existe" ],
     [ 409, "cns_taken", "este CNS já pertence a outro paciente — confira o número" ],

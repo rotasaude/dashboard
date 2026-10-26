@@ -18,6 +18,10 @@
 // devolve as seções vazias. Uma recusa por vez, com foco no campo (a seção
 // recolhida reabre); 409 stale_version: a frase, o digitado fica e
 // "Recarregar" relê.
+// Pessoa nova sem CPF (I1): nome, nascimento e mãe são os da busca de
+// duplicados, só leitura; "Corrigir (refaz a busca)" volta à busca. Quem
+// passou pela busca leva `duplicates_reviewed: true` (L28); sem ela, o 409
+// duplicate_suspected volta à busca com o digitado, a frase e os candidatos.
 import { useId, useState, type FormEvent, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -43,7 +47,7 @@ import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } fr
 import { alert, checkLabel, fieldLabel, fieldset, form, grid, legend, muted, row } from "../exams/styles";
 import { useFieldFocus } from "./fieldFocus";
 import { fromDraft, toDraft, type Draft } from "./sectionDraft";
-import type { PersonChoice } from "./PersonStart";
+import type { PersonChoice, PersonRestart } from "./PersonStart";
 import { ExitForm } from "./ExitForm";
 import { addressLine } from "./HouseholdList";
 
@@ -55,6 +59,7 @@ export const LOCKED_TEXT = "validados no posto";
 export const OUT_OF_REACH = "O cadastro ativo desta pessoa é de uma microárea que você não alcança. Peça ao ACS dessa microárea ou ao " +
   "enfermeiro/médico da equipe para atualizar ou registrar a saída por mudança.";
 export const FILL_TEXT = "Dados do paciente: preencha só o que falta ou está errado; o que ficar em branco não muda.";
+export const SEARCHED_TEXT = "Nome, nascimento e mãe são os da busca de possíveis duplicados; para mudar, refaça a busca.";
 
 // Domicílio do morador (o aberto na tela) com as famílias dele: a ficha
 // escolhe a família ("Família") e is_responsible sai do responsável dela.
@@ -88,7 +93,7 @@ const BRAZIL = 31;
 const SEX_LABEL: Record<PatientSex, string> = { female: "Feminino", male: "Masculino" };
 
 type Subject =
-  | { kind: "new"; cpf?: string }
+  | { kind: "new"; cpf?: string; duplicatesReviewed?: boolean }
   | { kind: "patient"; patientId: string; displayName?: string | null; hasCpf?: boolean }
   | { kind: "citizen"; citizenId: string; displayName?: string | null }
   | { kind: "edit"; registration: Registration };
@@ -109,17 +114,17 @@ function yearsOld(birth: string, today: string): number | null {
   return y - by - (m > bm || (m === bm && d >= bd) ? 0 : 1);
 }
 
-export function RegistrationForm({ today = todayInCity(), household, teamId, choice, registrationId, onSaved, onExited, onCancel }: {
+export function RegistrationForm({ today = todayInCity(), household, teamId, choice, registrationId, onSaved, onExited, onCancel, onRestart }: {
   today?: string; household?: RegistrationPlace; teamId?: string; choice?: PersonChoice; registrationId?: string;
-  onSaved(r: Registration): void; onExited?(r: Registration): void; onCancel(): void;
+  onSaved(r: Registration): void; onExited?(r: Registration): void; onCancel(): void; onRestart?(restart: PersonRestart): void;
 }) {
   const initialId = registrationId ?? (choice?.kind === "patient" ? choice.registrationId : null) ?? null;
   // "Abrir cadastro" (already_registered com o id) troca a criação pela edição do ativo.
   const [ openId, setOpenId ] = useState<string | null>(initialId);
-  const common = { today, household, teamId, onSaved, onExited, onCancel };
+  const common = { today, household, teamId, onSaved, onExited, onCancel, onRestart };
   if (openId) return <EditLoader id={openId} {...common} />;
   if (!choice) return null;
-  const subject: Subject = choice.kind === "new" ? { kind: "new", cpf: choice.cpf }
+  const subject: Subject = choice.kind === "new" ? { kind: "new", cpf: choice.cpf, duplicatesReviewed: choice.duplicatesReviewed }
     : choice.kind === "citizen" ? { kind: "citizen", citizenId: choice.citizenId, displayName: choice.displayName }
     : { kind: "patient", patientId: choice.patientId, displayName: choice.displayName, hasCpf: choice.hasCpf };
   const identity = choice.kind === "citizen" ? {} : choice.identity ?? {};
@@ -128,6 +133,7 @@ export function RegistrationForm({ today = todayInCity(), household, teamId, cho
 
 type Common = {
   today: string; household?: RegistrationPlace; teamId?: string; onSaved(r: Registration): void; onExited?(r: Registration): void; onCancel(): void;
+  onRestart?(restart: PersonRestart): void;
 };
 
 function EditLoader({ id, ...common }: Common & { id: string }) {
@@ -149,7 +155,7 @@ function EditLoader({ id, ...common }: Common & { id: string }) {
     {...common} />;
 }
 
-function FormBody({ subject, identity: given, today, household, teamId, onSaved, onExited, onCancel, onOpen, onReload }: Common & {
+function FormBody({ subject, identity: given, today, household, teamId, onSaved, onExited, onCancel, onRestart, onOpen, onReload }: Common & {
   subject: Subject; identity: PatientIdentity; onOpen?(id: string): void; onReload?(): void;
 }) {
   const client = useQueryClient();
@@ -161,6 +167,8 @@ function FormBody({ subject, identity: given, today, household, teamId, onSaved,
   // com par validado, o api recusa o diferente — identity_locked com o campo).
   const fill = subject.kind === "patient";
   const typedIdentity = subject.kind === "new" || fill || (r !== null && !locked);
+  // Pessoa nova sem CPF: o que a busca de duplicados procurou não muda aqui (I1).
+  const searched = subject.kind === "new" && !subject.cpf;
   const idPrefix = subject.kind === "new" ? "new_patient" : "patient";
 
   const [ person, setPerson ] = useState<Identity>({ full_name: given.full_name ?? "", birth_date: given.birth_date ?? "", sex: given.sex ?? "",
@@ -262,7 +270,7 @@ function FormBody({ subject, identity: given, today, household, teamId, onSaved,
     else Object.assign(common, { sociodemographic: section("sociodemographic"), health_conditions: section("health_conditions"),
       street_situation: section("street_situation") });
     common.refused = refused;
-    if (subject.kind === "new") return { new_patient: newPatient(), ...common };
+    if (subject.kind === "new") return { new_patient: newPatient(), ...(subject.duplicatesReviewed ? { duplicates_reviewed: true } : {}), ...common };
     const extra: Pick<RegistrationBody, "patient" | "cpf" | "cns"> = {};
     if (r && typedIdentity) {
       const changed = changedIdentity(person, r);
@@ -277,6 +285,12 @@ function FormBody({ subject, identity: given, today, household, teamId, onSaved,
     if (subject.kind === "patient") return { patient_id: subject.patientId, ...extra, ...common };
     if (subject.kind === "citizen") return { citizen_id: subject.citizenId, ...extra, ...common };
     return { ...extra, ...common };
+  }
+
+  // Nome, nascimento e mãe como a busca de duplicados os recebe (mãe em branco não vai).
+  function searchQuery(): PersonRestart["query"] {
+    const mother = squish(person.mother_name);
+    return { full_name: squish(person.full_name), birth_date: person.birth_date, ...(mother ? { mother_name: mother } : {}) };
   }
 
   function newPatient(): NewPatient {
@@ -308,6 +322,11 @@ function FormBody({ subject, identity: given, today, household, teamId, onSaved,
     onError: (err) => {
       if (isStale(err)) { setProblem(null); focus.mark(null); setStale(true); return; }
       const code = errorCode(err);
+      // L28: nome e nascimento de um paciente existente — de volta à busca, com a frase e os candidatos.
+      if (code === "duplicate_suspected" && subject.kind === "new" && onRestart) {
+        onRestart({ query: searchQuery(), ...(subject.cpf ? { cpf: subject.cpf } : {}), search: true });
+        return;
+      }
       if (code === "already_registered") {
         const id = err instanceof ApiError ? (err.body as { registration_id?: unknown } | null)?.registration_id : null;
         setActiveId(typeof id === "string" ? id : null);
@@ -361,6 +380,18 @@ function FormBody({ subject, identity: given, today, household, teamId, onSaved,
         onChange={(v) => setField(name, spec.key, v)} focus={focus} asSelect={spec.key === "status_eh_gestante" && pregnancyUnknown} />
     ));
 
+  const sexSelect = (
+    <label style={fieldLabel}>
+      Sexo
+      <select ref={focus.reg(`${idPrefix}.sex`)} value={person.sex} style={inputStyle} aria-invalid={focus.invalid(`${idPrefix}.sex`)}
+        onChange={(e) => setPerson((p) => ({ ...p, sex: e.target.value }))}>
+        <option value="">—</option>
+        <option value="female">Feminino</option>
+        <option value="male">Masculino</option>
+      </select>
+    </label>
+  );
+
   const motherUnknown = visible("identification", "desconhece_nome_mae") && (
     <label style={checkLabel}>
       <input type="checkbox" checked={sections.identification.desconhece_nome_mae === "true"}
@@ -400,7 +431,26 @@ function FormBody({ subject, identity: given, today, household, teamId, onSaved,
       )}
 
       <CollapsibleSection title={SECTION_TITLE.identification} closed={closed.has("identification")} onToggle={() => toggle("identification")}>
-        {typedIdentity ? (
+        {searched ? (
+          <>
+            <div style={grid}>
+              <KeyValue k="Nome" v={person.full_name || "—"} mono={false} />
+              <KeyValue k="Nascimento" v={fmtDay(person.birth_date)} />
+              <KeyValue k="Mãe" v={person.mother_name || "—"} mono={false} />
+            </div>
+            <div style={row}>
+              <p style={muted}>{SEARCHED_TEXT}</p>
+              {onRestart && (
+                <button type="button" style={secondaryButtonStyle} onClick={() => onRestart({ query: searchQuery() })}>Corrigir (refaz a busca)</button>
+              )}
+            </div>
+            <div style={row}>
+              {text("Nome social", "new_patient.social_name", socialName, setSocialName)}
+              {sexSelect}
+            </div>
+            {motherUnknown && <div style={row}>{motherUnknown}</div>}
+          </>
+        ) : typedIdentity ? (
           <>
             {fill && (
               <>
@@ -414,15 +464,7 @@ function FormBody({ subject, identity: given, today, household, teamId, onSaved,
             </div>
             <div style={row}>
               {text("Data de nascimento", `${idPrefix}.birth_date`, person.birth_date, (v) => setPerson((p) => ({ ...p, birth_date: v })), "date")}
-              <label style={fieldLabel}>
-                Sexo
-                <select ref={focus.reg(`${idPrefix}.sex`)} value={person.sex} style={inputStyle} aria-invalid={focus.invalid(`${idPrefix}.sex`)}
-                  onChange={(e) => setPerson((p) => ({ ...p, sex: e.target.value }))}>
-                  <option value="">—</option>
-                  <option value="female">Feminino</option>
-                  <option value="male">Masculino</option>
-                </select>
-              </label>
+              {sexSelect}
             </div>
             <div style={row}>
               {text("Nome da mãe", `${idPrefix}.mother_name`, person.mother_name, (v) => setPerson((p) => ({ ...p, mother_name: v })))}

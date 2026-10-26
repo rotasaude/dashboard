@@ -8,12 +8,15 @@
 // que está digitado (mudou qualquer um dos três → buscar de novo). As duas
 // buscas são mutações no clique (gravam trilha), nunca reações ao que se
 // digita; tudo vai no corpo, nada em storage, URL ou log.
-import { useState, type FormEvent } from "react";
+// Volta da ficha (I1, L28): "Corrigir (refaz a busca)" reabre a busca sem CPF
+// com o que foi buscado; o 409 duplicate_suspected reabre com a frase e a
+// busca já feita (o clique foi o Salvar), levando o CPF da pessoa nova, se havia.
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { errorCode, findDuplicates, lookupTerritoryPerson, type DuplicateCandidate, type DuplicateQuery, type PatientIdentity, type TerritoryPerson } from "../../lib/api";
 import { maskCpf, onlyDigits } from "../../lib/attendance";
 import { todayInCity } from "../../lib/campaigns";
-import { NO_NAME, cpfProblem, duplicateQueryProblem, fmtDay, territoryError } from "../../lib/territoryRegistry";
+import { DUPLICATE_SUSPECTED_TEXT, NO_NAME, cpfProblem, duplicateQueryProblem, fmtDay, territoryError } from "../../lib/territoryRegistry";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { alert, checkLabel, fieldLabel, fieldset, form, legend, list, muted, row } from "../exams/styles";
 
@@ -21,11 +24,15 @@ import { alert, checkLabel, fieldLabel, fieldset, form, legend, list, muted, row
 // não relê o paciente); `identity` do paciente: só a mãe digitada na busca de
 // duplicados (nome e nascimento já casaram com o candidato — mandá-los
 // regravaria o nome em acento ou caixa). `new`: a identidade digitada
-// e, com CPF, o CPF (só dígitos).
+// e, com CPF, o CPF (só dígitos); `duplicatesReviewed`: passou pela busca de
+// duplicados e confirmou que é outra pessoa (L28).
 export type PersonChoice =
   | { kind: "patient"; patientId: string; registrationId: string | null; displayName?: string | null; hasCpf?: boolean; identity?: PatientIdentity }
   | { kind: "citizen"; citizenId: string; displayName?: string | null }
-  | { kind: "new"; identity: PatientIdentity; cpf?: string };
+  | { kind: "new"; identity: PatientIdentity; cpf?: string; duplicatesReviewed?: boolean };
+// Volta à busca de duplicados: o que foi buscado (ou digitado), o CPF da
+// pessoa nova (se havia) e `search` (409 duplicate_suspected: busca e frase ao abrir).
+export interface PersonRestart { query: DuplicateQuery; cpf?: string; search?: boolean }
 
 const sameQuery = (a: DuplicateQuery | null, b: DuplicateQuery) =>
   !!a && a.full_name === b.full_name && a.birth_date === b.birth_date && (a.mother_name ?? "") === (b.mother_name ?? "");
@@ -34,8 +41,10 @@ export function candidateLine(c: DuplicateCandidate): string {
   return `${c.display_name} · nascido em ${fmtDay(c.birth_date)} · ${c.has_cpf ? "com CPF" : "sem CPF"}`;
 }
 
-export function PersonStart({ today = todayInCity(), onChoose, onCancel }: { today?: string; onChoose(choice: PersonChoice): void; onCancel(): void }) {
-  const [ hasCpf, setHasCpf ] = useState(true);
+export function PersonStart({ today = todayInCity(), onChoose, onCancel, initial }: {
+  today?: string; onChoose(choice: PersonChoice): void; onCancel(): void; initial?: PersonRestart;
+}) {
+  const [ hasCpf, setHasCpf ] = useState(!initial);
   return (
     <div style={form}>
       <fieldset style={fieldset}>
@@ -45,7 +54,7 @@ export function PersonStart({ today = todayInCity(), onChoose, onCancel }: { tod
           <label style={checkLabel}><input type="radio" name="person-has-cpf" checked={!hasCpf} onChange={() => setHasCpf(false)} />Não tem CPF</label>
         </div>
       </fieldset>
-      {hasCpf ? <ByCpf onChoose={onChoose} /> : <WithoutCpf today={today} onChoose={onChoose} />}
+      {hasCpf ? <ByCpf onChoose={onChoose} /> : <WithoutCpf today={today} onChoose={onChoose} initial={initial} />}
       <div style={row}>
         <button type="button" style={secondaryButtonStyle} onClick={onCancel}>Cancelar</button>
       </div>
@@ -121,11 +130,13 @@ function ByCpf({ onChoose }: { onChoose(choice: PersonChoice): void }) {
   );
 }
 
-function WithoutCpf({ today, onChoose }: { today: string; onChoose(choice: PersonChoice): void }) {
-  const [ fullName, setFullName ] = useState("");
-  const [ birth, setBirth ] = useState("");
-  const [ mother, setMother ] = useState("");
-  const [ problem, setProblem ] = useState<string | null>(null);
+function WithoutCpf({ today, onChoose, initial }: { today: string; onChoose(choice: PersonChoice): void; initial?: PersonRestart }) {
+  const [ fullName, setFullName ] = useState(initial?.query.full_name ?? "");
+  const [ birth, setBirth ] = useState(initial?.query.birth_date ?? "");
+  const [ mother, setMother ] = useState(initial?.query.mother_name ?? "");
+  const [ problem, setProblem ] = useState<string | null>(initial?.search ? DUPLICATE_SUSPECTED_TEXT : null);
+  const cpf = initial?.cpf;
+  const started = useRef(false);
   const [ result, setResult ] = useState<{ query: DuplicateQuery; candidates: DuplicateCandidate[] } | null>(null);
 
   const typed = (): DuplicateQuery => {
@@ -138,6 +149,14 @@ function WithoutCpf({ today, onChoose }: { today: string; onChoose(choice: Perso
     onSuccess: (candidates, query) => setResult({ query, candidates }),
     onError: (err) => setProblem(territoryError(err))
   });
+
+  // 409 duplicate_suspected: a busca do que foi salvo roda uma vez ao abrir (a ação foi o Salvar).
+  useEffect(() => {
+    if (!initial?.search || started.current) return;
+    started.current = true;
+    search.mutate(typed());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function submit(e: FormEvent) {
     e.preventDefault();
@@ -189,7 +208,10 @@ function WithoutCpf({ today, onChoose }: { today: string; onChoose(choice: Perso
           )}
           <div style={row}>
             {current.candidates.length > 0 && <span style={muted}>Nenhuma destas? É outra pessoa:</span>}
-            <button type="button" style={buttonStyle} onClick={() => onChoose({ kind: "new", identity: { ...current.query } })}>Criar pessoa sem CPF</button>
+            <button type="button" style={buttonStyle}
+              onClick={() => onChoose({ kind: "new", identity: { ...current.query }, ...(cpf ? { cpf } : {}), duplicatesReviewed: true })}>
+              {cpf ? "Criar pessoa nova com o CPF" : "Criar pessoa sem CPF"}
+            </button>
           </div>
         </section>
       )}

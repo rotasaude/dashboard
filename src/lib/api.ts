@@ -4118,8 +4118,12 @@ export interface RegistrationBody {
   street_situation?: CodedSection | null; refused?: boolean;
 }
 // POST: a pessoa é uma das três; com new_patient, `patient`/`cpf`/`cns` não vão.
+// L28: `duplicates_reviewed: true` só quando a pessoa passou pela busca de
+// duplicados e confirmou que é outra; sem ele, nome e nascimento de um
+// paciente existente → 409 duplicate_suspected.
 export type RegistrationInput = (
-  { patient_id: string } | { citizen_id: string } | { new_patient: NewPatient; patient?: never; cpf?: never; cns?: never }
+  { patient_id: string } | { citizen_id: string }
+  | { new_patient: NewPatient; duplicates_reviewed?: boolean; patient?: never; cpf?: never; cns?: never }
 ) & RegistrationBody;
 // PATCH: a pessoa é a do cadastro (patient_id, se vier, tem de ser o mesmo).
 export type RegistrationUpdate = RegistrationBody & { patient_id?: string };

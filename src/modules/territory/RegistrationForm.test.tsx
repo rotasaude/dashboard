@@ -88,6 +88,42 @@ describe("RegistrationForm", () => {
     await waitFor(() => expect(onSaved).toHaveBeenCalledWith(registration()));
   });
 
+  it("pessoa nova sem CPF (I1): nome, nascimento e mãe da busca são só leitura; Corrigir refaz a busca; o corpo leva duplicates_reviewed (L28)", async () => {
+    const onRestart = vi.fn();
+    renderWithProviders(<RegistrationForm today={TODAY24} household={HOUSE} choice={{ ...NEW, duplicatesReviewed: true }} onRestart={onRestart}
+      onSaved={vi.fn()} onCancel={vi.fn()} />);
+    expect(screen.queryByLabelText("Nome completo")).toBeNull();
+    expect(screen.queryByLabelText("Data de nascimento")).toBeNull();
+    expect(screen.queryByLabelText("Nome da mãe")).toBeNull();
+    expect(screen.getByText("José das Dores")).not.toBeNull();
+    expect(screen.getByText("30/09/2026")).not.toBeNull();
+    expect(screen.getByText("Maria das Dores")).not.toBeNull();
+    fillNewbornIdentity();
+    save();
+    await waitFor(() => expect(api.createRegistration).toHaveBeenCalledTimes(1));
+    expect(created()).toEqual(expect.objectContaining({ duplicates_reviewed: true,
+      new_patient: expect.objectContaining({ full_name: "José das Dores", birth_date: "2026-09-30", mother_name: "Maria das Dores" }) }));
+    fireEvent.click(screen.getByRole("button", { name: "Corrigir (refaz a busca)" }));
+    expect(onRestart).toHaveBeenCalledWith({ query: { full_name: "José das Dores", birth_date: "2026-09-30", mother_name: "Maria das Dores" } });
+  });
+
+  it("pessoa nova sem passar pela busca não manda duplicates_reviewed; 409 duplicate_suspected volta à busca com o digitado (L28)", async () => {
+    mocked(api.createRegistration).mockRejectedValue(new api.ApiError(409, { error: "duplicate_suspected" }, "409"));
+    const onRestart = vi.fn();
+    renderWithProviders(<RegistrationForm today={TODAY24} household={HOUSE} choice={{ kind: "new", identity: {}, cpf: "52998224725" }}
+      onRestart={onRestart} onSaved={vi.fn()} onCancel={vi.fn()} />);
+    typeIn("Nome completo", "Rita  de Souza ");
+    typeIn("Data de nascimento", "1990-01-10");
+    pick("Sexo", "female");
+    pick("Raça/cor", "01");
+    fillIdentification();
+    fireEvent.click(screen.getByLabelText("Não sabe o nome da mãe"));
+    save();
+    await waitFor(() => expect(onRestart).toHaveBeenCalledWith({ query: { full_name: "Rita de Souza", birth_date: "1990-01-10" }, cpf: "52998224725",
+      search: true }));
+    expect(created()).not.toHaveProperty("duplicates_reviewed");
+  });
+
   it("pessoa nova com CPF (busca deu 404): o CPF vai em new_patient, sem motivo; a tela não pede o CPF de novo", async () => {
     renderWithProviders(<RegistrationForm today={TODAY24} household={HOUSE} choice={{ kind: "new", identity: {}, cpf: "52998224725" }}
       onSaved={vi.fn()} onCancel={vi.fn()} />);
@@ -317,7 +353,8 @@ describe("RegistrationForm", () => {
 
   it("gestante só para sexo feminino de 9 a 60 anos: o campo some e sai do corpo (errata 5.1)", async () => {
     renderWithProviders(<RegistrationForm today={TODAY24} household={HOUSE}
-      choice={{ kind: "new", identity: { full_name: "Ana Souza", birth_date: "1990-01-10", mother_name: "Rita Souza" } }} onSaved={vi.fn()} onCancel={vi.fn()} />);
+      choice={{ kind: "new", identity: { full_name: "Ana Souza", birth_date: "1990-01-10", mother_name: "Rita Souza" }, cpf: "52998224725" }}
+      onSaved={vi.fn()} onCancel={vi.fn()} />);
     pick("Sexo", "female");
     fireEvent.click(screen.getByLabelText("Está gestante"));
     typeIn("Maternidade de referência", "Maternidade Bairro Novo");
@@ -325,7 +362,6 @@ describe("RegistrationForm", () => {
     expect(screen.queryByLabelText("Está gestante")).toBeNull();
     expect(screen.queryByLabelText("Maternidade de referência")).toBeNull();
     pick("Raça/cor", "01");
-    pick("Motivo de não ter CPF", "8");
     fillIdentification();
     save();
     await waitFor(() => expect(api.createRegistration).toHaveBeenCalledTimes(1));
@@ -484,7 +520,7 @@ describe("RegistrationForm", () => {
 
     it("cadastro novo não tem Registrar saída", async () => {
       renderWithProviders(<RegistrationForm today={TODAY24} household={HOUSE} choice={NEW} onSaved={vi.fn()} onCancel={vi.fn()} />);
-      await screen.findByLabelText("Nome completo");
+      await screen.findByRole("button", { name: "Salvar cadastro" });
       expect(exitButton()).toBeNull();
     });
   });

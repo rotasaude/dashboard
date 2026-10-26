@@ -12,6 +12,7 @@ vi.mock("../../lib/api", async (importOriginal) => {
 
 import * as api from "../../lib/api";
 import { PersonStart } from "./PersonStart";
+import { DUPLICATE_SUSPECTED_TEXT } from "../../lib/territoryRegistry";
 import { renderWithProviders } from "../../test/campaignFixtures";
 import { TODAY24, territoryUser } from "../../test/territoryFixtures";
 
@@ -70,8 +71,37 @@ describe("PersonStart", () => {
     expect(screen.queryByRole("button", { name: CREATE })).toBeNull();
     typeIn("Nome da mãe", "Maria das Dores");
     fireEvent.click(await screen.findByRole("button", { name: CREATE }));
-    expect(onChoose).toHaveBeenCalledWith({ kind: "new", identity: { full_name: "José Dores", birth_date: "2026-09-30", mother_name: "Maria das Dores" } });
+    // Passou pela busca e escolheu "é outra pessoa": o corpo vai com duplicates_reviewed (L28).
+    expect(onChoose).toHaveBeenCalledWith({ kind: "new", identity: { full_name: "José Dores", birth_date: "2026-09-30", mother_name: "Maria das Dores" },
+      duplicatesReviewed: true });
     expect(api.findDuplicates).toHaveBeenCalledTimes(2);
+  });
+
+  it("volta da ficha (Corrigir): 'Não tem CPF' com nome, nascimento e mãe preenchidos; a busca é de novo um clique", async () => {
+    mocked(api.findDuplicates).mockResolvedValue([]);
+    renderWithProviders(<PersonStart today={TODAY24} onChoose={vi.fn()} onCancel={vi.fn()}
+      initial={{ query: { full_name: "José das Dores", birth_date: "2026-09-30", mother_name: "Maria das Dores" } }} />);
+    expect((screen.getByLabelText("Não tem CPF") as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByLabelText("Nome completo") as HTMLInputElement).value).toBe("José das Dores");
+    expect((screen.getByLabelText("Data de nascimento") as HTMLInputElement).value).toBe("2026-09-30");
+    expect((screen.getByLabelText("Nome da mãe") as HTMLInputElement).value).toBe("Maria das Dores");
+    expect(screen.queryByRole("button", { name: CREATE })).toBeNull();
+    expect(api.findDuplicates).not.toHaveBeenCalled();
+  });
+
+  it("volta do 409 duplicate_suspected: a frase, a busca já feita com os candidatos; com CPF, 'é outra pessoa' cria com o CPF", async () => {
+    mocked(api.findDuplicates).mockResolvedValue([ { patient_id: "pa7", display_name: "Rita de Souza", birth_date: "1990-01-10", has_cpf: false } ]);
+    const onChoose = vi.fn();
+    renderWithProviders(<PersonStart today={TODAY24} onChoose={onChoose} onCancel={vi.fn()}
+      initial={{ query: { full_name: "Rita de Souza", birth_date: "1990-01-10" }, cpf: "52998224725", search: true }} />);
+    expect(screen.getByRole("alert").textContent).toBe(DUPLICATE_SUSPECTED_TEXT);
+    expect(await screen.findByText("Rita de Souza · nascido em 10/01/1990 · sem CPF")).not.toBeNull();
+    expect(api.findDuplicates).toHaveBeenCalledTimes(1);
+    expect(api.findDuplicates).toHaveBeenCalledWith({ full_name: "Rita de Souza", birth_date: "1990-01-10" });
+    expect(screen.getByRole("alert").textContent).not.toMatch(/Rita/);
+    fireEvent.click(screen.getByRole("button", { name: "Criar pessoa nova com o CPF" }));
+    expect(onChoose).toHaveBeenCalledWith({ kind: "new", identity: { full_name: "Rita de Souza", birth_date: "1990-01-10" }, cpf: "52998224725",
+      duplicatesReviewed: true });
   });
 
   it("busca de duplicados: nome sem sobrenome ou nascimento futuro não sai; mãe em branco não vai; 429 vira frase", async () => {
