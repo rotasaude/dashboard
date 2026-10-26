@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { ApiError } from "./api";
 import {
-  IDENTITY_REVIEW_TEXT, STALE_TEXT, TERRITORY_DISABLED, TERRITORY_NO_ROLE, canUseTerritory, cnsProblem, cpfProblem, duplicateQueryProblem, errorPath,
+  IDENTITY_REVIEW_TEXT, STALE_TEXT, TERRITORY_DISABLED, TERRITORY_NO_ROLE, canUseTerritory, cpfProblem, duplicateQueryProblem, errorPath,
   exitReasonLabel, isStale, microAreaCodeProblem, microAreaNameProblem, registryStatusLabel, registryStatusTone, territoryError, territoryRoles
 } from "./territoryRegistry";
 
@@ -61,12 +61,9 @@ describe("busca de duplicados e documentos", () => {
     expect(duplicateQueryProblem({ full_name: "Maria Silva", birth_date: "2026-10-23" }, "2026-10-23")).toBeNull();
     expect(duplicateQueryProblem({ full_name: "Maria Silva", birth_date: "1960-01-01", mother_name: "Ana" }, "2026-10-23")).toBeNull();
   });
-  it("CPF e CNS pelo dígito", () => {
+  it("CPF pelo dígito", () => {
     expect(cpfProblem("529.982.247-25")).toBeNull();
     expect(cpfProblem("529.982.247-24")).toBe("CPF inválido: confira os 11 dígitos");
-    expect(cnsProblem("")).toBeNull();
-    expect(cnsProblem("123")).toBe("CNS inválido: confira os 15 dígitos");
-    expect(cnsProblem("7000 0000 0000 005")).toBeNull();
   });
 });
 

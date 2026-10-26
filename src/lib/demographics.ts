@@ -11,6 +11,8 @@ export const RACE_COLORS = [
   { code: "04", label: "Amarela" }, { code: "05", label: "Indígena" }
 ] as const;
 export const INDIGENOUS = "05";
+// Larguras do endereço do paciente no layout do BPA — a ficha domiciliar do
+// cadastro territorial usa as mesmas (fonte única; territoryDictionaries reexporta).
 export const STREET_MAX = 30;
 export const NUMBER_MAX = 5;
 export const COMPLEMENT_MAX = 10;

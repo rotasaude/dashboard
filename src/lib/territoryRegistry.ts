@@ -9,7 +9,6 @@ import { describeActionError } from "./actionErrors";
 import { isValidCpf, onlyDigits } from "./attendance";
 import { COUNT_QUERY, NOMINAL_QUERY, STATIC_QUERY, fmtDay } from "./careLines";
 import { featureDisabledKey, hasFeature } from "./features";
-import { isValidCns } from "./professionals";
 
 // "Lê sem trilha" é uma regra só, a do módulo 23.
 export { COUNT_QUERY, NOMINAL_QUERY, STATIC_QUERY, fmtDay };
@@ -88,11 +87,6 @@ export function duplicateQueryProblem(q: { full_name: string; birth_date: string
 
 export function cpfProblem(cpf: string): string | null {
   return isValidCpf(onlyDigits(cpf)) ? null : "CPF inválido: confira os 11 dígitos";
-}
-
-// CNS é opcional na ficha: vazio não é problema.
-export function cnsProblem(cns: string): string | null {
-  return cns.trim() === "" || isValidCns(cns) ? null : "CNS inválido: confira os 15 dígitos";
 }
 
 // ─── Recusas do api (frase, nunca o corpo nem o valor enviado) ─────────────

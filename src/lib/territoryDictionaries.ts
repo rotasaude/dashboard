@@ -10,6 +10,7 @@
 // ficha; a frase nunca repete o valor.
 import type { Family, HouseholdInput, NewPatient, PanelNeighborhood, PatientIdentity, PatientSex, Registration, RegistrationBody } from "./api";
 import { isValidCpf } from "./attendance";
+import { COMPLEMENT_MAX, DISTRICT_MAX, NUMBER_MAX, STREET_MAX } from "./demographics";
 import { isValidCns } from "./professionals";
 import {
   DOMAINS, SECTIONS, STRING_DOMAINS, type DomainKey, type FieldSpec, type SectionKey, type StringDomainKey
@@ -190,12 +191,12 @@ export function sectionProblem(section: SectionKey, raw: unknown): Problem | nul
 
 // ─── Endereço (TerritoryRegistry::Address) ─────────────────────────────────
 const ADDRESS_KEYS = [ "zip", "street_type", "street", "number", "no_number", "complement", "neighborhood_id", "district", "reference" ];
-export const STREET_MAX = 30;
-export const COMPLEMENT_MAX = 10;
-export const DISTRICT_MAX = 30;
+// Larguras do endereço: as mesmas do BPA (lib/demographics, fonte única); o
+// ponto de referência só existe na ficha domiciliar.
+export { COMPLEMENT_MAX, DISTRICT_MAX, NUMBER_MAX, STREET_MAX };
 export const REFERENCE_MAX = 40;
-const NUMBER = /^[A-Za-z0-9]{1,5}$/;
-const NUMBER_FORMAT = "número de 1 a 5 letras ou dígitos";
+const NUMBER = new RegExp(`^[A-Za-z0-9]{1,${NUMBER_MAX}}$`);
+const NUMBER_FORMAT = `número de 1 a ${NUMBER_MAX} letras ou dígitos`;
 const ADDRESS_INVALID: Record<string, string> = {
   zip: "CEP com 8 dígitos", street_type: "escolha o tipo de logradouro", street: "informe o logradouro", number: NUMBER_FORMAT,
   complement: "complemento inválido", neighborhood_id: "escolha o bairro da lista", district: "informe o bairro",
@@ -244,7 +245,7 @@ export function addressProblem(raw: unknown, neighborhoods?: PanelNeighborhood[]
   const listed = neighborhoodId ? neighborhoods?.find((n) => n.id === neighborhoodId) : undefined;
   if (listed && !usableNeighborhood(listed)) {
     return problem("address.neighborhood_id",
-      "este bairro não serve para a ficha (inativo ou com nome maior que 30 letras) — escreva o bairro no campo de texto");
+      `este bairro não serve para a ficha (inativo ou com nome maior que ${DISTRICT_MAX} letras) — escreva o bairro no campo de texto`);
   }
   if (!neighborhoodId && !district) return problem("address.district", "informe o bairro");
   if (district && chars(district) > DISTRICT_MAX) return problem("address.district", `bairro com mais de ${DISTRICT_MAX} caracteres`);
