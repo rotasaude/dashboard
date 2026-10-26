@@ -1,12 +1,13 @@
 // src/modules/TerritoryTeam.test.tsx
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { focusManager, onlineManager } from "@tanstack/react-query";
 
 vi.mock("../lib/api", async (importOriginal) => {
   const real = await importOriginal<typeof import("../lib/api")>();
   return { ...real, fetchCurrentSession: vi.fn(), getTerritoryContext: vi.fn(), listHouseholds: vi.fn(), getHousehold: vi.fn(), listRegistrations: vi.fn(),
-    createHousehold: vi.fn(), updateHousehold: vi.fn(), addFamily: vi.fn(), updateFamily: vi.fn(), listPanelNeighborhoods: vi.fn() };
+    createHousehold: vi.fn(), updateHousehold: vi.fn(), addFamily: vi.fn(), updateFamily: vi.fn(), listPanelNeighborhoods: vi.fn(),
+    findDuplicates: vi.fn(), lookupTerritoryPerson: vi.fn(), createRegistration: vi.fn(), updateRegistration: vi.fn(), getRegistration: vi.fn() };
 });
 
 import * as api from "../lib/api";
@@ -25,7 +26,12 @@ const JOSE = registration({ id: "rg2", is_responsible: false, status: "expired",
 afterEach(cleanup);
 beforeEach(() => {
   for (const fn of [ api.fetchCurrentSession, api.getTerritoryContext, api.listHouseholds, api.getHousehold, api.listRegistrations,
-    api.createHousehold, api.updateHousehold, api.addFamily, api.updateFamily, api.listPanelNeighborhoods ]) mocked(fn).mockReset();
+    api.createHousehold, api.updateHousehold, api.addFamily, api.updateFamily, api.listPanelNeighborhoods, api.findDuplicates, api.lookupTerritoryPerson,
+    api.createRegistration, api.updateRegistration, api.getRegistration ]) mocked(fn).mockReset();
+  mocked(api.findDuplicates).mockResolvedValue([]);
+  mocked(api.createRegistration).mockResolvedValue(registration({ id: "rg9" }));
+  mocked(api.updateRegistration).mockResolvedValue(registration({ id: "rg2", version: 2 }));
+  mocked(api.getRegistration).mockResolvedValue(JOSE);
   mocked(api.listPanelNeighborhoods).mockResolvedValue([ { id: "nb1", name: "Vila Verde", active: true } ]);
   mocked(api.createHousehold).mockResolvedValue(household());
   mocked(api.updateFamily).mockResolvedValue(household({ version: 3 }));
@@ -38,6 +44,23 @@ beforeEach(() => {
   mocked(api.getHousehold).mockResolvedValue(household());
   mocked(api.listRegistrations).mockResolvedValue([ registration(), JOSE ]);
 });
+
+const typeIn = (label: string, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
+// Os obrigatórios do §15 que a ficha não tira do paciente (nacionalidade já vem Brasileira).
+function fillIdentification() {
+  typeIn("Raça/cor", "03");
+  typeIn("Município de nascimento (código IBGE, 7 dígitos)", "4106902");
+  typeIn("Celular (DDD + número)", "41999990000");
+  fireEvent.click(screen.getByLabelText("Não sabe o nome do pai"));
+  fireEvent.click(within(screen.getByRole("group", { name: "Quer informar a orientação sexual?" })).getByLabelText("Não"));
+  fireEvent.click(within(screen.getByRole("group", { name: "Quer informar a identidade de gênero?" })).getByLabelText("Não"));
+  fireEvent.click(screen.getByLabelText("Não está em situação de rua"));
+}
+
+async function openHousehold() {
+  fireEvent.click(await screen.findByRole("button", { name: "Abrir Rua das Flores, 120" }));
+  await screen.findByText("José das Dores");
+}
 
 describe("TerritoryTeam", () => {
   it("abre na primeira microárea; domicílio → famílias → moradores com a situação", async () => {
@@ -124,6 +147,83 @@ describe("TerritoryTeam", () => {
     expect(await screen.findByText("Família salva. Nova versão do domicílio enviada ao e-SUS.")).not.toBeNull();
     expect(api.updateFamily).toHaveBeenCalledWith("fa1", { income_band: "3", members_count: 3, living_since: "2019-05", moved_out: false }, 2);
     await waitFor(() => expect(api.getHousehold).toHaveBeenCalledTimes(2));
+  });
+
+  it("Adicionar morador: busca de duplicados, pessoa nova na família, aviso e moradores relidos uma vez", async () => {
+    renderWithProviders(<TerritoryTeam today={TODAY24} />);
+    await openHousehold();
+    fireEvent.click(screen.getByRole("button", { name: "Adicionar morador" }));
+    // Uma família morando: já escolhida; "sem família" também vale.
+    const families = screen.getByLabelText("Família") as HTMLSelectElement;
+    expect(families.value).toBe("fa1");
+    expect(Array.from(families.options).map((o) => o.textContent)).toEqual([ "sem família", "Responsável: Maria das Dores" ]);
+    fireEvent.click(screen.getByLabelText("Não tem CPF"));
+    typeIn("Nome completo", "Ana das Dores");
+    typeIn("Data de nascimento", "2026-09-30");
+    typeIn("Nome da mãe", "Maria das Dores");
+    fireEvent.click(screen.getByRole("button", { name: "Buscar possíveis duplicados" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Criar pessoa sem CPF" }));
+    expect((screen.getByLabelText("Nome completo") as HTMLInputElement).value).toBe("Ana das Dores");
+    typeIn("Sexo", "female");
+    typeIn("Motivo de não ter CPF", "3");
+    fillIdentification();
+    fireEvent.click(screen.getByRole("button", { name: "Salvar cadastro" }));
+    expect(await screen.findByText("Cadastro salvo. Nova versão enviada ao e-SUS.")).not.toBeNull();
+    expect(mocked(api.createRegistration).mock.calls[0][0]).toEqual(expect.objectContaining({ household_id: "hh1", family_id: "fa1", is_responsible: false,
+      new_patient: { full_name: "Ana das Dores", birth_date: "2026-09-30", sex: "female", mother_name: "Maria das Dores", no_cpf_reason: "3" } }));
+    expect(screen.queryByLabelText("Família")).toBeNull();
+    await waitFor(() => expect(api.listRegistrations).toHaveBeenCalledTimes(2));
+  });
+
+  it("Adicionar morador pelo CPF: o responsável da família escolhida entra como responsável; sem família, não", async () => {
+    mocked(api.lookupTerritoryPerson).mockResolvedValue({ patient_id: "pa1", citizen_id: null, display_name: "Maria das Dores", registration_id: null });
+    renderWithProviders(<TerritoryTeam today={TODAY24} />);
+    await openHousehold();
+    fireEvent.click(screen.getByRole("button", { name: "Adicionar morador" }));
+    typeIn("CPF", "529.982.247-25");
+    fireEvent.click(screen.getByRole("button", { name: "Buscar pelo CPF" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Cadastrar Maria das Dores" }));
+    fillIdentification();
+    fireEvent.click(screen.getByRole("button", { name: "Salvar cadastro" }));
+    await waitFor(() => expect(api.createRegistration).toHaveBeenCalledTimes(1));
+    expect(mocked(api.createRegistration).mock.calls[0][0]).toEqual(expect.objectContaining({ patient_id: "pa1", household_id: "hh1", family_id: "fa1",
+      is_responsible: true }));
+    await screen.findByText("Cadastro salvo. Nova versão enviada ao e-SUS.");
+
+    fireEvent.click(screen.getByRole("button", { name: "Adicionar morador" }));
+    typeIn("Família", "");
+    typeIn("CPF", "529.982.247-25");
+    fireEvent.click(screen.getByRole("button", { name: "Buscar pelo CPF" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Cadastrar Maria das Dores" }));
+    fillIdentification();
+    fireEvent.click(screen.getByRole("button", { name: "Salvar cadastro" }));
+    await waitFor(() => expect(api.createRegistration).toHaveBeenCalledTimes(2));
+    const body = mocked(api.createRegistration).mock.calls[1][0];
+    expect(body).toEqual(expect.objectContaining({ household_id: "hh1", is_responsible: false }));
+    expect(body).not.toHaveProperty("family_id");
+  });
+
+  it("Abrir cadastro de um morador: lê o cadastro e salva a versão nova; Cancelar fecha", async () => {
+    renderWithProviders(<TerritoryTeam today={TODAY24} />);
+    await openHousehold();
+    fireEvent.click(screen.getByRole("button", { name: "Abrir cadastro de José das Dores" }));
+    await waitFor(() => expect(api.getRegistration).toHaveBeenCalledWith("rg2"));
+    expect(((await screen.findByLabelText("Nome completo")) as HTMLInputElement).value).toBe("José das Dores");
+    expect(screen.queryByRole("button", { name: "Adicionar morador" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Salvar cadastro" }));
+    expect(await screen.findByText("Cadastro salvo. Nova versão enviada ao e-SUS.")).not.toBeNull();
+    expect(mocked(api.updateRegistration).mock.calls[0][0]).toBe("rg2");
+    expect(mocked(api.updateRegistration).mock.calls[0][2]).toBe(1);
+    fireEvent.click(screen.getByRole("button", { name: "Abrir cadastro de Maria das Dores" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Cancelar" }));
+    expect(screen.queryByRole("button", { name: "Salvar cadastro" })).toBeNull();
+  });
+
+  it("domicílio inativo não recebe morador novo", async () => {
+    mocked(api.getHousehold).mockResolvedValue(household({ status: "inactive", families: [] }));
+    renderWithProviders(<TerritoryTeam today={TODAY24} />);
+    await openHousehold();
+    expect(screen.queryByRole("button", { name: "Adicionar morador" })).toBeNull();
   });
 
   it("sem Nova família fora do tipo 01 ou com recusa; família que se mudou não se edita", async () => {

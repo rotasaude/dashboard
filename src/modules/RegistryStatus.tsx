@@ -11,6 +11,10 @@
 // duas — com uma só, ela pode ser a do ACS. Com microárea escolhida a
 // população é só quem tem cadastro nela: "sem cadastro" vem sempre vazio,
 // então a aba sai e a tela explica.
+// "Cadastrar"/"Atualizar" abrem a ficha individual nesta tela (Task 12):
+// quem tem cadastro, pelo cadastro; paciente ou par validado sem cadastro,
+// pela pessoa, com a equipe escolhida — sem domicílio, a ficha vai fora de
+// área (team_id, A11). Salvar relê a lista e os números uma vez.
 import { useState } from "react";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { countRegistryStatus, getTerritoryContext, listRegistryStatus, type PersonRow, type RegistryListStatus } from "../lib/api";
@@ -26,8 +30,10 @@ import { StatTile } from "../components/StatTile";
 import { Tag } from "../components/Tag";
 import { SegmentedControl } from "../shell/SegmentedControl";
 import { inputStyle, secondaryButtonStyle } from "../components/formStyles";
-import { alert, fieldLabel, muted, row, stack } from "./exams/styles";
+import { alert, fieldLabel, muted, okText, row, stack } from "./exams/styles";
 import { TerritoryGate } from "./territory/TerritoryGate";
+import { REGISTRATION_SAVED, RegistrationForm } from "./territory/RegistrationForm";
+import type { PersonChoice } from "./territory/PersonStart";
 
 const NO_NAME = "cidadão sem nome no cadastro";
 export const MISSING_NEEDS_TEAM = "Com uma microárea escolhida, a lista e os números são só de quem tem cadastro nela — quem ainda não tem cadastro não tem microárea.";
@@ -52,22 +58,34 @@ const EMPTY: Record<Tab, string> = {
   missing_identifier: "nenhum cadastro sem identificador", missing: "ninguém da equipe sem cadastro", refused: "nenhuma recusa"
 };
 
-// onRegister(row, teamId): "Cadastrar" (sem cadastro) / "Atualizar" (os demais);
-// a equipe vai junto porque quem não tem cadastro não tem domicílio (A11).
-export function RegistryStatus({ onRegister }: { today?: string; onRegister?(row: PersonRow, teamId: string): void } = {}) {
+// A pessoa da linha na ficha: o cadastro (atualizar) ou a pessoa (cadastrar).
+type Opening = { key: string; name: string; teamId: string; registrationId?: string; choice?: PersonChoice };
+function opening(p: PersonRow, teamId: string, name: string): Opening | null {
+  const key = p.patient_id ?? p.citizen_id;
+  if (!key) return null;
+  if (p.registration_id) return { key, name, teamId, registrationId: p.registration_id };
+  const choice: PersonChoice = p.patient_id
+    ? { kind: "patient", patientId: p.patient_id, registrationId: null, displayName: p.display_name }
+    : { kind: "citizen", citizenId: key, displayName: p.display_name };
+  return { key, name, teamId, choice };
+}
+
+export function RegistryStatus({ today }: { today?: string } = {}) {
   return (
     <TerritoryGate title="Validade dos cadastros" sub="cadastro territorial · vencidos, a vencer e quem falta cadastrar" allow={(r) => r.professional}>
-      {() => <StatusBody onRegister={onRegister} />}
+      {() => <StatusBody today={today} />}
     </TerritoryGate>
   );
 }
 
-function StatusBody({ onRegister }: { onRegister?(row: PersonRow, teamId: string): void }) {
+function StatusBody({ today }: { today?: string }) {
   const context = useQuery({ queryKey: [ TERRITORY_CONTEXT_KEY ], queryFn: getTerritoryContext, ...STATIC_QUERY });
   const [ teamChoice, setTeamChoice ] = useState("");
   // null = ainda não escolhida (vale o padrão da equipe); "" = todas as microáreas.
   const [ areaChoice, setAreaChoice ] = useState<string | null>(null);
   const [ tabChoice, setTabChoice ] = useState<Tab>("expired");
+  const [ open, setOpen ] = useState<Opening | null>(null);
+  const [ notice, setNotice ] = useState<string | null>(null);
 
   const teams = (context.data?.teams ?? []).map((t) => {
     const areas = t.micro_areas.filter((m) => m.can_register);
@@ -118,15 +136,16 @@ function StatusBody({ onRegister }: { onRegister?(row: PersonRow, teamId: string
       )
     }
   ];
-  if (onRegister) {
-    cols.push({
-      label: "Ação", w: "110px", card: "actions",
-      render: (p) => {
-        const verb = p.status === "missing" ? "Cadastrar" : "Atualizar";
-        return <button type="button" style={secondaryButtonStyle} aria-label={`${verb} ${nameOf(p)}`} onClick={() => onRegister(p, teamId)}>{verb}</button>;
-      }
-    });
-  }
+  cols.push({
+    label: "Ação", w: "110px", card: "actions",
+    render: (p) => {
+      const verb = p.status === "missing" ? "Cadastrar" : "Atualizar";
+      const next = opening(p, teamId, nameOf(p));
+      return next && (
+        <button type="button" style={secondaryButtonStyle} aria-label={`${verb} ${nameOf(p)}`} onClick={() => { setNotice(null); setOpen(next); }}>{verb}</button>
+      );
+    }
+  });
 
   return (
     <div style={stack}>
@@ -165,6 +184,15 @@ function StatusBody({ onRegister }: { onRegister?(row: PersonRow, teamId: string
         <StatTile label="Sem identificador (CPF ou CNS)" value={c?.missing_identifier} tone="warn" />
         <StatTile label="Sem cadastro" value={microAreaId ? "—" : c?.missing} tone="down" hint={microAreaId ? "só na equipe toda" : undefined} />
       </KpiGrid>
+      {notice && <p role="status" style={okText}>{notice}</p>}
+      {open && (
+        <Panel title="Cadastro individual" sub={open.name}>
+          <div style={{ padding: 16 }}>
+            <RegistrationForm key={open.key} today={today} teamId={open.teamId} registrationId={open.registrationId} choice={open.choice}
+              onCancel={() => setOpen(null)} onSaved={() => { setOpen(null); setNotice(REGISTRATION_SAVED); }} />
+          </div>
+        </Panel>
+      )}
       <SegmentedControl<Tab> options={tabs} value={tab} onChange={setTabChoice} />
       <Panel title="Pessoas" sub={TAB_SUB[tab]}>
         <div style={{ ...stack, padding: 16 }}>
