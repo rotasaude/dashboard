@@ -110,9 +110,12 @@ export function HouseholdForm({ microAreaId, initial, onSaved, onCancel }: {
 
   const save = useMutation({
     mutationFn: (body: HouseholdInput) => (initial ? updateHousehold(initial.id, body, initial.version) : createHousehold(body)),
+    // A resposta é o domicílio salvo (versão nova): entra no cache do detalhe,
+    // que não relê (sem trilha extra; reabrir não dá 409). Só a lista relê.
+    // Na criação, sem detalhe aberto, o cache sai na hora (gcTime 0).
     onSuccess: (h) => {
+      client.setQueryData([ HOUSEHOLD_KEY, h.id ], h);
       void client.invalidateQueries({ queryKey: [ HOUSEHOLDS_KEY ] });
-      void client.invalidateQueries({ queryKey: [ HOUSEHOLD_KEY ] });
       onSaved(h);
     },
     onError: (err) => {

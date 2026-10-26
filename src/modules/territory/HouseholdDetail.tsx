@@ -6,7 +6,8 @@
 // Fichas (Task 11): "Editar domicílio"; "Nova família" só em domicílio (tipo
 // 01) sem recusa, com responsável entre os moradores que ainda não respondem
 // por família; "Editar família" só da família que não se mudou (a mudança é
-// definitiva). Salvar relê o domicílio uma vez (ação do usuário).
+// definitiva). Salvar usa a resposta (o domicílio inteiro) sem reler o
+// domicílio; a família relê os moradores (o responsável muda, L28).
 // Ficha individual (Task 12): "Adicionar morador" (domicílio ativo) escolhe a
 // família (a única morando já vem escolhida; "sem família" vale), acha a
 // pessoa (PersonStart) e abre a ficha com o domicílio; "Abrir cadastro" de um

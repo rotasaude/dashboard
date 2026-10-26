@@ -13,7 +13,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { addFamily, errorCode, updateFamily, type Family, type FamilyInput, type Household, type HouseholdAddress } from "../../lib/api";
 import { todayInCity } from "../../lib/campaigns";
 import { DOMAINS, familyProblem, householdProblem } from "../../lib/territoryDictionaries";
-import { HOUSEHOLDS_KEY, HOUSEHOLD_KEY, NO_NAME, STALE_TEXT, errorPath, isStale, territoryError } from "../../lib/territoryRegistry";
+import { HOUSEHOLDS_KEY, HOUSEHOLD_KEY, NO_NAME, RESIDENTS_KEY, STALE_TEXT, errorPath, isStale, territoryError } from "../../lib/territoryRegistry";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { alert, checkLabel, fieldLabel, form, muted, row } from "../exams/styles";
 import { useFieldFocus } from "./fieldFocus";
@@ -68,9 +68,13 @@ export function FamilyForm({ household, initial, candidates, onSaved, onCancel, 
     mutationFn: (body: FamilyInput) => (initial
       ? updateFamily(initial.id, body, household.version)
       : addFamily(household.id, body as FamilyInput & { responsible: { patient_id: string } }, household.version)),
+    // A resposta é o domicílio inteiro: entra no cache do detalhe (sem reler).
+    // Os moradores releem: o api vincula o responsável à família (L28) e a
+    // marca "responsável" muda. A lista relê pelo número de famílias.
     onSuccess: (h) => {
+      client.setQueryData([ HOUSEHOLD_KEY, h.id ], h);
+      void client.invalidateQueries({ queryKey: [ RESIDENTS_KEY, h.id ] });
       void client.invalidateQueries({ queryKey: [ HOUSEHOLDS_KEY ] });
-      void client.invalidateQueries({ queryKey: [ HOUSEHOLD_KEY ] });
       onSaved(h);
     },
     onError: (err) => {

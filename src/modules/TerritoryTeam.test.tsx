@@ -169,7 +169,29 @@ describe("TerritoryTeam", () => {
     fireEvent.click(screen.getByRole("button", { name: "Salvar família" }));
     expect(await screen.findByText("Família salva. Nova versão do domicílio enviada ao e-SUS.")).not.toBeNull();
     expect(api.updateFamily).toHaveBeenCalledWith("fa1", { income_band: "3", members_count: 3, living_since: "2019-05", moved_out: false }, 2);
-    await waitFor(() => expect(api.getHousehold).toHaveBeenCalledTimes(2));
+    // A resposta é o domicílio inteiro: entra no cache (sem reler o domicílio); moradores e lista releem (L28: o responsável pode ter mudado).
+    await waitFor(() => expect(api.listRegistrations).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(api.listHouseholds).toHaveBeenCalledTimes(2));
+    expect(api.getHousehold).toHaveBeenCalledTimes(1);
+  });
+
+  it("salvar o domicílio usa a resposta (versão nova) sem reler o domicílio; só a lista relê", async () => {
+    const saved = household({ address: { ...household().address, number: "130" } as api.HouseholdAddress, version: 3 });
+    mocked(api.updateHousehold).mockResolvedValue(saved);
+    renderWithProviders(<TerritoryTeam today={TODAY24} />);
+    await openHousehold();
+    fireEvent.click(screen.getByRole("button", { name: "Editar domicílio" }));
+    typeIn("Número", "130");
+    fireEvent.click(screen.getByRole("button", { name: "Salvar domicílio" }));
+    expect(await screen.findByText("Domicílio salvo. Nova versão enviada ao e-SUS.")).not.toBeNull();
+    expect(screen.getByRole("heading", { name: "Rua das Flores, 130" })).not.toBeNull();
+    await waitFor(() => expect(api.listHouseholds).toHaveBeenCalledTimes(2));
+    expect(api.getHousehold).toHaveBeenCalledTimes(1);
+    // Reabrir já usa a versão 3 (sem 409 por versão velha).
+    fireEvent.click(screen.getByRole("button", { name: "Editar domicílio" }));
+    fireEvent.click(screen.getByRole("button", { name: "Salvar domicílio" }));
+    await waitFor(() => expect(api.updateHousehold).toHaveBeenCalledTimes(2));
+    expect(mocked(api.updateHousehold).mock.calls[1][2]).toBe(3);
   });
 
   it("Adicionar morador: busca de duplicados, pessoa nova na família, aviso e moradores relidos uma vez", async () => {
