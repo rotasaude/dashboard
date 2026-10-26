@@ -15,7 +15,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getHousehold, listRegistrations, type Family, type Registration } from "../../lib/api";
 import {
-  HOUSEHOLD_KEY, NOMINAL_QUERY, NO_NAME, RESIDENTS_KEY, fmtDay, registryStatusLabel, registryStatusTone, territoryError
+  HOUSEHOLD_KEY, IDENTITY_REVIEW_TEXT, NOMINAL_QUERY, NO_NAME, RESIDENTS_KEY, fmtDay, registryStatusLabel, registryStatusTone, territoryError
 } from "../../lib/territoryRegistry";
 import { patientDocument } from "../../lib/patientDocument";
 import { Panel } from "../../components/Panel";
@@ -157,7 +157,15 @@ export function HouseholdDetail({ householdId, onBack, today }: { householdId: s
               cols={[
                 { label: "Nome", w: "2fr", card: "title", render: residentName },
                 { label: "Documento", w: "1.6fr", render: (r) => patientDocument(r.patient).v },
-                { label: "Situação", w: "180px", render: (r) => <Tag tone={registryStatusTone(r.status)}>{registryStatusLabel(r.status)}</Tag> },
+                {
+                  label: "Situação", w: "1.4fr",
+                  render: (r) => (
+                    <span style={row}>
+                      <Tag tone={registryStatusTone(r.status)}>{registryStatusLabel(r.status)}</Tag>
+                      {r.identity_review_pending && <Tag tone="warn">{IDENTITY_REVIEW_TEXT}</Tag>}
+                    </span>
+                  )
+                },
                 { label: "Família", w: "130px", render: (r) => (r.is_responsible ? "responsável" : "—") },
                 {
                   label: "Ação", w: "140px", card: "actions",

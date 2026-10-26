@@ -12,7 +12,7 @@ vi.mock("../lib/api", async (importOriginal) => {
 
 import * as api from "../lib/api";
 import { TerritoryTeam } from "./TerritoryTeam";
-import { TERRITORY_DISABLED, TERRITORY_NO_ROLE } from "../lib/territoryRegistry";
+import { IDENTITY_REVIEW_TEXT, TERRITORY_DISABLED, TERRITORY_NO_ROLE } from "../lib/territoryRegistry";
 import { renderWithProviders } from "../test/campaignFixtures";
 import {
   TEAM_EAP, TODAY24, family, household, microArea, profilelessRegistration, registration, territoryContext, territoryUser
@@ -77,6 +77,14 @@ describe("TerritoryTeam", () => {
     expect(screen.getByText("Responsável: Maria das Dores · 3 pessoas")).not.toBeNull();
     expect(screen.getByText("perto da escola")).not.toBeNull();
     expect(document.body.textContent).not.toMatch(/undefined|null|status_tem_diabetes|nu_comodos/);
+  });
+
+  it("morador com a identidade atualizada no posto: a marca 'revisar e salvar' na lista (L24)", async () => {
+    mocked(api.listRegistrations).mockResolvedValue([ registration(), { ...JOSE, identity_review_pending: true } ]);
+    renderWithProviders(<TerritoryTeam today={TODAY24} />);
+    await openHousehold();
+    const residents = screen.getByRole("region", { name: "Moradores" });
+    expect(within(residents).getAllByText(IDENTITY_REVIEW_TEXT).length).toBe(1);
   });
 
   it("família de uma pessoa no singular; mudou-se vira marca", async () => {
