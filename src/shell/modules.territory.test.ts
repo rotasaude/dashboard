@@ -17,7 +17,8 @@ describe("grupo Cadastro territorial (módulo 24a)", () => {
     expect(itemsOf(navGroupsFor(user([ "health_professional" ], [ "clinical_record" ])))).toEqual([]);
     expect(itemsOf(navGroupsFor(user([ "health_professional" ], [ "territory_registry" ])))).toEqual([]);
     expect(itemsOf(navGroupsFor(user([ "citizen_verifier" ])))).toEqual([]);
-    expect(itemsOf(navGroupsFor(user([], undefined, true)))).toEqual([]);
+    expect(itemsOf(navGroupsFor(user([ "health_professional" ], undefined, true)))).toEqual([]);
+    expect(itemsOf(navGroupsFor(user([ "municipal_admin" ], undefined, true)))).toEqual([]);
     expect(navGroupsFor(user([ "health_professional" ], [])).some((g) => g.label === "Cadastro territorial")).toBe(false);
     expect(navGroupsFor(null).some((g) => g.label === "Cadastro territorial")).toBe(false);
   });

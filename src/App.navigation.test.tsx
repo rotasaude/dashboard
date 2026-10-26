@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { ReactElement } from "react";
 import { renderModule, shellGroups } from "./App";
 import { NAV_GROUPS, navGroupsFor } from "./shell/modules";
+import { TerritoryMicroAreas } from "./modules/TerritoryMicroAreas";
 
 type El = ReactElement<Record<string, (id?: string) => void>>;
 
@@ -24,11 +25,15 @@ describe("atalhos entre telas", () => {
   });
 
   it.each([ "integrations", "cnes", "production", "my-consultations", "professional-consultations",
-    "open-drafts", "clinical-record", "signature", "clinical-documents-admin", "exams-admin" ] as const)
+    "open-drafts", "clinical-record", "signature", "clinical-documents-admin", "exams-admin", "territory-micro-areas" ] as const)
   ("%s.onGoToSecurity abre Segurança", (screenId) => {
     const navigate = vi.fn();
     (renderModule(screenId, navigate) as El).props.onGoToSecurity();
     expect(navigate).toHaveBeenCalledWith("security");
+  });
+
+  it("territory-micro-areas abre a tela de microáreas", () => {
+    expect((renderModule("territory-micro-areas", vi.fn()) as ReactElement).type).toBe(TerritoryMicroAreas);
   });
 });
 
