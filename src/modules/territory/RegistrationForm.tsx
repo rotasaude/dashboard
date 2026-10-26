@@ -283,7 +283,7 @@ function FormBody({ subject, identity: given, today, household, teamId, onSaved,
       if (filled) extra.patient = filled;
     }
     if (askCpf && newCpf.trim()) extra.cpf = onlyDigits(newCpf);
-    if (subject.kind !== "new" && askCns && cns.trim()) extra.cns = cns.replace(/\s/g, "");
+    if (askCns && cns.trim()) extra.cns = cns.replace(/\s/g, "");
     if (subject.kind === "patient") return { patient_id: subject.patientId, ...extra, ...common };
     if (subject.kind === "citizen") return { citizen_id: subject.citizenId, ...extra, ...common };
     return { ...extra, ...common };
