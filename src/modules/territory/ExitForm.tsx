@@ -13,8 +13,8 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { exitRegistration, type ExitInput, type Registration } from "../../lib/api";
 import { exitProblem } from "../../lib/territoryDictionaries";
 import {
-  EXIT_REASONS, REGISTRATION_KEY, REGISTRY_COUNT_KEY, REGISTRY_STATUS_KEY, RESIDENTS_KEY, STALE_TEXT, errorPath, exitReasonLabel, fmtDay,
-  isStale, territoryError
+  EXIT_REASONS, HOUSEHOLDS_KEY, HOUSEHOLD_KEY, REGISTRATION_KEY, REGISTRY_COUNT_KEY, REGISTRY_STATUS_KEY, RESIDENTS_KEY, STALE_TEXT, errorPath,
+  exitReasonLabel, fmtDay, isStale, territoryError
 } from "../../lib/territoryRegistry";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { alert, box, checkLabel, fieldLabel, fieldset, form, legend, muted, row } from "../exams/styles";
@@ -55,6 +55,10 @@ export function ExitForm({ registration, today, onDone, onCancel }: {
     mutationFn: (body: ExitInput) => exitRegistration(registration.id, body),
     onSuccess: (saved) => {
       for (const key of [ RESIDENTS_KEY, REGISTRY_STATUS_KEY, REGISTRY_COUNT_KEY ]) void client.invalidateQueries({ queryKey: [ key ] });
+      // I1: responsible_exited é calculado na leitura do domicílio (a saída
+      // não gera versão dele) — o detalhe aberto e a lista releem uma vez.
+      if (registration.household_id) void client.invalidateQueries({ queryKey: [ HOUSEHOLD_KEY, registration.household_id ] });
+      void client.invalidateQueries({ queryKey: [ HOUSEHOLDS_KEY ] });
       client.setQueryData([ REGISTRATION_KEY, registration.id ], saved);
       onDone(saved);
     },

@@ -183,5 +183,8 @@ describe("ExitForm", () => {
     await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: [ "territoryRegistryStatus" ] }));
     expect(invalidate).toHaveBeenCalledWith({ queryKey: [ "territoryRegistryCount" ] });
     expect(invalidate).toHaveBeenCalledWith({ queryKey: [ "territoryResidents" ] });
+    // I1: o domicílio relê (responsible_exited é calculado na leitura) e a lista também.
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: [ "territoryHousehold", "hh1" ] });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: [ "territoryHouseholds" ] });
   });
 });

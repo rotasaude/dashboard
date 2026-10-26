@@ -131,7 +131,7 @@ export function HouseholdDetail({ householdId, onBack, today }: { householdId: s
                 <strong>Adicionar morador</strong>
                 {editing.choice ? (
                   <RegistrationForm today={today} choice={editing.choice} onCancel={() => setEditing(null)} onSaved={saved(REGISTRATION_SAVED)}
-                    household={{ id: h.id, families: h.families }} onRestart={(restart) => setEditing({ kind: "resident", choice: null, restart, round: (editing.round ?? 0) + 1 })} />
+                    onExited={saved(REGISTRATION_EXITED)} household={{ id: h.id, families: h.families }} onRestart={(restart) => setEditing({ kind: "resident", choice: null, restart, round: (editing.round ?? 0) + 1 })} />
                 ) : (
                   <PersonStart today={today} initial={editing.restart} onCancel={() => setEditing(null)}
                     onChoose={(choice) => setEditing(choice.kind === "patient" && choice.registrationId

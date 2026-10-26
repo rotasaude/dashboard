@@ -524,6 +524,52 @@ describe("TerritoryTeam", () => {
     expect(api.exitRegistration).toHaveBeenCalledWith("rg2", { reason: "moved", on: "2026-10-20" });
   });
 
+  it("Adicionar morador → 409 already_registered → Abrir cadastro → saída: a tela avisa a saída, não 'Cadastro salvo' (m6)", async () => {
+    mocked(api.lookupTerritoryPerson).mockResolvedValue({ patient_id: "pa2", citizen_id: null, display_name: "José das Dores", registration_id: null });
+    mocked(api.createRegistration).mockRejectedValue(new api.ApiError(409, { error: "already_registered", registration_id: "rg2" }, "409"));
+    mocked(api.exitRegistration).mockResolvedValue({ ...JOSE, status: "exited" });
+    renderWithProviders(<TerritoryTeam today={TODAY24} />);
+    await openHousehold();
+    fireEvent.click(screen.getByRole("button", { name: "Adicionar morador" }));
+    typeIn("CPF", "529.982.247-25");
+    fireEvent.click(screen.getByRole("button", { name: "Buscar pelo CPF" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Cadastrar José das Dores" }));
+    fillIdentification();
+    fireEvent.click(screen.getByRole("button", { name: "Salvar cadastro" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Abrir cadastro" }));
+    await screen.findByRole("form", { name: "Atualizar cadastro individual" });
+    fireEvent.click(screen.getByRole("button", { name: "Registrar saída" }));
+    fireEvent.click(screen.getByLabelText("mudou de território"));
+    typeIn("Data da saída", "2026-10-20");
+    fireEvent.click(screen.getByRole("button", { name: "Registrar saída" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar saída" }));
+    expect(await screen.findByText("Saída registrada. Nova versão enviada ao e-SUS.")).not.toBeNull();
+    expect(screen.queryByText("Cadastro salvo. Nova versão enviada ao e-SUS.")).toBeNull();
+  });
+
+  it("saída do responsável pelo detalhe: o domicílio relê e a marca e 'Trocar responsável' aparecem sem fechar o detalhe (I1)", async () => {
+    mocked(api.getHousehold).mockResolvedValueOnce(household())
+      .mockResolvedValue(household({ families: [ family({ responsible_exited: true }) ] }));
+    mocked(api.getRegistration).mockResolvedValue(registration());
+    mocked(api.exitRegistration).mockResolvedValue(registration({ status: "exited" }));
+    renderWithProviders(<TerritoryTeam today={TODAY24} />);
+    await openHousehold();
+    expect(screen.queryByText("Responsável saiu — escolha o novo responsável")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Abrir cadastro de Maria das Dores" }));
+    await screen.findByRole("form", { name: "Atualizar cadastro individual" });
+    fireEvent.click(screen.getByRole("button", { name: "Registrar saída" }));
+    fireEvent.click(screen.getByLabelText("óbito"));
+    typeIn("Data da saída", "2026-10-20");
+    typeIn("Data do óbito", "2026-10-19");
+    fireEvent.click(screen.getByRole("button", { name: "Registrar saída" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar saída" }));
+    expect(await screen.findByText("Saída registrada. Nova versão enviada ao e-SUS.")).not.toBeNull();
+    expect(await screen.findByText("Responsável saiu — escolha o novo responsável")).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Trocar responsável da família de Maria das Dores" })).not.toBeNull();
+    expect(api.getHousehold).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole("heading", { name: "Rua das Flores, 120" })).not.toBeNull();
+  });
+
   it("Inativar domicílio: só sem família morando; a confirmação explica; PATCH com status e o domicílio como está", async () => {
     const moved = household({ families: [ family({ moved_out: true }) ] });
     mocked(api.getHousehold).mockResolvedValue(moved);
