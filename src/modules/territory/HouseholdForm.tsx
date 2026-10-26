@@ -12,7 +12,7 @@
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  createHousehold, errorCode, listPanelNeighborhoods, updateHousehold, type CodedSection, type Household, type HouseholdAddress,
+  createHousehold, errorCode, listPanelNeighborhoods, updateHousehold, type Household, type HouseholdAddress,
   type HouseholdInput
 } from "../../lib/api";
 import { onlyDigits } from "../../lib/attendance";
@@ -25,14 +25,13 @@ import { HOUSEHOLDS_KEY, HOUSEHOLD_KEY, STALE_TEXT, STATIC_QUERY, errorPath, isS
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { alert, checkLabel, fieldLabel, fieldset, form, legend, muted, row } from "../exams/styles";
 import { useFieldFocus } from "./fieldFocus";
+import { fromDraft, toDraft, type Draft } from "./sectionDraft";
 
-// ─── Estado da tela (texto como digitado; o corpo converte) ────────────────
+// ─── Estado da tela (texto como digitado; o corpo converte — sectionDraft) ──
 type AddressDraft = {
   zip: string; street_type: string; street: string; number: string; no_number: boolean; complement: string;
   neighborhood_id: string; district: string; reference: string;
 };
-// code → "83"; codes → number[]; bool → "" | "true" | "false"; count/texto → string; object → Draft.
-type Draft = Record<string, unknown>;
 
 const STREET_TYPE_DEFAULT = "081"; // Rua
 const FAMILIES_TEXT = "o domicílio ainda tem famílias morando: só domicílio (tipo 01) sem recusa leva famílias — registre a mudança delas antes";
@@ -44,45 +43,6 @@ function addressDraft(address: Household["address"] | undefined): AddressDraft {
     no_number: a.no_number === true, complement: a.complement ?? "", neighborhood_id: a.neighborhood_id ?? "", district: a.district ?? "",
     reference: a.reference ?? ""
   };
-}
-
-function toDraft(fields: FieldSpec[], values: CodedSection | null | undefined): Draft {
-  const draft: Draft = {};
-  for (const spec of fields) {
-    const value = values?.[spec.key];
-    if (value === null || value === undefined) continue;
-    if (spec.type === "object") draft[spec.key] = toDraft(spec.fields ?? [], value as CodedSection);
-    else if (spec.type === "codes") draft[spec.key] = Array.isArray(value) ? value : [];
-    else draft[spec.key] = String(value);
-  }
-  return draft;
-}
-
-// O que vai no corpo: só o preenchido; contagem que não é inteiro vai como
-// veio para a regra recusar com a frase dela (nunca cortada nem arredondada).
-function fromDraft(fields: FieldSpec[], draft: Draft, visible: (key: string) => boolean = () => true): CodedSection | null {
-  const out: CodedSection = {};
-  for (const spec of fields) {
-    if (!visible(spec.key)) continue;
-    const raw = draft[spec.key];
-    if (raw === undefined) continue;
-    if (spec.type === "object") {
-      const nested = fromDraft(spec.fields ?? [], raw as Draft);
-      if (nested) out[spec.key] = nested;
-      continue;
-    }
-    if (spec.type === "codes") {
-      if (Array.isArray(raw) && raw.length > 0) out[spec.key] = raw as number[];
-      continue;
-    }
-    const text = typeof raw === "string" ? raw.trim() : "";
-    if (!text) continue;
-    if (spec.type === "bool") out[spec.key] = text === "true";
-    else if (spec.type === "code") out[spec.key] = Number(text);
-    else if (spec.type === "count") out[spec.key] = /^\d+$/.test(text) ? Number(text) : text;
-    else out[spec.key] = text;
-  }
-  return Object.keys(out).length > 0 ? out : null;
 }
 
 const LIVING = SECTIONS.living_conditions;
