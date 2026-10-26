@@ -227,17 +227,16 @@ describe("TerritoryTeam", () => {
     renderWithProviders(<TerritoryTeam today={TODAY24} />);
     await openHousehold();
     fireEvent.click(screen.getByRole("button", { name: "Adicionar morador" }));
-    // Uma família morando: já escolhida; "sem família" também vale.
-    const families = screen.getByLabelText("Família") as HTMLSelectElement;
-    expect(families.value).toBe("fa1");
-    expect(Array.from(families.options).map((o) => o.textContent)).toEqual([ "sem família", "Responsável: Maria das Dores" ]);
     fireEvent.click(screen.getByLabelText("Não tem CPF"));
     typeIn("Nome completo", "Ana das Dores");
     typeIn("Data de nascimento", "2026-09-30");
     typeIn("Nome da mãe", "Maria das Dores");
     fireEvent.click(screen.getByRole("button", { name: "Buscar possíveis duplicados" }));
     fireEvent.click(await screen.findByRole("button", { name: "Criar pessoa sem CPF" }));
-    expect((screen.getByLabelText("Nome completo") as HTMLInputElement).value).toBe("Ana das Dores");
+    // Uma família morando: já escolhida na ficha; "sem família" também vale.
+    const families = screen.getByLabelText("Família") as HTMLSelectElement;
+    expect(families.value).toBe("fa1");
+    expect(Array.from(families.options).map((o) => o.textContent)).toEqual([ "sem família", "Responsável: Maria das Dores" ]);
     typeIn("Sexo", "female");
     typeIn("Motivo de não ter CPF", "3");
     fillIdentification();
@@ -265,16 +264,71 @@ describe("TerritoryTeam", () => {
     await screen.findByText("Cadastro salvo. Nova versão enviada ao e-SUS.");
 
     fireEvent.click(screen.getByRole("button", { name: "Adicionar morador" }));
-    typeIn("Família", "");
     typeIn("CPF", "529.982.247-25");
     fireEvent.click(screen.getByRole("button", { name: "Buscar pelo CPF" }));
     fireEvent.click(await screen.findByRole("button", { name: "Cadastrar Maria das Dores" }));
+    typeIn("Família", "");
     fillIdentification();
     fireEvent.click(screen.getByRole("button", { name: "Salvar cadastro" }));
     await waitFor(() => expect(api.createRegistration).toHaveBeenCalledTimes(2));
     const body = mocked(api.createRegistration).mock.calls[1][0];
     expect(body).toEqual(expect.objectContaining({ household_id: "hh1", is_responsible: false }));
     expect(body).not.toHaveProperty("family_id");
+  });
+
+  it("responsável cadastrado antes da família: Abrir cadastro já escolhe a família dele e salva como responsável (I2)", async () => {
+    mocked(api.getHousehold).mockResolvedValue(household({ families: [ family(), family({ id: "fa2", responsible: { patient_id: "pa2", display_name: "José das Dores" },
+      members_count: 1 }) ] }));
+    mocked(api.getRegistration).mockResolvedValue({ ...JOSE, family_id: null, is_responsible: false });
+    renderWithProviders(<TerritoryTeam today={TODAY24} />);
+    await openHousehold();
+    fireEvent.click(screen.getByRole("button", { name: "Abrir cadastro de José das Dores" }));
+    const families = (await screen.findByLabelText("Família")) as HTMLSelectElement;
+    expect(families.value).toBe("fa2");
+    fireEvent.click(screen.getByRole("button", { name: "Salvar cadastro" }));
+    await waitFor(() => expect(api.updateRegistration).toHaveBeenCalledTimes(1));
+    expect(mocked(api.updateRegistration).mock.calls[0][1]).toEqual(expect.objectContaining({ household_id: "hh1", family_id: "fa2", is_responsible: true }));
+    // Outra família escolhida: não é o responsável dela.
+    fireEvent.click(await screen.findByRole("button", { name: "Abrir cadastro de José das Dores" }));
+    await screen.findByLabelText("Família");
+    typeIn("Família", "fa1");
+    fireEvent.click(screen.getByRole("button", { name: "Salvar cadastro" }));
+    await waitFor(() => expect(api.updateRegistration).toHaveBeenCalledTimes(2));
+    expect(mocked(api.updateRegistration).mock.calls[1][1]).toEqual(expect.objectContaining({ family_id: "fa1", is_responsible: false }));
+  });
+
+  it("Adicionar morador → Atualizar quem mora em outro domicílio: a ficha avisa onde mora hoje e que salvar muda (I3)", async () => {
+    const elsewhere = household({ id: "hh9", micro_area: { id: "ma1", code: "01" },
+      address: { ...household().address, street: "das Palmeiras", number: "45" } as api.HouseholdAddress });
+    mocked(api.lookupTerritoryPerson).mockResolvedValue({ patient_id: "pa2", citizen_id: null, display_name: "José das Dores", registration_id: "rg2" });
+    mocked(api.getRegistration).mockResolvedValue({ ...JOSE, household_id: "hh9", family_id: "fa9", is_responsible: true });
+    mocked(api.getHousehold).mockImplementation(async (id: string) => (id === "hh9" ? elsewhere : household()));
+    renderWithProviders(<TerritoryTeam today={TODAY24} />);
+    await openHousehold();
+    fireEvent.click(screen.getByRole("button", { name: "Adicionar morador" }));
+    typeIn("CPF", "529.982.247-25");
+    fireEvent.click(screen.getByRole("button", { name: "Buscar pelo CPF" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Atualizar o cadastro de José das Dores" }));
+    expect(await screen.findByText("Mora hoje em 01 · Rua das Palmeiras, 45; salvar muda o cadastro para este domicílio.")).not.toBeNull();
+    // Família deste domicílio: a única morando (não é responsável dela).
+    expect((screen.getByLabelText("Família") as HTMLSelectElement).value).toBe("fa1");
+    fireEvent.click(screen.getByRole("button", { name: "Salvar cadastro" }));
+    await waitFor(() => expect(api.updateRegistration).toHaveBeenCalledTimes(1));
+    expect(mocked(api.updateRegistration).mock.calls[0][1]).toEqual(expect.objectContaining({ household_id: "hh1", family_id: "fa1", is_responsible: false }));
+  });
+
+  it("Adicionar morador → Atualizar cadastro fora de área: o aviso diz que salvar o põe neste domicílio (I3)", async () => {
+    mocked(api.lookupTerritoryPerson).mockResolvedValue({ patient_id: "pa2", citizen_id: null, display_name: "José das Dores", registration_id: "rg2" });
+    mocked(api.getRegistration).mockResolvedValue({ ...JOSE, household_id: null, family_id: null, is_responsible: false, micro_area: null });
+    renderWithProviders(<TerritoryTeam today={TODAY24} />);
+    await openHousehold();
+    fireEvent.click(screen.getByRole("button", { name: "Adicionar morador" }));
+    typeIn("CPF", "529.982.247-25");
+    fireEvent.click(screen.getByRole("button", { name: "Buscar pelo CPF" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Atualizar o cadastro de José das Dores" }));
+    expect(await screen.findByText("Hoje o cadastro está fora de área (sem domicílio), na equipe ESF Vila Verde; salvar muda o cadastro para este domicílio."))
+      .not.toBeNull();
+    expect(api.getHousehold).toHaveBeenCalledTimes(1);
   });
 
   it("Abrir cadastro de um morador: lê o cadastro e salva a versão nova; Cancelar fecha", async () => {

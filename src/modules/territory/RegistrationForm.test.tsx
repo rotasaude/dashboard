@@ -19,7 +19,7 @@ import type { RegistrationPatient } from "../../lib/api";
 import { FILL_TEXT, OUT_OF_REACH, RegistrationForm } from "./RegistrationForm";
 import { STALE_TEXT } from "../../lib/territoryRegistry";
 import { renderWithProviders } from "../../test/campaignFixtures";
-import { TODAY24, registration, territoryUser } from "../../test/territoryFixtures";
+import { TODAY24, family, registration, territoryUser } from "../../test/territoryFixtures";
 
 const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
 const typeIn = (label: string, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
@@ -45,7 +45,8 @@ beforeEach(() => {
 });
 
 const NEW = { kind: "new" as const, identity: { full_name: "José das Dores", birth_date: "2026-09-30", mother_name: "Maria das Dores" } };
-const HOUSE = { id: "hh1", familyId: "fa1", responsiblePatientId: "pa1" };
+// Domicílio com uma família morando (responsável pa1).
+const HOUSE = { id: "hh1", families: [ family() ] };
 
 // Os obrigatórios do §15 que não moram no paciente (nacionalidade já vem Brasileira).
 function fillIdentification() {
@@ -302,7 +303,7 @@ describe("RegistrationForm", () => {
   it("nada no storage nem na URL: CPF, nome, condições só no corpo", async () => {
     const setItem = vi.spyOn(Storage.prototype, "setItem");
     const log = vi.spyOn(console, "log");
-    renderWithProviders(<RegistrationForm today={TODAY24} household={{ id: "hh1", familyId: null }} choice={NEW} onSaved={vi.fn()} onCancel={vi.fn()} />);
+    renderWithProviders(<RegistrationForm today={TODAY24} household={{ id: "hh1", families: [] }} choice={NEW} onSaved={vi.fn()} onCancel={vi.fn()} />);
     fillNewbornIdentity();
     fireEvent.click(screen.getByLabelText("Tem diabetes"));
     save();

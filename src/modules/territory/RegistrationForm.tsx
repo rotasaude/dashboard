@@ -21,7 +21,8 @@
 import { useId, useState, type FormEvent, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  ApiError, createRegistration, errorCode, getRegistration, updateRegistration, type CodedSection, type NewPatient, type PatientIdentity,
+  ApiError, createRegistration, errorCode, getHousehold, getRegistration, updateRegistration, type CodedSection, type Family, type NewPatient,
+  type PatientIdentity,
   type PatientSex, type Registration, type RegistrationBody, type RegistrationInput, type RegistrationUpdate
 } from "../../lib/api";
 import { maskCpf, onlyDigits } from "../../lib/attendance";
@@ -33,8 +34,8 @@ import {
 } from "../../lib/territoryDictionaries";
 import { FIELD_LABELS, sectionFieldLabel } from "../../lib/territoryLabels";
 import {
-  IDENTITY_REVIEW_TEXT, NOMINAL_QUERY, NO_NAME, REGISTRATION_KEY, REGISTRY_COUNT_KEY, REGISTRY_STATUS_KEY, RESIDENTS_KEY, STALE_TEXT, errorPath, fmtDay,
-  isStale, territoryError
+  HOUSEHOLD_KEY, IDENTITY_REVIEW_TEXT, NOMINAL_QUERY, NO_NAME, REGISTRATION_KEY, REGISTRY_COUNT_KEY, REGISTRY_STATUS_KEY, RESIDENTS_KEY, STALE_TEXT,
+  errorPath, fmtDay, isStale, teamName, territoryError
 } from "../../lib/territoryRegistry";
 import { Tag } from "../../components/Tag";
 import { KeyValue } from "../../components/KeyValue";
@@ -44,6 +45,7 @@ import { useFieldFocus } from "./fieldFocus";
 import { fromDraft, toDraft, type Draft } from "./sectionDraft";
 import type { PersonChoice } from "./PersonStart";
 import { ExitForm } from "./ExitForm";
+import { addressLine } from "./HouseholdList";
 
 export const REGISTRATION_SAVED = "Cadastro salvo. Nova versão enviada ao e-SUS.";
 export const REGISTRATION_EXITED = "Saída registrada. Nova versão enviada ao e-SUS.";
@@ -54,8 +56,9 @@ export const OUT_OF_REACH = "O cadastro ativo desta pessoa é de uma microárea 
   "enfermeiro/médico da equipe para atualizar ou registrar a saída por mudança.";
 export const FILL_TEXT = "Dados do paciente: preencha só o que falta ou está errado; o que ficar em branco não muda.";
 
-// Domicílio do morador; responsiblePatientId = o responsável da família escolhida.
-export interface RegistrationPlace { id: string; familyId: string | null; responsiblePatientId?: string | null }
+// Domicílio do morador (o aberto na tela) com as famílias dele: a ficha
+// escolhe a família ("Família") e is_responsible sai do responsável dela.
+export interface RegistrationPlace { id: string; families: Family[] }
 
 type Section = "identification" | "sociodemographic" | "health_conditions" | "street_situation";
 const SECTION_TITLE: Record<Section, string> = {
@@ -180,6 +183,9 @@ function FormBody({ subject, identity: given, today, household, teamId, onSaved,
   const [ exiting, setExiting ] = useState(false);
   const [ activeId, setActiveId ] = useState<string | null>(null);
   const [ stale, setStale ] = useState(false);
+  const living = (household?.families ?? []).filter((f) => !f.moved_out);
+  const patientId = r ? r.patient.id : subject.kind === "patient" ? subject.patientId : null;
+  const [ familyId, setFamilyId ] = useState(() => defaultFamily(r, household, living, patientId));
 
   // ─── O que a tela sabe da pessoa (visibilidade; a regra usa patientFacts) ──
   const known: Known = fill
@@ -188,7 +194,7 @@ function FormBody({ subject, identity: given, today, household, teamId, onSaved,
     ? { sex: (person.sex || null) as PatientSex | null, birth: person.birth_date || null, motherPresent: !!person.mother_name.trim() }
     : r ? { sex: r.patient.sex, birth: r.patient.birth_date, motherPresent: !!r.patient.mother_name }
     : { sex: undefined, birth: undefined, motherPresent: undefined };
-  const place = placeOf(subject, household, teamId);
+  const place = placeOf(r, patientId, household, living.find((f) => f.id === familyId), teamId);
   const years = known.birth ? yearsOld(known.birth, today) : null;
   const pregnancy = known.sex !== "male" && (known.birth === undefined || canBePregnant(known.sex, known.birth, today));
   // Fato desconhecido: gestante vira —/Sim/Não (— não vai), nunca um "não" por desmarcar.
@@ -372,6 +378,16 @@ function FormBody({ subject, identity: given, today, household, teamId, onSaved,
   return (
     <>
     <form style={form} onSubmit={submit} noValidate aria-label={r ? "Atualizar cadastro individual" : "Novo cadastro individual"}>
+      {household && living.length > 0 && (
+        <label style={fieldLabel}>
+          Família
+          <select ref={focus.reg("family_id")} value={familyId} style={inputStyle} aria-invalid={focus.invalid("family_id")}
+            onChange={(e) => setFamilyId(e.target.value)}>
+            <option value="">sem família</option>
+            {living.map((f) => <option key={f.id} value={f.id}>{`Responsável: ${f.responsible.display_name ?? NO_NAME}`}</option>)}
+          </select>
+        </label>
+      )}
       {r?.identity_review_pending && (
         <div style={row}>
           <Tag tone="warn">{IDENTITY_REVIEW_TEXT}</Tag>
@@ -480,6 +496,7 @@ function FormBody({ subject, identity: given, today, household, teamId, onSaved,
         {refused && <p style={muted}>com a recusa, a ficha leva só a identificação; sociodemográfico, condições de saúde e situação de rua não vão</p>}
       </fieldset>
 
+      {r && household && <MoveNote registration={r} householdId={household.id} />}
       {problem && <p role="alert" style={alert}>{problem}</p>}
       {activeId && onOpen && (
         <div style={row}>
@@ -503,20 +520,51 @@ function FormBody({ subject, identity: given, today, household, teamId, onSaved,
   );
 }
 
-// Lugar do cadastro (L7): o domicílio dado (morador novo ou que se muda para
-// ele), o do próprio cadastro (edição) ou, sem domicílio, a equipe.
-function placeOf(subject: Subject, household: RegistrationPlace | undefined, teamId: string | undefined): Shared & { is_responsible: boolean } {
-  const r = subject.kind === "edit" ? subject.registration : null;
-  const patientId = r ? r.patient.id : subject.kind === "patient" ? subject.patientId : null;
+// Família de partida (I2): a do cadastro neste domicílio; senão a de que a
+// pessoa é responsável (cadastrada antes da família); senão, quem chega (novo
+// ou de outro domicílio) entra na única família morando; quem já mora aqui
+// sem família fica sem família.
+function defaultFamily(r: Registration | null, household: RegistrationPlace | undefined, living: Family[], patientId: string | null): string {
+  if (!household) return "";
+  const here = r !== null && r.household_id === household.id;
+  if (here && r.family_id && living.some((f) => f.id === r.family_id)) return r.family_id;
+  const own = patientId ? living.find((f) => f.responsible.patient_id === patientId) : undefined;
+  if (own) return own.id;
+  if (here) return "";
+  return living.length === 1 ? living[0].id : "";
+}
+
+// Lugar do cadastro (L7): o domicílio dado (morador novo, que se muda para ele
+// ou que mora nele) com a família escolhida — is_responsible = é o
+// responsável dela —, o do próprio cadastro (edição fora da tela do
+// domicílio) ou, sem domicílio, a equipe.
+function placeOf(r: Registration | null, patientId: string | null, household: RegistrationPlace | undefined, family: Family | undefined,
+  teamId: string | undefined): Shared & { is_responsible: boolean } {
   if (household) {
-    const same = r && r.household_id === household.id && r.family_id === household.familyId;
-    const responsible = same ? r.is_responsible
-      : !!household.familyId && !!patientId && household.responsiblePatientId === patientId;
-    return { household_id: household.id, ...(household.familyId ? { family_id: household.familyId } : {}), is_responsible: responsible };
+    return { household_id: household.id, ...(family ? { family_id: family.id } : {}),
+      is_responsible: !!family && !!patientId && family.responsible.patient_id === patientId };
   }
   if (r?.household_id) return { household_id: r.household_id, ...(r.family_id ? { family_id: r.family_id } : {}), is_responsible: r.is_responsible };
   const team = r ? r.team.id : teamId;
   return { ...(team ? { team_id: team } : {}), is_responsible: false };
+}
+
+// Cadastro que mora hoje em outro domicílio ou fora de área (I3): antes de
+// salvar, a ficha diz onde ele está e que salvar o muda para este domicílio.
+// O endereço de lá é uma leitura nominal (uma vez, ao abrir); sem ela, só a microárea.
+export const MOVE_TEXT = "salvar muda o cadastro para este domicílio.";
+function MoveNote({ registration: r, householdId }: { registration: Registration; householdId: string }) {
+  const elsewhere = r.household_id !== null && r.household_id !== householdId ? r.household_id : null;
+  const other = useQuery({ queryKey: [ HOUSEHOLD_KEY, elsewhere ], queryFn: () => getHousehold(elsewhere as string), enabled: elsewhere !== null,
+    ...NOMINAL_QUERY, retry: false });
+  if (r.household_id === householdId) return null;
+  if (!elsewhere) {
+    return <p role="note" style={alert}>{`Hoje o cadastro está fora de área (sem domicílio), na equipe ${teamName(r.team)}; ${MOVE_TEXT}`}</p>;
+  }
+  if (other.isPending) return <p className="mono" style={muted}>carregando…</p>;
+  const code = r.micro_area?.code ?? other.data?.micro_area.code;
+  const where = other.data ? `${code ? `${code} · ` : ""}${addressLine(other.data.address)}` : `outro domicílio${code ? ` da microárea ${code}` : ""}`;
+  return <p role="note" style={alert}>{`Mora hoje em ${where}; ${MOVE_TEXT}`}</p>;
 }
 
 // Paciente escolhido sem cadastro: só o preenchido (em branco não muda nada).

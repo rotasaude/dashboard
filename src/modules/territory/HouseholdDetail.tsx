@@ -10,10 +10,11 @@
 // domicílio; a família relê os moradores (o responsável muda, L28).
 // "Inativar domicílio" só sem família morando; inativo, "Reativar" — e nem
 // morador nem família novos.
-// Ficha individual (Task 12): "Adicionar morador" (domicílio ativo) escolhe a
-// família (a única morando já vem escolhida; "sem família" vale), acha a
-// pessoa (PersonStart) e abre a ficha com o domicílio; "Abrir cadastro" de um
-// morador abre a ficha dele. Salvar relê os moradores uma vez.
+// Ficha individual (Task 12; I2): "Adicionar morador" (domicílio ativo) acha a
+// pessoa (PersonStart) e abre a ficha com o domicílio e as famílias; "Abrir
+// cadastro" de um morador abre a ficha dele, também com as famílias. A ficha
+// escolhe a família (a dele; a de que é responsável; para quem chega, a única
+// morando). Salvar relê os moradores uma vez.
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getHousehold, listRegistrations, type Family, type Registration } from "../../lib/api";
@@ -25,9 +26,9 @@ import { Panel } from "../../components/Panel";
 import { DataTable } from "../../components/DataTable";
 import { Tag } from "../../components/Tag";
 import { KeyValue } from "../../components/KeyValue";
-import { inputStyle, secondaryButtonStyle } from "../../components/formStyles";
+import { secondaryButtonStyle } from "../../components/formStyles";
 import { allowsFamilies, dictLabel } from "../../lib/territoryDictionaries";
-import { alert, box, fieldLabel, grid, list, muted, okText, row, stack } from "../exams/styles";
+import { alert, box, grid, list, muted, okText, row, stack } from "../exams/styles";
 import { HOUSEHOLD_SAVED, addressLine, householdStatus } from "./HouseholdList";
 import { HouseholdForm } from "./HouseholdForm";
 import { FamilyForm } from "./FamilyForm";
@@ -39,7 +40,7 @@ import { REGISTRATION_EXITED, REGISTRATION_SAVED, RegistrationForm } from "./Reg
 export const FAMILY_SAVED = "Família salva. Nova versão do domicílio enviada ao e-SUS.";
 type Editing =
   | { kind: "household" } | { kind: "status" } | { kind: "newFamily" } | { kind: "family"; family: Family }
-  | { kind: "resident"; familyId: string; choice: PersonChoice | null } | { kind: "registration"; id: string; name: string } | null;
+  | { kind: "resident"; choice: PersonChoice | null } | { kind: "registration"; id: string; name: string } | null;
 
 export function familyLine(f: Family): string {
   const name = f.responsible.display_name ?? NO_NAME;
@@ -62,7 +63,6 @@ export function HouseholdDetail({ householdId, onBack, today }: { householdId: s
   const candidates = (residents.data ?? []).filter((r) => !responsibles.has(r.patient.id))
     .map((r) => ({ patient_id: r.patient.id, display_name: r.patient.display_name }));
   const familyName = (f: Family) => f.responsible.display_name ?? NO_NAME;
-  const living = (h?.families ?? []).filter((f) => !f.moved_out);
   const residentName = (r: Registration) => r.patient.display_name ?? NO_NAME;
 
   return (
@@ -94,7 +94,7 @@ export function HouseholdDetail({ householdId, onBack, today }: { householdId: s
                 )}
                 {h.status === "active" && (
                   <button type="button" style={secondaryButtonStyle}
-                    onClick={() => open({ kind: "resident", familyId: living.length === 1 ? living[0].id : "", choice: null })}>
+                    onClick={() => open({ kind: "resident", choice: null })}>
                     Adicionar morador
                   </button>
                 )}
@@ -113,19 +113,9 @@ export function HouseholdDetail({ householdId, onBack, today }: { householdId: s
             {editing?.kind === "resident" && (
               <Reveal style={box}>
                 <strong>Adicionar morador</strong>
-                {living.length > 0 && (
-                  <label style={fieldLabel}>
-                    Família
-                    <select value={editing.familyId} style={inputStyle} onChange={(e) => setEditing({ ...editing, familyId: e.target.value })}>
-                      <option value="">sem família</option>
-                      {living.map((f) => <option key={f.id} value={f.id}>{`Responsável: ${familyName(f)}`}</option>)}
-                    </select>
-                  </label>
-                )}
                 {editing.choice ? (
                   <RegistrationForm today={today} choice={editing.choice} onCancel={() => setEditing(null)} onSaved={saved(REGISTRATION_SAVED)}
-                    household={{ id: h.id, familyId: editing.familyId || null,
-                      responsiblePatientId: living.find((f) => f.id === editing.familyId)?.responsible.patient_id ?? null }} />
+                    household={{ id: h.id, families: h.families }} />
                 ) : (
                   <PersonStart today={today} onCancel={() => setEditing(null)} onChoose={(choice) => setEditing({ ...editing, choice })} />
                 )}
@@ -134,8 +124,8 @@ export function HouseholdDetail({ householdId, onBack, today }: { householdId: s
             {editing?.kind === "registration" && (
               <Reveal key={editing.id} style={box}>
                 <strong>{`Cadastro de ${editing.name}`}</strong>
-                <RegistrationForm today={today} registrationId={editing.id} onCancel={() => setEditing(null)} onSaved={saved(REGISTRATION_SAVED)}
-                  onExited={saved(REGISTRATION_EXITED)} />
+                <RegistrationForm today={today} registrationId={editing.id} household={{ id: h.id, families: h.families }}
+                  onCancel={() => setEditing(null)} onSaved={saved(REGISTRATION_SAVED)} onExited={saved(REGISTRATION_EXITED)} />
               </Reveal>
             )}
             {(editing?.kind === "newFamily" || editing?.kind === "family") && (
