@@ -106,7 +106,8 @@ const ERRORS: Record<string, string> = {
   invalid_cpf: "CPF inválido: confira os 11 dígitos",
   invalid_cns: "CNS inválido: confira os 15 dígitos",
   identity_locked: "a identidade desta pessoa já foi validada presencialmente — não se altera aqui",
-  invalid_ethnicity: "etnia só vale com raça/cor indígena",
+  // O api manda o mesmo código para etnia fora de 05 e para código fora da lista LEDI.
+  invalid_ethnicity: "etnia inválida: só vale com raça/cor indígena e com um código de etnia da lista — confira a raça/cor ou escolha outro código",
   too_long: "texto maior que o limite do campo destacado",
   invalid_transition: "esta ação não vale para a situação atual do cadastro (já saiu ou recusou)",
   cbo_not_allowed: "só o ACS da microárea, enfermeiro ou médico da equipe grava o cadastro",
@@ -124,6 +125,12 @@ const ERRORS: Record<string, string> = {
   not_found: "não encontrado — recarregue",
   too_many_requests: "muitas buscas seguidas — aguarde um minuto"
 };
+// invalid_registration num lugar que não é campo da tela: o domicílio, a
+// família ou a microárea mudou depois da leitura.
+const PLACE_PATHS = new Set([ "micro_area_id", "household_id", "family_id", "is_responsible", "version" ]);
+const PLACE_CHANGED = "o domicílio, a família ou a microárea não aceita mais este cadastro — recarregue";
+// 422/409 fora do mapa e sem frase do api (o padrão comum diria "a API recusou a ação").
+const REFUSED = "o sistema recusou — confira os dados e tente de novo";
 // invalid_micro_area traz `field` (name | active): a frase diz qual.
 const MICRO_AREA_FIELD: Record<string, string> = {
   name: `nome da microárea inválido: de 1 a ${MICRO_AREA_NAME_MAX} caracteres`,
@@ -140,8 +147,10 @@ export function territoryError(err: unknown): string {
   if (featureDisabledKey(err) !== null) return TERRITORY_DISABLED;
   const code = errorCode(err);
   if (code === "invalid_micro_area") return MICRO_AREA_FIELD[bodyString(err, "field") ?? ""] ?? CHECK_FIELD;
+  if (code === "invalid_registration" && PLACE_PATHS.has(bodyString(err, "path") ?? "")) return PLACE_CHANGED;
   if (code && Object.prototype.hasOwnProperty.call(ERRORS, code)) return ERRORS[code];
   if (err instanceof ApiError) {
+    if ((err.status === 422 || err.status === 409) && !bodyString(err, "message")) return REFUSED;
     // Fora do mapa: o padrão do SensitiveAction (frase, nunca o código cru).
     const described = describeActionError(err);
     if ("message" in described) return described.message;

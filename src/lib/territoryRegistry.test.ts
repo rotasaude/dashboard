@@ -85,7 +85,7 @@ describe("recusas do api (contrato §3–§5; api 17175a8)", () => {
     [ 422, "invalid_cpf", "CPF inválido: confira os 11 dígitos" ],
     [ 422, "invalid_cns", "CNS inválido: confira os 15 dígitos" ],
     [ 422, "identity_locked", "a identidade desta pessoa já foi validada presencialmente — não se altera aqui" ],
-    [ 422, "invalid_ethnicity", "etnia só vale com raça/cor indígena" ],
+    [ 422, "invalid_ethnicity", "etnia inválida: só vale com raça/cor indígena e com um código de etnia da lista — confira a raça/cor ou escolha outro código" ],
     [ 422, "too_long", "texto maior que o limite do campo destacado" ],
     [ 422, "invalid_transition", "esta ação não vale para a situação atual do cadastro (já saiu ou recusou)" ],
     [ 403, "cbo_not_allowed", "só o ACS da microárea, enfermeiro ou médico da equipe grava o cadastro" ],
@@ -109,6 +109,18 @@ describe("recusas do api (contrato §3–§5; api 17175a8)", () => {
     expect(territoryError(refusal(422, { error: "invalid_micro_area", field: "name" }))).toBe("nome da microárea inválido: de 1 a 60 caracteres");
     expect(territoryError(refusal(422, { error: "invalid_micro_area", field: "active" }))).toBe("situação da microárea inválida — recarregue");
     expect(territoryError(refusal(422, { error: "invalid_micro_area" }))).toBe("confira o campo destacado");
+  });
+  it("422/409 fora do mapa e sem frase do api: frase sem jargão", () => {
+    expect(territoryError(refusal(422, { error: "novo_codigo" }))).toBe("o sistema recusou — confira os dados e tente de novo");
+    expect(territoryError(refusal(409, null))).toBe("o sistema recusou — confira os dados e tente de novo");
+    expect(territoryError(refusal(422, { error: "novo_codigo" }))).not.toMatch(/API/);
+  });
+  it("invalid_registration num lugar sem campo na tela: frase própria, que manda recarregar", () => {
+    for (const path of [ "micro_area_id", "household_id", "family_id", "is_responsible", "version" ]) {
+      expect(territoryError(refusal(422, { error: "invalid_registration", path })))
+        .toBe("o domicílio, a família ou a microárea não aceita mais este cadastro — recarregue");
+    }
+    expect(territoryError(refusal(422, { error: "invalid_registration", path: "identification.dnv" }))).toBe("confira o campo destacado");
   });
   it("429 sem corpo, código novo e falha de rede", () => {
     expect(territoryError(refusal(429, null))).toBe("muitas tentativas — aguarde alguns minutos");
