@@ -7,7 +7,8 @@ import {
   IconKeyboard, IconListCheck, IconListDetails, IconLock, IconMapPin, IconMessages, IconMicroscope, IconNotes, IconPackageImport, IconPencil, IconPill, IconPlugConnected,
   IconReportAnalytics, IconRosetteDiscountCheck, IconServerCog, IconSettings, IconShieldCheck, IconSignature, IconSpeakerphone, IconStack2, IconStethoscope, IconTestPipe, IconTruck, IconTruckDelivery, IconUpload,
   IconUser, IconUserCircle, IconUsers, IconUsersGroup, IconCalendarStats, IconFileInvoice, IconReceipt, IconReceiptTax,
-  IconHeartHandshake, IconUserSearch, IconGauge, IconRoute
+  IconHeartHandshake, IconUserSearch, IconGauge, IconRoute,
+  IconHomeHeart, IconMap2, IconCalendarDue, IconHexagons
 } from "@tabler/icons-react";
 import type { Catalog } from "./types";
 
@@ -21,6 +22,7 @@ export const CATALOG: Catalog = {
     "Operação":    { icon: IconServerCog, description: "Filas e saúde do sistema" },
     "Atendimento": { icon: IconStethoscope, description: "Agenda, prontuário e consultas" },
     "Linhas de cuidado": { icon: IconHeartHandshake, description: "Busca ativa, sugestões e prévia dos indicadores" },
+    "Cadastro territorial": { icon: IconHomeHeart, description: "Microáreas, domicílios, famílias e cadastro individual" },
     "Exames":      { icon: IconMicroscope, description: "Pedidos, resultados e prestadores" },
     "Laboratório": { icon: IconFlask, description: "Amostras, laudos, controle de qualidade e estoque" },
     "Faturamento": { icon: IconReceipt, description: "Procedimentos, competências e arquivo BPA" },
@@ -81,6 +83,9 @@ export const CATALOG: Catalog = {
     "care-lines-team": { icon: IconUserSearch, description: "Quem procurar, sugestões e inscrições da equipe" },
     "care-lines-preview": { icon: IconGauge, description: "Estimativa de C2 a C7 por equipe" },
     "care-lines-admin": { icon: IconRoute, description: "Adotar linhas do catálogo e criar linhas próprias" },
+    "territory-team": { icon: IconMap2, description: "Domicílios, famílias e moradores por microárea" },
+    "registry-status": { icon: IconCalendarDue, description: "Vencidos, a vencer e quem falta cadastrar" },
+    "territory-micro-areas": { icon: IconHexagons, description: "Microáreas das equipes e o ACS responsável" },
     "campaigns": { icon: IconSpeakerphone, description: "Criar e enviar campanhas por SMS" },
     "team": { icon: IconUsers, description: "Usuários, convites e papéis" },
     "professionals": { icon: IconIdBadge2, description: "Vínculos, CBO e turnos" },

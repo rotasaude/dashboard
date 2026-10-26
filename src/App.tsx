@@ -36,6 +36,9 @@ import { BillingSettings } from "./modules/BillingSettings";
 import { CareLinesAdmin } from "./modules/CareLinesAdmin";
 import { CareLinesTeam } from "./modules/CareLinesTeam";
 import { CareLinesPreview } from "./modules/CareLinesPreview";
+import { TerritoryTeam } from "./modules/TerritoryTeam";
+import { RegistryStatus } from "./modules/RegistryStatus";
+import { TerritoryMicroAreas } from "./modules/TerritoryMicroAreas";
 import { ProviderPortal } from "./modules/ProviderPortal";
 import { AcknowledgementNotice } from "./modules/exams/AcknowledgementNotice";
 import { Shell } from "./shell/Shell";
@@ -276,6 +279,9 @@ export function renderModule(active: ModuleId, setActive: (id: ModuleId) => void
     case "care-lines-team": return <CareLinesTeam />;
     case "care-lines-preview": return <CareLinesPreview />;
     case "care-lines-admin": return <CareLinesAdmin onGoToSecurity={() => setActive("security")} />;
+    case "territory-team": return <TerritoryTeam />;
+    case "registry-status": return <RegistryStatus />;
+    case "territory-micro-areas": return <TerritoryMicroAreas onGoToSecurity={() => setActive("security")} />;
     default:               return <Placeholder title={labelFor(active)} />;
   }
 }

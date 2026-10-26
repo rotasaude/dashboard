@@ -5,6 +5,7 @@ import { hasFeature } from "../lib/features";
 import { canSeeSignatureOverview, canSign } from "../lib/signature";
 import { canRequestSncr, canSeeSncrOverview } from "../lib/controlled";
 import { canUseCareLines } from "../lib/careLines";
+import { canUseTerritory } from "../lib/territoryRegistry";
 export type ModuleId =
   | "overview" | "ingestion" | "conversations" | "consent"
   | "triages" | "classification" | "reports" | "protocols" | "events"
@@ -17,7 +18,8 @@ export type ModuleId =
   | "lab-qc-runs" | "lab-qc-chart" | "lab-qc-blocks" | "lab-qc-setup" | "lab-eqa" | "lab-inventory" | "lab-traceability" | "lab-instruments"
   | "lab-admin" | "lab-reports"
   | "billing-procedures" | "billing-periods" | "billing-settings"
-  | "care-lines-team" | "care-lines-preview" | "care-lines-admin";
+  | "care-lines-team" | "care-lines-preview" | "care-lines-admin"
+  | "territory-team" | "registry-status" | "territory-micro-areas";
 
 export interface NavItem { id: ModuleId; label: string; icon: string; }
 export interface NavGroupDef { label: string; items: NavItem[]; }
@@ -59,6 +61,11 @@ export const NAV_GROUPS: NavGroupDef[] = [
     { id: "care-lines-team", label: "Acompanhamento da equipe", icon: "♡" },
     { id: "care-lines-preview", label: "Prévia dos indicadores", icon: "◑" },
     { id: "care-lines-admin", label: "Linhas da cidade", icon: "⚙" }
+  ]},
+  { label: "Cadastro territorial", items: [
+    { id: "territory-team", label: "Território da equipe", icon: "⌂" },
+    { id: "registry-status", label: "Validade dos cadastros", icon: "⏲" },
+    { id: "territory-micro-areas", label: "Microáreas", icon: "⬡" }
   ]},
   { label: "Exames", items: [
     { id: "exam-acknowledgements", label: "Resultados aguardando ciência", icon: "⚑" },
@@ -211,6 +218,9 @@ export function navGroupsFor(
   // agregada, do admin e do analyst; adotar e criar linhas, só do admin.
   const careOn = canUseCareLines(user);
   const isAnalyst = roles.includes("analyst");
+  // Módulo 24a (ADR 0042): `territory_registry` E `clinical_record`; território e
+  // validade do profissional — o api confere CBO e escopo —, microáreas do admin.
+  const territoryOn = canUseTerritory(user);
   return NAV_GROUPS.filter((group) => {
     if (group.label === "Conta") return !user?.operator;
     if (group.label === "Equipe") return isAdmin;
@@ -274,6 +284,8 @@ export function navGroupsFor(
       if (item.id === "care-lines-team") return careOn && isProfessional;
       if (item.id === "care-lines-preview") return careOn && (isAdmin || isAnalyst);
       if (item.id === "care-lines-admin") return careOn && isAdmin;
+      if (item.id === "territory-team" || item.id === "registry-status") return territoryOn && isProfessional;
+      if (item.id === "territory-micro-areas") return territoryOn && isAdmin;
       if (item.id === "integrations" || item.id === "cnes") return canIntegrations;
       if (item.id === "production") return canProduction;
       return true;
