@@ -25,8 +25,10 @@ export function outcomeView(draft: OutcomeDraft, referenceIds: string[] | undefi
   return { referenceUnits, otherUnits, referralUnitId, targetUnitName };
 }
 
-export function outcomeProblem(draft: OutcomeDraft, referralUnitId: string): string | null {
-  return draft.outcome === "referred" && !referralUnitId && !draft.note.trim()
+// Módulo 26a (G12 #4): com a regulação ligada e ao menos um pedido presente (rascunho ou enviado), "encaminhado" sem
+// unidade nem descrição passa aqui; quem decide é o api (`regulation_request_required`).
+export function outcomeProblem(draft: OutcomeDraft, referralUnitId: string, viaRegulation = false): string | null {
+  return draft.outcome === "referred" && !referralUnitId && !draft.note.trim() && !viaRegulation
     ? "informe a unidade de destino ou a descrição do encaminhamento"
     : null;
 }

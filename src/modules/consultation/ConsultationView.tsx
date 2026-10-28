@@ -8,7 +8,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../../lib/auth";
 import {
   errorCode, fetchConsultationPdf, getConsultation,
-  type Addendum, type Consultation, type ConsultationOptions, type PatientProblem
+  type Addendum, type Consultation, type ConsultationOptions, type PatientProblem, type RegulationNotSent
 } from "../../lib/api";
 import { ACTION_LABEL, CONSULTATION_KEY, SOAP_FIELDS, changesLines, codedLabel, consultationError, withAddendum } from "../../lib/consultation";
 import { fmtDateTime } from "../../lib/format";
@@ -20,6 +20,8 @@ import { canSign, printHint } from "../../lib/signature";
 import { hasFeature } from "../../lib/features";
 import { ConsultationExamStatus } from "../exams/ConsultationExamStatus";
 import { useReveal } from "../../lib/useReveal";
+import { RegulationRequestsField } from "./RegulationRequestsField";
+import { openGuide } from "../regulation/openGuide";
 
 export interface ConsultationViewProps {
   consultation: Consultation;
@@ -32,6 +34,10 @@ export interface ConsultationViewProps {
   // Administrador: leitura sem Imprimir e sem Adendo, mesmo que o id coincida.
   readOnly?: boolean;
   searchDelayMs?: number;
+  // Módulo 26a (F-26.2): a autora, na consulta finalizada, vê os pedidos de regulação (peça em modo adendo, com a guia).
+  regulation?: boolean;
+  // `regulation_not_sent` da finalização (só na memória de quem finalizou); depois de um adendo vale o dele.
+  notSent?: RegulationNotSent[];
   // O 201 devolve o adendo: quem mostra a consulta o acrescenta sem reler
   // (o api recusa a releitura da autora depois que o atendimento fechou).
   onAddendumAdded(addendum: Addendum): void;
@@ -56,6 +62,9 @@ export function ConsultationView(props: ConsultationViewProps) {
   const [ adding, setAdding ] = useState(false);
   const [ printing, setPrinting ] = useState(false);
   const [ printError, setPrintError ] = useState<string | null>(null);
+  const [ notSent, setNotSent ] = useState<RegulationNotSent[]>(props.notSent ?? []);
+  const [ regulationKey, setRegulationKey ] = useState(0);
+  const showRegulation = !!props.regulation && isAuthor && c.status === "finalized";
   // Abre à vista, com o foco no título (AT-07).
   const revealRef = useReveal<HTMLElement>(true);
   const conductLabel = (code: string) => codedLabel(options?.conducts, code);
@@ -123,6 +132,12 @@ export function ConsultationView(props: ConsultationViewProps) {
           </ul>
         ))}
 
+      {showRegulation && (
+        <RegulationRequestsField consultationId={c.id} cbo={c.cbo_code} cid10Allowed={options?.cid10_allowed_for_cbo ?? false}
+          mode="addendum" searchDelayMs={props.searchDelayMs} refreshKey={regulationKey} notSent={notSent}
+          onOpenGuide={async (id) => { const out = await openGuide(id); return out.ok ? null : out.text; }} />
+      )}
+
       {addenda.length > 0 && (
         <ol aria-label="adendos" style={{ margin: 0, paddingLeft: 18, display: "flex", flexDirection: "column", gap: 8 }}>
           {addenda.map((a) => (
@@ -157,7 +172,12 @@ export function ConsultationView(props: ConsultationViewProps) {
         <AddendumForm consultation={c} options={options} patientProblems={props.patientProblems}
           loadPatientProblems={props.loadPatientProblems}
           searchDelayMs={props.searchDelayMs} examPriority={hasFeature(user, "exam_tracking")}
-          onDone={(addendum) => { setAdding(false); props.onAddendumAdded(addendum); }}
+          onDone={(addendum) => {
+            setAdding(false);
+            // Os rascunhos seguiram (ou não) com o adendo: relê a peça e troca os avisos pelos dele (vazio se tudo foi).
+            setNotSent(addendum.regulation_not_sent ?? []); setRegulationKey((k) => k + 1);
+            props.onAddendumAdded(addendum);
+          }}
           onCancel={() => setAdding(false)} />
       )}
     </section>

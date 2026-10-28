@@ -422,4 +422,28 @@ describe("ConsultationEditor — pedido de regulação (módulo 26a)", () => {
     fireEvent.change(screen.getByLabelText("Desfecho"), { target: { value: "referred" } });
     expect(screen.queryByText(/só para outra unidade da rede/)).toBeNull();
   });
+
+  it("encaminhado sem unidade nem descrição: com um pedido (rascunho) confirma; sem pedido, a frase de hoje (G12 #4)", async () => {
+    mocked(api.listConsultationRegulationRequests).mockResolvedValue([ regRequest({ status: "draft" }) ]);
+    mount();
+    fillMinimum();
+    await screen.findByRole("listitem", { name: "Cardiologia" });
+    fireEvent.click(screen.getByRole("button", { name: "Finalizar consulta" }));
+    const box = screen.getByRole("region", { name: "Finalizar consulta" });
+    fireEvent.change(within(box).getByLabelText("Desfecho"), { target: { value: "referred" } });
+    expect(within(box).queryByRole("list", { name: "o que falta para finalizar" })).toBeNull();
+    expect((within(box).getByRole("button", { name: "Confirmar finalização" }) as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(within(box).getByRole("button", { name: "Confirmar finalização" }));
+    await waitFor(() => expect(mocked(api.finalizeConsultation)).toHaveBeenCalledWith("cs1", { outcome: "referred" }));
+
+    cleanup();
+    mocked(api.listConsultationRegulationRequests).mockResolvedValue([]);
+    mount();
+    fillMinimum();
+    await screen.findByRole("button", { name: "Pedir regulação" });
+    fireEvent.click(screen.getByRole("button", { name: "Finalizar consulta" }));
+    fireEvent.change(screen.getByLabelText("Desfecho"), { target: { value: "referred" } });
+    expect(screen.getByRole("list", { name: "o que falta para finalizar" }).textContent)
+      .toBe("informe a unidade de destino ou a descrição do encaminhamento");
+  });
 });

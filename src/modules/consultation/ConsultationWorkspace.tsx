@@ -7,7 +7,7 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   getAttendanceRecord, getConsultation, getConsultationOptions, getConsultationProblems, startConsultation, type ClinicalRecord,
-  type Consultation, type HealthUnit
+  type Consultation, type HealthUnit, type RegulationNotSent
 } from "../../lib/api";
 import { OPTIONS_KEY, RECORD_KEY, consultationError, existingConsultationId, withAddendum } from "../../lib/consultation";
 import { useAuth } from "../../lib/auth";
@@ -24,6 +24,7 @@ import { ConsultationEditor } from "./ConsultationEditor";
 import { ConsultationLoader, ConsultationView } from "./ConsultationView";
 import { ProceduresPanel } from "../billing/ProceduresPanel";
 import { canUseBilling, unitBills } from "../../lib/billing";
+import { allowedTypes, canRequestRegulation } from "../../lib/regulation";
 
 interface Props {
   attendanceId: string;
@@ -66,6 +67,10 @@ export function ConsultationWorkspace(props: Props) {
   const examsOn = hasFeature(user, "exam_tracking");
   // Módulo 22: procedimentos realizados no atendimento, nunca na UBS (ADR 0039).
   const proceduresOn = canUseBilling(user) && unitBills(props.unit);
+  // Módulo 26a (F-26.2): "Pedir regulação" no rascunho e os pedidos na consulta finalizada; só quem pode pedir e com CBO que pede.
+  const regulationOn = canRequestRegulation(user) && allowedTypes(consultation?.cbo_code).length > 0;
+  // `regulation_not_sent` da finalização, só na memória (o GET da consulta não o traz).
+  const [ notSent, setNotSent ] = useState<RegulationNotSent[]>([]);
   // Aba Documentos: o editor continua montado (escondido) para o autosave não
   // perder o que foi digitado; os documentos só montam na primeira abertura da
   // aba e depois ficam montados (escondidos), para a volta à Consulta não perder
@@ -182,16 +187,16 @@ export function ConsultationWorkspace(props: Props) {
             {consultation?.status === "draft" && options.isError && <p role="alert" style={alert}>{consultationError(options.error)}</p>}
             {consultation?.status === "draft" && options.data && (
               <ConsultationEditor key={consultation.id} consultation={consultation} record={record.data} options={options.data}
-                referenceUnitIds={props.referenceUnitIds} unit={props.unit} units={props.units} examPriority={examsOn}
+                referenceUnitIds={props.referenceUnitIds} unit={props.unit} units={props.units} examPriority={examsOn} regulation={regulationOn}
                 notifications={canSuggestNotification(user) && cboCanNotify(consultation.cbo_code)}
                 autosaveDelayMs={props.autosaveDelayMs} searchDelayMs={props.searchDelayMs}
-                onFinalized={(c) => { setConsultation(c); restartRereads(); void rereadProblems(c.id); props.onFinalized(); }}
+                onFinalized={(c) => { setNotSent(c.regulation_not_sent ?? []); setConsultation(c); restartRereads(); void rereadProblems(c.id); props.onFinalized(); }}
                 onLocked={(message) => void reload(message)} />
             )}
 
             {consultation?.status === "finalized" && (
               <ConsultationView consultation={consultation} options={options.data ?? null} patientProblems={record.data.problems}
-                signatureSettled={signatureSettled}
+                signatureSettled={signatureSettled} regulation={regulationOn} notSent={notSent}
                 searchDelayMs={props.searchDelayMs}
                 onAddendumAdded={(addendum) => {
                   setConsultation((c) => (c ? withAddendum(c, addendum) : c)); restartRereads();

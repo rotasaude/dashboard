@@ -96,13 +96,41 @@ describe("RegulationRequestsField", () => {
     expect(onOpenGuide).toHaveBeenCalledWith("rr1");
   });
 
-  it("rascunho que não seguiu (regulation_not_sent): marcado como não enviado, com o motivo, e segue editável", async () => {
+  it("no adendo, todo rascunho é 'não enviado' (no lugar de 'rascunho'); o motivo só no que o api devolveu", async () => {
     mocked(api.listConsultationRegulationRequests).mockResolvedValue([ DRAFT, regRequest({ id: "rr2", status: "draft", target: { code: "0205010032", name: "Ecocardiografia" } }) ]);
     mount({ mode: "addendum", notSent: [ { index: 0, id: "rr1", error: "cbo_not_allowed", path: "target_code" } ] });
     const item = await screen.findByRole("listitem", { name: "Cardiologia" });
     expect(within(item).getByText(NOT_SENT_LABEL)).not.toBeNull();
+    expect(within(item).queryByText("rascunho")).toBeNull();
+    expect(within(item).getByText(/^seu CBO não pode pedir este encaminhamento/).tagName).toBe("SMALL");
     expect(within(item).getByRole("button", { name: "Editar o pedido de Cardiologia" })).not.toBeNull();
-    expect(within(screen.getByRole("listitem", { name: "Ecocardiografia" })).queryByText(NOT_SENT_LABEL)).toBeNull();
+    expect(within(item).getByRole("button", { name: "Retirar o pedido de Cardiologia" })).not.toBeNull();
+    const other = screen.getByRole("listitem", { name: "Ecocardiografia" });
+    expect(within(other).getByText(NOT_SENT_LABEL)).not.toBeNull();
+    expect(within(other).queryByText(/seu CBO/)).toBeNull();
+  });
+
+  it("na consulta (modo rascunho) o rascunho segue 'rascunho', sem 'não enviado'", async () => {
+    mocked(api.listConsultationRegulationRequests).mockResolvedValue([ DRAFT ]);
+    mount({ mode: "draft", notSent: [ { index: 0, id: "rr1", error: "cbo_not_allowed" } ] });
+    const item = await screen.findByRole("listitem", { name: "Cardiologia" });
+    expect(within(item).getByText("rascunho")).not.toBeNull();
+    expect(within(item).queryByText(NOT_SENT_LABEL)).toBeNull();
+  });
+
+  it("avisa a peça-mãe de quantos pedidos há (rascunho ou enviado)", async () => {
+    mocked(api.listConsultationRegulationRequests).mockResolvedValue([ DRAFT, regRequest({ id: "rr2", status: "pending" }) ]);
+    const onCount = vi.fn();
+    mount({ onCountChange: onCount });
+    await screen.findAllByRole("listitem", { name: "Cardiologia" });
+    expect(onCount).toHaveBeenLastCalledWith(2);
+  });
+
+  it("a falha da guia aparece na própria peça", async () => {
+    mocked(api.listConsultationRegulationRequests).mockResolvedValue([ regRequest({ status: "authorized" }) ]);
+    mount({ mode: "addendum", onOpenGuide: async () => "guia não encontrada" });
+    fireEvent.click(await screen.findByRole("button", { name: "Guia em PDF" }));
+    expect((await screen.findByRole("alert")).textContent).toBe("guia não encontrada");
   });
 
   it("a leitura é única: sem polling, e refreshKey relê", async () => {

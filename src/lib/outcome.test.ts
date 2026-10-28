@@ -25,6 +25,13 @@ describe("desfecho do atendimento", () => {
     expect(outcomeProblem(EMPTY_OUTCOME, "")).toBeNull();
   });
 
+  it("com a regulação ligada e um pedido presente, encaminhado sem unidade nem descrição passa (o api decide)", () => {
+    const bare = { outcome: "referred" as const, referralChoice: null, note: "" };
+    expect(outcomeProblem(bare, "", true)).toBeNull();
+    expect(outcomeProblem(bare, "", false)).toBe("informe a unidade de destino ou a descrição do encaminhamento");
+    expect(outcomeProblem(bare, "")).toBe("informe a unidade de destino ou a descrição do encaminhamento");
+  });
+
   it("corpo igual ao do close de hoje", () => {
     expect(outcomeBody(EMPTY_OUTCOME, "u3")).toEqual({ outcome: "discharged" });
     expect(outcomeBody({ outcome: "referred", referralChoice: null, note: "" }, "u3")).toEqual({ outcome: "referred", referral_unit_id: "u3" });

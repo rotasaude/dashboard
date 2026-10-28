@@ -32,10 +32,13 @@ interface Props {
   noteTarget?: HTMLElement | null;
   searchDelayMs?: number;
   // Com a função, os pedidos já enviados oferecem "Guia em PDF".
-  onOpenGuide?(id: string): void;
+  // Devolve a frase da falha (a guia que não abriu), que aparece aqui mesmo; nada ou `null` = abriu.
+  onOpenGuide?(id: string): void | Promise<string | null | void>;
+  // Quantos pedidos há (rascunho ou enviado): a finalização do editor usa para aceitar "encaminhado" sem unidade.
+  onCountChange?(count: number): void;
   // Mudou → relê a lista (ex.: o api recusou a finalização e a lista pode ter mudado).
   refreshKey?: number;
-  // `regulation_not_sent` do finalize ou do adendo: esses rascunhos ficam marcados "não enviado".
+  // `regulation_not_sent` do finalize ou do adendo: só no adendo; o rascunho vira "não enviado", e o motivo vem do api.
   notSent?: RegulationNotSent[];
 }
 
@@ -62,6 +65,16 @@ export function RegulationRequestsField(props: Props) {
   const requests = list.data ?? [];
   const drafts = requests.filter((r) => r.status === "draft").length;
   const notSent = new Map((props.notSent ?? []).map((n) => [ n.id, n ]));
+  const onCount = useRef(props.onCountChange);
+  onCount.current = props.onCountChange;
+  const count = list.data?.length;
+  useEffect(() => { if (count !== undefined) onCount.current?.(count); }, [ count ]);
+
+  async function openGuide(id: string) {
+    setError(null);
+    const text = await onOpenGuide?.(id);
+    if (typeof text === "string") setError(text);
+  }
 
   function close() { setEditing(null); setDirty(false); }
 
@@ -102,17 +115,18 @@ export function RegulationRequestsField(props: Props) {
         <ul style={listStyle}>
           {requests.map((r) => {
             const draft = r.status === "draft";
-            const missed = draft ? notSent.get(r.id) : undefined;
+            // No adendo o rascunho que sobrou é "não enviado" (no lugar de "rascunho"); o motivo só se o api o devolveu.
+            const unsent = mode === "addendum" && draft;
+            const missed = unsent ? notSent.get(r.id) : undefined;
             return (
               <li key={r.id} aria-label={r.target.name} style={item}>
                 <div style={row}>
                   <strong style={{ fontSize: 13 }}>{r.target.name}</strong>
                   <span style={muted}>{typeLabel(r.type)}</span>
                   <Tag tone={colorTone(r.suggested_color)}>{colorLabel(r.suggested_color)}</Tag>
-                  <Tag tone={statusTone(r.status)}>{statusLabel(r.status)}</Tag>
-                  {missed && <Tag tone="down">{NOT_SENT_LABEL}</Tag>}
+                  {unsent ? <Tag tone="warn">{NOT_SENT_LABEL}</Tag> : <Tag tone={statusTone(r.status)}>{statusLabel(r.status)}</Tag>}
                 </div>
-                {missed && <p style={alert}>{notSentReason(missed)}</p>}
+                {missed && <small style={reasonText}>{notSentReason(missed)}</small>}
                 <div style={row}>
                   {draft ? (
                     <>
@@ -124,7 +138,7 @@ export function RegulationRequestsField(props: Props) {
                         disabledReason={editing !== null ? "feche o formulário aberto antes" : null} onConfirm={() => withdraw(r)} />
                     </>
                   ) : onOpenGuide ? (
-                    <button type="button" style={secondaryButtonStyle} onClick={() => onOpenGuide(r.id)}>Guia em PDF</button>
+                    <button type="button" style={secondaryButtonStyle} onClick={() => void openGuide(r.id)}>Guia em PDF</button>
                   ) : null}
                 </div>
               </li>
@@ -154,4 +168,5 @@ export function RegulationRequestsField(props: Props) {
 
 const listStyle: CSSProperties = { listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 8 };
 const item: CSSProperties = { display: "flex", flexDirection: "column", gap: 6, padding: 8, border: "1px solid var(--rule)", borderRadius: 8 };
+const reasonText: CSSProperties = { fontSize: 12, color: "var(--ink)" };
 const noteText: CSSProperties = { margin: 0, fontSize: 12.5, color: "var(--ink)" };

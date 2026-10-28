@@ -92,6 +92,8 @@ export function ConsultationEditor(props: ConsultationEditorProps) {
   const [ noteHost, setNoteHost ] = useState<HTMLElement | null>(null);
   // Módulo 26a: a finalização recusada pela regra da regulação pede que a peça releia a lista.
   const [ regulationKey, setRegulationKey ] = useState(0);
+  // Quantos pedidos a peça leu (rascunho ou enviado): com algum, "encaminhado" não exige unidade nem descrição (G12 #4).
+  const [ regulationCount, setRegulationCount ] = useState(0);
 
   // Sair com texto ainda não salvo pede confirmação do navegador (AT-04).
   useLeaveGuard(autosave.pending && !locked && !sealing);
@@ -100,7 +102,7 @@ export function ConsultationEditor(props: ConsultationEditorProps) {
 
   const today = todayInCity();
   const { referralUnitId } = outcomeView(outcome, props.referenceUnitIds, unit, units);
-  const outcomeIssue = outcomeProblem(outcome, referralUnitId);
+  const outcomeIssue = outcomeProblem(outcome, referralUnitId, !!props.regulation && regulationCount > 0);
   const missing = [ ...finalizeProblems(check), ...(outcomeIssue ? [ outcomeIssue ] : []) ];
   const set = (patch: Partial<ConsultationDraft>) => setDraft((d) => ({ ...d, ...patch }));
 
@@ -177,7 +179,7 @@ export function ConsultationEditor(props: ConsultationEditorProps) {
           e de `blockedFinal`; rascunho que deixou de valer volta em `regulation_not_sent` e a consulta finaliza. */}
       {props.regulation && (
         <RegulationRequestsField consultationId={consultation.id} cbo={consultation.cbo_code} cid10Allowed={options.cid10_allowed_for_cbo}
-          mode="draft" finalizing={finalizing} noteTarget={noteHost} searchDelayMs={props.searchDelayMs} refreshKey={regulationKey} />
+          mode="draft" finalizing={finalizing} noteTarget={noteHost} searchDelayMs={props.searchDelayMs} refreshKey={regulationKey} onCountChange={setRegulationCount} />
       )}
 
       {!finalizing ? (
