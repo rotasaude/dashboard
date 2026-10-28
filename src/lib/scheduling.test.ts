@@ -214,6 +214,11 @@ describe("rótulo do pedido", () => {
     expect(requestKindLabel({ kind: "care_line", origin_unit_name: "UBS Centro" })).toBe("Linha de cuidado");
     expect(requestKindLabel({ kind: "care_line", origin_unit_name: null })).toBe("Linha de cuidado");
   });
+
+  it("pedido vindo da regulação (módulo 26a), com ou sem unidade solicitante", () => {
+    expect(requestKindLabel({ kind: "regulated", origin_unit_name: "UBS Centro" })).toBe("Regulação (pedido de UBS Centro)");
+    expect(requestKindLabel({ kind: "regulated", origin_unit_name: null })).toBe("Regulação");
+  });
 });
 
 describe("estado do horário", () => {

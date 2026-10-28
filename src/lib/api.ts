@@ -555,7 +555,8 @@ export interface CheckInTriage { id: string; date: string; protocol_name: string
 export interface CheckInAppointment {
   // Pedido de linha de cuidado (módulo 23) não tem triagem raiz: kind "care_line", sem protocolo nem prioridade.
   // Os kinds seguem AppointmentRequest::KINDS do api; o rótulo vem de requestKindLabel, o mesmo da fila.
-  id: string; scheduled_at: string; kind: "return" | "referral" | "triage" | "screening" | "care_line"; unit_name: string;
+  // "regulated" é o pedido de agendamento da rede própria aberto pela regulação (módulo 26a).
+  id: string; scheduled_at: string; kind: "return" | "referral" | "triage" | "screening" | "care_line" | "regulated"; unit_name: string;
   protocol_name: string | null; priority: number | null;
 }
 
@@ -661,7 +662,8 @@ export async function closeAttendance(
 // `priority` é a prioridade do pedido (rotina/prioritária); a da triagem é
 // `triage_priority`.
 export interface RequestRow {
-  id: string; kind: "return" | "referral" | "triage" | "screening" | "care_line"; origin: "attendance" | "triage" | "care_line";
+  id: string; kind: "return" | "referral" | "triage" | "screening" | "care_line" | "regulated";
+  origin: "attendance" | "triage" | "care_line" | "regulation";
   origin_unit_name: string | null; created_at: string; cpf_masked: string; note: string | null;
   reopened_reason: "expired" | "no_show" | null;
   appointment_type_key: string; appointment_type_name: string; priority: SchedulingPriority; due_on: string;

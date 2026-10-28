@@ -4,11 +4,13 @@ import { focusManager, onlineManager } from "@tanstack/react-query";
 
 vi.mock("../../lib/api", async (importOriginal) => ({ ...(await importOriginal<typeof import("../../lib/api")>()), fetchCurrentSession: vi.fn(),
   getRegulationRequest: vi.fn(), listCareOffers: vi.fn(), authorizeRegulationRequest: vi.fn(), returnRegulationRequest: vi.fn(),
-  denyRegulationRequest: vi.fn(), cancelRegulationRequest: vi.fn(), fetchRegulationGuide: vi.fn() }));
+  denyRegulationRequest: vi.fn(), cancelRegulationRequest: vi.fn(), fetchRegulationGuide: vi.fn(), scheduleRegulationRequest: vi.fn(),
+  recordRegulationOutcome: vi.fn() }));
 import * as api from "../../lib/api";
 import { ApiError } from "../../lib/api";
 import { RequestDetail } from "./RequestDetail";
 import { POPUP_BLOCKED } from "./openGuide";
+import { fmtDateTime } from "../../lib/format";
 import { QUOTA_EXHAUSTED_TEXT, SKIP_REASON_TEXT, STALE_TEXT } from "../../lib/regulation";
 import { renderWithProviders } from "../../test/campaignFixtures";
 import { TODAY26, offer, regRequest, regUser } from "../../test/regulationFixtures";
@@ -27,7 +29,7 @@ describe("RequestDetail", () => {
   let onBack: ReturnType<typeof vi.fn>;
   beforeEach(() => {
     for (const fn of [ api.getRegulationRequest, api.listCareOffers, api.authorizeRegulationRequest, api.returnRegulationRequest,
-      api.denyRegulationRequest, api.cancelRegulationRequest, api.fetchRegulationGuide ]) mocked(fn).mockReset();
+      api.denyRegulationRequest, api.cancelRegulationRequest, api.fetchRegulationGuide, api.scheduleRegulationRequest, api.recordRegulationOutcome ]) mocked(fn).mockReset();
     mocked(api.fetchCurrentSession).mockResolvedValue(regUser());
     mocked(api.getRegulationRequest).mockResolvedValue(regRequest({ ciap2: "K86" }));
     mocked(api.listCareOffers).mockResolvedValue([ OWN, FULL, CONTRACTED ]);
@@ -269,6 +271,50 @@ describe("RequestDetail", () => {
     expect(mocked(api.getRegulationRequest)).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole("button", { name: "Voltar à fila" }));
     expect(onBack).toHaveBeenLastCalledWith(true);
+  });
+
+  const AUTHORIZED_EXTERNAL = { ...AUTHORIZED_OWN, offer_id: "of3", provider: { id: "pr3", name: "Consórcio Leste", kind: "consortium" } };
+
+  it("agendar (F-26.5): o detalhe fica aberto na situação nova, com a frase, sem leitura nominal a mais", async () => {
+    mocked(api.getRegulationRequest).mockResolvedValue(regRequest({ status: "authorized", authorization: AUTHORIZED_EXTERNAL, version: 4 }));
+    mocked(api.scheduleRegulationRequest).mockResolvedValue(regRequest({ status: "scheduled", authorization: AUTHORIZED_EXTERNAL, version: 5,
+      schedule: { at: "2026-11-10T14:30:00-03:00", place: "Consórcio Leste", notes: null } }));
+    mount();
+    fireEvent.click(await screen.findByRole("button", { name: "Registrar agendamento" }));
+    text("Data e hora", "2026-11-10T14:30");
+    text("Local", "Consórcio Leste");
+    fireEvent.click(screen.getByRole("button", { name: "Salvar agendamento" }));
+    expect((await screen.findByRole("status")).textContent).toBe("Agendamento registrado: o cidadão vê a data e o local no celular.");
+    expect(await screen.findByRole("button", { name: "Remarcar" })).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Faltou" })).not.toBeNull();
+    expect(screen.getByText(fmtDateTime("2026-11-10T14:30:00-03:00"))).not.toBeNull();
+    expect(onChanged).not.toHaveBeenCalled();
+    expect(mocked(api.getRegulationRequest)).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "Voltar à fila" }));
+    expect(onBack).toHaveBeenLastCalledWith(true);
+  });
+
+  it("agendar com versão velha: a frase do Recarregar sobe ao detalhe, que relê e some com a frase", async () => {
+    mocked(api.getRegulationRequest).mockResolvedValueOnce(regRequest({ status: "authorized", authorization: AUTHORIZED_EXTERNAL, version: 4 }))
+      .mockResolvedValue(regRequest({ status: "authorized", authorization: AUTHORIZED_EXTERNAL, version: 6 }));
+    mocked(api.scheduleRegulationRequest).mockRejectedValue(new ApiError(409, { error: "stale_version" }, "x"));
+    mount();
+    fireEvent.click(await screen.findByRole("button", { name: "Registrar agendamento" }));
+    text("Data e hora", "2026-11-10T14:30");
+    text("Local", "Consórcio Leste");
+    fireEvent.click(screen.getByRole("button", { name: "Salvar agendamento" }));
+    expect((await screen.findByRole("alert")).textContent).toBe(STALE_TEXT);
+    expect((screen.getByLabelText("Local") as HTMLInputElement).value).toBe("Consórcio Leste");
+    fireEvent.click(screen.getByRole("button", { name: "Recarregar" }));
+    await waitFor(() => expect(screen.queryByText(STALE_TEXT)).toBeNull());
+    expect(mocked(api.getRegulationRequest)).toHaveBeenCalledTimes(2);
+  });
+
+  it("rede própria autorizada: a frase do módulo 17 e nenhum formulário", async () => {
+    mocked(api.getRegulationRequest).mockResolvedValue(regRequest({ status: "authorized", authorization: AUTHORIZED_OWN, appointment_request_id: "ar9" }));
+    mount();
+    expect(await screen.findByText("O agendamento é feito pela unidade de destino (pedido de agendamento do módulo 17).")).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Registrar agendamento" })).toBeNull();
   });
 
   it("ações por situação: autorizado não nega nem autoriza", async () => {

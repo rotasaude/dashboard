@@ -3,7 +3,8 @@
 // cancelar, pelas ações da situação (`actionsFor`). A leitura é nominal e grava trilha: nunca relê sozinha (NOMINAL_QUERY),
 // só no "Recarregar". O detalhe nunca mostra posição na fila. `stale_version` e `invalid_transition` deixam o formulário
 // aberto e oferecem "Recarregar". Depois de uma decisão, `onChanged(frase)` devolve à fila (que relê); "Voltar à fila"
-// avisa por `onBack(changed)` se houve decisão, para a fila reler só quando precisa. `extra` é o espaço das Tasks 12 e 13.
+// avisa por `onBack(changed)` se houve decisão, para a fila reler só quando precisa. O agendamento externo e o desfecho (`ScheduleOutcome`, F-26.5) deixam o detalhe aberto: gravam o pedido
+// devolvido por `applied` e mostram a frase aqui. `extra` é o espaço da Task 13.
 import { useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -19,9 +20,10 @@ import { patientDocument } from "../../lib/patientDocument";
 import { KeyValue } from "../../components/KeyValue";
 import { Tag } from "../../components/Tag";
 import { buttonStyle, secondaryButtonStyle } from "../../components/formStyles";
-import { alert, grid, list, muted, row, stack, title } from "../exams/styles";
+import { alert, grid, list, muted, okText, row, stack, title } from "../exams/styles";
 import { AuthorizeForm } from "./AuthorizeForm";
 import { ReasonAction } from "./ReasonAction";
+import { ScheduleOutcome } from "./ScheduleOutcome";
 import { openGuide } from "./openGuide";
 
 type Mode = "authorize" | "return" | "deny" | "cancel" | null;
@@ -42,11 +44,12 @@ export function RequestDetail({ id, today, onBack, onChanged, extra }: {
   const [ mode, setMode ] = useState<Mode>(null);
   const [ stale, setStale ] = useState<string | null>(null);
   const [ guideError, setGuideError ] = useState<string | null>(null);
+  const [ note, setNote ] = useState<string | null>(null);
   const changed = useRef(false);
   const request = detail.data;
 
   const done = (text: string) => { changed.current = true; onChanged(text); };
-  const applied = (updated: RegulationRequest) => { changed.current = true; queryClient.setQueryData([ REG_DETAIL_KEY, id ], updated); };
+  const applied = (updated: RegulationRequest) => { changed.current = true; setStale(null); queryClient.setQueryData([ REG_DETAIL_KEY, id ], updated); };
   const reload = () => { void detail.refetch().then((r) => { if (!r.isError) setStale(null); }); };
   const guide = async () => {
     setGuideError(null);
@@ -179,6 +182,8 @@ export function RequestDetail({ id, today, onBack, onChanged, extra }: {
         <ReasonAction label="Motivo do cancelamento" submitLabel="Cancelar pedido" onCancel={close}
           onSubmit={reasonAction(request, (reason, v) => cancelRegulationRequest(id, reason, v), cancelText)} />
       )}
+      {note && <p role="status" style={okText}>{note}</p>}
+      <ScheduleOutcome request={request} onApplied={applied} onChanged={setNote} onStale={setStale} />
       {extra?.({ request, applied })}
     </section>
   );
