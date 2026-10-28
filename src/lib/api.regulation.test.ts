@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   addNurseItem, authorizeRegulationRequest, cancelRegulationRequest, complementRegulationRequest, countRegulationRequests, createCareOffer,
-  createCareProvider, createRegulationRequest, deleteRegulationRequest, denyRegulationRequest, fetchRegulationGuide, fetchStateExportCsv,
+  createCareProvider, updateCareProvider, createRegulationRequest, deleteRegulationRequest, denyRegulationRequest, fetchRegulationGuide, fetchStateExportCsv,
   getRegulationRequest, getRiskDeadlines, listCareOffers, listCareProviders, listConsultationRegulationRequests, listNurseItems,
   listRegulationRequests, listReturnedRequests, recordRegulationOutcome, removeNurseItem, returnRegulationRequest, scheduleRegulationRequest,
   searchRegulationTargets, setRegulationExternal, updateCareOffer, updateRegulationRequest, updateRiskDeadlines
@@ -102,11 +102,28 @@ describe("cliente da regulação (contrato §3–§8)", () => {
 
   it("guia e CSV lidos com fetch; nome do arquivo seguro ou nulo", async () => {
     fetchMock.mockImplementationOnce(() => ok("%PDF", { "Content-Type": "application/pdf", "Content-Disposition": 'attachment; filename="guia-regulacao-rr1.pdf"' }))
-      .mockImplementationOnce(() => ok("a;b", { "Content-Type": "text/csv", "Content-Disposition": 'attachment; filename="Joana Lima.csv"' }));
+      .mockImplementationOnce(() => ok("a;b", { "Content-Type": "text/csv", "Content-Disposition": 'attachment; filename="Joana Lima.csv"' }))
+      .mockImplementationOnce(() => ok("a;b", { "Content-Type": "text/csv", "Content-Disposition": 'attachment; filename="regulacao-estado-2026-10-28.csv"' }));
     expect((await fetchRegulationGuide("rr1")).filename).toBe("guia-regulacao-rr1.pdf");
     expect(urlOf(0).pathname).toBe("/regulation/requests/rr1/guide.pdf");
     expect((await fetchStateExportCsv("pending")).filename).toBeNull();
+    expect((await fetchStateExportCsv()).filename).toBe("regulacao-estado-2026-10-28.csv");
+    expect(urlOf(2).search).toBe("");
     expect([ urlOf(1).pathname, urlOf(1).search ]).toEqual([ "/regulation/exports/state.csv", "?status=pending" ]);
+  });
+
+  it("valores novos dos enums do §1: prestador consortium e sistema externo care vão no corpo", async () => {
+    await createCareProvider({ name: "Consórcio Intermunicipal", cnes: "2384311", kind: "consortium", active: true });
+    expect([ urlOf(0).pathname, initOf(0).method, bodyOf(0) ]).toEqual([ "/regulation/admin/providers", "POST",
+      { name: "Consórcio Intermunicipal", cnes: "2384311", kind: "consortium", active: true } ]);
+    await setRegulationExternal("rr1", "care", "2026/987", 2);
+    expect(bodyOf(1)).toEqual({ system: "care", number: "2026/987", version: 2 });
+  });
+
+  it("prestador: PATCH em /regulation/admin/providers/:id com o corpo", async () => {
+    await updateCareProvider("pr1", { name: "UBS Especialidades", kind: "ppi", health_unit_id: null, active: false });
+    expect([ urlOf(0).pathname, initOf(0).method, headersOf(0)["Content-Type"], bodyOf(0) ]).toEqual([ "/regulation/admin/providers/pr1", "PATCH",
+      "application/json", { name: "UBS Especialidades", kind: "ppi", health_unit_id: null, active: false } ]);
   });
 
   it("administração: prestadores, ofertas, prazos e lista do enfermeiro", async () => {

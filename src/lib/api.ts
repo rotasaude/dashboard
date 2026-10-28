@@ -4489,8 +4489,8 @@ export type RegulationType = "specialty" | "procedure";
 export type RiskColor = "red" | "yellow" | "green" | "blue";
 export type RegulationStatus =
   | "draft" | "pending" | "returned" | "denied" | "authorized" | "scheduled" | "completed" | "missed" | "cancelled" | "closed" | "external";
-export type ProviderKind = "own" | "contracted" | "state";
-export type ExternalSystem = "sisreg" | "cmce" | "other";
+export type ProviderKind = "own" | "contracted" | "consortium" | "ppi";
+export type ExternalSystem = "sisreg" | "care" | "cross" | "other";
 
 export interface RegulationTarget { type: RegulationType; code: string; name: string; group?: string | null; nurse_allowed?: boolean }
 export interface RegulationEvent { status: RegulationStatus | string; at: string; by: { name: string } | null; reason: string | null }
