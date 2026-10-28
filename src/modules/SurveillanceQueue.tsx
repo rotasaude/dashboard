@@ -3,7 +3,7 @@
 // A lista é nominal e grava leitura na trilha: nunca relê sozinha (NOMINAL_QUERY
 // — nem ao voltar à aba, nem ao reconectar, nem com o tempo). Só a contagem
 // relê a cada minuto, pelo hook compartilhado com o menu. A ordem é a do api.
-import { useState, type CSSProperties } from "react";
+import { useRef, useState, type CSSProperties } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   listNotifications, listSurveillanceDiseases, listSurveillanceUnits,
@@ -89,6 +89,9 @@ function QueueBody() {
   });
 
   const token = `${tabKey}|${disease}|${unit}|${list.dataUpdatedAt}`;
+  // A resposta de uma página pedida para outra lista (aba, filtro ou leitura) não mexe nas páginas desta.
+  const currentToken = useRef(token);
+  currentToken.current = token;
   const liveExtra = extra && extra.token === token ? extra : null;
   const more = moreState && moreState.token === token ? moreState : null;
   const rows = uniqueById([ ...(list.data?.notifications ?? []), ...(liveExtra?.rows ?? []) ]);
@@ -100,6 +103,7 @@ function QueueBody() {
     setMoreState({ token: asked, busy: true, error: null });
     try {
       const page = await listNotifications({ ...query, before: next });
+      if (currentToken.current !== asked) return;
       setExtra((prev) => ({ token: asked, rows: [ ...(prev && prev.token === asked ? prev.rows : []), ...page.notifications ], next: page.next_before }));
       setMoreState({ token: asked, busy: false, error: null });
     } catch (err) {

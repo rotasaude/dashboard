@@ -4,12 +4,16 @@
 // numa coluna própria — a linha não é clicável, então nunca há botão dentro de
 // botão. Situação ou código novo do api aparece cru; nada some.
 import type { SurveillanceNotification } from "../../lib/api";
-import { NO_NAME, NO_NEIGHBORHOOD, statusLabel, statusTone } from "../../lib/surveillance";
+import { NO_NAME, NO_NEIGHBORHOOD, fmtDay, statusLabel, statusTone } from "../../lib/surveillance";
 import { fmtDateTime } from "../../lib/format";
 import { documentText } from "../../lib/patientDocument";
 import { DataTable, type Column } from "../../components/DataTable";
 import { Tag } from "../../components/Tag";
 import { secondaryButtonStyle } from "../../components/formStyles";
+
+// "imediata" só enquanto aberta, como o aviso da fila e o `immediate_open` do api.
+const OPEN_STATUSES = [ "possible", "notified", "investigating" ];
+const isOpenImmediate = (n: SurveillanceNotification): boolean => n.deadline === "immediate" && OPEN_STATUSES.includes(n.status);
 
 const deadlineCell = { display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 4 } as const;
 const tagRow = { display: "flex", flexWrap: "wrap", gap: 4 } as const;
@@ -21,10 +25,10 @@ export function NotificationTable({ rows, onOpen }: { rows: SurveillanceNotifica
     {
       label: "Prazo", w: "1.2fr", render: (n) => (
         <span style={deadlineCell}>
-          {(n.overdue || n.deadline === "immediate") && (
+          {(n.overdue || isOpenImmediate(n)) && (
             <span style={tagRow}>
               {n.overdue && <Tag tone="down">vencida</Tag>}
-              {n.deadline === "immediate" && <Tag tone="warn">imediata</Tag>}
+              {isOpenImmediate(n) && <Tag tone="warn">imediata</Tag>}
             </span>
           )}
           <span>{fmtDateTime(n.due_at)}</span>
@@ -45,7 +49,9 @@ export function NotificationTable({ rows, onOpen }: { rows: SurveillanceNotifica
     { label: "Situação", w: "1.2fr", render: (n) => <Tag tone={statusTone(n.status)}>{statusLabel(n.status)}</Tag> },
     {
       label: "Ação", w: "90px", card: "actions", render: (n) => (
-        <button type="button" style={secondaryButtonStyle} onClick={() => onOpen(n.id)}>Abrir</button>
+        // Nome distinto por linha (sem o nome da pessoa): doença e data da suspeita.
+        <button type="button" style={secondaryButtonStyle} onClick={() => onOpen(n.id)}
+          aria-label={`Abrir notificação de ${n.disease.name || n.disease.code} de ${fmtDay(n.suspected_on)}`}>Abrir</button>
       )
     }
   ];

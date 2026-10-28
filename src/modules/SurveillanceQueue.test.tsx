@@ -133,11 +133,50 @@ describe("SurveillanceQueue", () => {
     await waitFor(() => expect(queries().at(-1)).toEqual({ status: "possible", disease: null, unitId: null, before: "c9" }));
   });
 
-  it("a ação Abrir fica numa coluna própria: a linha não é botão", async () => {
+  it("a ação Abrir fica numa coluna própria: a linha não é botão, e cada botão tem nome distinto", async () => {
     renderWithProviders(<SurveillanceQueue today={TODAY25} />);
     const rows = await screen.findAllByRole("row", { name: /Joana Lima/ });
     expect(rows[0].tagName).toBe("DIV");
-    expect(within(rows[0]).getByRole("button", { name: "Abrir" })).not.toBeNull();
+    expect(within(rows[0]).getByRole("button", { name: "Abrir notificação de Sarampo de 26/10/2026" })).not.toBeNull();
+    expect(within(rows[1]).getByRole("button", { name: "Abrir notificação de Dengue de 26/10/2026" })).not.toBeNull();
+    // O nome do botão não leva o nome da pessoa.
+    const names = screen.getAllByRole("button", { name: /^Abrir notificação/ }).map((b) => b.getAttribute("aria-label"));
+    expect(names.some((n) => /Joana/.test(n ?? ""))).toBe(false);
+  });
+
+  it("a tag imediata só vale com a notificação aberta", async () => {
+    const immediate = { code: "sarampo", name: "Sarampo", deadline: "immediate" };
+    mocked(api.listNotifications).mockResolvedValue({ notifications: [
+      notification({ id: "a", status: "notified", deadline: "immediate", disease: immediate }),
+      notification({ id: "b", status: "possible", deadline: "immediate", disease: immediate }),
+      notification({ id: "c", status: "investigating", deadline: "immediate", disease: immediate }),
+      notification({ id: "d", status: "closed", deadline: "immediate", disease: immediate }),
+      notification({ id: "e", status: "entered", deadline: "immediate", disease: immediate }),
+      notification({ id: "f", status: "dismissed", deadline: "immediate", disease: immediate }) ], next_before: null });
+    renderWithProviders(<SurveillanceQueue today={TODAY25} />);
+    await screen.findAllByRole("row", { name: /Joana Lima/ });
+    expect(bodyRows().map((r) => within(r).queryByText("imediata") !== null)).toEqual([ true, true, true, false, false, false ]);
+  });
+
+  it("página que chega depois de trocar de aba não mexe nas páginas da aba nova", async () => {
+    let late: (page: api.NotificationPage) => void = () => {};
+    mocked(api.listNotifications)
+      .mockResolvedValueOnce({ notifications: [ notification({ id: "nt1" }) ], next_before: "c1" })
+      .mockReturnValueOnce(new Promise((resolve) => { late = resolve; }))
+      .mockResolvedValueOnce({ notifications: [ notification({ id: "nt5" }) ], next_before: "c5" })
+      .mockResolvedValueOnce({ notifications: [ notification({ id: "nt6" }) ], next_before: null });
+    renderWithProviders(<SurveillanceQueue today={TODAY25} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Carregar mais" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Possíveis não feitas (2)" }));
+    await waitFor(() => expect(queries().at(-1)).toEqual({ status: "possible", disease: null, unitId: null }));
+    await waitFor(() => expect(bodyRows()).toHaveLength(1));
+    fireEvent.click(await screen.findByRole("button", { name: "Carregar mais" }));
+    await waitFor(() => expect(bodyRows()).toHaveLength(2));
+    // A página atrasada da aba antiga chega agora e é ignorada.
+    await act(async () => { late({ notifications: [ notification({ id: "nt2" }) ], next_before: null }); });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(bodyRows()).toHaveLength(2);
+    expect(screen.queryByRole("button", { name: "Carregar mais" })).toBeNull();
   });
 
   it("pessoa sem nome, documento, bairro e situação nova aparecem; nada some", async () => {
