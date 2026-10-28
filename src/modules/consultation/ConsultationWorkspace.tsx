@@ -14,6 +14,7 @@ import { useAuth } from "../../lib/auth";
 import { canSign, signatureSettling } from "../../lib/signature";
 import { canUseDocuments } from "../../lib/clinicalDocuments";
 import { hasFeature } from "../../lib/features";
+import { canSuggestNotification, cboCanNotify } from "../../lib/surveillance";
 import { buttonStyle, disabledButtonStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { SegmentedControl } from "../../shell/SegmentedControl";
 import { ConsultationDocuments } from "../documents/ConsultationDocuments";
@@ -182,6 +183,7 @@ export function ConsultationWorkspace(props: Props) {
             {consultation?.status === "draft" && options.data && (
               <ConsultationEditor key={consultation.id} consultation={consultation} record={record.data} options={options.data}
                 referenceUnitIds={props.referenceUnitIds} unit={props.unit} units={props.units} examPriority={examsOn}
+                notifications={canSuggestNotification(user) && cboCanNotify(consultation.cbo_code)}
                 autosaveDelayMs={props.autosaveDelayMs} searchDelayMs={props.searchDelayMs}
                 onFinalized={(c) => { setConsultation(c); restartRereads(); void rereadProblems(c.id); props.onFinalized(); }}
                 onLocked={(message) => void reload(message)} />

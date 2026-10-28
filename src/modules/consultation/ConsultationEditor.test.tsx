@@ -6,13 +6,16 @@ import type { ReactNode } from "react";
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const real = await importOriginal<typeof import("../../lib/api")>();
-  return { ...real, saveConsultationDraft: vi.fn(), finalizeConsultation: vi.fn(), searchTerminology: vi.fn(), searchSigtap: vi.fn() };
+  return { ...real, saveConsultationDraft: vi.fn(), finalizeConsultation: vi.fn(), searchTerminology: vi.fn(), searchSigtap: vi.fn(),
+    getNotificationSuggestions: vi.fn(), createConsultationNotification: vi.fn(), listSurveillanceDiseases: vi.fn() };
 });
 
 import * as api from "../../lib/api";
 import { ApiError } from "../../lib/api";
 import { ConsultationEditor } from "./ConsultationEditor";
 import { NOW19, consultation, finalized, options, record } from "../../test/consultationFixtures";
+import { DENGUE } from "../../test/surveillanceFixtures";
+import { SUGGESTION_PENDING_NOTE } from "./NotificationSuggestions";
 
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
@@ -204,3 +207,114 @@ describe("ConsultationEditor — à vista (AT-07)", () => {
   });
 });
 
+
+describe("ConsultationEditor — notificação (módulo 25)", () => {
+  // Módulo 25 (ADR 0043): a notificação nunca bloqueia a finalização — a peça fica fora de `missing`.
+  beforeEach(() => {
+    for (const fn of [ api.saveConsultationDraft, api.finalizeConsultation, api.getNotificationSuggestions, api.createConsultationNotification ]) mocked(fn).mockReset();
+    mocked(api.saveConsultationDraft).mockImplementation(async () => consultation());
+    mocked(api.finalizeConsultation).mockResolvedValue(finalized());
+    mocked(api.listSurveillanceDiseases).mockResolvedValue([]);
+  });
+  const mount = (over: { notifications?: boolean; consultation?: ReturnType<typeof consultation>; delay?: number } = {}) => render(
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <ConsultationEditor consultation={over.consultation ?? consultation()} record={record()} options={options()} unit={unit} units={units}
+        notifications={over.notifications ?? true} autosaveDelayMs={over.delay ?? 0} searchDelayMs={0} onFinalized={vi.fn()} onLocked={vi.fn()} />
+    </QueryClientProvider>);
+  const pending = () => mocked(api.getNotificationSuggestions).mockResolvedValue([ { disease: DENGUE, matched_code: "A90" } ]);
+  const addedDengue = () => consultation({ evaluated_problems: [ { problem_id: null, terminology: "cid10", code: "A90", label: "Dengue", action: "add" } ] });
+
+  it.each([
+    [ "pendente", pending ],
+    [ "leitura que falha", () => mocked(api.getNotificationSuggestions).mockRejectedValue(new ApiError(500, {}, "x")) ],
+    [ "leitura sem rede", () => mocked(api.getNotificationSuggestions).mockRejectedValue(new TypeError("Failed to fetch")) ]
+  ])("sugestão %s: a finalização segue igual", async (_, arrange) => {
+    arrange();
+    mount();
+    fillMinimum();
+    fireEvent.click(screen.getByRole("button", { name: "Finalizar consulta" }));
+    const confirm = screen.getByRole("button", { name: "Confirmar finalização" }) as HTMLButtonElement;
+    expect(confirm.disabled).toBe(false);
+    expect(screen.queryByRole("list", { name: "o que falta para finalizar" })).toBeNull();
+    fireEvent.click(confirm);
+    await waitFor(() => expect(mocked(api.finalizeConsultation)).toHaveBeenCalledTimes(1));
+  });
+
+  it("finalizando com sugestão pendente: o aviso aparece DENTRO da caixa de finalizar, ao lado do botão", async () => {
+    pending();
+    mount();
+    fillMinimum();
+    await screen.findByText("CID de notificação obrigatória (A90): notificar suspeita de Dengue");
+    expect(screen.queryByText(SUGGESTION_PENDING_NOTE)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Finalizar consulta" }));
+    const box = screen.getByRole("region", { name: "Finalizar consulta" });
+    expect(await within(box).findByText(SUGGESTION_PENDING_NOTE)).not.toBeNull();
+    expect(screen.getAllByText(SUGGESTION_PENDING_NOTE)).toHaveLength(1);
+    // O botão da peça continua à mão e a caixa continua finalizando.
+    expect(screen.getByRole("button", { name: "Notificar suspeita de Dengue" })).not.toBeNull();
+    expect((within(box).getByRole("button", { name: "Confirmar finalização" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("finalizando com a leitura falha: sem o aviso de pendência", async () => {
+    mocked(api.getNotificationSuggestions).mockRejectedValue(new ApiError(500, {}, "x"));
+    mount();
+    fireEvent.click(screen.getByRole("button", { name: "Finalizar consulta" }));
+    await screen.findByRole("alert");
+    expect(screen.queryByText(SUGGESTION_PENDING_NOTE)).toBeNull();
+  });
+
+  it("a falha da leitura aparece só na peça, não na caixa de finalizar", async () => {
+    mocked(api.getNotificationSuggestions).mockRejectedValue(new ApiError(500, {}, "x"));
+    mount();
+    fireEvent.click(screen.getByRole("button", { name: "Finalizar consulta" }));
+    const alert = await screen.findByRole("alert");
+    expect(within(screen.getByRole("region", { name: "Finalizar consulta" })).queryByRole("alert")).toBeNull();
+    expect(within(screen.getByRole("region", { name: "Notificação de doença ou agravo" })).getByRole("alert")).toBe(alert);
+  });
+
+  it("sem a prop: nem a peça nem a leitura", () => {
+    pending();
+    mount({ notifications: false });
+    expect(screen.queryByRole("region", { name: "Notificação de doença ou agravo" })).toBeNull();
+    expect(mocked(api.getNotificationSuggestions)).not.toHaveBeenCalled();
+  });
+
+  it("a peça vem depois dos exames", async () => {
+    pending();
+    mount();
+    await screen.findByRole("region", { name: "Notificação de doença ou agravo" });
+    const exams = screen.getByText("Exames solicitados");
+    const piece = screen.getByRole("region", { name: "Notificação de doença ou agravo" });
+    const finalize = screen.getByRole("button", { name: "Finalizar consulta" });
+    expect(exams.compareDocumentPosition(piece) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(piece.compareDocumentPosition(finalize) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("escrever no rascunho não relê as sugestões; remover o CID só relê depois que o salvamento assenta", async () => {
+    pending();
+    let settle: (c: ReturnType<typeof consultation>) => void = () => {};
+    mocked(api.saveConsultationDraft).mockImplementation(() => new Promise((resolve) => { settle = resolve; }));
+    mount({ consultation: addedDengue() });
+    await screen.findByRole("button", { name: "Notificar suspeita de Dengue" });
+    expect(mocked(api.getNotificationSuggestions)).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "Remover A90" }));
+    await waitFor(() => expect(mocked(api.saveConsultationDraft)).toHaveBeenCalledTimes(1));
+    // Salvando: a chave que o api lê ainda é a do rascunho antigo.
+    expect(mocked(api.getNotificationSuggestions)).toHaveBeenCalledTimes(1);
+    mocked(api.getNotificationSuggestions).mockResolvedValue([]);
+    settle(consultation());
+    await waitFor(() => expect(mocked(api.getNotificationSuggestions)).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Notificar suspeita de Dengue" })).toBeNull());
+  });
+
+  it("texto que não mexe nos problemas não relê as sugestões", async () => {
+    pending();
+    mount({ consultation: addedDengue() });
+    await screen.findByRole("button", { name: "Notificar suspeita de Dengue" });
+    text("Plano (P)", "Hidratação e retorno.");
+    await waitFor(() => expect(mocked(api.saveConsultationDraft)).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByText(/^salvo às/)).not.toBeNull());
+    expect(mocked(api.getNotificationSuggestions)).toHaveBeenCalledTimes(1);
+  });
+});

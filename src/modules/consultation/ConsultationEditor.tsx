@@ -4,7 +4,7 @@
 // problemas, condutas e exames estruturados. O rascunho se salva sozinho e só
 // a autora o vê. "Finalizar" pede o desfecho com a mesma tela do "Encerrar",
 // espera o salvamento em curso e manda; a consulta finalizada não muda mais.
-import { useRef, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import {
   errorCode, finalizeConsultation, saveConsultationDraft,
   type ClinicalRecord, type Consultation, type ConsultationOptions, type HealthUnit
@@ -24,10 +24,13 @@ import { OutcomeFields } from "../attendance/OutcomeFields";
 import { ProblemsEditor } from "./ProblemsEditor";
 import { ConductsField } from "./ConductsField";
 import { ExamRequestsField } from "./ExamRequestsField";
+import { NotificationSuggestions } from "./NotificationSuggestions";
 
 export interface ConsultationEditorProps {
   // Módulo 21a: prioridade de cada exame (com exam_tracking ligado).
   examPriority?: boolean;
+  // Módulo 25 (ADR 0043): a peça de notificação de doença ou agravo (médico/enfermeiro, vigilância ligada).
+  notifications?: boolean;
   consultation: Consultation;
   record: ClinicalRecord;
   options: ConsultationOptions;
@@ -74,6 +77,15 @@ export function ConsultationEditor(props: ConsultationEditorProps) {
     describe: consultationError,
     onError: (err) => { lock(err); }
   });
+
+  // Módulo 25: o api lê o rascunho SALVO, então as sugestões só são relidas quando o autosave assenta.
+  const addedKey = check.input.evaluated_problems.filter((p) => p.action === "add").map((p) => `${p.terminology}:${p.code}`).sort().join(",");
+  const [ problemsKey, setProblemsKey ] = useState(addedKey);
+  useEffect(() => {
+    if (!autosave.pending && autosave.status.kind !== "saving") setProblemsKey(addedKey);
+  }, [ addedKey, autosave.pending, autosave.status.kind ]);
+  // Onde o aviso "notificação pendente" aparece ao finalizar: dentro da caixa de finalizar.
+  const [ noteHost, setNoteHost ] = useState<HTMLElement | null>(null);
 
   // Sair com texto ainda não salvo pede confirmação do navegador (AT-04).
   useLeaveGuard(autosave.pending && !locked && !sealing);
@@ -143,6 +155,12 @@ export function ConsultationEditor(props: ConsultationEditorProps) {
       <ConductsField options={options.conducts} value={draft.conducts} onChange={(conducts) => set({ conducts })} />
       <ExamRequestsField value={draft.exams} onChange={(exams) => set({ exams })} cid10Allowed={options.cid10_allowed_for_cbo}
         searchDelayMs={props.searchDelayMs} priorityOn={props.examPriority} />
+      {/* Módulo 25 (ADR 0043): a notificação nunca bloqueia a finalização — fora de `missing`, de
+          `finalizeProblems` e de `blockedFinal`; a falha dela só aparece nela. */}
+      {props.notifications && (
+        <NotificationSuggestions consultationId={consultation.id} problemsKey={problemsKey} today={today} finalizing={finalizing}
+          noteTarget={noteHost} />
+      )}
 
       {!finalizing ? (
         <div>
@@ -164,6 +182,8 @@ export function ConsultationEditor(props: ConsultationEditorProps) {
             </ul>
           )}
           {error && <p role="alert" style={alert}>{error}</p>}
+          {/* Destino do aviso de notificação pendente (portal da peça); sem caixa própria no layout. */}
+          {props.notifications && <div ref={setNoteHost} style={{ display: "contents" }} />}
           <div style={{ display: "flex", gap: 8 }}>
             <button type="button" disabled={blockedFinal} style={blockedFinal ? disabledButtonStyle : buttonStyle}
               onClick={() => void confirm()}>
