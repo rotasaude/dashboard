@@ -10,7 +10,7 @@ import { SensitiveAction } from "../../components/SensitiveAction";
 import { buttonStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { alert, box, checkLabel, form, legend, row } from "../exams/styles";
 import { TargetSearch } from "./TargetSearch";
-import { fieldsetStyle } from "./styles";
+import { fieldsetStyle, statusStyle } from "./styles";
 
 const TYPES: RegulationType[] = [ "specialty", "procedure" ];
 const TYPE_NAME: Record<RegulationType, string> = { specialty: "Especialidade", procedure: "Procedimento" };
@@ -41,7 +41,7 @@ export function NurseItemForm({ onSaved, onCancel, onGoToSecurity }: { onSaved(m
           </fieldset>
           {/* Sem `cbo`: a busca não é filtrada pela lista do enfermeiro. */}
           <TargetSearch key={type} type={type} onPick={(t) => { setError(null); setTarget(t); }} />
-          {target && <p style={{ margin: 0, fontSize: 12.5, fontWeight: 600 }}>{`Alvo: ${target.code} — ${target.name}`}</p>}
+          {target && <p style={statusStyle}>{`Alvo: ${target.code} — ${target.name}`}</p>}
           {error && <p role="alert" style={alert}>{error}</p>}
           {!confirming && (
             <div style={row}>

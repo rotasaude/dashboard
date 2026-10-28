@@ -14,10 +14,9 @@ import { buttonStyle, inputStyle, secondaryButtonStyle } from "../components/for
 import { alert, fieldLabel, muted, row, stack } from "./exams/styles";
 import { RegulationGate } from "./regulation/RegulationGate";
 import { NurseItemForm } from "./regulation/NurseItemForm";
-import { fieldBox, fieldsetStyle, hintStyle } from "./regulation/styles";
+import { fieldBox, fieldsetStyle, hintStyle, statusStyle } from "./regulation/styles";
 
 const DEADLINE_NOTE = "O prazo conta da data do pedido; mudar vale para os pedidos novos.";
-const statusStyle: CSSProperties = { margin: 0, fontSize: 12.5, fontWeight: 600 };
 const daysGrid: CSSProperties = { display: "flex", gap: 16, flexWrap: "wrap" };
 
 export function RegulationSettings({ onGoToSecurity }: { onGoToSecurity?: () => void } = {}) {

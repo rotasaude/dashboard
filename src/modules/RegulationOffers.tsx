@@ -16,6 +16,7 @@ import { alert, fieldLabel, muted, row, stack } from "./exams/styles";
 import { RegulationGate } from "./regulation/RegulationGate";
 import { ProviderForm } from "./regulation/ProviderForm";
 import { OfferForm } from "./regulation/OfferForm";
+import { statusStyle } from "./regulation/styles";
 
 export function RegulationOffers({ today, onGoToSecurity }: { today?: string; onGoToSecurity?(): void } = {}) {
   return (
@@ -28,7 +29,6 @@ export function RegulationOffers({ today, onGoToSecurity }: { today?: string; on
 const UNITS_KEY = "regulationUnits";
 const stackCell: CSSProperties = { display: "flex", flexDirection: "column", gap: 2 };
 const mutedText: CSSProperties = { fontSize: 11, color: "var(--ink3)" };
-const statusStyle: CSSProperties = { margin: 0, fontSize: 12.5, fontWeight: 600 };
 
 type ProviderEditor = CareProvider | "new" | null;
 type OfferEditor = CareOffer | "new" | null;

@@ -3,7 +3,7 @@
 // (busca pelo nome, sem filtro de enfermeiro) e de um mês: cadastra-se o corrente ou um futuro, nunca um passado (conferido
 // aqui com o dia da cidade e de novo no api, `invalid_month`). Só o mês corrente é autorizável. Em edição só muda a quantidade;
 // abaixo do já autorizado o api recusa (`quantity_below_used`) e a frase fica no formulário, com o que foi digitado.
-import { useState, type CSSProperties } from "react";
+import { useState } from "react";
 import { createCareOffer, updateCareOffer } from "../../lib/api";
 import type { CareOffer, CareProvider, RegulationTarget, RegulationType } from "../../lib/api";
 import {
@@ -13,7 +13,7 @@ import { SensitiveAction } from "../../components/SensitiveAction";
 import { buttonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { alert, box, fieldLabel, form, muted, row } from "../exams/styles";
 import { TargetSearch } from "./TargetSearch";
-import { fieldBox, fieldsetStyle, hintStyle } from "./styles";
+import { fieldBox, fieldsetStyle, hintStyle, statusStyle } from "./styles";
 
 const TYPES: RegulationType[] = [ "specialty", "procedure" ];
 const AUTHORIZABLE_NOTE = "Só a oferta do mês corrente pode receber autorizações; as dos meses seguintes ficam preparadas.";
@@ -77,7 +77,7 @@ export function OfferForm({ offer, providers, today, onSaved, onCancel, onGoToSe
               </label>
               {/* Sem `cbo`: a oferta não é filtrada pela lista do enfermeiro. */}
               <TargetSearch key={type} type={type} onPick={(t) => { setError(null); setTarget(t); }} />
-              {target && <p style={chosenStyle}>{`Alvo: ${target.code} — ${target.name}`}</p>}
+              {target && <p style={statusStyle}>{`Alvo: ${target.code} — ${target.name}`}</p>}
               <div style={fieldBox}>
                 <label style={fieldLabel}>
                   Mês
@@ -122,4 +122,3 @@ export function OfferForm({ offer, providers, today, onSaved, onCancel, onGoToSe
   );
 }
 
-const chosenStyle: CSSProperties = { margin: 0, fontSize: 12.5, fontWeight: 600 };
