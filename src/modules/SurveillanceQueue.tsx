@@ -3,6 +3,8 @@
 // A lista é nominal e grava leitura na trilha: nunca relê sozinha (NOMINAL_QUERY
 // — nem ao voltar à aba, nem ao reconectar, nem com o tempo). Só a contagem
 // relê a cada minuto, pelo hook compartilhado com o menu. A ordem é a do api.
+// "Notificação manual" abre o painel da notificação sem consulta; criada (ou a
+// já existente, no 409), abre o detalhe dela.
 import { useRef, useState, type CSSProperties } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -17,6 +19,7 @@ import { alert, fieldLabel, muted, row, stack } from "./exams/styles";
 import { SurveillanceGate } from "./surveillance/SurveillanceGate";
 import { NotificationTable } from "./surveillance/NotificationTable";
 import { NotificationDetail } from "./surveillance/NotificationDetail";
+import { ManualNotificationPanel } from "./surveillance/ManualNotificationPanel";
 
 export type QueueTab = "possible" | "notified" | "investigating" | "overdue" | "closed" | "entered" | "dismissed";
 
@@ -60,15 +63,15 @@ function uniqueById(rows: SurveillanceNotification[]): SurveillanceNotification[
 interface Extra { token: string; rows: SurveillanceNotification[]; next: string | null }
 interface MoreState { token: string; busy: boolean; error: string | null }
 
-export function SurveillanceQueue(_props: { today?: string } = {}) {
+export function SurveillanceQueue({ today }: { today?: string } = {}) {
   return (
     <SurveillanceGate title="Fila da vigilância" sub="notificações com prazo · vigilância epidemiológica" allow={(r) => r.surveillance}>
-      {() => <QueueBody />}
+      {() => <QueueBody today={today} />}
     </SurveillanceGate>
   );
 }
 
-function QueueBody() {
+function QueueBody({ today }: { today?: string }) {
   const { user } = useAuth();
   const [ tabKey, setTabKey ] = useState<QueueTab>("notified");
   const [ disease, setDisease ] = useState("");
@@ -76,6 +79,8 @@ function QueueBody() {
   const [ extra, setExtra ] = useState<Extra | null>(null);
   const [ moreState, setMoreState ] = useState<MoreState | null>(null);
   const [ openId, setOpenId ] = useState<string | null>(null);
+  const [ manual, setManual ] = useState(false);
+  const openNotification = (id: string) => { setManual(false); setOpenId(id); };
 
   const counts = useSurveillanceCount(true, user?.id ?? null);
   const diseases = useQuery({ queryKey: [ DISEASES_KEY ], queryFn: listSurveillanceDiseases, ...STATIC_QUERY });
@@ -120,6 +125,15 @@ function QueueBody() {
   return (
     <div style={stack}>
       {banner && <p role="status" style={bannerStyle}>{banner}</p>}
+      {!manual && (
+        <div style={row}>
+          <button type="button" style={buttonStyle} onClick={() => { setOpenId(null); setManual(true); }}>Notificação manual</button>
+        </div>
+      )}
+      {manual && (
+        <ManualNotificationPanel today={today} onCreated={(n) => openNotification(n.id)} onOpenExisting={openNotification}
+          onCancel={() => setManual(false)} />
+      )}
       <div role="tablist" aria-label="Situação das notificações" style={tabList}>
         {QUEUE_TABS.map((t) => {
           const active = t.key === tabKey;

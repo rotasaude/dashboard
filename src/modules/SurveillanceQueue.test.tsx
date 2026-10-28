@@ -5,7 +5,7 @@ import { focusManager, onlineManager } from "@tanstack/react-query";
 vi.mock("../lib/api", async (importOriginal) => {
   const real = await importOriginal<typeof import("../lib/api")>();
   return { ...real, fetchCurrentSession: vi.fn(), listNotifications: vi.fn(), countNotifications: vi.fn(), listSurveillanceDiseases: vi.fn(),
-    listSurveillanceUnits: vi.fn(), getNotification: vi.fn() };
+    listSurveillanceUnits: vi.fn(), getNotification: vi.fn(), lookupSurveillancePerson: vi.fn(), createManualNotification: vi.fn() };
 });
 import * as api from "../lib/api";
 import type { NotificationQuery } from "../lib/api";
@@ -22,7 +22,7 @@ const bodyRows = () => screen.getAllByRole("row").filter((r) => within(r).queryA
 describe("SurveillanceQueue", () => {
   beforeEach(() => {
     for (const fn of [ api.fetchCurrentSession, api.listNotifications, api.countNotifications, api.getNotification,
-      api.listSurveillanceDiseases, api.listSurveillanceUnits ]) mocked(fn).mockReset();
+      api.listSurveillanceDiseases, api.listSurveillanceUnits, api.lookupSurveillancePerson, api.createManualNotification ]) mocked(fn).mockReset();
     mocked(api.fetchCurrentSession).mockResolvedValue(survUser());
     mocked(api.countNotifications).mockResolvedValue(counts());
     mocked(api.listSurveillanceDiseases).mockResolvedValue([ DENGUE, MEASLES ]);
@@ -242,5 +242,27 @@ describe("SurveillanceQueue", () => {
     expect(mocked(api.listNotifications)).not.toHaveBeenCalled();
     expect(mocked(api.countNotifications)).not.toHaveBeenCalled();
     expect(mocked(api.listSurveillanceDiseases)).not.toHaveBeenCalled();
+  });
+
+  it("Notificação manual abre o painel; Cancelar fecha; criada, abre o detalhe da nova", async () => {
+    mocked(api.lookupSurveillancePerson).mockResolvedValue({ patient_id: "pa1", citizen_id: null, display_name: "Joana Lima", registration_id: null });
+    mocked(api.createManualNotification).mockResolvedValue(notification({ id: "nt9", origin: "manual" }));
+    mocked(api.getNotification).mockResolvedValue(notification({ id: "nt9", origin: "manual" }));
+    renderWithProviders(<SurveillanceQueue today={TODAY25} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Notificação manual" }));
+    expect(screen.getByRole("region", { name: "Notificação manual" })).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+    expect(screen.queryByRole("region", { name: "Notificação manual" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Notificação manual" }));
+    fireEvent.change(screen.getByLabelText("CPF"), { target: { value: "52998224725" } });
+    fireEvent.click(screen.getByRole("button", { name: "Buscar pelo CPF" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Notificar Joana Lima" }));
+    await screen.findByRole("option", { name: "UBS Centro · CNES 2384299" });
+    fireEvent.change(screen.getByLabelText("Doença ou agravo"), { target: { value: "sarampo" } });
+    fireEvent.change(screen.getByLabelText("Unidade notificadora"), { target: { value: "u1" } });
+    fireEvent.click(screen.getByRole("button", { name: "Registrar notificação" }));
+    await waitFor(() => expect(mocked(api.getNotification)).toHaveBeenCalledWith("nt9"));
+    expect(screen.queryByRole("region", { name: "Notificação manual" })).toBeNull();
+    expect(await screen.findByRole("region", { name: "Detalhe da notificação" })).not.toBeNull();
   });
 });

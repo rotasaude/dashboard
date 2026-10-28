@@ -13,6 +13,8 @@
 // Volta da ficha (I1, L28): "Corrigir (refaz a busca)" reabre a busca sem CPF
 // com o que foi buscado; o 409 duplicate_suspected reabre com a frase e a
 // busca já feita (o clique foi o Salvar), levando o CPF da pessoa nova, se havia.
+// Fonte trocável (módulo 25): `source` diz por onde buscar, que frase dar a
+// uma recusa e o rótulo de "escolher esta pessoa"; o padrão é o do 24a.
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { errorCode, findDuplicates, lookupTerritoryPerson, type DuplicateCandidate, type DuplicateQuery, type PatientIdentity, type TerritoryPerson } from "../../lib/api";
@@ -48,8 +50,23 @@ export function candidateLine(c: DuplicateCandidate): string {
   return `${c.display_name} · nascido em ${fmtDay(c.birth_date)} · ${c.has_cpf ? "com CPF" : "sem CPF"}`;
 }
 
-export function PersonStart({ today = todayInCity(), onChoose, onCancel, initial }: {
-  today?: string; onChoose(choice: PersonChoice): void; onCancel(): void; initial?: PersonRestart;
+// Por onde a pessoa é buscada e como a tela fala dela (o 24a e a vigilância têm rotas e frases próprias).
+export interface PersonSource {
+  lookup(cpf: string): Promise<TerritoryPerson>;
+  duplicates(q: DuplicateQuery): Promise<DuplicateCandidate[]>;
+  describe(err: unknown): string;
+  // O botão que escolhe o paciente sem cadastro ou o par validado achado pelo CPF.
+  pickLabel(name: string): string;
+}
+export const TERRITORY_PERSON_SOURCE: PersonSource = {
+  lookup: (cpf) => lookupTerritoryPerson(cpf),
+  duplicates: (q) => findDuplicates(q),
+  describe: territoryError,
+  pickLabel: (name) => `Cadastrar ${name}`
+};
+
+export function PersonStart({ today = todayInCity(), onChoose, onCancel, initial, source = TERRITORY_PERSON_SOURCE }: {
+  today?: string; onChoose(choice: PersonChoice): void; onCancel(): void; initial?: PersonRestart; source?: PersonSource;
 }) {
   const [ hasCpf, setHasCpf ] = useState(!initial);
   // A volta vale só até trocar o "Tem CPF?" (trocar recomeça em branco, sem buscar sozinho de novo).
@@ -64,7 +81,7 @@ export function PersonStart({ today = todayInCity(), onChoose, onCancel, initial
           <label style={checkLabel}><input type="radio" name="person-has-cpf" checked={!hasCpf} onChange={() => choose(false)} />Não tem CPF</label>
         </div>
       </fieldset>
-      {hasCpf ? <ByCpf onChoose={onChoose} /> : <WithoutCpf today={today} onChoose={onChoose} initial={restart} />}
+      {hasCpf ? <ByCpf onChoose={onChoose} source={source} /> : <WithoutCpf today={today} onChoose={onChoose} initial={restart} source={source} />}
       <div style={row}>
         <button type="button" style={secondaryButtonStyle} onClick={onCancel}>Cancelar</button>
       </div>
@@ -72,17 +89,17 @@ export function PersonStart({ today = todayInCity(), onChoose, onCancel, initial
   );
 }
 
-function ByCpf({ onChoose }: { onChoose(choice: PersonChoice): void }) {
+function ByCpf({ onChoose, source = TERRITORY_PERSON_SOURCE }: { onChoose(choice: PersonChoice): void; source?: PersonSource }) {
   const [ cpf, setCpf ] = useState("");
   const [ problem, setProblem ] = useState<string | null>(null);
   // A resposta vale para o CPF buscado; trocar o número a apaga.
   const [ found, setFound ] = useState<{ cpf: string; person: TerritoryPerson | null } | null>(null);
   const lookup = useMutation({
-    mutationFn: (digits: string) => lookupTerritoryPerson(digits),
+    mutationFn: (digits: string) => source.lookup(digits),
     onSuccess: (person, digits) => setFound({ cpf: digits, person }),
     onError: (err, digits) => {
-      if (errorCode(err) === "person_not_found") { setFound({ cpf: digits, person: null }); setProblem(territoryError(err)); return; }
-      setProblem(territoryError(err));
+      if (errorCode(err) === "person_not_found") { setFound({ cpf: digits, person: null }); setProblem(source.describe(err)); return; }
+      setProblem(source.describe(err));
     }
   });
 
@@ -126,12 +143,12 @@ function ByCpf({ onChoose }: { onChoose(choice: PersonChoice): void }) {
           ) : p.patient_id ? (
             <button type="button" style={buttonStyle}
               onClick={() => onChoose({ kind: "patient", patientId: p.patient_id as string, registrationId: null, displayName: p.display_name, hasCpf: true })}>
-              {`Cadastrar ${name}`}
+              {source.pickLabel(name)}
             </button>
           ) : p.citizen_id && (
             <button type="button" style={buttonStyle}
               onClick={() => onChoose({ kind: "citizen", citizenId: p.citizen_id as string, displayName: p.display_name })}>
-              {`Cadastrar ${name}`}
+              {source.pickLabel(name)}
             </button>
           )}
         </div>
@@ -140,7 +157,9 @@ function ByCpf({ onChoose }: { onChoose(choice: PersonChoice): void }) {
   );
 }
 
-function WithoutCpf({ today, onChoose, initial }: { today: string; onChoose(choice: PersonChoice): void; initial?: PersonRestart }) {
+function WithoutCpf({ today, onChoose, initial, source = TERRITORY_PERSON_SOURCE }: {
+  today: string; onChoose(choice: PersonChoice): void; initial?: PersonRestart; source?: PersonSource;
+}) {
   const [ fullName, setFullName ] = useState(initial?.query.full_name ?? "");
   const [ birth, setBirth ] = useState(initial?.query.birth_date ?? "");
   const [ mother, setMother ] = useState(initial?.query.mother_name ?? "");
@@ -155,9 +174,9 @@ function WithoutCpf({ today, onChoose, initial }: { today: string; onChoose(choi
     return q;
   };
   const search = useMutation({
-    mutationFn: (q: DuplicateQuery) => findDuplicates(q),
+    mutationFn: (q: DuplicateQuery) => source.duplicates(q),
     onSuccess: (candidates, query) => setResult({ query, candidates }),
-    onError: (err) => setProblem(territoryError(err))
+    onError: (err) => setProblem(source.describe(err))
   });
 
   // 409 duplicate_suspected: a busca do que foi salvo roda uma vez ao abrir (a ação foi o Salvar).

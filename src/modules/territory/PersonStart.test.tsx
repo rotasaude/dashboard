@@ -257,3 +257,37 @@ describe("PersonStart", () => {
     expect(window.location.search + window.location.hash).toBe("");
   });
 });
+
+describe("PersonStart — outra fonte (módulo 25)", () => {
+  it("com source, busca pelas funções dela e não pelas do território", async () => {
+    const source = { lookup: vi.fn().mockResolvedValue({ patient_id: "pa1", citizen_id: null, display_name: "Joana Lima", registration_id: null }),
+      duplicates: vi.fn().mockResolvedValue([]), describe: () => "frase da fonte", pickLabel: (name: string) => `Notificar ${name}` };
+    renderWithProviders(<PersonStart onChoose={vi.fn()} onCancel={vi.fn()} source={source} />);
+    fireEvent.change(screen.getByLabelText("CPF"), { target: { value: "52998224725" } });
+    fireEvent.click(screen.getByRole("button", { name: "Buscar pelo CPF" }));
+    await waitFor(() => expect(source.lookup).toHaveBeenCalledWith("52998224725"));
+    expect(await screen.findByRole("button", { name: "Notificar Joana Lima" })).not.toBeNull();
+    expect(mocked(api.lookupTerritoryPerson)).not.toHaveBeenCalled();
+  });
+
+  it("as frases de recusa das duas buscas são as da fonte", async () => {
+    const source = { lookup: vi.fn().mockRejectedValue(new Error("x")), duplicates: vi.fn().mockRejectedValue(new Error("y")),
+      describe: (err: unknown) => `frase da fonte: ${(err as Error).message}`, pickLabel: (name: string) => `Notificar ${name}` };
+    renderWithProviders(<PersonStart today={TODAY24} onChoose={vi.fn()} onCancel={vi.fn()} source={source} />);
+    typeIn("CPF", "52998224725");
+    fireEvent.click(screen.getByRole("button", { name: "Buscar pelo CPF" }));
+    expect((await screen.findByRole("alert")).textContent).toBe("frase da fonte: x");
+    fillNoCpf();
+    fireEvent.click(screen.getByRole("button", { name: "Buscar possíveis duplicados" }));
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toBe("frase da fonte: y"));
+    expect(mocked(api.findDuplicates)).not.toHaveBeenCalled();
+  });
+
+  it("sem source, o rótulo do 24a segue o mesmo (paciente sem cadastro e par validado)", async () => {
+    mocked(api.lookupTerritoryPerson).mockResolvedValue({ patient_id: null, citizen_id: "ci1", display_name: "Ana Reis", registration_id: null });
+    renderWithProviders(<PersonStart today={TODAY24} onChoose={vi.fn()} onCancel={vi.fn()} />);
+    typeIn("CPF", "52998224725");
+    fireEvent.click(screen.getByRole("button", { name: "Buscar pelo CPF" }));
+    expect(await screen.findByRole("button", { name: "Cadastrar Ana Reis" })).not.toBeNull();
+  });
+});

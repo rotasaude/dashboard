@@ -589,8 +589,9 @@ const SOCIAL_NAME_MAX = 70;
 const text = (value: unknown): string | null => (typeof value === "string" ? squish(value) || null : null);
 const validCns = (value: string) => /^\d{15}$/.test(value) && isValidCns(value);
 
-// Patients::CreateTyped (o paciente digitado), com o caminho new_patient.*.
-function newPatientProblem(raw: NewPatient, today: string): Problem | null {
+// Patients::CreateTyped (o paciente digitado), com o caminho new_patient.*
+// (também o new_patient da notificação manual, módulo 25).
+export function newPatientProblem(raw: NewPatient, today: string): Problem | null {
   const at = (key: string, message: string) => problem(`new_patient.${key}`, message);
   const v = Object.fromEntries((Object.keys(raw) as (keyof NewPatient)[]).map((key) => [ key, text(raw[key]) ])) as Record<keyof NewPatient, string | null>;
   if (!isValidLediName(v.full_name)) return at("full_name", NAME_MESSAGE);
