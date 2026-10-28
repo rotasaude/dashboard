@@ -4,14 +4,14 @@ import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 vi.mock("../../lib/api", async (importOriginal) => {
   const real = await importOriginal<typeof import("../../lib/api")>();
   return { ...real, fetchCurrentSession: vi.fn(), getNotification: vi.fn(), transitionNotification: vi.fn(), dismissNotification: vi.fn(),
-    fetchNotificationPdf: vi.fn() };
+    fetchNotificationPdf: vi.fn(), updateNotificationForm: vi.fn() };
 });
 vi.mock("../lab/saveFile", () => ({ saveFile: vi.fn() }));
 import * as api from "../../lib/api";
 import { ApiError } from "../../lib/api";
 import { saveFile } from "../lab/saveFile";
 import { NotificationDetail } from "./NotificationDetail";
-import { NOTIFICATIONS_KEY, SURVEILLANCE_COUNT_KEY, STALE_TEXT } from "../../lib/surveillance";
+import { NOTIFICATIONS_KEY, NOTIFICATION_KEY, SURVEILLANCE_COUNT_KEY, STALE_TEXT } from "../../lib/surveillance";
 import { renderWithProviders } from "../../test/campaignFixtures";
 import { notification, survUser } from "../../test/surveillanceFixtures";
 
@@ -22,7 +22,7 @@ const open = (props: Partial<Parameters<typeof NotificationDetail>[0]> = {}) =>
 
 describe("NotificationDetail", () => {
   beforeEach(() => {
-    for (const fn of [ api.getNotification, api.transitionNotification, api.dismissNotification, api.fetchNotificationPdf, saveFile ]) mocked(fn).mockReset();
+    for (const fn of [ api.getNotification, api.transitionNotification, api.dismissNotification, api.fetchNotificationPdf, api.updateNotificationForm, saveFile ]) mocked(fn).mockReset();
     mocked(api.fetchCurrentSession).mockResolvedValue(survUser());
     mocked(api.getNotification).mockResolvedValue(notification({ status: "investigating", version: 4 }));
   });
@@ -275,5 +275,27 @@ describe("NotificationDetail", () => {
     cleanup();
     open({ formSlot: (n) => <p>ficha de {n.id}</p> });
     expect(await screen.findByText("ficha de nt1")).not.toBeNull();
+  });
+
+  it("a ficha complementar vem por padrão: salvar grava no detalhe, avisa quem abriu e invalida a fila", async () => {
+    mocked(api.getNotification).mockResolvedValue(notification({ status: "notified", version: 2, form: { race_color: "4" } }));
+    mocked(api.updateNotificationForm).mockResolvedValue(notification({ status: "notified", version: 3, form: { race_color: "4", phone: "4133334444" } }));
+    const onChanged = vi.fn();
+    const { client } = open({ onChanged });
+    const invalidate = vi.spyOn(client, "invalidateQueries");
+    fireEvent.change(await screen.findByLabelText("(DDD) Telefone"), { target: { value: "(41) 3333-4444" } });
+    fireEvent.click(screen.getByRole("button", { name: "Salvar ficha" }));
+    await waitFor(() => expect(mocked(api.updateNotificationForm).mock.calls[0][2]).toBe(2));
+    expect((await screen.findByText("Ficha salva.")).textContent).toBe("Ficha salva.");
+    expect(onChanged.mock.calls[0][0].version).toBe(3);
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: [ NOTIFICATIONS_KEY ] });
+    expect((client.getQueryData([ NOTIFICATION_KEY, "nt1" ]) as { version: number }).version).toBe(3);
+  });
+
+  it("encerrada no sistema oficial: a ficha aparece só em leitura", async () => {
+    mocked(api.getNotification).mockResolvedValue(notification({ status: "entered", form: { race_color: "4" } }));
+    open();
+    expect(await screen.findByText("Parda")).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Salvar ficha" })).toBeNull();
   });
 });

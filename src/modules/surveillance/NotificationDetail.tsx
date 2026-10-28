@@ -18,21 +18,23 @@ import { Tag } from "../../components/Tag";
 import { secondaryButtonStyle } from "../../components/formStyles";
 import { alert, grid, list, muted, panel, row, title } from "../exams/styles";
 import { saveFile } from "../lab/saveFile";
+import { NotificationFormSection } from "./NotificationFormSection";
 import { TransitionForm } from "./TransitionForm";
 
 interface Props {
   id: string;
   onClose(): void;
   onChanged?(n: SurveillanceNotification): void;
-  // A ficha (Task 8) entra aqui: recebe a notificação lida e devolve a salva.
+  // A ficha complementar é o padrão; quem quiser trocar recebe a notificação lida e devolve a salva.
   formSlot?: (n: SurveillanceNotification, onSaved: (n: SurveillanceNotification) => void) => ReactNode;
 }
 
 const residenceText = (n: SurveillanceNotification): string =>
   n.resident_elsewhere ? `residente em outro município${n.residence_ibge ? ` (IBGE ${n.residence_ibge})` : ""}` : "no município";
+const defaultFormSlot: NonNullable<Props["formSlot"]> = (n, onSaved) => <NotificationFormSection notification={n} onSaved={onSaved} />;
 const unitText = (n: SurveillanceNotification): string => (n.unit.cnes ? `${n.unit.name} · CNES ${n.unit.cnes}` : n.unit.name);
 
-export function NotificationDetail({ id, onClose, onChanged, formSlot }: Props) {
+export function NotificationDetail({ id, onClose, onChanged, formSlot = defaultFormSlot }: Props) {
   const client = useQueryClient();
   const detail = useQuery({ queryKey: [ NOTIFICATION_KEY, id ], queryFn: () => getNotification(id), ...NOMINAL_QUERY });
   const [ pdfBusy, setPdfBusy ] = useState(false);
@@ -102,7 +104,7 @@ export function NotificationDetail({ id, onClose, onChanged, formSlot }: Props) 
               ))}
             </ul>
           </div>
-          {formSlot?.(n, formSaved)}
+          {formSlot(n, formSaved)}
           <TransitionForm notification={n} onDone={(saved) => onChanged?.(saved)} onReload={() => void detail.refetch()} />
         </>
       )}
