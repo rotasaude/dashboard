@@ -11,7 +11,7 @@ import * as api from "../../lib/api";
 import { ApiError } from "../../lib/api";
 import { saveFile } from "../lab/saveFile";
 import { NotificationDetail } from "./NotificationDetail";
-import { STALE_TEXT } from "../../lib/surveillance";
+import { NOTIFICATIONS_KEY, SURVEILLANCE_COUNT_KEY, STALE_TEXT } from "../../lib/surveillance";
 import { renderWithProviders } from "../../test/campaignFixtures";
 import { notification, survUser } from "../../test/surveillanceFixtures";
 
@@ -111,6 +111,65 @@ describe("NotificationDetail", () => {
     // Digitada: não há mais passo, e o número aparece.
     expect(await screen.findByText("1234567")).not.toBeNull();
     expect(screen.queryByRole("button", { name: "Registrar número oficial" })).toBeNull();
+  });
+
+  it("motivo opcional de 1 ou 2 caracteres é aceito na transição (o api não pede mínimo)", async () => {
+    mocked(api.getNotification).mockResolvedValue(notification({ status: "notified", version: 4 }));
+    mocked(api.transitionNotification).mockResolvedValue(notification({ status: "investigating", version: 5 }));
+    open();
+    fireEvent.click(await screen.findByRole("button", { name: "Iniciar investigação" }));
+    fireEvent.change(screen.getByLabelText("Motivo (opcional)"), { target: { value: "ok" } });
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+    await waitFor(() => expect(mocked(api.transitionNotification).mock.calls[0]).toEqual([ "nt1", { to: "investigating", reason: "ok", version: 4 } ]));
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("número oficial com espaço, inclusive nas pontas, é recusado e nada é enviado", async () => {
+    mocked(api.getNotification).mockResolvedValue(notification({ status: "closed", classification: "confirmed", version: 6 }));
+    open();
+    fireEvent.click(await screen.findByRole("button", { name: "Registrar número oficial" }));
+    fireEvent.change(screen.getByLabelText("Número da notificação no sistema oficial"), { target: { value: " 1234 " } });
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+    expect((await screen.findByRole("alert")).textContent).toBe("número oficial de 1 a 30 caracteres: letras, números, ponto, barra ou hífen");
+    expect(mocked(api.transitionNotification)).not.toHaveBeenCalled();
+  });
+
+  it("depois de um andamento a fila e a contagem são invalidadas (transição)", async () => {
+    mocked(api.getNotification).mockResolvedValue(notification({ status: "notified", version: 4 }));
+    mocked(api.transitionNotification).mockResolvedValue(notification({ status: "investigating", version: 5 }));
+    const { client } = open();
+    const spy = vi.spyOn(client, "invalidateQueries");
+    fireEvent.click(await screen.findByRole("button", { name: "Iniciar investigação" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+    await screen.findByRole("status");
+    const keys = spy.mock.calls.map((c) => (c[0] as { queryKey: unknown[] }).queryKey);
+    expect(keys).toContainEqual([ NOTIFICATIONS_KEY ]);
+    expect(keys).toContainEqual([ SURVEILLANCE_COUNT_KEY ]);
+  });
+
+  it("depois do descarte a fila e a contagem são invalidadas", async () => {
+    mocked(api.getNotification).mockResolvedValue(notification({ status: "possible", version: 1 }));
+    mocked(api.dismissNotification).mockResolvedValue(notification({ status: "dismissed", version: 2 }));
+    const { client } = open();
+    const spy = vi.spyOn(client, "invalidateQueries");
+    fireEvent.click(await screen.findByRole("button", { name: "Descartar possível" }));
+    fireEvent.change(screen.getByLabelText("Motivo do descarte"), { target: { value: "não era caso" } });
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar descarte" }));
+    await screen.findByRole("status");
+    const keys = spy.mock.calls.map((c) => (c[0] as { queryKey: unknown[] }).queryKey);
+    expect(keys).toContainEqual([ NOTIFICATIONS_KEY ]);
+    expect(keys).toContainEqual([ SURVEILLANCE_COUNT_KEY ]);
+  });
+
+  it("falha no andamento não invalida a fila nem a contagem", async () => {
+    mocked(api.transitionNotification).mockRejectedValue(new ApiError(422, { error: "invalid_transition" }, "x"));
+    const { client } = open();
+    const spy = vi.spyOn(client, "invalidateQueries");
+    fireEvent.click(await screen.findByRole("button", { name: "Encerrar" }));
+    fireEvent.change(screen.getByLabelText("Classificação final"), { target: { value: "confirmed" } });
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+    await screen.findByRole("alert");
+    expect(spy).not.toHaveBeenCalled();
   });
 
   it("409 stale_version na transição: frase, o formulário fica, recarregar relê", async () => {

@@ -20,6 +20,8 @@ import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } fr
 import { alert, box, fieldLabel, okText, row } from "../exams/styles";
 
 export const CLASSIFICATION_PROBLEM = "escolha a classificação final para encerrar";
+const REASON_MAX = 500;
+const REASON_TOO_LONG = "motivo com mais de 500 caracteres";
 const DONE_TEXT = "Andamento registrado.";
 
 type Mode = NotificationStatus | "dismiss";
@@ -57,17 +59,19 @@ export function TransitionForm({ notification, onDone, onReload }: Props) {
   function problem(): string | null {
     if (chosen === "dismiss") return reasonProblem(dismissReason, true);
     if (chosen === "closed" && !CLASSIFICATIONS.some((c) => c.key === classification)) return CLASSIFICATION_PROBLEM;
+    // Recusar, nunca cortar: espaço nas pontas ou no meio é recusado e nada é enviado.
     if (chosen === "entered") {
-      const p = officialNumberProblem(officialNumber.trim());
+      const p = officialNumberProblem(officialNumber);
       if (p) return p;
     }
-    return reasonProblem(reason, false);
+    // O motivo opcional só tem o teto de 500 (o api não pede mínimo); o do descarte segue 3 a 500.
+    return [ ...reason.trim() ].length > REASON_MAX ? REASON_TOO_LONG : null;
   }
 
   function body(to: NotificationStatus): TransitionInput {
     const input: TransitionInput = { to, version: notification.version };
     if (to === "closed") input.classification = classification as NotificationClassification;
-    if (to === "entered") input.official_number = officialNumber.trim();
+    if (to === "entered") input.official_number = officialNumber;
     if (reason.trim()) input.reason = reason.trim();
     return input;
   }
