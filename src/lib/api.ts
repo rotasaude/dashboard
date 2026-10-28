@@ -1637,7 +1637,12 @@ export interface Addendum {
   id: string; author_name: string; created_at: string; reason: string; text: string; changes: AddendumChanges | null;
   // Módulo 19b (contrato 2026-10-08 §2): calculado pelo api; ausente em api sem o 19b.
   signature?: SignatureBlock;
+  // Módulo 26a (contrato §13 G4): pedidos de regulação que não seguiram junto com o adendo.
+  regulation_not_sent?: RegulationNotSent[];
 }
+
+// Módulo 26a (contrato §13 G4): um pedido de regulação do rascunho que não foi enviado ao finalizar.
+export interface RegulationNotSent { index: number; id: string; error: string; path?: string }
 
 export interface Consultation {
   id: string; attendance_id: string; patient_id: string; status: "draft" | "finalized";
@@ -1648,6 +1653,8 @@ export interface Consultation {
   started_at: string; finalized_at: string | null; addenda: Addendum[];
   // Módulo 19b (contrato 2026-10-08 §2): só na finalizada; o rascunho não tem.
   signature?: SignatureBlock;
+  // Módulo 26a (contrato §13 G4): pedidos de regulação que não seguiram junto com a finalização.
+  regulation_not_sent?: RegulationNotSent[];
 }
 export interface ConsultationSummary {
   id: string; finalized_at: string; author_name: string; cbo_label: string; care_type_label: string;
@@ -4463,4 +4470,217 @@ export function createLocalDisease(input: LocalDiseaseInput): Promise<LocalDisea
 // PATCH parcial: só as chaves presentes mudam (desativar manda só `active`).
 export function updateLocalDisease(id: string, input: Partial<LocalDiseaseInput>): Promise<LocalDisease> {
   return jsonFetch<LocalDisease>(survPath("admin", "local_diseases", id), survWrite("PATCH", input));
+}
+
+// ─── Regulação municipal (módulo 26a, ADR 0044; contrato 2026-10-28 §2–§8, §13) ───
+// Na URL só ids, tipo e código do alvo, cor, situação, mês, cursor e limite — nunca
+// CPF, CNS, nome, CID-10, CIAP-2, justificativa, motivo, local ou número externo:
+// tudo isso, e a versão esperada, vai no corpo. Listas vêm em envelope (ausente =
+// vazio); escritas e detalhe devolvem o objeto PURO. Filtro vazio ou nulo nunca vai na URL.
+
+const REGULATION_BASE = import.meta.env.VITE_REGULATION_BASE || "/regulation";
+const regPath = (...parts: string[]) => [ REGULATION_BASE, ...parts.map(encodeURIComponent) ].join("/");
+// Sempre com corpo (`{}` no DELETE do rascunho): o jsonFetch só põe o Content-Type quando há corpo.
+const regWrite = (method: "POST" | "PATCH" | "DELETE", body: unknown): RequestInit => ({ method, body: JSON.stringify(body) });
+
+export const REGULATION_PAGE_SIZE = 50;
+
+export type RegulationType = "specialty" | "procedure";
+export type RiskColor = "red" | "yellow" | "green" | "blue";
+export type RegulationStatus =
+  | "draft" | "pending" | "returned" | "denied" | "authorized" | "scheduled" | "completed" | "missed" | "cancelled" | "closed" | "external";
+export type ProviderKind = "own" | "contracted" | "state";
+export type ExternalSystem = "sisreg" | "cmce" | "other";
+
+export interface RegulationTarget { type: RegulationType; code: string; name: string; group?: string | null; nurse_allowed?: boolean }
+export interface RegulationEvent { status: RegulationStatus | string; at: string; by: { name: string } | null; reason: string | null }
+export interface RegulationPatient { id: string; display_name: string | null; has_cpf: boolean; cns_masked: string | null }
+export interface RegulationRequest {
+  id: string; patient: RegulationPatient; type: RegulationType | string; target: { code: string; name: string };
+  cid10: string | null; ciap2: string | null; justification: string; suggested_color: RiskColor | string; color: RiskColor | string;
+  color_reason: string | null; status: RegulationStatus | string;
+  // Nulos no rascunho.
+  requested_at: string | null; due_on: string | null; overdue: boolean;
+  requester: { name: string; cbo: string; unit: { id: string; name: string } }; consultation_id: string;
+  authorization: {
+    offer_id: string; provider: { id: string; name: string; kind: ProviderKind | string }; month: string;
+    skip_reason: string | null; at: string; by: { name: string };
+  } | null;
+  appointment_request_id: string | null; schedule: { at: string; place: string; notes: string | null } | null;
+  outcome: "completed" | "missed" | string | null; misses: number; external: { system: ExternalSystem | string; number: string } | null;
+  state_regulated: boolean; version: number; events?: RegulationEvent[];
+}
+export interface RegulationRequestInput {
+  type: RegulationType; target_code: string; cid10?: string | null; ciap2?: string | null; justification: string;
+  suggested_color: RiskColor; state_regulated?: boolean;
+}
+export interface RegulationQuery {
+  status?: string | null; overdue?: boolean; type?: RegulationType | null; targetCode?: string | null; color?: RiskColor | null; before?: string | null;
+}
+export interface RegulationPage { requests: RegulationRequest[]; next_before: string | null }
+export interface RegulationCounts { pending: number; overdue: number; returned: number; authorized: number; external: number }
+export interface AuthorizeInput { offer_id: string; color?: RiskColor; color_reason?: string; skip_reason?: string; version: number }
+export interface ComplementInput { justification: string; cid10?: string | null; ciap2?: string | null; suggested_color?: RiskColor; version: number }
+// Nome próprio: `ScheduleInput` já é o agendamento de exame (21a).
+export interface RegulationScheduleInput { at: string; place: string; notes?: string | null; version: number }
+export interface CareProvider {
+  id: string; name: string; cnes: string; kind: ProviderKind | string; health_unit: { id: string; name: string } | null; active: boolean;
+}
+export interface CareProviderInput { name: string; cnes?: string; kind: ProviderKind; health_unit_id?: string | null; active: boolean }
+export interface CareOffer {
+  id: string; provider: { id: string; name: string; kind: ProviderKind | string };
+  target: RegulationTarget; month: string; quantity: number; used: number; available: number;
+}
+export interface CareOfferInput { provider_id: string; target_type: RegulationType; target_code: string; month: string; quantity: number }
+export interface RiskDeadlines { red: number; yellow: number; green: number; blue: number }
+export interface NurseItem { target_type: RegulationType; target_code: string; name: string }
+
+// Busca de alvo (R2): especialidade ou procedimento regulável; o termo vai na URL, que não guarda dado de pessoa.
+export async function searchRegulationTargets(q: string, type: RegulationType): Promise<RegulationTarget[]> {
+  const p = new URLSearchParams({ type, q, limit: "20" });
+  return (await jsonFetch<{ targets?: RegulationTarget[] }>(withQuery(regPath("targets"), p))).targets ?? [];
+}
+
+// ── Pedidos da consulta (rascunho editável só até finalizar) ──
+export async function listConsultationRegulationRequests(consultationId: string): Promise<RegulationRequest[]> {
+  return (await jsonFetch<{ requests?: RegulationRequest[] }>(consultationPath(consultationId, "regulation_requests"))).requests ?? [];
+}
+
+export function createRegulationRequest(consultationId: string, input: RegulationRequestInput): Promise<RegulationRequest> {
+  return jsonFetch<RegulationRequest>(consultationPath(consultationId, "regulation_requests"), regWrite("POST", input));
+}
+
+export function updateRegulationRequest(consultationId: string, id: string, input: RegulationRequestInput): Promise<RegulationRequest> {
+  return jsonFetch<RegulationRequest>(
+    consultationPath(consultationId, `regulation_requests/${encodeURIComponent(id)}`), regWrite("PATCH", input));
+}
+
+export async function deleteRegulationRequest(consultationId: string, id: string): Promise<void> {
+  await jsonFetch<void>(consultationPath(consultationId, `regulation_requests/${encodeURIComponent(id)}`), regWrite("DELETE", {}));
+}
+
+export function fetchRegulationGuide(id: string): Promise<SignatureFile> {
+  return binaryFetch(regPath("requests", id, "guide.pdf"), "application/pdf");
+}
+
+// ── Fila e decisões do regulador ──
+function regulationParams(q: RegulationQuery): URLSearchParams {
+  const p = new URLSearchParams();
+  if (q.status) p.set("status", q.status);
+  if (typeof q.overdue === "boolean") p.set("overdue", q.overdue ? "true" : "false");
+  if (q.type) p.set("type", q.type);
+  if (q.targetCode) p.set("target_code", q.targetCode);
+  if (q.color) p.set("color", q.color);
+  if (q.before) p.set("before", q.before);
+  p.set("limit", String(REGULATION_PAGE_SIZE));
+  return p;
+}
+
+export async function listRegulationRequests(q: RegulationQuery): Promise<RegulationPage> {
+  const b = await jsonFetch<{ requests?: RegulationRequest[]; next_before?: string | null }>(
+    withQuery(regPath("requests"), regulationParams(q)));
+  return { requests: b.requests ?? [], next_before: b.next_before ?? null };
+}
+
+export function getRegulationRequest(id: string): Promise<RegulationRequest> {
+  return jsonFetch<RegulationRequest>(regPath("requests", id));
+}
+
+export async function countRegulationRequests(): Promise<RegulationCounts> {
+  const b = await jsonFetch<Partial<RegulationCounts>>(regPath("requests", "count"));
+  return { pending: b.pending ?? 0, overdue: b.overdue ?? 0, returned: b.returned ?? 0, authorized: b.authorized ?? 0, external: b.external ?? 0 };
+}
+
+export function authorizeRegulationRequest(id: string, input: AuthorizeInput): Promise<RegulationRequest> {
+  return jsonFetch<RegulationRequest>(regPath("requests", id, "authorize"), regWrite("POST", input));
+}
+
+export function returnRegulationRequest(id: string, reason: string, version: number): Promise<RegulationRequest> {
+  return jsonFetch<RegulationRequest>(regPath("requests", id, "return"), regWrite("POST", { reason, version }));
+}
+
+export function denyRegulationRequest(id: string, reason: string, version: number): Promise<RegulationRequest> {
+  return jsonFetch<RegulationRequest>(regPath("requests", id, "deny"), regWrite("POST", { reason, version }));
+}
+
+export function cancelRegulationRequest(id: string, reason: string, version: number): Promise<RegulationRequest> {
+  return jsonFetch<RegulationRequest>(regPath("requests", id, "cancel"), regWrite("POST", { reason, version }));
+}
+
+// ── Solicitante: devolvidos da unidade e complemento ──
+export async function listReturnedRequests(unitId: string): Promise<RegulationRequest[]> {
+  const p = new URLSearchParams({ unit_id: unitId });
+  return (await jsonFetch<{ requests?: RegulationRequest[] }>(withQuery(regPath("returned"), p))).requests ?? [];
+}
+
+export function complementRegulationRequest(id: string, input: ComplementInput): Promise<RegulationRequest> {
+  return jsonFetch<RegulationRequest>(regPath("requests", id, "complement"), regWrite("POST", input));
+}
+
+// ── Rede externa: agendamento, desfecho e número do sistema do estado ──
+export function scheduleRegulationRequest(id: string, input: RegulationScheduleInput): Promise<RegulationRequest> {
+  return jsonFetch<RegulationRequest>(regPath("requests", id, "schedule"), regWrite("POST", input));
+}
+
+export function recordRegulationOutcome(id: string, result: "completed" | "missed", version: number): Promise<RegulationRequest> {
+  return jsonFetch<RegulationRequest>(regPath("requests", id, "outcome"), regWrite("POST", { result, version }));
+}
+
+export function setRegulationExternal(id: string, system: ExternalSystem, number: string, version: number): Promise<RegulationRequest> {
+  return jsonFetch<RegulationRequest>(regPath("requests", id, "external"), regWrite("POST", { system, number, version }));
+}
+
+// CSV livre para digitar no sistema do estado. Situação vazia ou nula = sem filtro.
+export function fetchStateExportCsv(status?: string | null): Promise<SignatureFile> {
+  const p = new URLSearchParams();
+  if (status) p.set("status", status);
+  return binaryFetch(withQuery(regPath("exports", "state.csv"), p), "text/csv");
+}
+
+// ── Administração (municipal_admin): prestadores, ofertas, prazos e lista do enfermeiro ──
+export async function listCareProviders(): Promise<CareProvider[]> {
+  return (await jsonFetch<{ providers?: CareProvider[] }>(regPath("admin", "providers"))).providers ?? [];
+}
+
+export function createCareProvider(input: CareProviderInput): Promise<CareProvider> {
+  return jsonFetch<CareProvider>(regPath("admin", "providers"), regWrite("POST", input));
+}
+
+export function updateCareProvider(id: string, input: CareProviderInput): Promise<CareProvider> {
+  return jsonFetch<CareProvider>(regPath("admin", "providers", id), regWrite("PATCH", input));
+}
+
+export async function listCareOffers(q: { month?: string | null; targetCode?: string | null }): Promise<CareOffer[]> {
+  const p = new URLSearchParams();
+  if (q.month) p.set("month", q.month);
+  if (q.targetCode) p.set("target_code", q.targetCode);
+  return (await jsonFetch<{ offers?: CareOffer[] }>(withQuery(regPath("admin", "offers"), p))).offers ?? [];
+}
+
+export function createCareOffer(input: CareOfferInput): Promise<CareOffer> {
+  return jsonFetch<CareOffer>(regPath("admin", "offers"), regWrite("POST", input));
+}
+
+export function updateCareOffer(id: string, quantity: number): Promise<CareOffer> {
+  return jsonFetch<CareOffer>(regPath("admin", "offers", id), regWrite("PATCH", { quantity }));
+}
+
+export function getRiskDeadlines(): Promise<RiskDeadlines> {
+  return jsonFetch<RiskDeadlines>(regPath("admin", "deadlines"));
+}
+
+export function updateRiskDeadlines(d: RiskDeadlines): Promise<RiskDeadlines> {
+  return jsonFetch<RiskDeadlines>(regPath("admin", "deadlines"), regWrite("PATCH", d));
+}
+
+export async function listNurseItems(): Promise<NurseItem[]> {
+  return (await jsonFetch<{ items?: NurseItem[] }>(regPath("admin", "nurse_items"))).items ?? [];
+}
+
+export function addNurseItem(input: { target_type: RegulationType; target_code: string }): Promise<NurseItem> {
+  return jsonFetch<NurseItem>(regPath("admin", "nurse_items"), regWrite("POST", input));
+}
+
+export async function removeNurseItem(item: { target_type: RegulationType; target_code: string }): Promise<void> {
+  await jsonFetch<void>(regPath("admin", "nurse_items"), regWrite("DELETE", item));
 }

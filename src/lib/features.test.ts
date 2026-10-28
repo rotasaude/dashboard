@@ -96,3 +96,9 @@ describe("módulo 25", () => {
     expect(featureLabel("surveillance")).toBe("Vigilância epidemiológica");
   });
 });
+
+describe("módulo 26a", () => {
+  it("care_regulation tem nome em português", () => {
+    expect(featureLabel("care_regulation")).toBe("Regulação municipal");
+  });
+});
