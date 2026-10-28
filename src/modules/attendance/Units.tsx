@@ -26,7 +26,8 @@ const SCOPE_SHORT: Record<ScreeningScope, string> = { walk_in: "sem horário", a
 interface Editing { id: string | null; initial: UnitFormValue }
 
 // Módulo 21b: `labOn` = `municipal_lab` ligado (vem do Atendimento, que já lê a sessão).
-export function Units({ labOn = false }: { labOn?: boolean } = {}) {
+// Módulo 25: `surveillanceOn` = `surveillance` ligado; só então a unidade mostra e edita a marca notificadora.
+export function Units({ labOn = false, surveillanceOn = false }: { labOn?: boolean; surveillanceOn?: boolean } = {}) {
   const queryClient = useQueryClient();
   const neighborhoods = useQuery({ queryKey: NEIGHBORHOODS_KEY, queryFn: listNeighborhoods });
   const [ rows, setRows ] = useState<HealthUnitRow[] | null>(null);
@@ -66,7 +67,12 @@ export function Units({ labOn = false }: { labOn?: boolean } = {}) {
     try {
       const address = addressPayload(value);
       if (editing.id) {
-        await updateUnit(editing.id, value.name, value.kind, address, value.screeningScope, value.collectsSamples);
+        // O 7º argumento só segue quando a marca existe (interruptor ligado): desligado, o corpo é o de sempre.
+        if (value.notifying !== undefined) {
+          await updateUnit(editing.id, value.name, value.kind, address, value.screeningScope, value.collectsSamples, value.notifying);
+        } else {
+          await updateUnit(editing.id, value.name, value.kind, address, value.screeningScope, value.collectsSamples);
+        }
       } else {
         await createUnit(value.name, value.kind, address);
         void queryClient.invalidateQueries({ queryKey: [ "activeUnits" ] });
@@ -134,6 +140,7 @@ export function Units({ labOn = false }: { labOn?: boolean } = {}) {
                 formatAddress(r, r.neighborhood_id ? nameOf.get(r.neighborhood_id) : null) },
               { label: "Acolhimento", w: "1.2fr", render: (r) => SCOPE_SHORT[r.screening_scope ?? "walk_in"] },
               ...(labOn ? [ { label: "Coleta", w: "0.8fr", render: (r: HealthUnitRow) => (r.collects_samples ? "coleta" : "—") } ] : []),
+              ...(surveillanceOn ? [ { label: "Notificadora", w: "0.9fr", render: (r: HealthUnitRow) => (r.notifying !== false ? "notificadora" : "—") } ] : []),
               { label: "Situação", w: "1fr", render: (r) => <Tag tone={r.active ? "ok" : undefined}>{r.active ? "ativa" : "inativa"}</Tag> },
               {
                 label: "", w: "auto", align: "right", render: (r) => (
@@ -141,7 +148,8 @@ export function Units({ labOn = false }: { labOn?: boolean } = {}) {
                     <button type="button" style={secondaryButtonStyle}
                       onClick={() => setEditing({ id: r.id, initial: {
                         name: r.name, kind: r.kind, ...addressFieldsFrom(r), screeningScope: r.screening_scope ?? "walk_in",
-                        ...(labOn ? { collectsSamples: r.collects_samples === true } : {})
+                        ...(labOn ? { collectsSamples: r.collects_samples === true } : {}),
+                        ...(surveillanceOn ? { notifying: r.notifying !== false } : {})
                       } })}>
                       Editar
                     </button>

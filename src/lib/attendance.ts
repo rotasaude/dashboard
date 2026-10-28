@@ -139,6 +139,8 @@ const MESSAGES: Record<string, string> = {
   attendance_not_waiting: "o atendimento não está mais aguardando — a escuta não foi concluída",
   not_reassessable: "esta escuta não pode mais ser reavaliada — a fila foi atualizada",
   invalid_screening_scope: "escolha uma das opções de acolhimento",
+  // Módulo 25 (K11): o api recusa `notifying` que não seja booleano.
+  invalid_notifying: "só unidade ativa pode ser marcada como notificadora",
   note_too_long: "o texto passa de 500 caracteres",
   terminology_unavailable: "a CIAP-2 não está disponível agora — tente de novo em instantes",
   // Módulo 19 (contratos §2): nomes conferidos no documento.

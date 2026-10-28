@@ -12,8 +12,9 @@ import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } fr
 // vem preenchido, e o bairro do CEP é só sugestão. Ele pré-seleciona um
 // bairro ATIVO de mesmo nome apenas se o admin ainda não escolheu nenhum.
 // Qualquer falha deixa os campos livres.
+// `notifying` (módulo 25) só aparece com o interruptor `surveillance` ligado e na edição.
 // `screeningScope` (módulo 18) só existe na edição: a unidade nova nasce `walk_in` no api.
-export interface UnitFormValue extends AddressFields { name: string; kind: string; screeningScope?: ScreeningScope; collectsSamples?: boolean }
+export interface UnitFormValue extends AddressFields { name: string; kind: string; screeningScope?: ScreeningScope; collectsSamples?: boolean; notifying?: boolean }
 
 interface Props {
   initial: UnitFormValue;
@@ -130,6 +131,12 @@ export function UnitForm({ initial, neighborhoods, busy, cepTimeoutMs = VIACEP_T
         <label style={{ ...labelStyle, flexDirection: "row", alignItems: "center", gap: 6 }}>
           <input type="checkbox" checked={value.collectsSamples} onChange={(e) => set({ collectsSamples: e.target.checked })} />
           Coleta amostras para o laboratório municipal
+        </label>
+      )}
+      {value.notifying !== undefined && (
+        <label style={{ ...labelStyle, flexDirection: "row", alignItems: "center", gap: 6 }}>
+          <input type="checkbox" checked={value.notifying} onChange={(e) => set({ notifying: e.target.checked })} />
+          Unidade notificadora (notificação negativa semanal)
         </label>
       )}
       <div style={{ display: "flex", gap: 8 }}>

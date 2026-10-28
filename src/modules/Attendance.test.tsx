@@ -96,6 +96,22 @@ describe("Attendance", () => {
     expect(screen.queryByText("Coleta")).toBeNull();
   });
 
+  it("administrador com surveillance vê a coluna Notificadora em Unidades; sem o interruptor, não", async () => {
+    mocked(api.fetchCurrentSession).mockResolvedValue({ ...session("municipal_admin"), features: [ "surveillance" ] });
+    mocked(api.listAllUnits).mockResolvedValue([ { id: "u1", name: "UBS Centro", kind: "ubs", active: true, notifying: true } ]);
+    renderAttendance();
+    expect(await screen.findByText("Notificadora")).not.toBeNull();
+    expect(screen.getByText("notificadora")).not.toBeNull();
+  });
+
+  it("administrador sem surveillance não vê a coluna Notificadora", async () => {
+    mocked(api.fetchCurrentSession).mockResolvedValue(session("municipal_admin"));
+    mocked(api.listAllUnits).mockResolvedValue([ { id: "u1", name: "UBS Centro", kind: "ubs", active: true, notifying: true } ]);
+    renderAttendance();
+    await screen.findByText("UBS Centro");
+    expect(screen.queryByText("Notificadora")).toBeNull();
+  });
+
   it("sem citizen_verifier não aparece 'Pedidos sem unidade'", async () => {
     mocked(api.fetchCurrentSession).mockResolvedValue(session("municipal_admin"));
     renderAttendance();

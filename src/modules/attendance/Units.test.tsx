@@ -27,10 +27,10 @@ const rows = [
 ];
 const centro = { id: "n1", name: "Centro", active: true, source: "seed" as const, units: [] };
 
-function renderUnits(client = new QueryClient({ defaultOptions: { queries: { retry: false } } }), labOn = false) {
+function renderUnits(client = new QueryClient({ defaultOptions: { queries: { retry: false } } }), labOn = false, surveillanceOn = false) {
   const wrapper = ({ children }: { children: ReactNode }) =>
     <QueryClientProvider client={client}>{children}</QueryClientProvider>;
-  render(<Units labOn={labOn} />, { wrapper });
+  render(<Units labOn={labOn} surveillanceOn={surveillanceOn} />, { wrapper });
   return client;
 }
 
@@ -259,6 +259,55 @@ describe("Units", () => {
       fireEvent.click(box);
       fireEvent.click(screen.getByRole("button", { name: "Salvar" }));
       await waitFor(() => expect(api.updateUnit).toHaveBeenCalledWith("u1", "UBS Centro", "ubs", expect.anything(), "walk_in", false));
+    });
+  });
+  describe("módulo 25 — unidade notificadora", () => {
+    const surv = [ { ...rows[0], notifying: true }, { ...rows[1], notifying: false } ];
+
+    it("sem surveillanceOn: sem coluna Notificadora, sem checkbox e sem 7º argumento", async () => {
+      mocked(api.listAllUnits).mockResolvedValue(surv);
+      mocked(api.updateUnit).mockResolvedValue(surv[0]);
+      renderUnits();
+      await screen.findByText("UBS Centro");
+      expect(screen.queryByRole("columnheader", { name: "Notificadora" })).toBeNull();
+      expect(screen.queryByText("notificadora")).toBeNull();
+      fireEvent.click(screen.getAllByRole("button", { name: "Editar" })[0]);
+      expect(screen.queryByLabelText("Unidade notificadora (notificação negativa semanal)")).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Salvar" }));
+      await waitFor(() => expect(api.updateUnit).toHaveBeenCalled());
+      expect(mocked(api.updateUnit).mock.calls[0]).toHaveLength(6);
+    });
+
+    it("com surveillanceOn: coluna Notificadora e a marca vai ao updateUnit (7º argumento)", async () => {
+      mocked(api.listAllUnits).mockResolvedValue(surv);
+      mocked(api.updateUnit).mockResolvedValue(surv[0]);
+      renderUnits(undefined, false, true);
+      await screen.findByText("UBS Centro");
+      expect(screen.getByRole("columnheader", { name: "Notificadora" })).not.toBeNull();
+      expect(screen.getByText("notificadora")).not.toBeNull();
+      fireEvent.click(screen.getAllByRole("button", { name: "Editar" })[0]);
+      const box = screen.getByLabelText("Unidade notificadora (notificação negativa semanal)") as HTMLInputElement;
+      expect(box.checked).toBe(true);
+      fireEvent.click(box);
+      fireEvent.click(screen.getByRole("button", { name: "Salvar" }));
+      await waitFor(() => expect(api.updateUnit).toHaveBeenCalledWith("u1", "UBS Centro", "ubs", expect.anything(), "walk_in", undefined, false));
+    });
+
+    it("unidade sem a chave do api conta como notificadora ao editar (default do api é sim)", async () => {
+      mocked(api.listAllUnits).mockResolvedValue(rows);
+      renderUnits(undefined, false, true);
+      await screen.findByText("UBS Centro");
+      fireEvent.click(screen.getAllByRole("button", { name: "Editar" })[0]);
+      expect((screen.getByLabelText("Unidade notificadora (notificação negativa semanal)") as HTMLInputElement).checked).toBe(true);
+    });
+
+    it("recusa invalid_notifying é traduzida", async () => {
+      mocked(api.listAllUnits).mockResolvedValue(surv);
+      mocked(api.updateUnit).mockRejectedValue(new ApiError(422, { error: "invalid_notifying" }, "x"));
+      renderUnits(undefined, false, true);
+      fireEvent.click((await screen.findAllByRole("button", { name: "Editar" }))[0]);
+      fireEvent.click(screen.getByRole("button", { name: "Salvar" }));
+      expect((await screen.findByRole("alert")).textContent).toBe("só unidade ativa pode ser marcada como notificadora");
     });
   });
 });
