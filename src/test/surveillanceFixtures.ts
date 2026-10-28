@@ -29,7 +29,7 @@ export function counts(over: Partial<NotificationCounts> = {}): NotificationCoun
   return { possible: 2, notified: 5, investigating: 1, overdue: 3, immediate_open: 1, without_official_number: 4, ...over };
 }
 export function localDisease(over: Partial<LocalDisease> = {}): LocalDisease {
-  return { id: "ld1", code: "local_febre_oropouche", name: "Febre do Oropouche", deadline: "immediate", cid10: [ "A938" ], ciap2: [],
+  return { id: "ld1", code: "local_febre_oropouche", name: "Febre do Oropouche", deadline: "immediate", cid10: [ "R17" ], ciap2: [],
     repeat_after_days: 30, sinan_form: null, local: true, list_version: null, notes: null, active: true, ...over };
 }
 export function negatives(over: Partial<WeeklyNegatives> = {}): WeeklyNegatives {
