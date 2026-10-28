@@ -6,6 +6,7 @@ import { canSeeSignatureOverview, canSign } from "../lib/signature";
 import { canRequestSncr, canSeeSncrOverview } from "../lib/controlled";
 import { canUseCareLines } from "../lib/careLines";
 import { canUseTerritory } from "../lib/territoryRegistry";
+import { canUseSurveillance } from "../lib/surveillance";
 export type ModuleId =
   | "overview" | "ingestion" | "conversations" | "consent"
   | "triages" | "classification" | "reports" | "protocols" | "events"
@@ -19,7 +20,8 @@ export type ModuleId =
   | "lab-admin" | "lab-reports"
   | "billing-procedures" | "billing-periods" | "billing-settings"
   | "care-lines-team" | "care-lines-preview" | "care-lines-admin"
-  | "territory-team" | "registry-status" | "territory-micro-areas";
+  | "territory-team" | "registry-status" | "territory-micro-areas"
+  | "surveillance-queue" | "surveillance-negatives" | "surveillance-reports" | "surveillance-panel" | "surveillance-diseases";
 
 export interface NavItem { id: ModuleId; label: string; icon: string; }
 export interface NavGroupDef { label: string; items: NavItem[]; }
@@ -66,6 +68,13 @@ export const NAV_GROUPS: NavGroupDef[] = [
     { id: "territory-team", label: "Território da equipe", icon: "⌂" },
     { id: "registry-status", label: "Validade dos cadastros", icon: "⏲" },
     { id: "territory-micro-areas", label: "Microáreas", icon: "⬡" }
+  ]},
+  { label: "Vigilância", items: [
+    { id: "surveillance-queue", label: "Fila da vigilância", icon: "⚠" },
+    { id: "surveillance-negatives", label: "Notificação negativa", icon: "∅" },
+    { id: "surveillance-reports", label: "Relatórios da vigilância", icon: "▤" },
+    { id: "surveillance-panel", label: "Painel por bairro e semana", icon: "▦" },
+    { id: "surveillance-diseases", label: "Doenças notificáveis", icon: "☰" }
   ]},
   { label: "Exames", items: [
     { id: "exam-acknowledgements", label: "Resultados aguardando ciência", icon: "⚑" },
@@ -221,6 +230,10 @@ export function navGroupsFor(
   // Módulo 24a (ADR 0042): `territory_registry` E `clinical_record`; território e
   // validade do profissional — o api confere CBO e escopo —, microáreas do admin.
   const territoryOn = canUseTerritory(user);
+  // Módulo 25 (ADR 0043): `surveillance`, sem exigir o prontuário; tudo do papel
+  // surveillance, o painel agregado também do analyst.
+  const survOn = canUseSurveillance(user);
+  const isSurveillance = roles.includes("surveillance");
   return NAV_GROUPS.filter((group) => {
     if (group.label === "Conta") return !user?.operator;
     if (group.label === "Equipe") return isAdmin;
@@ -286,6 +299,8 @@ export function navGroupsFor(
       if (item.id === "care-lines-admin") return careOn && isAdmin;
       if (item.id === "territory-team" || item.id === "registry-status") return territoryOn && isProfessional;
       if (item.id === "territory-micro-areas") return territoryOn && isAdmin;
+      if (item.id === "surveillance-panel") return survOn && (isSurveillance || isAnalyst);
+      if (item.id.startsWith("surveillance-")) return survOn && isSurveillance;
       if (item.id === "integrations" || item.id === "cnes") return canIntegrations;
       if (item.id === "production") return canProduction;
       return true;
@@ -334,5 +349,16 @@ export function withQcBlockCount(groups: NavGroupDef[], count: number): NavGroup
   return groups.map((group) => ({
     ...group,
     items: group.items.map((item) => item.id === "lab-qc-blocks" ? { ...item, label: `${item.label} (${shown})` } : item)
+  }));
+}
+
+// Módulo 25: notificações imediatas abertas no item da fila. O número vem da
+// rota de contagem (sem lista, sem trilha); um item por papel `surveillance`.
+export function withSurveillanceCount(groups: NavGroupDef[], count: number): NavGroupDef[] {
+  if (count <= 0) return groups;
+  const shown = count === 1 ? "1 imediata" : `${count} imediatas`;
+  return groups.map((group) => ({
+    ...group,
+    items: group.items.map((item) => item.id === "surveillance-queue" ? { ...item, label: `${item.label} (${shown})` } : item)
   }));
 }

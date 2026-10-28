@@ -8,7 +8,8 @@ import {
   IconReportAnalytics, IconRosetteDiscountCheck, IconServerCog, IconSettings, IconShieldCheck, IconSignature, IconSpeakerphone, IconStack2, IconStethoscope, IconTestPipe, IconTruck, IconTruckDelivery, IconUpload,
   IconUser, IconUserCircle, IconUsers, IconUsersGroup, IconCalendarStats, IconFileInvoice, IconReceipt, IconReceiptTax,
   IconHeartHandshake, IconUserSearch, IconGauge, IconRoute,
-  IconHomeHeart, IconMap2, IconCalendarDue, IconHexagons
+  IconHomeHeart, IconMap2, IconCalendarDue, IconHexagons,
+  IconVirus, IconBellRinging, IconCalendarX, IconFileSpreadsheet, IconGridDots, IconVirusSearch
 } from "@tabler/icons-react";
 import type { Catalog } from "./types";
 
@@ -23,6 +24,7 @@ export const CATALOG: Catalog = {
     "Atendimento": { icon: IconStethoscope, description: "Agenda, prontuário e consultas" },
     "Linhas de cuidado": { icon: IconHeartHandshake, description: "Busca ativa, sugestões e prévia dos indicadores" },
     "Cadastro territorial": { icon: IconHomeHeart, description: "Microáreas, domicílios, famílias e cadastro individual" },
+    "Vigilância": { icon: IconVirus, description: "Notificação compulsória, prazos, negativa semanal e painel" },
     "Exames":      { icon: IconMicroscope, description: "Pedidos, resultados e prestadores" },
     "Laboratório": { icon: IconFlask, description: "Amostras, laudos, controle de qualidade e estoque" },
     "Faturamento": { icon: IconReceipt, description: "Procedimentos, competências e arquivo BPA" },
@@ -86,6 +88,11 @@ export const CATALOG: Catalog = {
     "territory-team": { icon: IconMap2, description: "Domicílios, famílias e moradores por microárea" },
     "registry-status": { icon: IconCalendarDue, description: "Vencidos, a vencer e quem falta cadastrar" },
     "territory-micro-areas": { icon: IconHexagons, description: "Microáreas das equipes e o ACS responsável" },
+    "surveillance-queue": { icon: IconBellRinging, description: "Notificações com prazo, imediatas e vencidas primeiro" },
+    "surveillance-negatives": { icon: IconCalendarX, description: "Unidades sem casos na semana epidemiológica" },
+    "surveillance-reports": { icon: IconFileSpreadsheet, description: "CSV por semana e encerradas sem número oficial" },
+    "surveillance-panel": { icon: IconGridDots, description: "Casos por bairro e semana epidemiológica" },
+    "surveillance-diseases": { icon: IconVirusSearch, description: "Lista nacional e doenças da cidade" },
     "campaigns": { icon: IconSpeakerphone, description: "Criar e enviar campanhas por SMS" },
     "team": { icon: IconUsers, description: "Usuários, convites e papéis" },
     "professionals": { icon: IconIdBadge2, description: "Vínculos, CBO e turnos" },

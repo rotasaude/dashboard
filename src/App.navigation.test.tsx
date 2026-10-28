@@ -6,6 +6,11 @@ import { NAV_GROUPS, navGroupsFor } from "./shell/modules";
 import { TerritoryMicroAreas } from "./modules/TerritoryMicroAreas";
 import { TerritoryTeam } from "./modules/TerritoryTeam";
 import { RegistryStatus } from "./modules/RegistryStatus";
+import { SurveillanceQueue } from "./modules/SurveillanceQueue";
+import { SurveillanceNegatives } from "./modules/SurveillanceNegatives";
+import { SurveillanceReports } from "./modules/SurveillanceReports";
+import { SurveillancePanel } from "./modules/SurveillancePanel";
+import { SurveillanceDiseases } from "./modules/SurveillanceDiseases";
 
 type El = ReactElement<Record<string, (id?: string) => void>>;
 
@@ -38,6 +43,18 @@ describe("atalhos entre telas", () => {
     expect((renderModule("territory-micro-areas", vi.fn()) as ReactElement).type).toBe(TerritoryMicroAreas);
   });
 
+  it("as cinco telas da vigilância abrem a tela certa; a das doenças vai à Segurança", () => {
+    const navigate = vi.fn();
+    expect((renderModule("surveillance-queue", navigate) as ReactElement).type).toBe(SurveillanceQueue);
+    expect((renderModule("surveillance-negatives", navigate) as ReactElement).type).toBe(SurveillanceNegatives);
+    expect((renderModule("surveillance-reports", navigate) as ReactElement).type).toBe(SurveillanceReports);
+    expect((renderModule("surveillance-panel", navigate) as ReactElement).type).toBe(SurveillancePanel);
+    const diseases = renderModule("surveillance-diseases", navigate) as El;
+    expect(diseases.type).toBe(SurveillanceDiseases);
+    diseases.props.onGoToSecurity();
+    expect(navigate).toHaveBeenCalledWith("security");
+  });
+
   it("territory-team abre o território da equipe", () => {
     expect((renderModule("territory-team", vi.fn()) as ReactElement).type).toBe(TerritoryTeam);
   });
@@ -48,6 +65,12 @@ describe("atalhos entre telas", () => {
 });
 
 describe("grupos do shell", () => {
+  it("a fila da vigilância leva as imediatas no rótulo e no ponto do trilho", () => {
+    const item = (n: number) => shellGroups(NAV_GROUPS, 0, 0, 0, 0, n).flatMap((g) => g.items).find((i) => i.id === "surveillance-queue");
+    expect(item(2)).toEqual({ id: "surveillance-queue", label: "Fila da vigilância (2 imediatas)", count: 2 });
+    expect(item(0)).toEqual({ id: "surveillance-queue", label: "Fila da vigilância" });
+  });
+
   it("Bloqueios do CIQ levam a contagem no rótulo e no ponto do trilho", () => {
     const item = (n: number) => shellGroups(NAV_GROUPS, 0, 0, 0, n).flatMap((g) => g.items).find((i) => i.id === "lab-qc-blocks");
     expect(item(2)).toEqual({ id: "lab-qc-blocks", label: "Bloqueios e revisões do CIQ (2 ativos)", count: 2 });
