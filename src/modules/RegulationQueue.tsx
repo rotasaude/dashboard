@@ -6,15 +6,16 @@
 // A ordem é a do api (vencidos, cor, data — contrato §13 G2): a tela lê UMA vez,
 // sem `overdue`, e só parte as linhas carregadas em "Vencidos" e "No prazo".
 import { useState, type CSSProperties } from "react";
-import { useInfiniteQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { listRegulationRequests, type RegulationQuery, type RegulationRequest, type RegulationTarget, type RegulationType, type RiskColor } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { useRegulationCount } from "../hooks/useRegulationCount";
-import { COLORS, NOMINAL_QUERY, REG_LIST_KEY, regulationError, statusLabel, typeLabel } from "../lib/regulation";
+import { COLORS, NOMINAL_QUERY, REG_COUNT_KEY, REG_LIST_KEY, regulationError, statusLabel, typeLabel } from "../lib/regulation";
 import { cityIsoDate } from "../lib/format";
 import { buttonStyle, inputStyle, secondaryButtonStyle } from "../components/formStyles";
-import { alert, fieldLabel, muted, row, stack, title } from "./exams/styles";
+import { alert, fieldLabel, muted, okText, row, stack, title } from "./exams/styles";
 import { RegulationGate } from "./regulation/RegulationGate";
+import { RequestDetail } from "./regulation/RequestDetail";
 import { RequestTable } from "./regulation/RequestTable";
 import { TargetSearch } from "./regulation/TargetSearch";
 
@@ -69,6 +70,8 @@ function QueueBody({ today }: { today?: string }) {
   const [ type, setType ] = useState<RegulationType>("specialty");
   const [ target, setTarget ] = useState<RegulationTarget | null>(null);
   const [ openId, setOpenId ] = useState<string | null>(null);
+  const [ notice, setNotice ] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
   const counts = useRegulationCount(true, user?.id ?? null);
   const tab = QUEUE_TABS.find((t) => t.key === tabKey) ?? QUEUE_TABS[0];
@@ -89,21 +92,29 @@ function QueueBody({ today }: { today?: string }) {
   const late = tab.key === "pending" ? rows.filter((r) => r.overdue) : [];
   const onTime = tab.key === "pending" ? rows.filter((r) => !r.overdue) : [];
   const banner = bannerText(counts.data?.overdue);
-  const open = (r: RegulationRequest) => setOpenId(r.id);
+  const open = (r: RegulationRequest) => { setNotice(null); setOpenId(r.id); };
   const label = (t: TabSpec) => (t.count && counts.data ? `${t.label} (${counts.data[t.count]})` : t.label);
   const changeType = (next: RegulationType) => { setType(next); setTarget(null); };
-  // Voltar relê a página atual: a ação feita no detalhe muda a fila.
-  const back = () => { setOpenId(null); void list.refetch(); };
+  // Cada página da lista é uma leitura nominal com trilha: só relê quando uma decisão mudou a fila, e volta à primeira
+  // página (uma leitura). A contagem das abas e do menu é invalidada junto; sem decisão, nenhuma leitura.
+  const back = (changed: boolean) => {
+    setOpenId(null);
+    if (!changed) return;
+    void queryClient.resetQueries({ queryKey: [ REG_LIST_KEY, query ] });
+    void queryClient.invalidateQueries({ queryKey: [ REG_COUNT_KEY ] });
+  };
+  const decided = (text: string) => { back(true); setNotice(text); };
 
   return (
     <div style={stack}>
       {banner && <p role="status" style={bannerStyle}>{banner}</p>}
+      {notice && <p role="status" style={okText}>{notice}</p>}
       <div role="tablist" aria-label="Situação dos pedidos" style={tabList}>
         {QUEUE_TABS.map((t) => {
           const active = t.key === tabKey;
           return (
             <button key={t.key} type="button" role="tab" aria-selected={active} className="mono"
-              style={active ? tabActive : tabIdle} onClick={() => { setTabKey(t.key); setOpenId(null); }}>
+              style={active ? tabActive : tabIdle} onClick={() => { setTabKey(t.key); setOpenId(null); setNotice(null); }}>
               {label(t)}
             </button>
           );
@@ -141,11 +152,7 @@ function QueueBody({ today }: { today?: string }) {
         )}
       </div>}
       {openId ? (
-        // O detalhe é da Task 8; até lá a fila guarda o id e espera.
-        <div style={stack}>
-          <div style={row}><button type="button" style={secondaryButtonStyle} onClick={back}>Voltar à fila</button></div>
-          <p style={muted}>carregando…</p>
-        </div>
+        <RequestDetail key={openId} id={openId} today={day} onBack={back} onChanged={decided} />
       ) : (
         <div role="tabpanel" style={stack}>
           {list.isPending && <p style={muted}>carregando…</p>}

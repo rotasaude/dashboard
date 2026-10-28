@@ -4,7 +4,7 @@ import { focusManager, onlineManager } from "@tanstack/react-query";
 
 vi.mock("../lib/api", async (importOriginal) => ({ ...(await importOriginal<typeof import("../lib/api")>()), fetchCurrentSession: vi.fn(),
   listRegulationRequests: vi.fn(), countRegulationRequests: vi.fn(), getRegulationRequest: vi.fn(), searchRegulationTargets: vi.fn(),
-  listCareOffers: vi.fn(), fetchStateExportCsv: vi.fn() }));
+  listCareOffers: vi.fn(), fetchStateExportCsv: vi.fn(), returnRegulationRequest: vi.fn() }));
 import * as api from "../lib/api";
 import type { RegulationQuery } from "../lib/api";
 import { RegulationQueue } from "./RegulationQueue";
@@ -24,6 +24,10 @@ describe("RegulationQueue", () => {
     mocked(api.fetchCurrentSession).mockResolvedValue(regUser());
     mocked(api.countRegulationRequests).mockResolvedValue(regCounts());
     mocked(api.searchRegulationTargets).mockResolvedValue([ CARDIO ]);
+    mocked(api.getRegulationRequest).mockReset();
+    mocked(api.getRegulationRequest).mockResolvedValue(regRequest());
+    mocked(api.returnRegulationRequest).mockReset();
+    mocked(api.returnRegulationRequest).mockResolvedValue(regRequest({ status: "returned" }));
     // A ordem é do api: vencidos, cor, data (contrato §13 G2); uma leitura só.
     mocked(api.listRegulationRequests).mockResolvedValue({ requests: [ OVERDUE, regRequest() ], next_before: "c1" });
   });
@@ -80,16 +84,59 @@ describe("RegulationQueue", () => {
     await waitFor(() => expect(screen.queryByRole("button", { name: "Carregar mais" })).toBeNull());
   });
 
-  it("Abrir guarda o id e espera o detalhe; Voltar à fila relê a lista", async () => {
+  it("Abrir mostra o detalhe; Voltar à fila sem decisão não relê a lista nem a contagem", async () => {
+    renderWithProviders(<RegulationQueue today={TODAY26} />);
+    const onTime = await screen.findByRole("region", { name: "No prazo" });
+    await waitFor(() => expect(mocked(api.countRegulationRequests)).toHaveBeenCalled());
+    fireEvent.click(within(onTime).getByRole("button", { name: /^Abrir pedido de Cardiologia/ }));
+    expect(await screen.findByRole("region", { name: "Cardiologia" })).not.toBeNull();
+    expect(mocked(api.getRegulationRequest)).toHaveBeenCalledWith("rr1");
+    expect(screen.queryByRole("region", { name: "No prazo" })).toBeNull();
+    const lists = mocked(api.listRegulationRequests).mock.calls.length;
+    const counts = mocked(api.countRegulationRequests).mock.calls.length;
+    fireEvent.click(screen.getByRole("button", { name: "Voltar à fila" }));
+    expect(await screen.findByRole("region", { name: "No prazo" })).not.toBeNull();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(mocked(api.listRegulationRequests).mock.calls.length).toBe(lists);
+    expect(mocked(api.countRegulationRequests).mock.calls.length).toBe(counts);
+    expect(screen.queryByText(/devolvido à unidade/)).toBeNull();
+  });
+
+  it("decidir volta à fila com a frase, relê UMA vez a primeira página (sem before) e a contagem", async () => {
+    renderWithProviders(<RegulationQueue today={TODAY26} />);
+    await screen.findByRole("region", { name: "Vencidos" });
+    // Duas páginas carregadas: a releitura volta a uma só.
+    mocked(api.listRegulationRequests).mockResolvedValueOnce({
+      requests: [ regRequest({ id: "rr3", patient: { id: "pa3", display_name: "Ana Reis", has_cpf: true, cns_masked: null } }) ], next_before: null });
+    fireEvent.click(screen.getByRole("button", { name: "Carregar mais" }));
+    await screen.findByRole("row", { name: /Ana Reis/ });
+    const onTime = screen.getByRole("region", { name: "No prazo" });
+    fireEvent.click(within(onTime).getAllByRole("button", { name: /^Abrir pedido de Cardiologia/ })[0]);
+    fireEvent.click(await screen.findByRole("button", { name: "Devolver para complementar" }));
+    fireEvent.change(screen.getByLabelText("Motivo da devolução"), { target: { value: "Falta o resultado do teste ergométrico" } });
+    const lists = mocked(api.listRegulationRequests).mock.calls.length;
+    const counts = mocked(api.countRegulationRequests).mock.calls.length;
+    fireEvent.click(screen.getByRole("button", { name: "Devolver" }));
+    const notice = await screen.findByText("Pedido devolvido à unidade solicitante para complementar.");
+    expect(notice.getAttribute("role")).toBe("status");
+    expect(await screen.findByRole("region", { name: "No prazo" })).not.toBeNull();
+    await waitFor(() => expect(mocked(api.countRegulationRequests).mock.calls.length).toBe(counts + 1));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(mocked(api.listRegulationRequests).mock.calls.length).toBe(lists + 1);
+    expect(queries().at(-1)).toEqual({ status: "pending", type: null, targetCode: null, color: null });
+    expect(screen.queryByRole("region", { name: "Cardiologia" })).toBeNull();
+  });
+
+  it("trocar de aba tira a frase da decisão", async () => {
     renderWithProviders(<RegulationQueue today={TODAY26} />);
     const onTime = await screen.findByRole("region", { name: "No prazo" });
     fireEvent.click(within(onTime).getByRole("button", { name: /^Abrir pedido de Cardiologia/ }));
-    expect(screen.getByText("carregando…")).not.toBeNull();
-    expect(screen.queryByRole("region", { name: "No prazo" })).toBeNull();
-    const before = mocked(api.listRegulationRequests).mock.calls.length;
-    fireEvent.click(screen.getByRole("button", { name: "Voltar à fila" }));
-    await waitFor(() => expect(mocked(api.listRegulationRequests).mock.calls.length).toBe(before + 1));
-    expect(await screen.findByRole("region", { name: "No prazo" })).not.toBeNull();
+    fireEvent.click(await screen.findByRole("button", { name: "Devolver para complementar" }));
+    fireEvent.change(screen.getByLabelText("Motivo da devolução"), { target: { value: "Falta o resultado do teste ergométrico" } });
+    fireEvent.click(screen.getByRole("button", { name: "Devolver" }));
+    await screen.findByText("Pedido devolvido à unidade solicitante para complementar.");
+    fireEvent.click(screen.getByRole("tab", { name: "Devolvidos (2)" }));
+    expect(screen.queryByText("Pedido devolvido à unidade solicitante para complementar.")).toBeNull();
   });
 
   it("volta à aba e reconecta: a lista não relê", async () => {
