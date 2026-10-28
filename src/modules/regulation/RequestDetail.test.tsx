@@ -73,6 +73,39 @@ describe("RequestDetail", () => {
     expect(onChanged).toHaveBeenCalledWith("Autorizado em Ambulatório de Especialidades. A unidade vai marcar o horário pelo pedido de agendamento.");
   });
 
+  it("sem cor confirmada: Cor sugerida aparece e Cor confirmada diz que ainda não foi confirmada", async () => {
+    mocked(api.getRegulationRequest).mockResolvedValue(regRequest({ color: null, suggested_color: "yellow" }));
+    mount();
+    await screen.findByRole("region", { name: "Cardiologia" });
+    expect(screen.getByText("Cor sugerida").nextSibling?.textContent).toBe("amarelo");
+    expect(screen.getByText("Cor confirmada").nextSibling?.textContent).toBe("ainda não confirmada");
+  });
+
+  it("autorizar mantendo a cor sugerida: não pede motivo e o corpo vai sem color nem color_reason", async () => {
+    mocked(api.getRegulationRequest).mockResolvedValue(regRequest({ color: null, suggested_color: "yellow" }));
+    mount();
+    const form = await openAuthorize();
+    expect((screen.getByLabelText("Cor confirmada") as HTMLSelectElement).value).toBe("yellow");
+    expect(Array.from((screen.getByLabelText("Cor confirmada") as HTMLSelectElement).options).map((o) => o.value))
+      .toEqual([ "red", "yellow", "green", "blue" ]);
+    expect(screen.queryByLabelText("Motivo da mudança de cor")).toBeNull();
+    fireEvent.click(within(form).getByLabelText(/Consórcio Leste/));
+    fireEvent.click(within(form).getByRole("button", { name: "Confirmar autorização" }));
+    await waitFor(() => expect(mocked(api.authorizeRegulationRequest)).toHaveBeenCalledWith("rr1", { offer_id: "of3", version: 3 }));
+    const body = mocked(api.authorizeRegulationRequest).mock.calls[0][1];
+    expect("color" in body).toBe(false);
+    expect("color_reason" in body).toBe(false);
+  });
+
+  it("sem cor confirmada, escolher outra cor que não a sugerida pede motivo", async () => {
+    mocked(api.getRegulationRequest).mockResolvedValue(regRequest({ color: null, suggested_color: "yellow" }));
+    mount();
+    const form = await openAuthorize();
+    fireEvent.click(within(form).getByLabelText(/Consórcio Leste/));
+    text("Cor confirmada", "green");
+    expect(screen.getByLabelText("Motivo da mudança de cor")).not.toBeNull();
+  });
+
   it("mudar a cor pede motivo antes; 422 skip_reason_required pede o motivo e reenvia com ele", async () => {
     mount();
     const form = await openAuthorize();

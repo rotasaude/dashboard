@@ -8,7 +8,7 @@ import { useQuery } from "@tanstack/react-query";
 import { errorCode, listCareOffers, authorizeRegulationRequest } from "../../lib/api";
 import type { AuthorizeInput, CareOffer, RegulationRequest, RiskColor } from "../../lib/api";
 import {
-  COLORS, COLOR_REASON_TEXT, NOMINAL_QUERY, REG_OFFERS_KEY, SKIP_REASON_TEXT, currentMonth, providerKindLabel, reasonProblem, regulationError
+  COLORS, COLOR_REASON_TEXT, NOMINAL_QUERY, REG_OFFERS_KEY, SKIP_REASON_TEXT, currentMonth, effectiveColor, providerKindLabel, reasonProblem, regulationError
 } from "../../lib/regulation";
 import { Tag } from "../../components/Tag";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
@@ -34,9 +34,11 @@ export function AuthorizeForm({ request, today, onDone, onStale, onCancel }: {
   });
   const [ offerId, setOfferId ] = useState<string | null>(null);
   // A cor escolhida vale só para a versão do pedido em que foi escolhida: um "Recarregar" com outra cor confirmada
-  // volta a seguir o pedido, sem acender o motivo sem o usuário mexer.
+  // volta a seguir o pedido, sem acender o motivo sem o usuário mexer. O ponto de partida é a cor efetiva (confirmada, ou a
+  // sugerida enquanto não houve confirmação): é com ela que se compara, e o api só pede motivo para o que difere dela.
+  const effective = effectiveColor(request);
   const [ pick, setPick ] = useState<{ version: number; color: string } | null>(null);
-  const color = pick && pick.version === request.version ? pick.color : request.color;
+  const color = pick && pick.version === request.version ? pick.color : effective;
   const [ colorReason, setColorReason ] = useState("");
   const [ skipAsked, setSkipAsked ] = useState(false);
   const [ skipReason, setSkipReason ] = useState("");
@@ -46,7 +48,7 @@ export function AuthorizeForm({ request, today, onDone, onStale, onCancel }: {
   const list = offers.data ?? [];
   const anyAvailable = list.some((o) => o.available > 0);
   const chosen = list.find((o) => o.id === offerId && o.available > 0) ?? null;
-  const colorChanged = color !== request.color;
+  const colorChanged = color !== effective;
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -106,7 +108,7 @@ export function AuthorizeForm({ request, today, onDone, onStale, onCancel }: {
         Cor confirmada
         <select value={color} style={inputStyle} onChange={(e) => setPick({ version: request.version, color: e.target.value })}>
           {COLORS.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
-          {!COLORS.some((c) => c.key === request.color) && <option value={request.color}>{request.color}</option>}
+          {!COLORS.some((c) => c.key === effective) && <option value={effective}>{effective}</option>}
         </select>
       </label>
       {colorChanged && (

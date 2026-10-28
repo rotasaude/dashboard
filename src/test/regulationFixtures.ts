@@ -15,7 +15,7 @@ export function regRequest(over: Partial<RegulationRequest> = {}): RegulationReq
   return {
     id: "rr1", patient: { id: "pa1", display_name: "Joana Lima", has_cpf: true, cns_masked: null }, type: "specialty",
     target: { code: "225120", name: "Cardiologia" }, cid10: "I209", ciap2: null,
-    justification: "Dor torácica aos esforços há 3 meses, teste ergométrico alterado.", suggested_color: "yellow", color: "yellow",
+    justification: "Dor torácica aos esforços há 3 meses, teste ergométrico alterado.", suggested_color: "yellow", color: null,
     color_reason: null, status: "pending", requested_at: "2026-10-08T10:00:00-03:00", due_on: "2026-11-07", overdue: false,
     requester: { name: "Dra. Helena Prado", cbo: "225142", unit: UBS_CENTRO }, consultation_id: "cs1", authorization: null,
     appointment_request_id: null, schedule: null, outcome: null, misses: 0, external: null, state_regulated: false, version: 3,

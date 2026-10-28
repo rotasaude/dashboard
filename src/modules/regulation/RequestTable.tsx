@@ -4,11 +4,12 @@
 // própria, então nunca há botão dentro de botão. Cor e situação nova do api
 // aparecem cruas; nada some. Cor só por papéis do tema (Tag).
 import type { RegulationRequest } from "../../lib/api";
-import { colorLabel, colorTone, dueText, typeLabel, waitDays, waitText } from "../../lib/regulation";
+import { dueText, typeLabel, waitDays, waitText } from "../../lib/regulation";
 import { fmtDateTime } from "../../lib/format";
 import { documentText } from "../../lib/patientDocument";
 import { DataTable, type Column } from "../../components/DataTable";
 import { Tag } from "../../components/Tag";
+import { ColorCell } from "./ColorCell";
 import { secondaryButtonStyle } from "../../components/formStyles";
 
 export const NO_NAME = "pessoa sem nome no cadastro";
@@ -20,7 +21,7 @@ export function RequestTable({ rows, today, onOpen, empty = "nenhum pedido nesta
   rows: RegulationRequest[]; today: string; onOpen(r: RegulationRequest): void; empty?: string;
 }) {
   const cols: Column<RegulationRequest>[] = [
-    { label: "Cor", w: "0.8fr", render: (r) => <Tag tone={colorTone(r.color)}>{colorLabel(r.color)}</Tag> },
+    { label: "Cor", w: "0.8fr", render: (r) => <ColorCell request={r} /> },
     {
       label: "Encaminhamento", w: "1.6fr", card: "title", render: (r) => (
         <span style={stackCell}>

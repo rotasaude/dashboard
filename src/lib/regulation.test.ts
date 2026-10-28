@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { ApiError } from "./api";
 import {
   actionsFor, allowedTypes, canRequestRegulation, canUseRegulation, ciap2Problem, cnesProblem, colorLabel, colorTone, currentMonth,
-  deadlinesProblem, diagnosisRule, draftFromRequest, draftsNote, dueText, EMPTY_DRAFT, exportFilename, externalNumberProblem, guideFilename,
+  deadlinesProblem, diagnosisRule, draftFromRequest, draftsNote, dueText, effectiveColor, EMPTY_DRAFT, exportFilename, externalNumberProblem, guideFilename,
   monthLabel, monthProblem, normalizeCiap2, returnReason, notesProblem, notSentReason, parseQuantity, placeProblem, providerKindLabel, providerNameProblem,
   quantityProblem, reasonProblem, regulationError, regulationFinalizeError, regulationRoles, requestBody, requestProblem, requesterKind,
   scheduleAtProblem, statusLabel, statusTone, systemLabel, targetsFor, targetTermProblem, typeLabel, waitDays, waitText,
@@ -42,6 +42,13 @@ describe("portão e quem pede", () => {
     expect(targetsFor("223505", all)).toEqual([ ECO ]);
     expect(targetsFor("223208", all)).toEqual([ ENDO ]);
     expect(targetsFor(null, all)).toEqual(all);
+  });
+});
+
+describe("effectiveColor", () => {
+  it("a confirmada vence; sem confirmação vale a sugerida", () => {
+    expect(effectiveColor({ color: "red", suggested_color: "yellow" })).toBe("red");
+    expect(effectiveColor({ color: null, suggested_color: "yellow" })).toBe("yellow");
   });
 });
 

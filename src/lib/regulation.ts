@@ -103,6 +103,11 @@ export function colorTone(code: string | null | undefined): string {
   return COLORS.find((c) => c.key === code)?.tone ?? "neutral";
 }
 
+// A cor que ordena a fila: a confirmada pelo regulador, ou a sugerida enquanto ele não confirmou (o api manda `color: null`).
+export function effectiveColor(r: Pick<RegulationRequest, "color" | "suggested_color">): string {
+  return r.color ?? r.suggested_color;
+}
+
 const STATUS_LABEL: Record<string, string> = {
   draft: "rascunho", pending: "aguardando regulação", returned: "devolvido para complementar", authorized: "autorizado", scheduled: "agendado",
   completed: "realizado", missed: "faltou", denied: "negado", cancelled: "cancelado", closed: "encerrado (segunda falta)", external: "regulado pelo estado"

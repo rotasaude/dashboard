@@ -118,7 +118,9 @@ export function RequestDetail({ id, today, onBack, onChanged, extra }: {
         <KeyValue k="CIAP-2" v={dash(request.ciap2)} />
         <KeyValue k="Situação" v={<Tag tone={statusTone(request.status)}>{statusLabel(request.status)}</Tag>} />
         <KeyValue k="Cor sugerida" v={<Tag tone={colorTone(request.suggested_color)}>{colorLabel(request.suggested_color)}</Tag>} />
-        <KeyValue k="Cor confirmada" v={<Tag tone={colorTone(request.color)}>{colorLabel(request.color)}</Tag>} />
+        <KeyValue k="Cor confirmada" v={request.color
+          ? <Tag tone={colorTone(request.color)}>{colorLabel(request.color)}</Tag>
+          : "ainda não confirmada"} />
         {request.color_reason && <KeyValue k="Motivo da mudança de cor" v={request.color_reason} mono={false} />}
         <KeyValue k="Solicitante" v={request.requester.name} mono={false} />
         <KeyValue k="Unidade" v={dash(request.requester.unit?.name)} mono={false} />

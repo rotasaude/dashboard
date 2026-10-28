@@ -42,6 +42,14 @@ describe("RegulationReturned", () => {
     await waitFor(() => expect(mocked(api.listReturnedRequests)).toHaveBeenLastCalledWith("u3"));
   });
 
+  it("devolvido sem cor confirmada mostra a cor sugerida, marcada como sugerida", async () => {
+    mocked(api.listReturnedRequests).mockResolvedValue([ { ...RETURNED, color: null, suggested_color: "red" } ]);
+    renderWithProviders(<RegulationReturned />);
+    const row = await screen.findByRole("listitem", { name: "Cardiologia de Joana Lima" });
+    expect(within(row).getByText("vermelho")).not.toBeNull();
+    expect(within(row).getByText("sugerida")).not.toBeNull();
+  });
+
   it("um vínculo só: sem seletor, a unidade aparece como texto", async () => {
     mocked(api.getMyProfessional).mockResolvedValue(profile([ link("l1", "u1", "UBS Centro") ]));
     renderWithProviders(<RegulationReturned />);

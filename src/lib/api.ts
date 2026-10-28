@@ -4499,7 +4499,9 @@ export interface RegulationEvent { status: RegulationStatus | string; at: string
 export interface RegulationPatient { id: string; display_name: string | null; has_cpf: boolean; cns_masked: string | null }
 export interface RegulationRequest {
   id: string; patient: RegulationPatient; type: RegulationType | string; target: { code: string; name: string };
-  cid10: string | null; ciap2: string | null; justification: string; suggested_color: RiskColor | string; color: RiskColor | string;
+  cid10: string | null; ciap2: string | null; justification: string; suggested_color: RiskColor | string;
+  // A cor CONFIRMADA pelo regulador: nula até ele confirmar. A que ordena a fila é a efetiva (`effectiveColor`).
+  color: RiskColor | string | null;
   color_reason: string | null; status: RegulationStatus | string;
   // Nulos no rascunho.
   requested_at: string | null; due_on: string | null; overdue: boolean;

@@ -32,6 +32,14 @@ describe("RegulationQueue", () => {
     mocked(api.listRegulationRequests).mockResolvedValue({ requests: [ OVERDUE, regRequest() ], next_before: "c1" });
   });
 
+  it("pedido pendente sem cor confirmada mostra a cor sugerida, marcada como sugerida", async () => {
+    mocked(api.listRegulationRequests).mockResolvedValue({ requests: [ regRequest({ color: null, suggested_color: "green" }) ], next_before: null });
+    renderWithProviders(<RegulationQueue today={TODAY26} />);
+    const row = await screen.findByRole("row", { name: /Joana Lima/ });
+    expect(within(row).getByText("verde")).not.toBeNull();
+    expect(within(row).getByText("sugerida")).not.toBeNull();
+  });
+
   it("abas com contagens, aviso e bloco dos vencidos no topo; cor, espera e prazo; sem posição", async () => {
     renderWithProviders(<RegulationQueue today={TODAY26} />);
     expect((await screen.findByRole("status")).textContent).toBe("3 pedidos vencidos");

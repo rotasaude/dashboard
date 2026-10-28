@@ -16,12 +16,12 @@ import { OPTIONS_KEY } from "../lib/consultation";
 import { fmtDateTime } from "../lib/format";
 import { documentText } from "../lib/patientDocument";
 import {
-  NOMINAL_QUERY, REG_RETURNED_KEY, STATIC_QUERY, colorLabel, colorTone, draftFromRequest, regulationError, requesterKind, returnReason, typeLabel
+  NOMINAL_QUERY, REG_RETURNED_KEY, STATIC_QUERY, draftFromRequest, regulationError, requesterKind, returnReason, typeLabel
 } from "../lib/regulation";
 import { EmptyState } from "../components/EmptyState";
-import { Tag } from "../components/Tag";
 import { buttonStyle, inputStyle, secondaryButtonStyle } from "../components/formStyles";
 import { alert, box, fieldLabel, muted, okText, row, stack, title } from "./exams/styles";
+import { ColorCell } from "./regulation/ColorCell";
 import { RegulationGate } from "./regulation/RegulationGate";
 import { RequestForm } from "./regulation/RequestForm";
 import { NO_NAME } from "./regulation/RequestTable";
@@ -161,7 +161,7 @@ function ReturnedList({ unit, cid10Allowed, optionsError }: { unit: UnitOption; 
           {rows.map((r) => (
             <li key={r.id} aria-label={`${r.target.name} de ${r.patient.display_name || NO_NAME}`} style={item}>
               <div style={row}>
-                <Tag tone={colorTone(r.color)}>{colorLabel(r.color)}</Tag>
+                <ColorCell request={r} />
                 <h3 style={title}>{r.target.name}</h3>
                 <span className="mono" style={muted}>{typeLabel(r.type)}</span>
               </div>
