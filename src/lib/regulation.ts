@@ -18,6 +18,7 @@ export const STALE_TEXT = "outra pessoa alterou este pedido enquanto você decid
 export const QUOTA_EXHAUSTED_TEXT = "a cota desta oferta acabou enquanto você decidia — escolha outra oferta";
 export const SKIP_REASON_TEXT =
   "Há pedido mais antigo, de cor igual ou mais grave, esperando nesta especialidade ou procedimento com oferta disponível. Para autorizar este antes, registre o motivo.";
+export const COLOR_REASON_TEXT = "ao mudar a cor, informe o motivo";
 export const REFERRAL_HINT =
   "Encaminhamento a especialista ou procedimento é pelo “Pedir regulação” na consulta; este desfecho é só para outra unidade da rede.";
 export const UNSAVED_REQUEST_NOTE = "O pedido de regulação que você está escrevendo ainda não foi salvo e não vai junto.";
@@ -350,7 +351,7 @@ const FIELD_LABEL: Record<string, string> = {
 };
 
 const MESSAGES: Record<string, string> = {
-  color_reason_required: "ao mudar a cor, informe o motivo",
+  color_reason_required: COLOR_REASON_TEXT,
   cbo_not_allowed:
     "seu CBO não pode pedir este encaminhamento: médico pede qualquer especialidade ou procedimento; enfermeiro, só os da lista do município; dentista, só especialidades odontológicas",
   appointment_scheduled: "a unidade já marcou o horário: o cidadão cancela pelo celular, ou a falta devolve o pedido à regulação",

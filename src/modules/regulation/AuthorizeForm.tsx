@@ -5,10 +5,10 @@
 // formulário, com o que foi digitado; `stale_version` e `invalid_transition` sobem para quem tem o "Recarregar".
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ApiError, errorCode, listCareOffers, authorizeRegulationRequest } from "../../lib/api";
+import { errorCode, listCareOffers, authorizeRegulationRequest } from "../../lib/api";
 import type { AuthorizeInput, CareOffer, RegulationRequest, RiskColor } from "../../lib/api";
 import {
-  COLORS, NOMINAL_QUERY, REG_OFFERS_KEY, SKIP_REASON_TEXT, currentMonth, providerKindLabel, reasonProblem, regulationError
+  COLORS, COLOR_REASON_TEXT, NOMINAL_QUERY, REG_OFFERS_KEY, SKIP_REASON_TEXT, currentMonth, providerKindLabel, reasonProblem, regulationError
 } from "../../lib/regulation";
 import { Tag } from "../../components/Tag";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
@@ -33,7 +33,10 @@ export function AuthorizeForm({ request, today, onDone, onStale, onCancel }: {
     ...NOMINAL_QUERY
   });
   const [ offerId, setOfferId ] = useState<string | null>(null);
-  const [ color, setColor ] = useState<string>(request.color);
+  // A cor escolhida vale só para a versão do pedido em que foi escolhida: um "Recarregar" com outra cor confirmada
+  // volta a seguir o pedido, sem acender o motivo sem o usuário mexer.
+  const [ pick, setPick ] = useState<{ version: number; color: string } | null>(null);
+  const color = pick && pick.version === request.version ? pick.color : request.color;
   const [ colorReason, setColorReason ] = useState("");
   const [ skipAsked, setSkipAsked ] = useState(false);
   const [ skipReason, setSkipReason ] = useState("");
@@ -50,9 +53,7 @@ export function AuthorizeForm({ request, today, onDone, onStale, onCancel }: {
     if (busy) return;
     if (!chosen) { setMessage(CHOOSE_OFFER_TEXT); return; }
     if (colorChanged) {
-      const reason = colorReason.trim() === ""
-        ? regulationError(new ApiError(422, { error: "color_reason_required" }, ""))
-        : reasonProblem(colorReason);
+      const reason = colorReason.trim() === "" ? COLOR_REASON_TEXT : reasonProblem(colorReason);
       if (reason) { setMessage(reason); return; }
     }
     if (skipAsked) {
@@ -103,7 +104,7 @@ export function AuthorizeForm({ request, today, onDone, onStale, onCancel }: {
       </fieldset>
       <label style={fieldLabel}>
         Cor confirmada
-        <select value={color} style={inputStyle} onChange={(e) => setColor(e.target.value)}>
+        <select value={color} style={inputStyle} onChange={(e) => setPick({ version: request.version, color: e.target.value })}>
           {COLORS.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
           {!COLORS.some((c) => c.key === request.color) && <option value={request.color}>{request.color}</option>}
         </select>

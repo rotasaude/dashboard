@@ -227,6 +227,50 @@ describe("RequestDetail", () => {
     await waitFor(() => expect(mocked(api.getRegulationRequest)).toHaveBeenCalledTimes(2));
   });
 
+  it("invalid_transition e Recarregar com a situação nova: o formulário que não vale mais some", async () => {
+    mocked(api.denyRegulationRequest).mockRejectedValue(new ApiError(422, { error: "invalid_transition" }, "x"));
+    mount();
+    fireEvent.click(await screen.findByRole("button", { name: "Negar" }));
+    text("Motivo da negativa", "Não há indicação clínica para a especialidade");
+    fireEvent.click(screen.getByRole("button", { name: "Negar pedido" }));
+    await screen.findByRole("alert");
+    mocked(api.getRegulationRequest).mockResolvedValue(regRequest({ status: "authorized", authorization: AUTHORIZED_OWN, version: 4 }));
+    fireEvent.click(screen.getByRole("button", { name: "Recarregar" }));
+    await waitFor(() => expect(screen.queryByLabelText("Motivo da negativa")).toBeNull());
+    expect(screen.queryByRole("button", { name: "Negar" })).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.getByRole("button", { name: "Cancelar o pedido" })).not.toBeNull();
+  });
+
+  it("Recarregar com outra cor confirmada: o motivo da mudança não acende sozinho e a escolha de oferta fica", async () => {
+    mount();
+    const form = await openAuthorize();
+    fireEvent.click(within(form).getByLabelText(/Consórcio Leste/));
+    mocked(api.authorizeRegulationRequest).mockRejectedValueOnce(new ApiError(409, { error: "stale_version" }, "x"));
+    fireEvent.click(within(form).getByRole("button", { name: "Confirmar autorização" }));
+    await screen.findByRole("alert");
+    mocked(api.getRegulationRequest).mockResolvedValue(regRequest({ color: "red", version: 4 }));
+    fireEvent.click(screen.getByRole("button", { name: "Recarregar" }));
+    await waitFor(() => expect((screen.getByLabelText("Cor confirmada") as HTMLSelectElement).value).toBe("red"));
+    expect(screen.queryByLabelText("Motivo da mudança de cor")).toBeNull();
+    expect((within(form).getByLabelText(/Consórcio Leste/) as HTMLInputElement).checked).toBe(true);
+    fireEvent.click(within(form).getByRole("button", { name: "Confirmar autorização" }));
+    await waitFor(() => expect(mocked(api.authorizeRegulationRequest)).toHaveBeenLastCalledWith("rr1", { offer_id: "of3", version: 4 }));
+  });
+
+  it("extra recebe o pedido e `applied`: mostra a situação nova sem leitura a mais e Voltar à fila passa changed = true", async () => {
+    const next = regRequest({ status: "authorized", authorization: AUTHORIZED_OWN, version: 4 });
+    renderWithProviders(<RequestDetail id="rr1" today={TODAY26} onBack={onBack} onChanged={onChanged}
+      extra={({ request, applied }) => <button type="button" onClick={() => applied(next)}>{`aplicar sobre v${request.version}`}</button>} />);
+    fireEvent.click(await screen.findByRole("button", { name: "aplicar sobre v3" }));
+    expect(await screen.findByRole("button", { name: "aplicar sobre v4" })).not.toBeNull();
+    expect(screen.getByText("autorizado")).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Autorizar" })).toBeNull();
+    expect(mocked(api.getRegulationRequest)).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "Voltar à fila" }));
+    expect(onBack).toHaveBeenLastCalledWith(true);
+  });
+
   it("ações por situação: autorizado não nega nem autoriza", async () => {
     mocked(api.getRegulationRequest).mockResolvedValue(regRequest({ status: "authorized", authorization: AUTHORIZED_OWN }));
     mount();
@@ -253,7 +297,7 @@ describe("RequestDetail", () => {
 
   it("Guia em PDF: janela bloqueada mostra a frase; o slot extra aparece", async () => {
     vi.spyOn(window, "open").mockReturnValue(null);
-    renderWithProviders(<RequestDetail id="rr1" today={TODAY26} onBack={onBack} onChanged={onChanged} extra={<p>espaço das próximas tasks</p>} />);
+    renderWithProviders(<RequestDetail id="rr1" today={TODAY26} onBack={onBack} onChanged={onChanged} extra={() => <p>espaço das próximas tasks</p>} />);
     fireEvent.click(await screen.findByRole("button", { name: "Guia em PDF" }));
     expect((await screen.findByRole("alert")).textContent).toBe(POPUP_BLOCKED);
     expect(screen.getByText("espaço das próximas tasks")).not.toBeNull();

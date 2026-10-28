@@ -5,7 +5,7 @@
 // aberto e oferecem "Recarregar". Depois de uma decisão, `onChanged(frase)` devolve à fila (que relê); "Voltar à fila"
 // avisa por `onBack(changed)` se houve decisão, para a fila reler só quando precisa. `extra` é o espaço das Tasks 12 e 13.
 import { useRef, useState, type ReactNode } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   cancelRegulationRequest, denyRegulationRequest, errorCode, getRegulationRequest, returnRegulationRequest,
   type RegulationRequest
@@ -29,9 +29,14 @@ type Mode = "authorize" | "return" | "deny" | "cancel" | null;
 const NO_NAME = "pessoa sem nome no cadastro";
 const dash = (v: string | null | undefined) => (v && v.trim() !== "" ? v : "—");
 
+// Contexto do `extra` (Tasks 12 e 13): o pedido lido e `applied`, que grava no cache o pedido devolvido por uma ação
+// que deixa o detalhe aberto (agendar, desfecho, número externo) e marca que a fila mudou, sem leitura nominal a mais.
+export interface DetailContext { request: RegulationRequest; applied(updated: RegulationRequest): void }
+
 export function RequestDetail({ id, today, onBack, onChanged, extra }: {
-  id: string; today?: string; onBack(changed: boolean): void; onChanged(text: string): void; extra?: ReactNode;
+  id: string; today?: string; onBack(changed: boolean): void; onChanged(text: string): void; extra?: (ctx: DetailContext) => ReactNode;
 }) {
+  const queryClient = useQueryClient();
   const day = today ?? cityIsoDate();
   const detail = useQuery({ queryKey: [ REG_DETAIL_KEY, id ], queryFn: () => getRegulationRequest(id), ...NOMINAL_QUERY });
   const [ mode, setMode ] = useState<Mode>(null);
@@ -41,6 +46,7 @@ export function RequestDetail({ id, today, onBack, onChanged, extra }: {
   const request = detail.data;
 
   const done = (text: string) => { changed.current = true; onChanged(text); };
+  const applied = (updated: RegulationRequest) => { changed.current = true; queryClient.setQueryData([ REG_DETAIL_KEY, id ], updated); };
   const reload = () => { void detail.refetch().then((r) => { if (!r.isError) setStale(null); }); };
   const guide = async () => {
     setGuideError(null);
@@ -80,6 +86,11 @@ export function RequestDetail({ id, today, onBack, onChanged, extra }: {
   const auth = request.authorization;
   const cancelText = auth && request.outcome === null ? "Pedido cancelado; a vaga volta para a cota do mês." : "Pedido cancelado.";
   const close = () => setMode(null);
+  // O formulário aberto só vale enquanto a situação lida ainda permite a ação (um "Recarregar" pode ter mudado isso).
+  const allowed: Record<Exclude<Mode, null>, boolean> = {
+    authorize: actions.authorize, return: actions.returnBack, deny: actions.deny, cancel: actions.cancel
+  };
+  const active: Mode = mode && allowed[mode] ? mode : null;
 
   return (
     <section aria-label={request.target.name} style={stack}>
@@ -147,7 +158,7 @@ export function RequestDetail({ id, today, onBack, onChanged, extra }: {
           <button type="button" style={buttonStyle} onClick={reload}>Recarregar</button>
         </div>
       )}
-      {mode === null && (
+      {active === null && (
         <div style={row}>
           {actions.authorize && <button type="button" style={buttonStyle} onClick={() => setMode("authorize")}>Autorizar</button>}
           {actions.returnBack && <button type="button" style={secondaryButtonStyle} onClick={() => setMode("return")}>Devolver para complementar</button>}
@@ -155,20 +166,20 @@ export function RequestDetail({ id, today, onBack, onChanged, extra }: {
           {actions.cancel && <button type="button" style={secondaryButtonStyle} onClick={() => setMode("cancel")}>Cancelar o pedido</button>}
         </div>
       )}
-      {mode === "authorize" && <AuthorizeForm request={request} today={day} onDone={done} onStale={setStale} onCancel={close} />}
-      {mode === "return" && (
+      {active === "authorize" && <AuthorizeForm request={request} today={day} onDone={done} onStale={setStale} onCancel={close} />}
+      {active === "return" && (
         <ReasonAction label="Motivo da devolução" submitLabel="Devolver" onCancel={close}
           onSubmit={reasonAction(request, (reason, v) => returnRegulationRequest(id, reason, v), "Pedido devolvido à unidade solicitante para complementar.")} />
       )}
-      {mode === "deny" && (
+      {active === "deny" && (
         <ReasonAction label="Motivo da negativa" submitLabel="Negar pedido" onCancel={close}
           onSubmit={reasonAction(request, (reason, v) => denyRegulationRequest(id, reason, v), "Pedido negado.")} />
       )}
-      {mode === "cancel" && (
+      {active === "cancel" && (
         <ReasonAction label="Motivo do cancelamento" submitLabel="Cancelar pedido" onCancel={close}
           onSubmit={reasonAction(request, (reason, v) => cancelRegulationRequest(id, reason, v), cancelText)} />
       )}
-      {extra}
+      {extra?.({ request, applied })}
     </section>
   );
 }
