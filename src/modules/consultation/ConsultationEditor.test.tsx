@@ -224,18 +224,24 @@ describe("ConsultationEditor — notificação (módulo 25)", () => {
   const pending = () => mocked(api.getNotificationSuggestions).mockResolvedValue([ { disease: DENGUE, matched_code: "A90" } ]);
   const addedDengue = () => consultation({ evaluated_problems: [ { problem_id: null, terminology: "cid10", code: "A90", label: "Dengue", action: "add" } ] });
 
+  // A leitura das sugestões termina ANTES de finalizar: o botão é conferido com a peça já resolvida.
+  const NOTICE = "CID de notificação obrigatória (A90): notificar suspeita de Dengue";
   it.each([
-    [ "pendente", pending ],
-    [ "leitura que falha", () => mocked(api.getNotificationSuggestions).mockRejectedValue(new ApiError(500, {}, "x")) ],
-    [ "leitura sem rede", () => mocked(api.getNotificationSuggestions).mockRejectedValue(new TypeError("Failed to fetch")) ]
-  ])("sugestão %s: a finalização segue igual", async (_, arrange) => {
+    [ "pendente", pending, () => screen.findByText(NOTICE), true ],
+    [ "leitura que falha", () => mocked(api.getNotificationSuggestions).mockRejectedValue(new ApiError(500, {}, "x")), () => screen.findByRole("alert"), false ],
+    [ "leitura sem rede", () => mocked(api.getNotificationSuggestions).mockRejectedValue(new TypeError("Failed to fetch")), () => screen.findByRole("alert"), false ]
+  ])("sugestão %s: a finalização segue igual", async (_, arrange, settle, hasNote) => {
     arrange();
     mount();
     fillMinimum();
+    await settle();
     fireEvent.click(screen.getByRole("button", { name: "Finalizar consulta" }));
-    const confirm = screen.getByRole("button", { name: "Confirmar finalização" }) as HTMLButtonElement;
+    const box = screen.getByRole("region", { name: "Finalizar consulta" });
+    if (hasNote) expect(await within(box).findByText(SUGGESTION_PENDING_NOTE)).not.toBeNull();
+    else expect(within(box).queryByText(SUGGESTION_PENDING_NOTE)).toBeNull();
+    const confirm = within(box).getByRole("button", { name: "Confirmar finalização" }) as HTMLButtonElement;
     expect(confirm.disabled).toBe(false);
-    expect(screen.queryByRole("list", { name: "o que falta para finalizar" })).toBeNull();
+    expect(within(box).queryByRole("list", { name: "o que falta para finalizar" })).toBeNull();
     fireEvent.click(confirm);
     await waitFor(() => expect(mocked(api.finalizeConsultation)).toHaveBeenCalledTimes(1));
   });

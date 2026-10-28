@@ -61,6 +61,8 @@ export function NotificationSuggestions({ consultationId, problemsKey, today, fi
     try {
       await createConsultationNotification({ consultation_id: consultationId, disease_code: code, ...(symptoms ? { symptoms_on: symptoms } : {}) });
       setDone(`Suspeita de ${name} notificada à vigilância.`);
+      // Some já: sem segundo clique (409) e sem aviso de pendência se a releitura falhar.
+      setGone((g) => [ ...g, code ]);
       setSymptoms(""); setPicking(false); setPicked("");
       void suggestions.refetch();
     } catch (err) {
@@ -127,6 +129,7 @@ export function NotificationSuggestions({ consultationId, problemsKey, today, fi
 
       {done && <p role="status" style={okText}>{done}</p>}
       {error && <p role="alert" style={alert}>{error}</p>}
+      {/* Portal e não o editor: o aviso depende de `visible` (que desconta `gone`); o editor teria de espelhá-lo. */}
       {noteTarget === undefined ? note : noteTarget && note ? createPortal(note, noteTarget) : null}
     </section>
   );

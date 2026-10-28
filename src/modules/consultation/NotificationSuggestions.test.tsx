@@ -38,6 +38,20 @@ describe("NotificationSuggestions", () => {
     await waitFor(() => expect(mocked(api.getNotificationSuggestions)).toHaveBeenCalledTimes(2));
   });
 
+  it("depois de notificar, a sugestão some na hora, mesmo se a releitura falhar, e o aviso de finalização também", async () => {
+    mocked(api.getNotificationSuggestions).mockResolvedValueOnce([ { disease: DENGUE, matched_code: "A90" } ])
+      .mockRejectedValue(new ApiError(500, {}, "x"));
+    mount(true);
+    await screen.findByText(SUGGESTION_PENDING_NOTE);
+    fireEvent.click(screen.getByRole("button", { name: "Notificar suspeita de Dengue" }));
+    await screen.findByRole("status");
+    expect(screen.queryByRole("button", { name: "Notificar suspeita de Dengue" })).toBeNull();
+    expect(screen.queryByText(SUGGESTION_PENDING_NOTE)).toBeNull();
+    // A releitura que falhou só aparece na peça; a notificação feita não é refeita.
+    await screen.findByRole("alert");
+    expect(mocked(api.createConsultationNotification)).toHaveBeenCalledTimes(1);
+  });
+
   it("sem data dos sintomas, o corpo não leva symptoms_on", async () => {
     mount();
     fireEvent.click(await screen.findByRole("button", { name: "Notificar suspeita de Dengue" }));
