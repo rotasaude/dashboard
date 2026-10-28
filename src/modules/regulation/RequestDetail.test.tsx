@@ -273,6 +273,46 @@ describe("RequestDetail", () => {
     expect(onBack).toHaveBeenLastCalledWith(true);
   });
 
+  it("`applied` limpa a recusa de versão anterior (o alerta e o Recarregar somem)", async () => {
+    mocked(api.authorizeRegulationRequest).mockRejectedValueOnce(new ApiError(409, { error: "stale_version" }, "x"));
+    const next = regRequest({ status: "external", state_regulated: true, version: 4 });
+    renderWithProviders(<RequestDetail id="rr1" today={TODAY26} onBack={onBack} onChanged={onChanged}
+      extra={({ applied }) => <button type="button" onClick={() => applied(next)}>aplicar</button>} />);
+    const form = await openAuthorize();
+    fireEvent.click(within(form).getByLabelText(/Ambulatório de Especialidades/));
+    fireEvent.click(within(form).getByRole("button", { name: "Confirmar autorização" }));
+    expect((await screen.findByRole("alert")).textContent).toBe(STALE_TEXT);
+    fireEvent.click(screen.getByRole("button", { name: "aplicar" }));
+    await waitFor(() => expect(screen.queryByText(STALE_TEXT)).toBeNull());
+    expect(screen.queryByRole("button", { name: "Recarregar" })).toBeNull();
+    expect(mocked(api.getRegulationRequest)).toHaveBeenCalledTimes(1);
+  });
+
+  it("a nota de sucesso some no Recarregar e quando uma nova ação começa", async () => {
+    mocked(api.getRegulationRequest).mockResolvedValue(regRequest({ status: "external", state_regulated: true }));
+    renderWithProviders(<RequestDetail id="rr1" today={TODAY26} onBack={onBack} onChanged={onChanged}
+      extra={({ notify, stale, begin }) => (
+        <>
+          <button type="button" onClick={() => notify("Número externo registrado.")}>nota</button>
+          <button type="button" onClick={() => stale(STALE_TEXT)}>desatualizar</button>
+          <button type="button" onClick={begin}>começar</button>
+        </>
+      )} />);
+    fireEvent.click(await screen.findByRole("button", { name: "nota" }));
+    expect((await screen.findByRole("status")).textContent).toBe("Número externo registrado.");
+    fireEvent.click(screen.getByRole("button", { name: "desatualizar" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Recarregar" }));
+    await waitFor(() => expect(screen.queryByRole("status")).toBeNull());
+    fireEvent.click(screen.getByRole("button", { name: "nota" }));
+    await screen.findByRole("status");
+    fireEvent.click(screen.getByRole("button", { name: "começar" }));
+    expect(screen.queryByRole("status")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "nota" }));
+    await screen.findByRole("status");
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar o pedido" }));
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
   const AUTHORIZED_EXTERNAL = { ...AUTHORIZED_OWN, offer_id: "of3", provider: { id: "pr3", name: "Consórcio Leste", kind: "consortium" } };
 
   it("agendar (F-26.5): o detalhe fica aberto na situação nova, com a frase, sem leitura nominal a mais", async () => {

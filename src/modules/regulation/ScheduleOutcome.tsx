@@ -25,8 +25,10 @@ export function outcomeText(after: RegulationRequest): string {
   return "Desfecho registrado.";
 }
 
-export function ScheduleOutcome({ request, onChanged, onApplied, onStale }: {
+export function ScheduleOutcome({ request, onChanged, onApplied, onStale, onStart }: {
   request: RegulationRequest; onChanged(text: string): void; onApplied?(updated: RegulationRequest): void; onStale?(text: string): void;
+  // Uma nova ação começou (abrir o formulário, enviar, confirmar o desfecho): quem chama limpa a frase de sucesso anterior.
+  onStart?(): void;
 }) {
   const [ open, setOpen ] = useState(false);
   const [ message, setMessage ] = useState<string | null>(null);
@@ -52,6 +54,7 @@ export function ScheduleOutcome({ request, onChanged, onApplied, onStale }: {
 
   async function outcome(result: "completed" | "missed") {
     setMessage(null);
+    onStart?.();
     try {
       const updated = await recordRegulationOutcome(request.id, result, request.version);
       done(updated, outcomeText(updated));
@@ -77,7 +80,7 @@ export function ScheduleOutcome({ request, onChanged, onApplied, onStale }: {
       {!open && (
         <div style={row}>
           {actions.schedule && (
-            <button type="button" style={buttonStyle} onClick={() => { setMessage(null); setOpen(true); }}>
+            <button type="button" style={buttonStyle} onClick={() => { setMessage(null); onStart?.(); setOpen(true); }}>
               {request.schedule ? "Remarcar" : "Registrar agendamento"}
             </button>
           )}
@@ -90,15 +93,15 @@ export function ScheduleOutcome({ request, onChanged, onApplied, onStale }: {
         </div>
       )}
       {open && actions.schedule && (
-        <ScheduleForm request={request} onCancel={() => setOpen(false)} onSaved={(updated) => done(updated, SCHEDULED_TEXT)} onRefused={refuse} />
+        <ScheduleForm request={request} onStart={onStart} onCancel={() => setOpen(false)} onSaved={(updated) => done(updated, SCHEDULED_TEXT)} onRefused={refuse} />
       )}
       {message && <p role="alert" style={alert}>{message}</p>}
     </div>
   );
 }
 
-function ScheduleForm({ request, onSaved, onRefused, onCancel }: {
-  request: RegulationRequest; onSaved(updated: RegulationRequest): void; onRefused(err: unknown): string | null; onCancel(): void;
+function ScheduleForm({ request, onSaved, onRefused, onCancel, onStart }: {
+  request: RegulationRequest; onStart?(): void; onSaved(updated: RegulationRequest): void; onRefused(err: unknown): string | null; onCancel(): void;
 }) {
   const [ at, setAt ] = useState("");
   const [ place, setPlace ] = useState(request.schedule?.place ?? "");
@@ -109,6 +112,7 @@ function ScheduleForm({ request, onSaved, onRefused, onCancel }: {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (busy) return;
+    onStart?.();
     const found = scheduleAtProblem(at) ?? placeProblem(place) ?? notesProblem(notes);
     const iso = cityLocalIso(at);
     if (found || !iso) { setProblem(found ?? "data e hora inválidas"); return; }

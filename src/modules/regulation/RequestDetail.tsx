@@ -4,7 +4,7 @@
 // só no "Recarregar". O detalhe nunca mostra posição na fila. `stale_version` e `invalid_transition` deixam o formulário
 // aberto e oferecem "Recarregar". Depois de uma decisão, `onChanged(frase)` devolve à fila (que relê); "Voltar à fila"
 // avisa por `onBack(changed)` se houve decisão, para a fila reler só quando precisa. O agendamento externo e o desfecho (`ScheduleOutcome`, F-26.5) deixam o detalhe aberto: gravam o pedido
-// devolvido por `applied` e mostram a frase aqui. `extra` é o espaço da Task 13.
+// devolvido por `applied` e mostram a frase aqui. `extra` recebe o contexto (`DetailContext`); o número externo (`ExternalNumberForm`, F-26.6) entra por ele.
 import { useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -33,7 +33,11 @@ const dash = (v: string | null | undefined) => (v && v.trim() !== "" ? v : "—"
 
 // Contexto do `extra` (Tasks 12 e 13): o pedido lido e `applied`, que grava no cache o pedido devolvido por uma ação
 // que deixa o detalhe aberto (agendar, desfecho, número externo) e marca que a fila mudou, sem leitura nominal a mais.
-export interface DetailContext { request: RegulationRequest; applied(updated: RegulationRequest): void }
+// `notify` mostra a frase de sucesso; `stale` mostra a recusa de versão com o "Recarregar"; `begin` avisa que uma nova ação
+// começou (a frase de sucesso anterior sai, para não ficar contradita na tela).
+export interface DetailContext {
+  request: RegulationRequest; applied(updated: RegulationRequest): void; notify(text: string): void; stale(text: string): void; begin(): void;
+}
 
 export function RequestDetail({ id, today, onBack, onChanged, extra }: {
   id: string; today?: string; onBack(changed: boolean): void; onChanged(text: string): void; extra?: (ctx: DetailContext) => ReactNode;
@@ -48,9 +52,12 @@ export function RequestDetail({ id, today, onBack, onChanged, extra }: {
   const changed = useRef(false);
   const request = detail.data;
 
+  // A frase de sucesso (`note`) vale até a próxima ação ou o "Recarregar": nunca fica ao lado de uma recusa mais nova.
+  const begin = () => setNote(null);
   const done = (text: string) => { changed.current = true; onChanged(text); };
   const applied = (updated: RegulationRequest) => { changed.current = true; setStale(null); queryClient.setQueryData([ REG_DETAIL_KEY, id ], updated); };
-  const reload = () => { void detail.refetch().then((r) => { if (!r.isError) setStale(null); }); };
+  const reload = () => { setNote(null); void detail.refetch().then((r) => { if (!r.isError) setStale(null); }); };
+  const startMode = (next: Exclude<Mode, null>) => { begin(); setMode(next); };
   const guide = async () => {
     setGuideError(null);
     const out = await openGuide(id);
@@ -163,10 +170,10 @@ export function RequestDetail({ id, today, onBack, onChanged, extra }: {
       )}
       {active === null && (
         <div style={row}>
-          {actions.authorize && <button type="button" style={buttonStyle} onClick={() => setMode("authorize")}>Autorizar</button>}
-          {actions.returnBack && <button type="button" style={secondaryButtonStyle} onClick={() => setMode("return")}>Devolver para complementar</button>}
-          {actions.deny && <button type="button" style={secondaryButtonStyle} onClick={() => setMode("deny")}>Negar</button>}
-          {actions.cancel && <button type="button" style={secondaryButtonStyle} onClick={() => setMode("cancel")}>Cancelar o pedido</button>}
+          {actions.authorize && <button type="button" style={buttonStyle} onClick={() => startMode("authorize")}>Autorizar</button>}
+          {actions.returnBack && <button type="button" style={secondaryButtonStyle} onClick={() => startMode("return")}>Devolver para complementar</button>}
+          {actions.deny && <button type="button" style={secondaryButtonStyle} onClick={() => startMode("deny")}>Negar</button>}
+          {actions.cancel && <button type="button" style={secondaryButtonStyle} onClick={() => startMode("cancel")}>Cancelar o pedido</button>}
         </div>
       )}
       {active === "authorize" && <AuthorizeForm request={request} today={day} onDone={done} onStale={setStale} onCancel={close} />}
@@ -183,8 +190,8 @@ export function RequestDetail({ id, today, onBack, onChanged, extra }: {
           onSubmit={reasonAction(request, (reason, v) => cancelRegulationRequest(id, reason, v), cancelText)} />
       )}
       {note && <p role="status" style={okText}>{note}</p>}
-      <ScheduleOutcome request={request} onApplied={applied} onChanged={setNote} onStale={setStale} />
-      {extra?.({ request, applied })}
+      <ScheduleOutcome request={request} onApplied={applied} onChanged={setNote} onStale={setStale} onStart={begin} />
+      {extra?.({ request, applied, notify: setNote, stale: setStale, begin })}
     </section>
   );
 }

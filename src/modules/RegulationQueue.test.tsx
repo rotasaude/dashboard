@@ -4,7 +4,7 @@ import { focusManager, onlineManager } from "@tanstack/react-query";
 
 vi.mock("../lib/api", async (importOriginal) => ({ ...(await importOriginal<typeof import("../lib/api")>()), fetchCurrentSession: vi.fn(),
   listRegulationRequests: vi.fn(), countRegulationRequests: vi.fn(), getRegulationRequest: vi.fn(), searchRegulationTargets: vi.fn(),
-  listCareOffers: vi.fn(), fetchStateExportCsv: vi.fn(), returnRegulationRequest: vi.fn() }));
+  listCareOffers: vi.fn(), fetchStateExportCsv: vi.fn(), returnRegulationRequest: vi.fn(), setRegulationExternal: vi.fn() }));
 import * as api from "../lib/api";
 import type { RegulationQuery } from "../lib/api";
 import { RegulationQueue } from "./RegulationQueue";
@@ -157,5 +157,83 @@ describe("RegulationQueue", () => {
     renderWithProviders(<RegulationQueue today={TODAY26} />);
     expect(await screen.findByText(REGULATION_NO_ROLE)).not.toBeNull();
     expect(mocked(api.listRegulationRequests)).not.toHaveBeenCalled();
+  });
+});
+
+describe("RegulationQueue — exportação para o sistema do estado", () => {
+  beforeEach(() => {
+    mocked(api.fetchCurrentSession).mockResolvedValue(regUser());
+    mocked(api.countRegulationRequests).mockResolvedValue(regCounts());
+    mocked(api.listRegulationRequests).mockResolvedValue({ requests: [ regRequest({ status: "external", state_regulated: true }) ], next_before: null });
+    mocked(api.fetchStateExportCsv).mockReset().mockResolvedValue({ blob: new Blob([ "a;b" ]), filename: null });
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  function captureDownloads() {
+    const anchors: HTMLAnchorElement[] = [];
+    const realCreate = document.createElement.bind(document);
+    vi.spyOn(document, "createElement").mockImplementation((tag: string) => {
+      const el = realCreate(tag);
+      if (tag === "a") { anchors.push(el as HTMLAnchorElement); (el as HTMLAnchorElement).click = vi.fn(); }
+      return el;
+    });
+    class FakeURL extends URL {}
+    Object.assign(FakeURL, { createObjectURL: vi.fn(() => "blob:x"), revokeObjectURL: vi.fn() });
+    vi.stubGlobal("URL", FakeURL);
+    return anchors;
+  }
+
+  it("CSV com nome sem dado pessoal; nada no storage", async () => {
+    const setItem = vi.spyOn(Storage.prototype, "setItem");
+    const anchors = captureDownloads();
+    renderWithProviders(<RegulationQueue today={TODAY26} />);
+    fireEvent.click(await screen.findByRole("tab", { name: "Pelo estado (1)" }));
+    expect(await screen.findByText("Regulados pelo estado não entram na fila municipal nem consomem cota.")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Exportar CSV para o sistema do estado" }));
+    await waitFor(() => expect(mocked(api.fetchStateExportCsv)).toHaveBeenCalledWith("external"));
+    await waitFor(() => expect(anchors.at(-1)?.download).toBe("regulacao-estado-2026-10-28.csv"));
+    expect(setItem).not.toHaveBeenCalled();
+    vi.restoreAllMocks();
+  });
+
+  it("o status da aba vai ao api; o nome seguro do api vale; a nota só na aba do estado", async () => {
+    const anchors = captureDownloads();
+    mocked(api.fetchStateExportCsv).mockResolvedValue({ blob: new Blob([ "a;b" ]), filename: "regulacao-estado-2026-10-27.csv" });
+    renderWithProviders(<RegulationQueue today={TODAY26} />);
+    await screen.findAllByRole("row", { name: /Cardiologia/ });
+    expect(screen.queryByText("Regulados pelo estado não entram na fila municipal nem consomem cota.")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Exportar CSV para o sistema do estado" }));
+    await waitFor(() => expect(mocked(api.fetchStateExportCsv)).toHaveBeenCalledWith("pending"));
+    await waitFor(() => expect(anchors.at(-1)?.download).toBe("regulacao-estado-2026-10-27.csv"));
+    vi.restoreAllMocks();
+  });
+
+  it("falha no CSV: a frase do módulo, sem repetir o corpo do api", async () => {
+    mocked(api.fetchStateExportCsv).mockRejectedValue(new api.ApiError(500, { error: "boom", detail: "Joana Lima" }, "x"));
+    renderWithProviders(<RegulationQueue today={TODAY26} />);
+    await screen.findAllByRole("row", { name: /Cardiologia/ });
+    fireEvent.click(screen.getByRole("button", { name: "Exportar CSV para o sistema do estado" }));
+    const alertBox = await screen.findByRole("alert");
+    expect(alertBox.textContent).not.toContain("Joana");
+    expect(alertBox.textContent).not.toBe("");
+  });
+
+  it("número externo no detalhe: grava, fica no detalhe com a frase, e a fila relê ao voltar", async () => {
+    const ext = regRequest({ status: "external", state_regulated: true, version: 2 });
+    mocked(api.listRegulationRequests).mockResolvedValue({ requests: [ ext ], next_before: null });
+    mocked(api.getRegulationRequest).mockResolvedValue(ext);
+    mocked(api.setRegulationExternal).mockReset().mockResolvedValue({ ...ext, version: 3, external: { system: "sisreg", number: "2026/123456" } });
+    renderWithProviders(<RegulationQueue today={TODAY26} />);
+    fireEvent.click(await screen.findByRole("tab", { name: "Pelo estado (1)" }));
+    fireEvent.click(await screen.findByRole("button", { name: /^Abrir pedido de Cardiologia/ }));
+    fireEvent.change(await screen.findByLabelText("Número no sistema do estado"), { target: { value: "2026/123456" } });
+    fireEvent.click(screen.getByRole("button", { name: "Registrar número" }));
+    await waitFor(() => expect(mocked(api.setRegulationExternal)).toHaveBeenCalledWith("rr1", "sisreg", "2026/123456", 2));
+    expect((await screen.findByText("Número externo registrado.")).getAttribute("role")).toBe("status");
+    expect(screen.getByText("SISREG 2026/123456")).not.toBeNull();
+    expect(mocked(api.getRegulationRequest)).toHaveBeenCalledTimes(1);
+    const listReads = mocked(api.listRegulationRequests).mock.calls.length;
+    fireEvent.click(screen.getByRole("button", { name: "Voltar à fila" }));
+    await waitFor(() => expect(mocked(api.listRegulationRequests).mock.calls.length).toBe(listReads + 1));
   });
 });

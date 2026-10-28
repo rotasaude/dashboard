@@ -4,16 +4,20 @@
 // relê sozinha (NOMINAL_QUERY — nem ao voltar à aba, nem ao reconectar, nem com
 // o tempo). Só a contagem relê a cada minuto, pelo hook compartilhado com o menu.
 // A ordem é a do api (vencidos, cor, data — contrato §13 G2): a tela lê UMA vez,
-// sem `overdue`, e só parte as linhas carregadas em "Vencidos" e "No prazo".
+// sem `overdue`, e só parte as linhas carregadas em "Vencidos" e "No prazo". "Exportar CSV para o sistema do estado" (F-26.6)
+// baixa a situação da aba por um link temporário; o nome do arquivo não leva dado pessoal. O número externo
+// (`ExternalNumberForm`) entra no detalhe pelo espaço `extra`.
 import { useState, type CSSProperties } from "react";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
-import { listRegulationRequests, type RegulationQuery, type RegulationRequest, type RegulationTarget, type RegulationType, type RiskColor } from "../lib/api";
+import { fetchStateExportCsv, listRegulationRequests, type RegulationQuery, type RegulationRequest, type RegulationTarget, type RegulationType, type RiskColor } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { useRegulationCount } from "../hooks/useRegulationCount";
-import { COLORS, NOMINAL_QUERY, REG_COUNT_KEY, REG_LIST_KEY, regulationError, statusLabel, typeLabel } from "../lib/regulation";
+import { COLORS, NOMINAL_QUERY, REG_COUNT_KEY, REG_LIST_KEY, exportFilename, regulationError, statusLabel, typeLabel } from "../lib/regulation";
 import { cityIsoDate } from "../lib/format";
-import { buttonStyle, inputStyle, secondaryButtonStyle } from "../components/formStyles";
+import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../components/formStyles";
 import { alert, fieldLabel, muted, okText, row, stack, title } from "./exams/styles";
+import { saveFile } from "./lab/saveFile";
+import { ExternalNumberForm } from "./regulation/ExternalNumberForm";
 import { RegulationGate } from "./regulation/RegulationGate";
 import { RequestDetail } from "./regulation/RequestDetail";
 import { RequestTable } from "./regulation/RequestTable";
@@ -38,6 +42,8 @@ export const QUEUE_TABS: TabSpec[] = [
   { key: "external", label: "Pelo estado", status: "external", count: "external" },
   { key: "finished", label: "Encerrados", status: "completed" }
 ];
+
+export const STATE_NOTE = "Regulados pelo estado não entram na fila municipal nem consomem cota.";
 
 export const FINISHED_STATUSES: string[] = [ "completed", "denied", "cancelled", "closed" ];
 
@@ -71,6 +77,8 @@ function QueueBody({ today }: { today?: string }) {
   const [ target, setTarget ] = useState<RegulationTarget | null>(null);
   const [ openId, setOpenId ] = useState<string | null>(null);
   const [ notice, setNotice ] = useState<string | null>(null);
+  const [ exporting, setExporting ] = useState(false);
+  const [ exportError, setExportError ] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
   const counts = useRegulationCount(true, user?.id ?? null);
@@ -104,6 +112,20 @@ function QueueBody({ today }: { today?: string }) {
     void queryClient.invalidateQueries({ queryKey: [ REG_COUNT_KEY ] });
   };
   const decided = (text: string) => { back(true); setNotice(text); };
+  // A situação da aba vai ao api; sem nome seguro dele, o nome é por data (sem dado pessoal).
+  const exportCsv = async () => {
+    if (exporting) return;
+    setExporting(true);
+    setExportError(null);
+    try {
+      const file = await fetchStateExportCsv(query.status);
+      saveFile(file, file.filename ?? exportFilename(day));
+    } catch (err) {
+      setExportError(regulationError(err));
+    } finally {
+      setExporting(false);
+    }
+  };
 
   return (
     <div style={stack}>
@@ -114,7 +136,7 @@ function QueueBody({ today }: { today?: string }) {
           const active = t.key === tabKey;
           return (
             <button key={t.key} type="button" role="tab" aria-selected={active} className="mono"
-              style={active ? tabActive : tabIdle} onClick={() => { setTabKey(t.key); setOpenId(null); setNotice(null); }}>
+              style={active ? tabActive : tabIdle} onClick={() => { setTabKey(t.key); setOpenId(null); setNotice(null); setExportError(null); }}>
               {label(t)}
             </button>
           );
@@ -151,8 +173,18 @@ function QueueBody({ today }: { today?: string }) {
           <TargetSearch type={type} onPick={setTarget} />
         )}
       </div>}
+      {!openId && (
+        <div style={row}>
+          <button type="button" style={exporting ? disabledButtonStyle : secondaryButtonStyle} disabled={exporting} onClick={() => void exportCsv()}>
+            Exportar CSV para o sistema do estado
+          </button>
+          {tab.key === "external" && <p style={muted}>{STATE_NOTE}</p>}
+        </div>
+      )}
+      {!openId && exportError && <p role="alert" style={alert}>{exportError}</p>}
       {openId ? (
-        <RequestDetail key={openId} id={openId} today={day} onBack={back} onChanged={decided} />
+        <RequestDetail key={openId} id={openId} today={day} onBack={back} onChanged={decided}
+          extra={(ctx) => <ExternalNumberForm request={ctx.request} onApplied={ctx.applied} onChanged={ctx.notify} onStale={ctx.stale} onStart={ctx.begin} />} />
       ) : (
         <div role="tabpanel" style={stack}>
           {list.isPending && <p style={muted}>carregando…</p>}
