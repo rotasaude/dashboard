@@ -25,12 +25,16 @@ import { ProblemsEditor } from "./ProblemsEditor";
 import { ConductsField } from "./ConductsField";
 import { ExamRequestsField } from "./ExamRequestsField";
 import { NotificationSuggestions } from "./NotificationSuggestions";
+import { RegulationRequestsField } from "./RegulationRequestsField";
+import { regulationFinalizeError } from "../../lib/regulation";
 
 export interface ConsultationEditorProps {
   // Módulo 21a: prioridade de cada exame (com exam_tracking ligado).
   examPriority?: boolean;
   // Módulo 25 (ADR 0043): a peça de notificação de doença ou agravo (médico/enfermeiro, vigilância ligada).
   notifications?: boolean;
+  // Módulo 26a (F-26.2): a peça "Pedir regulação" (rascunhos que vão para a regulação ao finalizar). Nunca bloqueia.
+  regulation?: boolean;
   consultation: Consultation;
   record: ClinicalRecord;
   options: ConsultationOptions;
@@ -86,6 +90,8 @@ export function ConsultationEditor(props: ConsultationEditorProps) {
   }, [ addedKey, autosave.pending, autosave.status.kind ]);
   // Onde o aviso "notificação pendente" aparece ao finalizar: dentro da caixa de finalizar.
   const [ noteHost, setNoteHost ] = useState<HTMLElement | null>(null);
+  // Módulo 26a: a finalização recusada pela regra da regulação pede que a peça releia a lista.
+  const [ regulationKey, setRegulationKey ] = useState(0);
 
   // Sair com texto ainda não salvo pede confirmação do navegador (AT-04).
   useLeaveGuard(autosave.pending && !locked && !sealing);
@@ -109,7 +115,12 @@ export function ConsultationEditor(props: ConsultationEditorProps) {
       setSealing(true);
       props.onFinalized(await finalizeConsultation(consultation.id, outcomeBody(outcome, referralUnitId)));
     } catch (err) {
-      if (!lock(err)) { setError(consultationError(err)); setSealing(false); }
+      if (!lock(err)) {
+        const regulationText = regulationFinalizeError(err);
+        if (regulationText) setRegulationKey((k) => k + 1);
+        setError(regulationText ?? consultationError(err));
+        setSealing(false);
+      }
     } finally {
       setBusy(false);
     }
@@ -162,6 +173,13 @@ export function ConsultationEditor(props: ConsultationEditorProps) {
           noteTarget={noteHost} />
       )}
 
+      {/* Módulo 26a: o pedido de regulação nunca bloqueia a finalização — fora de `missing`, de `finalizeProblems`
+          e de `blockedFinal`; rascunho que deixou de valer volta em `regulation_not_sent` e a consulta finaliza. */}
+      {props.regulation && (
+        <RegulationRequestsField consultationId={consultation.id} cbo={consultation.cbo_code} cid10Allowed={options.cid10_allowed_for_cbo}
+          mode="draft" finalizing={finalizing} noteTarget={noteHost} searchDelayMs={props.searchDelayMs} refreshKey={regulationKey} />
+      )}
+
       {!finalizing ? (
         <div>
           <button type="button" disabled={locked} style={locked ? disabledButtonStyle : buttonStyle} onClick={() => setFinalizing(true)}>
@@ -175,15 +193,15 @@ export function ConsultationEditor(props: ConsultationEditorProps) {
             Finalizar encerra o atendimento com o desfecho abaixo e gera a ficha do e-SUS. Encaminhamento e retorno geram o pedido de agendamento.
           </p>
           <OutcomeFields idPrefix="consultation-" value={outcome} onChange={setOutcome}
-            referenceIds={props.referenceUnitIds} unit={unit} units={units} />
+            referenceIds={props.referenceUnitIds} unit={unit} units={units} regulationHint={props.regulation} />
           {missing.length > 0 && (
             <ul aria-label="o que falta para finalizar" style={{ margin: 0, paddingLeft: 18 }}>
               {missing.map((m) => <li key={m} style={alert}>{m}</li>)}
             </ul>
           )}
           {error && <p role="alert" style={alert}>{error}</p>}
-          {/* Destino do aviso de notificação pendente (portal da peça); sem caixa própria no layout. */}
-          {props.notifications && <div ref={setNoteHost} style={{ display: "contents" }} />}
+          {/* Destino dos avisos de finalização das peças (portal): notificação pendente e pedidos de regulação. */}
+          {(props.notifications || props.regulation) && <div ref={setNoteHost} style={{ display: "contents" }} />}
           <div style={{ display: "flex", gap: 8 }}>
             <button type="button" disabled={blockedFinal} style={blockedFinal ? disabledButtonStyle : buttonStyle}
               onClick={() => void confirm()}>

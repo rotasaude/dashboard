@@ -7,7 +7,8 @@ import type { ReactNode } from "react";
 vi.mock("../../lib/api", async (importOriginal) => {
   const real = await importOriginal<typeof import("../../lib/api")>();
   return { ...real, saveConsultationDraft: vi.fn(), finalizeConsultation: vi.fn(), searchTerminology: vi.fn(), searchSigtap: vi.fn(),
-    getNotificationSuggestions: vi.fn(), createConsultationNotification: vi.fn(), listSurveillanceDiseases: vi.fn() };
+    getNotificationSuggestions: vi.fn(), createConsultationNotification: vi.fn(), listSurveillanceDiseases: vi.fn(),
+    listConsultationRegulationRequests: vi.fn(), createRegulationRequest: vi.fn(), searchRegulationTargets: vi.fn() };
 });
 
 import * as api from "../../lib/api";
@@ -16,6 +17,8 @@ import { ConsultationEditor } from "./ConsultationEditor";
 import { NOW19, consultation, finalized, options, record } from "../../test/consultationFixtures";
 import { DENGUE } from "../../test/surveillanceFixtures";
 import { SUGGESTION_PENDING_NOTE } from "./NotificationSuggestions";
+import { REGULATION_REQUIRED_TEXT, UNSAVED_REQUEST_NOTE } from "../../lib/regulation";
+import { regRequest } from "../../test/regulationFixtures";
 
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
@@ -322,5 +325,101 @@ describe("ConsultationEditor — notificação (módulo 25)", () => {
     await waitFor(() => expect(mocked(api.saveConsultationDraft)).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(screen.getByText(/^salvo às/)).not.toBeNull());
     expect(mocked(api.getNotificationSuggestions)).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("ConsultationEditor — pedido de regulação (módulo 26a)", () => {
+  // O pedido nunca bloqueia a finalização: a peça fica fora de `missing`, `finalizeProblems` e `blockedFinal`.
+  beforeEach(() => {
+    for (const fn of [ api.saveConsultationDraft, api.finalizeConsultation, api.listConsultationRegulationRequests ]) mocked(fn).mockReset();
+    mocked(api.saveConsultationDraft).mockImplementation(async () => consultation());
+    mocked(api.finalizeConsultation).mockResolvedValue(finalized());
+    mocked(api.searchRegulationTargets).mockResolvedValue([]);
+  });
+  const mount = (regulation = true, onFinalized = vi.fn()) => render(
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <ConsultationEditor consultation={consultation()} record={record()} options={options()} unit={unit} units={units}
+        regulation={regulation} autosaveDelayMs={0} searchDelayMs={0} onFinalized={onFinalized} onLocked={vi.fn()} />
+    </QueryClientProvider>);
+
+  it.each([
+    [ "formulário aberto e não salvo", () => { mocked(api.listConsultationRegulationRequests).mockResolvedValue([]); }, true ],
+    [ "leitura que falha", () => { mocked(api.listConsultationRegulationRequests).mockRejectedValue(new ApiError(500, {}, "x")); }, false ],
+    [ "leitura sem rede", () => { mocked(api.listConsultationRegulationRequests).mockRejectedValue(new TypeError("Failed to fetch")); }, false ]
+  ])("formulário aberto ou leitura que falha (%s): a finalização segue igual", async (_, arrange, typing) => {
+    arrange();
+    mount();
+    fillMinimum();
+    const piece = await screen.findByRole("region", { name: "Pedidos de regulação" });
+    if (typing) {
+      fireEvent.click(await within(piece).findByRole("button", { name: "Pedir regulação" }));
+      fireEvent.change(within(piece).getByLabelText("Justificativa"), { target: { value: "começou e não salvou" } });
+    } else {
+      await within(piece).findByRole("alert");
+    }
+    fireEvent.click(screen.getByRole("button", { name: "Finalizar consulta" }));
+    const box = screen.getByRole("region", { name: "Finalizar consulta" });
+    if (typing) expect(await within(box).findByText(UNSAVED_REQUEST_NOTE)).not.toBeNull();
+    expect(within(box).queryByRole("alert")).toBeNull();
+    expect(within(box).queryByRole("list", { name: "o que falta para finalizar" })).toBeNull();
+    const confirm = within(box).getByRole("button", { name: "Confirmar finalização" }) as HTMLButtonElement;
+    expect(confirm.disabled).toBe(false);
+    fireEvent.click(confirm);
+    await waitFor(() => expect(mocked(api.finalizeConsultation)).toHaveBeenCalledTimes(1));
+  });
+
+  it("finalização recusada por encaminhamento sem unidade: a frase diz o que fazer, nada se perde, a peça relê", async () => {
+    mocked(api.listConsultationRegulationRequests).mockResolvedValue([]);
+    mocked(api.finalizeConsultation).mockRejectedValueOnce(new ApiError(422, { error: "regulation_request_required" }, "x"));
+    mount();
+    fillMinimum();
+    await screen.findByRole("region", { name: "Pedidos de regulação" });
+    fireEvent.click(screen.getByRole("button", { name: "Finalizar consulta" }));
+    const box = screen.getByRole("region", { name: "Finalizar consulta" });
+    fireEvent.click(within(box).getByRole("button", { name: "Confirmar finalização" }));
+    expect((await within(box).findByRole("alert")).textContent).toBe(REGULATION_REQUIRED_TEXT);
+    expect((screen.getByLabelText("Plano (P)") as HTMLTextAreaElement).value).toBe("Ajuste de dose; retorno em 30 dias.");
+    await waitFor(() => expect(mocked(api.listConsultationRegulationRequests).mock.calls.length).toBeGreaterThan(1));
+  });
+
+  it("rascunho que deixou de valer: a consulta finaliza e o retorno segue para quem abriu", async () => {
+    mocked(api.listConsultationRegulationRequests).mockResolvedValue([ regRequest({ status: "draft" }) ]);
+    mocked(api.finalizeConsultation).mockResolvedValue({ ...finalized(),
+      regulation_not_sent: [ { index: 0, id: "rr1", error: "cbo_not_allowed", path: "target_code" } ] });
+    const onFinalized = vi.fn();
+    mount(true, onFinalized);
+    fillMinimum();
+    await screen.findByRole("listitem", { name: "Cardiologia" });
+    fireEvent.click(screen.getByRole("button", { name: "Finalizar consulta" }));
+    const box = screen.getByRole("region", { name: "Finalizar consulta" });
+    fireEvent.click(within(box).getByRole("button", { name: "Confirmar finalização" }));
+    await waitFor(() => expect(onFinalized).toHaveBeenCalledTimes(1));
+    expect(onFinalized.mock.calls[0][0].regulation_not_sent).toHaveLength(1);
+    expect(within(box).queryByRole("alert")).toBeNull();
+  });
+
+  it("ao finalizar: a conta dos rascunhos e o aviso do não salvo, dentro da caixa", async () => {
+    mocked(api.listConsultationRegulationRequests).mockResolvedValue([ { ...regRequest({ status: "draft" }) } ]);
+    mount();
+    await screen.findByRole("listitem", { name: "Cardiologia" });
+    fireEvent.click(screen.getByRole("button", { name: "Finalizar consulta" }));
+    const box = screen.getByRole("region", { name: "Finalizar consulta" });
+    expect(await within(box).findByText("1 pedido de regulação vai para a fila da regulação ao finalizar.")).not.toBeNull();
+  });
+
+  it("desfecho Encaminhado: a dica de que especialista é pelo pedido; sem a prop, nem peça nem dica", async () => {
+    mocked(api.listConsultationRegulationRequests).mockResolvedValue([]);
+    mount();
+    fireEvent.click(screen.getByRole("button", { name: "Finalizar consulta" }));
+    fireEvent.change(screen.getByLabelText("Desfecho"), { target: { value: "referred" } });
+    expect(screen.getByText(/só para outra unidade da rede/)).not.toBeNull();
+    cleanup();
+    mocked(api.listConsultationRegulationRequests).mockClear();
+    mount(false);
+    expect(screen.queryByRole("region", { name: "Pedidos de regulação" })).toBeNull();
+    expect(mocked(api.listConsultationRegulationRequests)).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Finalizar consulta" }));
+    fireEvent.change(screen.getByLabelText("Desfecho"), { target: { value: "referred" } });
+    expect(screen.queryByText(/só para outra unidade da rede/)).toBeNull();
   });
 });

@@ -3,6 +3,7 @@
 // quando os dois estão na tela.
 import type { CareOutcome, HealthUnit } from "../../lib/api";
 import { CARE_OUTCOMES, OUTCOME_LABEL, outcomeView, type OutcomeDraft } from "../../lib/outcome";
+import { REFERRAL_HINT } from "../../lib/regulation";
 import { inputStyle } from "../../components/formStyles";
 import { FrozenTextNotice } from "../../components/FrozenTextNotice";
 
@@ -13,9 +14,11 @@ interface Props {
   unit: HealthUnit;
   units: HealthUnit[];
   idPrefix?: string;
+  // Módulo 26a: sob "Encaminhado", lembra que especialista e procedimento são pelo "Pedir regulação" da consulta.
+  regulationHint?: boolean;
 }
 
-export function OutcomeFields({ value, onChange, referenceIds, unit, units, idPrefix = "" }: Props) {
+export function OutcomeFields({ value, onChange, referenceIds, unit, units, idPrefix = "", regulationHint }: Props) {
   const { referenceUnits, otherUnits, referralUnitId, targetUnitName } = outcomeView(value, referenceIds, unit, units);
   const set = (patch: Partial<OutcomeDraft>) => onChange({ ...value, ...patch });
 
@@ -38,6 +41,7 @@ export function OutcomeFields({ value, onChange, referenceIds, unit, units, idPr
               {otherUnits.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
             </select>
           </label>
+          {regulationHint && <small style={hintStyle}>{REFERRAL_HINT}</small>}
           <label style={labelStyle}>
             Descrição
             <input value={value.note} onChange={(e) => set({ note: e.target.value })} style={inputStyle}
@@ -68,3 +72,4 @@ export function OutcomeFields({ value, onChange, referenceIds, unit, units, idPr
 }
 
 const labelStyle = { display: "flex", flexDirection: "column" as const, gap: 4, fontSize: 12, color: "var(--ink2)" };
+const hintStyle = { fontSize: 12, color: "var(--ink3)" };
