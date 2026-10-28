@@ -129,7 +129,7 @@ export function TransitionForm({ notification, onDone, onReload }: Props) {
           {chosen === "entered" && (
             <label style={fieldLabel}>
               Número da notificação no sistema oficial
-              <input value={officialNumber} maxLength={60} style={inputStyle} autoComplete="off" onChange={(e) => setOfficialNumber(e.target.value)} />
+              <input value={officialNumber} style={inputStyle} autoComplete="off" onChange={(e) => setOfficialNumber(e.target.value)} />
             </label>
           )}
           {chosen === "dismiss" ? (

@@ -97,6 +97,17 @@ describe("NotificationDetail", () => {
     expect(mocked(api.transitionNotification)).not.toHaveBeenCalled();
   });
 
+  it("o campo do número oficial não corta o digitado (sem maxLength)", async () => {
+    mocked(api.getNotification).mockResolvedValue(notification({ status: "closed", classification: "confirmed", version: 6 }));
+    open();
+    fireEvent.click(await screen.findByRole("button", { name: "Registrar número oficial" }));
+    const input = screen.getByLabelText("Número da notificação no sistema oficial");
+    expect(input.hasAttribute("maxlength")).toBe(false);
+    const long = "A".repeat(61);
+    fireEvent.change(input, { target: { value: long } });
+    expect((input as HTMLInputElement).value).toBe(long);
+  });
+
   it("número oficial: formato antes; vai com a transição para entered", async () => {
     mocked(api.getNotification).mockResolvedValue(notification({ status: "closed", classification: "confirmed", version: 6 }));
     mocked(api.transitionNotification).mockResolvedValue(notification({ status: "entered", official_number: "1234567", version: 7 }));

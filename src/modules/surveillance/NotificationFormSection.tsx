@@ -50,7 +50,7 @@ export function NotificationFormSection({ notification, onSaved }: Props) {
     const server = formValues(notification.form, FIELDS);
     setValues((prev) => Object.fromEntries(FIELDS.map((f) => [ f.key, edited.current.has(f.key) ? prev[f.key] : server[f.key] ])));
     setStale(false); setError(null); setInvalidKey(null);
-  }, [ notification.version ]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [ notification.version ]);
 
   function change(key: string, value: string) {
     edited.current.add(key);

@@ -293,12 +293,13 @@ describe("Units", () => {
       await waitFor(() => expect(api.updateUnit).toHaveBeenCalledWith("u1", "UBS Centro", "ubs", expect.anything(), "walk_in", undefined, false));
     });
 
-    it("unidade sem a chave do api conta como notificadora ao editar (default do api é sim)", async () => {
+    // O api sempre manda `notifying` (o default dele é kind == "ubs"); a chave ausente não vira "sim".
+    it("unidade sem a chave do api não conta como notificadora ao editar", async () => {
       mocked(api.listAllUnits).mockResolvedValue(rows);
       renderUnits(undefined, false, true);
       await screen.findByText("UBS Centro");
       fireEvent.click(screen.getAllByRole("button", { name: "Editar" })[0]);
-      expect((screen.getByLabelText("Unidade notificadora (notificação negativa semanal)") as HTMLInputElement).checked).toBe(true);
+      expect((screen.getByLabelText("Unidade notificadora (notificação negativa semanal)") as HTMLInputElement).checked).toBe(false);
     });
 
     it("recusa invalid_notifying é traduzida", async () => {
@@ -307,7 +308,7 @@ describe("Units", () => {
       renderUnits(undefined, false, true);
       fireEvent.click((await screen.findAllByRole("button", { name: "Editar" }))[0]);
       fireEvent.click(screen.getByRole("button", { name: "Salvar" }));
-      expect((await screen.findByRole("alert")).textContent).toBe("só unidade ativa pode ser marcada como notificadora");
+      expect((await screen.findByRole("alert")).textContent).toBe("valor de unidade notificadora inválido");
     });
   });
 });

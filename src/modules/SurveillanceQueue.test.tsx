@@ -244,6 +244,16 @@ describe("SurveillanceQueue", () => {
     expect(mocked(api.listSurveillanceDiseases)).not.toHaveBeenCalled();
   });
 
+  it("abrir uma linha fecha o painel da notificação manual", async () => {
+    renderWithProviders(<SurveillanceQueue today={TODAY25} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Notificação manual" }));
+    expect(screen.getByRole("region", { name: "Notificação manual" })).not.toBeNull();
+    mocked(api.getNotification).mockResolvedValue(notification());
+    fireEvent.click(screen.getAllByRole("button", { name: "Abrir notificação de Sarampo de 26/10/2026" })[0]);
+    expect(screen.queryByRole("region", { name: "Notificação manual" })).toBeNull();
+    expect(await screen.findByRole("region", { name: "Detalhe da notificação" })).not.toBeNull();
+  });
+
   it("Notificação manual abre o painel; Cancelar fecha; criada, abre o detalhe da nova", async () => {
     mocked(api.lookupSurveillancePerson).mockResolvedValue({ patient_id: "pa1", citizen_id: null, display_name: "Joana Lima", registration_id: null });
     mocked(api.createManualNotification).mockResolvedValue(notification({ id: "nt9", origin: "manual" }));

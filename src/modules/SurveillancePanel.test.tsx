@@ -66,6 +66,15 @@ describe("SurveillancePanel", () => {
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
+  it("Atualizar com os mesmos filtros lê de novo", async () => {
+    renderWithProviders(<SurveillancePanel today={TODAY25} />);
+    await screen.findByRole("row", { name: /Centro/ });
+    expect(panelCalls()).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "Atualizar" }));
+    await waitFor(() => expect(panelCalls()).toHaveLength(2));
+    expect(panelCalls()[1][0]).toEqual(panelCalls()[0][0]);
+  });
+
   it("semana em formato inválido ou no futuro não vai ao api", async () => {
     renderWithProviders(<SurveillancePanel today={TODAY25} />);
     await screen.findByRole("row", { name: /Centro/ });

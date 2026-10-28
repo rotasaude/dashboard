@@ -57,7 +57,10 @@ function PanelBody({ today }: { today: string }) {
     const next: Filters = { ...draft, from: draft.from.trim(), to: draft.to.trim() };
     const found = weekRangeProblem(next.from, next.to, today);
     setProblem(found);
-    if (!found) setApplied(next);
+    if (found) return;
+    // Mesmos filtros: a chave da consulta não muda, então "Atualizar" relê à mão (agregado, sem trilha).
+    if (next.from === applied.from && next.to === applied.to && next.disease === applied.disease) void panel.refetch();
+    else setApplied(next);
   }
 
   const diseaseOptions = diseases.data ?? [];

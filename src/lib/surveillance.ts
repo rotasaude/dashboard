@@ -261,7 +261,7 @@ const ERRORS: Record<string, string> = {
   invalid_residence: "município de residência inválido (não pode ser o desta cidade)",
   invalid_symptoms_on: "data dos primeiros sintomas inválida",
   invalid_patient: "confira os dados da pessoa",
-  invalid_notifying: "só unidade ativa pode ser marcada como notificadora",
+  invalid_notifying: "valor de unidade notificadora inválido",
   stale_version: STALE_TEXT,
   invalid_transition: "essa mudança não vale para a situação atual da notificação — recarregue",
   invalid_disease: "doença fora da lista vigente — recarregue a lista",

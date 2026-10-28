@@ -141,7 +141,7 @@ function QueueBody({ today }: { today?: string }) {
       <div role="tabpanel" style={stack}>
         {list.isPending && <p style={muted}>carregando…</p>}
         {list.isError && <p role="alert" style={alert}>{surveillanceError(list.error)}</p>}
-        {list.data && <NotificationTable rows={rows} onOpen={setOpenId} />}
+        {list.data && <NotificationTable rows={rows} onOpen={openNotification} />}
         {more.error && <p role="alert" style={alert}>{more.error}</p>}
         {list.data && next && (
           <div style={row}>

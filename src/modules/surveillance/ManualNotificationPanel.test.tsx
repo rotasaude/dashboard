@@ -100,13 +100,25 @@ describe("ManualNotificationPanel", () => {
   });
 
   it("busca e criação: CPF, nome e mãe só no corpo; nada no storage", async () => {
+    mocked(api.lookupSurveillancePerson).mockRejectedValue(new ApiError(404, { error: "person_not_found" }, "x"));
     mocked(api.findSurveillanceDuplicates).mockResolvedValue([]);
     panel();
+    // 1) busca pelo CPF (ninguém), 2) busca de duplicados por nome/mãe, 3) criação.
+    text("CPF", "52998224725");
+    fireEvent.click(screen.getByRole("button", { name: "Buscar pelo CPF" }));
+    await waitFor(() => expect(mocked(api.lookupSurveillancePerson)).toHaveBeenCalledWith("52998224725"));
+    await screen.findByRole("button", { name: "Cadastrar pessoa nova com este CPF" });
     fireEvent.click(screen.getByLabelText("Não tem CPF"));
     text("Nome completo", "José Souza"); text("Data de nascimento", "2026-09-30"); text("Nome da mãe", "Maria Souza");
     fireEvent.click(screen.getByRole("button", { name: "Buscar possíveis duplicados" }));
-    await screen.findByRole("button", { name: "Criar pessoa sem CPF" });
+    fireEvent.click(await screen.findByRole("button", { name: "Criar pessoa sem CPF" }));
     expect(mocked(api.findSurveillanceDuplicates).mock.calls[0][0]).toEqual({ full_name: "José Souza", birth_date: "2026-09-30", mother_name: "Maria Souza" });
+    text("Sexo", "male"); text("Motivo de não ter CPF", "3");
+    await fillCase();
+    fireEvent.click(screen.getByRole("button", { name: "Registrar notificação" }));
+    await waitFor(() => expect(mocked(api.createManualNotification)).toHaveBeenCalledTimes(1));
+    expect(mocked(api.createManualNotification).mock.calls[0][0].new_patient)
+      .toEqual({ full_name: "José Souza", birth_date: "2026-09-30", mother_name: "Maria Souza", sex: "male", no_cpf_reason: "3" });
     expect(window.localStorage.length).toBe(0);
     expect(window.sessionStorage.length).toBe(0);
   });

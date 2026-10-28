@@ -140,7 +140,7 @@ export function Units({ labOn = false, surveillanceOn = false }: { labOn?: boole
                 formatAddress(r, r.neighborhood_id ? nameOf.get(r.neighborhood_id) : null) },
               { label: "Acolhimento", w: "1.2fr", render: (r) => SCOPE_SHORT[r.screening_scope ?? "walk_in"] },
               ...(labOn ? [ { label: "Coleta", w: "0.8fr", render: (r: HealthUnitRow) => (r.collects_samples ? "coleta" : "—") } ] : []),
-              ...(surveillanceOn ? [ { label: "Notificadora", w: "0.9fr", render: (r: HealthUnitRow) => (r.notifying !== false ? "notificadora" : "—") } ] : []),
+              ...(surveillanceOn ? [ { label: "Notificadora", w: "0.9fr", render: (r: HealthUnitRow) => (r.notifying === true ? "notificadora" : "—") } ] : []),
               { label: "Situação", w: "1fr", render: (r) => <Tag tone={r.active ? "ok" : undefined}>{r.active ? "ativa" : "inativa"}</Tag> },
               {
                 label: "", w: "auto", align: "right", render: (r) => (
@@ -149,7 +149,7 @@ export function Units({ labOn = false, surveillanceOn = false }: { labOn?: boole
                       onClick={() => setEditing({ id: r.id, initial: {
                         name: r.name, kind: r.kind, ...addressFieldsFrom(r), screeningScope: r.screening_scope ?? "walk_in",
                         ...(labOn ? { collectsSamples: r.collects_samples === true } : {}),
-                        ...(surveillanceOn ? { notifying: r.notifying !== false } : {})
+                        ...(surveillanceOn ? { notifying: r.notifying === true } : {})
                       } })}>
                       Editar
                     </button>
