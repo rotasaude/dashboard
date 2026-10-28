@@ -479,6 +479,8 @@ export interface HealthUnit extends Partial<UnitAddress> {
   id: string; name: string; kind: string; screening_scope?: ScreeningScope;
   // Módulo 21b: a unidade coleta amostras para o laboratório municipal.
   collects_samples?: boolean;
+  // Módulo 25 (D15): unidade notificadora (notificação negativa semanal).
+  notifying?: boolean;
 }
 export interface HealthUnitRow extends HealthUnit {
   active: boolean;
@@ -515,11 +517,13 @@ export async function createUnit(name: string, kind: string, address: UnitAddres
 }
 
 export async function updateUnit(
-  id: string, name: string, kind: string, address: UnitAddress, screeningScope?: ScreeningScope, collectsSamples?: boolean
+  id: string, name: string, kind: string, address: UnitAddress, screeningScope?: ScreeningScope, collectsSamples?: boolean,
+  notifying?: boolean
 ): Promise<HealthUnitRow> {
   const body: Record<string, unknown> = { name, kind, ...address };
   if (screeningScope) body.screening_scope = screeningScope;
   if (collectsSamples !== undefined) body.collects_samples = collectsSamples;
+  if (notifying !== undefined) body.notifying = notifying;
   const payload = await jsonFetch<{ unit: HealthUnitRow }>(`${ATTENDANCE_BASE}/units/${encodeURIComponent(id)}`, {
     method: "POST", body: JSON.stringify(body)
   });
@@ -4266,4 +4270,196 @@ export async function countRegistryStatus(teamId: string, microAreaId?: string |
   const b = await jsonFetch<Partial<RegistryCounts>>(withQuery(territoryPath("registry_status", "count"), p));
   return { valid: b.valid ?? 0, due_soon: b.due_soon ?? 0, expired: b.expired ?? 0, missing: b.missing ?? 0,
     missing_identifier: b.missing_identifier ?? 0 };
+}
+
+// ─── Vigilância epidemiológica (módulo 25, ADR 0043; contrato 2026-10-27 §2–§8, §14, §15) ───
+// Formas do api REAL (K5, K15). Na URL só ids, o código da doença, a situação,
+// as semanas, o cursor e o limite — nunca CPF, CNS, nome, nascimento, mãe, ficha,
+// motivo, classificação ou número oficial: a pessoa, a ficha e o andamento vão no
+// corpo. Listas vêm em envelope (ausente = vazio); escritas e detalhe devolvem o
+// objeto PURO. Filtro vazio ou nulo nunca vai na URL (o api recusa `disease=`).
+
+const SURVEILLANCE_BASE = import.meta.env.VITE_SURVEILLANCE_BASE || "/surveillance";
+const survPath = (...parts: string[]) => [ SURVEILLANCE_BASE, ...parts.map(encodeURIComponent) ].join("/");
+const survWrite = (method: "POST" | "PATCH", body: unknown): RequestInit => ({ method, body: JSON.stringify(body) });
+
+export const SURVEILLANCE_PAGE_SIZE = 50;
+
+export type DiseaseDeadline = "immediate" | "weekly";
+export type NotificationOrigin = "consultation" | "manual" | "safety_net";
+export type NotificationStatus = "possible" | "notified" | "investigating" | "closed" | "entered" | "dismissed";
+export type NotificationClassification = "confirmed" | "discarded" | "inconclusive";
+export interface NotifiableDisease {
+  code: string; name: string; deadline: DiseaseDeadline | string; cid10: string[]; ciap2: string[]; repeat_after_days: number;
+  sinan_form: string | null; local: boolean; list_version: number | null;
+  // K13c: a nota explica a doença sem CID (só notificação manual). `id` e `active` são da local (nulos na nacional).
+  notes: string | null; id: string | null; active: boolean | null;
+}
+// D4: a doença local tem id e pode ser desativada (some das sugestões; o que foi notificado fica).
+export interface LocalDisease extends NotifiableDisease { id: string; active: boolean }
+export interface LocalDiseaseInput {
+  code?: string; name: string; deadline: DiseaseDeadline; cid10: string[]; ciap2: string[]; repeat_after_days: number; active?: boolean;
+}
+export interface NotificationSuggestion { disease: NotifiableDisease; matched_code: string }
+// §14 (A1): o api só aceita texto (outro tipo → 422 invalid_form); null limpa o campo. Chaves em sinan-form.yml.
+export type NotificationForm = Record<string, string | null>;
+export interface NotificationEvent { status: NotificationStatus | string; at: string; by: { name: string } | null; reason: string | null }
+export interface NotificationPatient { id: string; display_name: string | null; has_cpf: boolean; cns_masked: string | null }
+export interface SurveillanceNotification {
+  id: string; patient: NotificationPatient; disease: { code: string; name: string; deadline: DiseaseDeadline | string };
+  origin: NotificationOrigin | string; status: NotificationStatus | string; classification: NotificationClassification | string | null;
+  suspected_on: string; symptoms_on: string | null; unit: { id: string; cnes: string | null; name: string }; notifier: { name: string } | null;
+  // K5: prazo da doença no momento da notificação; datas de cada passo (nulas até acontecer).
+  deadline: DiseaseDeadline | string; due_at: string; overdue: boolean; official_number: string | null;
+  resident_elsewhere: boolean; residence_ibge: string | null; neighborhood: { id: string | null; name: string } | null;
+  consultation_id: string | null; closed_at: string | null; entered_at: string | null; dismissed_at: string | null; version: number;
+  // Só no detalhe (a lista não traz).
+  form?: NotificationForm; events?: NotificationEvent[];
+}
+export interface NotificationQuery {
+  status?: NotificationStatus | null; disease?: string | null; overdue?: boolean; unitId?: string | null;
+  // K7: encerradas sem número oficial (o api força status=closed).
+  withoutOfficialNumber?: boolean; before?: string | null;
+}
+export interface NotificationPage { notifications: SurveillanceNotification[]; next_before: string | null }
+export interface NotificationCounts {
+  possible: number; notified: number; investigating: number; overdue: number; immediate_open: number; without_official_number: number;
+}
+export interface ConsultationNotificationInput { consultation_id: string; disease_code: string; symptoms_on?: string | null }
+export type ManualNotificationInput = (
+  { patient_id: string } | { citizen_id: string } | { new_patient: NewPatient; duplicates_reviewed?: boolean }
+) & {
+  disease_code: string; suspected_on: string; symptoms_on?: string | null; unit_id: string;
+  resident_elsewhere?: boolean; residence_ibge?: string | null;
+};
+export interface TransitionInput {
+  to: NotificationStatus; classification?: NotificationClassification; official_number?: string; reason?: string; version: number;
+}
+export type WeeklyNegativeStatus = "with_cases" | "negative" | "pending";
+export interface WeeklyNegatives { week: string; units: { unit: { id: string; cnes: string | null; name: string }; status: WeeklyNegativeStatus | string }[] }
+// D2: unidades ativas para a vigilância (a rota do atendimento não é do papel surveillance).
+export interface SurveillanceUnit { id: string; cnes: string | null; name: string; kind: string; notifying: boolean }
+export interface PanelQuery { fromWeek: string; toWeek: string; disease?: string | null }
+export interface SurveillancePanel {
+  weeks: string[]; rows: { neighborhood: { id: string | null; name: string }; counts: (number | null)[]; signal: boolean[] }[]; suppressed: boolean;
+}
+// A busca por CPF da vigilância: a forma do 24a mais `has_cpf` e `cns_masked` (L8); sem cadastro territorial.
+export interface SurveillancePerson extends TerritoryPerson { has_cpf: boolean; cns_masked: string | null }
+
+// ── Lista de doenças e consulta ──
+export async function listSurveillanceDiseases(): Promise<NotifiableDisease[]> {
+  return (await jsonFetch<{ diseases?: NotifiableDisease[] }>(survPath("diseases"))).diseases ?? [];
+}
+
+// D1: sugestão na consulta (autora; sem trilha). O prefixo é o do atendimento.
+export async function getNotificationSuggestions(consultationId: string): Promise<NotificationSuggestion[]> {
+  return (await jsonFetch<{ suggestions?: NotificationSuggestion[] }>(consultationPath(consultationId, "notification_suggestions")))
+    .suggestions ?? [];
+}
+
+export function createConsultationNotification(input: ConsultationNotificationInput): Promise<SurveillanceNotification> {
+  return jsonFetch<SurveillanceNotification>(survPath("notifications"), survWrite("POST", input));
+}
+
+export function createManualNotification(input: ManualNotificationInput): Promise<SurveillanceNotification> {
+  return jsonFetch<SurveillanceNotification>(survPath("notifications"), survWrite("POST", input));
+}
+
+// ── Fila, detalhe e ficha ──
+// Só o que veio, na ordem do contrato; vazio e nulo ficam de fora.
+function notificationParams(q: NotificationQuery): URLSearchParams {
+  const p = new URLSearchParams();
+  if (q.status) p.set("status", q.status);
+  if (q.disease) p.set("disease", q.disease);
+  if (q.overdue === true) p.set("overdue", "true");
+  if (q.unitId) p.set("unit_id", q.unitId);
+  if (q.withoutOfficialNumber === true) p.set("without_official_number", "true");
+  if (q.before) p.set("before", q.before);
+  p.set("limit", String(SURVEILLANCE_PAGE_SIZE));
+  return p;
+}
+
+// Nominal (uma trilha por consulta): nunca relida sozinha.
+export async function listNotifications(q: NotificationQuery): Promise<NotificationPage> {
+  const b = await jsonFetch<Partial<NotificationPage>>(withQuery(survPath("notifications"), notificationParams(q)));
+  return { notifications: b.notifications ?? [], next_before: b.next_before ?? null };
+}
+
+export function getNotification(id: string): Promise<SurveillanceNotification> {
+  return jsonFetch<SurveillanceNotification>(survPath("notifications", id));
+}
+
+// Sem trilha: pode reler a cada minuto.
+export async function countNotifications(): Promise<NotificationCounts> {
+  const b = await jsonFetch<Partial<NotificationCounts>>(survPath("notifications", "count"));
+  return { possible: b.possible ?? 0, notified: b.notified ?? 0, investigating: b.investigating ?? 0, overdue: b.overdue ?? 0,
+    immediate_open: b.immediate_open ?? 0, without_official_number: b.without_official_number ?? 0 };
+}
+
+// A ficha inteira e a versão lida, só do corpo.
+export function updateNotificationForm(id: string, form: NotificationForm, version: number): Promise<SurveillanceNotification> {
+  return jsonFetch<SurveillanceNotification>(survPath("notifications", id), survWrite("PATCH", { form, version }));
+}
+
+export function transitionNotification(id: string, input: TransitionInput): Promise<SurveillanceNotification> {
+  return jsonFetch<SurveillanceNotification>(survPath("notifications", id, "transition"), survWrite("POST", input));
+}
+
+export function dismissNotification(id: string, reason: string, version: number): Promise<SurveillanceNotification> {
+  return jsonFetch<SurveillanceNotification>(survPath("notifications", id, "dismiss"), survWrite("POST", { reason, version }));
+}
+
+// ── Notificação manual: unidades e pessoa (D2, D3) ──
+export async function listSurveillanceUnits(): Promise<SurveillanceUnit[]> {
+  return (await jsonFetch<{ units?: SurveillanceUnit[] }>(survPath("units"))).units ?? [];
+}
+
+// A vigilância não abre cadastro territorial: registration_id sempre nulo (o PersonStart nunca oferece "Já tem cadastro").
+export async function lookupSurveillancePerson(cpf: string): Promise<SurveillancePerson> {
+  const b = await jsonFetch<Omit<SurveillancePerson, "registration_id">>(survPath("person_lookup"), survWrite("POST", { cpf }));
+  return { ...b, registration_id: null };
+}
+
+export async function findSurveillanceDuplicates(q: DuplicateQuery): Promise<DuplicateCandidate[]> {
+  const b = await jsonFetch<{ candidates?: Omit<DuplicateCandidate, "registration_id">[] }>(
+    survPath("patients", "duplicates"), survWrite("POST", q));
+  return (b.candidates ?? []).map((c) => ({ ...c, registration_id: null }));
+}
+
+// ── Negativa semanal, saídas e painel ──
+export function listWeeklyNegatives(week: string): Promise<WeeklyNegatives> {
+  return jsonFetch<WeeklyNegatives>(withQuery(survPath("weekly_negatives"), new URLSearchParams({ week })));
+}
+
+export async function recordWeeklyNegative(unitId: string, week: string): Promise<void> {
+  await jsonFetch<unknown>(survPath("weekly_negatives"), survWrite("POST", { unit_id: unitId, week }));
+}
+
+// Trilha por pessoa; o nome do arquivo vem do api (notificacao-<id>.pdf), sem dado pessoal.
+export function fetchNotificationPdf(id: string): Promise<SignatureFile> {
+  return binaryFetch(survPath("notifications", id, "form.pdf"), "application/pdf");
+}
+
+export function fetchWeekCsv(week: string): Promise<SignatureFile> {
+  return binaryFetch(withQuery(survPath("exports", "week.csv"), new URLSearchParams({ week })), "text/csv");
+}
+
+// Agregado sem nome de pessoa e sem trilha. Doença vazia ou nula = todas (o api recusa `disease=`).
+export function getSurveillancePanel(q: PanelQuery): Promise<SurveillancePanel> {
+  const p = new URLSearchParams({ from_week: q.fromWeek, to_week: q.toWeek });
+  if (q.disease) p.set("disease", q.disease);
+  return jsonFetch<SurveillancePanel>(withQuery(survPath("panel"), p));
+}
+
+// ── Doenças locais (surveillance; escrita com step-up) ──
+export async function listLocalDiseases(): Promise<LocalDisease[]> {
+  return (await jsonFetch<{ diseases?: LocalDisease[] }>(survPath("admin", "local_diseases"))).diseases ?? [];
+}
+
+export function createLocalDisease(input: LocalDiseaseInput): Promise<LocalDisease> {
+  return jsonFetch<LocalDisease>(survPath("admin", "local_diseases"), survWrite("POST", input));
+}
+
+export function updateLocalDisease(id: string, input: LocalDiseaseInput): Promise<LocalDisease> {
+  return jsonFetch<LocalDisease>(survPath("admin", "local_diseases", id), survWrite("PATCH", input));
 }

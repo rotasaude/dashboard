@@ -19,6 +19,7 @@ import react from "@vitejs/plugin-react";
 //   /integrations, /cnes, /production → módulo 16 (credenciais, CNES e produção e-SUS).
 //   /clinical_record → prontuário fora do atendimento (módulo 19: abertura justificada e relatório).
 //   /care_lines → linhas de cuidado (módulo 23: linhas da cidade, painel da equipe, sugestões e prévia).
+//   /surveillance → vigilância epidemiológica (módulo 25: lista de doenças, fila, ficha, negativa semanal, painel).
 //   /signature  → assinatura digital (módulo 19b). O prestador devolve a pessoa a
 //                 /dashboard/signature/callback (base do Vite), que NÃO casa com este
 //                 prefixo: o retorno é do dashboard, e só o POST /signature/oauth/callback vai ao api.
@@ -78,7 +79,9 @@ export default defineConfig({
       // Módulo 22: faturamento de procedimentos (BPA). Regex como os vizinhos: não casa /billingX.
       "^/billing(/|$)": proxy(TARGET),
       // Módulo 23: linhas de cuidado. Regex como os vizinhos.
-      "^/care_lines(/|$)": proxy(TARGET)
+      "^/care_lines(/|$)": proxy(TARGET),
+      // Módulo 25: vigilância epidemiológica. Regex como os vizinhos.
+      "^/surveillance(/|$)": proxy(TARGET)
     }
   }
 });

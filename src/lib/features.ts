@@ -9,7 +9,7 @@ export type FeatureKey =
   | "ledi_export" | "cadsus_lookup" | "clinical_record" | "digital_signature" | "clinical_documents" | "controlled_prescriptions"
   | "patient_timeline" | "exam_tracking" | "exam_fhir_inbound" | "exam_pec_bridge" | "fake_lab"
   | "municipal_lab" | "lab_hl7_inbound" | "fake_middleware" | "lab_quality_control" | "lab_inventory"
-  | "procedure_billing" | "care_lines" | "territory_registry";
+  | "procedure_billing" | "care_lines" | "territory_registry" | "surveillance";
 
 export const FEATURE_DISABLED_MESSAGE = "esta funcionalidade está desligada para a cidade";
 
@@ -35,7 +35,9 @@ const FEATURE_LABEL: Record<string, string> = {
   // Módulo 23 (ADR 0040): exige clinical_record (modo record).
   care_lines: "Linhas de cuidado",
   // Módulo 24a (ADR 0042): exige clinical_record (modo record).
-  territory_registry: "Cadastro individual e domiciliar"
+  territory_registry: "Cadastro individual e domiciliar",
+  // Módulo 25 (ADR 0043): sem pré-requisito de modo de prontuário; a sugestão na consulta exige clinical_record.
+  surveillance: "Vigilância epidemiológica"
 };
 
 export function sessionFeatures(user: { features?: unknown } | null | undefined): string[] {

@@ -90,3 +90,9 @@ describe("módulo 24a", () => {
     expect(hasFeature({ features: [ "clinical_record" ] }, "territory_registry")).toBe(false);
   });
 });
+
+describe("módulo 25", () => {
+  it("surveillance tem rótulo em português", () => {
+    expect(featureLabel("surveillance")).toBe("Vigilância epidemiológica");
+  });
+});
