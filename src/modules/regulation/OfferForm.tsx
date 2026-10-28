@@ -13,6 +13,7 @@ import { SensitiveAction } from "../../components/SensitiveAction";
 import { buttonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { alert, box, fieldLabel, form, muted, row } from "../exams/styles";
 import { TargetSearch } from "./TargetSearch";
+import { fieldBox, fieldsetStyle, hintStyle } from "./styles";
 
 const TYPES: RegulationType[] = [ "specialty", "procedure" ];
 const AUTHORIZABLE_NOTE = "Só a oferta do mês corrente pode receber autorizações; as dos meses seguintes ficam preparadas.";
@@ -121,7 +122,4 @@ export function OfferForm({ offer, providers, today, onSaved, onCancel, onGoToSe
   );
 }
 
-const fieldBox: CSSProperties = { display: "flex", flexDirection: "column", gap: 2 };
-const hintStyle: CSSProperties = { fontSize: 11.5, color: "var(--ink3)" };
-const fieldsetStyle: CSSProperties = { border: "none", padding: 0, margin: 0, minWidth: 0 };
 const chosenStyle: CSSProperties = { margin: 0, fontSize: 12.5, fontWeight: 600 };

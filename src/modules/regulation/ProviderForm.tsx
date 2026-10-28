@@ -3,13 +3,14 @@
 // tem 7 dígitos; na rede própria o CNES não é digitado: o api o herda da unidade da rede (ativa), e o tipo nunca muda depois de
 // criado. Tudo é conferido aqui antes da confirmação (recusar, nunca cortar) e de novo no api; a escrita passa pelo step-up.
 // Durante a confirmação o formulário fica à vista, parado: a recusa do api (cnes_taken, unit_taken…) aparece junto dele.
-import { useState, type CSSProperties } from "react";
+import { useState } from "react";
 import { createCareProvider, updateCareProvider } from "../../lib/api";
 import type { CareProvider, CareProviderInput, HealthUnitRow, ProviderKind } from "../../lib/api";
 import { cnesProblem, providerKindLabel, providerNameProblem, regulationError } from "../../lib/regulation";
 import { SensitiveAction } from "../../components/SensitiveAction";
 import { buttonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { alert, box, checkLabel, fieldLabel, form, row } from "../exams/styles";
+import { fieldBox, fieldsetStyle, hintStyle } from "./styles";
 
 const KINDS: ProviderKind[] = [ "own", "contracted", "consortium", "ppi" ];
 const OWN_NOTE = "O CNES do prestador da rede própria é o da unidade escolhida.";
@@ -118,7 +119,3 @@ export function ProviderForm({ provider, units, onSaved, onCancel, onGoToSecurit
     </section>
   );
 }
-
-const fieldBox: CSSProperties = { display: "flex", flexDirection: "column", gap: 2 };
-const hintStyle: CSSProperties = { fontSize: 11.5, color: "var(--ink3)" };
-const fieldsetStyle: CSSProperties = { border: "none", padding: 0, margin: 0, minWidth: 0 };
