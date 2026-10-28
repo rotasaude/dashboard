@@ -152,7 +152,7 @@ export function actionsFor(r: RegulationRequest): RegulationActions {
     cancel: s === "pending" || s === "returned" || s === "authorized" || s === "external" || (s === "scheduled" && !own),
     schedule: ((s === "authorized" || s === "scheduled") && outside) || (r.state_regulated && s === "external"),
     outcome: s === "scheduled" && outside,
-    external: s === "pending" || s === "external"
+    external: s === "pending" || s === "returned" || s === "external"
   };
 }
 

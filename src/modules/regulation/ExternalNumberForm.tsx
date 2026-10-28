@@ -1,6 +1,6 @@
 // src/modules/regulation/ExternalNumberForm.tsx
 // Número do pedido no sistema do estado (SISREG, CARE, CROSS, outro; módulo 26a, F-26.6), pelas ações da situação
-// (`actionsFor(...).external`: `pending` e `external`; o api recusa nas outras). O formato é conferido antes de enviar.
+// (`actionsFor(...).external`: `pending`, `returned` e `external`; o api recusa nas outras). O formato é conferido antes de enviar.
 // Gravado, devolve o pedido por `onApplied` (quem chama grava no cache, sem leitura nominal a mais) e a frase por
 // `onChanged`. `stale_version` e `invalid_transition` deixam o número digitado: a frase sobe por `onStale` (quem a recebe
 // oferece o "Recarregar"); sem ele, aparece aqui. O número não vai a log, URL nem storage.

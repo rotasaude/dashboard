@@ -70,13 +70,13 @@ describe("ações por situação (D13, D16)", () => {
   const contracted = { ...own, provider: { id: "pr2", name: "Clínica do Coração", kind: "contracted" } };
   it.each([
     [ "pending", null, false, { authorize: true, returnBack: true, deny: true, cancel: true, schedule: false, outcome: false, external: true } ],
-    [ "returned", null, false, { authorize: false, returnBack: false, deny: true, cancel: true, schedule: false, outcome: false, external: false } ],
+    [ "returned", null, false, { authorize: false, returnBack: false, deny: true, cancel: true, schedule: false, outcome: false, external: true } ],
     [ "authorized", own, false, { authorize: false, returnBack: false, deny: false, cancel: true, schedule: false, outcome: false, external: false } ],
     [ "authorized", contracted, false, { authorize: false, returnBack: false, deny: false, cancel: true, schedule: true, outcome: false, external: false } ],
     [ "scheduled", contracted, false, { authorize: false, returnBack: false, deny: false, cancel: true, schedule: true, outcome: true, external: false } ],
     [ "scheduled", own, false, { authorize: false, returnBack: false, deny: false, cancel: false, schedule: false, outcome: false, external: false } ],
     [ "external", null, true, { authorize: false, returnBack: false, deny: false, cancel: true, schedule: true, outcome: false, external: true } ],
-    // G12 #7: o número externo só onde o api aceita (pending e external).
+    // G12 #7: o número externo só onde o api aceita (pending, returned e external).
     [ "scheduled", null, true, { authorize: false, returnBack: false, deny: false, cancel: true, schedule: true, outcome: true, external: false } ],
     [ "completed", own, false, { authorize: false, returnBack: false, deny: false, cancel: false, schedule: false, outcome: false, external: false } ],
     [ "archived", null, false, { authorize: false, returnBack: false, deny: false, cancel: false, schedule: false, outcome: false, external: false } ]

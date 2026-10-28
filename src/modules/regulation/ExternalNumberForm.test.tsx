@@ -72,8 +72,11 @@ describe("ExternalNumberForm", () => {
     expect((screen.getByLabelText(NUMBER) as HTMLInputElement).value).toBe("2026/123456");
   });
 
-  it("só onde a ação vale (pendente e regulado pelo estado); autorizado não desenha nada", () => {
+  it("só onde a ação vale (pendente, devolvido e regulado pelo estado); autorizado não desenha nada", () => {
     renderWithProviders(<ExternalNumberForm request={regRequest({ status: "pending" })} onChanged={vi.fn()} />);
+    expect(screen.getByRole("button", { name: "Registrar número" })).not.toBeNull();
+    cleanup();
+    renderWithProviders(<ExternalNumberForm request={regRequest({ status: "returned" })} onChanged={vi.fn()} />);
     expect(screen.getByRole("button", { name: "Registrar número" })).not.toBeNull();
     cleanup();
     renderWithProviders(<ExternalNumberForm request={regRequest({ status: "authorized" })} onChanged={vi.fn()} />);
