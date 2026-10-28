@@ -2,7 +2,9 @@
 // A unidade vem dos vínculos ativos de `getMyProfessional` (o api exige vínculo ativo nela). A lista é nominal e grava
 // leitura na trilha: nunca relê sozinha (NOMINAL_QUERY); relê só depois de complementar ou no "Recarregar".
 // "Complementar" reusa o `RequestForm` em `complement`: o pedido volta a `pending` e mantém a data original. O CID-10 que já
-// estava no pedido conta (G12); `stale_version` mantém o texto digitado e oferece "Recarregar".
+// estava no pedido conta (G12). `stale_version` (ou `invalid_transition`) mantém o texto digitado e oferece "Recarregar": ele relê
+// a lista e troca o pedido aberto pelo de mesmo id com a versão nova, com o formulário montado (o rascunho sobrevive); se o
+// pedido sumiu ou deixou de ser `returned`, o formulário fecha.
 import { useState, type CSSProperties } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -87,10 +89,14 @@ function ReturnedList({ unit, cid10Allowed, optionsError }: { unit: UnitOption; 
   const [ editing, setEditing ] = useState<RegulationRequest | null>(null);
   const [ stale, setStale ] = useState(false);
   const [ notice, setNotice ] = useState<string | null>(null);
+  const [ cleared, setCleared ] = useState(0);
+  const [ reloadError, setReloadError ] = useState<string | null>(null);
+  // O pedido recém-complementado some da tela até a releitura terminar (um segundo clique daria invalid_transition).
+  const [ done, setDone ] = useState<string | null>(null);
 
-  const rows = list.data ?? [];
+  const rows = (list.data ?? []).filter((r) => r.id !== done);
   const reread = () => queryClient.invalidateQueries({ queryKey });
-  const close = () => { setEditing(null); setStale(false); };
+  const close = () => { setEditing(null); setStale(false); setReloadError(null); };
 
   async function send(request: RegulationRequest, body: RegulationRequestInput) {
     // O corpo do complemento: sem tipo, alvo nem "regulado pelo estado" (o pedido já os tem).
@@ -105,23 +111,40 @@ function ReturnedList({ unit, cid10Allowed, optionsError }: { unit: UnitOption; 
       throw err; // o formulário mostra a frase e mantém o texto
     }
     close();
+    setDone(request.id);
     setNotice(COMPLEMENTED_TEXT);
-    await reread();
+    try { await reread(); } finally { setDone(null); }
   }
 
-  const reload = () => { close(); setNotice(null); void reread(); };
+  // Relê e troca o pedido aberto pela versão nova, sem desmontar o formulário. Sumiu ou não está mais devolvido: fecha.
+  async function reload(openId: string) {
+    setReloadError(null);
+    const out = await list.refetch();
+    if (out.isError) { setReloadError(regulationError(out.error)); return; }
+    const fresh = (out.data ?? []).find((r) => r.id === openId && r.status === "returned");
+    if (!fresh) { close(); return; }
+    setStale(false);
+    setCleared((n) => n + 1);
+    setEditing(fresh);
+  }
 
   if (editing) {
+    const reason = returnReason(editing);
     return (
       <section aria-label={`Complementar ${editing.target.name}`} style={stack}>
         <div style={box}>
           <strong>{editing.target.name}</strong>
           <span className="mono" style={muted}>{`${editing.patient.display_name || NO_NAME} · ${documentText(editing.patient)}`}</span>
-          {returnReason(editing) && <span style={muted}>{`Devolvido: ${returnReason(editing)}`}</span>}
+          {reason && <span style={muted}>{`Devolvido: ${reason}`}</span>}
         </div>
         <RequestForm key={editing.id} cbo={unit.cbo} cid10Allowed={cid10Allowed ?? false} mode="complement" submitLabel="Enviar complemento"
-          initial={draftFromRequest(editing)} onSubmit={(body) => send(editing, body)} onCancel={close} />
-        {stale && <div style={row}><button type="button" style={buttonStyle} onClick={reload}>Recarregar</button></div>}
+          initial={draftFromRequest(editing)} clearMessageKey={cleared} onSubmit={(body) => send(editing, body)} onCancel={close} />
+        {stale && (
+          <div style={row}>
+            <button type="button" style={buttonStyle} onClick={() => void reload(editing.id)}>Recarregar</button>
+            {reloadError && <span role="alert" style={alert}>{reloadError}</span>}
+          </div>
+        )}
       </section>
     );
   }

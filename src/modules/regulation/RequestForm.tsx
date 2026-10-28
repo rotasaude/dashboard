@@ -15,8 +15,10 @@ import { TargetSearch } from "./TargetSearch";
 const TYPE_RADIO: Record<RegulationType, string> = { specialty: "Especialidade", procedure: "Procedimento" };
 const snapshot = (d: RequestDraft) => JSON.stringify([ d.type, d.target?.code ?? null, d.cid10, d.ciap2, d.justification, d.color, d.stateRegulated ]);
 
-export function RequestForm({ cbo, cid10Allowed, initial, submitLabel, mode, delayMs, onSubmit, onCancel, onDirty }: {
+export function RequestForm({ cbo, cid10Allowed, initial, submitLabel, mode, delayMs, clearMessageKey, onSubmit, onCancel, onDirty }: {
   cbo: string | null; cid10Allowed: boolean; initial?: RequestDraft; submitLabel: string; mode: "create" | "complement"; delayMs?: number;
+  // Muda → apaga a frase de recusa que está na tela, mantendo o que foi digitado (ex.: depois de recarregar a versão).
+  clearMessageKey?: number;
   onSubmit(body: RegulationRequestInput): Promise<void>; onCancel(): void; onDirty?(dirty: boolean): void;
 }) {
   const types = allowedTypes(cbo);
@@ -30,6 +32,8 @@ export function RequestForm({ cbo, cid10Allowed, initial, submitLabel, mode, del
   // G12: no complemento, o CID-10 que já estava no pedido conta; quem não é médico só o vê.
   const kept = complement && start.cid10.trim() !== "";
   const keptReadOnly = cid10IsKept(rule, kept);
+
+  useEffect(() => { setMessage(null); }, [ clearMessageKey ]);
 
   const dirty = snapshot(draft) !== snapshot(start);
   const onDirtyRef = useRef(onDirty);

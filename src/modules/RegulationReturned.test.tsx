@@ -22,7 +22,7 @@ const profile = (links: ReturnType<typeof link>[]) => ({ professional: { id: "p1
 
 describe("RegulationReturned", () => {
   beforeEach(() => {
-    for (const fn of [ api.listReturnedRequests, api.complementRegulationRequest, api.getMyProfessional ]) mocked(fn).mockReset();
+    for (const fn of [ api.listReturnedRequests, api.complementRegulationRequest, api.getMyProfessional, api.getConsultationOptions ]) mocked(fn).mockReset();
     mocked(api.fetchCurrentSession).mockResolvedValue(regUser([ "health_professional" ]));
     mocked(api.getMyProfessional).mockResolvedValue(profile([ link("l1", "u1", "UBS Centro"), link("l2", "u3", "UBS Vila"),
       link("l3", "u9", "UBS Antiga", "2026-05-01") ]));
@@ -95,19 +95,78 @@ describe("RegulationReturned", () => {
       { justification: RETURNED.justification, suggested_color: "yellow", version: 4 }));
   });
 
-  it("409 stale_version: frase, o texto fica e 'Recarregar' relê a lista", async () => {
+  it("409 stale_version: frase, o texto fica; 'Recarregar' mantém o rascunho e reenvia com a versão nova", async () => {
+    mocked(api.complementRegulationRequest).mockRejectedValueOnce(new ApiError(409, { error: "stale_version" }, "x"));
+    renderWithProviders(<RegulationReturned />);
+    fireEvent.click(await screen.findByRole("button", { name: "Complementar" }));
+    const next = "Texto novo do complemento, com o exame.";
+    fireEvent.change(screen.getByLabelText("Justificativa"), { target: { value: next } });
+    fireEvent.click(screen.getByRole("button", { name: "Enviar complemento" }));
+    expect((await screen.findByRole("alert")).textContent).toBe(STALE_TEXT);
+    expect((screen.getByLabelText("Justificativa") as HTMLTextAreaElement).value).toBe(next);
+    expect(mocked(api.listReturnedRequests)).toHaveBeenCalledTimes(1);
+    mocked(api.listReturnedRequests).mockResolvedValue([ { ...RETURNED, version: 5 } ]);
+    fireEvent.click(screen.getByRole("button", { name: "Recarregar" }));
+    await waitFor(() => expect(mocked(api.listReturnedRequests)).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Recarregar" })).toBeNull());
+    expect((screen.getByLabelText("Justificativa") as HTMLTextAreaElement).value).toBe(next);
+    expect(screen.queryByRole("alert")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Enviar complemento" }));
+    await waitFor(() => expect(mocked(api.complementRegulationRequest)).toHaveBeenLastCalledWith("rr1",
+      { justification: next, cid10: "I209", suggested_color: "yellow", version: 5 }));
+  });
+
+  it("409 invalid_transition: frase do api e 'Recarregar'; pedido que sumiu da lista fecha o formulário", async () => {
+    mocked(api.complementRegulationRequest).mockRejectedValue(new ApiError(409, { error: "invalid_transition" }, "x"));
+    renderWithProviders(<RegulationReturned />);
+    fireEvent.click(await screen.findByRole("button", { name: "Complementar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Enviar complemento" }));
+    expect((await screen.findByRole("alert")).textContent).toBe("este pedido mudou de situação — recarregue");
+    mocked(api.listReturnedRequests).mockResolvedValue([]);
+    fireEvent.click(screen.getByRole("button", { name: "Recarregar" }));
+    expect(await screen.findByText("nenhum pedido devolvido para esta unidade")).not.toBeNull();
+    expect(screen.queryByLabelText("Justificativa")).toBeNull();
+  });
+
+  it("Recarregar com o pedido já fora de 'returned': fecha o formulário", async () => {
     mocked(api.complementRegulationRequest).mockRejectedValue(new ApiError(409, { error: "stale_version" }, "x"));
     renderWithProviders(<RegulationReturned />);
     fireEvent.click(await screen.findByRole("button", { name: "Complementar" }));
-    fireEvent.change(screen.getByLabelText("Justificativa"), { target: { value: "Texto novo do complemento, com o exame." } });
     fireEvent.click(screen.getByRole("button", { name: "Enviar complemento" }));
-    expect((await screen.findByRole("alert")).textContent).toBe(STALE_TEXT);
-    expect((screen.getByLabelText("Justificativa") as HTMLTextAreaElement).value).toBe("Texto novo do complemento, com o exame.");
-    expect(mocked(api.listReturnedRequests)).toHaveBeenCalledTimes(1);
+    await screen.findByRole("alert");
+    mocked(api.listReturnedRequests).mockResolvedValue([ { ...RETURNED, status: "pending" } ]);
     fireEvent.click(screen.getByRole("button", { name: "Recarregar" }));
-    await waitFor(() => expect(mocked(api.listReturnedRequests)).toHaveBeenCalledTimes(2));
-    expect(await screen.findByRole("listitem", { name: "Cardiologia de Joana Lima" })).not.toBeNull();
-    expect(screen.queryByLabelText("Justificativa")).toBeNull();
+    await waitFor(() => expect(screen.queryByLabelText("Justificativa")).toBeNull());
+  });
+
+  it("depois de complementar, o pedido some até a releitura terminar", async () => {
+    renderWithProviders(<RegulationReturned />);
+    fireEvent.click(await screen.findByRole("button", { name: "Complementar" }));
+    let release: (rows: unknown[]) => void = () => undefined;
+    mocked(api.listReturnedRequests).mockReturnValue(new Promise((resolve) => { release = resolve; }));
+    fireEvent.click(screen.getByRole("button", { name: "Enviar complemento" }));
+    expect(await screen.findByText(/^Pedido complementado/)).not.toBeNull();
+    expect(screen.queryByRole("listitem", { name: "Cardiologia de Joana Lima" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Complementar" })).toBeNull();
+    release([]);
+    expect(await screen.findByText("nenhum pedido devolvido para esta unidade")).not.toBeNull();
+  });
+
+  it("'Complementar' fica desabilitado até as regras de diagnóstico chegarem", async () => {
+    let release: (v: unknown) => void = () => undefined;
+    mocked(api.getConsultationOptions).mockReturnValue(new Promise((resolve) => { release = resolve; }));
+    renderWithProviders(<RegulationReturned />);
+    const button = await screen.findByRole("button", { name: "Complementar" });
+    expect((button as HTMLButtonElement).disabled).toBe(true);
+    release({ care_types: [], conducts: [], cid10_allowed_for_cbo: true });
+    await waitFor(() => expect((screen.getByRole("button", { name: "Complementar" }) as HTMLButtonElement).disabled).toBe(false));
+  });
+
+  it("falha nas regras de diagnóstico: alerta e 'Complementar' continua desabilitado", async () => {
+    mocked(api.getConsultationOptions).mockRejectedValue(new ApiError(500, { error: "boom" }, "x"));
+    renderWithProviders(<RegulationReturned />);
+    expect((await screen.findByRole("alert")).textContent).toBe("não foi possível ler as regras de diagnóstico — recarregue a página");
+    expect(((await screen.findByRole("button", { name: "Complementar" })) as HTMLButtonElement).disabled).toBe(true);
   });
 
   it("sem devolvidos: estado vazio", async () => {
