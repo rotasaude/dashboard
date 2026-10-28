@@ -4,7 +4,7 @@ import { ApiError } from "./api";
 import {
   actionsFor, allowedTypes, canRequestRegulation, canUseRegulation, ciap2Problem, cnesProblem, colorLabel, colorTone, currentMonth,
   deadlinesProblem, diagnosisRule, draftFromRequest, draftsNote, dueText, EMPTY_DRAFT, exportFilename, externalNumberProblem, guideFilename,
-  monthLabel, monthProblem, normalizeCiap2, notesProblem, notSentReason, parseQuantity, placeProblem, providerKindLabel, providerNameProblem,
+  monthLabel, monthProblem, normalizeCiap2, returnReason, notesProblem, notSentReason, parseQuantity, placeProblem, providerKindLabel, providerNameProblem,
   quantityProblem, reasonProblem, regulationError, regulationFinalizeError, regulationRoles, requestBody, requestProblem, requesterKind,
   scheduleAtProblem, statusLabel, statusTone, systemLabel, targetsFor, targetTermProblem, typeLabel, waitDays, waitText,
   QUOTA_EXHAUSTED_TEXT, REGULATION_DISABLED, REGULATION_REQUIRED_TEXT, STALE_TEXT, type RequestDraft
@@ -150,6 +150,31 @@ describe("formato: recusar, nunca cortar", () => {
     expect(requestBody(draft({ justification: `  ${"x".repeat(2000)}  ` }), "225142", true).justification).toBe("x".repeat(2000));
     // Enfermeiro com os dois: manda os dois; sem CID-10 preenchido, não manda a chave.
     expect(requestBody(draft({ cid10: "", ciap2: "K86" }), "223505", true)).not.toHaveProperty("cid10");
+  });
+  it("complemento com CID-10 já no pedido (G12): satisfaz o diagnóstico e o corpo o omite", () => {
+    // Enfermeiro/dentista sem CID-10 não é obrigado a dar CIAP-2 se o médico já pôs o CID-10; o api guarda o dele.
+    expect(requestProblem(draft({ cid10: "I209", ciap2: "" }), "223505", false, true)).toBeNull();
+    expect(requestProblem(draft({ cid10: "I209", ciap2: "" }), "223208", false, true)).toBeNull();
+    expect(requestProblem(draft({ cid10: "I209", ciap2: "" }), "223505", true, true)).toBeNull();
+    // Sem o CID-10 guardado, nada muda.
+    expect(requestProblem(draft({ cid10: "", ciap2: "" }), "223505", false, false)).toEqual({ field: "ciap2", text: "informe o CIAP-2" });
+    // O CIAP-2 digitado ainda é conferido.
+    expect(requestProblem(draft({ cid10: "I209", ciap2: "K8" }), "223505", false, true)).toEqual({ field: "ciap2", text: "use um código CIAP-2, ex.: K86" });
+    // Médico (regra cid10): o CID-10 continua editável e obrigatório.
+    expect(requestProblem(draft({ cid10: "", ciap2: "" }), "225142", true, true)).toEqual({ field: "cid10", text: "informe o CID-10" });
+    expect(requestProblem(draft({ cid10: "I209", ciap2: "" }), "225142", true, true)).toBeNull();
+    // Corpo: quem não é médico não manda o CID-10 guardado; o médico manda o que está no campo.
+    expect(requestBody(draft({ cid10: "I209", ciap2: "" }), "223505", false, true)).not.toHaveProperty("cid10");
+    expect(requestBody(draft({ cid10: "I209", ciap2: "k86" }), "223505", true, true)).toMatchObject({ ciap2: "K86" });
+    expect(requestBody(draft({ cid10: "I209", ciap2: "k86" }), "223505", true, true)).not.toHaveProperty("cid10");
+    expect(requestBody(draft({ cid10: "i20.9" }), "225142", true, true)).toMatchObject({ cid10: "I209" });
+  });
+  it("motivo da devolução: o do último evento returned", () => {
+    const ev = (status: string, reason: string | null) => ({ status, at: "2026-10-20T15:00:00-03:00", by: { name: "Regulador" }, reason });
+    expect(returnReason(regRequest({ events: [ ev("pending", null), ev("returned", "primeiro"), ev("pending", null), ev("returned", "segundo") ] }))).toBe("segundo");
+    expect(returnReason(regRequest({ events: [ ev("pending", null) ] }))).toBeNull();
+    expect(returnReason(regRequest({ events: [ ev("returned", null) ] }))).toBeNull();
+    expect(returnReason(regRequest({ events: undefined }))).toBeNull();
   });
   it("rascunho: vazio e vindo do pedido", () => {
     expect(EMPTY_DRAFT("procedure")).toEqual({ type: "procedure", target: null, cid10: "", ciap2: "", justification: "", color: "", stateRegulated: false });

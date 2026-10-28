@@ -136,6 +136,18 @@ describe("RequestForm", () => {
       justification: `${JUST} Complemento.`, suggested_color: "yellow" }));
   });
 
+  it("complemento de enfermeira com CID-10 do pedido: só leitura, sem exigir CIAP-2, corpo sem cid10", async () => {
+    const onSubmit = mount({ mode: "complement", cbo: "223505", cid10Allowed: false, submitLabel: "Complementar",
+      initial: { type: "specialty", target: { type: "specialty", code: "225120", name: "Cardiologia" }, cid10: "I209", ciap2: "", justification: JUST,
+        color: "yellow", stateRegulated: false } });
+    expect(screen.queryByLabelText("CID-10")).toBeNull();
+    expect(screen.getByText("CID-10 do pedido: I209")).not.toBeNull();
+    text("Justificativa", `${JUST} Complemento.`);
+    fireEvent.click(screen.getByRole("button", { name: "Complementar" }));
+    await waitFor(() => expect(onSubmit.mock.calls[0][0]).toEqual({ type: "specialty", target_code: "225120",
+      justification: `${JUST} Complemento.`, suggested_color: "yellow" }));
+  });
+
   it("Trocar volta à busca e onDirty avisa quando há texto ou escolha não enviada", async () => {
     const onDirty = vi.fn();
     mount({ onDirty });

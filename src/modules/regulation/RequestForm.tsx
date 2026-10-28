@@ -5,7 +5,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { RegulationRequestInput, RegulationType, RiskColor } from "../../lib/api";
 import {
-  COLORS, EMPTY_DRAFT, JUSTIFICATION_MAX, allowedTypes, diagnosisRule, regulationError, requestBody, requestProblem, typeLabel,
+  COLORS, EMPTY_DRAFT, JUSTIFICATION_MAX, allowedTypes, cid10IsKept, diagnosisRule, regulationError, requestBody, requestProblem, typeLabel,
   type RequestDraft, type RequestField
 } from "../../lib/regulation";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
@@ -27,6 +27,9 @@ export function RequestForm({ cbo, cid10Allowed, initial, submitLabel, mode, del
   const refs = useRef<Partial<Record<RequestField, HTMLElement | null>>>({});
   const rule = diagnosisRule(cbo, cid10Allowed);
   const complement = mode === "complement";
+  // G12: no complemento, o CID-10 que já estava no pedido conta; quem não é médico só o vê.
+  const kept = complement && start.cid10.trim() !== "";
+  const keptReadOnly = cid10IsKept(rule, kept);
 
   const dirty = snapshot(draft) !== snapshot(start);
   const onDirtyRef = useRef(onDirty);
@@ -39,7 +42,7 @@ export function RequestForm({ cbo, cid10Allowed, initial, submitLabel, mode, del
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (busy) return;
-    const problem = requestProblem(draft, cbo, cid10Allowed);
+    const problem = requestProblem(draft, cbo, cid10Allowed, kept);
     if (problem) {
       setMessage(problem.text);
       refs.current[problem.field]?.focus();
@@ -49,7 +52,7 @@ export function RequestForm({ cbo, cid10Allowed, initial, submitLabel, mode, del
     setBusy(true);
     try {
       // Em `complement` o "regulado pelo estado" não aparece nem vai: o pedido já nasceu assim ou não.
-      await onSubmit(requestBody(complement ? { ...draft, stateRegulated: false } : draft, cbo, cid10Allowed));
+      await onSubmit(requestBody(complement ? { ...draft, stateRegulated: false } : draft, cbo, cid10Allowed, kept));
     } catch (err) {
       setMessage(regulationError(err));
     } finally {
@@ -83,7 +86,8 @@ export function RequestForm({ cbo, cid10Allowed, initial, submitLabel, mode, del
       ) : (
         <TargetSearch type={draft.type} cbo={cbo} delayMs={delayMs} inputRef={field("target")} onPick={(t) => set("target", t)} />
       )}
-      {rule !== "ciap2" && (
+      {keptReadOnly && <p className="mono" style={muted}>{`CID-10 do pedido: ${start.cid10}`}</p>}
+      {rule !== "ciap2" && !keptReadOnly && (
         <label style={fieldLabel}>
           CID-10
           <input ref={field("cid10")} value={draft.cid10} style={inputStyle} autoComplete="off" onChange={(e) => set("cid10", e.target.value)} />

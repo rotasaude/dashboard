@@ -235,20 +235,31 @@ export function ciap2Problem(text: string | null | undefined): string | null {
 
 export type RequestField = "target" | "cid10" | "ciap2" | "justification" | "color";
 
-export function requestProblem(d: RequestDraft, cbo: string | null | undefined, cid10Allowed: boolean): { field: RequestField; text: string } | null {
+// G12: no complemento, o CID-10 que já estava no pedido conta. Quem não é médico (regra ≠ "cid10") não o edita nem o reenvia:
+// o api o guarda (`kept_cid10`) e o diagnóstico já está satisfeito. O médico segue editando o campo.
+export function cid10IsKept(rule: DiagnosisRule, keptCid10: boolean): boolean {
+  return keptCid10 && rule !== "cid10";
+}
+
+export function requestProblem(
+  d: RequestDraft, cbo: string | null | undefined, cid10Allowed: boolean, keptCid10 = false
+): { field: RequestField; text: string } | null {
   if (!d.target) return { field: "target", text: "escolha a especialidade ou o procedimento" };
   const rule = diagnosisRule(cbo, cid10Allowed);
+  const kept = cid10IsKept(rule, keptCid10);
   const cid10 = normalizeCid10(d.cid10);
   const ciap2 = normalizeCiap2(d.ciap2);
-  if (rule !== "ciap2") {
+  if (rule !== "ciap2" && !kept) {
     if (rule === "cid10" && cid10 === "") return { field: "cid10", text: "informe o CID-10" };
     const bad = cid10Problem(d.cid10);
     if (bad) return { field: "cid10", text: bad };
   }
   const badCiap = ciap2Problem(d.ciap2);
   if (badCiap) return { field: "ciap2", text: badCiap };
-  if (rule === "ciap2" && ciap2 === "") return { field: "ciap2", text: "informe o CIAP-2" };
-  if (rule === "either" && cid10 === "" && ciap2 === "") return { field: "ciap2", text: "informe o CID-10 ou o CIAP-2" };
+  if (!kept) {
+    if (rule === "ciap2" && ciap2 === "") return { field: "ciap2", text: "informe o CIAP-2" };
+    if (rule === "either" && cid10 === "" && ciap2 === "") return { field: "ciap2", text: "informe o CID-10 ou o CIAP-2" };
+  }
   const j = justificationProblem(d.justification);
   if (j) return { field: "justification", text: j };
   if (d.color === "") return { field: "color", text: "escolha a cor sugerida" };
@@ -256,17 +267,23 @@ export function requestProblem(d: RequestDraft, cbo: string | null | undefined, 
 }
 
 // O texto nunca é cortado: só sem espaços nas pontas.
-export function requestBody(d: RequestDraft, cbo: string | null | undefined, cid10Allowed: boolean): RegulationRequestInput {
+export function requestBody(d: RequestDraft, cbo: string | null | undefined, cid10Allowed: boolean, keptCid10 = false): RegulationRequestInput {
   const rule = diagnosisRule(cbo, cid10Allowed);
   const cid10 = normalizeCid10(d.cid10);
   const ciap2 = normalizeCiap2(d.ciap2);
   const body: RegulationRequestInput = {
     type: d.type, target_code: d.target?.code ?? "", justification: d.justification.trim(), suggested_color: d.color as RiskColor
   };
-  if (rule !== "ciap2" && cid10 !== "") body.cid10 = cid10;
+  if (rule !== "ciap2" && !cid10IsKept(rule, keptCid10) && cid10 !== "") body.cid10 = cid10;
   if (ciap2 !== "") body.ciap2 = ciap2;
   if (d.stateRegulated) body.state_regulated = true;
   return body;
+}
+
+// D8: o motivo da devolução é o `reason` do último evento `returned` (os devolvidos da unidade vêm com `events`, G6).
+export function returnReason(r: RegulationRequest): string | null {
+  const last = [ ...(r.events ?? []) ].reverse().find((e) => e.status === "returned");
+  return last?.reason ?? null;
 }
 
 // ─── Outros formatos ───────────────────────────────────────────────────────
