@@ -58,6 +58,25 @@ describe("SurveillanceReports", () => {
     await waitFor(() => expect(mocked(api.fetchWeekCsv).mock.calls[0][0]).toBe("2026-43"));
   });
 
+  it("semana sem casos: arquivo vazio também é salvo, com o nome da semana", async () => {
+    mocked(api.fetchWeekCsv).mockResolvedValue({ blob: new Blob([ "" ]), filename: null });
+    renderWithProviders(<SurveillanceReports today={TODAY25} />);
+    await screen.findByLabelText("Semana (AAAA-SS)");
+    fireEvent.click(screen.getByRole("button", { name: "Baixar CSV" }));
+    await waitFor(() => expect(mocked(saveFile)).toHaveBeenCalledTimes(1));
+    expect(mocked(saveFile).mock.calls[0][1]).toBe("notificacoes-2026-42.csv");
+  });
+
+  it("o aviso da semana some ao editar a semana", async () => {
+    renderWithProviders(<SurveillanceReports today={TODAY25} />);
+    const input = await screen.findByLabelText("Semana (AAAA-SS)");
+    fireEvent.change(input, { target: { value: "2026-44" } });
+    fireEvent.click(screen.getByRole("button", { name: "Baixar CSV" }));
+    await screen.findByRole("alert");
+    fireEvent.change(input, { target: { value: "2026-43" } });
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
   it("semana inválida não baixa", async () => {
     renderWithProviders(<SurveillanceReports today={TODAY25} />);
     fireEvent.change(await screen.findByLabelText("Semana (AAAA-SS)"), { target: { value: "2026-44" } });

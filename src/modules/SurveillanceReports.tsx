@@ -8,7 +8,8 @@
 // estão o PDF e o "Registrar número oficial".
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { fetchWeekCsv, listNotifications, type NotificationQuery, type SurveillanceNotification } from "../lib/api";
+import { fetchWeekCsv, listNotifications, type NotificationQuery } from "../lib/api";
+import { usePagedNotifications } from "../hooks/usePagedNotifications";
 import { todayInCity } from "../lib/campaigns";
 import { NOMINAL_QUERY, NOTIFICATIONS_KEY, previousEpiWeek, surveillanceError, weekLabel, weekProblem } from "../lib/surveillance";
 import { Panel } from "../components/Panel";
@@ -62,7 +63,7 @@ function WeekCsv({ today }: { today: string }) {
         <div style={{ ...row, alignItems: "flex-end" }}>
           <label style={fieldLabel}>
             Semana (AAAA-SS)
-            <input value={week} style={inputStyle} className="mono" placeholder="2026-42" onChange={(e) => setWeek(e.target.value)}
+            <input value={week} style={inputStyle} className="mono" placeholder="2026-42" onChange={(e) => { setWeek(e.target.value); setMessage(null); }}
               onKeyDown={(e) => { if (e.key === "Enter") void download(); }} />
           </label>
           <button type="button" style={busy ? disabledButtonStyle : buttonStyle} disabled={busy} onClick={() => void download()}>
@@ -77,44 +78,15 @@ function WeekCsv({ today }: { today: string }) {
   );
 }
 
-// A linha pode repetir entre páginas (a ordem é por prazo, não por id): a primeira vez vale.
-function uniqueById(rows: SurveillanceNotification[]): SurveillanceNotification[] {
-  const seen = new Set<string>();
-  return rows.filter((r) => (seen.has(r.id) ? false : (seen.add(r.id), true)));
-}
-
-// Páginas extras valem só para a leitura (dataUpdatedAt) que as pediu.
-interface Extra { token: number; rows: SurveillanceNotification[]; next: string | null }
-
 function WithoutNumber() {
   const [ shown, setShown ] = useState(false);
   const [ openId, setOpenId ] = useState<string | null>(null);
-  const [ extra, setExtra ] = useState<Extra | null>(null);
-  const [ moreBusy, setMoreBusy ] = useState(false);
-  const [ moreError, setMoreError ] = useState<string | null>(null);
 
   const list = useQuery({
     queryKey: [ NOTIFICATIONS_KEY, REPORT_KEY ], queryFn: () => listNotifications(WITHOUT_NUMBER), enabled: shown, ...NOMINAL_QUERY
   });
 
-  const token = list.dataUpdatedAt;
-  const liveExtra = extra && extra.token === token ? extra : null;
-  const rows = uniqueById([ ...(list.data?.notifications ?? []), ...(liveExtra?.rows ?? []) ]);
-  const next = liveExtra ? liveExtra.next : list.data?.next_before ?? null;
-
-  async function loadMore() {
-    if (!next || moreBusy) return;
-    const asked = token;
-    setMoreBusy(true); setMoreError(null);
-    try {
-      const page = await listNotifications({ ...WITHOUT_NUMBER, before: next });
-      setExtra((prev) => ({ token: asked, rows: [ ...(prev && prev.token === asked ? prev.rows : []), ...page.notifications ], next: page.next_before }));
-    } catch (err) {
-      setMoreError(surveillanceError(err));
-    } finally {
-      setMoreBusy(false);
-    }
-  }
+  const { rows, next, more, loadMore } = usePagedNotifications(list, WITHOUT_NUMBER, REPORT_KEY);
 
   return (
     <Panel title="Encerradas sem número oficial">
@@ -133,11 +105,11 @@ function WithoutNumber() {
             {list.isPending && <p className="mono" style={muted}>carregando…</p>}
             {list.isError && <p role="alert" style={alert}>{surveillanceError(list.error)}</p>}
             {list.data && <NotificationTable rows={rows} onOpen={setOpenId} />}
-            {moreError && <p role="alert" style={alert}>{moreError}</p>}
+            {more.error && <p role="alert" style={alert}>{more.error}</p>}
             {list.data && next && (
               <div style={row}>
-                <button type="button" style={moreBusy ? disabledButtonStyle : buttonStyle} disabled={moreBusy} onClick={() => void loadMore()}>
-                  {moreBusy ? "Carregando…" : "Carregar mais"}
+                <button type="button" style={more.busy ? disabledButtonStyle : buttonStyle} disabled={more.busy} onClick={() => void loadMore()}>
+                  {more.busy ? "Carregando…" : "Carregar mais"}
                 </button>
               </div>
             )}

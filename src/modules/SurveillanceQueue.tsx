@@ -5,14 +5,15 @@
 // relê a cada minuto, pelo hook compartilhado com o menu. A ordem é a do api.
 // "Notificação manual" abre o painel da notificação sem consulta; criada (ou a
 // já existente, no 409), abre o detalhe dela.
-import { useRef, useState, type CSSProperties } from "react";
+import { useState, type CSSProperties } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   listNotifications, listSurveillanceDiseases, listSurveillanceUnits,
-  type NotificationCounts, type NotificationQuery, type SurveillanceNotification
+  type NotificationCounts, type NotificationQuery
 } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { useSurveillanceCount } from "../hooks/useSurveillanceCount";
+import { usePagedNotifications } from "../hooks/usePagedNotifications";
 import { DISEASES_KEY, NOTIFICATIONS_KEY, NOMINAL_QUERY, STATIC_QUERY, UNITS_KEY, surveillanceError } from "../lib/surveillance";
 import { buttonStyle, inputStyle } from "../components/formStyles";
 import { alert, fieldLabel, muted, row, stack } from "./exams/styles";
@@ -53,16 +54,6 @@ function bannerText(counts: NotificationCounts | undefined): string | null {
   return parts.length > 0 ? parts.join(" · ") : null;
 }
 
-// A linha pode repetir entre páginas (a ordem é por prazo, não por id): a primeira vez vale.
-function uniqueById(rows: SurveillanceNotification[]): SurveillanceNotification[] {
-  const seen = new Set<string>();
-  return rows.filter((r) => (seen.has(r.id) ? false : (seen.add(r.id), true)));
-}
-
-// Páginas extras valem só para a lista (aba, filtros e leitura) que as pediu.
-interface Extra { token: string; rows: SurveillanceNotification[]; next: string | null }
-interface MoreState { token: string; busy: boolean; error: string | null }
-
 export function SurveillanceQueue({ today }: { today?: string } = {}) {
   return (
     <SurveillanceGate title="Fila da vigilância" sub="notificações com prazo · vigilância epidemiológica" allow={(r) => r.surveillance}>
@@ -76,8 +67,6 @@ function QueueBody({ today }: { today?: string }) {
   const [ tabKey, setTabKey ] = useState<QueueTab>("notified");
   const [ disease, setDisease ] = useState("");
   const [ unit, setUnit ] = useState("");
-  const [ extra, setExtra ] = useState<Extra | null>(null);
-  const [ moreState, setMoreState ] = useState<MoreState | null>(null);
   const [ openId, setOpenId ] = useState<string | null>(null);
   const [ manual, setManual ] = useState(false);
   const openNotification = (id: string) => { setManual(false); setOpenId(id); };
@@ -93,28 +82,8 @@ function QueueBody({ today }: { today?: string }) {
     queryKey: [ NOTIFICATIONS_KEY, tabKey, disease, unit ], queryFn: () => listNotifications(query), ...NOMINAL_QUERY
   });
 
-  const token = `${tabKey}|${disease}|${unit}|${list.dataUpdatedAt}`;
-  // A resposta de uma página pedida para outra lista (aba, filtro ou leitura) não mexe nas páginas desta.
-  const currentToken = useRef(token);
-  currentToken.current = token;
-  const liveExtra = extra && extra.token === token ? extra : null;
-  const more = moreState && moreState.token === token ? moreState : null;
-  const rows = uniqueById([ ...(list.data?.notifications ?? []), ...(liveExtra?.rows ?? []) ]);
-  const next = liveExtra ? liveExtra.next : list.data?.next_before ?? null;
-
-  async function loadMore() {
-    if (!next || more?.busy) return;
-    const asked = token;
-    setMoreState({ token: asked, busy: true, error: null });
-    try {
-      const page = await listNotifications({ ...query, before: next });
-      if (currentToken.current !== asked) return;
-      setExtra((prev) => ({ token: asked, rows: [ ...(prev && prev.token === asked ? prev.rows : []), ...page.notifications ], next: page.next_before }));
-      setMoreState({ token: asked, busy: false, error: null });
-    } catch (err) {
-      setMoreState({ token: asked, busy: false, error: surveillanceError(err) });
-    }
-  }
+  // As páginas extras valem só para a lista (aba, filtros e leitura) que as pediu.
+  const { rows, next, more, loadMore } = usePagedNotifications(list, query, `${tabKey}|${disease}|${unit}`);
 
   const banner = bannerText(counts.data);
   // Os filtros só aparecem com as listas lidas; sem permissão para uma delas, a tela segue sem esse filtro.
@@ -173,11 +142,11 @@ function QueueBody({ today }: { today?: string }) {
         {list.isPending && <p style={muted}>carregando…</p>}
         {list.isError && <p role="alert" style={alert}>{surveillanceError(list.error)}</p>}
         {list.data && <NotificationTable rows={rows} onOpen={setOpenId} />}
-        {more?.error && <p role="alert" style={alert}>{more.error}</p>}
+        {more.error && <p role="alert" style={alert}>{more.error}</p>}
         {list.data && next && (
           <div style={row}>
-            <button type="button" style={buttonStyle} disabled={more?.busy === true} onClick={() => void loadMore()}>
-              {more?.busy ? "Carregando…" : "Carregar mais"}
+            <button type="button" style={buttonStyle} disabled={more.busy} onClick={() => void loadMore()}>
+              {more.busy ? "Carregando…" : "Carregar mais"}
             </button>
           </div>
         )}
