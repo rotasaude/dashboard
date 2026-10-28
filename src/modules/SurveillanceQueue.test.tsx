@@ -144,6 +144,19 @@ describe("SurveillanceQueue", () => {
     expect(names.some((n) => /Joana/.test(n ?? ""))).toBe(false);
   });
 
+  it("Abrir mostra o detalhe acima da tabela, lê uma vez, e Fechar o tira", async () => {
+    mocked(api.getNotification).mockResolvedValue(notification({ id: "nt2", version: 3 }));
+    renderWithProviders(<SurveillanceQueue today={TODAY25} />);
+    const rows = await screen.findAllByRole("row", { name: /Joana Lima/ });
+    expect(mocked(api.getNotification)).not.toHaveBeenCalled();
+    fireEvent.click(within(rows[0]).getByRole("button", { name: "Abrir notificação de Sarampo de 26/10/2026" }));
+    expect(await screen.findByRole("region", { name: "Detalhe da notificação" })).not.toBeNull();
+    expect(mocked(api.getNotification)).toHaveBeenCalledWith("nt2");
+    expect(mocked(api.getNotification)).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "Fechar" }));
+    expect(screen.queryByRole("region", { name: "Detalhe da notificação" })).toBeNull();
+  });
+
   it("a tag imediata só vale com a notificação aberta", async () => {
     const immediate = { code: "sarampo", name: "Sarampo", deadline: "immediate" };
     mocked(api.listNotifications).mockResolvedValue({ notifications: [

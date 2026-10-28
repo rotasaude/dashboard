@@ -16,6 +16,7 @@ import { buttonStyle, inputStyle } from "../components/formStyles";
 import { alert, fieldLabel, muted, row, stack } from "./exams/styles";
 import { SurveillanceGate } from "./surveillance/SurveillanceGate";
 import { NotificationTable } from "./surveillance/NotificationTable";
+import { NotificationDetail } from "./surveillance/NotificationDetail";
 
 export type QueueTab = "possible" | "notified" | "investigating" | "overdue" | "closed" | "entered" | "dismissed";
 
@@ -74,8 +75,7 @@ function QueueBody() {
   const [ unit, setUnit ] = useState("");
   const [ extra, setExtra ] = useState<Extra | null>(null);
   const [ moreState, setMoreState ] = useState<MoreState | null>(null);
-  // A Task 6 desenha o detalhe a partir deste id.
-  const [ , setOpenId ] = useState<string | null>(null);
+  const [ openId, setOpenId ] = useState<string | null>(null);
 
   const counts = useSurveillanceCount(true, user?.id ?? null);
   const diseases = useQuery({ queryKey: [ DISEASES_KEY ], queryFn: listSurveillanceDiseases, ...STATIC_QUERY });
@@ -153,6 +153,8 @@ function QueueBody() {
           )}
         </div>
       )}
+      {/* O detalhe lê ao abrir e depois de uma ação; a chave zera o formulário ao abrir outra. */}
+      {openId && <NotificationDetail key={openId} id={openId} onClose={() => setOpenId(null)} />}
       <div role="tabpanel" style={stack}>
         {list.isPending && <p style={muted}>carregando…</p>}
         {list.isError && <p role="alert" style={alert}>{surveillanceError(list.error)}</p>}
