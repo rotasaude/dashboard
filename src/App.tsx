@@ -312,7 +312,7 @@ export function renderModule(active: ModuleId, setActive: (id: ModuleId) => void
     case "surveillance-diseases": return <SurveillanceDiseases onGoToSecurity={() => setActive("security")} />;
     case "regulation-queue": return <RegulationQueue />;
     case "regulation-returned": return <RegulationReturned />;
-    case "regulation-offers": return <RegulationOffers />;
+    case "regulation-offers": return <RegulationOffers onGoToSecurity={() => setActive("security")} />;
     case "regulation-settings": return <RegulationSettings onGoToSecurity={() => setActive("security")} />;
     default:               return <Placeholder title={labelFor(active)} />;
   }
