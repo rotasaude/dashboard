@@ -146,7 +146,9 @@ const MESSAGES: Record<string, string> = {
   // Módulo 19 (contratos §2): nomes conferidos no documento.
   invalid_full_name: "confira o nome completo no documento (3 a 200 caracteres)",
   invalid_social_name: "o nome social pode ter até 200 caracteres",
-  invalid_mother_name: "o nome da mãe pode ter até 200 caracteres"
+  invalid_mother_name: "o nome da mãe pode ter até 200 caracteres",
+  // Módulo 26a, Desvio 2 do plano do api: com a regulação ligada, encaminhar sem unidade de destino exige o pedido de regulação.
+  regulation_request_required: "com a regulação ligada, encaminhamento sem unidade de destino é pelo “Pedir regulação” na consulta — escolha a unidade da rede"
 };
 
 export function attendanceError(err: unknown): string {
