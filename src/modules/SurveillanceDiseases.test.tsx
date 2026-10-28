@@ -110,8 +110,7 @@ describe("SurveillanceDiseases", () => {
     expect(screen.getByText(/as notificações já feitas ficam/)).not.toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
     await waitFor(() => expect(mocked(api.updateLocalDisease).mock.calls[0][0]).toBe("ld1"));
-    expect(mocked(api.updateLocalDisease).mock.calls[0][1]).toEqual({ name: "Febre do Oropouche", deadline: "immediate", cid10: [ "R17" ], ciap2: [],
-      repeat_after_days: 30, active: false });
+    expect(mocked(api.updateLocalDisease).mock.calls[0][1]).toEqual({ active: false });
   });
 
   it("reativar manda active true; a colisão com a lista nacional nova diz a posição do código", async () => {
@@ -123,7 +122,7 @@ describe("SurveillanceDiseases", () => {
     fireEvent.click(within(row).getByRole("button", { name: "Reativar" }));
     fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
     expect(await screen.findByText("o CID-10 da posição 1 já pertence a outra doença da lista")).not.toBeNull();
-    expect(mocked(api.updateLocalDisease).mock.calls[0][1]).toMatchObject({ active: true });
+    expect(mocked(api.updateLocalDisease).mock.calls[0][1]).toEqual({ active: true });
   });
 
   it("409 duplicate_code fica no formulário", async () => {
@@ -146,6 +145,25 @@ describe("SurveillanceDiseases", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Confirmar" }));
     expect(await screen.findByText("CIAP-2 da posição 2 inválido")).not.toBeNull();
     expect((screen.getByLabelText("CIAP-2") as HTMLInputElement).value).toBe("A77, A78");
+  });
+
+  it("depois da recusa, Cancelar na confirmação devolve o formulário editável com os valores", async () => {
+    mocked(api.createLocalDisease).mockRejectedValue(new ApiError(409, { error: "duplicate_code", path: "code" }, "x"));
+    renderWithProviders(<SurveillanceDiseases />);
+    fireEvent.click(await screen.findByRole("button", { name: "Nova doença local" }));
+    text("Código", "local_x"); text("Nome", "Febre X"); text("Prazo", "weekly");
+    fireEvent.click(screen.getByRole("button", { name: "Revisar" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Confirmar" }));
+    await screen.findByText("já existe doença com este código");
+    expect(screen.getByLabelText("Nome").matches(":disabled")).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+    const code = screen.getByLabelText("Código") as HTMLInputElement;
+    expect(code.matches(":disabled")).toBe(false);
+    expect(code.value).toBe("local_x");
+    expect((screen.getByLabelText("Nome") as HTMLInputElement).value).toBe("Febre X");
+    text("Código", "local_y");
+    expect(screen.queryByText("já existe doença com este código")).toBeNull();
+    expect(screen.getByRole("button", { name: "Revisar" })).not.toBeNull();
   });
 
   it("erro de leitura aparece como frase, sem o corpo", async () => {

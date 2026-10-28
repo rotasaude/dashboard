@@ -4460,6 +4460,7 @@ export function createLocalDisease(input: LocalDiseaseInput): Promise<LocalDisea
   return jsonFetch<LocalDisease>(survPath("admin", "local_diseases"), survWrite("POST", input));
 }
 
-export function updateLocalDisease(id: string, input: LocalDiseaseInput): Promise<LocalDisease> {
+// PATCH parcial: só as chaves presentes mudam (desativar manda só `active`).
+export function updateLocalDisease(id: string, input: Partial<LocalDiseaseInput>): Promise<LocalDisease> {
   return jsonFetch<LocalDisease>(survPath("admin", "local_diseases", id), survWrite("PATCH", input));
 }

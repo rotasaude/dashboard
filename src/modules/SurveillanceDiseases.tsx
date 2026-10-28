@@ -117,7 +117,7 @@ function Body({ onGoToSecurity }: { onGoToSecurity?(): void }) {
           description={toggle.active ? CREATE_EFFECT : DEACTIVATE_EFFECT}
           requiresStepUp
           confirmLabel="Confirmar"
-          run={async () => { await updateLocalDisease(toggle.disease.id, { ...bodyOf(draftOf(toggle.disease)), active: toggle.active }); }}
+          run={async () => { await updateLocalDisease(toggle.disease.id, { active: toggle.active }); }}
           onDone={() => saved(`Doença ${toggle.disease.name} ${toggle.active ? "reativada" : "desativada"}.`)}
           onCancel={() => setToggle(null)}
           onGoToSecurity={onGoToSecurity}
@@ -144,7 +144,7 @@ function draftOf(d: LocalDisease | null): LocalDiseaseDraft {
     : { code: "", name: "", deadline: "", cid10: "", ciap2: "", repeat_after_days: "30" };
 }
 
-// Corpo sem `code` (só a criação o leva) e sem `active`. O nome vai sem espaços nas pontas: o api exige `name.strip == name`.
+// Corpo sem `code` (só a criação o leva) e sem `active` (desativar/reativar manda só `active`, para não desfazer edição alheia). O nome vai sem espaços nas pontas: o api exige `name.strip == name`.
 function bodyOf(draft: LocalDiseaseDraft) {
   return {
     name: draft.name.trim(), deadline: draft.deadline as DiseaseDeadline, cid10: codesOf(draft.cid10), ciap2: codesOf(draft.ciap2),
