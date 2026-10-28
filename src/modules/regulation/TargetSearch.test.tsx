@@ -37,7 +37,7 @@ describe("TargetSearch", () => {
     expect(screen.queryByRole("button", { name: /abdômen/ })).toBeNull();
   });
 
-  it("rótulo próprio, busca sem cache e consulta não repetida sem mudar o termo", async () => {
+  it("rótulo próprio e o api é chamado com o termo e o tipo", async () => {
     renderWithProviders(<TargetSearch type="specialty" label="Alvo da oferta" delayMs={0} onPick={vi.fn()} />);
     fireEvent.change(screen.getByLabelText("Alvo da oferta"), { target: { value: "cardio" } });
     await waitFor(() => expect(mocked(api.searchRegulationTargets)).toHaveBeenCalledWith("cardio", "specialty"));
@@ -51,5 +51,24 @@ describe("TargetSearch", () => {
     mocked(api.searchRegulationTargets).mockRejectedValueOnce(new TypeError("fetch"));
     type("yyyy");
     expect((await screen.findByRole("alert")).textContent).toBe("sem conexão com o servidor — tente de novo");
+  });
+
+  it("Enter no campo não submete o formulário que o contém", async () => {
+    const onSubmit = vi.fn((e: { preventDefault(): void }) => e.preventDefault());
+    renderWithProviders(<form onSubmit={onSubmit}><TargetSearch type="specialty" delayMs={0} onPick={vi.fn()} /><button type="submit">enviar</button></form>);
+    const input = screen.getByLabelText("Especialidade ou procedimento");
+    type("cardio");
+    expect(fireEvent.keyDown(input, { key: "Enter", code: "Enter" })).toBe(false);
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("enquanto o debounce segura o termo anterior, a lista velha some", async () => {
+    mocked(api.searchRegulationTargets).mockImplementation(async (q: string) => (q === "cardio" ? [ CARDIO ] : [ { ...CARDIO, code: "225133", name: "Endocrinologia" } ]));
+    renderWithProviders(<TargetSearch type="specialty" delayMs={400} onPick={vi.fn()} />);
+    type("cardio");
+    expect(await screen.findByRole("button", { name: /Cardiologia/ })).not.toBeNull();
+    type("endocr");
+    expect(screen.queryByRole("button", { name: /Cardiologia/ })).toBeNull();
+    expect(await screen.findByRole("button", { name: /Endocrinologia/ })).not.toBeNull();
   });
 });

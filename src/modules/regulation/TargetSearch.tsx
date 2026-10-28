@@ -24,14 +24,16 @@ export function TargetSearch({ type, cbo = null, label = "Especialidade ou proce
     gcTime: 0, retry: false, refetchOnReconnect: false, refetchOnWindowFocus: false
   });
   // Depois de escolher, o campo limpa na hora; o termo "atrasado" não mantém a lista velha.
-  const show = enabled && typed.length > 0 && targetTermProblem(typed) === null;
+  // `term === typed`: enquanto o debounce segura o termo anterior, a lista velha não fica clicável sob o texto novo.
+  const show = enabled && term === typed && typed.length > 0 && targetTermProblem(typed) === null;
   const results = query.isSuccess ? targetsFor(cbo, query.data) : [];
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
       <label style={fieldLabel}>
         {label}
-        <input ref={inputRef} value={text} placeholder="nome da especialidade ou do procedimento" style={inputStyle} onChange={(e) => setText(e.target.value)} />
+        <input ref={inputRef} value={text} placeholder="nome da especialidade ou do procedimento" style={inputStyle} onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") e.preventDefault(); }} />
       </label>
       {problem && <p style={muted}>{problem}</p>}
       {show && query.isPending && <p className="mono" style={muted}>buscando…</p>}
