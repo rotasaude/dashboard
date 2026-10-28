@@ -18,6 +18,8 @@ import { TODAY26, offer, regRequest, regUser } from "../../test/regulationFixtur
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
 const text = (label: string, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
+// O par rótulo/valor do KeyValue: o item que contém o rótulo (sem depender da ordem dos nós dentro dele).
+const pair = (label: string) => within(screen.getByText(label).parentElement as HTMLElement);
 const OWN = offer();
 const FULL = offer({ id: "of2", provider: { id: "pr2", name: "Clínica do Coração", kind: "contracted" }, used: 6, quantity: 6, available: 0 });
 const CONTRACTED = offer({ id: "of3", provider: { id: "pr3", name: "Consórcio Leste", kind: "consortium" }, available: 4 });
@@ -60,8 +62,8 @@ describe("RequestDetail", () => {
     mocked(api.getRegulationRequest).mockResolvedValue(regRequest({ cid10: null, ciap2: "K86" }));
     mount();
     await screen.findByRole("region", { name: "Cardiologia" });
-    expect(screen.getByText("CID-10").nextSibling?.textContent).toBe("—");
-    expect(screen.getByText("CIAP-2").nextSibling?.textContent).toBe("K86");
+    expect(pair("CID-10").getByText("—")).not.toBeNull();
+    expect(pair("CIAP-2").getByText("K86")).not.toBeNull();
   });
 
   it("autorizar na rede própria: corpo com a versão e a frase do pedido de agendamento", async () => {
@@ -77,8 +79,31 @@ describe("RequestDetail", () => {
     mocked(api.getRegulationRequest).mockResolvedValue(regRequest({ color: null, suggested_color: "yellow" }));
     mount();
     await screen.findByRole("region", { name: "Cardiologia" });
-    expect(screen.getByText("Cor sugerida").nextSibling?.textContent).toBe("amarelo");
-    expect(screen.getByText("Cor confirmada").nextSibling?.textContent).toBe("ainda não confirmada");
+    expect(pair("Cor sugerida").getByText("amarelo")).not.toBeNull();
+    expect(pair("Cor confirmada").getByText("ainda não confirmada")).not.toBeNull();
+  });
+
+  it("com cor confirmada: a Tag da confirmada aparece e não diz que falta confirmar", async () => {
+    mocked(api.getRegulationRequest).mockResolvedValue(regRequest({ color: "red", suggested_color: "yellow" }));
+    mount();
+    await screen.findByRole("region", { name: "Cardiologia" });
+    expect(pair("Cor sugerida").getByText("amarelo")).not.toBeNull();
+    expect(pair("Cor confirmada").getByText("vermelho")).not.toBeNull();
+    expect(screen.queryByText("ainda não confirmada")).toBeNull();
+  });
+
+  it("autorizar com cor confirmada diferente da sugerida: voltar à sugerida difere da efetiva e pede motivo", async () => {
+    mocked(api.getRegulationRequest).mockResolvedValue(regRequest({ color: "red", suggested_color: "yellow" }));
+    mount();
+    const form = await openAuthorize();
+    expect((screen.getByLabelText("Cor confirmada") as HTMLSelectElement).value).toBe("red");
+    expect(screen.queryByLabelText("Motivo da mudança de cor")).toBeNull();
+    fireEvent.click(within(form).getByLabelText(/Consórcio Leste/));
+    text("Cor confirmada", "yellow");
+    expect(screen.getByLabelText("Motivo da mudança de cor")).not.toBeNull();
+    fireEvent.click(within(form).getByRole("button", { name: "Confirmar autorização" }));
+    expect((await within(form).findByRole("alert")).textContent).toBe("ao mudar a cor, informe o motivo");
+    expect(mocked(api.authorizeRegulationRequest)).not.toHaveBeenCalled();
   });
 
   it("autorizar mantendo a cor sugerida: não pede motivo e o corpo vai sem color nem color_reason", async () => {

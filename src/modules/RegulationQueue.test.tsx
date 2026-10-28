@@ -51,6 +51,7 @@ describe("RegulationQueue", () => {
     expect(late.compareDocumentPosition(onTime) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     const lateRow = await within(late).findByRole("row", { name: /Marcos Souza/ });
     expect(within(lateRow).getByText("vermelho")).not.toBeNull();
+    expect(within(lateRow).queryByText("sugerida")).toBeNull();
     expect(within(lateRow).getByText("vencido há 3 dias")).not.toBeNull();
     expect(within(lateRow).getByText("10 dias")).not.toBeNull();
     const row = await within(onTime).findByRole("row", { name: /Joana Lima/ });
