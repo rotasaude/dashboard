@@ -56,9 +56,9 @@ describe("reviewerCount", () => {
 const apiError = (status: number, body: unknown) => new ApiError(status, body, String(status));
 
 describe("convite", () => {
-  it("oferece os 14 papéis da cidade que se convidam pela Equipe", () => {
+  it("oferece os 15 papéis da cidade que se convidam pela Equipe", () => {
     expect(INVITE_ROLES.map((r) => r.role).sort()).toEqual([
-      "analyst", "billing_clerk", "campaign_manager", "citizen_verifier", "exam_regulator", "health_professional", "lab_releaser", "lab_staff",
+      "analyst", "billing_clerk", "campaign_manager", "care_regulator", "citizen_verifier", "exam_regulator", "health_professional", "lab_releaser", "lab_staff",
       "municipal_admin", "protocol_author", "protocol_publisher", "protocol_reviewer", "surveillance", "viewer"
     ]);
     expect(INVITE_ROLES.find((r) => r.role === "exam_regulator")?.label).toBe("Regulador de exames");
@@ -73,6 +73,9 @@ describe("convite", () => {
     // Módulo 25 (ADR 0043): a fila nominal da vigilância — privilegiado (step-up no convite).
     expect(INVITE_ROLES.find((r) => r.role === "surveillance")?.label).toBe("Vigilância epidemiológica");
     expect(isPrivilegedRole("surveillance")).toBe(true);
+    // Módulo 26a: o regulador decide sobre pedido nominal — privilegiado (step-up no convite).
+    expect(INVITE_ROLES.find((r) => r.role === "care_regulator")?.label).toBe("Regulador de encaminhamentos");
+    expect(isPrivilegedRole("care_regulator")).toBe(true);
     // O exam_provider só entra pelo cadastro do prestador.
     expect(INVITE_ROLES.some((r) => r.role === "exam_provider")).toBe(false);
     expect(INVITE_ROLES.find((r) => r.role === "campaign_manager")?.label).toBe("Gestor de campanhas");

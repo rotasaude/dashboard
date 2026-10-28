@@ -7,6 +7,7 @@ import { canRequestSncr, canSeeSncrOverview } from "../lib/controlled";
 import { canUseCareLines } from "../lib/careLines";
 import { canUseTerritory } from "../lib/territoryRegistry";
 import { canUseSurveillance } from "../lib/surveillance";
+import { canUseRegulation } from "../lib/regulation";
 export type ModuleId =
   | "overview" | "ingestion" | "conversations" | "consent"
   | "triages" | "classification" | "reports" | "protocols" | "events"
@@ -21,7 +22,8 @@ export type ModuleId =
   | "billing-procedures" | "billing-periods" | "billing-settings"
   | "care-lines-team" | "care-lines-preview" | "care-lines-admin"
   | "territory-team" | "registry-status" | "territory-micro-areas"
-  | "surveillance-queue" | "surveillance-negatives" | "surveillance-reports" | "surveillance-panel" | "surveillance-diseases";
+  | "surveillance-queue" | "surveillance-negatives" | "surveillance-reports" | "surveillance-panel" | "surveillance-diseases"
+  | "regulation-queue" | "regulation-returned" | "regulation-offers" | "regulation-settings";
 
 export interface NavItem { id: ModuleId; label: string; icon: string; }
 export interface NavGroupDef { label: string; items: NavItem[]; }
@@ -75,6 +77,12 @@ export const NAV_GROUPS: NavGroupDef[] = [
     { id: "surveillance-reports", label: "Relatórios da vigilância", icon: "▤" },
     { id: "surveillance-panel", label: "Painel por bairro e semana", icon: "▦" },
     { id: "surveillance-diseases", label: "Doenças notificáveis", icon: "☰" }
+  ]},
+  { label: "Regulação", items: [
+    { id: "regulation-queue", label: "Fila regulada", icon: "⇉" },
+    { id: "regulation-returned", label: "Encaminhamentos devolvidos", icon: "↩" },
+    { id: "regulation-offers", label: "Prestadores e cotas", icon: "▣" },
+    { id: "regulation-settings", label: "Prazos e lista do enfermeiro", icon: "⏲" }
   ]},
   { label: "Exames", items: [
     { id: "exam-acknowledgements", label: "Resultados aguardando ciência", icon: "⚑" },
@@ -234,6 +242,11 @@ export function navGroupsFor(
   // surveillance, o painel agregado também do analyst.
   const survOn = canUseSurveillance(user);
   const isSurveillance = roles.includes("surveillance");
+  // Módulo 26a: `care_regulation` E `clinical_record` (regra única em canUseRegulation).
+  // A fila é só do regulador; devolvidos, do profissional; ofertas, do regulador e do
+  // admin; prazos e lista do enfermeiro, do admin.
+  const regOn = canUseRegulation(user);
+  const isCareRegulator = roles.includes("care_regulator");
   return NAV_GROUPS.filter((group) => {
     if (group.label === "Conta") return !user?.operator;
     if (group.label === "Equipe") return isAdmin;
@@ -301,6 +314,10 @@ export function navGroupsFor(
       if (item.id === "territory-micro-areas") return territoryOn && isAdmin;
       if (item.id === "surveillance-panel") return survOn && (isSurveillance || isAnalyst);
       if (item.id.startsWith("surveillance-")) return survOn && isSurveillance;
+      if (item.id === "regulation-queue") return regOn && isCareRegulator;
+      if (item.id === "regulation-returned") return regOn && isProfessional && hasFeature(user, "clinical_record");
+      if (item.id === "regulation-offers") return regOn && (isAdmin || isCareRegulator);
+      if (item.id === "regulation-settings") return regOn && isAdmin;
       if (item.id === "integrations" || item.id === "cnes") return canIntegrations;
       if (item.id === "production") return canProduction;
       return true;
@@ -360,5 +377,16 @@ export function withSurveillanceCount(groups: NavGroupDef[], count: number): Nav
   return groups.map((group) => ({
     ...group,
     items: group.items.map((item) => item.id === "surveillance-queue" ? { ...item, label: `${item.label} (${shown})` } : item)
+  }));
+}
+
+// Módulo 26a: pedidos vencidos no item da fila regulada. O número vem da rota
+// de contagem (sem lista, sem trilha); um item por papel `care_regulator`.
+export function withRegulationCount(groups: NavGroupDef[], overdue: number): NavGroupDef[] {
+  if (overdue <= 0) return groups;
+  const shown = overdue === 1 ? "1 vencido" : `${overdue} vencidos`;
+  return groups.map((group) => ({
+    ...group,
+    items: group.items.map((item) => item.id === "regulation-queue" ? { ...item, label: `${item.label} (${shown})` } : item)
   }));
 }

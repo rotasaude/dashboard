@@ -92,11 +92,13 @@ export const INVITE_ROLES: { role: string; label: string }[] = [
   { role: "billing_clerk", label: "Faturista" },
   // Módulo 25 (ADR 0043): fila nominal da vigilância; privilegiado (step-up para conceder).
   { role: "surveillance", label: "Vigilância epidemiológica" },
+  // Módulo 26a: decide sobre pedido nominal de encaminhamento; privilegiado (step-up para conceder).
+  { role: "care_regulator", label: "Regulador de encaminhamentos" },
   { role: "municipal_admin", label: "Administrador municipal" }
 ];
 
 // Membership::PRIVILEGED_ROLES: conceder OU convidar exige step-up.
-const PRIVILEGED_ROLES = new Set([ "municipal_admin", REVIEWER_ROLE, VERIFIER_ROLE, PROFESSIONAL_ROLE, CAMPAIGN_MANAGER_ROLE, "exam_regulator", "lab_staff", "lab_releaser", "billing_clerk", "surveillance" ]);
+const PRIVILEGED_ROLES = new Set([ "municipal_admin", REVIEWER_ROLE, VERIFIER_ROLE, PROFESSIONAL_ROLE, CAMPAIGN_MANAGER_ROLE, "exam_regulator", "lab_staff", "lab_releaser", "billing_clerk", "surveillance", "care_regulator" ]);
 
 export function isPrivilegedRole(role: string): boolean {
   return PRIVILEGED_ROLES.has(role);

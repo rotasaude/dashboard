@@ -25,9 +25,10 @@ describe("grupo Cadastro territorial (módulo 24a)", () => {
   it("vem depois de Linhas de cuidado, antes da Vigilância, e tem ícone e descrição", () => {
     const labels = NAV_GROUPS.map((g) => g.label);
     expect(labels.indexOf("Cadastro territorial")).toBe(labels.indexOf("Linhas de cuidado") + 1);
-    // O módulo 25 pôs a Vigilância logo depois; ela é que antecede Exames.
+    // O módulo 25 pôs a Vigilância logo depois; o 26a pôs a Regulação depois dela, e é ela que antecede Exames.
     expect(labels.indexOf("Vigilância")).toBe(labels.indexOf("Cadastro territorial") + 1);
-    expect(labels.indexOf("Exames")).toBe(labels.indexOf("Vigilância") + 1);
+    expect(labels.indexOf("Regulação")).toBe(labels.indexOf("Vigilância") + 1);
+    expect(labels.indexOf("Exames")).toBe(labels.indexOf("Regulação") + 1);
     expect(CATALOG.groups["Cadastro territorial"].description).toBe("Microáreas, domicílios, famílias e cadastro individual");
     expect(CATALOG.screens["registry-status"].description).toBe("Vencidos, a vencer e quem falta cadastrar");
     expect(CATALOG.screens["territory-team"].description).toBe("Domicílios, famílias e moradores por microárea");

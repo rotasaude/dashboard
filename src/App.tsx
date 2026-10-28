@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { ScopeContext, PERIOD_OPTIONS, useScope, type PeriodKey } from "./lib/scope";
 import { useAuth } from "./lib/auth";
-import { NAV_GROUPS, labelFor, isExamProvider, navGroupsFor, withExamPendingCount, withLabCriticalCount, withPendingCount, withQcBlockCount, withSurveillanceCount, type ModuleId, type NavGroupDef } from "./shell/modules";
+import { NAV_GROUPS, labelFor, isExamProvider, navGroupsFor, withExamPendingCount, withLabCriticalCount, withPendingCount, withQcBlockCount, withRegulationCount, withSurveillanceCount, type ModuleId, type NavGroupDef } from "./shell/modules";
 import { useAlerts } from "./hooks/useAlerts";
 import { usePendingSignatures } from "./hooks/usePendingSignatures";
 import { canSign } from "./lib/signature";
@@ -11,6 +11,8 @@ import { useLabCriticalCount } from "./hooks/useLabCriticalCount";
 import { useQcBlockCount } from "./hooks/useQcBlockCount";
 import { useSurveillanceCount } from "./hooks/useSurveillanceCount";
 import { canUseSurveillance, surveillanceRoles } from "./lib/surveillance";
+import { useRegulationCount } from "./hooks/useRegulationCount";
+import { canUseRegulation, regulationRoles } from "./lib/regulation";
 import { canUseQc } from "./lib/qc";
 import { canUseLab, labRoles } from "./lib/lab";
 import { LabCriticalNotice } from "./modules/lab/LabCriticalNotice";
@@ -46,6 +48,10 @@ import { SurveillanceNegatives } from "./modules/SurveillanceNegatives";
 import { SurveillanceReports } from "./modules/SurveillanceReports";
 import { SurveillancePanel } from "./modules/SurveillancePanel";
 import { SurveillanceDiseases } from "./modules/SurveillanceDiseases";
+import { RegulationQueue } from "./modules/RegulationQueue";
+import { RegulationReturned } from "./modules/RegulationReturned";
+import { RegulationOffers } from "./modules/RegulationOffers";
+import { RegulationSettings } from "./modules/RegulationSettings";
 import { ProviderPortal } from "./modules/ProviderPortal";
 import { AcknowledgementNotice } from "./modules/exams/AcknowledgementNotice";
 import { Shell } from "./shell/Shell";
@@ -108,8 +114,8 @@ const ALL_SLUGS: ReadonlySet<string> = new Set(NAV_GROUPS.map((g) => slugOf(g.la
 // Grupos do shell a partir do filtro por papel de hoje. O rótulo de
 // Pendentes leva a contagem de withPendingCount ("(3)", "(200+)"), como no
 // menu antigo; `count` só acende o ponto do trilho.
-export function shellGroups(groups: NavGroupDef[], pending: number, examPending = 0, labCritical = 0, qcBlocks = 0, surveillanceImmediate = 0): ShellGroup[] {
-  return withSurveillanceCount(withQcBlockCount(withLabCriticalCount(withExamPendingCount(withPendingCount(groups, pending), examPending), labCritical), qcBlocks), surveillanceImmediate).map((g) => ({
+export function shellGroups(groups: NavGroupDef[], pending: number, examPending = 0, labCritical = 0, qcBlocks = 0, surveillanceImmediate = 0, regulationOverdue = 0): ShellGroup[] {
+  return withRegulationCount(withSurveillanceCount(withQcBlockCount(withLabCriticalCount(withExamPendingCount(withPendingCount(groups, pending), examPending), labCritical), qcBlocks), surveillanceImmediate), regulationOverdue).map((g) => ({
     label: g.label,
     slug: slugOf(g.label),
     items: g.items.map((i) => {
@@ -122,6 +128,8 @@ export function shellGroups(groups: NavGroupDef[], pending: number, examPending 
       if (i.id === "lab-qc-blocks" && qcBlocks > 0) return { id: i.id, label: i.label, count: qcBlocks };
       // Módulo 25: imediatas abertas acendem a fila da vigilância.
       if (i.id === "surveillance-queue" && surveillanceImmediate > 0) return { id: i.id, label: i.label, count: surveillanceImmediate };
+      // Módulo 26a: vencidos acendem a fila regulada.
+      if (i.id === "regulation-queue" && regulationOverdue > 0) return { id: i.id, label: i.label, count: regulationOverdue };
       return { id: i.id, label: i.label };
     })
   }));
@@ -160,9 +168,12 @@ function ShellInner({ initialModule }: { initialModule?: ModuleId }) {
   // Módulo 25: só quem tem o papel surveillance lê a contagem (o analyst só vê o painel).
   const survQuery = useSurveillanceCount(canUseSurveillance(auth.user) && surveillanceRoles(auth.user).surveillance, auth.user?.id ?? null);
   const survImmediate = survQuery.data?.immediate_open ?? 0;
+  // Módulo 26a: só o regulador lê a contagem (os vencidos acendem a fila regulada).
+  const regQuery = useRegulationCount(canUseRegulation(auth.user) && regulationRoles(auth.user).regulator, auth.user?.id ?? null);
+  const regOverdue = regQuery.data?.overdue ?? 0;
   const groups = useMemo(
-    () => shellGroups(navGroupsFor(auth.user), pending.data?.length ?? 0, examCount, labCritical, qcBlocks, survImmediate),
-    [ auth.user, pending.data?.length, examCount, labCritical, qcBlocks, survImmediate ]
+    () => shellGroups(navGroupsFor(auth.user), pending.data?.length ?? 0, examCount, labCritical, qcBlocks, survImmediate, regOverdue),
+    [ auth.user, pending.data?.length, examCount, labCritical, qcBlocks, survImmediate, regOverdue ]
   );
 
   const isAllowed = useCallback((r: Route<ModuleId>) => {
@@ -299,6 +310,10 @@ export function renderModule(active: ModuleId, setActive: (id: ModuleId) => void
     case "surveillance-reports": return <SurveillanceReports />;
     case "surveillance-panel": return <SurveillancePanel />;
     case "surveillance-diseases": return <SurveillanceDiseases onGoToSecurity={() => setActive("security")} />;
+    case "regulation-queue": return <RegulationQueue />;
+    case "regulation-returned": return <RegulationReturned />;
+    case "regulation-offers": return <RegulationOffers />;
+    case "regulation-settings": return <RegulationSettings onGoToSecurity={() => setActive("security")} />;
     default:               return <Placeholder title={labelFor(active)} />;
   }
 }

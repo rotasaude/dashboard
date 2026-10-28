@@ -9,7 +9,8 @@ import {
   IconUser, IconUserCircle, IconUsers, IconUsersGroup, IconCalendarStats, IconFileInvoice, IconReceipt, IconReceiptTax,
   IconHeartHandshake, IconUserSearch, IconGauge, IconRoute,
   IconHomeHeart, IconMap2, IconCalendarDue, IconHexagons,
-  IconVirus, IconBellRinging, IconCalendarX, IconFileSpreadsheet, IconGridDots, IconVirusSearch
+  IconVirus, IconBellRinging, IconCalendarX, IconFileSpreadsheet, IconGridDots, IconVirusSearch,
+  IconArrowsSplit2, IconListNumbers, IconArrowBackUp, IconBuildingStore, IconClockHour4
 } from "@tabler/icons-react";
 import type { Catalog } from "./types";
 
@@ -25,6 +26,7 @@ export const CATALOG: Catalog = {
     "Linhas de cuidado": { icon: IconHeartHandshake, description: "Busca ativa, sugestões e prévia dos indicadores" },
     "Cadastro territorial": { icon: IconHomeHeart, description: "Microáreas, domicílios, famílias e cadastro individual" },
     "Vigilância": { icon: IconVirus, description: "Notificação compulsória, prazos, negativa semanal e painel" },
+    "Regulação": { icon: IconArrowsSplit2, description: "Encaminhamentos a especialista e procedimento, fila, cotas e prazos" },
     "Exames":      { icon: IconMicroscope, description: "Pedidos, resultados e prestadores" },
     "Laboratório": { icon: IconFlask, description: "Amostras, laudos, controle de qualidade e estoque" },
     "Faturamento": { icon: IconReceipt, description: "Procedimentos, competências e arquivo BPA" },
@@ -93,6 +95,10 @@ export const CATALOG: Catalog = {
     "surveillance-reports": { icon: IconFileSpreadsheet, description: "CSV por semana e encerradas sem número oficial" },
     "surveillance-panel": { icon: IconGridDots, description: "Casos por bairro e semana epidemiológica" },
     "surveillance-diseases": { icon: IconVirusSearch, description: "Lista nacional e doenças da cidade" },
+    "regulation-queue": { icon: IconListNumbers, description: "Pedidos por cor e espera, vencidos primeiro" },
+    "regulation-returned": { icon: IconArrowBackUp, description: "Pedidos da unidade devolvidos para complementar" },
+    "regulation-offers": { icon: IconBuildingStore, description: "Prestadores, ofertas e cota mensal com saldo" },
+    "regulation-settings": { icon: IconClockHour4, description: "Prazos por cor e o que o enfermeiro pode pedir" },
     "campaigns": { icon: IconSpeakerphone, description: "Criar e enviar campanhas por SMS" },
     "team": { icon: IconUsers, description: "Usuários, convites e papéis" },
     "professionals": { icon: IconIdBadge2, description: "Vínculos, CBO e turnos" },
