@@ -8,6 +8,7 @@ import { canUseCareLines } from "../lib/careLines";
 import { canUseTerritory } from "../lib/territoryRegistry";
 import { canUseSurveillance } from "../lib/surveillance";
 import { canUseRegulation } from "../lib/regulation";
+import { canUsePharmacy } from "../lib/pharmacy";
 export type ModuleId =
   | "overview" | "ingestion" | "conversations" | "consent"
   | "triages" | "classification" | "reports" | "protocols" | "events"
@@ -23,7 +24,9 @@ export type ModuleId =
   | "care-lines-team" | "care-lines-preview" | "care-lines-admin"
   | "territory-team" | "registry-status" | "territory-micro-areas"
   | "surveillance-queue" | "surveillance-negatives" | "surveillance-reports" | "surveillance-panel" | "surveillance-diseases"
-  | "regulation-queue" | "regulation-returned" | "regulation-offers" | "regulation-settings";
+  | "regulation-queue" | "regulation-returned" | "regulation-offers" | "regulation-settings"
+  | "pharmacy-dispensing" | "pharmacy-external" | "pharmacy-transfers" | "pharmacy-entries" | "pharmacy-stock" | "pharmacy-adjustments"
+  | "pharmacy-alerts" | "pharmacy-admin";
 
 export interface NavItem { id: ModuleId; label: string; icon: string; }
 export interface NavGroupDef { label: string; items: NavItem[]; }
@@ -83,6 +86,16 @@ export const NAV_GROUPS: NavGroupDef[] = [
     { id: "regulation-returned", label: "Encaminhamentos devolvidos", icon: "↩" },
     { id: "regulation-offers", label: "Prestadores e cotas", icon: "▣" },
     { id: "regulation-settings", label: "Prazos e lista do enfermeiro", icon: "⏲" }
+  ]},
+  { label: "Farmácia", items: [
+    { id: "pharmacy-dispensing", label: "Dispensação", icon: "℞" },
+    { id: "pharmacy-external", label: "Receita externa", icon: "✎" },
+    { id: "pharmacy-transfers", label: "Transferências", icon: "⇄" },
+    { id: "pharmacy-entries", label: "Entradas e abertura", icon: "⇲" },
+    { id: "pharmacy-stock", label: "Posição e extrato", icon: "▦" },
+    { id: "pharmacy-adjustments", label: "Inventário e ajustes", icon: "±" },
+    { id: "pharmacy-alerts", label: "Alertas da farmácia", icon: "⚠" },
+    { id: "pharmacy-admin", label: "Locais e configurações", icon: "⚙" }
   ]},
   { label: "Exames", items: [
     { id: "exam-acknowledgements", label: "Resultados aguardando ciência", icon: "⚑" },
@@ -247,6 +260,15 @@ export function navGroupsFor(
   // admin; prazos e lista do enfermeiro, do admin.
   const regOn = canUseRegulation(user);
   const isCareRegulator = roles.includes("care_regulator");
+  // Módulo 27a (ADR 0045): `pharmacy`, sem exigir o prontuário; o interruptor vale para TODO /pharmacy/*,
+  // inclusive "Locais e configurações". Dispensação e receita externa: farmacêutico e auxiliar; transferências,
+  // posição e alertas: os três papéis; entradas: almoxarife e farmacêutico (a abertura é dele — P6 do plano do api);
+  // ajustes: farmacêutico e almoxarife; administração: municipal_admin. O papel POR LOCAL é conferido na tela
+  // (LocationPick) e no api.
+  const phOn = canUsePharmacy(user);
+  const isPharmacist = roles.includes("pharmacist");
+  const isPharmacyAssistant = roles.includes("pharmacy_assistant");
+  const isStockKeeper = roles.includes("stock_keeper");
   return NAV_GROUPS.filter((group) => {
     if (group.label === "Conta") return !user?.operator;
     if (group.label === "Equipe") return isAdmin;
@@ -318,6 +340,13 @@ export function navGroupsFor(
       if (item.id === "regulation-returned") return regOn && isProfessional && hasFeature(user, "clinical_record");
       if (item.id === "regulation-offers") return regOn && (isAdmin || isCareRegulator);
       if (item.id === "regulation-settings") return regOn && isAdmin;
+      if (item.id === "pharmacy-dispensing" || item.id === "pharmacy-external") return phOn && (isPharmacist || isPharmacyAssistant);
+      if (item.id === "pharmacy-transfers" || item.id === "pharmacy-stock" || item.id === "pharmacy-alerts") {
+        return phOn && (isPharmacist || isPharmacyAssistant || isStockKeeper);
+      }
+      if (item.id === "pharmacy-entries") return phOn && (isStockKeeper || isPharmacist);
+      if (item.id === "pharmacy-adjustments") return phOn && (isPharmacist || isStockKeeper);
+      if (item.id === "pharmacy-admin") return phOn && isAdmin;
       if (item.id === "integrations" || item.id === "cnes") return canIntegrations;
       if (item.id === "production") return canProduction;
       return true;

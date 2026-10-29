@@ -56,10 +56,10 @@ describe("reviewerCount", () => {
 const apiError = (status: number, body: unknown) => new ApiError(status, body, String(status));
 
 describe("convite", () => {
-  it("oferece os 15 papéis da cidade que se convidam pela Equipe", () => {
+  it("oferece os 18 papéis da cidade que se convidam pela Equipe", () => {
     expect(INVITE_ROLES.map((r) => r.role).sort()).toEqual([
       "analyst", "billing_clerk", "campaign_manager", "care_regulator", "citizen_verifier", "exam_regulator", "health_professional", "lab_releaser", "lab_staff",
-      "municipal_admin", "protocol_author", "protocol_publisher", "protocol_reviewer", "surveillance", "viewer"
+      "municipal_admin", "pharmacist", "pharmacy_assistant", "protocol_author", "protocol_publisher", "protocol_reviewer", "stock_keeper", "surveillance", "viewer"
     ]);
     expect(INVITE_ROLES.find((r) => r.role === "exam_regulator")?.label).toBe("Regulador de exames");
     expect(isPrivilegedRole("exam_regulator")).toBe(true);
@@ -76,6 +76,13 @@ describe("convite", () => {
     // Módulo 26a: o regulador decide sobre pedido nominal — privilegiado (step-up no convite).
     expect(INVITE_ROLES.find((r) => r.role === "care_regulator")?.label).toBe("Regulador de encaminhamentos");
     expect(isPrivilegedRole("care_regulator")).toBe(true);
+    // Módulo 27a (ADR 0045): farmacêutico e auxiliar leem e gravam dado nominal — privilegiados; o almoxarife não (D19, H9).
+    expect(INVITE_ROLES.find((r) => r.role === "pharmacist")?.label).toBe("Farmacêutico");
+    expect(INVITE_ROLES.find((r) => r.role === "pharmacy_assistant")?.label).toBe("Auxiliar de farmácia");
+    expect(INVITE_ROLES.find((r) => r.role === "stock_keeper")?.label).toBe("Almoxarife");
+    expect(isPrivilegedRole("pharmacist")).toBe(true);
+    expect(isPrivilegedRole("pharmacy_assistant")).toBe(true);
+    expect(isPrivilegedRole("stock_keeper")).toBe(false);
     // O exam_provider só entra pelo cadastro do prestador.
     expect(INVITE_ROLES.some((r) => r.role === "exam_provider")).toBe(false);
     expect(INVITE_ROLES.find((r) => r.role === "campaign_manager")?.label).toBe("Gestor de campanhas");

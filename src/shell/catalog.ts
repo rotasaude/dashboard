@@ -10,7 +10,8 @@ import {
   IconHeartHandshake, IconUserSearch, IconGauge, IconRoute,
   IconHomeHeart, IconMap2, IconCalendarDue, IconHexagons,
   IconVirus, IconBellRinging, IconCalendarX, IconFileSpreadsheet, IconGridDots, IconVirusSearch,
-  IconArrowsSplit2, IconListNumbers, IconArrowBackUp, IconBuildingStore, IconClockHour4
+  IconArrowsSplit2, IconListNumbers, IconArrowBackUp, IconBuildingStore, IconClockHour4,
+  IconBuildingWarehouse, IconPrescription, IconFilePlus, IconTransfer, IconTruckLoading, IconListSearch, IconScale, IconAlertTriangle, IconBuildingCog
 } from "@tabler/icons-react";
 import type { Catalog } from "./types";
 
@@ -27,6 +28,7 @@ export const CATALOG: Catalog = {
     "Cadastro territorial": { icon: IconHomeHeart, description: "Microáreas, domicílios, famílias e cadastro individual" },
     "Vigilância": { icon: IconVirus, description: "Notificação compulsória, prazos, negativa semanal e painel" },
     "Regulação": { icon: IconArrowsSplit2, description: "Encaminhamentos a especialista e procedimento, fila, cotas e prazos" },
+    "Farmácia": { icon: IconBuildingWarehouse, description: "Almoxarifado, farmácia da unidade, dispensação e alertas" },
     "Exames":      { icon: IconMicroscope, description: "Pedidos, resultados e prestadores" },
     "Laboratório": { icon: IconFlask, description: "Amostras, laudos, controle de qualidade e estoque" },
     "Faturamento": { icon: IconReceipt, description: "Procedimentos, competências e arquivo BPA" },
@@ -99,6 +101,14 @@ export const CATALOG: Catalog = {
     "regulation-returned": { icon: IconArrowBackUp, description: "Pedidos da unidade devolvidos para complementar" },
     "regulation-offers": { icon: IconBuildingStore, description: "Prestadores, ofertas e cota mensal com saldo" },
     "regulation-settings": { icon: IconClockHour4, description: "Prazos por cor e o que o enfermeiro pode pedir" },
+    "pharmacy-dispensing": { icon: IconPrescription, description: "Receita pelo código ou pelo paciente, lote e retirada" },
+    "pharmacy-external": { icon: IconFilePlus, description: "Receita de fora da rede, com profissional e conselho" },
+    "pharmacy-transfers": { icon: IconTransfer, description: "Envio do almoxarifado e recebimento conferido na unidade" },
+    "pharmacy-entries": { icon: IconTruckLoading, description: "Nota fiscal, doação e inventário de abertura, com lote" },
+    "pharmacy-stock": { icon: IconListSearch, description: "Saldo por local e lote, extrato e estoque mínimo" },
+    "pharmacy-adjustments": { icon: IconScale, description: "Ajustes, perdas e vencimentos, com aprovação" },
+    "pharmacy-alerts": { icon: IconAlertTriangle, description: "Vencendo, abaixo do mínimo, em trânsito e pendências" },
+    "pharmacy-admin": { icon: IconBuildingCog, description: "Locais de estoque, equipe por local e prazos" },
     "campaigns": { icon: IconSpeakerphone, description: "Criar e enviar campanhas por SMS" },
     "team": { icon: IconUsers, description: "Usuários, convites e papéis" },
     "professionals": { icon: IconIdBadge2, description: "Vínculos, CBO e turnos" },

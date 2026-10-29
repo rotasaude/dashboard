@@ -52,6 +52,14 @@ import { RegulationQueue } from "./modules/RegulationQueue";
 import { RegulationReturned } from "./modules/RegulationReturned";
 import { RegulationOffers } from "./modules/RegulationOffers";
 import { RegulationSettings } from "./modules/RegulationSettings";
+import { PharmacyDispensing } from "./modules/PharmacyDispensing";
+import { PharmacyExternal } from "./modules/PharmacyExternal";
+import { PharmacyTransfers } from "./modules/PharmacyTransfers";
+import { PharmacyEntries } from "./modules/PharmacyEntries";
+import { PharmacyStock } from "./modules/PharmacyStock";
+import { PharmacyAdjustments } from "./modules/PharmacyAdjustments";
+import { PharmacyAlerts } from "./modules/PharmacyAlerts";
+import { PharmacyAdmin } from "./modules/PharmacyAdmin";
 import { ProviderPortal } from "./modules/ProviderPortal";
 import { AcknowledgementNotice } from "./modules/exams/AcknowledgementNotice";
 import { Shell } from "./shell/Shell";
@@ -314,6 +322,14 @@ export function renderModule(active: ModuleId, setActive: (id: ModuleId) => void
     case "regulation-returned": return <RegulationReturned />;
     case "regulation-offers": return <RegulationOffers onGoToSecurity={() => setActive("security")} />;
     case "regulation-settings": return <RegulationSettings onGoToSecurity={() => setActive("security")} />;
+    case "pharmacy-dispensing": return <PharmacyDispensing />;
+    case "pharmacy-external": return <PharmacyExternal />;
+    case "pharmacy-transfers": return <PharmacyTransfers />;
+    case "pharmacy-entries": return <PharmacyEntries />;
+    case "pharmacy-stock": return <PharmacyStock />;
+    case "pharmacy-adjustments": return <PharmacyAdjustments onGoToSecurity={() => setActive("security")} />;
+    case "pharmacy-alerts": return <PharmacyAlerts />;
+    case "pharmacy-admin": return <PharmacyAdmin onGoToSecurity={() => setActive("security")} />;
     default:               return <Placeholder title={labelFor(active)} />;
   }
 }
