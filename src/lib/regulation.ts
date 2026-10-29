@@ -104,6 +104,12 @@ export function colorTone(code: string | null | undefined): string {
   return COLORS.find((c) => c.key === code)?.tone ?? "neutral";
 }
 
+// Páginas por cursor podem repetir um pedido que mudou de posição entre as leituras: vale a primeira ocorrência.
+export function uniqueById(rows: RegulationRequest[]): RegulationRequest[] {
+  const seen = new Set<string>();
+  return rows.filter((r) => (seen.has(r.id) ? false : (seen.add(r.id), true)));
+}
+
 // A cor que ordena a fila: a confirmada pelo regulador, ou a sugerida enquanto ele não confirmou (o api manda `color: null`).
 export function effectiveColor(r: Pick<RegulationRequest, "color" | "suggested_color">): string {
   return r.color ?? r.suggested_color;

@@ -4612,9 +4612,13 @@ export function cancelRegulationRequest(id: string, reason: string, version: num
 }
 
 // ── Solicitante: devolvidos da unidade e complemento ──
-export async function listReturnedRequests(unitId: string): Promise<RegulationRequest[]> {
+// Paginado por cursor opaco (`before`), como a fila: só ids na URL; `next_before` nulo = última página.
+export async function listReturnedRequests(unitId: string, before?: string | null): Promise<RegulationPage> {
   const p = new URLSearchParams({ unit_id: unitId });
-  return (await jsonFetch<{ requests?: RegulationRequest[] }>(withQuery(regPath("returned"), p))).requests ?? [];
+  if (before) p.set("before", before);
+  p.set("limit", String(REGULATION_PAGE_SIZE));
+  const b = await jsonFetch<{ requests?: RegulationRequest[]; next_before?: string | null }>(withQuery(regPath("returned"), p));
+  return { requests: b.requests ?? [], next_before: b.next_before ?? null };
 }
 
 export function complementRegulationRequest(id: string, input: ComplementInput): Promise<RegulationRequest> {

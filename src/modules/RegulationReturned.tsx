@@ -6,7 +6,7 @@
 // a lista e troca o pedido aberto pelo de mesmo id com a versão nova, com o formulário montado (o rascunho sobrevive); se o
 // pedido sumiu ou deixou de ser `returned`, o formulário fecha.
 import { useState, type CSSProperties } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   complementRegulationRequest, errorCode, getConsultationOptions, getMyProfessional, listReturnedRequests,
   type ProfessionalLink, type RegulationRequest, type RegulationRequestInput
@@ -16,7 +16,7 @@ import { OPTIONS_KEY } from "../lib/consultation";
 import { fmtDateTime } from "../lib/format";
 import { documentText } from "../lib/patientDocument";
 import {
-  NOMINAL_QUERY, REG_RETURNED_KEY, STATIC_QUERY, draftFromRequest, regulationError, requesterKind, returnReason, typeLabel
+  NOMINAL_QUERY, REG_RETURNED_KEY, STATIC_QUERY, draftFromRequest, regulationError, requesterKind, returnReason, typeLabel, uniqueById
 } from "../lib/regulation";
 import { EmptyState } from "../components/EmptyState";
 import { buttonStyle, inputStyle, secondaryButtonStyle } from "../components/formStyles";
@@ -85,7 +85,14 @@ function ReturnedBody() {
 function ReturnedList({ unit, cid10Allowed, optionsError }: { unit: UnitOption; cid10Allowed: boolean | null; optionsError: boolean }) {
   const queryClient = useQueryClient();
   const queryKey = [ REG_RETURNED_KEY, unit.id ];
-  const list = useQuery({ queryKey, queryFn: () => listReturnedRequests(unit.id), ...NOMINAL_QUERY });
+  // Cada página é uma leitura nominal com trilha; "Carregar mais" segue o cursor do api. A unidade nova remonta a lista (key), do início.
+  const list = useInfiniteQuery({
+    queryKey,
+    queryFn: ({ pageParam }) => (pageParam ? listReturnedRequests(unit.id, pageParam) : listReturnedRequests(unit.id)),
+    initialPageParam: null as string | null,
+    getNextPageParam: (last) => last.next_before ?? undefined,
+    ...NOMINAL_QUERY
+  });
   const [ editing, setEditing ] = useState<RegulationRequest | null>(null);
   const [ stale, setStale ] = useState(false);
   const [ notice, setNotice ] = useState<string | null>(null);
@@ -94,8 +101,10 @@ function ReturnedList({ unit, cid10Allowed, optionsError }: { unit: UnitOption; 
   // O pedido recém-complementado some da tela até a releitura terminar (um segundo clique daria invalid_transition).
   const [ done, setDone ] = useState<string | null>(null);
 
-  const rows = (list.data ?? []).filter((r) => r.id !== done);
-  const reread = () => queryClient.invalidateQueries({ queryKey });
+  const loaded = uniqueById((list.data?.pages ?? []).flatMap((p) => p.requests));
+  const rows = loaded.filter((r) => r.id !== done);
+  // Depois de complementar, volta à primeira página (uma leitura só), como a fila depois de uma decisão.
+  const reread = () => queryClient.resetQueries({ queryKey });
   const close = () => { setEditing(null); setStale(false); setReloadError(null); };
 
   async function send(request: RegulationRequest, body: RegulationRequestInput) {
@@ -121,7 +130,7 @@ function ReturnedList({ unit, cid10Allowed, optionsError }: { unit: UnitOption; 
     setReloadError(null);
     const out = await list.refetch();
     if (out.isError) { setReloadError(regulationError(out.error)); return; }
-    const fresh = (out.data ?? []).find((r) => r.id === openId && r.status === "returned");
+    const fresh = uniqueById((out.data?.pages ?? []).flatMap((p) => p.requests)).find((r) => r.id === openId && r.status === "returned");
     if (!fresh) { close(); return; }
     setStale(false);
     setCleared((n) => n + 1);
@@ -155,7 +164,7 @@ function ReturnedList({ unit, cid10Allowed, optionsError }: { unit: UnitOption; 
       {optionsError && <p role="alert" style={alert}>não foi possível ler as regras de diagnóstico — recarregue a página</p>}
       {list.isPending && <p style={muted}>carregando…</p>}
       {list.isError && <p role="alert" style={alert}>{regulationError(list.error)}</p>}
-      {list.data && rows.length === 0 && <EmptyState title={EMPTY_TEXT} />}
+      {list.data && rows.length === 0 && !list.hasNextPage && <EmptyState title={EMPTY_TEXT} />}
       {rows.length > 0 && (
         <ul style={listStyle}>
           {rows.map((r) => (
@@ -176,6 +185,13 @@ function ReturnedList({ unit, cid10Allowed, optionsError }: { unit: UnitOption; 
             </li>
           ))}
         </ul>
+      )}
+      {list.data && list.hasNextPage && (
+        <div style={row}>
+          <button type="button" style={buttonStyle} disabled={list.isFetchingNextPage} onClick={() => void list.fetchNextPage()}>
+            {list.isFetchingNextPage ? "Carregando…" : "Carregar mais"}
+          </button>
+        </div>
       )}
     </div>
   );

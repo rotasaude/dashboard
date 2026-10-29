@@ -12,7 +12,7 @@ import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchStateExportCsv, listRegulationRequests, type RegulationQuery, type RegulationRequest, type RegulationTarget, type RegulationType, type RiskColor } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { useRegulationCount } from "../hooks/useRegulationCount";
-import { COLORS, NOMINAL_QUERY, REG_COUNT_KEY, REG_LIST_KEY, exportFilename, regulationError, statusLabel, typeLabel } from "../lib/regulation";
+import { COLORS, NOMINAL_QUERY, REG_COUNT_KEY, REG_LIST_KEY, exportFilename, regulationError, statusLabel, typeLabel, uniqueById } from "../lib/regulation";
 import { cityIsoDate } from "../lib/format";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../components/formStyles";
 import { alert, fieldLabel, muted, okText, row, stack, title } from "./exams/styles";
@@ -60,11 +60,6 @@ export function RegulationQueue({ today }: { today?: string } = {}) {
 function bannerText(overdue: number | undefined): string | null {
   if (!overdue || overdue <= 0) return null;
   return overdue === 1 ? "1 pedido vencido" : `${overdue} pedidos vencidos`;
-}
-
-function uniqueById(rows: RegulationRequest[]): RegulationRequest[] {
-  const seen = new Set<string>();
-  return rows.filter((r) => (seen.has(r.id) ? false : (seen.add(r.id), true)));
 }
 
 function QueueBody({ today }: { today?: string }) {

@@ -18,6 +18,7 @@ const link = (id: string, unit: string, name: string, ended: string | null = nul
 const RETURNED = regRequest({ status: "returned", version: 4, events: [
   { status: "pending", at: "2026-10-08T10:00:00-03:00", by: { name: "Dra. Helena Prado" }, reason: null },
   { status: "returned", at: "2026-10-20T15:00:00-03:00", by: { name: "Regulador" }, reason: "Falta o resultado do teste ergométrico" } ] });
+const page = (requests: unknown[], next_before: string | null = null) => ({ requests, next_before });
 const profile = (links: ReturnType<typeof link>[]) => ({ professional: { id: "p1" }, shifts: [], links });
 
 describe("RegulationReturned", () => {
@@ -27,7 +28,7 @@ describe("RegulationReturned", () => {
     mocked(api.getMyProfessional).mockResolvedValue(profile([ link("l1", "u1", "UBS Centro"), link("l2", "u3", "UBS Vila"),
       link("l3", "u9", "UBS Antiga", "2026-05-01") ]));
     mocked(api.getConsultationOptions).mockResolvedValue({ care_types: [], conducts: [], cid10_allowed_for_cbo: true });
-    mocked(api.listReturnedRequests).mockResolvedValue([ RETURNED ]);
+    mocked(api.listReturnedRequests).mockResolvedValue(page([ RETURNED ]));
     mocked(api.complementRegulationRequest).mockResolvedValue(regRequest({ status: "pending", version: 5 }));
   });
 
@@ -42,8 +43,48 @@ describe("RegulationReturned", () => {
     await waitFor(() => expect(mocked(api.listReturnedRequests)).toHaveBeenLastCalledWith("u3"));
   });
 
+  it("Carregar mais: usa o cursor, acrescenta a página seguinte e some no fim", async () => {
+    const second = regRequest({ id: "rr2", target: { code: "225125", name: "Ortopedia" }, status: "returned", version: 2 });
+    mocked(api.listReturnedRequests).mockResolvedValueOnce(page([ RETURNED ], "c1")).mockResolvedValueOnce(page([ second ], null));
+    renderWithProviders(<RegulationReturned />);
+    await screen.findByRole("listitem", { name: "Cardiologia de Joana Lima" });
+    expect(mocked(api.listReturnedRequests)).toHaveBeenCalledWith("u1");
+    fireEvent.click(screen.getByRole("button", { name: "Carregar mais" }));
+    expect(await screen.findByRole("listitem", { name: /^Ortopedia de / })).not.toBeNull();
+    expect(mocked(api.listReturnedRequests)).toHaveBeenLastCalledWith("u1", "c1");
+    expect(screen.getByRole("listitem", { name: "Cardiologia de Joana Lima" })).not.toBeNull();
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Carregar mais" })).toBeNull());
+  });
+
+  it("sem next_before na primeira página: nenhum botão Carregar mais", async () => {
+    renderWithProviders(<RegulationReturned />);
+    await screen.findByRole("listitem", { name: "Cardiologia de Joana Lima" });
+    expect(screen.queryByRole("button", { name: "Carregar mais" })).toBeNull();
+  });
+
+  it("trocar de unidade recomeça do início, sem cursor", async () => {
+    mocked(api.listReturnedRequests).mockResolvedValueOnce(page([ RETURNED ], "c1")).mockResolvedValue(page([ RETURNED ], null));
+    renderWithProviders(<RegulationReturned />);
+    await screen.findByRole("listitem", { name: "Cardiologia de Joana Lima" });
+    fireEvent.change(screen.getByLabelText("Unidade"), { target: { value: "u3" } });
+    await waitFor(() => expect(mocked(api.listReturnedRequests)).toHaveBeenLastCalledWith("u3"));
+    expect(mocked(api.listReturnedRequests).mock.calls.every((c) => c[1] === undefined)).toBe(true);
+    await screen.findByRole("listitem", { name: "Cardiologia de Joana Lima" });
+    expect(screen.queryByRole("button", { name: "Carregar mais" })).toBeNull();
+  });
+
+  it("erro ao carregar a página seguinte: frase da regulação em alerta, e a página já lida continua", async () => {
+    mocked(api.listReturnedRequests).mockResolvedValueOnce(page([ RETURNED ], "c1"))
+      .mockRejectedValueOnce(new ApiError(403, { error: "missing_role" }, "x"));
+    renderWithProviders(<RegulationReturned />);
+    await screen.findByRole("listitem", { name: "Cardiologia de Joana Lima" });
+    fireEvent.click(screen.getByRole("button", { name: "Carregar mais" }));
+    expect((await screen.findByRole("alert")).textContent).toBe("seu papel não permite usar a regulação municipal");
+    expect(screen.getByRole("listitem", { name: "Cardiologia de Joana Lima" })).not.toBeNull();
+  });
+
   it("devolvido sem cor confirmada mostra a cor sugerida, marcada como sugerida", async () => {
-    mocked(api.listReturnedRequests).mockResolvedValue([ { ...RETURNED, color: null, suggested_color: "red" } ]);
+    mocked(api.listReturnedRequests).mockResolvedValue(page([ { ...RETURNED, color: null, suggested_color: "red" } ]));
     renderWithProviders(<RegulationReturned />);
     const row = await screen.findByRole("listitem", { name: "Cardiologia de Joana Lima" });
     expect(within(row).getByText("vermelho")).not.toBeNull();
@@ -113,7 +154,7 @@ describe("RegulationReturned", () => {
     expect((await screen.findByRole("alert")).textContent).toBe(STALE_TEXT);
     expect((screen.getByLabelText("Justificativa") as HTMLTextAreaElement).value).toBe(next);
     expect(mocked(api.listReturnedRequests)).toHaveBeenCalledTimes(1);
-    mocked(api.listReturnedRequests).mockResolvedValue([ { ...RETURNED, version: 5 } ]);
+    mocked(api.listReturnedRequests).mockResolvedValue(page([ { ...RETURNED, version: 5 } ]));
     fireEvent.click(screen.getByRole("button", { name: "Recarregar" }));
     await waitFor(() => expect(mocked(api.listReturnedRequests)).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(screen.queryByRole("button", { name: "Recarregar" })).toBeNull());
@@ -130,7 +171,7 @@ describe("RegulationReturned", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Complementar" }));
     fireEvent.click(screen.getByRole("button", { name: "Enviar complemento" }));
     expect((await screen.findByRole("alert")).textContent).toBe("este pedido mudou de situação — recarregue");
-    mocked(api.listReturnedRequests).mockResolvedValue([]);
+    mocked(api.listReturnedRequests).mockResolvedValue(page([]));
     fireEvent.click(screen.getByRole("button", { name: "Recarregar" }));
     expect(await screen.findByText("nenhum pedido devolvido para esta unidade")).not.toBeNull();
     expect(screen.queryByLabelText("Justificativa")).toBeNull();
@@ -142,7 +183,7 @@ describe("RegulationReturned", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Complementar" }));
     fireEvent.click(screen.getByRole("button", { name: "Enviar complemento" }));
     await screen.findByRole("alert");
-    mocked(api.listReturnedRequests).mockResolvedValue([ { ...RETURNED, status: "pending" } ]);
+    mocked(api.listReturnedRequests).mockResolvedValue(page([ { ...RETURNED, status: "pending" } ]));
     fireEvent.click(screen.getByRole("button", { name: "Recarregar" }));
     await waitFor(() => expect(screen.queryByLabelText("Justificativa")).toBeNull());
   });
@@ -150,13 +191,13 @@ describe("RegulationReturned", () => {
   it("depois de complementar, o pedido some até a releitura terminar", async () => {
     renderWithProviders(<RegulationReturned />);
     fireEvent.click(await screen.findByRole("button", { name: "Complementar" }));
-    let release: (rows: unknown[]) => void = () => undefined;
+    let release: (page: unknown) => void = () => undefined;
     mocked(api.listReturnedRequests).mockReturnValue(new Promise((resolve) => { release = resolve; }));
     fireEvent.click(screen.getByRole("button", { name: "Enviar complemento" }));
     expect(await screen.findByText(/^Pedido complementado/)).not.toBeNull();
     expect(screen.queryByRole("listitem", { name: "Cardiologia de Joana Lima" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Complementar" })).toBeNull();
-    release([]);
+    release(page([]));
     expect(await screen.findByText("nenhum pedido devolvido para esta unidade")).not.toBeNull();
   });
 
@@ -178,7 +219,7 @@ describe("RegulationReturned", () => {
   });
 
   it("sem devolvidos: estado vazio", async () => {
-    mocked(api.listReturnedRequests).mockResolvedValue([]);
+    mocked(api.listReturnedRequests).mockResolvedValue(page([]));
     renderWithProviders(<RegulationReturned />);
     expect(await screen.findByText("nenhum pedido devolvido para esta unidade")).not.toBeNull();
   });

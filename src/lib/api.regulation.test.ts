@@ -84,10 +84,21 @@ describe("cliente da regulação (contrato §3–§8)", () => {
     for (let i = 1; i <= 4; i++) expect([ initOf(i).method, headersOf(i)["Content-Type"] ]).toEqual([ "POST", "application/json" ]);
   });
 
+  it("devolvidos: cursor e limite na URL; envelope com next_before; ausente vira página vazia", async () => {
+    fetchMock.mockImplementationOnce(() => ok({ requests: [ { id: "rr1" } ], next_before: "c2" }))
+      .mockImplementationOnce(() => ok({ requests: [ { id: "rr2" } ], next_before: null })).mockImplementationOnce(() => ok({}));
+    expect(await listReturnedRequests("u1")).toEqual({ requests: [ { id: "rr1" } ], next_before: "c2" });
+    expect(urlOf(0).pathname).toBe("/regulation/returned");
+    expect(Object.fromEntries(urlOf(0).searchParams)).toEqual({ unit_id: "u1", limit: "50" });
+    expect(await listReturnedRequests("u1", "c2")).toEqual({ requests: [ { id: "rr2" } ], next_before: null });
+    expect(Object.fromEntries(urlOf(1).searchParams)).toEqual({ unit_id: "u1", before: "c2", limit: "50" });
+    expect(await listReturnedRequests("u1")).toEqual({ requests: [], next_before: null });
+  });
+
   it("solicitante, agendamento, desfecho e número externo", async () => {
     fetchMock.mockImplementationOnce(() => ok({ requests: [ { id: "rr1" } ] }));
-    expect(await listReturnedRequests("u1")).toEqual([ { id: "rr1" } ]);
-    expect([ urlOf(0).pathname, urlOf(0).search ]).toEqual([ "/regulation/returned", "?unit_id=u1" ]);
+    expect(await listReturnedRequests("u1")).toMatchObject({ requests: [ { id: "rr1" } ] });
+    expect([ urlOf(0).pathname, urlOf(0).search ]).toEqual([ "/regulation/returned", "?unit_id=u1&limit=50" ]);
     await complementRegulationRequest("rr1", { justification: INPUT.justification, ciap2: "K86", suggested_color: "yellow", version: 4 });
     expect([ urlOf(1).pathname, bodyOf(1) ]).toEqual([ "/regulation/requests/rr1/complement",
       { justification: INPUT.justification, ciap2: "K86", suggested_color: "yellow", version: 4 } ]);
