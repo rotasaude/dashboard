@@ -55,6 +55,8 @@ function Body({ location, today, renderDispense }: { location: PharmacyLocation;
   const [ rereading, setRereading ] = useState(false);
   // Só a busca (ou a releitura) mais recente vale: `clear` e `onFound` incrementam; a resposta de uma releitura que ficou para trás é ignorada.
   const seq = useRef(0);
+  // O `seq` de quando o formulário abriu: se mudou (busca nova ou limpa durante o envio), a resposta da dispensação não refaz a busca antiga.
+  const opened = useRef(0);
   // A nova leitura da MESMA busca, uma vez, depois de dispensar (mutação: grava trilha, sem cache nem releitura sozinha).
   const reread = useMutation({ mutationFn: (input: PrescriptionLookupInput) => lookupPrescriptions(input), gcTime: 0 });
 
@@ -76,7 +78,12 @@ function Body({ location, today, renderDispense }: { location: PharmacyLocation;
   }
 
   // A receita mudou (cancelada, vencida, sumiu): fecha o formulário, tira a lista velha e deixa a frase; a pessoa busca de novo.
-  function stale() { clear(); setProblem(PRESCRIPTION_CHANGED); }
+  function stale() { if (opened.current !== seq.current) return; clear(); setProblem(PRESCRIPTION_CHANGED); }
+  // Dispensou: se a busca já foi trocada, só o aviso fica (a lista nova não é da receita dispensada).
+  function done(input: PrescriptionLookupInput, patientId: string | null) {
+    if (opened.current !== seq.current) { setNotice(DISPENSED_TEXT); return; }
+    dispensed(input, patientId);
+  }
 
   const open = found?.list.find((p) => p.id === dispensing) ?? null;
   return (
@@ -91,9 +98,9 @@ function Body({ location, today, renderDispense }: { location: PharmacyLocation;
       {rereading && <p className="mono" style={muted}>relendo a receita…</p>}
       {found && !rereading && found.list.length === 0 && <p style={muted}>{found.patientId ? NO_PRESCRIPTION_PATIENT_TEXT : NO_PRESCRIPTION_TEXT}</p>}
       {found && !rereading && found.list.length > 0 && found.patientId && <p style={muted}>{PATIENT_WINDOW_TEXT}</p>}
-      {!rereading && !open && found?.list.map((p) => <PrescriptionCard key={`${p.kind}-${p.id}`} p={p} onDispense={() => { setNotice(null); setDispensing(p.id); }} />)}
+      {!rereading && !open && found?.list.map((p) => <PrescriptionCard key={`${p.kind}-${p.id}`} p={p} onDispense={() => { setNotice(null); opened.current = seq.current; setDispensing(p.id); }} />)}
       {!rereading && found && open && renderDispense({
-        location, prescription: open, today, onDone: () => dispensed(found.input, found.patientId), onStale: stale, onCancel: () => setDispensing(null)
+        location, prescription: open, today, onDone: () => done(found.input, found.patientId), onStale: stale, onCancel: () => setDispensing(null)
       })}
     </div>
   );

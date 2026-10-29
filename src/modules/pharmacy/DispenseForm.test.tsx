@@ -45,7 +45,7 @@ describe("DispenseForm", () => {
     fireEvent.click(screen.getByLabelText(`Dispensado por completo — ${AMOX}`));
     // H12: a amoxicilina é antimicrobiano — a receita é retida (sem número digitado: o api grava notification_number null).
     fireEvent.click(screen.getByRole("button", { name: "Registrar dispensação" }));
-    expect((await screen.findAllByRole("listitem")).map((li) => li.textContent)).toContain("medicamento controlado: registre a retenção da receita");
+    expect((await screen.findAllByRole("listitem")).map((li) => li.textContent)).toContain("este medicamento exige a retenção da receita: marque 'Receita retida na farmácia'");
     expect(mocked(api.recordDispensation)).not.toHaveBeenCalled();
     fireEvent.click(screen.getByLabelText("Receita retida na farmácia"));
     fireEvent.click(screen.getByRole("button", { name: "Registrar dispensação" }));
@@ -61,7 +61,7 @@ describe("DispenseForm", () => {
     fireEvent.click(screen.getByRole("button", { name: "Registrar dispensação" }));
     const items = (await screen.findAllByRole("listitem")).map((li) => li.textContent);
     expect(items).toEqual(expect.arrayContaining([ `${AMOX}: saída maior que o saldo do lote (30)`,
-      `${CLON}: a quantidade tem no máximo 2 casas depois da vírgula`, "medicamento controlado: registre a retenção da receita" ]));
+      `${CLON}: a quantidade tem no máximo 2 casas depois da vírgula`, "este medicamento exige a retenção da receita: marque 'Receita retida na farmácia'" ]));
     expect(mocked(api.recordDispensation)).not.toHaveBeenCalled();
   });
 
@@ -93,7 +93,7 @@ describe("DispenseForm", () => {
     await waitFor(() => expect((screen.getByLabelText(`Lote — ${CLON}`) as HTMLSelectElement).value).toBe("lot2"));
     text(`Quantidade — ${CLON} (comprimido)`, "30");
     fireEvent.click(screen.getByRole("button", { name: "Registrar dispensação" }));
-    expect((await screen.findAllByRole("listitem")).map((li) => li.textContent)).toContain("medicamento controlado: registre a retenção da receita");
+    expect((await screen.findAllByRole("listitem")).map((li) => li.textContent)).toContain("este medicamento exige a retenção da receita: marque 'Receita retida na farmácia'");
     expect(screen.queryByLabelText(/Número da notificação/)).toBeNull();
     fireEvent.click(screen.getByLabelText("Receita retida na farmácia"));
     fireEvent.click(screen.getByRole("button", { name: "Registrar dispensação" }));
@@ -150,7 +150,7 @@ describe("DispenseForm", () => {
     text("Quantidade — amoxil 500 (cápsula)", "21");
     expect(screen.queryByLabelText("Receita retida na farmácia")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Registrar dispensação" }));
-    expect(await screen.findByText("medicamento controlado: registre a retenção da receita")).not.toBeNull();
+    expect(await screen.findByText("este medicamento exige a retenção da receita: marque 'Receita retida na farmácia'")).not.toBeNull();
     expect(mocked(api.recordDispensation).mock.calls[0][0].retention).toBeUndefined();
     fireEvent.click(screen.getByLabelText("Receita retida na farmácia"));
     fireEvent.click(screen.getByRole("button", { name: "Registrar dispensação" }));
@@ -182,5 +182,36 @@ describe("DispenseForm", () => {
     fireEvent.click(screen.getByLabelText("Receita retida na farmácia"));
     fireEvent.click(screen.getByRole("button", { name: "Registrar dispensação" }));
     expect(await screen.findByText("medicamento controlado: só o farmacêutico dispensa")).not.toBeNull();
+  });
+
+  it("lote enviado fica congelado: depois de insufficient_balance com o lote zerado, o seletor fica sem lote e o reenvio recusa", async () => {
+    mocked(api.recordDispensation).mockRejectedValueOnce(new ApiError(422, { error: "insufficient_balance", path: "items[0].quantity" }, "422"));
+    renderForm();
+    await waitFor(() => expect((screen.getByLabelText(`Lote — ${AMOX}`) as HTMLSelectElement).value).toBe("lot1"));
+    text(`Quantidade — ${AMOX} (cápsula)`, "21");
+    fireEvent.click(screen.getByLabelText("Receita retida na farmácia"));
+    // A releitura devolve o lote enviado (lot1) com saldo 0; o lote seguinte (lotB) continua com saldo.
+    mocked(api.listPositions).mockImplementation(() => Promise.resolve({ next_before: null, positions: [ position({ lots: [
+      lotBalance({ lot: stockLot({ id: "lotB", lot_number: "AMX2702", expires_on: "2027-02-01" }), balance: "500" }), lotBalance({ balance: "0" }) ] }) ] }));
+    fireEvent.click(screen.getByRole("button", { name: "Registrar dispensação" }));
+    expect(await screen.findByText("o saldo do lote mudou — os lotes foram relidos; confira a quantidade")).not.toBeNull();
+    await waitFor(() => expect((screen.getByLabelText(`Lote — ${AMOX}`) as HTMLSelectElement).value).toBe(""));
+    expect(screen.getByRole("option", { name: "Escolha o lote" })).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Registrar dispensação" }));
+    expect((await screen.findAllByRole("listitem")).map((li) => li.textContent)).toContain(`${AMOX}: escolha o lote`);
+    expect(mocked(api.recordDispensation)).toHaveBeenCalledTimes(1);
+  });
+
+  it("antimicrobiano comum: a nota do número da notificação não aparece; controlado: aparece", async () => {
+    renderForm();
+    await waitFor(() => expect((screen.getByLabelText(`Lote — ${AMOX}`) as HTMLSelectElement).value).toBe("lot1"));
+    text(`Quantidade — ${AMOX} (cápsula)`, "21");
+    expect(screen.getByLabelText("Receita retida na farmácia")).not.toBeNull();
+    expect(screen.queryByText(/número da notificação/i)).toBeNull();
+    cleanup();
+    renderForm(prescription({ items: [ CLONA_ITEM ] }));
+    await waitFor(() => expect((screen.getByLabelText(`Lote — ${CLON}`) as HTMLSelectElement).value).toBe("lot2"));
+    text(`Quantidade — ${CLON} (comprimido)`, "30");
+    expect(screen.getByText(/número da notificação/i)).not.toBeNull();
   });
 });

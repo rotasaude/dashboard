@@ -203,6 +203,28 @@ describe("PharmacyDispensing — busca", () => {
     expect(screen.queryByRole("article")).toBeNull();
   });
 
+  it("busca trocada durante o envio: a resposta da dispensação não refaz a busca nem traz o cartão de volta", async () => {
+    mocked(api.recordDispensation).mockReset();
+    mocked(api.listPositions).mockResolvedValue({ positions: [ position() ], next_before: null });
+    let resolve: (d: ReturnType<typeof dispensation>) => void = () => {};
+    mocked(api.recordDispensation).mockReturnValue(new Promise((r) => { resolve = r; }));
+    renderWithProviders(<PharmacyDispensing today={TODAY27} />);
+    await searchByCode();
+    fireEvent.click(await screen.findByRole("button", { name: "Dispensar" }));
+    await waitFor(() => expect((screen.getByLabelText("Lote — Amoxicilina 500 mg cápsula") as HTMLSelectElement).value).toBe("lot1"));
+    text("Quantidade — Amoxicilina 500 mg cápsula (cápsula)", "21");
+    fireEvent.click(screen.getByLabelText("Receita retida na farmácia"));
+    fireEvent.click(screen.getByRole("button", { name: "Registrar dispensação" }));
+    await waitFor(() => expect(mocked(api.recordDispensation)).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByLabelText("Pelo paciente"));
+    resolve(dispensation());
+    expect(await screen.findByText("Dispensação registrada.")).not.toBeNull();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(mocked(api.lookupPrescriptions)).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("article")).toBeNull();
+    expect(screen.queryByText("relendo a receita…")).toBeNull();
+  });
+
   describe("releitura depois de dispensar", () => {
     const done = ({ onDone }: { onDone(): void }) => <button type="button" onClick={() => onDone()}>Concluir (dublê)</button>;
     const dispenseStub = async () => {

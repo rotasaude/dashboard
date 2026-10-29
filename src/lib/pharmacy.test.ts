@@ -401,6 +401,11 @@ describe("recusas do api", () => {
     expect(pharmacyRefusals(e(403, { error: "controlled_requires_pharmacist" }))).toEqual([
       { path: "", code: "controlled_requires_pharmacist", text: CONTROLLED_PHARMACIST_ONLY } ]);
     expect(pharmacyRefusals(e(422, { error: "retention_required", path: "items[0]" }))[0]).toMatchObject({ path: "items[0]", code: "retention_required" });
+    // problems vazio ou só com entradas inválidas: cai na recusa do topo (error/path).
+    for (const problems of [ [], [ "lixo", null, 3 ] ]) {
+      expect(pharmacyRefusals(e(422, { error: "lot_expired", path: "items[0]", problems }))).toEqual([
+        { path: "items[0]", code: "lot_expired", text: "lote vencido — escolha outro lote" } ]);
+    }
     expect(pharmacyRefusals(new Error("offline"))).toEqual([ { path: "", code: "", text: "sem conexão com o servidor — tente de novo" } ]);
   });
   it("outro interruptor, papel, 404 e status sem código", () => {

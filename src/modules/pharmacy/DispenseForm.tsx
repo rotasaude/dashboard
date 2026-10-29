@@ -90,6 +90,11 @@ export function DispenseForm({ location, prescription: p, today = todayInCity(),
     }))
   };
   const retention = needsRetention(effectiveDraft, effective);
+  // A nota do número só vale para o controlado (lista A/B); o antimicrobiano comum retém sem número.
+  const filledControlled = filledLines(effectiveDraft).some(([ id ]) => {
+    const i = p.items.find((x) => x.id === id);
+    return i !== undefined && (i.controlled || picked[i.id]?.controlled === true);
+  });
 
   const send = useMutation({
     gcTime: 0,
@@ -141,6 +146,8 @@ export function DispenseForm({ location, prescription: p, today = todayInCity(),
     if (found.length > 0) { setRows(found.map((f, n) => ({ key: `${n}-${f.path}`, text: f.text }))); return; }
     const body = dispenseBody(effectiveDraft, effective, location.id);
     sent.current = body.items.map((it) => it.prescription_item_id);
+    // Congela o lote enviado: se o saldo mudar e o lote sumir, a releitura não troca para outro lote por baixo da pessoa.
+    setDraft(effectiveDraft);
     setRows([]);
     send.mutate(body);
   }
@@ -217,7 +224,7 @@ export function DispenseForm({ location, prescription: p, today = todayInCity(),
             <input type="checkbox" checked={draft.retained} onChange={(e) => { touch(); setDraft((cur) => ({ ...cur, retained: e.target.checked })); }} />
             Receita retida na farmácia
           </label>
-          <small style={muted}>O número da notificação é o do próprio documento da receita; não se digita aqui.</small>
+          {filledControlled && <small style={muted}>O número da notificação é o do próprio documento da receita; não se digita aqui.</small>}
         </div>
       )}
 

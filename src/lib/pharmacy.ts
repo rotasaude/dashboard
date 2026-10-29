@@ -22,7 +22,7 @@ export const NO_LOCATION = "você não está vinculado a nenhum local de estoque
 export const CONTROLLED_PHARMACIST_ONLY = "medicamento controlado: só o farmacêutico dispensa";
 export const FREE_TEXT_PHARMACIST_ONLY = "item em texto livre: só o farmacêutico dispensa, escolhendo o item do catálogo";
 export const ITEM_COMPLETED = "item já dispensado por completo";
-export const RETENTION_REQUIRED = "medicamento controlado: registre a retenção da receita";
+export const RETENTION_REQUIRED = "este medicamento exige a retenção da receita: marque 'Receita retida na farmácia'";
 export const NOTHING_TO_DISPENSE = "informe a quantidade de ao menos um item";
 export const NO_PATIENT_RECORD =
   "esta pessoa ainda não tem receita no Rota Saúde — se trouxe receita de fora da rede, use Receita externa";
@@ -616,16 +616,18 @@ export type Refusal = Problem & { code: string };
 export function pharmacyRefusals(err: unknown): Refusal[] {
   const status = err instanceof ApiError ? err.status : 422;
   const list = bodyOf(err)?.problems;
-  if (Array.isArray(list) && list.length > 0) {
-    return list.flatMap((raw): Refusal[] => {
+  const mapped = Array.isArray(list)
+    ? list.flatMap((raw): Refusal[] => {
       if (!raw || typeof raw !== "object") return [];
       const row = raw as Record<string, unknown>;
       const code = typeof row.error === "string" ? row.error : "";
       const path = typeof row.path === "string" ? row.path : "";
       const next = typeof row.next_allowed_on === "string" ? row.next_allowed_on : null;
       return [ { path, code, text: codeText(code || undefined, path || null, next, status) } ];
-    });
-  }
+    })
+    : [];
+  // `problems` ausente, vazio ou só com entradas inválidas: vale a recusa do topo do corpo.
+  if (mapped.length > 0) return mapped;
   return [ { path: errorPath(err) ?? "", code: errorCode(err) ?? "", text: pharmacyError(err) } ];
 }
 
