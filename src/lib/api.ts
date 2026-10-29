@@ -4737,7 +4737,8 @@ export interface PharmacySettings {
   common_validity_days: number; continuous_validity_days: number; continuous_interval_days: number;
   expiry_alert_days: number; adjustment_approval_percent: number;
 }
-export interface StockMinimum { catalog_item_id: string; minimum: string; item?: StockItem }
+// O api sempre manda `item` na saída (GET e PUT); na entrada só vão `catalog_item_id` e `minimum`. O GET omite o mínimo zero.
+export interface StockMinimum { catalog_item_id: string; minimum: string; item: StockItem }
 
 // expiring_soon / expired por lote: o api os produz; ausentes (api antigo) = a tela mostra todos os lotes e decide "vencido" pela data.
 export interface LotBalance { lot: StockLot; balance: string; in_transit: string; expiring_soon?: boolean; expired?: boolean }
@@ -4771,8 +4772,12 @@ export interface StockReceipt {
   id: string; kind: "invoice" | "donation" | "opening" | string; location: LocationRef; items: { lot: StockLot; quantity: string }[]; at: string;
 }
 
-// H12: item da transferência com `quantity` (enviada), `quantity_received` e `difference`; sem sent_by/received_by.
-export interface TransferItem { lot: StockLot; quantity: string; quantity_received: string | null; difference: string | null }
+// H2/H12: item da transferência com `quantity_sent`, `quantity_received` e `difference` (= enviado − recebido, nunca negativa; nula até
+// o recebimento); sem sent_by/received_by. `reason` (texto livre da diferença) só vem no detalhe e na resposta do recebimento, e só para
+// quem recebe no destino; a lista nunca o traz.
+export interface TransferItem {
+  lot: StockLot; quantity_sent: string; quantity_received: string | null; difference: string | null; reason?: string | null;
+}
 export interface StockTransfer {
   id: string; from: LocationRef; to: LocationRef; status: TransferStatus | string; sent_at: string; received_at: string | null; items: TransferItem[];
 }

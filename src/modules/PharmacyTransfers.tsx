@@ -9,7 +9,7 @@ import { listTransfers, type PharmacyLocation, type StockTransfer, type Transfer
 import { todayInCity } from "../lib/campaigns";
 import { fmtDateTime } from "../lib/format";
 import {
-  PH_TRANSFERS_KEY, STATIC_QUERY, fmtQuantity, fmtSigned, locationRoles, pharmacyError, transferStatusLabel, transferStatusTone
+  PH_TRANSFERS_KEY, STATIC_QUERY, fmtQuantity, locationRoles, pharmacyError, transferStatusLabel, transferStatusTone
 } from "../lib/pharmacy";
 import { DataTable } from "../components/DataTable";
 import { Tag } from "../components/Tag";
@@ -22,9 +22,10 @@ import { TRANSFER_SENT_TEXT, TransferForm } from "./pharmacy/TransferForm";
 
 function itemText(i: TransferItem): string {
   const unit = i.lot.item.dispensing_unit;
-  const base = `${i.lot.item.name} · lote ${i.lot.lot_number} · enviado ${fmtQuantity(i.quantity)} ${unit}`;
+  const base = `${i.lot.item.name} · lote ${i.lot.lot_number} · enviado ${fmtQuantity(i.quantity_sent)} ${unit}`;
   if (i.quantity_received === null) return base;
-  const diff = i.difference !== null && Number(i.difference) !== 0 ? ` (diferença ${fmtSigned(i.difference)})` : "";
+  // O api manda enviado − recebido (nunca negativo): é o que faltou chegar.
+  const diff = i.difference !== null && Number(i.difference) !== 0 ? ` (faltaram ${fmtQuantity(i.difference)} ${unit})` : "";
   return `${base} · recebido ${fmtQuantity(i.quantity_received)} ${unit}${diff}`;
 }
 

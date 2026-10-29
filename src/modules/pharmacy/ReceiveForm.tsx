@@ -59,7 +59,7 @@ export function ReceiveForm({ transfer, onStart, onDone, onStale, onCancel }: {
     // O motivo só vale onde há diferença: o que sobrou de uma conferência corrigida não vai.
     const lines = transfer.items.map((it) => {
       const l = lineOf(it.lot.id);
-      return differs(it.lot.id, it.quantity) ? l : { ...l, reason: "" };
+      return differs(it.lot.id, it.quantity_sent) ? l : { ...l, reason: "" };
     });
     const local = receiveProblems(lines, transfer);
     if (local.length > 0) { setShown(local.map((p) => ({ key: p.path, text: p.text }))); return; }
@@ -84,7 +84,7 @@ export function ReceiveForm({ transfer, onStart, onDone, onStale, onCancel }: {
       <p style={muted}>Conte o que chegou, lote a lote, e digite o que contou. Se for diferente do enviado, escreva o motivo.</p>
       {transfer.items.map((it) => {
         const id = it.lot.id; const lotNumber = it.lot.lot_number; const unit = it.lot.item.dispensing_unit;
-        const sent = fmtQuantity(it.quantity);
+        const sent = fmtQuantity(it.quantity_sent);
         const l = lineOf(id);
         return (
           <div key={id} style={{ ...box, background: "var(--panel)", ...(flagged.has(id) ? flaggedStyle : null) }}>
@@ -96,7 +96,7 @@ export function ReceiveForm({ transfer, onStart, onDone, onStale, onCancel }: {
                 <input value={l.received} inputMode="decimal" style={inputStyle} disabled={busy} aria-label={`Recebido do lote ${lotNumber} (enviado ${sent})`}
                   onChange={(e) => patch(id, { received: e.target.value })} />
               </label>
-              {differs(id, it.quantity) && (
+              {differs(id, it.quantity_sent) && (
                 <label style={{ ...fieldLabel, flex: "1 1 24ch" }}>
                   Motivo da diferença
                   <input value={l.reason} style={inputStyle} disabled={busy} aria-label={`Motivo da diferença do lote ${lotNumber}`}

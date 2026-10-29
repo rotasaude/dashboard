@@ -167,11 +167,11 @@ describe("PharmacyTransfers", () => {
     mocked(api.listTransfers).mockResolvedValue({ transfers: [
       transfer(),
       transfer({ id: "t2", to: UBS_REF, status: "received_with_difference", received_at: "2026-10-28T14:00:00-03:00",
-        items: [ { lot: stockLot(), quantity: "100.00", quantity_received: "90.00", difference: "-10.00" } ] }) ], next_before: null });
+        items: [ { lot: stockLot(), quantity_sent: "100.00", quantity_received: "90.00", difference: "10.00" } ] }) ], next_before: null });
     renderWithProviders(<PharmacyTransfers today={TODAY27} />);
     const rows = await screen.findAllByRole("row", { name: /Almoxarifado Central/ });
     expect(rows).toHaveLength(2);
-    expect(rows[1].textContent).toContain("recebido 90 cápsula (diferença -10)");
+    expect(rows[1].textContent).toContain("recebido 90 cápsula (faltaram 10 cápsula)");
     expect(rows[1].textContent).toContain("Recebida com diferença");
     expect(rows[0].textContent).toContain("Em trânsito");
     expect(screen.queryByRole("button", { name: /Receber transferência/ })).toBeNull();

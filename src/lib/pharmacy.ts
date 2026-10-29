@@ -389,8 +389,8 @@ export function receiveProblems(lines: ReceiveLine[], t: StockTransfer): Problem
     if (!line || line.received.trim() === "") { out.push({ path: id, text: `${who}: informe a quantidade recebida (0 se nada chegou)` }); continue; }
     const q = quantityProblem(line.received, "a quantidade recebida", { allowZero: true });
     if (q) { out.push({ path: id, text: `${who}: ${q}` }); continue; }
-    const received = cents(toApiQuantity(line.received)); const sent = cents(item.quantity);
-    if (received > sent) out.push({ path: id, text: `${who}: recebido maior que o enviado (${fmtQuantity(item.quantity)})` });
+    const received = cents(toApiQuantity(line.received)); const sent = cents(item.quantity_sent);
+    if (received > sent) out.push({ path: id, text: `${who}: recebido maior que o enviado (${fmtQuantity(item.quantity_sent)})` });
     else if (received !== sent && reasonProblem(line.reason)) {
       out.push({ path: id, text: `${who}: recebido diferente do enviado — escreva o motivo (10 a 500 caracteres)` });
     }
@@ -412,7 +412,7 @@ export function hasDifference(lines: ReceiveLine[], t: StockTransfer): boolean {
   return t.items.some((item) => {
     const line = lineFor(lines, item.lot.id);
     if (!line || quantityProblem(line.received, "a quantidade recebida", { allowZero: true })) return false;
-    return cents(toApiQuantity(line.received)) !== cents(item.quantity);
+    return cents(toApiQuantity(line.received)) !== cents(item.quantity_sent);
   });
 }
 

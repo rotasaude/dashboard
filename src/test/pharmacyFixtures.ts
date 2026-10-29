@@ -59,7 +59,7 @@ export function dispensation(over: Partial<Dispensation> = {}): Dispensation {
 export function transfer(over: Partial<StockTransfer> = {}): StockTransfer {
   return {
     id: "t1", from: CENTRAL_REF, to: UBS_REF, status: "sent", sent_at: "2026-10-28T09:00:00-03:00", received_at: null,
-    items: [ { lot: stockLot(), quantity: "100.00", quantity_received: null, difference: null } ], ...over
+    items: [ { lot: stockLot(), quantity_sent: "100.00", quantity_received: null, difference: null } ], ...over
   };
 }
 export function adjustment(over: Partial<StockAdjustment> = {}): StockAdjustment {

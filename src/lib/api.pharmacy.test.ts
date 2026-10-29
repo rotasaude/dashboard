@@ -5,6 +5,7 @@ import {
   listTransfers, lookupPharmacyPerson, lookupPrescriptions, putMinimums, receiveTransfer, recordAdjustment, recordDispensation, recordOpening,
   recordReceipt, recordReturn, rejectAdjustment, removeLocationStaff, searchPharmacyItems, sendTransfer, updateAdminLocation, updatePharmacySettings
 } from "./api";
+import { AMOXI } from "../test/pharmacyFixtures";
 
 function ok(body: unknown): Promise<Response> {
   return Promise.resolve(new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } }));
@@ -44,8 +45,8 @@ describe("cliente da farmácia (contrato §3–§9)", () => {
     const S = { common_validity_days: 30, continuous_validity_days: 180, continuous_interval_days: 25, expiry_alert_days: 90, adjustment_approval_percent: 10 };
     await updatePharmacySettings(S);
     expect([ ...writeOf(7), bodyOf(7) ]).toEqual([ "/pharmacy/admin/settings", "PATCH", "application/json", S ]);
-    fetchMock.mockImplementationOnce(() => ok({ minimums: [ { catalog_item_id: "ci1", minimum: "50" } ] }));
-    expect(await getMinimums("l2")).toEqual([ { catalog_item_id: "ci1", minimum: "50" } ]);
+    fetchMock.mockImplementationOnce(() => ok({ minimums: [ { catalog_item_id: "ci1", minimum: "50.00", item: AMOXI } ] }));
+    expect(await getMinimums("l2")).toEqual([ { catalog_item_id: "ci1", minimum: "50.00", item: AMOXI } ]);
     expect(urlOf(8).pathname).toBe("/pharmacy/locations/l2/minimums");
     await putMinimums("l2", [ { catalog_item_id: "ci1", minimum: "60" } ]);
     expect([ ...writeOf(9), bodyOf(9) ]).toEqual([ "/pharmacy/locations/l2/minimums", "PUT", "application/json", { minimums: [ { catalog_item_id: "ci1", minimum: "60" } ] } ]);

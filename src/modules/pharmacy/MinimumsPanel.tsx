@@ -11,8 +11,8 @@ import { ItemSearch } from "./ItemSearch";
 
 interface MinRow { item: StockItem; value: string }
 
-const toRows = (list: StockMinimum[]): MinRow[] =>
-  list.flatMap((m) => (m.item ? [ { item: m.item, value: fmtQuantity(m.minimum) } ] : []));
+// `item` é obrigatório no api: a linha nunca é descartada em silêncio (o PUT substitui a lista inteira).
+const toRows = (list: StockMinimum[]): MinRow[] => list.map((m) => ({ item: m.item, value: fmtQuantity(m.minimum) }));
 
 export function MinimumsPanel({ location }: { location: PharmacyLocation }) {
   const minimums = useQuery({
