@@ -1,15 +1,15 @@
 // src/modules/regulation/ScheduleOutcome.tsx
 // Agendamento fora da rede própria e desfecho do atendimento (módulo 26a; F-26.5), pelas ações da situação (`actionsFor`).
 // "Registrar agendamento" (ou "Remarcar", que mantém o mês da cota) vale em `authorized`/`scheduled` de prestador externo e
-// em `external` regulado pelo estado; "Realizado" e "Faltou" valem em `scheduled`. A hora digitada é a da cidade (`cityLocalIso`).
+// em `external` regulado pelo estado; "Realizado" e "Faltou" valem em `scheduled`, do dia do agendamento (da cidade) em diante. A hora digitada é a da cidade (`cityLocalIso`).
 // A primeira falta devolve o pedido à fila sem devolver a cota; a segunda o encerra: a frase sai da resposta do api. Na rede
 // própria o horário é do pedido de agendamento do módulo 17 e aqui não há formulário. `stale_version` deixa o formulário como
 // está. Local e observação não vão a log nem a URL.
 import { useState } from "react";
 import { errorCode, recordRegulationOutcome, scheduleRegulationRequest } from "../../lib/api";
 import type { RegulationRequest } from "../../lib/api";
-import { actionsFor, notesProblem, placeProblem, regulationError, scheduleAtProblem } from "../../lib/regulation";
-import { cityLocalIso } from "../../lib/format";
+import { OUTCOME_BEFORE_SCHEDULE_TEXT, actionsFor, notesProblem, placeProblem, regulationError, scheduleAtProblem } from "../../lib/regulation";
+import { cityIsoDate, cityLocalIso } from "../../lib/format";
 import { ConfirmButton } from "../../components/ConfirmButton";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { alert, fieldLabel, form, muted, row } from "../exams/styles";
@@ -33,6 +33,9 @@ export function ScheduleOutcome({ request, onChanged, onApplied, onStale, onStar
   const [ open, setOpen ] = useState(false);
   const [ message, setMessage ] = useState<string | null>(null);
   const actions = actionsFor(request);
+  // G15.2: o desfecho só vale a partir do dia do agendamento, comparado como data no fuso da cidade (nunca `new Date()` cru).
+  const outcomeDay = request.schedule ? cityIsoDate(new Date(request.schedule.at)) : null;
+  const outcomeOpen = outcomeDay === null || cityIsoDate() >= outcomeDay;
   const own = request.authorization?.provider.kind === "own";
   const ownWaiting = own && (request.status === "authorized" || request.status === "scheduled");
 
@@ -84,7 +87,7 @@ export function ScheduleOutcome({ request, onChanged, onApplied, onStale, onStar
               {request.schedule ? "Remarcar" : "Registrar agendamento"}
             </button>
           )}
-          {actions.outcome && (
+          {actions.outcome && outcomeOpen && (
             <>
               <ConfirmButton label="Realizado" question="Confirmar que o atendimento foi realizado?" onConfirm={() => outcome("completed")} />
               <ConfirmButton label="Faltou" question="Confirmar que o paciente faltou?" onConfirm={() => outcome("missed")} />
@@ -92,6 +95,7 @@ export function ScheduleOutcome({ request, onChanged, onApplied, onStale, onStar
           )}
         </div>
       )}
+      {!open && actions.outcome && !outcomeOpen && <p style={muted}>{OUTCOME_BEFORE_SCHEDULE_TEXT}</p>}
       {open && actions.schedule && (
         <ScheduleForm request={request} onStart={onStart} onCancel={() => setOpen(false)} onSaved={(updated) => done(updated, SCHEDULED_TEXT)} onRefused={refuse} />
       )}

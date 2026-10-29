@@ -14,6 +14,7 @@ export { NOMINAL_QUERY, COUNT_QUERY, STATIC_QUERY } from "./careLines";
 // ─── Frases ────────────────────────────────────────────────────────────────
 export const REGULATION_DISABLED = "a regulação municipal está desligada nesta cidade";
 export const REGULATION_NO_ROLE = "seu papel não permite usar a regulação municipal";
+export const OUTCOME_BEFORE_SCHEDULE_TEXT = "O desfecho pode ser registrado a partir do dia do agendamento.";
 export const STALE_TEXT = "outra pessoa alterou este pedido enquanto você decidia — recarregue para ver a versão nova";
 export const QUOTA_EXHAUSTED_TEXT = "a cota desta oferta acabou enquanto você decidia — escolha outra oferta";
 export const SKIP_REASON_TEXT =
@@ -396,6 +397,7 @@ const MESSAGES: Record<string, string> = {
   invalid_deadlines: "o prazo de uma cor menos grave não pode ser menor que o de uma mais grave",
   skip_reason_required: SKIP_REASON_TEXT,
   stale_version: STALE_TEXT,
+  outcome_before_schedule: OUTCOME_BEFORE_SCHEDULE_TEXT,
   quota_exhausted: QUOTA_EXHAUSTED_TEXT,
   missing_role: REGULATION_NO_ROLE,
   regulation_request_required: REGULATION_REQUIRED_TEXT

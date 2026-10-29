@@ -6,11 +6,13 @@ vi.mock("../../lib/api", async (importOriginal) => ({ ...(await importOriginal<t
 import * as api from "../../lib/api";
 import { ApiError } from "../../lib/api";
 import { ScheduleOutcome } from "./ScheduleOutcome";
-import { STALE_TEXT } from "../../lib/regulation";
+import { OUTCOME_BEFORE_SCHEDULE_TEXT, STALE_TEXT } from "../../lib/regulation";
 import { renderWithProviders } from "../../test/campaignFixtures";
 import { regRequest, regUser } from "../../test/regulationFixtures";
 
-afterEach(cleanup);
+afterEach(() => { cleanup(); vi.useRealTimers(); });
+// Só o relógio (Date) é congelado: o resto do ambiente de teste segue com timers reais.
+const freezeAt = (iso: string) => { vi.useFakeTimers({ toFake: [ "Date" ] }); vi.setSystemTime(new Date(iso)); };
 const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
 const text = (label: string, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
 const auth = (kind: string) => ({ offer_id: "of3", provider: { id: "pr3", name: "Consórcio Leste", kind }, month: "2026-10", skip_reason: null,
@@ -24,6 +26,8 @@ describe("ScheduleOutcome", () => {
     mocked(api.fetchCurrentSession).mockResolvedValue(regUser());
     onChanged = vi.fn();
     onApplied = vi.fn();
+    // Hoje da cidade = dia do agendamento (2026-11-10), salvo nos testes que mudam o relógio.
+    freezeAt("2026-11-10T15:00:00-03:00");
   });
 
   it("prestador externo: data no fuso da cidade, local e versão; datas e local conferidos antes", async () => {
@@ -110,6 +114,43 @@ describe("ScheduleOutcome", () => {
     await waitFor(() => expect(mocked(api.recordRegulationOutcome)).toHaveBeenCalledWith("rr1", result, 6));
     expect(onChanged).toHaveBeenCalledWith(phrase);
     expect(onApplied).toHaveBeenCalledWith(after);
+  });
+
+  describe("desfecho só a partir do dia do agendamento (G15.2)", () => {
+    const scheduled = () => regRequest({ status: "scheduled", authorization: auth("contracted"), version: 6,
+      schedule: { at: "2026-11-10T00:30:00-03:00", place: "Clínica", notes: null } });
+
+    it("antes do dia: sem Realizado/Faltou e com a frase", async () => {
+      freezeAt("2026-11-09T23:59:00-03:00");
+      renderWithProviders(<ScheduleOutcome request={scheduled()} onChanged={onChanged} />);
+      expect(await screen.findByText(OUTCOME_BEFORE_SCHEDULE_TEXT)).not.toBeNull();
+      expect(OUTCOME_BEFORE_SCHEDULE_TEXT).toBe("O desfecho pode ser registrado a partir do dia do agendamento.");
+      expect(screen.queryByRole("button", { name: "Realizado" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Faltou" })).toBeNull();
+    });
+
+    it("no dia (comparado no fuso da cidade): com os botões e sem a frase", async () => {
+      freezeAt("2026-11-10T00:31:00-03:00");
+      renderWithProviders(<ScheduleOutcome request={scheduled()} onChanged={onChanged} />);
+      expect(await screen.findByRole("button", { name: "Realizado" })).not.toBeNull();
+      expect(screen.getByRole("button", { name: "Faltou" })).not.toBeNull();
+      expect(screen.queryByText(OUTCOME_BEFORE_SCHEDULE_TEXT)).toBeNull();
+    });
+
+    it("depois do dia: com os botões", async () => {
+      freezeAt("2026-11-12T10:00:00-03:00");
+      renderWithProviders(<ScheduleOutcome request={scheduled()} onChanged={onChanged} />);
+      expect(await screen.findByRole("button", { name: "Faltou" })).not.toBeNull();
+    });
+
+    it("outcome_before_schedule (422) mostra a mesma frase", async () => {
+      mocked(api.recordRegulationOutcome).mockRejectedValue(new ApiError(422, { error: "outcome_before_schedule" }, ""));
+      renderWithProviders(<ScheduleOutcome request={scheduled()} onChanged={onChanged} />);
+      fireEvent.click(await screen.findByRole("button", { name: "Realizado" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Confirmar" }));
+      expect((await screen.findByRole("alert")).textContent).toBe(OUTCOME_BEFORE_SCHEDULE_TEXT);
+      expect(onChanged).not.toHaveBeenCalled();
+    });
   });
 
   it("rede própria: segue o 17, sem formulário", async () => {

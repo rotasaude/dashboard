@@ -15,7 +15,7 @@ import { QUOTA_EXHAUSTED_TEXT, SKIP_REASON_TEXT, STALE_TEXT } from "../../lib/re
 import { renderWithProviders } from "../../test/campaignFixtures";
 import { TODAY26, offer, regRequest, regUser } from "../../test/regulationFixtures";
 
-afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.useRealTimers(); });
 const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
 const text = (label: string, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
 // O par rótulo/valor do KeyValue: o item que contém o rótulo (sem depender da ordem dos nós dentro dele).
@@ -374,6 +374,9 @@ describe("RequestDetail", () => {
   const AUTHORIZED_EXTERNAL = { ...AUTHORIZED_OWN, offer_id: "of3", provider: { id: "pr3", name: "Consórcio Leste", kind: "consortium" } };
 
   it("agendar (F-26.5): o detalhe fica aberto na situação nova, com a frase, sem leitura nominal a mais", async () => {
+    // Hoje (da cidade) é antes do dia agendado: o desfecho ainda não é oferecido (G15.2).
+    vi.useFakeTimers({ toFake: [ "Date" ] });
+    vi.setSystemTime(new Date("2026-11-09T12:00:00-03:00"));
     mocked(api.getRegulationRequest).mockResolvedValue(regRequest({ status: "authorized", authorization: AUTHORIZED_EXTERNAL, version: 4 }));
     mocked(api.scheduleRegulationRequest).mockResolvedValue(regRequest({ status: "scheduled", authorization: AUTHORIZED_EXTERNAL, version: 5,
       schedule: { at: "2026-11-10T14:30:00-03:00", place: "Consórcio Leste", notes: null } }));
@@ -384,7 +387,8 @@ describe("RequestDetail", () => {
     fireEvent.click(screen.getByRole("button", { name: "Salvar agendamento" }));
     expect((await screen.findByRole("status")).textContent).toBe("Agendamento registrado: o cidadão vê a data e o local no celular.");
     expect(await screen.findByRole("button", { name: "Remarcar" })).not.toBeNull();
-    expect(screen.getByRole("button", { name: "Faltou" })).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Faltou" })).toBeNull();
+    expect(screen.getByText("O desfecho pode ser registrado a partir do dia do agendamento.")).not.toBeNull();
     expect(screen.getByText(fmtDateTime("2026-11-10T14:30:00-03:00"))).not.toBeNull();
     expect(onChanged).not.toHaveBeenCalled();
     expect(mocked(api.getRegulationRequest)).toHaveBeenCalledTimes(1);
