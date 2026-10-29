@@ -8,7 +8,7 @@ import {
   errorPath, filledLines, fmtQuantity, fmtSigned, hasDifference, issuedOnProblem, itemBlock, lineQuantity, locationRoles, lotOptionLabel,
   lotsWithBalance, needsRetention, newReceiptLine, normalizeShortCode, notificationNumberProblem, pharmacyError, pharmacyProblems,
   pharmacyRoles, prescriberProblem, prescriptionBlock, problemItemIndex, quantityProblem, reasonProblem, receiptItems, receiptProblems,
-  receiveBody, receiveProblems, settingsProblem, suggestedLotId, toApiQuantity, transferProblems
+  receiveBody, receiveProblems, settingsProblem, sortPositions, suggestedLotId, toApiQuantity, transferProblems, movementDocument, movementLabel
 } from "./pharmacy";
 import { AMOXI, CENTRAL, CLONA, TODAY27, UBS_FARM, lotBalance, position, prescription, rxItem, stockLot, transfer } from "../test/pharmacyFixtures";
 
@@ -414,5 +414,30 @@ describe("recusas do api", () => {
     expect(problemItemIndex(null)).toBeNull();
     expect(pharmacyProblems(new Error("x"))).toEqual([]);
     expect(pharmacyProblems(e(422, { problems: "nope" }))).toEqual([]);
+  });
+});
+
+describe("extrato e posição: rótulos, documento e ordem da página", () => {
+  it("rótulos do movimento (código novo aparece cru)", () => {
+    expect([ "opening", "receipt", "donation", "transfer_out", "transfer_in", "dispensing", "loss", "expiry", "adjustment", "return" ].map(movementLabel)).toEqual([
+      "abertura", "entrada por nota", "doação", "saída por transferência", "entrada por transferência", "dispensação", "perda", "vencimento", "ajuste", "devolução"
+    ]);
+    expect(movementLabel("novo")).toBe("novo");
+  });
+
+  it("documento: o número quando houver; dispensação e transferência só o tipo; sem documento, traço", () => {
+    expect(movementDocument({ type: "invoice", id: "n1", number: "NF 1234" })).toBe("NF 1234");
+    expect(movementDocument({ type: "dispensation", id: "dp1", number: null })).toBe("dispensação");
+    expect(movementDocument({ type: "transfer", id: "t1", number: null })).toBe("transferência");
+    expect(movementDocument({ type: "novo", id: null, number: null })).toBe("novo");
+    expect(movementDocument(null)).toBe("—");
+  });
+
+  it("ordena pelo nome do item e depois pelo local, sem mexer na lista original", () => {
+    const a = position(); const c = position({ item: CLONA });
+    const a2 = position({ location: { id: "l1", name: "Almoxarifado Central", kind: "central" } });
+    const list = [ c, a, a2 ];
+    expect(sortPositions(list)).toEqual([ a2, a, c ]);
+    expect(list).toEqual([ c, a, a2 ]);
   });
 });

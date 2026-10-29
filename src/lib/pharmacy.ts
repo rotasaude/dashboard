@@ -5,7 +5,7 @@ import {
   ApiError, errorCode,
   type AdjustmentInput, type AdjustmentKind, type DispensationInput, type LotBalance, type PharmacyLocation, type PharmacySettings,
   type PrescriberInput, type PrescriptionItemView, type PrescriptionView, type ReceiptItemInput, type ReceiveInput, type StockItem,
-  type StockPosition, type StockTransfer
+  type StockMovement, type StockPosition, type StockTransfer
 } from "./api";
 import { NOMINAL_QUERY, STATIC_QUERY } from "./careLines";
 import { featureDisabledKey, featureLabel, hasFeature } from "./features";
@@ -71,10 +71,26 @@ const KIND_LABEL: Record<string, string> = { central: "Almoxarifado central", un
 export const locationKindLabel = (code: string): string => KIND_LABEL[code] ?? code;
 
 const MOVEMENT_LABEL: Record<string, string> = {
-  opening: "Inventário de abertura", receipt: "Entrada por nota", donation: "Entrada por doação", transfer_out: "Transferência enviada",
-  transfer_in: "Transferência recebida", dispensing: "Dispensação", loss: "Perda", expiry: "Vencimento", adjustment: "Ajuste", return: "Devolução"
+  opening: "abertura", receipt: "entrada por nota", donation: "doação", transfer_out: "saída por transferência",
+  transfer_in: "entrada por transferência", dispensing: "dispensação", loss: "perda", expiry: "vencimento", adjustment: "ajuste", return: "devolução"
 };
 export const movementLabel = (code: string): string => MOVEMENT_LABEL[code] ?? code;
+
+// Documento do movimento no extrato: o número quando houver ("NF 1234"); dispensação e transferência, só o tipo (a dispensação
+// aparece pelo id no api e nunca por nome de paciente). Tipo novo aparece cru.
+const DOCUMENT_LABEL: Record<string, string> = {
+  dispensation: "dispensação", transfer: "transferência", invoice: "nota fiscal", receipt: "nota fiscal", donation: "doação",
+  adjustment: "ajuste", opening: "abertura", return: "devolução"
+};
+export function movementDocument(doc: StockMovement["document"] | undefined): string {
+  if (!doc) return "—";
+  return doc.number ? doc.number : (DOCUMENT_LABEL[doc.type] ?? doc.type);
+}
+
+// H10: o api ordena a página por id; a ordem visível (nome do item, depois o local) é da tela. Cópia: não mexe na lista de entrada.
+export function sortPositions(list: StockPosition[]): StockPosition[] {
+  return [ ...list ].sort((a, b) => a.item.name.localeCompare(b.item.name, "pt-BR") || a.location.name.localeCompare(b.location.name, "pt-BR"));
+}
 
 const TRANSFER_LABEL: Record<string, string> = { sent: "Em trânsito", received: "Recebida", received_with_difference: "Recebida com diferença" };
 const TRANSFER_TONE: Record<string, string> = { sent: "info", received: "ok", received_with_difference: "warn" };
