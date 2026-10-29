@@ -173,11 +173,14 @@ export function lotsWithBalance(p: StockPosition | undefined): LotBalance[] {
   return (p?.lots ?? []).filter((b) => cents(b.balance) > 0).sort(byExpiry);
 }
 
-// Perda: só lote não vencido; vencimento: só lote já vencido (o api devolve lot_expired / lot_not_expired); contagem: qualquer lote com saldo.
+// Contagem de inventário (e tipo ainda não escolhido): TODOS os lotes da posição, inclusive os de saldo zero — o inventário que não acha
+// estoque zerado não serve (o api trata saldo zero como acima do limite e pede aprovação). Perda: só lote não vencido e com saldo;
+// vencimento: só lote já vencido e com saldo (o api devolve lot_expired / lot_not_expired). Do que vence primeiro ao que vence depois.
 export function lotsForKind(p: StockPosition | undefined, kind: AdjustmentKind | "", today: string): LotBalance[] {
-  const all = lotsWithBalance(p);
-  if (kind === "loss") return all.filter((b) => b.lot.expires_on >= today);
-  if (kind === "expiry") return all.filter((b) => b.lot.expires_on < today);
+  const all = [ ...(p?.lots ?? []) ].sort(byExpiry);
+  const stocked = (b: LotBalance) => cents(b.balance) > 0;
+  if (kind === "loss") return all.filter((b) => stocked(b) && b.lot.expires_on >= today);
+  if (kind === "expiry") return all.filter((b) => stocked(b) && b.lot.expires_on < today);
   return all;
 }
 

@@ -7,7 +7,7 @@ import * as api from "../lib/api";
 import { ApiError } from "../lib/api";
 import { PharmacyAdjustments } from "./PharmacyAdjustments";
 import { renderWithProviders } from "../test/campaignFixtures";
-import { CENTRAL, TODAY27, UBS_FARM, adjustment, lotBalance, phUser, position, stockLot } from "../test/pharmacyFixtures";
+import { CENTRAL, CLONA, TODAY27, UBS_FARM, adjustment, lotBalance, phUser, position, stockLot } from "../test/pharmacyFixtures";
 
 afterEach(cleanup);
 const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
@@ -24,6 +24,7 @@ describe("PharmacyAdjustments", () => {
   });
 
   it("contagem: a diferença antes; step-up; ajuste acima do limite fica pendente", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
     mocked(api.recordAdjustment).mockResolvedValue(adjustment({ id: "a3", status: "pending" }));
     renderWithProviders(<PharmacyAdjustments today={TODAY27} />);
     await screen.findByLabelText("Medicamento"); text("Medicamento", "ci1");
@@ -34,6 +35,42 @@ describe("PharmacyAdjustments", () => {
     await waitFor(() => expect(mocked(api.recordAdjustment)).toHaveBeenCalledWith({ location_id: "l2", lot_id: "lot1", kind: "adjustment",
       counted_quantity: "20", reason: "contagem do fim do mês" }));
     expect((await screen.findByRole("status")).textContent).toBe("Ajuste acima do limite da cidade: aguardando a aprovação de outra pessoa do local.");
+    // A revisão (com o <form> do SensitiveAction) não fica dentro do <form> dos campos.
+    expect(errors.mock.calls.map((c) => String(c[0]) + String(c[1] ?? "")).filter((m) => m.includes("validateDOMNesting") || m.includes("cannot be a descendant"))).toEqual([]);
+    errors.mockRestore();
+  });
+
+  it("contagem a partir de zero: lote com saldo 0 aparece e a contagem vai; a resposta pendente mostra a frase", async () => {
+    const zero = lotBalance({ lot: stockLot({ id: "z", lot_number: "ZERO9" }), balance: "0" });
+    mocked(api.listPositions).mockResolvedValue({ positions: [ position({ lots: [ zero ], balance: "0" }) ], next_before: null });
+    mocked(api.recordAdjustment).mockResolvedValue(adjustment({ id: "a4", status: "pending", balance_at_request: "0", quantity: "3", counted_quantity: "3" }));
+    renderWithProviders(<PharmacyAdjustments today={TODAY27} />);
+    await screen.findByLabelText("Medicamento"); text("Medicamento", "ci1");
+    text("Tipo", "adjustment"); text("Lote", "z"); text("Quantidade contada", "3"); text("Motivo", "achei três caixas no fundo da estante");
+    fireEvent.click(screen.getByRole("button", { name: "Revisar ajuste" }));
+    expect(await screen.findByText("Saldo 0 → 3 (+3)")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Registrar ajuste" }));
+    await waitFor(() => expect(mocked(api.recordAdjustment)).toHaveBeenCalledWith({ location_id: "l2", lot_id: "z", kind: "adjustment",
+      counted_quantity: "3", reason: "achei três caixas no fundo da estante" }));
+    expect((await screen.findByRole("status")).textContent).toBe("Ajuste acima do limite da cidade: aguardando a aprovação de outra pessoa do local.");
+    // Perda não oferece lote sem saldo.
+    text("Medicamento", "ci1"); text("Tipo", "loss");
+    expect(optionValues("Lote")).toEqual([ "" ]);
+  });
+
+  it("medicamentos além da primeira página: Carregar mais", async () => {
+    const second = position({ item: CLONA, lots: [ lotBalance({ lot: stockLot({ id: "c1", item: CLONA, lot_number: "CLO1" }), balance: "12" }) ], balance: "12" });
+    mocked(api.listPositions).mockImplementation(async (q: { before?: string | null }) =>
+      q.before === "cur2" ? { positions: [ second ], next_before: null } : { positions: [ position() ], next_before: "cur2" });
+    renderWithProviders(<PharmacyAdjustments today={TODAY27} />);
+    await screen.findByLabelText("Medicamento");
+    expect(optionValues("Medicamento")).toEqual([ "", "ci1" ]);
+    fireEvent.click(screen.getByRole("button", { name: "Carregar mais medicamentos" }));
+    await waitFor(() => expect(optionValues("Medicamento")).toEqual([ "", "ci1", "ci2" ]));
+    expect(mocked(api.listPositions)).toHaveBeenCalledWith({ locationId: "l2", before: "cur2" });
+    expect(screen.queryByRole("button", { name: "Carregar mais medicamentos" })).toBeNull();
+    text("Medicamento", "ci2");
+    expect(optionValues("Lote")).toEqual([ "", "c1" ]);
   });
 
   it("contagem aplicada na hora: a frase vem do status da resposta", async () => {
@@ -72,7 +109,9 @@ describe("PharmacyAdjustments", () => {
     mocked(api.recordAdjustment).mockResolvedValue(adjustment({ kind: "expiry", status: "applied" }));
     renderWithProviders(<PharmacyAdjustments today={TODAY27} />);
     await screen.findByLabelText("Medicamento"); text("Medicamento", "ci1");
-    expect(optionValues("Lote")).toEqual([ "", "o", "f" ]);
+    expect(optionValues("Lote")).toEqual([ "", "e", "o", "f" ]); // sem tipo e na contagem: todos, inclusive o de saldo zero
+    text("Tipo", "adjustment");
+    expect(optionValues("Lote")).toEqual([ "", "e", "o", "f" ]);
     text("Lote", "f"); text("Tipo", "expiry");
     expect(optionValues("Lote")).toEqual([ "", "o" ]);
     expect((screen.getByLabelText("Lote") as HTMLSelectElement).value).toBe("");
@@ -151,6 +190,7 @@ describe("PharmacyAdjustments", () => {
     expect(other.textContent).toContain("Contagem do fim do mês");
     expect(other.textContent).toContain("30 cápsula");
     fireEvent.click(within(other).getByRole("button", { name: "Aprovar" }));
+    expect(await screen.findByText(/Será aplicada ao saldo atual a diferença de -10 cápsula \(no pedido de Paulo Almeida: saldo 30 → contado 20\)\./)).not.toBeNull();
     fireEvent.click(await screen.findByRole("button", { name: "Aprovar ajuste" }));
     expect(await screen.findByText("este ajuste já foi decidido — a lista foi relida")).not.toBeNull();
     await waitFor(() => expect(mocked(api.listAdjustments).mock.calls.length).toBeGreaterThanOrEqual(2));
@@ -177,9 +217,14 @@ describe("PharmacyAdjustments", () => {
     expect(await screen.findByText("outra pessoa do local precisa aprovar este ajuste")).not.toBeNull();
     expect(screen.queryByRole("status")).toBeNull();
     fireEvent.click(within(panel.getByRole("row", { name: /Paulo Almeida/ })).getByRole("button", { name: "Rejeitar" }));
+    // Motivo curto: a dica aparece e o passo do step-up nem abre (o código do autenticador não é gasto).
     fireEvent.change(await screen.findByLabelText("Motivo da rejeição"), { target: { value: "curto" } });
-    fireEvent.click(screen.getByRole("button", { name: "Rejeitar ajuste" }));
     expect(await screen.findByText("o motivo tem de 10 a 500 caracteres")).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Rejeitar ajuste" })).toBeNull();
+    expect(screen.queryByLabelText("Código do autenticador")).toBeNull();
+    fireEvent.change(screen.getByLabelText("Motivo da rejeição"), { target: { value: "contagem refeita, saldo confere" } });
+    expect(screen.queryByText("o motivo tem de 10 a 500 caracteres")).toBeNull();
+    expect(screen.getByRole("button", { name: "Rejeitar ajuste" })).not.toBeNull();
     expect(mocked(api.rejectAdjustment)).not.toHaveBeenCalled();
   });
 });

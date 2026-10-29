@@ -10,7 +10,7 @@ import { listPositions, recordAdjustment, type AdjustmentKind, type PharmacyLoca
 import { fmtDay } from "../../lib/exams";
 import {
   PH_ADJUSTMENTS_KEY, PH_POSITIONS_KEY, STATIC_QUERY, adjustmentBody, adjustmentDelta, adjustmentKindLabel, adjustmentProblem, cents,
-  fmtQuantity, fmtSigned, lotKindProblem, lotOptionLabel, lotsForKind, lotsWithBalance, pharmacyError, reasonProblem, type AdjustmentDraft
+  fmtQuantity, fmtSigned, lotKindProblem, lotOptionLabel, lotsForKind, pharmacyError, reasonProblem, type AdjustmentDraft
 } from "../../lib/pharmacy";
 import { SensitiveAction } from "../../components/SensitiveAction";
 import { buttonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
@@ -48,7 +48,8 @@ export function AdjustmentForm({ location, today, onStart, onDone, onGoToSecurit
   const saved = useRef<StockAdjustment | null>(null);
 
   const all = (positions.data?.pages ?? []).flatMap((p) => p.positions);
-  const offered = all.filter((p) => lotsWithBalance(p).length > 0);
+  // Contagem parte de zero: o medicamento só some quando não tem lote nenhum (perda e vencimento ainda exigem saldo, no seletor de lotes).
+  const offered = all.filter((p) => p.lots.length > 0);
   const position: StockPosition | undefined = all.find((p) => p.item.catalog_item_id === itemId);
   const unit = position?.item.dispensing_unit ?? "";
   const lots = lotsForKind(position, draft.kind, today);
@@ -101,7 +102,8 @@ export function AdjustmentForm({ location, today, onStart, onDone, onGoToSecurit
   if (positions.isError && !positions.data) return <p role="alert" style={alert}>{pharmacyError(positions.error)}</p>;
 
   return (
-    <form aria-label="Registrar ajuste, perda ou vencimento" style={{ display: "flex", flexDirection: "column", gap: 12, maxWidth: 720 }}
+    <div style={{ display: "flex", flexDirection: "column", gap: 12, maxWidth: 720 }}>
+    <form aria-label="Registrar ajuste, perda ou vencimento" style={{ display: "flex", flexDirection: "column", gap: 12 }}
       onSubmit={(e) => { e.preventDefault(); if (!locked) startReview(); }}>
       <h3 style={title}>{`Ajuste, perda ou vencimento em ${location.name}`}</h3>
       <p style={muted}>Para corrigir o saldo, registre um ajuste novo: nenhum movimento é editado nem apagado.</p>
@@ -142,6 +144,13 @@ export function AdjustmentForm({ location, today, onStart, onDone, onGoToSecurit
           <textarea value={draft.reason} rows={2} style={inputStyle} onChange={(e) => patch({ reason: e.target.value })} />
         </label>
       </fieldset>
+      {positions.hasNextPage && (
+        <div style={row}>
+          <button type="button" style={secondaryButtonStyle} disabled={locked || positions.isFetchingNextPage} onClick={() => void positions.fetchNextPage()}>
+            {positions.isFetchingNextPage ? "Carregando…" : "Carregar mais medicamentos"}
+          </button>
+        </div>
+      )}
 
       {problems.length > 0 && (
         <div role="alert" style={alert}>
@@ -150,53 +159,55 @@ export function AdjustmentForm({ location, today, onStart, onDone, onGoToSecurit
       )}
 
       {!review && <div style={row}><button type="submit" style={buttonStyle}>Revisar ajuste</button></div>}
-
-      {review && !(lot && position) && (
-        <div style={box}>
-          <p role="alert" style={alert}>O lote não está mais na posição do local — volte e escolha de novo.</p>
-          <div style={row}><button type="button" style={secondaryButtonStyle} onClick={() => setReview(null)}>Voltar</button></div>
-        </div>
-      )}
-      {review && lot && position && (
-        <div style={{ ...box, background: "var(--panel)" }}>
-          <strong>{`${adjustmentKindLabel(review.kind)}: ${position.item.name}`}</strong>
-          <small className="mono" style={muted}>{`lote ${lot.lot.lot_number} · vence ${fmtDay(lot.lot.expires_on)}`}</small>
-          <p style={{ margin: 0 }}>{summary}</p>
-          <small style={muted}>{`Motivo: ${review.reason.trim()}`}</small>
-          <SensitiveAction
-            title={`Confirmar: ${adjustmentKindLabel(review.kind).toLowerCase()}`}
-            description={review.kind === "adjustment"
-              ? "O ajuste fica registrado em seu nome e não se edita. Se passar do limite da cidade, espera a aprovação de outra pessoa do local."
-              : "O saldo do lote muda agora, em seu nome, e o registro não se edita; correção é um ajuste novo."}
-            requiresStepUp
-            confirmLabel="Registrar ajuste"
-            run={async () => {
-              try {
-                saved.current = await recordAdjustment(adjustmentBody(review, location.id));
-              } catch (err) {
-                reread(); // o saldo pode ter mudado: a tela mostra o novo e mantém o que foi digitado
-                throw err;
-              }
-            }}
-            onDone={() => {
-              const result = saved.current;
-              reread();
-              const kind = review.kind as AdjustmentKind;
-              reset();
-              if (result) onDone(result, kind);
-            }}
-            onCancel={() => setReview(null)}
-            onGoToSecurity={onGoToSecurity}
-            translateError={(err) => pharmacyError(err)}
-          />
-        </div>
-      )}
     </form>
+
+    {/* A revisão e o step-up ficam FORA do <form> dos campos: o SensitiveAction tem o <form> dele (nada de form dentro de form). */}
+    {review && !(lot && position) && (
+      <div style={box}>
+        <p role="alert" style={alert}>O lote não está mais na posição do local — volte e escolha de novo.</p>
+        <div style={row}><button type="button" style={secondaryButtonStyle} onClick={() => setReview(null)}>Voltar</button></div>
+      </div>
+    )}
+    {review && lot && position && (
+      <div style={{ ...box, background: "var(--panel)" }}>
+        <strong>{`${adjustmentKindLabel(review.kind)}: ${position.item.name}`}</strong>
+        <small className="mono" style={muted}>{`lote ${lot.lot.lot_number} · vence ${fmtDay(lot.lot.expires_on)}`}</small>
+        <p style={{ margin: 0 }}>{summary}</p>
+        <small style={muted}>{`Motivo: ${review.reason.trim()}`}</small>
+        <SensitiveAction
+          title={`Confirmar: ${adjustmentKindLabel(review.kind).toLowerCase()}`}
+          description={review.kind === "adjustment"
+            ? "O ajuste fica registrado em seu nome e não se edita. Se passar do limite da cidade, espera a aprovação de outra pessoa do local."
+            : "O saldo do lote muda agora, em seu nome, e o registro não se edita; correção é um ajuste novo."}
+          requiresStepUp
+          confirmLabel="Registrar ajuste"
+          run={async () => {
+            try {
+              saved.current = await recordAdjustment(adjustmentBody(review, location.id));
+            } catch (err) {
+              reread(); // o saldo pode ter mudado: a tela mostra o novo e mantém o que foi digitado
+              throw err;
+            }
+          }}
+          onDone={() => {
+            const result = saved.current;
+            reread();
+            const kind = review.kind as AdjustmentKind;
+            reset();
+            if (result) onDone(result, kind);
+          }}
+          onCancel={() => setReview(null)}
+          onGoToSecurity={onGoToSecurity}
+          translateError={(err) => pharmacyError(err)}
+        />
+      </div>
+    )}
+    </div>
   );
 }
 
 function lotsHint(kind: AdjustmentKind | ""): string {
   if (kind === "expiry") return "nenhum lote vencido com saldo";
   if (kind === "loss") return "nenhum lote não vencido com saldo";
-  return "nenhum lote com saldo";
+  return "nenhum lote";
 }

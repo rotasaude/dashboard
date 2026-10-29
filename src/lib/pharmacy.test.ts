@@ -327,7 +327,7 @@ describe("ajuste: contagem é saldo; lotes por tipo", () => {
     expect(adjustmentProblem({ ...base, kind: "loss", amount: "100000" }, "200000")).toBe("a quantidade pode ser no máximo 99999,99");
     expect(adjustmentProblem({ ...base, kind: "expiry", amount: "100000" }, "200000")).toBe("a quantidade pode ser no máximo 99999,99");
   });
-  it("lotes por tipo: perda só não vencido, vencimento só vencido, contagem qualquer", () => {
+  it("lotes por tipo: perda só não vencido, vencimento só vencido, contagem qualquer (inclusive saldo zero)", () => {
     const fresh = lotBalance({ lot: stockLot({ id: "f", expires_on: TODAY27 }) });
     const old = lotBalance({ lot: stockLot({ id: "o", expires_on: "2026-10-28" }) });
     const empty = lotBalance({ lot: stockLot({ id: "e", expires_on: "2026-10-01" }), balance: "0" });
@@ -335,8 +335,8 @@ describe("ajuste: contagem é saldo; lotes por tipo", () => {
     const ids = (k: "" | "adjustment" | "loss" | "expiry") => lotsForKind(p, k, TODAY27).map((b) => b.lot.id);
     expect(ids("loss")).toEqual([ "f" ]);
     expect(ids("expiry")).toEqual([ "o" ]);
-    expect(ids("adjustment")).toEqual([ "o", "f" ]);
-    expect(ids("")).toEqual([ "o", "f" ]);
+    expect(ids("adjustment")).toEqual([ "e", "o", "f" ]); // contagem parte de zero: o lote zerado entra
+    expect(ids("")).toEqual([ "e", "o", "f" ]);
     expect(lotsForKind(undefined, "loss", TODAY27)).toEqual([]);
     expect(lotKindProblem("loss", old.lot, TODAY27)).toBe("lote vencido — registre como vencimento, não como perda");
     expect(lotKindProblem("expiry", fresh.lot, TODAY27)).toBe("vencimento só de lote já vencido — use perda");

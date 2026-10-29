@@ -1,6 +1,6 @@
 // Ajustes aguardando aprovação do local (módulo 27a; F-27.4; contrato §6, H4). Só a contagem acima do limite da cidade chega aqui.
-// Outra pessoa do local decide: "Aprovar" aplica o ajuste ao saldo; "Rejeitar" exige o motivo (10 a 500 caracteres). Os dois passam pelo
-// step-up. O ajuste da própria pessoa não oferece nenhum dos dois (`requested_by.user_id` é o id da sessão): diz "aguardando outra pessoa
+// Outra pessoa do local decide: "Aprovar" aplica o ajuste ao saldo; "Rejeitar" exige o motivo (10 a 500 caracteres), conferido ANTES do
+// step-up (o código do autenticador não se gasta com motivo recusado). Os dois passam pelo step-up. O ajuste da própria pessoa não oferece nenhum dos dois (`requested_by.user_id` é o id da sessão): diz "aguardando outra pessoa
 // do local". `same_user`, `not_pending` e `not_found` fecham a confirmação, mostram a frase e a lista é relida (quem chama guarda a frase).
 // O `reason` já vem na lista: não há leitura de detalhe. Sem polling; lê ao abrir e depois de cada decisão. Nada em URL, log ou storage.
 import { useRef, useState } from "react";
@@ -14,17 +14,27 @@ import {
 import { DataTable } from "../../components/DataTable";
 import { Panel } from "../../components/Panel";
 import { SensitiveAction } from "../../components/SensitiveAction";
-import { buttonStyle, secondaryButtonStyle } from "../../components/formStyles";
-import { alert, muted, row, stack } from "../exams/styles";
+import { buttonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
+import { alert, box, fieldLabel, muted, row, stack } from "../exams/styles";
 
 export const ADJUSTMENT_APPROVED_TEXT = "Ajuste aprovado: o saldo foi corrigido.";
 export const ADJUSTMENT_REJECTED_TEXT = "Ajuste rejeitado: o saldo não mudou.";
 const STALE = new Set([ "same_user", "not_pending", "not_found" ]);
 
-// A frase do motivo curto sai do SensitiveAction como erro local (nada vai ao api).
-class LocalProblem extends Error {}
-
 type Action = { kind: "approve" | "reject"; adjustment: StockAdjustment } | null;
+
+// O api aplica a DIFERENÇA guardada no pedido sobre o saldo de agora (não o contado): a frase diz isso, com o que o pedido via.
+function approvalText(a: StockAdjustment): string {
+  const unit = a.lot.item.dispensing_unit;
+  const request = a.counted_quantity === null
+    ? `saldo ${fmtQuantity(a.balance_at_request)}`
+    : `saldo ${fmtQuantity(a.balance_at_request)} → contado ${fmtQuantity(a.counted_quantity)}`;
+  return `Será aplicada ao saldo atual a diferença de ${fmtSigned(a.quantity)} ${unit} (no pedido de ${a.requested_by.name}: ${request}). Fica registrado em seu nome.`;
+}
+
+function rejectionText(a: StockAdjustment): string {
+  return `O saldo do lote não muda e o pedido de ${a.requested_by.name} é encerrado. Fica registrado em seu nome, com o motivo.`;
+}
 
 export function PendingAdjustments({ location, onNotice, onStale, onGoToSecurity }: {
   location: PharmacyLocation; onNotice(text: string): void; onStale(text: string): void; onGoToSecurity?(): void;
@@ -34,6 +44,8 @@ export function PendingAdjustments({ location, onNotice, onStale, onGoToSecurity
   const [ action, setAction ] = useState<Action>(null);
   // A decisão que o api recusou por já estar decidida / ser da mesma pessoa: a frase sobe, a confirmação fecha.
   const staleText = useRef<string | null>(null);
+  // O motivo da rejeição é conferido ANTES do SensitiveAction existir: assim o código do autenticador nunca é gasto com um motivo recusado.
+  const [ rejectReason, setRejectReason ] = useState("");
 
   const pending = useInfiniteQuery({
     queryKey: [ PH_ADJUSTMENTS_KEY, location.id, "pending" ],
@@ -42,6 +54,7 @@ export function PendingAdjustments({ location, onNotice, onStale, onGoToSecurity
     getNextPageParam: (last) => last.next_before ?? undefined,
     ...STATIC_QUERY
   });
+  const rejectProblem = action?.kind === "reject" ? reasonProblem(rejectReason) : null;
   const rows = (pending.data?.pages ?? []).flatMap((p) => p.adjustments);
 
   const reread = () => {
@@ -49,16 +62,12 @@ export function PendingAdjustments({ location, onNotice, onStale, onGoToSecurity
     void queryClient.invalidateQueries({ queryKey: [ PH_POSITIONS_KEY ] });
   };
 
-  async function decide(a: Action, values: Record<string, string>) {
+  async function decide(a: Action) {
     if (!a) return;
     staleText.current = null;
-    if (a.kind === "reject") {
-      const problem = reasonProblem(values.reason ?? "");
-      if (problem) throw new LocalProblem(problem);
-    }
     try {
       if (a.kind === "approve") await approveAdjustment(a.adjustment.id);
-      else await rejectAdjustment(a.adjustment.id, (values.reason ?? "").trim());
+      else await rejectAdjustment(a.adjustment.id, rejectReason.trim());
     } catch (err) {
       reread();
       if (STALE.has(errorCode(err) ?? "")) { staleText.current = pharmacyError(err); return; }
@@ -91,7 +100,7 @@ export function PendingAdjustments({ location, onNotice, onStale, onGoToSecurity
               ) : (
                 <span style={row}>
                   <button type="button" style={buttonStyle} disabled={action !== null} onClick={() => { staleText.current = null; setAction({ kind: "approve", adjustment: a }); }}>Aprovar</button>
-                  <button type="button" style={secondaryButtonStyle} disabled={action !== null} onClick={() => { staleText.current = null; setAction({ kind: "reject", adjustment: a }); }}>Rejeitar</button>
+                  <button type="button" style={secondaryButtonStyle} disabled={action !== null} onClick={() => { staleText.current = null; setRejectReason(""); setAction({ kind: "reject", adjustment: a }); }}>Rejeitar</button>
                 </span>
               )) }
             ]}
@@ -107,26 +116,37 @@ export function PendingAdjustments({ location, onNotice, onStale, onGoToSecurity
         )}
 
         {action && (
-          <SensitiveAction
-            key={`${action.kind}-${action.adjustment.id}`}
-            title={`${action.kind === "approve" ? "Aprovar" : "Rejeitar"}: ${action.adjustment.lot.item.name}, lote ${action.adjustment.lot.lot_number}`}
-            description={action.kind === "approve"
-              ? `O saldo do lote passa a ${fmtQuantity(action.adjustment.counted_quantity ?? action.adjustment.balance_at_request)} ${action.adjustment.lot.item.dispensing_unit}, pedido por ${action.adjustment.requested_by.name}. Fica registrado em seu nome.`
-              : `O saldo do lote não muda e o pedido de ${action.adjustment.requested_by.name} é encerrado. Fica registrado em seu nome, com o motivo.`}
-            requiresStepUp
-            fields={action.kind === "reject" ? [ { name: "reason", label: "Motivo da rejeição", required: true, multiline: true } ] : []}
-            confirmLabel={action.kind === "approve" ? "Aprovar ajuste" : "Rejeitar ajuste"}
-            run={(values) => decide(action, values)}
-            onDone={() => {
-              const done = action;
-              setAction(null);
-              if (staleText.current) { onStale(staleText.current); staleText.current = null; return; }
-              onNotice(done?.kind === "approve" ? ADJUSTMENT_APPROVED_TEXT : ADJUSTMENT_REJECTED_TEXT);
-            }}
-            onCancel={() => setAction(null)}
-            onGoToSecurity={onGoToSecurity}
-            translateError={(err) => (err instanceof LocalProblem ? err.message : pharmacyError(err))}
-          />
+          <div style={{ ...box, background: "var(--panel)" }}>
+            {action.kind === "reject" && (
+              <>
+                <label style={fieldLabel}>
+                  Motivo da rejeição
+                  <textarea value={rejectReason} rows={3} style={inputStyle} onChange={(e) => setRejectReason(e.target.value)} />
+                </label>
+                {rejectProblem && <p style={muted}>{rejectProblem}</p>}
+                {rejectProblem && <div style={row}><button type="button" style={secondaryButtonStyle} onClick={() => setAction(null)}>Cancelar</button></div>}
+              </>
+            )}
+            {(action.kind === "approve" || !rejectProblem) && (
+              <SensitiveAction
+                key={`${action.kind}-${action.adjustment.id}`}
+                title={`${action.kind === "approve" ? "Aprovar" : "Rejeitar"}: ${action.adjustment.lot.item.name}, lote ${action.adjustment.lot.lot_number}`}
+                description={action.kind === "approve" ? approvalText(action.adjustment) : rejectionText(action.adjustment)}
+                requiresStepUp
+                confirmLabel={action.kind === "approve" ? "Aprovar ajuste" : "Rejeitar ajuste"}
+                run={() => decide(action)}
+                onDone={() => {
+                  const done = action;
+                  setAction(null);
+                  if (staleText.current) { onStale(staleText.current); staleText.current = null; return; }
+                  onNotice(done?.kind === "approve" ? ADJUSTMENT_APPROVED_TEXT : ADJUSTMENT_REJECTED_TEXT);
+                }}
+                onCancel={() => setAction(null)}
+                onGoToSecurity={onGoToSecurity}
+                translateError={(err) => pharmacyError(err)}
+              />
+            )}
+          </div>
         )}
       </div>
     </Panel>
