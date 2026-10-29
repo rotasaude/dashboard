@@ -9,7 +9,8 @@ export type FeatureKey =
   | "ledi_export" | "cadsus_lookup" | "clinical_record" | "digital_signature" | "clinical_documents" | "controlled_prescriptions"
   | "patient_timeline" | "exam_tracking" | "exam_fhir_inbound" | "exam_pec_bridge" | "fake_lab"
   | "municipal_lab" | "lab_hl7_inbound" | "fake_middleware" | "lab_quality_control" | "lab_inventory"
-  | "procedure_billing" | "care_lines" | "territory_registry" | "surveillance" | "care_regulation";
+  | "procedure_billing" | "care_lines" | "territory_registry" | "surveillance" | "care_regulation"
+  | "pharmacy";
 
 export const FEATURE_DISABLED_MESSAGE = "esta funcionalidade está desligada para a cidade";
 
@@ -39,7 +40,9 @@ const FEATURE_LABEL: Record<string, string> = {
   // Módulo 25 (ADR 0043): sem pré-requisito de modo de prontuário; a sugestão na consulta exige clinical_record.
   surveillance: "Vigilância epidemiológica",
   // Módulo 26a (ADR 0044): exige clinical_record.
-  care_regulation: "Regulação municipal"
+  care_regulation: "Regulação municipal",
+  // Módulo 27a (ADR 0045): sem pré-requisito.
+  pharmacy: "Farmácia e almoxarifado"
 };
 
 export function sessionFeatures(user: { features?: unknown } | null | undefined): string[] {

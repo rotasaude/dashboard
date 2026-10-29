@@ -2085,6 +2085,8 @@ export type DocumentInput =
 export interface PatientMedication {
   id: string; catalog_item?: CatalogItemRef | null; free_text?: string | null; label: string; dosage_summary: string | null;
   continuous: boolean; status: MedicationStatus; origin: MedicationOrigin; started_on?: string | null; updated_at: string;
+  // Módulo 27a (D23): última retirada na farmácia, só leitura.
+  last_dispensed_on?: string | null;
 }
 export type MedicationChange =
   | { action: "add_external"; catalog_item_id?: string; free_text?: string; dosage_summary?: string; continuous: boolean }
@@ -2323,7 +2325,9 @@ export async function getLastPatientIdentification(consultationId: string): Prom
 
 export type TimelineKind =
   | "triage" | "attendance" | "screening" | "appointment" | "consultation"
-  | "clinical_document" | "controlled_notification" | "campaign" | "exam" | "procedure";
+  | "clinical_document" | "controlled_notification" | "campaign" | "exam" | "procedure"
+  // Módulo 27a (D22): retirada na farmácia (o api manda detail_ref nulo e status "dispensed").
+  | "dispensation";
 
 export interface TimelineDetailRef { type: string; id: string }
 export interface TimelineEntry {
@@ -4691,4 +4695,314 @@ export function addNurseItem(input: { target_type: RegulationType; target_code: 
 
 export async function removeNurseItem(item: { target_type: RegulationType; target_code: string }): Promise<void> {
   await jsonFetch<void>(regPath("admin", "nurse_items"), regWrite("DELETE", item));
+}
+
+// ─── Farmácia e almoxarifado (módulo 27a, ADR 0045; contrato 2026-10-29 §2–§9, §13 H1–H12) ───
+// Na URL só ids, situação, filtros booleanos, nome do medicamento na busca da posição, cursor e limite —
+// nunca CPF, CNS, nome, código da receita, conteúdo da receita, profissional, posologia, motivo ou número
+// de notificação: tudo isso vai no corpo. A busca da receita, da pessoa e dos duplicados é POST (grava
+// trilha no api). Listas vêm em envelope (ausente = vazio); escritas e detalhes devolvem o objeto PURO
+// (H12); o DELETE de equipe devolve 204. Quantidades: string com ponto no api ("12.5"); a vírgula é da tela.
+
+const PHARMACY_BASE = import.meta.env.VITE_PHARMACY_BASE || "/pharmacy";
+const phPath = (...parts: string[]) => [ PHARMACY_BASE, ...parts.map(encodeURIComponent) ].join("/");
+// Sempre com corpo (`{}` na aprovação): o jsonFetch só põe o Content-Type quando há corpo.
+const phWrite = (method: "POST" | "PATCH" | "PUT" | "DELETE", body: unknown): RequestInit => ({ method, body: JSON.stringify(body) });
+
+export const PHARMACY_PAGE_SIZE = 50;
+
+export type PharmacyRole = "pharmacist" | "pharmacy_assistant" | "stock_keeper";
+export type StockLocationKind = "central" | "unit";
+export type StockMovementKind =
+  | "opening" | "receipt" | "donation" | "transfer_out" | "transfer_in" | "dispensing" | "loss" | "expiry" | "adjustment" | "return";
+export type TransferStatus = "sent" | "received" | "received_with_difference";
+export type AdjustmentStatus = "applied" | "pending" | "approved" | "rejected";
+export type AdjustmentKind = "adjustment" | "loss" | "expiry";
+export type PrescriptionKind = "digital" | "external";
+
+// H1: `unit` é a unidade da CONCENTRAÇÃO (mg); `dispensing_unit` é a que se conta no balcão (cápsula).
+export interface StockItem {
+  catalog_item_id: string; catmat_code: number; name: string; unit: string; dispensing_unit: string;
+  controlled: boolean; controlled_list: string | null;
+}
+export interface StockLot { id: string; item: StockItem; lot_number: string; expires_on: string; manufacturer: string | null }
+export interface LocationRef { id: string; name: string; kind: StockLocationKind | string }
+
+// D1: os locais da pessoa com o papel dela em cada um. O almoxarife do central vê todos; os alheios vêm com `roles: []`.
+export interface PharmacyLocation extends LocationRef { health_unit: { id: string; name: string } | null; active: boolean; roles: string[] }
+export interface LocationStaff { user_id: string; name: string | null; role: PharmacyRole | string }
+export interface AdminLocation extends LocationRef { health_unit: { id: string; name: string } | null; active: boolean; staff: LocationStaff[] }
+export interface AdminLocationInput { kind: StockLocationKind; health_unit_id?: string | null; name: string; active: boolean }
+export interface PharmacySettings {
+  common_validity_days: number; continuous_validity_days: number; continuous_interval_days: number;
+  expiry_alert_days: number; adjustment_approval_percent: number;
+}
+export interface StockMinimum { catalog_item_id: string; minimum: string; item?: StockItem }
+
+export interface LotBalance { lot: StockLot; balance: string; in_transit: string }
+export interface StockPosition {
+  location: LocationRef; item: StockItem; lots: LotBalance[]; balance: string; minimum: string | null;
+  below_minimum: boolean; expiring_soon: boolean;
+}
+export interface PositionQuery {
+  locationId?: string | null; q?: string | null; catalogItemId?: string | null; expiring?: boolean; belowMinimum?: boolean; before?: string | null;
+}
+// next_before: cursor opaco do api; repasse como veio.
+export interface PositionPage { positions: StockPosition[]; next_before: string | null }
+export interface StockMovement {
+  id: string; kind: StockMovementKind | string; quantity: string;
+  document: { type: string; id: string | null; number: string | null } | null;
+  reason?: string | null; by: { name: string } | null; at: string;
+}
+export interface MovementPage { movements: StockMovement[]; next_before: string | null }
+
+export interface PackageInput { units_per_package: number; packages: number }
+export interface ReceiptItemInput {
+  catalog_item_id: string; lot_number: string; expires_on: string; manufacturer?: string; quantity: string; package?: PackageInput;
+}
+export interface ReceiptInput {
+  location_id: string; document: { kind: "invoice" | "donation"; number: string; supplier: string }; items: ReceiptItemInput[];
+}
+// D8: inventário de abertura — sem documento; uma vez por local e item.
+// Nome com prefixo: `OpeningInput` já é a abertura justificada do prontuário (módulo 19).
+export interface PharmacyOpeningInput { location_id: string; items: ReceiptItemInput[] }
+export interface StockReceipt {
+  id: string; kind: "invoice" | "donation" | "opening" | string; location: LocationRef; items: { lot: StockLot; quantity: string }[]; at: string;
+}
+
+// H12: item da transferência com `quantity` (enviada), `quantity_received` e `difference`; sem sent_by/received_by.
+export interface TransferItem { lot: StockLot; quantity: string; quantity_received: string | null; difference: string | null }
+export interface StockTransfer {
+  id: string; from: LocationRef; to: LocationRef; status: TransferStatus | string; sent_at: string; received_at: string | null; items: TransferItem[];
+}
+export interface TransferInput { to_location_id: string; items: { lot_id: string; quantity: string }[] }
+export interface ReceiveInput { items: { lot_id: string; quantity_received: string; reason?: string }[] }
+export interface TransferQuery { locationId: string; status?: string | null; before?: string | null }
+export interface TransferPage { transfers: StockTransfer[]; next_before: string | null }
+
+// H12: `reason` vem na lista; `same_user` compara requested_by.user_id.
+export interface StockAdjustment {
+  id: string; location: LocationRef; lot: StockLot; kind: AdjustmentKind | string; status: AdjustmentStatus | string;
+  quantity: string; counted_quantity: string | null; balance_at_request: string; reason: string;
+  requested_by: { user_id: string; name: string }; decided_by: { user_id: string; name: string } | null;
+  decision_reason: string | null; created_at: string;
+}
+export interface AdjustmentInput {
+  location_id: string; lot_id: string; kind: AdjustmentKind; counted_quantity?: string; quantity?: string; reason: string;
+}
+export interface AdjustmentPage { adjustments: StockAdjustment[]; next_before: string | null }
+
+export interface PharmacyPatient { id: string; display_name: string | null; has_cpf: boolean; cns_masked: string | null }
+export interface PrescriptionItemView {
+  id: string; catalog_item_id: string | null; free_text: string | null; printed_description: string; quantity: string; quantity_unit: string;
+  dosage_instructions: string; continuous: boolean; controlled: boolean;
+  // H12: calculado pelo api (antimicrobiano do catálogo, controlado ou controle especial).
+  retention_required: boolean;
+  dispensed_total: string; last_dispensed_on: string | null; next_allowed_on: string | null; completed: boolean;
+  // P4: validade por item.
+  valid_until?: string; expired?: boolean;
+}
+export interface PrescriptionView {
+  kind: PrescriptionKind | string; id: string; short_code: string | null; issued_on: string; valid_until: string | null;
+  expired: boolean; cancelled: boolean; prescriber: { name: string; council: string | null }; patient: PharmacyPatient;
+  items: PrescriptionItemView[];
+}
+export type PrescriptionLookupInput = { location_id: string; short_code: string } | { location_id: string; patient_id: string };
+export interface PrescriberInput { name: string; council: string; council_state: string; council_number: string }
+export interface ExternalItemInput {
+  catalog_item_id: string; quantity: string; quantity_unit: string; dosage_instructions: string; continuous: boolean;
+}
+// D4: paciente existente ou novo (forma do 24a); notificação só nas listas A e B.
+export type ExternalPrescriptionInput =
+  ({ patient_id: string } | { new_patient: NewPatient; duplicates_reviewed?: boolean })
+  & { prescriber: PrescriberInput; issued_on: string; notification_number?: string; items: ExternalItemInput[] };
+
+// D11: `complete` marca o item como dispensado por completo.
+export interface DispensationItemInput {
+  prescription_item_id: string; catalog_item_id?: string; lot_id: string; quantity: string; complete?: boolean;
+}
+// A tela manda `retention: {}`: o número retido é o do documento (D14).
+export interface DispensationInput {
+  location_id: string; prescription: { kind: PrescriptionKind; id: string }; items: DispensationItemInput[];
+  retention?: { notification_number?: string };
+}
+// D12 e H12: item com id (alvo da devolução), item e lote embutidos e `returned_total`.
+export interface DispensedItem {
+  id: string; prescription_item_id: string | null; catalog_item_id: string; item: StockItem;
+  lot_id: string; lot: { id: string; lot_number: string; expires_on: string };
+  quantity: string; returned_total: string; mapped_from_free_text: boolean;
+}
+export interface Dispensation {
+  id: string; location: LocationRef; prescription: { kind: PrescriptionKind | string; id: string }; patient: PharmacyPatient;
+  by: { name: string; role: string }; at: string; items: DispensedItem[]; retention: { notification_number: string | null } | null;
+}
+export interface DispensationPage { dispensations: Dispensation[]; next_before: string | null }
+// Devolução (H12): volta ao mesmo lote; a resposta é a dispensação inteira, atualizada.
+export interface ReturnInput { location_id: string; dispensation_item_id: string; quantity: string; reason: string }
+
+// D15: contagens do local (as listas da tela vêm da posição).
+export interface PharmacyAlerts { expiring: number; expired: number; below_minimum: number; in_transit: number; pending_adjustments: number }
+// P3: o api cria o paciente do par validado; a farmácia não tem cadastro territorial.
+export interface PharmacyPerson extends TerritoryPerson { has_cpf: boolean; cns_masked: string | null }
+
+// Só os filtros que vieram, nesta ordem; booleano vira "true"/"false"; limite sempre.
+function phParams(entries: [ string, string | boolean | null | undefined ][], before?: string | null): URLSearchParams {
+  const p = new URLSearchParams();
+  for (const [ key, value ] of entries) {
+    if (typeof value === "boolean") p.set(key, String(value));
+    else if (value) p.set(key, value);
+  }
+  if (before) p.set("before", before);
+  p.set("limit", String(PHARMACY_PAGE_SIZE));
+  return p;
+}
+
+// ── Locais, equipe, parâmetros e mínimos ──
+export async function listMyPharmacyLocations(): Promise<PharmacyLocation[]> {
+  return (await jsonFetch<{ locations?: PharmacyLocation[] }>(phPath("locations"))).locations ?? [];
+}
+
+export async function listAdminLocations(): Promise<AdminLocation[]> {
+  return (await jsonFetch<{ locations?: AdminLocation[] }>(phPath("admin", "locations"))).locations ?? [];
+}
+
+export function createAdminLocation(input: AdminLocationInput): Promise<AdminLocation> {
+  return jsonFetch<AdminLocation>(phPath("admin", "locations"), phWrite("POST", input));
+}
+
+export function updateAdminLocation(id: string, input: AdminLocationInput): Promise<AdminLocation> {
+  return jsonFetch<AdminLocation>(phPath("admin", "locations", id), phWrite("PATCH", input));
+}
+
+export function addLocationStaff(locationId: string, userId: string, role: PharmacyRole): Promise<AdminLocation> {
+  return jsonFetch<AdminLocation>(phPath("admin", "locations", locationId, "staff"), phWrite("POST", { user_id: userId, role }));
+}
+
+export async function removeLocationStaff(locationId: string, userId: string, role: string): Promise<void> {
+  await jsonFetch<void>(phPath("admin", "locations", locationId, "staff"), phWrite("DELETE", { user_id: userId, role }));
+}
+
+export function getPharmacySettings(): Promise<PharmacySettings> {
+  return jsonFetch<PharmacySettings>(phPath("admin", "settings"));
+}
+
+export function updatePharmacySettings(s: PharmacySettings): Promise<PharmacySettings> {
+  return jsonFetch<PharmacySettings>(phPath("admin", "settings"), phWrite("PATCH", s));
+}
+
+export async function getMinimums(locationId: string): Promise<StockMinimum[]> {
+  return (await jsonFetch<{ minimums?: StockMinimum[] }>(phPath("locations", locationId, "minimums"))).minimums ?? [];
+}
+
+export async function putMinimums(locationId: string, rows: { catalog_item_id: string; minimum: string }[]): Promise<StockMinimum[]> {
+  const b = await jsonFetch<{ minimums?: StockMinimum[] }>(phPath("locations", locationId, "minimums"), phWrite("PUT", { minimums: rows }));
+  return b.minimums ?? [];
+}
+
+// ── Catálogo, entradas e abertura ──
+export async function searchPharmacyItems(q: string): Promise<StockItem[]> {
+  return (await jsonFetch<{ items?: StockItem[] }>(phPath("items", "search"), phWrite("POST", { q }))).items ?? [];
+}
+
+export function recordReceipt(input: ReceiptInput): Promise<StockReceipt> {
+  return jsonFetch<StockReceipt>(phPath("receipts"), phWrite("POST", input));
+}
+
+export function recordOpening(input: PharmacyOpeningInput): Promise<StockReceipt> {
+  return jsonFetch<StockReceipt>(phPath("openings"), phWrite("POST", input));
+}
+
+// ── Posição e extrato ──
+export async function listPositions(q: PositionQuery): Promise<PositionPage> {
+  const p = phParams([
+    [ "location_id", q.locationId ], [ "q", q.q ], [ "catalog_item_id", q.catalogItemId ],
+    [ "expiring", q.expiring ], [ "below_minimum", q.belowMinimum ]
+  ], q.before);
+  const b = await jsonFetch<{ positions?: StockPosition[]; next_before?: string | null }>(withQuery(phPath("positions"), p));
+  return { positions: b.positions ?? [], next_before: b.next_before ?? null };
+}
+
+export async function listLotMovements(lotId: string, locationId: string, before: string | null): Promise<MovementPage> {
+  const b = await jsonFetch<{ movements?: StockMovement[]; next_before?: string | null }>(
+    withQuery(phPath("lots", lotId, "movements"), phParams([ [ "location_id", locationId ] ], before)));
+  return { movements: b.movements ?? [], next_before: b.next_before ?? null };
+}
+
+// ── Transferências ──
+export function sendTransfer(input: TransferInput): Promise<StockTransfer> {
+  return jsonFetch<StockTransfer>(phPath("transfers"), phWrite("POST", input));
+}
+
+export function receiveTransfer(id: string, input: ReceiveInput): Promise<StockTransfer> {
+  return jsonFetch<StockTransfer>(phPath("transfers", id, "receive"), phWrite("POST", input));
+}
+
+export async function listTransfers(q: TransferQuery): Promise<TransferPage> {
+  const b = await jsonFetch<{ transfers?: StockTransfer[]; next_before?: string | null }>(
+    withQuery(phPath("transfers"), phParams([ [ "location_id", q.locationId ], [ "status", q.status ] ], q.before)));
+  return { transfers: b.transfers ?? [], next_before: b.next_before ?? null };
+}
+
+// ── Ajustes, perdas e vencimentos ──
+export function recordAdjustment(input: AdjustmentInput): Promise<StockAdjustment> {
+  return jsonFetch<StockAdjustment>(phPath("adjustments"), phWrite("POST", input));
+}
+
+export function approveAdjustment(id: string): Promise<StockAdjustment> {
+  return jsonFetch<StockAdjustment>(phPath("adjustments", id, "approve"), phWrite("POST", {}));
+}
+
+export function rejectAdjustment(id: string, reason: string): Promise<StockAdjustment> {
+  return jsonFetch<StockAdjustment>(phPath("adjustments", id, "reject"), phWrite("POST", { reason }));
+}
+
+export async function listAdjustments(q: { locationId: string; status?: string | null; before?: string | null }): Promise<AdjustmentPage> {
+  const b = await jsonFetch<{ adjustments?: StockAdjustment[]; next_before?: string | null }>(
+    withQuery(phPath("adjustments"), phParams([ [ "location_id", q.locationId ], [ "status", q.status ] ], q.before)));
+  return { adjustments: b.adjustments ?? [], next_before: b.next_before ?? null };
+}
+
+// ── Receita e dispensação ──
+// Busca pelo código ou pelo paciente: POST no clique, tudo no corpo (nunca reação ao que se digita).
+export async function lookupPrescriptions(input: PrescriptionLookupInput): Promise<PrescriptionView[]> {
+  return (await jsonFetch<{ prescriptions?: PrescriptionView[] }>(phPath("prescriptions", "lookup"), phWrite("POST", input))).prescriptions ?? [];
+}
+
+export function createExternalPrescription(input: ExternalPrescriptionInput): Promise<PrescriptionView> {
+  return jsonFetch<PrescriptionView>(phPath("external_prescriptions"), phWrite("POST", input));
+}
+
+export function recordDispensation(input: DispensationInput): Promise<Dispensation> {
+  return jsonFetch<Dispensation>(phPath("dispensations"), phWrite("POST", input));
+}
+
+export function recordReturn(input: ReturnInput): Promise<Dispensation> {
+  return jsonFetch<Dispensation>(phPath("returns"), phWrite("POST", input));
+}
+
+export async function listDispensations(patientId: string, before: string | null): Promise<DispensationPage> {
+  const b = await jsonFetch<{ dispensations?: Dispensation[]; next_before?: string | null }>(
+    withQuery(phPath("dispensations"), phParams([ [ "patient_id", patientId ] ], before)));
+  return { dispensations: b.dispensations ?? [], next_before: b.next_before ?? null };
+}
+
+// ── Alertas, pessoa e duplicados ──
+export async function getPharmacyAlerts(locationId: string): Promise<PharmacyAlerts> {
+  const b = await jsonFetch<Partial<PharmacyAlerts>>(withQuery(phPath("alerts"), new URLSearchParams({ location_id: locationId })));
+  return {
+    expiring: b.expiring ?? 0, expired: b.expired ?? 0, below_minimum: b.below_minimum ?? 0,
+    in_transit: b.in_transit ?? 0, pending_adjustments: b.pending_adjustments ?? 0
+  };
+}
+
+// A farmácia não abre cadastro territorial: citizen_id e registration_id sempre nulos.
+export async function lookupPharmacyPerson(cpf: string): Promise<PharmacyPerson> {
+  const b = await jsonFetch<Omit<PharmacyPerson, "citizen_id" | "registration_id">>(phPath("person_lookup"), phWrite("POST", { cpf }));
+  return { ...b, citizen_id: null, registration_id: null };
+}
+
+export async function findPharmacyDuplicates(q: DuplicateQuery): Promise<DuplicateCandidate[]> {
+  const b = await jsonFetch<{ candidates?: Omit<DuplicateCandidate, "registration_id">[] }>(
+    phPath("patients", "duplicates"), phWrite("POST", q));
+  return (b.candidates ?? []).map((c) => ({ ...c, registration_id: null }));
 }

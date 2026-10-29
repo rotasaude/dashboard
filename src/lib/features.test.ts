@@ -102,3 +102,9 @@ describe("módulo 26a", () => {
     expect(featureLabel("care_regulation")).toBe("Regulação municipal");
   });
 });
+
+describe("módulo 27a", () => {
+  it("pharmacy tem nome em português", () => {
+    expect(featureLabel("pharmacy")).toBe("Farmácia e almoxarifado");
+  });
+});
