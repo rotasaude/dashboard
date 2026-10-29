@@ -126,7 +126,7 @@ describe("PatientHistory", () => {
 
     it.each([
       [ "return_exceeds", 422, "a devolução passa do que ainda resta devolver deste item — abra o histórico de novo para ver o atual" ],
-      [ "lot_expired", 422, "o lote desta retirada já venceu — a devolução não é aceita; registre a perda no ajuste de estoque" ],
+      [ "lot_expired", 422, "o lote desta retirada já venceu — a devolução não é aceita; registre o vencimento no ajuste de estoque" ],
       [ "invalid_quantity", 422, "quantidade inválida — use até 2 casas depois da vírgula" ],
       [ "missing_role", 403, "seu papel não permite usar a farmácia" ]
     ])("recusa do api (%s) é mostrada e o que foi digitado fica", async (code, status, phrase) => {

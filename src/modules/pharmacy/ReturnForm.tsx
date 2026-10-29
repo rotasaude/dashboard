@@ -1,7 +1,7 @@
 // Devolução de parte de um item já dispensado (módulo 27a; F-27.5, acréscimo da coordenação; contrato H12). Vive no histórico de
 // retiradas: o paciente devolve em condições de uso e o saldo volta ao MESMO lote da retirada. Quantidade (vírgula na tela, ponto no
-// corpo) até o que resta devolver e motivo de 10 a 500 caracteres. Sem step-up (como a dispensação; a spec só põe segundo fator no
-// ajuste de inventário): a conferência local vem antes e "Registrar devolução" chama o api direto. A resposta (201) é a dispensação
+// corpo) até o que resta devolver e motivo de 10 a 500 caracteres. Sem step-up (como a dispensação; a spec só põe segundo fator em
+// "Ajuste, perda ou vencimento"): a conferência local vem antes e "Registrar devolução" chama o api direto. A resposta (201) é a dispensação
 // inteira, atualizada; quem chamou troca o item na lista. A recusa do api fica na tela e o digitado não se perde. Nada em URL,
 // log ou storage.
 import { useState } from "react";
