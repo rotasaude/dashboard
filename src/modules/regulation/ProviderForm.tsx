@@ -21,7 +21,7 @@ export function ProviderForm({ provider, units, onSaved, onCancel, onGoToSecurit
 }) {
   const [ name, setName ] = useState(provider?.name ?? "");
   const [ kind, setKind ] = useState<string>(provider?.kind ?? "");
-  const [ cnes, setCnes ] = useState(provider && provider.kind !== "own" ? provider.cnes : "");
+  const [ cnes, setCnes ] = useState(provider && provider.kind !== "own" ? provider.cnes ?? "" : "");
   const [ unitId, setUnitId ] = useState(provider?.health_unit?.id ?? "");
   const [ active, setActive ] = useState(provider?.active ?? true);
   const [ error, setError ] = useState<string | null>(null);

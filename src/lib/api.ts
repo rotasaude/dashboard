@@ -4528,7 +4528,7 @@ export interface ComplementInput { justification: string; cid10?: string | null;
 // Nome próprio: `ScheduleInput` já é o agendamento de exame (21a).
 export interface RegulationScheduleInput { at: string; place: string; notes?: string | null; version: number }
 export interface CareProvider {
-  id: string; name: string; cnes: string; kind: ProviderKind | string; health_unit: { id: string; name: string } | null; active: boolean;
+  id: string; name: string; cnes: string | null; kind: ProviderKind | string; health_unit: { id: string; name: string } | null; active: boolean;
 }
 export interface CareProviderInput { name: string; cnes?: string; kind: ProviderKind; health_unit_id?: string | null; active: boolean }
 export interface CareOffer {
