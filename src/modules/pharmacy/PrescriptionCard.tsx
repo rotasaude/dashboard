@@ -1,0 +1,65 @@
+// Cartão da receita encontrada (módulo 27a; F-27.5; contrato §7, H3). Só mostra o que o api devolveu: paciente (sem CPF e CNS
+// mascarado como no 24a), emissão e validade da receita e de cada item, profissional, itens com quantidade e posologia.
+// O que impede dispensar (receita cancelada ou vencida) aparece NO LUGAR do botão "Dispensar"; as regras por item e a retenção
+// ficam no formulário da dispensação. Nada daqui vai a URL, log ou storage.
+import type { PrescriptionItemView, PrescriptionView } from "../../lib/api";
+import { fmtDay } from "../../lib/exams";
+import { fmtQuantity, prescriptionBlock } from "../../lib/pharmacy";
+import { NO_NAME } from "../../lib/territoryRegistry";
+import { Tag } from "../../components/Tag";
+import { buttonStyle } from "../../components/formStyles";
+import { box, muted, row } from "../exams/styles";
+
+const itemLine = { margin: 0, display: "flex", flexDirection: "column", gap: 2, fontSize: 12.5 } as const;
+
+export const prescriptionKindLabel = (kind: string): string => (kind === "external" ? "Receita externa" : "Receita digital");
+
+// ABCDE23456 → ABCDE-23456 (como vem impresso).
+export const fmtShortCode = (code: string): string => (code.length === 10 ? `${code.slice(0, 5)}-${code.slice(5)}` : code);
+
+function itemValidity(i: PrescriptionItemView): string | null {
+  if (!i.valid_until) return i.expired ? "item vencido" : null;
+  return i.expired ? `vencido em ${fmtDay(i.valid_until)}` : `vale até ${fmtDay(i.valid_until)}`;
+}
+
+export function PrescriptionCard({ p, onDispense }: { p: PrescriptionView; onDispense?(): void }) {
+  const kind = prescriptionKindLabel(p.kind);
+  const block = prescriptionBlock(p);
+  return (
+    <article aria-label={`${kind} de ${fmtDay(p.issued_on)}`} style={box}>
+      <div style={row}>
+        <Tag tone="info">{kind}</Tag>
+        {p.short_code && <span className="mono" style={muted}>{fmtShortCode(p.short_code)}</span>}
+      </div>
+      <div style={row}>
+        <strong>{p.patient.display_name ?? NO_NAME}</strong>
+        {!p.patient.has_cpf && <Tag tone="warn">sem CPF</Tag>}
+        {p.patient.cns_masked && <span className="mono" style={muted}>{`CNS ${p.patient.cns_masked}`}</span>}
+      </div>
+      <p style={muted}>{p.valid_until ? `emitida em ${fmtDay(p.issued_on)} · vale até ${fmtDay(p.valid_until)}` : `emitida em ${fmtDay(p.issued_on)}`}</p>
+      <p style={muted}>{p.prescriber.council ? `${p.prescriber.name} · ${p.prescriber.council}` : p.prescriber.name}</p>
+      <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: 8 }}>
+        {p.items.map((i) => {
+          const validity = itemValidity(i);
+          return (
+            <li key={i.id} style={itemLine}>
+              <span style={row}>
+                <strong>{i.printed_description}</strong>
+                {i.continuous && <Tag tone="info">uso contínuo</Tag>}
+                {i.controlled && <Tag tone="warn">controlado</Tag>}
+                {i.retention_required && <Tag tone="warn">retém a receita</Tag>}
+                {i.completed && <Tag tone="neutral">dispensado por completo</Tag>}
+              </span>
+              <span>{`${fmtQuantity(i.quantity)} ${i.quantity_unit} · já dispensado ${fmtQuantity(i.dispensed_total)}`}</span>
+              <span style={muted}>{i.dosage_instructions}</span>
+              {validity && (i.expired ? <span style={row}><Tag tone="down" mono={false}>{validity}</Tag></span> : <span style={muted}>{validity}</span>)}
+            </li>
+          );
+        })}
+      </ul>
+      {block ? <div style={row}><Tag tone="down" mono={false}>{block}</Tag></div> : onDispense && (
+        <div style={row}><button type="button" style={buttonStyle} onClick={onDispense}>Dispensar</button></div>
+      )}
+    </article>
+  );
+}
