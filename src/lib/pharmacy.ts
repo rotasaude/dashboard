@@ -26,6 +26,7 @@ export const RETENTION_REQUIRED = "este medicamento exige a retenção da receit
 export const NOTHING_TO_DISPENSE = "informe a quantidade de ao menos um item";
 export const NO_PATIENT_RECORD =
   "esta pessoa ainda não tem receita no Rota Saúde — se trouxe receita de fora da rede, use Receita externa";
+export const NOTIFICATION_REQUIRED = "receita de lista A ou B exige o número da notificação";
 export const BALANCE_CHANGED = "o saldo do lote mudou — os lotes foram relidos; confira a quantidade";
 export const PRESCRIPTION_CHANGED = "a receita mudou enquanto você dispensava — busque a receita de novo";
 
@@ -527,7 +528,7 @@ const ERRORS: Record<string, string> = {
   lot_not_expired: "vencimento só de lote já vencido — use perda",
   lot_mismatch: "este lote já existe com outra validade ou fabricante — confira",
   item_completed: ITEM_COMPLETED,
-  notification_required: "receita de lista A ou B exige o número da notificação",
+  notification_required: NOTIFICATION_REQUIRED,
   prescription_not_found: "receita não encontrada nesta cidade — confira o código",
   person_not_found: "ninguém com este CPF no Rota Saúde",
   citizen_not_verified: "este CPF tem cadastro declarado pelo cidadão, ainda sem validação presencial — valide a identidade antes",
