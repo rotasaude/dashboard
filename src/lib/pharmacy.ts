@@ -3,7 +3,7 @@
 // controlado, aprovação acima do limite e retenção são dele. A tela só não envia o que já sabe que será recusado.
 import {
   ApiError, errorCode,
-  type AdjustmentInput, type AdjustmentKind, type DispensationInput, type LotBalance, type PharmacyLocation, type PharmacySettings,
+  type AdjustmentInput, type AdjustmentKind, type DispensationInput, type DispensedItem, type ReturnInput, type LotBalance, type PharmacyLocation, type PharmacySettings,
   type PrescriberInput, type PrescriptionItemView, type PrescriptionView, type ReceiptItemInput, type ReceiveInput, type StockItem,
   type StockLot, type StockMovement, type StockPosition, type StockTransfer
 } from "./api";
@@ -456,6 +456,30 @@ export function adjustmentBody(d: AdjustmentDraft, locationId: string): Adjustme
   };
 }
 
+// ─── Devolução (histórico de retiradas; H12) ────────────────────────────────
+// O que ainda se pode devolver do item: dispensado − já devolvido (centésimos, sem erro de ponto flutuante).
+export const returnRemaining = (i: DispensedItem): number => cents(i.quantity) - cents(i.returned_total);
+
+export interface ReturnDraft { quantity: string; reason: string }
+
+// Todas as recusas locais de uma vez (a quantidade antes do motivo); [] = pode ir para a confirmação (step-up).
+export function returnProblems(d: ReturnDraft, i: DispensedItem): string[] {
+  const out: string[] = [];
+  const q = quantityProblem(d.quantity, "a quantidade");
+  if (q) out.push(q);
+  else if (cents(toApiQuantity(d.quantity)) > returnRemaining(i)) {
+    out.push(`a quantidade passa do que resta devolver deste item (${fmtQuantity(String(returnRemaining(i) / 100))})`);
+  }
+  const reason = reasonProblem(d.reason);
+  if (reason) out.push(reason);
+  return out;
+}
+
+// Só depois de returnProblems == []: quantidade com ponto, motivo aparado; o local é o da dispensação.
+export const returnBody = (d: ReturnDraft, i: DispensedItem, locationId: string): ReturnInput => ({
+  location_id: locationId, dispensation_item_id: i.id, quantity: toApiQuantity(d.quantity), reason: d.reason.trim()
+});
+
 // ─── Textos ─────────────────────────────────────────────────────────────────
 export function reasonProblem(text: string): string | null {
   const n = text.trim().length;
@@ -501,6 +525,9 @@ export function settingsProblem(raw: Record<keyof PharmacySettings, string>): st
 
 // ─── Recusas do api (frase, nunca o corpo nem o valor enviado) ─────────────
 const REASON_TEXT = "o motivo tem de 10 a 500 caracteres";
+export const RETURN_EXCEEDS = "a devolução passa do que ainda resta devolver deste item — abra o histórico de novo para ver o atual";
+// `lot_expired` na devolução: o ERRORS manda "escolher outro lote", que aqui não existe (a devolução volta ao lote da retirada).
+export const RETURN_LOT_EXPIRED = "o lote desta retirada já venceu — a devolução não é aceita";
 const QUANTITY_TEXT = "quantidade inválida — use até 2 casas depois da vírgula";
 const ERRORS: Record<string, string> = {
   insufficient_balance: BALANCE_CHANGED,
@@ -536,6 +563,7 @@ const ERRORS: Record<string, string> = {
   invalid_cns: "CNS inválido: confira os 15 dígitos",
   reason_required: REASON_TEXT,
   invalid_reason: REASON_TEXT,
+  return_exceeds: RETURN_EXCEEDS,
   invalid_items: "informe todos os lotes da transferência",
   too_many_requests: "muitas buscas em pouco tempo — espere um minuto",
   catalog_unavailable: "o catálogo de medicamentos está indisponível — tente de novo em instantes",

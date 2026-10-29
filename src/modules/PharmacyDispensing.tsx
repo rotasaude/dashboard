@@ -9,9 +9,11 @@ import { useMutation } from "@tanstack/react-query";
 import { lookupPrescriptions, type Dispensation, type PharmacyLocation, type PrescriptionLookupInput, type PrescriptionView } from "../lib/api";
 import { todayInCity } from "../lib/campaigns";
 import { PRESCRIPTION_CHANGED, pharmacyError } from "../lib/pharmacy";
-import { alert, muted, okText, stack } from "./exams/styles";
+import { secondaryButtonStyle } from "../components/formStyles";
+import { alert, muted, okText, row, stack } from "./exams/styles";
 import { DispenseForm } from "./pharmacy/DispenseForm";
 import { LocationPick } from "./pharmacy/LocationPick";
+import { PatientHistory } from "./pharmacy/PatientHistory";
 import { PharmacyGate } from "./pharmacy/PharmacyGate";
 import { PrescriptionCard } from "./pharmacy/PrescriptionCard";
 import { PrescriptionLookup } from "./pharmacy/PrescriptionLookup";
@@ -53,6 +55,8 @@ function Body({ location, today, renderDispense }: { location: PharmacyLocation;
   const [ notice, setNotice ] = useState<string | null>(null);
   const [ problem, setProblem ] = useState<string | null>(null);
   const [ rereading, setRereading ] = useState(false);
+  // O paciente cujo histórico de retiradas está aberto: o painel só nasce no clique (cada abertura é uma leitura nominal com trilha).
+  const [ historyOf, setHistoryOf ] = useState<string | null>(null);
   // Só a busca (ou a releitura) mais recente vale: `clear` e `onFound` incrementam; a resposta de uma releitura que ficou para trás é ignorada.
   const seq = useRef(0);
   // O `seq` de quando o formulário abriu: se mudou (busca nova ou limpa durante o envio), a resposta da dispensação não refaz a busca antiga.
@@ -60,7 +64,7 @@ function Body({ location, today, renderDispense }: { location: PharmacyLocation;
   // A nova leitura da MESMA busca, uma vez, depois de dispensar (mutação: grava trilha, sem cache nem releitura sozinha).
   const reread = useMutation({ mutationFn: (input: PrescriptionLookupInput) => lookupPrescriptions(input), gcTime: 0 });
 
-  const clear = () => { seq.current += 1; setRereading(false); setFound(null); setDispensing(null); setNotice(null); setProblem(null); };
+  const clear = () => { seq.current += 1; setRereading(false); setFound(null); setDispensing(null); setNotice(null); setProblem(null); setHistoryOf(null); };
 
   function dispensed(input: PrescriptionLookupInput, patientId: string | null) {
     const mine = seq.current;
@@ -91,14 +95,29 @@ function Body({ location, today, renderDispense }: { location: PharmacyLocation;
       <p className="mono" style={muted}>{`Local: ${location.name}`}</p>
       <PrescriptionLookup location={location} today={today} onClear={clear}
         onFound={(list, patientId, input) => {
-          seq.current += 1; setRereading(false); setDispensing(null); setNotice(null); setProblem(null); setFound({ list, patientId, input });
+          seq.current += 1; setRereading(false); setDispensing(null); setNotice(null); setProblem(null); setHistoryOf(null); setFound({ list, patientId, input });
         }} />
       {notice && <p role="status" style={okText}>{notice}</p>}
       {problem && <p role="alert" style={alert}>{problem}</p>}
       {rereading && <p className="mono" style={muted}>relendo a receita…</p>}
       {found && !rereading && found.list.length === 0 && <p style={muted}>{found.patientId ? NO_PRESCRIPTION_PATIENT_TEXT : NO_PRESCRIPTION_TEXT}</p>}
       {found && !rereading && found.list.length > 0 && found.patientId && <p style={muted}>{PATIENT_WINDOW_TEXT}</p>}
-      {!rereading && !open && found?.list.map((p) => <PrescriptionCard key={`${p.kind}-${p.id}`} p={p} onDispense={() => { setNotice(null); opened.current = seq.current; setDispensing(p.id); }} />)}
+      {/* Busca por paciente: um botão só, do paciente escolhido; busca pelo código: o botão fica no cartão (paciente da receita). */}
+      {found?.patientId && !open && (
+        <div style={row}>
+          <button type="button" style={secondaryButtonStyle} onClick={() => setHistoryOf(found.patientId)}>Histórico de retiradas</button>
+        </div>
+      )}
+      {!rereading && !open && found?.list.map((p) => (
+        <PrescriptionCard key={`${p.kind}-${p.id}`} p={p} onDispense={() => { setNotice(null); setHistoryOf(null); opened.current = seq.current; setDispensing(p.id); }}
+          onHistory={found.patientId ? undefined : () => setHistoryOf(p.patient.id)} />
+      ))}
+      {historyOf && !open && (
+        <div style={stack}>
+          <div style={row}><button type="button" style={secondaryButtonStyle} onClick={() => setHistoryOf(null)}>Fechar histórico</button></div>
+          <PatientHistory key={historyOf} patientId={historyOf} />
+        </div>
+      )}
       {!rereading && found && open && renderDispense({
         location, prescription: open, today, onDone: () => done(found.input, found.patientId), onStale: stale, onCancel: () => setDispensing(null)
       })}

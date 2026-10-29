@@ -7,7 +7,7 @@ import { fmtDay } from "../../lib/exams";
 import { fmtQuantity, prescriptionBlock } from "../../lib/pharmacy";
 import { NO_NAME } from "../../lib/territoryRegistry";
 import { Tag } from "../../components/Tag";
-import { buttonStyle } from "../../components/formStyles";
+import { buttonStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { box, muted, row } from "../exams/styles";
 
 const itemLine = { margin: 0, display: "flex", flexDirection: "column", gap: 2, fontSize: 12.5 } as const;
@@ -22,7 +22,7 @@ function itemValidity(i: PrescriptionItemView): string | null {
   return i.expired ? `vencido em ${fmtDay(i.valid_until)}` : `vale até ${fmtDay(i.valid_until)}`;
 }
 
-export function PrescriptionCard({ p, onDispense }: { p: PrescriptionView; onDispense?(): void }) {
+export function PrescriptionCard({ p, onDispense, onHistory }: { p: PrescriptionView; onDispense?(): void; onHistory?(): void }) {
   const kind = prescriptionKindLabel(p.kind);
   const block = prescriptionBlock(p);
   return (
@@ -60,6 +60,8 @@ export function PrescriptionCard({ p, onDispense }: { p: PrescriptionView; onDis
       {block ? <div style={row}><Tag tone="down" mono={false}>{block}</Tag></div> : onDispense && (
         <div style={row}><button type="button" style={buttonStyle} onClick={onDispense}>Dispensar</button></div>
       )}
+      {/* O histórico de retiradas é do paciente, não da receita: o botão vale mesmo com a receita vencida ou cancelada. */}
+      {onHistory && <div style={row}><button type="button" style={secondaryButtonStyle} onClick={onHistory}>Histórico de retiradas</button></div>}
     </article>
   );
 }

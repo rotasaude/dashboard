@@ -8,9 +8,9 @@ import {
   errorPath, filledLines, fmtQuantity, fmtSigned, hasDifference, issuedOnProblem, itemBlock, lineQuantity, locationRoles, lotOptionLabel,
   lotKindProblem, lotsForKind, lotsWithBalance, needsRetention, newReceiptLine, normalizeShortCode, notificationNumberProblem, pharmacyError, pharmacyProblems, pharmacyRefusals,
   pharmacyRoles, prescriberProblem, prescriptionBlock, problemItemIndex, quantityProblem, reasonProblem, receiptItems, receiptProblems,
-  receiveBody, receiveProblems, settingsProblem, sortPositions, suggestedLotId, toApiQuantity, transferProblems, movementDocument, movementLabel
+  receiveBody, receiveProblems, returnBody, returnProblems, returnRemaining, settingsProblem, sortPositions, suggestedLotId, toApiQuantity, transferProblems, movementDocument, movementLabel
 } from "./pharmacy";
-import { AMOXI, CENTRAL, CLONA, TODAY27, UBS_FARM, lotBalance, position, prescription, rxItem, stockLot, transfer } from "../test/pharmacyFixtures";
+import { AMOXI, CENTRAL, CLONA, TODAY27, UBS_FARM, dispensation, lotBalance, position, prescription, rxItem, stockLot, transfer } from "../test/pharmacyFixtures";
 
 const user = (roles: string[], features: string[] = [ "pharmacy" ], operator = false) => ({ operator, memberships: roles.map((role) => ({ role })), features });
 
@@ -375,6 +375,26 @@ describe("textos da receita externa e configurações", () => {
     expect(settingsProblem({ ...s, common_validity_days: "0" })).toBe("validade da receita comum de 1 a 365 dias");
     expect(settingsProblem({ ...s, continuous_validity_days: "366" })).toBe("validade da receita de uso contínuo de 1 a 365 dias");
     expect(settingsProblem({ ...s, expiry_alert_days: "" })).toBe("alerta de validade de 1 a 365 dias");
+  });
+});
+
+describe("devolução", () => {
+  const item = { ...dispensation().items[0], quantity: "21.00", returned_total: "5.00" };
+  it("o que resta devolver e as recusas locais, todas de uma vez", () => {
+    expect(returnRemaining(item)).toBe(1600);
+    expect(returnProblems({ quantity: "16", reason: "o paciente trocou de tratamento" }, item)).toEqual([]);
+    expect(returnProblems({ quantity: "16,5", reason: "o paciente trocou de tratamento" }, item)).toEqual([ "a quantidade passa do que resta devolver deste item (16)" ]);
+    expect(returnProblems({ quantity: "", reason: "curto" }, item)).toEqual([ "informe a quantidade", "o motivo tem de 10 a 500 caracteres" ]);
+    expect(returnProblems({ quantity: "1.5", reason: "o paciente trocou de tratamento" }, item)).toHaveLength(1);
+    expect(returnProblems({ quantity: "0", reason: "a".repeat(501) }, item)).toHaveLength(2);
+  });
+  it("corpo: vírgula vira ponto, motivo aparado, local da dispensação", () => {
+    expect(returnBody({ quantity: " 2,5 ", reason: "  o paciente trocou de tratamento " }, item, "l2")).toEqual({
+      location_id: "l2", dispensation_item_id: "di1", quantity: "2.5", reason: "o paciente trocou de tratamento" });
+  });
+  it("return_exceeds tem frase; lot_expired do pharmacyError segue sendo o da dispensação", () => {
+    expect(pharmacyError(new ApiError(422, { error: "return_exceeds" }, "422"))).toBe(
+      "a devolução passa do que ainda resta devolver deste item — abra o histórico de novo para ver o atual");
   });
 });
 

@@ -125,6 +125,40 @@ describe("PharmacyDispensing — busca", () => {
     expect(mocked(api.lookupPrescriptions)).not.toHaveBeenCalled();
   });
 
+  it("histórico de retiradas: só no clique, com o paciente do cartão; fechar e abrir de novo lê de novo", async () => {
+    mocked(api.listDispensations).mockReset();
+    mocked(api.listDispensations).mockResolvedValue({ dispensations: [ dispensation() ], next_before: null });
+    renderWithProviders(<PharmacyDispensing today={TODAY27} />);
+    await searchByCode();
+    await screen.findByRole("article", { name: /Receita digital/ });
+    expect(mocked(api.listDispensations)).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Histórico de retiradas" }));
+    expect((await screen.findByRole("row", { name: /29\/10\/2026/ })).textContent).toContain("Amoxicilina 500 mg cápsula — 21 (lote AMX2611)");
+    expect(mocked(api.listDispensations)).toHaveBeenCalledWith("pa1", null);
+    fireEvent.click(screen.getByRole("button", { name: "Fechar histórico" }));
+    expect(screen.queryByRole("row", { name: /29\/10\/2026/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Histórico de retiradas" }));
+    await screen.findByRole("row", { name: /29\/10\/2026/ });
+    expect(mocked(api.listDispensations)).toHaveBeenCalledTimes(2);
+  });
+
+  it("histórico de retiradas na busca por paciente: um botão, com o paciente escolhido, mesmo sem receita", async () => {
+    mocked(api.lookupPharmacyPerson).mockResolvedValue({ patient_id: "pa1", citizen_id: null, display_name: "Joana Lima", registration_id: null, has_cpf: true, cns_masked: null });
+    mocked(api.lookupPrescriptions).mockResolvedValue([]);
+    mocked(api.listDispensations).mockReset();
+    mocked(api.listDispensations).mockResolvedValue({ dispensations: [ dispensation() ], next_before: null });
+    renderWithProviders(<PharmacyDispensing today={TODAY27} />);
+    fireEvent.click(await screen.findByLabelText("Pelo paciente"));
+    text("CPF", "123.456.789-09");
+    fireEvent.click(screen.getByRole("button", { name: "Buscar pelo CPF" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Usar Joana Lima" }));
+    expect(await screen.findByText("nenhuma receita deste paciente nos últimos 365 dias")).not.toBeNull();
+    expect(mocked(api.listDispensations)).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Histórico de retiradas" }));
+    await screen.findByRole("row", { name: /29\/10\/2026/ });
+    expect(mocked(api.listDispensations)).toHaveBeenCalledWith("pa1", null);
+  });
+
   it("trocar de busca tira a lista; sem releitura sozinha", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
