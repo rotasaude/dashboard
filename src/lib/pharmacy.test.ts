@@ -6,7 +6,7 @@ import {
   NOTIFICATION_LISTS, NOMINAL_QUERY, PHARMACY_ALERTS_REFRESH_MS, PHARMACY_DISABLED, PHARMACY_NO_ROLE, PRESCRIPTION_CHANGED, RETENTION_REQUIRED,
   STATIC_QUERY, UFS, type ReceiptLine, adjustmentBody, adjustmentDelta, adjustmentProblem, availableLots, canUsePharmacy, cents, dispenseBody, dispenseProblems,
   errorPath, filledLines, fmtQuantity, fmtSigned, hasDifference, issuedOnProblem, itemBlock, lineQuantity, locationRoles, lotOptionLabel,
-  lotsWithBalance, needsRetention, newReceiptLine, normalizeShortCode, notificationNumberProblem, pharmacyError, pharmacyProblems,
+  lotKindProblem, lotsForKind, lotsWithBalance, needsRetention, newReceiptLine, normalizeShortCode, notificationNumberProblem, pharmacyError, pharmacyProblems,
   pharmacyRoles, prescriberProblem, prescriptionBlock, problemItemIndex, quantityProblem, reasonProblem, receiptItems, receiptProblems,
   receiveBody, receiveProblems, settingsProblem, sortPositions, suggestedLotId, toApiQuantity, transferProblems, movementDocument, movementLabel
 } from "./pharmacy";
@@ -309,6 +309,41 @@ describe("entrada, recebimento e ajuste", () => {
     expect(adjustmentBody(base, "l2")).toEqual({ location_id: "l2", lot_id: "lot1", kind: "adjustment", counted_quantity: "28.5", reason: "contagem do fim do mês" });
     expect(adjustmentBody({ ...base, kind: "loss", amount: "2,5", reason: " frasco quebrado no balcão " }, "l2"))
       .toEqual({ location_id: "l2", lot_id: "lot1", kind: "loss", quantity: "2.5", reason: "frasco quebrado no balcão" });
+  });
+});
+
+describe("ajuste: contagem é saldo; lotes por tipo", () => {
+  it("a contagem passa de 99999,99; a diferença para o saldo não; perda e vencimento seguem com o teto", () => {
+    const base = { lotId: "lot1", kind: "adjustment" as const, amount: "120000,5", reason: "contagem do fim do mês" };
+    expect(adjustmentProblem(base, "120000")).toBeNull();
+    expect(adjustmentDelta(base, "120000")).toBe("+0.5");
+    expect(fmtSigned("+0.5")).toBe("+0,5");
+    expect(fmtSigned("-1.50")).toBe("-1,5");
+    expect(adjustmentProblem({ ...base, amount: "100029,99" }, "30")).toBeNull();
+    expect(adjustmentProblem({ ...base, amount: "100030" }, "30")).toBe("a diferença entre a contagem e o saldo pode ser no máximo 99999,99");
+    expect(adjustmentProblem({ ...base, amount: "0" }, "100031")).toBe("a diferença entre a contagem e o saldo pode ser no máximo 99999,99");
+    expect(adjustmentProblem({ ...base, amount: "1".repeat(400) }, "30")).toBe("a diferença entre a contagem e o saldo pode ser no máximo 99999,99");
+    expect(adjustmentProblem({ ...base, amount: "2,555" }, "30")).toBe("a contagem tem no máximo 2 casas depois da vírgula");
+    expect(adjustmentProblem({ ...base, kind: "loss", amount: "100000" }, "200000")).toBe("a quantidade pode ser no máximo 99999,99");
+    expect(adjustmentProblem({ ...base, kind: "expiry", amount: "100000" }, "200000")).toBe("a quantidade pode ser no máximo 99999,99");
+  });
+  it("lotes por tipo: perda só não vencido, vencimento só vencido, contagem qualquer", () => {
+    const fresh = lotBalance({ lot: stockLot({ id: "f", expires_on: TODAY27 }) });
+    const old = lotBalance({ lot: stockLot({ id: "o", expires_on: "2026-10-28" }) });
+    const empty = lotBalance({ lot: stockLot({ id: "e", expires_on: "2026-10-01" }), balance: "0" });
+    const p = position({ lots: [ fresh, old, empty ] });
+    const ids = (k: "" | "adjustment" | "loss" | "expiry") => lotsForKind(p, k, TODAY27).map((b) => b.lot.id);
+    expect(ids("loss")).toEqual([ "f" ]);
+    expect(ids("expiry")).toEqual([ "o" ]);
+    expect(ids("adjustment")).toEqual([ "o", "f" ]);
+    expect(ids("")).toEqual([ "o", "f" ]);
+    expect(lotsForKind(undefined, "loss", TODAY27)).toEqual([]);
+    expect(lotKindProblem("loss", old.lot, TODAY27)).toBe("lote vencido — registre como vencimento, não como perda");
+    expect(lotKindProblem("expiry", fresh.lot, TODAY27)).toBe("vencimento só de lote já vencido — use perda");
+    expect(lotKindProblem("expiry", old.lot, TODAY27)).toBeNull();
+    expect(lotKindProblem("loss", fresh.lot, TODAY27)).toBeNull();
+    expect(lotKindProblem("adjustment", old.lot, TODAY27)).toBeNull();
+    expect(lotKindProblem("loss", undefined, TODAY27)).toBeNull();
   });
 });
 

@@ -5,7 +5,7 @@ import {
   ApiError, errorCode,
   type AdjustmentInput, type AdjustmentKind, type DispensationInput, type LotBalance, type PharmacyLocation, type PharmacySettings,
   type PrescriberInput, type PrescriptionItemView, type PrescriptionView, type ReceiptItemInput, type ReceiveInput, type StockItem,
-  type StockMovement, type StockPosition, type StockTransfer
+  type StockLot, type StockMovement, type StockPosition, type StockTransfer
 } from "./api";
 import { NOMINAL_QUERY, STATIC_QUERY } from "./careLines";
 import { featureDisabledKey, featureLabel, hasFeature } from "./features";
@@ -117,14 +117,15 @@ export const UFS = [
 export const NOTIFICATION_LISTS = [ "A1", "A2", "A3", "B1", "B2" ];
 
 // ─── Quantidade: vírgula, até 2 casas, no máximo 99999,99; recusa, nunca corta ──
-export function quantityProblem(raw: string, label = "a quantidade", opts: { allowZero?: boolean } = {}): string | null {
+// `unbounded`: sem o teto de 99999,99 — só a contagem de inventário (é um SALDO; o teto vale para a diferença, em adjustmentProblem).
+export function quantityProblem(raw: string, label = "a quantidade", opts: { allowZero?: boolean; unbounded?: boolean } = {}): string | null {
   const t = raw.trim();
   if (t === "") return `informe ${label}`;
   if (hasDot(t)) return DOT_IN_NUMBER;
   if (!/^\d+(,\d+)?$/.test(t)) return `${label}: use só dígitos e vírgula`;
   const [ int, dec = "" ] = t.split(",");
   if (dec.length > 2) return `${label} tem no máximo 2 casas depois da vírgula`;
-  if (int.length > 5) return `${label} pode ser no máximo 99999,99`;
+  if (!opts.unbounded && int.length > 5) return `${label} pode ser no máximo 99999,99`;
   if (!opts.allowZero && Number(`${int}.${dec || "0"}`) === 0) return `${label} precisa ser maior que zero`;
   return null;
 }
@@ -140,7 +141,8 @@ export function fmtQuantity(api: string | null | undefined): string {
 
 export function fmtSigned(api: string): string {
   const n = cents(api);
-  return n > 0 ? `+${fmtQuantity(api)}` : fmtQuantity(api);
+  const plain = api.replace(/^\+/, ""); // adjustmentDelta já devolve "+1": o sinal não pode dobrar
+  return n > 0 ? `+${fmtQuantity(plain)}` : fmtQuantity(plain);
 }
 
 // Centésimos inteiros: compara saldos sem erro de ponto flutuante.
@@ -169,6 +171,21 @@ export function suggestedLotId(p: StockPosition | undefined, today: string): str
 // Perda e vencimento escolhem entre os lotes com saldo, vencidos inclusive.
 export function lotsWithBalance(p: StockPosition | undefined): LotBalance[] {
   return (p?.lots ?? []).filter((b) => cents(b.balance) > 0).sort(byExpiry);
+}
+
+// Perda: só lote não vencido; vencimento: só lote já vencido (o api devolve lot_expired / lot_not_expired); contagem: qualquer lote com saldo.
+export function lotsForKind(p: StockPosition | undefined, kind: AdjustmentKind | "", today: string): LotBalance[] {
+  const all = lotsWithBalance(p);
+  if (kind === "loss") return all.filter((b) => b.lot.expires_on >= today);
+  if (kind === "expiry") return all.filter((b) => b.lot.expires_on < today);
+  return all;
+}
+
+export function lotKindProblem(kind: AdjustmentKind | "", lot: StockLot | undefined, today: string): string | null {
+  if (!lot) return null;
+  if (kind === "loss" && lot.expires_on < today) return "lote vencido — registre como vencimento, não como perda";
+  if (kind === "expiry" && lot.expires_on >= today) return "vencimento só de lote já vencido — use perda";
+  return null;
 }
 
 export function lotOptionLabel(b: LotBalance, suggested: boolean): string {
@@ -400,21 +417,25 @@ export function hasDifference(lines: ReceiveLine[], t: StockTransfer): boolean {
 export interface AdjustmentDraft { lotId: string; kind: AdjustmentKind | ""; amount: string; reason: string }
 
 const amountLabel = (kind: AdjustmentKind | ""): string => (kind === "adjustment" ? "a contagem" : "a quantidade");
+const MAX_QUANTITY_CENTS = 9_999_999;
 
 export function adjustmentProblem(d: AdjustmentDraft, balance: string): string | null {
   if (d.kind === "") return "escolha o tipo: ajuste de contagem, perda ou vencimento";
   if (!d.lotId) return "escolha o lote";
-  const q = quantityProblem(d.amount, amountLabel(d.kind), { allowZero: d.kind === "adjustment" });
+  // A contagem é um SALDO: pode passar de 99999,99; o que o api limita é a diferença para o saldo (422 invalid_quantity).
+  const counting = d.kind === "adjustment";
+  const q = quantityProblem(d.amount, amountLabel(d.kind), { allowZero: counting, unbounded: counting });
   if (q) return q;
   const amount = cents(toApiQuantity(d.amount));
-  if (d.kind === "adjustment" && amount === cents(balance)) return "a contagem é igual ao saldo — não há o que ajustar";
+  if (counting && amount === cents(balance)) return "a contagem é igual ao saldo — não há o que ajustar";
+  if (counting && Math.abs(amount - cents(balance)) > MAX_QUANTITY_CENTS) return "a diferença entre a contagem e o saldo pode ser no máximo 99999,99";
   if (d.kind !== "adjustment" && amount > cents(balance)) return `saída maior que o saldo do lote (${fmtQuantity(balance)})`;
   return reasonProblem(d.reason);
 }
 
 // A variação do saldo, no formato do api e com sinal ("-1.5", "+1", "0"); 0 quando ainda não dá para calcular.
 export function adjustmentDelta(d: AdjustmentDraft, balance: string): string {
-  if (d.kind === "" || quantityProblem(d.amount, "", { allowZero: true })) return "0";
+  if (d.kind === "" || quantityProblem(d.amount, "", { allowZero: true, unbounded: d.kind === "adjustment" })) return "0";
   const amount = cents(toApiQuantity(d.amount));
   const delta = d.kind === "adjustment" ? amount - cents(balance) : -amount;
   if (delta === 0) return "0";
