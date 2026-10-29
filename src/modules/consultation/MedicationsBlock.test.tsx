@@ -124,4 +124,12 @@ describe("MedicationsBlock", () => {
     finish(medication());
     await waitFor(() => expect(screen.queryByRole("region", { name: "Medicamento em uso de fora" })).toBeNull());
   });
+
+  it("última retirada na farmácia, só leitura; sem retirada, nada", async () => {
+    mocked(api.listPatientMedications).mockResolvedValue([ medication({ last_dispensed_on: "2026-10-20" }), medication({ id: "pm2", label: "Sinvastatina 20 mg" }) ]);
+    renderWithProviders(<MedicationsBlock patientId="pa1" draftConsultationId={null} />);
+    const list = within(await screen.findByRole("list", { name: "medicamentos em uso" }));
+    expect(within(list.getByText(/^Metformina 850 mg/).closest("li")!).getByText("última retirada 20/10/2026")).not.toBeNull();
+    expect(within(list.getByText(/^Sinvastatina 20 mg/).closest("li")!).queryByText(/última retirada/)).toBeNull();
+  });
 });

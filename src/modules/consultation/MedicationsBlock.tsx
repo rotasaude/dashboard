@@ -11,6 +11,7 @@ import {
   EMPTY_EXTERNAL, MEDICATIONS_KEY, MEDICATION_ORIGIN_LABEL, MEDICATION_STATUS_LABEL, documentError, externalChange, externalProblem,
   medicationLine, sortMedications, type ExternalDraft
 } from "../../lib/clinicalDocuments";
+import { fmtDay } from "../../lib/exams";
 import { Tag } from "../../components/Tag";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { MedicationSearch } from "../documents/MedicationSearch";
@@ -66,6 +67,7 @@ export function MedicationsBlock({ patientId, draftConsultationId, unitId, searc
               <Tag tone={m.status === "active" ? "ok" : "neutral"} mono={false}>{MEDICATION_STATUS_LABEL[m.status] ?? m.status}</Tag>
               <Tag mono={false}>{MEDICATION_ORIGIN_LABEL[m.origin] ?? m.origin}</Tag>
               {m.continuous && <Tag mono={false}>uso contínuo</Tag>}
+              {m.last_dispensed_on && <Tag mono={false}>{`última retirada ${fmtDay(m.last_dispensed_on)}`}</Tag>}
               {draftConsultationId && m.status === "active" && (
                 <button type="button" aria-label={`Suspender ${m.label}`} disabled={busy !== null}
                   style={busy !== null ? disabledButtonStyle : secondaryButtonStyle} onClick={() => void change(m.id, "suspend")}>Suspender</button>

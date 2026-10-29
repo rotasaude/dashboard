@@ -11,7 +11,7 @@ describe("linha do tempo — procedimentos (módulo 22; contrato §9)", () => {
 
   it("tipo e situação em português; não abre detalhe", () => {
     expect(timelineKindLabel("procedure")).toBe("Procedimento");
-    expect(TIMELINE_KINDS[TIMELINE_KINDS.length - 1]).toEqual({ key: "procedure", label: "Procedimento" });
+    expect(TIMELINE_KINDS[TIMELINE_KINDS.length - 2]).toEqual({ key: "procedure", label: "Procedimento" }); // a Dispensação (27a) vem depois
     expect(statusLabel("recorded")).toBe("registrado");
     expect(statusLabel("cancelled")).toBe("cancelado");
     expect(detailTarget(proc, true)).toBeNull();
@@ -22,7 +22,7 @@ describe("linha do tempo — procedimentos (módulo 22; contrato §9)", () => {
     expect(kinds.some((k) => k.key === "procedure")).toBe(false);
     expect(kinds.some((k) => k.key === "exam")).toBe(true);
     expect(timelineKinds(false, true).map((k) => k.key)).toContain("procedure");
-    expect(timelineKinds(true, true)).toEqual(TIMELINE_KINDS);
+    expect(timelineKinds(true, true, true)).toEqual(TIMELINE_KINDS);
     expect(filtersFrom(toggleKind(EMPTY_DRAFT, "campaign"), kinds).kinds).not.toContain("procedure");
   });
 

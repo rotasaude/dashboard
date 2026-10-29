@@ -22,13 +22,17 @@ export const TIMELINE_KINDS: { key: TimelineKind; label: string }[] = [
   { key: "controlled_notification", label: "Notificação de receita" },
   { key: "campaign", label: "Campanha" },
   { key: "exam", label: "Exame" },
-  { key: "procedure", label: "Procedimento" }
+  { key: "procedure", label: "Procedimento" },
+  { key: "dispensation", label: "Dispensação" }
 ];
 
 // O tipo Exame só existe com o rastreamento de exames ligado (módulo 21a); o
-// Procedimento, com o faturamento de procedimentos (módulo 22).
-export function timelineKinds(examTracking: boolean, procedureBilling = false): typeof TIMELINE_KINDS {
-  return TIMELINE_KINDS.filter((k) => (k.key !== "exam" || examTracking) && (k.key !== "procedure" || procedureBilling));
+// Procedimento, com o faturamento de procedimentos (módulo 22); a Dispensação,
+// com a farmácia — módulo 27a. O interruptor só tira o filtro: a entrada que o
+// api devolve continua na lista (registro clínico retido).
+export function timelineKinds(examTracking: boolean, procedureBilling = false, pharmacy = false): typeof TIMELINE_KINDS {
+  return TIMELINE_KINDS.filter((k) =>
+    (k.key !== "exam" || examTracking) && (k.key !== "procedure" || procedureBilling) && (k.key !== "dispensation" || pharmacy));
 }
 
 export const ALL_FILTERS: TimelineFilters = { kinds: [], from: "", to: "" };
@@ -151,7 +155,9 @@ const STATUS_LABEL: Record<string, string> = {
   acknowledged: "ciência dada",
   external: "resultado externo",
   // Módulo 22 (contrato §1): procedimento realizado (cancelled já está acima).
-  recorded: "registrado"
+  recorded: "registrado",
+  // Módulo 27a: retirada na farmácia (a entrada não abre detalhe — detail_ref nulo).
+  dispensed: "dispensado"
 };
 
 export function statusLabel(status: string | null, apiLabel?: string | null): string {
