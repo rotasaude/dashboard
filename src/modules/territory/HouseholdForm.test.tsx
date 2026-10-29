@@ -3,8 +3,10 @@
 // (preflight A14, C7, C8, C19): tipo de imóvel e renda em texto, logradouro
 // com o tipo DNE à parte, família com `responsible: { patient_id }` e a
 // versão do DOMICÍLIO.
+import type { ReactElement, ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const real = await importOriginal<typeof import("../../lib/api")>();
@@ -16,9 +18,26 @@ import * as api from "../../lib/api";
 import { HouseholdForm } from "./HouseholdForm";
 import { FamilyForm } from "./FamilyForm";
 import { STALE_TEXT } from "../../lib/territoryRegistry";
+import { AuthProvider } from "../../lib/auth";
+import { PANEL_NEIGHBORHOODS_KEY } from "../../lib/neighborhoodFilter";
 import { renderWithProviders } from "../../test/campaignFixtures";
 import { TODAY24, family, household, territoryUser } from "../../test/territoryFixtures";
 
+const NEIGHBORHOODS = [
+  { id: "nb1", name: "Vila Verde", active: true },
+  { id: "nb2", name: "Vila Velha", active: false },
+  { id: "nb3", name: "Jardim das Américas e Arredores Sul", active: true }
+];
+// Os bairros já estão no cache quando o formulário monta (staleTime infinito: nenhuma leitura em segundo plano). Esperá-los
+// com `findBy*` dependia do relógio: o formulário tem ~400 opções, cada render e cada consulta por papel custam centenas de
+// ms sob carga, e o timeout de 1 s do `findBy` estourava ("Vila Verde" nunca aparecia) — flaky só com a máquina ocupada.
+function renderHousehold(ui: ReactElement) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
+  client.setQueryData(PANEL_NEIGHBORHOODS_KEY, NEIGHBORHOODS);
+  const wrapper = ({ children }: { children: ReactNode }) =>
+    <QueryClientProvider client={client}><AuthProvider>{children}</AuthProvider></QueryClientProvider>;
+  return { client, ...render(ui, { wrapper }) };
+}
 const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
 const typeIn = (label: string, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
 const pick = (label: string, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
@@ -26,23 +45,18 @@ afterEach(cleanup);
 beforeEach(() => {
   for (const fn of [ api.fetchCurrentSession, api.createHousehold, api.updateHousehold, api.addFamily, api.updateFamily, api.listPanelNeighborhoods ]) mocked(fn).mockReset();
   mocked(api.fetchCurrentSession).mockResolvedValue(territoryUser());
-  mocked(api.listPanelNeighborhoods).mockResolvedValue([
-    { id: "nb1", name: "Vila Verde", active: true },
-    { id: "nb2", name: "Vila Velha", active: false },
-    { id: "nb3", name: "Jardim das Américas e Arredores Sul", active: true }
-  ]);
+  mocked(api.listPanelNeighborhoods).mockResolvedValue(NEIGHBORHOODS);
   mocked(api.createHousehold).mockResolvedValue(household());
   mocked(api.updateHousehold).mockResolvedValue(household({ version: 3 }));
   mocked(api.addFamily).mockResolvedValue(household({ version: 3 }));
   mocked(api.updateFamily).mockResolvedValue(household({ version: 3 }));
 });
 
-async function fillAddress() {
+function fillAddress() {
   typeIn("CEP", "81020-000");
   pick("Tipo de logradouro", "081");
   typeIn("Logradouro", "das Flores");
   typeIn("Número", "120");
-  await screen.findByRole("option", { name: "Vila Verde" });
   pick("Bairro", "nb1");
 }
 
@@ -51,8 +65,8 @@ const save = () => fireEvent.click(screen.getByRole("button", { name: "Salvar do
 describe("HouseholdForm", () => {
   it("cria um domicílio com moradia; o corpo tem só o que a ficha leva", async () => {
     const onSaved = vi.fn();
-    renderWithProviders(<HouseholdForm microAreaId="ma1" onSaved={onSaved} onCancel={vi.fn()} />);
-    await fillAddress();
+    renderHousehold(<HouseholdForm microAreaId="ma1" onSaved={onSaved} onCancel={vi.fn()} />);
+    fillAddress();
     pick("Tipo de imóvel", "1");
     pick("Localização", "83");
     pick("Situação de moradia ou posse da terra", "75");
@@ -68,8 +82,8 @@ describe("HouseholdForm", () => {
   });
 
   it("comércio: a seção de moradia some e não vai no corpo", async () => {
-    renderWithProviders(<HouseholdForm microAreaId="ma1" onSaved={vi.fn()} onCancel={vi.fn()} />);
-    await fillAddress();
+    renderHousehold(<HouseholdForm microAreaId="ma1" onSaved={vi.fn()} onCancel={vi.fn()} />);
+    fillAddress();
     pick("Tipo de imóvel", "1");
     pick("Localização", "83");
     pick("Tipo de imóvel", "2");
@@ -83,8 +97,8 @@ describe("HouseholdForm", () => {
   });
 
   it("recusa do domicílio: sem moradia nem família; endereço fica", async () => {
-    renderWithProviders(<HouseholdForm microAreaId="ma1" onSaved={vi.fn()} onCancel={vi.fn()} />);
-    await fillAddress();
+    renderHousehold(<HouseholdForm microAreaId="ma1" onSaved={vi.fn()} onCancel={vi.fn()} />);
+    fillAddress();
     pick("Tipo de imóvel", "1");
     pick("Localização", "83");
     fireEvent.click(screen.getByLabelText("O morador recusou o cadastro do domicílio"));
@@ -98,7 +112,7 @@ describe("HouseholdForm", () => {
   });
 
   it("recusa sem endereço: o endereço vai nulo", async () => {
-    renderWithProviders(<HouseholdForm microAreaId="ma1" onSaved={vi.fn()} onCancel={vi.fn()} />);
+    renderHousehold(<HouseholdForm microAreaId="ma1" onSaved={vi.fn()} onCancel={vi.fn()} />);
     pick("Tipo de imóvel", "1");
     fireEvent.click(screen.getByLabelText("O morador recusou o cadastro do domicílio"));
     save();
@@ -107,8 +121,8 @@ describe("HouseholdForm", () => {
   });
 
   it("CEP ruim é recusado antes de enviar, com o campo", async () => {
-    renderWithProviders(<HouseholdForm microAreaId="ma1" onSaved={vi.fn()} onCancel={vi.fn()} />);
-    await fillAddress();
+    renderHousehold(<HouseholdForm microAreaId="ma1" onSaved={vi.fn()} onCancel={vi.fn()} />);
+    fillAddress();
     pick("Tipo de imóvel", "2");
     typeIn("CEP", "8102");
     save();
@@ -119,8 +133,8 @@ describe("HouseholdForm", () => {
   });
 
   it("o nome do logradouro não repete o tipo", async () => {
-    renderWithProviders(<HouseholdForm microAreaId="ma1" onSaved={vi.fn()} onCancel={vi.fn()} />);
-    await fillAddress();
+    renderHousehold(<HouseholdForm microAreaId="ma1" onSaved={vi.fn()} onCancel={vi.fn()} />);
+    fillAddress();
     pick("Tipo de imóvel", "2");
     typeIn("Logradouro", "Rua das Flores");
     save();
@@ -130,8 +144,8 @@ describe("HouseholdForm", () => {
   });
 
   it("bairro: inativos e nomes acima de 30 letras ficam fora; sem bairro da lista, vai o texto", async () => {
-    renderWithProviders(<HouseholdForm microAreaId="ma1" onSaved={vi.fn()} onCancel={vi.fn()} />);
-    await fillAddress();
+    renderHousehold(<HouseholdForm microAreaId="ma1" onSaved={vi.fn()} onCancel={vi.fn()} />);
+    fillAddress();
     const options = Array.from((screen.getByLabelText("Bairro") as HTMLSelectElement).options).map((o) => o.value);
     expect(options).toEqual([ "", "nb1" ]);
     expect(screen.queryByLabelText("Bairro (texto)")).toBeNull();
@@ -145,8 +159,8 @@ describe("HouseholdForm", () => {
   });
 
   it("sem número: o número sai e vai no_number", async () => {
-    renderWithProviders(<HouseholdForm microAreaId="ma1" onSaved={vi.fn()} onCancel={vi.fn()} />);
-    await fillAddress();
+    renderHousehold(<HouseholdForm microAreaId="ma1" onSaved={vi.fn()} onCancel={vi.fn()} />);
+    fillAddress();
     fireEvent.click(screen.getByLabelText("Sem número"));
     expect(screen.queryByLabelText("Número")).toBeNull();
     pick("Tipo de imóvel", "2");
@@ -156,8 +170,8 @@ describe("HouseholdForm", () => {
   });
 
   it("abrigo (07): pede a instituição de permanência com o responsável técnico", async () => {
-    renderWithProviders(<HouseholdForm microAreaId="ma1" onSaved={vi.fn()} onCancel={vi.fn()} />);
-    await fillAddress();
+    renderHousehold(<HouseholdForm microAreaId="ma1" onSaved={vi.fn()} onCancel={vi.fn()} />);
+    fillAddress();
     pick("Tipo de imóvel", "7");
     pick("Localização", "83");
     // Campos que não cabem em abrigo nem aparecem.
@@ -176,11 +190,10 @@ describe("HouseholdForm", () => {
   });
 
   it("edição: começa da versão gravada e manda tudo de volta com a versão", async () => {
-    renderWithProviders(<HouseholdForm microAreaId="ma1" initial={household()} onSaved={vi.fn()} onCancel={vi.fn()} />);
+    renderHousehold(<HouseholdForm microAreaId="ma1" initial={household()} onSaved={vi.fn()} onCancel={vi.fn()} />);
     expect((screen.getByLabelText("Logradouro") as HTMLInputElement).value).toBe("das Flores");
     expect((screen.getByLabelText("Número de cômodos") as HTMLInputElement).value).toBe("4");
-    await screen.findByRole("option", { name: "Vila Verde" });
-    save();
+      save();
     await waitFor(() => expect(api.updateHousehold).toHaveBeenCalled());
     const [ id, body, version ] = mocked(api.updateHousehold).mock.calls[0];
     expect(id).toBe("hh1");
@@ -195,7 +208,7 @@ describe("HouseholdForm", () => {
   it("409 stale_version: frase, o formulário fica, recarregar relê", async () => {
     mocked(api.updateHousehold).mockRejectedValue(new api.ApiError(409, { error: "stale_version" }, "409"));
     const onCancel = vi.fn();
-    const { client } = renderWithProviders(<HouseholdForm microAreaId="ma1" initial={household()} onSaved={vi.fn()} onCancel={onCancel} />);
+    const { client } = renderHousehold(<HouseholdForm microAreaId="ma1" initial={household()} onSaved={vi.fn()} onCancel={onCancel} />);
     const invalidate = vi.spyOn(client, "invalidateQueries");
     typeIn("Ponto de referência", "em frente à praça");
     save();
@@ -210,8 +223,8 @@ describe("HouseholdForm", () => {
 
   it("422 invalid_household com path mostra a frase e marca o campo", async () => {
     mocked(api.createHousehold).mockRejectedValue(new api.ApiError(422, { error: "invalid_household", path: "address.number" }, "422"));
-    renderWithProviders(<HouseholdForm microAreaId="ma1" onSaved={vi.fn()} onCancel={vi.fn()} />);
-    await fillAddress();
+    renderHousehold(<HouseholdForm microAreaId="ma1" onSaved={vi.fn()} onCancel={vi.fn()} />);
+    fillAddress();
     pick("Tipo de imóvel", "2");
     save();
     expect(await screen.findByText("confira o campo destacado")).not.toBeNull();
@@ -221,8 +234,8 @@ describe("HouseholdForm", () => {
 
   it("nada da ficha vai para o storage", async () => {
     const setItem = vi.spyOn(Storage.prototype, "setItem");
-    renderWithProviders(<HouseholdForm microAreaId="ma1" onSaved={vi.fn()} onCancel={vi.fn()} />);
-    await fillAddress();
+    renderHousehold(<HouseholdForm microAreaId="ma1" onSaved={vi.fn()} onCancel={vi.fn()} />);
+    fillAddress();
     pick("Tipo de imóvel", "1");
     pick("Localização", "83");
     expect(setItem).not.toHaveBeenCalled();
