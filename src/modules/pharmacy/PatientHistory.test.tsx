@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 
 vi.mock("../../lib/api", async (importOriginal) => ({ ...(await importOriginal<typeof import("../../lib/api")>()), fetchCurrentSession: vi.fn(),
-  listDispensations: vi.fn(), listMyPharmacyLocations: vi.fn(), recordReturn: vi.fn(), stepUpMfa: vi.fn() }));
+  listDispensations: vi.fn(), listMyPharmacyLocations: vi.fn(), recordReturn: vi.fn() }));
 import * as api from "../../lib/api";
 import { ApiError } from "../../lib/api";
 import { PatientHistory } from "./PatientHistory";
@@ -17,7 +17,7 @@ const REASON = "o paciente trocou de tratamento";
 
 describe("PatientHistory", () => {
   beforeEach(() => {
-    for (const fn of [ api.listDispensations, api.recordReturn, api.stepUpMfa, api.listMyPharmacyLocations ]) mocked(fn).mockReset();
+    for (const fn of [ api.listDispensations, api.recordReturn, api.listMyPharmacyLocations ]) mocked(fn).mockReset();
     window.localStorage.clear(); window.sessionStorage.clear();
     mocked(api.fetchCurrentSession).mockResolvedValue(phUser([ "pharmacist" ]));
     mocked(api.listMyPharmacyLocations).mockResolvedValue([ UBS_FARM ]);
@@ -75,7 +75,9 @@ describe("PatientHistory", () => {
       await screen.findByRole("row", { name: /29\/10\/2026/ });
       expect(screen.queryByRole("button", { name: /Registrar devolução/ })).toBeNull();
       cleanup();
-      mocked(api.listDispensations).mockResolvedValueOnce({ dispensations: [ dispensation() ], next_before: null });
+      // Sobra do beforeEach (2 respostas enfileiradas): zera antes de reenfileirar, senão o 2º render leria outra dispensação.
+      mocked(api.listDispensations).mockReset();
+      mocked(api.listDispensations).mockResolvedValue({ dispensations: [ dispensation() ], next_before: null });
       mocked(api.listMyPharmacyLocations).mockResolvedValue([ { ...UBS_FARM, roles: [ "pharmacy_assistant" ] } ]);
       renderWithProviders(<PatientHistory patientId="pa1" />);
       expect(await screen.findByRole("button", { name: /Registrar devolução/ })).not.toBeNull();
@@ -91,38 +93,30 @@ describe("PatientHistory", () => {
       expect(screen.queryByRole("button", { name: /Registrar devolução/ })).toBeNull();
     });
 
-    it("limite da quantidade (dispensado − já devolvido) e motivo curto: tudo de uma vez, sem step-up", async () => {
+    it("limite da quantidade (dispensado − já devolvido) e motivo curto: tudo de uma vez, antes de chamar o api", async () => {
       mocked(api.listDispensations).mockReset();
       mocked(api.listDispensations).mockResolvedValue({ next_before: null, dispensations: [ dispensation({
         items: [ { ...dispensation().items[0], returned_total: "5.00" } ] }) ] });
-      mocked(api.fetchCurrentSession).mockResolvedValue(phUser([ "pharmacist" ], { mfa_verified_at: null }));
       await openForm();
       expect(screen.getByText(/até 16/)).not.toBeNull();
       text("Quantidade a devolver", "16,01"); text("Motivo da devolução", "curto");
-      fireEvent.click(screen.getByRole("button", { name: "Revisar devolução" }));
+      fireEvent.click(screen.getByRole("button", { name: "Registrar devolução" }));
       const items = (await screen.findAllByRole("listitem")).map((li) => li.textContent);
       expect(items).toEqual(expect.arrayContaining([ "a quantidade passa do que resta devolver deste item (16)", "o motivo tem de 10 a 500 caracteres" ]));
-      // Recusado ANTES do step-up: nem o campo do código nem o TOTP consumido.
-      expect(screen.queryByLabelText("Código do autenticador")).toBeNull();
-      expect(mocked(api.stepUpMfa)).not.toHaveBeenCalled();
+      // Recusado pela conferência local: o api não é chamado.
       expect(mocked(api.recordReturn)).not.toHaveBeenCalled();
       text("Quantidade a devolver", "1,5,5");
-      fireEvent.click(screen.getByRole("button", { name: "Revisar devolução" }));
+      fireEvent.click(screen.getByRole("button", { name: "Registrar devolução" }));
       expect((await screen.findAllByRole("listitem")).map((li) => li.textContent)).toContain("a quantidade: use só dígitos e vírgula");
     });
 
-    it("sucesso: step-up, corpo com ponto e o item trocado pela dispensação devolvida; sem reler a leitura nominal", async () => {
-      mocked(api.fetchCurrentSession).mockResolvedValue(phUser([ "pharmacist" ], { mfa_verified_at: null }));
-      mocked(api.stepUpMfa).mockResolvedValue(undefined);
+    it("sucesso: corpo com ponto e o item trocado pela dispensação devolvida; sem reler a leitura nominal", async () => {
       mocked(api.recordReturn).mockResolvedValue(dispensation({ retention: { notification_number: null },
         items: [ { ...dispensation().items[0], returned_total: "5.50" } ] }));
       await openForm();
       text("Quantidade a devolver", "5,5"); text("Motivo da devolução", `  ${REASON}  `);
-      fireEvent.click(screen.getByRole("button", { name: "Revisar devolução" }));
-      text("Código do autenticador", "123456");
-      fireEvent.click(await screen.findByRole("button", { name: "Registrar devolução" }));
+      fireEvent.click(screen.getByRole("button", { name: "Registrar devolução" }));
       await waitFor(() => expect(mocked(api.recordReturn)).toHaveBeenCalledWith({ location_id: "l2", dispensation_item_id: "di1", quantity: "5.5", reason: REASON }));
-      expect(mocked(api.stepUpMfa)).toHaveBeenCalledWith("123456");
       expect((await screen.findByRole("status")).textContent).toBe("Devolução registrada.");
       const row = within(screen.getByRole("row", { name: /29\/10\/2026/ }));
       expect(row.getByText("devolvido 5,5")).not.toBeNull();
@@ -132,17 +126,19 @@ describe("PatientHistory", () => {
 
     it.each([
       [ "return_exceeds", 422, "a devolução passa do que ainda resta devolver deste item — abra o histórico de novo para ver o atual" ],
-      [ "lot_expired", 422, "o lote desta retirada já venceu — a devolução não é aceita" ],
+      [ "lot_expired", 422, "o lote desta retirada já venceu — a devolução não é aceita; registre a perda no ajuste de estoque" ],
       [ "invalid_quantity", 422, "quantidade inválida — use até 2 casas depois da vírgula" ],
       [ "missing_role", 403, "seu papel não permite usar a farmácia" ]
     ])("recusa do api (%s) é mostrada e o que foi digitado fica", async (code, status, phrase) => {
       mocked(api.recordReturn).mockRejectedValue(new ApiError(status, { error: code }, String(status)));
       await openForm();
       text("Quantidade a devolver", "2"); text("Motivo da devolução", REASON);
-      fireEvent.click(screen.getByRole("button", { name: "Revisar devolução" }));
-      fireEvent.click(await screen.findByRole("button", { name: "Registrar devolução" }));
-      expect((await screen.findByText(phrase)).getAttribute("role")).toBe("alert");
+      fireEvent.click(screen.getByRole("button", { name: "Registrar devolução" }));
+      expect((await screen.findByText(phrase)).closest("[role=alert]")).not.toBeNull();
       expect(screen.queryByRole("status")).toBeNull();
+      // O que foi digitado fica depois da recusa.
+      expect((screen.getByLabelText("Quantidade a devolver") as HTMLInputElement).value).toBe("2");
+      expect((screen.getByLabelText("Motivo da devolução") as HTMLTextAreaElement).value).toBe(REASON);
       expect(mocked(api.listDispensations)).toHaveBeenCalledTimes(1);
     });
 
@@ -150,8 +146,7 @@ describe("PatientHistory", () => {
       mocked(api.recordReturn).mockRejectedValue(new ApiError(422, { error: "invalid_request", path: "reason" }, "422"));
       await openForm();
       text("Quantidade a devolver", "2"); text("Motivo da devolução", REASON);
-      fireEvent.click(screen.getByRole("button", { name: "Revisar devolução" }));
-      fireEvent.click(await screen.findByRole("button", { name: "Registrar devolução" }));
+      fireEvent.click(screen.getByRole("button", { name: "Registrar devolução" }));
       expect(await screen.findByText("o motivo tem de 10 a 500 caracteres")).not.toBeNull();
     });
   });

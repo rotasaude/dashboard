@@ -527,7 +527,7 @@ export function settingsProblem(raw: Record<keyof PharmacySettings, string>): st
 const REASON_TEXT = "o motivo tem de 10 a 500 caracteres";
 export const RETURN_EXCEEDS = "a devolução passa do que ainda resta devolver deste item — abra o histórico de novo para ver o atual";
 // `lot_expired` na devolução: o ERRORS manda "escolher outro lote", que aqui não existe (a devolução volta ao lote da retirada).
-export const RETURN_LOT_EXPIRED = "o lote desta retirada já venceu — a devolução não é aceita";
+export const RETURN_LOT_EXPIRED = "o lote desta retirada já venceu — a devolução não é aceita; registre a perda no ajuste de estoque";
 const QUANTITY_TEXT = "quantidade inválida — use até 2 casas depois da vírgula";
 const ERRORS: Record<string, string> = {
   insufficient_balance: BALANCE_CHANGED,

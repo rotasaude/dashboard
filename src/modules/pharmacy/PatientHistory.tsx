@@ -24,7 +24,7 @@ const itemList: CSSProperties = { margin: 0, padding: 0, listStyle: "none", disp
 
 interface Returning { dispensationId: string; itemId: string }
 
-export function PatientHistory({ patientId, onGoToSecurity }: { patientId: string; onGoToSecurity?(): void }) {
+export function PatientHistory({ patientId }: { patientId: string }) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const queryKey = [ PH_DISPENSATIONS_KEY, patientId ];
@@ -113,7 +113,7 @@ export function PatientHistory({ patientId, onGoToSecurity }: { patientId: strin
       )}
       {query.isError && query.data && <p role="alert" style={alert}>{pharmacyError(query.error)}</p>}
       {target && targetItem && (
-        <ReturnForm key={targetItem.id} dispensation={target} item={targetItem} onDone={returned} onCancel={() => setReturning(null)} onGoToSecurity={onGoToSecurity} />
+        <ReturnForm key={targetItem.id} dispensation={target} item={targetItem} onDone={returned} onCancel={() => setReturning(null)} />
       )}
     </section>
   );
