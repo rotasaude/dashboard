@@ -6,7 +6,7 @@ import {
   NOTIFICATION_LISTS, NOMINAL_QUERY, PHARMACY_ALERTS_REFRESH_MS, PHARMACY_DISABLED, PHARMACY_NO_ROLE, PRESCRIPTION_CHANGED, RETENTION_REQUIRED,
   STATIC_QUERY, UFS, type ReceiptLine, adjustmentBody, adjustmentDelta, adjustmentProblem, availableLots, canUsePharmacy, cents, dispenseBody, dispenseProblems,
   errorPath, filledLines, fmtQuantity, fmtSigned, hasDifference, issuedOnProblem, itemBlock, lineQuantity, locationRoles, lotOptionLabel,
-  lotKindProblem, lotsForKind, lotsWithBalance, needsRetention, newReceiptLine, normalizeShortCode, notificationNumberProblem, pharmacyError, pharmacyProblems,
+  lotKindProblem, lotsForKind, lotsWithBalance, needsRetention, newReceiptLine, normalizeShortCode, notificationNumberProblem, pharmacyError, pharmacyProblems, pharmacyRefusals,
   pharmacyRoles, prescriberProblem, prescriptionBlock, problemItemIndex, quantityProblem, reasonProblem, receiptItems, receiptProblems,
   receiveBody, receiveProblems, settingsProblem, sortPositions, suggestedLotId, toApiQuantity, transferProblems, movementDocument, movementLabel
 } from "./pharmacy";
@@ -392,6 +392,16 @@ describe("recusas do api", () => {
       { path: "items[0].quantity", text: "o saldo do lote mudou — os lotes foram relidos; confira a quantidade" },
       { path: "items[1]", text: "lote vencido — escolha outro lote" } ]);
     expect(pharmacyProblems(e(422, { error: "lot_expired" }))).toEqual([]);
+  });
+  it("pharmacyRefusals: o código de cada recusa, com ou sem problems", () => {
+    expect(pharmacyRefusals(e(422, { error: "too_early", path: "items[1]", problems: [
+      { path: "items[1]", error: "too_early", next_allowed_on: "2026-11-03" }, "lixo", { path: "items[0].quantity", error: "insufficient_balance" } ] }))).toEqual([
+      { path: "items[1]", code: "too_early", text: "uso contínuo: próxima retirada deste item a partir de 03/11/2026" },
+      { path: "items[0].quantity", code: "insufficient_balance", text: "o saldo do lote mudou — os lotes foram relidos; confira a quantidade" } ]);
+    expect(pharmacyRefusals(e(403, { error: "controlled_requires_pharmacist" }))).toEqual([
+      { path: "", code: "controlled_requires_pharmacist", text: CONTROLLED_PHARMACIST_ONLY } ]);
+    expect(pharmacyRefusals(e(422, { error: "retention_required", path: "items[0]" }))[0]).toMatchObject({ path: "items[0]", code: "retention_required" });
+    expect(pharmacyRefusals(new Error("offline"))).toEqual([ { path: "", code: "", text: "sem conexão com o servidor — tente de novo" } ]);
   });
   it("outro interruptor, papel, 404 e status sem código", () => {
     expect(pharmacyError(e(403, { error: "feature_disabled", feature: "lab" }))).toContain("desligado nesta cidade");

@@ -610,6 +610,25 @@ export function pharmacyProblems(err: unknown): Problem[] {
   });
 }
 
+// Recusas com o código de cada uma (a tela reage ao código: relê lotes, avisa receita mudada, abre a retenção). Com `problems`, uma por
+// problema; sem ele, a recusa do corpo (path vazio quando não há; code vazio quando não é do api).
+export type Refusal = Problem & { code: string };
+export function pharmacyRefusals(err: unknown): Refusal[] {
+  const status = err instanceof ApiError ? err.status : 422;
+  const list = bodyOf(err)?.problems;
+  if (Array.isArray(list) && list.length > 0) {
+    return list.flatMap((raw): Refusal[] => {
+      if (!raw || typeof raw !== "object") return [];
+      const row = raw as Record<string, unknown>;
+      const code = typeof row.error === "string" ? row.error : "";
+      const path = typeof row.path === "string" ? row.path : "";
+      const next = typeof row.next_allowed_on === "string" ? row.next_allowed_on : null;
+      return [ { path, code, text: codeText(code || undefined, path || null, next, status) } ];
+    });
+  }
+  return [ { path: errorPath(err) ?? "", code: errorCode(err) ?? "", text: pharmacyError(err) } ];
+}
+
 // "items[2].quantity" → 2 (posição no corpo enviado); sem índice, null.
 export function problemItemIndex(path: string | null | undefined): number | null {
   const m = path ? /^items\[(\d+)\]/.exec(path) : null;

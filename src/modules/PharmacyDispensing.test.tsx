@@ -6,9 +6,9 @@ vi.mock("../lib/api", async (importOriginal) => ({ ...(await importOriginal<type
   listPositions: vi.fn(), recordDispensation: vi.fn(), listDispensations: vi.fn() }));
 import * as api from "../lib/api";
 import { ApiError } from "../lib/api";
-import { PharmacyDispensing } from "./PharmacyDispensing";
+import { PharmacyDispensing, REREAD_FAILED_TEXT } from "./PharmacyDispensing";
 import { renderWithProviders } from "../test/campaignFixtures";
-import { TODAY27, UBS_FARM, phUser, prescription, rxItem } from "../test/pharmacyFixtures";
+import { TODAY27, UBS_FARM, dispensation, phUser, position, prescription, rxItem } from "../test/pharmacyFixtures";
 
 afterEach(cleanup);
 const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
@@ -142,7 +142,7 @@ describe("PharmacyDispensing — busca", () => {
     mocked(api.lookupPrescriptions).mockResolvedValueOnce([ prescription() ])
       .mockResolvedValueOnce([ prescription({ items: [ rxItem({ dispensed_total: "21", completed: true }) ] }) ]);
     renderWithProviders(<PharmacyDispensing today={TODAY27}
-      renderDispense={({ onDone }) => <button type="button" onClick={onDone}>Concluir (provisório)</button>} />);
+      renderDispense={({ onDone }) => <button type="button" onClick={() => onDone()}>Concluir (provisório)</button>} />);
     await searchByCode("abcde-23456");
     fireEvent.click(await screen.findByRole("button", { name: "Dispensar" }));
     fireEvent.click(screen.getByRole("button", { name: "Concluir (provisório)" }));
@@ -153,18 +153,89 @@ describe("PharmacyDispensing — busca", () => {
     expect(screen.queryByRole("button", { name: "Concluir (provisório)" })).toBeNull();
   });
 
-  it("o encaixe provisório abre e fecha; o auxiliar usa a tela e o almoxarife não", async () => {
+  it("Dispensar abre o formulário no lugar dos cartões; cancelar volta; o auxiliar usa a tela e o almoxarife não", async () => {
     mocked(api.fetchCurrentSession).mockResolvedValue(phUser([ "pharmacy_assistant" ]));
     mocked(api.listMyPharmacyLocations).mockResolvedValue([ { ...UBS_FARM, roles: [ "pharmacy_assistant" ] } ]);
+    mocked(api.listPositions).mockResolvedValue({ positions: [ position() ], next_before: null });
     renderWithProviders(<PharmacyDispensing today={TODAY27} />);
     await searchByCode();
     fireEvent.click(await screen.findByRole("button", { name: "Dispensar" }));
-    expect(screen.getByText("Dispensação em construção")).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Registrar dispensação" })).not.toBeNull();
+    expect(screen.queryByRole("article")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
-    expect(screen.queryByText("Dispensação em construção")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Registrar dispensação" })).toBeNull();
+    expect(screen.getByRole("article", { name: /Receita digital/ })).not.toBeNull();
     cleanup();
     mocked(api.fetchCurrentSession).mockResolvedValue(phUser([ "stock_keeper" ]));
     renderWithProviders(<PharmacyDispensing today={TODAY27} />);
     expect(await screen.findByText("seu papel não permite usar a farmácia")).not.toBeNull();
+  });
+
+  it("o formulário real: dispensa, a mesma busca é refeita e a frase aparece", async () => {
+    mocked(api.listPositions).mockResolvedValue({ positions: [ position() ], next_before: null });
+    mocked(api.recordDispensation).mockResolvedValue(dispensation());
+    mocked(api.lookupPrescriptions).mockResolvedValueOnce([ prescription() ])
+      .mockResolvedValueOnce([ prescription({ items: [ rxItem({ dispensed_total: "21", completed: true }) ] }) ]);
+    renderWithProviders(<PharmacyDispensing today={TODAY27} />);
+    await searchByCode();
+    fireEvent.click(await screen.findByRole("button", { name: "Dispensar" }));
+    await waitFor(() => expect((screen.getByLabelText("Lote — Amoxicilina 500 mg cápsula") as HTMLSelectElement).value).toBe("lot1"));
+    text("Quantidade — Amoxicilina 500 mg cápsula (cápsula)", "21");
+    fireEvent.click(screen.getByLabelText("Receita retida na farmácia"));
+    fireEvent.click(screen.getByRole("button", { name: "Registrar dispensação" }));
+    expect(await screen.findByText("Dispensação registrada.")).not.toBeNull();
+    await screen.findByText("dispensado por completo");
+    expect(mocked(api.lookupPrescriptions)).toHaveBeenCalledTimes(2);
+  });
+
+  it("receita cancelada no meio: fecha o formulário, tira a lista e deixa a frase", async () => {
+    mocked(api.listPositions).mockResolvedValue({ positions: [ position() ], next_before: null });
+    mocked(api.recordDispensation).mockRejectedValue(new ApiError(422, { error: "prescription_cancelled" }, "422"));
+    renderWithProviders(<PharmacyDispensing today={TODAY27} />);
+    await searchByCode();
+    fireEvent.click(await screen.findByRole("button", { name: "Dispensar" }));
+    await waitFor(() => expect((screen.getByLabelText("Lote — Amoxicilina 500 mg cápsula") as HTMLSelectElement).value).toBe("lot1"));
+    text("Quantidade — Amoxicilina 500 mg cápsula (cápsula)", "21");
+    fireEvent.click(screen.getByLabelText("Receita retida na farmácia"));
+    fireEvent.click(screen.getByRole("button", { name: "Registrar dispensação" }));
+    expect((await screen.findByRole("alert")).textContent).toBe("a receita mudou enquanto você dispensava — busque a receita de novo");
+    expect(screen.queryByRole("button", { name: "Registrar dispensação" })).toBeNull();
+    expect(screen.queryByRole("article")).toBeNull();
+  });
+
+  describe("releitura depois de dispensar", () => {
+    const done = ({ onDone }: { onDone(): void }) => <button type="button" onClick={() => onDone()}>Concluir (dublê)</button>;
+    const dispenseStub = async () => {
+      await searchByCode();
+      fireEvent.click(await screen.findByRole("button", { name: "Dispensar" }));
+      fireEvent.click(screen.getByRole("button", { name: "Concluir (dublê)" }));
+    };
+
+    it("falha: a lista some e a frase explica", async () => {
+      mocked(api.lookupPrescriptions).mockResolvedValueOnce([ prescription() ]).mockRejectedValueOnce(new ApiError(500, null, "500"));
+      renderWithProviders(<PharmacyDispensing today={TODAY27} renderDispense={done} />);
+      await dispenseStub();
+      const alertEl = await screen.findByRole("alert");
+      expect(alertEl.textContent).toBe(`${REREAD_FAILED_TEXT} (não foi possível concluir (500) — tente de novo)`);
+      expect(screen.queryByRole("article")).toBeNull();
+      expect(screen.queryByText("Dispensação registrada.")).toBeNull();
+    });
+
+    it("enquanto relê, nenhum cartão dispensável; resposta de busca trocada no meio é ignorada", async () => {
+      let resolve: (list: ReturnType<typeof prescription>[]) => void = () => {};
+      mocked(api.lookupPrescriptions).mockResolvedValueOnce([ prescription() ])
+        .mockReturnValueOnce(new Promise((r) => { resolve = r; }));
+      renderWithProviders(<PharmacyDispensing today={TODAY27} renderDispense={done} />);
+      await dispenseStub();
+      expect(await screen.findByText("relendo a receita…")).not.toBeNull();
+      expect(screen.queryByRole("article")).toBeNull();
+      expect(screen.queryByRole("button", { name: "Dispensar" })).toBeNull();
+      fireEvent.click(screen.getByLabelText("Pelo paciente"));
+      expect(screen.queryByText("relendo a receita…")).toBeNull();
+      resolve([ prescription() ]);
+      await new Promise((r) => setTimeout(r, 20));
+      expect(screen.queryByRole("article")).toBeNull();
+      expect(screen.queryByText("Dispensação registrada.")).toBeNull();
+    });
   });
 });

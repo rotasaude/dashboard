@@ -95,6 +95,7 @@ function ByCpf({ onChoose, source = TERRITORY_PERSON_SOURCE }: { onChoose(choice
   // A resposta vale para o CPF buscado; trocar o número a apaga.
   const [ found, setFound ] = useState<{ cpf: string; person: TerritoryPerson | null } | null>(null);
   const lookup = useMutation({
+    gcTime: 0,
     mutationFn: (digits: string) => source.lookup(digits),
     onSuccess: (person, digits) => setFound({ cpf: digits, person }),
     onError: (err, digits) => {
@@ -174,6 +175,7 @@ function WithoutCpf({ today, onChoose, initial, source = TERRITORY_PERSON_SOURCE
     return q;
   };
   const search = useMutation({
+    gcTime: 0,
     mutationFn: (q: DuplicateQuery) => source.duplicates(q),
     onSuccess: (candidates, query) => setResult({ query, candidates }),
     onError: (err) => setProblem(source.describe(err))
