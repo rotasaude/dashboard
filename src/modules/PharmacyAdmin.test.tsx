@@ -56,6 +56,7 @@ describe("PharmacyAdmin", () => {
   it("novo local: nome curto recusado; almoxarifado central não pede unidade nem leva health_unit_id", async () => {
     renderWithProviders(<PharmacyAdmin />);
     fireEvent.click(await screen.findByRole("button", { name: "Novo local" }));
+    expect(screen.getByText("O tipo não muda depois de criado.")).not.toBeNull();
     text("Tipo", "central"); text("Nome", "Ab");
     expect(screen.queryByLabelText("Unidade de saúde")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Revisar" }));
@@ -75,6 +76,8 @@ describe("PharmacyAdmin", () => {
     fireEvent.click(within(row).getByRole("button", { name: "Editar" }));
     expect((screen.getByLabelText("Tipo") as HTMLSelectElement).disabled).toBe(true);
     expect((screen.getByLabelText("Tipo") as HTMLSelectElement).value).toBe("unit");
+    expect((screen.getByLabelText("Unidade de saúde") as HTMLSelectElement).disabled).toBe(true);
+    expect(screen.getByText("O tipo e a unidade não mudam depois de criado.")).not.toBeNull();
     fireEvent.click(screen.getByLabelText("Ativo"));
     fireEvent.click(screen.getByRole("button", { name: "Revisar" }));
     fireEvent.click(await screen.findByRole("button", { name: "Salvar local" }));

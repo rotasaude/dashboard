@@ -18,6 +18,7 @@ import { fieldBox, fieldsetStyle, hintStyle, statusStyle } from "../regulation/s
 
 const KINDS: StockLocationKind[] = [ "central", "unit" ];
 const KIND_NOTE = "O tipo não muda depois de criado.";
+const EDIT_NOTE = "O tipo e a unidade não mudam depois de criado.";
 const NAME_TEXT = "o nome do local tem de 3 a 120 caracteres";
 const UNIT_TEXT = "escolha a unidade de saúde da farmácia";
 
@@ -112,7 +113,7 @@ function LocationForm({ location, units, onSaved, onCancel, onGoToSecurity }: {
                 {KINDS.map((k) => <option key={k} value={k}>{locationKindLabel(k)}</option>)}
               </select>
             </label>
-            <span style={hintStyle}>{KIND_NOTE}</span>
+            <span style={hintStyle}>{location ? EDIT_NOTE : KIND_NOTE}</span>
           </div>
           <div style={fieldBox}>
             <label style={fieldLabel}>
