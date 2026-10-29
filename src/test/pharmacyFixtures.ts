@@ -26,7 +26,7 @@ export function phUser(roles: string[] = [ "pharmacist" ], over: Partial<Session
 export function stockLot(over: Partial<StockLot> = {}): StockLot {
   return { id: "lot1", item: AMOXI, lot_number: "AMX2611", expires_on: "2026-11-20", manufacturer: "EMS", ...over };
 }
-export function lotBalance(over: Partial<LotBalance> = {}): LotBalance { return { lot: stockLot(), balance: "30", in_transit: "0", ...over }; }
+export function lotBalance(over: Partial<LotBalance> = {}): LotBalance { return { lot: stockLot(), balance: "30", in_transit: "0", expiring_soon: true, expired: false, ...over }; }
 export function position(over: Partial<StockPosition> = {}): StockPosition {
   return { location: UBS_REF, item: AMOXI, lots: [ lotBalance() ], balance: "30", minimum: "50", below_minimum: true, expiring_soon: true, ...over };
 }

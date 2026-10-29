@@ -11,7 +11,12 @@ import { AMOXI, CENTRAL, CLONA, TODAY27, UBS_FARM, lotBalance, phAlerts, phUser,
 
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
-const EXPIRING = position({ lots: [ lotBalance(), lotBalance({ lot: stockLot({ id: "lot0", lot_number: "AMX2609", expires_on: "2026-09-30" }), balance: "4" }) ] });
+const EXPIRING = position({ lots: [
+  lotBalance(),
+  lotBalance({ lot: stockLot({ id: "lot0", lot_number: "AMX2609", expires_on: "2026-09-30" }), balance: "4", expiring_soon: false, expired: true }),
+  lotBalance({ lot: stockLot({ id: "lot7", lot_number: "AMX2801", expires_on: "2028-01-31" }), balance: "99", expiring_soon: false, expired: false }),
+  lotBalance({ lot: stockLot({ id: "lot8", lot_number: "AMX2610", expires_on: "2026-11-05" }), balance: "0", expiring_soon: true, expired: false })
+] });
 
 describe("PharmacyAlerts", () => {
   beforeEach(() => {
@@ -31,6 +36,10 @@ describe("PharmacyAlerts", () => {
     const expiring = within(await screen.findByRole("region", { name: "Vencendo e vencidos" }));
     expect((await expiring.findByRole("row", { name: /AMX2611 · Amoxicilina 500 mg cápsula/ })).textContent).toContain("20/11/2026");
     expect(within(expiring.getByRole("row", { name: /AMX2609/ })).getByText("vencido")).not.toBeNull();
+    expect(within(expiring.getByRole("row", { name: /AMX2611/ })).queryByText("vencido")).toBeNull();
+    // ruling 1: lote que não vence (flags falsos) e lote sem saldo não entram na lista.
+    expect(expiring.queryByText(/AMX2801/)).toBeNull();
+    expect(expiring.queryByText(/AMX2610/)).toBeNull();
     expect(within(await screen.findByRole("region", { name: "Abaixo do mínimo" })).getByText("30 cápsula (mínimo 50)")).not.toBeNull();
     expect(mocked(api.getPharmacyAlerts)).toHaveBeenCalledWith("l2");
     expect(mocked(api.listPositions)).toHaveBeenCalledWith({ locationId: "l2", expiring: true });
@@ -49,6 +58,42 @@ describe("PharmacyAlerts", () => {
     await waitFor(() => expect(mocked(api.listPositions)).toHaveBeenLastCalledWith({ locationId: null, belowMinimum: true }));
     expect(mocked(api.listPositions)).toHaveBeenCalledWith({ locationId: null, expiring: true });
     expect(mocked(api.getPharmacyAlerts)).toHaveBeenCalledWith("l1");
+    // as contagens são do local, mesmo com "Todos os locais" marcado (D15): nenhuma leitura sem local.
+    expect(mocked(api.getPharmacyAlerts).mock.calls.every((c) => c[0] === "l1")).toBe(true);
+    expect(mocked(api.getPharmacyAlerts)).not.toHaveBeenCalledWith(null);
+    expect(mocked(api.getPharmacyAlerts)).not.toHaveBeenCalledWith(undefined);
+  });
+
+  it("\"Todos os locais\" só para o almoxarife do central no próprio local", async () => {
+    // pharmacist numa unidade
+    const first = renderWithProviders(<PharmacyAlerts today={TODAY27} />);
+    expect(await screen.findByText("Vencendo: 2")).not.toBeNull();
+    expect(screen.queryByLabelText("Todos os locais")).toBeNull();
+    first.unmount(); cleanup();
+    // stock_keeper olhando um local alheio (roles: [])
+    mocked(api.fetchCurrentSession).mockResolvedValue(phUser([ "stock_keeper" ]));
+    mocked(api.listMyPharmacyLocations).mockResolvedValue([ { ...CENTRAL, roles: [] } ]);
+    const second = renderWithProviders(<PharmacyAlerts today={TODAY27} />);
+    expect(await screen.findByText("Vencendo: 2")).not.toBeNull();
+    expect(screen.queryByLabelText("Todos os locais")).toBeNull();
+    second.unmount(); cleanup();
+    // stock_keeper numa unidade (não central)
+    mocked(api.listMyPharmacyLocations).mockResolvedValue([ { ...UBS_FARM, roles: [ "stock_keeper" ] } ]);
+    renderWithProviders(<PharmacyAlerts today={TODAY27} />);
+    expect(await screen.findByText("Vencendo: 2")).not.toBeNull();
+    expect(screen.queryByLabelText("Todos os locais")).toBeNull();
+  });
+
+  it("api sem os campos por lote: mostra todos os lotes e a data decide o \"vencido\"", async () => {
+    const bare = (l: ReturnType<typeof lotBalance>) => { const { expiring_soon, expired, ...rest } = l; void expiring_soon; void expired; return rest; };
+    mocked(api.listPositions).mockImplementation((q: { expiring?: boolean }) => Promise.resolve({ positions: [ q.expiring
+      ? position({ lots: [ bare(lotBalance()), bare(lotBalance({ lot: stockLot({ id: "lot0", lot_number: "AMX2609", expires_on: "2026-09-30" }), balance: "4" })) ] })
+      : position() ], next_before: null }));
+    renderWithProviders(<PharmacyAlerts today={TODAY27} />);
+    const expiring = within(await screen.findByRole("region", { name: "Vencendo e vencidos" }));
+    expect(await expiring.findByRole("row", { name: /AMX2611/ })).not.toBeNull();
+    expect(within(expiring.getByRole("row", { name: /AMX2609/ })).getByText("vencido")).not.toBeNull();
+    expect(within(expiring.getByRole("row", { name: /AMX2611/ })).queryByText("vencido")).toBeNull();
   });
 
   it("emenda H10: a ordem das listas segue o nome do item, e a unidade é a de dispensação", async () => {

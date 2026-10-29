@@ -23,6 +23,11 @@ import { PharmacyGate } from "./pharmacy/PharmacyGate";
 const NOTHING = "nada aqui";
 const screenLink = (id: string) => toHash({ kind: "screen", id });
 
+// Lote por lote (o api marca `expiring_soon` / `expired`): só os que vencem ou venceram, e com saldo (defensivo).
+// Sem os campos (api antigo), mostra todos os lotes e a data decide o "vencido".
+const shown = (b: LotBalance) => (b.expiring_soon === undefined && b.expired === undefined ? true : !!(b.expiring_soon || b.expired)) && Number(b.balance) > 0;
+const isExpired = (b: LotBalance, today: string) => b.expired ?? b.lot.expires_on < today;
+
 interface ExpiringRow { position: StockPosition; balance: LotBalance }
 
 export function PharmacyAlerts({ today = todayInCity() }: { today?: string } = {}) {
@@ -106,7 +111,7 @@ function ListBody({ query, children }: { query: ReturnType<typeof usePositionLis
 function ExpiringList({ scope, today }: { scope: string | null; today: string }) {
   const query = usePositionList(scope, "expiring");
   return (
-    <Panel title="Vencendo e vencidos" sub="lotes das posições com validade próxima">
+    <Panel title="Vencendo e vencidos" sub="lotes a vencer e já vencidos (a contagem Vencendo não inclui os vencidos)">
       <ListBody query={query}>
         {(positions) => (
           <DataTable<ExpiringRow>
@@ -114,11 +119,11 @@ function ExpiringList({ scope, today }: { scope: string | null; today: string })
               { label: "Lote · medicamento", w: "1.8fr", card: "title", render: (r) => `${r.balance.lot.lot_number} · ${r.position.item.name}` },
               { label: "Local", w: "1fr", render: (r) => r.position.location.name },
               { label: "Validade", w: "1fr", render: (r) => (
-                <span style={row}>{fmtDay(r.balance.lot.expires_on)}{r.balance.lot.expires_on < today && <Tag tone="down">vencido</Tag>}</span>
+                <span style={row}>{fmtDay(r.balance.lot.expires_on)}{isExpired(r.balance, today) && <Tag tone="down">vencido</Tag>}</span>
               ) },
               { label: "Saldo", w: "0.8fr", align: "right", render: (r) => <span className="mono">{`${fmtQuantity(r.balance.balance)} ${r.position.item.dispensing_unit}`}</span> }
             ]}
-            rows={positions.flatMap((position) => [ ...position.lots ].sort((a, b) => a.lot.expires_on.localeCompare(b.lot.expires_on)).map((balance) => ({ position, balance })))}
+            rows={positions.flatMap((position) => position.lots.filter(shown).sort((a, b) => a.lot.expires_on.localeCompare(b.lot.expires_on)).map((balance) => ({ position, balance })))}
             rowKey={(r) => `${r.position.location.id}:${r.balance.lot.id}`} empty={NOTHING}
           />
         )}

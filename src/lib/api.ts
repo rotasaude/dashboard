@@ -4739,7 +4739,8 @@ export interface PharmacySettings {
 }
 export interface StockMinimum { catalog_item_id: string; minimum: string; item?: StockItem }
 
-export interface LotBalance { lot: StockLot; balance: string; in_transit: string }
+// expiring_soon / expired por lote: o api os produz; ausentes (api antigo) = a tela mostra todos os lotes e decide "vencido" pela data.
+export interface LotBalance { lot: StockLot; balance: string; in_transit: string; expiring_soon?: boolean; expired?: boolean }
 export interface StockPosition {
   location: LocationRef; item: StockItem; lots: LotBalance[]; balance: string; minimum: string | null;
   below_minimum: boolean; expiring_soon: boolean;
