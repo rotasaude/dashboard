@@ -9,6 +9,7 @@ import { DENTAL_CHART_KEY, DENTAL_PLANS_KEY, dentalError, locationLabel, NOMINAL
 import { secondaryButtonStyle } from "../../components/formStyles";
 import { alert, muted, panel, row } from "../exams/styles";
 import { Odontogram, type ToothSelection } from "./Odontogram";
+import { ProsthesisPanel } from "./ProsthesisPanel";
 import { TreatmentPlanPanel } from "./TreatmentPlanPanel";
 import { ToothActions } from "./ToothActions";
 import { FaoFields } from "./FaoFields";
@@ -31,7 +32,7 @@ interface Props {
   onPlanRead?(plan: DentalPlan | null): void;
 }
 
-export function DentalEditor({ record, unit, options, value, role, baseline, planRefreshKey = 0, searchDelayMs, onChange, onPlanRead }: Props) {
+export function DentalEditor({ consultation, record, unit, options, value, role, baseline, planRefreshKey = 0, searchDelayMs, onChange, onPlanRead }: Props) {
   const patientId = record.patient.id;
   const situations = options.dental?.situations;
   const [ selection, setSelection ] = useState<ToothSelection | null>(null);
@@ -116,6 +117,9 @@ export function DentalEditor({ record, unit, options, value, role, baseline, pla
           );
         })}
       </section>
+      {!baseline && dentist && (
+        <ProsthesisPanel consultation={consultation} patientId={patientId} value={value} onChange={onChange} searchDelayMs={searchDelayMs} />
+      )}
       {!baseline && (
         <section aria-label="Especialidades" style={panel}>
           <h3 style={{ margin: 0, fontSize: 14 }}>Especialidades</h3>
