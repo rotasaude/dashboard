@@ -50,6 +50,15 @@ describe("PatientHistory", () => {
     expect(window.localStorage.length + window.sessionStorage.length).toBe(0);
   });
 
+  it("quem dispensou sem perfil profissional (by.name null): mostra \"—\" e o papel, nunca \"null\"", async () => {
+    mocked(api.listDispensations).mockReset();
+    mocked(api.listDispensations).mockResolvedValue({ dispensations: [ dispensation({ by: { name: null, role: "pharmacy_assistant" } }) ], next_before: null });
+    renderWithProviders(<PatientHistory patientId="pa1" />);
+    const row = await screen.findByRole("row", { name: /29\/10\/2026/ });
+    expect(row.textContent).toContain("— · Auxiliar de farmácia");
+    expect(row.textContent).not.toContain("null");
+  });
+
   it("sem dispensação: frase de vazio; falha da leitura: a frase do api", async () => {
     mocked(api.listDispensations).mockReset();
     mocked(api.listDispensations).mockResolvedValueOnce({ dispensations: [], next_before: null });

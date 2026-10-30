@@ -35,12 +35,12 @@ export function rxItem(over: Partial<PrescriptionItemView> = {}): PrescriptionIt
   return {
     id: "pi1", catalog_item_id: "ci1", free_text: null, printed_description: "Amoxicilina 500 mg cápsula", quantity: "21", quantity_unit: "cápsula",
     dosage_instructions: "1 cápsula de 8 em 8 horas por 7 dias", continuous: false, controlled: false, retention_required: true, dispensed_total: "0",
-    last_dispensed_on: null, next_allowed_on: null, completed: false, ...over
+    last_dispensed_on: null, next_allowed_on: null, completed: false, item: AMOXI, valid_until: "2026-11-26", expired: false, ...over
   };
 }
 export function prescription(over: Partial<PrescriptionView> = {}): PrescriptionView {
   return {
-    kind: "digital", id: "doc1", short_code: "ABCDE23456", issued_on: "2026-10-27", valid_until: "2026-11-26", expired: false, cancelled: false,
+    kind: "digital", id: "doc1", short_code: "ABCDE-23456", issued_on: "2026-10-27", valid_until: "2026-11-26", expired: false, cancelled: false,
     prescriber: { name: "Dra. Helena Prado", council: "CRM-PR 12345" }, patient: { id: "pa1", display_name: "Joana Lima", has_cpf: true, cns_masked: null },
     items: [ rxItem() ], ...over
   };

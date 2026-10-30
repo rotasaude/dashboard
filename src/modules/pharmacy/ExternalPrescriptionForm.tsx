@@ -145,6 +145,7 @@ export function ExternalPrescriptionForm({ choice, location, today = todayInCity
     }));
     const input: ExternalPrescriptionInput = {
       ...who,
+      location_id: location.id,
       prescriber: { name: squish(prescriberName), council, council_state: councilState, council_number: councilNumber.trim() },
       issued_on: issuedOn,
       ...(pharmacist && notification.trim() ? { notification_number: notification.trim() } : {}),

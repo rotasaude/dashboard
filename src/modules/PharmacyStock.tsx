@@ -7,7 +7,6 @@
 import { useState, type FormEvent } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { listPositions, type LotBalance, type PharmacyLocation, type StockPosition } from "../lib/api";
-import { todayInCity } from "../lib/campaigns";
 import { fmtDay } from "../lib/exams";
 import {
   PH_POSITIONS_KEY, STATIC_QUERY, fmtQuantity, locationRoles, pharmacyError, sortPositions
@@ -31,19 +30,19 @@ const FIRST: Applied = { q: null, expiring: false, belowMinimum: false, all: fal
 const positionKey = (p: StockPosition) => `${p.location.id}:${p.item.catalog_item_id}`;
 const withUnit = (qty: string | null | undefined, p: StockPosition) => (qty === null || qty === undefined ? "—" : `${fmtQuantity(qty)} ${p.item.dispensing_unit}`);
 
-export function PharmacyStock({ today = todayInCity() }: { today?: string } = {}) {
+export function PharmacyStock() {
   return (
     <PharmacyGate title="Posição e extrato" sub="saldo por local e lote, extrato e estoque mínimo" allow={(r) => r.pharmacist || r.assistant || r.keeper}>
       {() => (
         <LocationPick allow={() => true}>
-          {(loc) => <Body location={loc} today={today} />}
+          {(loc) => <Body location={loc} />}
         </LocationPick>
       )}
     </PharmacyGate>
   );
 }
 
-function Body({ location, today }: { location: PharmacyLocation; today: string }) {
+function Body({ location }: { location: PharmacyLocation }) {
   const roles = locationRoles(location);
   // "Todos os locais" (sem location_id): só o almoxarife do central; o api recusa de novo.
   const canAll = location.kind === "central" && roles.keeper;
@@ -134,13 +133,13 @@ function Body({ location, today }: { location: PharmacyLocation; today: string }
         </div>
       )}
 
-      {open && <Lots position={open} today={today} lotId={lotId} onStatement={setLotId} />}
+      {open && <Lots position={open} lotId={lotId} onStatement={setLotId} />}
       {roles.keeper && <MinimumsPanel location={location} />}
     </div>
   );
 }
 
-function Lots({ position, today, lotId, onStatement }: { position: StockPosition; today: string; lotId: string | null; onStatement(id: string | null): void }) {
+function Lots({ position, lotId, onStatement }: { position: StockPosition; lotId: string | null; onStatement(id: string | null): void }) {
   const unit = position.item.dispensing_unit;
   const chosen = position.lots.find((b) => b.lot.id === lotId) ?? null;
   return (
@@ -150,7 +149,7 @@ function Lots({ position, today, lotId, onStatement }: { position: StockPosition
         cols={[
           { label: "Lote", w: "1fr", card: "title", render: (b) => <span className="mono">{b.lot.lot_number}</span> },
           { label: "Validade", w: "1fr", render: (b) => (
-            <span style={row}>{fmtDay(b.lot.expires_on)}{b.lot.expires_on < today && <Tag tone="down">vencido</Tag>}</span>
+            <span style={row}>{fmtDay(b.lot.expires_on)}{b.expired && <Tag tone="down">vencido</Tag>}</span>
           ) },
           { label: "Saldo", w: "0.8fr", align: "right", render: (b) => <span className="mono">{`${fmtQuantity(b.balance)} ${unit}`}</span> },
           { label: "Em trânsito", w: "0.8fr", align: "right", render: (b) => <span className="mono">{`${fmtQuantity(b.in_transit)} ${unit}`}</span> },

@@ -38,9 +38,21 @@ describe("PharmacyDispensing — busca", () => {
     await waitFor(() => expect(mocked(api.lookupPrescriptions)).toHaveBeenCalledWith({ location_id: "l2", short_code: "ABCDE23456" }));
     const card = within(await screen.findByRole("article", { name: /Receita digital/ }));
     expect(card.getByText("Joana Lima")).not.toBeNull();
+    // O api manda o código com hífen.
+    expect(card.getByText("ABCDE-23456")).not.toBeNull();
     expect(card.getByText("emitida em 27/10/2026 · vale até 26/11/2026")).not.toBeNull();
     expect(card.getByText(/1 cápsula de 8 em 8 horas por 7 dias/)).not.toBeNull();
     expect(card.getByRole("button", { name: "Dispensar" })).not.toBeNull();
+  });
+
+  it("receita digital de autor sem perfil (prescriber.name null): mostra o conselho e uma frase, nunca \"null\"", async () => {
+    mocked(api.lookupPrescriptions).mockResolvedValue([ prescription({ prescriber: { name: null, council: null } }) ]);
+    renderWithProviders(<PharmacyDispensing today={TODAY27} />);
+    await screen.findByLabelText("Código da receita"); text("Código da receita", "ABCDE23456");
+    fireEvent.click(screen.getByRole("button", { name: "Buscar receita" }));
+    const card = await screen.findByRole("article", { name: /Receita digital/ });
+    expect(card.textContent).toContain("profissional sem nome no cadastro");
+    expect(card.textContent).not.toContain("null");
   });
 
   it("receita vencida ou cancelada: o motivo no lugar de Dispensar", async () => {

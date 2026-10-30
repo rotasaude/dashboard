@@ -81,7 +81,7 @@ export const movementLabel = (code: string): string => MOVEMENT_LABEL[code] ?? c
 // aparece pelo id no api e nunca por nome de paciente). Tipo novo aparece cru.
 const DOCUMENT_LABEL: Record<string, string> = {
   dispensation: "dispensação", transfer: "transferência", invoice: "nota fiscal", receipt: "nota fiscal", donation: "doação",
-  adjustment: "ajuste", opening: "abertura", return: "devolução"
+  adjustment: "ajuste", opening: "abertura", return: "devolução", entry: "entrada"
 };
 export function movementDocument(doc: StockMovement["document"] | undefined): string {
   if (!doc) return "—";
@@ -200,7 +200,7 @@ export function lotOptionLabel(b: LotBalance, suggested: boolean): string {
 // ─── O que impede dispensar ─────────────────────────────────────────────────
 export function prescriptionBlock(p: PrescriptionView): string | null {
   if (p.cancelled) return "receita cancelada — não pode ser dispensada";
-  if (p.expired) return p.valid_until ? `receita vencida em ${fmtDay(p.valid_until)} — não pode ser dispensada` : "receita vencida — não pode ser dispensada";
+  if (p.expired) return `receita vencida em ${fmtDay(p.valid_until)} — não pode ser dispensada`;
   return null;
 }
 
@@ -208,7 +208,7 @@ export function prescriptionBlock(p: PrescriptionView): string | null {
 // Antimicrobiano não controlado o auxiliar dispensa (e retém); controlado, só o farmacêutico.
 export function itemBlock(i: PrescriptionItemView, ctx: { pharmacist: boolean; today: string }): string | null {
   if (i.completed) return ITEM_COMPLETED;
-  if (i.expired) return i.valid_until ? `item vencido em ${fmtDay(i.valid_until)}` : "item vencido";
+  if (i.expired) return `item vencido em ${fmtDay(i.valid_until)}`;
   if (i.continuous && i.next_allowed_on && i.next_allowed_on > ctx.today) {
     return `uso contínuo: próxima retirada a partir de ${fmtDay(i.next_allowed_on)}`;
   }
@@ -525,6 +525,8 @@ export function settingsProblem(raw: Record<keyof PharmacySettings, string>): st
 
 // ─── Recusas do api (frase, nunca o corpo nem o valor enviado) ─────────────
 const REASON_TEXT = "o motivo tem de 10 a 500 caracteres";
+export const ADJUSTMENT_PENDING_EXISTS = "já há uma contagem deste lote esperando aprovação";
+export const APPROVAL_NO_BALANCE = "o saldo atual não comporta esta diferença — rejeite o pedido e peça uma contagem nova";
 export const RETURN_EXCEEDS = "a devolução passa do que ainda resta devolver deste item — abra o histórico de novo para ver o atual";
 // `lot_expired` na devolução: o ERRORS manda "escolher outro lote", que aqui não existe (a devolução volta ao lote da retirada).
 export const RETURN_LOT_EXPIRED = "o lote desta retirada já venceu — a devolução não é aceita; registre o vencimento no ajuste de estoque";
@@ -544,6 +546,7 @@ const ERRORS: Record<string, string> = {
   already_received: "esta transferência já foi recebida — a lista foi relida",
   same_user: "outra pessoa do local precisa aprovar este ajuste",
   not_pending: "este ajuste já foi decidido — a lista foi relida",
+  adjustment_pending: ADJUSTMENT_PENDING_EXISTS,
   cbo_not_allowed: "farmacêutico precisa de vínculo profissional com CBO 2234",
   role_not_granted: "a pessoa precisa ter este papel na Equipe antes",
   unit_taken: "esta unidade já tem um local de estoque",
@@ -569,6 +572,10 @@ const ERRORS: Record<string, string> = {
   catalog_unavailable: "o catálogo de medicamentos está indisponível — tente de novo em instantes",
   not_found: "não encontrado — a tela foi atualizada",
   duplicate_suspected: DUPLICATE_SUSPECTED_TEXT,
+  cpf_taken: "este CPF já pertence a outro paciente — confira o número",
+  cns_taken: "este CNS já pertence a outro paciente — confira o número",
+  cpf_or_reason_required: "informe o CPF ou o motivo de não ter CPF",
+  invalid_patient: "confira os dados do paciente novo",
   mfa_required: "o código do autenticador não valeu — digite o código atual",
   missing_role: PHARMACY_NO_ROLE
 };

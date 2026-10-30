@@ -97,7 +97,7 @@ describe("cliente da farmácia (contrato §3–§9)", () => {
     expect(await lookupPrescriptions({ location_id: "l2", short_code: "ABCDE23456" })).toEqual([ { id: "doc1" } ]);
     expect([ ...writeOf(0), urlOf(0).search, bodyOf(0) ]).toEqual([ "/pharmacy/prescriptions/lookup", "POST", "application/json", "", { location_id: "l2", short_code: "ABCDE23456" } ]);
     expect(await lookupPrescriptions({ location_id: "l2", patient_id: "pa1" })).toEqual([]);
-    const EXT = { patient_id: "pa1", prescriber: { name: "Dra. Helena Prado", council: "CRM", council_state: "PR", council_number: "12345" }, issued_on: "2026-10-28",
+    const EXT = { patient_id: "pa1", location_id: "l2", prescriber: { name: "Dra. Helena Prado", council: "CRM", council_state: "PR", council_number: "12345" }, issued_on: "2026-10-28",
       items: [ { catalog_item_id: "ci1", quantity: "21", quantity_unit: "cápsula", dosage_instructions: "1 cápsula de 8 em 8 horas", continuous: false } ] };
     await createExternalPrescription(EXT);
     expect([ ...writeOf(2), bodyOf(2) ]).toEqual([ "/pharmacy/external_prescriptions", "POST", "application/json", EXT ]);
@@ -144,7 +144,7 @@ describe("cliente da farmácia (contrato §3–§9)", () => {
   it("nada sensível na URL: código, CPF, nome, receita, motivo e notificação só no corpo", async () => {
     await lookupPrescriptions({ location_id: "l2", short_code: "ABCDE23456" });
     await lookupPharmacyPerson("12345678909");
-    await createExternalPrescription({ patient_id: "pa1", prescriber: { name: "Dra. Helena Prado", council: "CRM", council_state: "PR", council_number: "12345" },
+    await createExternalPrescription({ patient_id: "pa1", location_id: "l2", prescriber: { name: "Dra. Helena Prado", council: "CRM", council_state: "PR", council_number: "12345" },
       issued_on: "2026-10-28", notification_number: "B1-0042", items: [ { catalog_item_id: "ci2", quantity: "30", quantity_unit: "comprimido",
         dosage_instructions: "1 cápsula de 8 em 8 horas", continuous: true } ] });
     await recordDispensation({ location_id: "l2", prescription: { kind: "external", id: "ex1" }, items: [ { prescription_item_id: "pi1", lot_id: "lot1", quantity: "30" } ],

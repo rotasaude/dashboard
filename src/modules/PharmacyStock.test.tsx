@@ -8,7 +8,7 @@ import * as api from "../lib/api";
 import { ApiError } from "../lib/api";
 import { PharmacyStock } from "./PharmacyStock";
 import { renderWithProviders } from "../test/campaignFixtures";
-import { AMOXI, CENTRAL, CLONA, TODAY27, UBS_FARM, phUser, position } from "../test/pharmacyFixtures";
+import { AMOXI, CENTRAL, CLONA, UBS_FARM, lotBalance, phUser, position, stockLot } from "../test/pharmacyFixtures";
 
 afterEach(cleanup);
 const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
@@ -29,7 +29,7 @@ describe("PharmacyStock", () => {
   });
 
   it("posição do local: saldo, mínimo e marcas; filtros na URL sem dado pessoal", async () => {
-    renderWithProviders(<PharmacyStock today={TODAY27} />);
+    renderWithProviders(<PharmacyStock />);
     const row = await screen.findByRole("row", { name: /Amoxicilina 500 mg cápsula/ });
     expect(row.textContent).toContain("30 cápsula");
     expect(within(row).getByText("abaixo do mínimo")).not.toBeNull();
@@ -44,14 +44,14 @@ describe("PharmacyStock", () => {
   it("central: todos os locais sem location_id", async () => {
     mocked(api.listMyPharmacyLocations).mockResolvedValue([ CENTRAL ]);
     mocked(api.fetchCurrentSession).mockResolvedValue(phUser([ "stock_keeper" ]));
-    renderWithProviders(<PharmacyStock today={TODAY27} />);
+    renderWithProviders(<PharmacyStock />);
     fireEvent.click(await screen.findByLabelText("Todos os locais"));
     fireEvent.click(screen.getByRole("button", { name: "Filtrar" }));
     await waitFor(() => expect(mocked(api.listPositions)).toHaveBeenLastCalledWith({ locationId: null, q: null, expiring: undefined, belowMinimum: undefined, before: null }));
   });
 
   it("extrato do lote: movimentos com sinal e documento; dispensação sem nome de paciente", async () => {
-    renderWithProviders(<PharmacyStock today={TODAY27} />);
+    renderWithProviders(<PharmacyStock />);
     fireEvent.click(await screen.findByRole("button", { name: "Lotes de Amoxicilina 500 mg cápsula" }));
     fireEvent.click(await screen.findByRole("button", { name: "Extrato do lote AMX2611" }));
     const table = within(await screen.findByRole("region", { name: "Extrato do lote AMX2611" }));
@@ -62,7 +62,7 @@ describe("PharmacyStock", () => {
   });
 
   it("mínimos: a lista inteira, vírgula e zero aceito", async () => {
-    renderWithProviders(<PharmacyStock today={TODAY27} />);
+    renderWithProviders(<PharmacyStock />);
     const input = await screen.findByLabelText("Mínimo de Amoxicilina 500 mg cápsula (cápsula)");
     fireEvent.change(input, { target: { value: "60.5" } });
     fireEvent.click(screen.getByRole("button", { name: "Salvar mínimos" }));
@@ -78,7 +78,7 @@ describe("PharmacyStock", () => {
     mocked(api.listPositions).mockResolvedValue({ positions: [
       position({ item: CLONA, lots: [], balance: "12.5", minimum: null, below_minimum: false, expiring_soon: false }), position()
     ], next_before: null });
-    renderWithProviders(<PharmacyStock today={TODAY27} />);
+    renderWithProviders(<PharmacyStock />);
     await screen.findByRole("row", { name: /Amoxicilina/ });
     const names = screen.getAllByRole("row").slice(1).map((r) => r.textContent ?? "");
     expect(names[0]).toContain("Amoxicilina");
@@ -92,7 +92,7 @@ describe("PharmacyStock", () => {
     const alheio = { ...UBS_FARM, roles: [] as string[] };
     mocked(api.listMyPharmacyLocations).mockResolvedValue([ CENTRAL, alheio ]);
     mocked(api.fetchCurrentSession).mockResolvedValue(phUser([ "stock_keeper" ]));
-    renderWithProviders(<PharmacyStock today={TODAY27} />);
+    renderWithProviders(<PharmacyStock />);
     const select = await screen.findByLabelText("Local");
     expect(await screen.findByLabelText("Mínimo de Amoxicilina 500 mg cápsula (cápsula)")).not.toBeNull();
     expect(screen.getByLabelText("Todos os locais")).not.toBeNull();
@@ -107,7 +107,7 @@ describe("PharmacyStock", () => {
   it("farmacêutico sem almoxarife: vê a posição mas não o painel de mínimos nem 'Todos os locais'", async () => {
     mocked(api.listMyPharmacyLocations).mockResolvedValue([ UBS_FARM ]);
     mocked(api.fetchCurrentSession).mockResolvedValue(phUser([ "pharmacist" ]));
-    renderWithProviders(<PharmacyStock today={TODAY27} />);
+    renderWithProviders(<PharmacyStock />);
     await screen.findByRole("row", { name: /Amoxicilina 500 mg cápsula/ });
     expect(screen.queryByRole("button", { name: "Salvar mínimos" })).toBeNull();
     expect(screen.queryByLabelText("Todos os locais")).toBeNull();
@@ -115,7 +115,7 @@ describe("PharmacyStock", () => {
   });
 
   it("'Vencendo' vai como true só quando marcado; medicamento com 1 letra não lê", async () => {
-    renderWithProviders(<PharmacyStock today={TODAY27} />);
+    renderWithProviders(<PharmacyStock />);
     await screen.findByRole("row", { name: /Amoxicilina/ });
     const calls = mocked(api.listPositions).mock.calls.length;
     fireEvent.change(screen.getByLabelText("Medicamento"), { target: { value: "a" } });
@@ -132,7 +132,7 @@ describe("PharmacyStock", () => {
     mocked(api.listPositions)
       .mockResolvedValueOnce({ positions: [ position() ], next_before: "c1" })
       .mockResolvedValueOnce({ positions: [ position({ item: CLONA, lots: [], balance: "3", minimum: null, below_minimum: false, expiring_soon: false }) ], next_before: null });
-    renderWithProviders(<PharmacyStock today={TODAY27} />);
+    renderWithProviders(<PharmacyStock />);
     await screen.findByRole("row", { name: /Amoxicilina/ });
     fireEvent.change(screen.getByLabelText("Medicamento"), { target: { value: "clona" } });
     expect(mocked(api.listPositions)).toHaveBeenCalledTimes(1);
@@ -145,21 +145,37 @@ describe("PharmacyStock", () => {
   it("extrato mostra o motivo quando houver; 'Carregar mais' do extrato usa o cursor", async () => {
     mocked(api.listLotMovements)
       .mockResolvedValueOnce({ movements: [ { id: "m3", kind: "loss", quantity: "-2.00", document: null, reason: "Frasco quebrado", by: { name: "Marta Souza" }, at: "2026-10-29T11:00:00-03:00" } ], next_before: "m3" })
-      .mockResolvedValueOnce({ movements: [ { id: "m4", kind: "receipt", quantity: "100.00", document: { type: "invoice", id: "n1", number: "NF 1234" }, by: null, at: "2026-10-01T08:00:00-03:00" } ], next_before: null });
-    renderWithProviders(<PharmacyStock today={TODAY27} />);
+      .mockResolvedValueOnce({ movements: [ { id: "m4", kind: "receipt", quantity: "100.00", document: { type: "invoice", id: "n1", number: "NF 1234" }, by: { name: null }, at: "2026-10-01T08:00:00-03:00" } ], next_before: null });
+    renderWithProviders(<PharmacyStock />);
     fireEvent.click(await screen.findByRole("button", { name: "Lotes de Amoxicilina 500 mg cápsula" }));
     fireEvent.click(await screen.findByRole("button", { name: "Extrato do lote AMX2611" }));
     const region = within(await screen.findByRole("region", { name: "Extrato do lote AMX2611" }));
     expect((await region.findByRole("row", { name: /perda/ })).textContent).toContain("Frasco quebrado");
     fireEvent.click(region.getByRole("button", { name: "Carregar mais" }));
-    expect((await region.findByRole("row", { name: /entrada por nota/ })).textContent).toContain("NF 1234");
+    const entry = await region.findByRole("row", { name: /entrada por nota/ });
+    expect(entry.textContent).toContain("NF 1234");
+    // Almoxarife sem perfil profissional: by.name null vira "—", nunca "null".
+    expect(entry.textContent).toContain("—");
+    expect(entry.textContent).not.toContain("null");
     expect(mocked(api.listLotMovements)).toHaveBeenLastCalledWith("lot1", "l2", "m3");
+  });
+
+  it("lote vencido pela marca `expired` do api: etiqueta \"vencido\" só nele", async () => {
+    mocked(api.listPositions).mockResolvedValue({ positions: [ position({ lots: [
+      lotBalance({ lot: stockLot({ id: "old", lot_number: "VELHO1", expires_on: "2026-09-30" }), balance: "4", expiring_soon: false, expired: true }),
+      lotBalance()
+    ] }) ], next_before: null });
+    renderWithProviders(<PharmacyStock />);
+    fireEvent.click(await screen.findByRole("button", { name: "Lotes de Amoxicilina 500 mg cápsula" }));
+    const lots = within(await screen.findByRole("region", { name: "Lotes de Amoxicilina 500 mg cápsula" }));
+    expect(within(lots.getByRole("row", { name: /VELHO1/ })).getByText("vencido")).not.toBeNull();
+    expect(within(lots.getByRole("row", { name: /AMX2611/ })).queryByText("vencido")).toBeNull();
   });
 
   it("mínimos: zero é aceito, a frase de erro diz o item, remover e acrescentar pelo ItemSearch, recusa do api com path", async () => {
     mocked(api.searchPharmacyItems).mockResolvedValue([ CLONA ]);
     mocked(api.putMinimums).mockRejectedValueOnce(new ApiError(422, { error: "invalid_request", path: "minimums[1].catalog_item_id" }, "422"));
-    renderWithProviders(<PharmacyStock today={TODAY27} />);
+    renderWithProviders(<PharmacyStock />);
     fireEvent.change(await screen.findByLabelText("Acrescentar medicamento"), { target: { value: "clona" } });
     fireEvent.click(await screen.findByRole("button", { name: "Clonazepam 2 mg comprimido · comprimido" }));
     const clona = await screen.findByLabelText("Mínimo de Clonazepam 2 mg comprimido (comprimido)");
@@ -176,7 +192,7 @@ describe("PharmacyStock", () => {
 
   it("sem armazenamento local nem releitura sozinha", async () => {
     const set = vi.spyOn(Storage.prototype, "setItem");
-    renderWithProviders(<PharmacyStock today={TODAY27} />);
+    renderWithProviders(<PharmacyStock />);
     await screen.findByRole("row", { name: /Amoxicilina/ });
     expect(set).not.toHaveBeenCalled();
     set.mockRestore();

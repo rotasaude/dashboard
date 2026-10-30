@@ -10,15 +10,15 @@ import { Tag } from "../../components/Tag";
 import { buttonStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { box, muted, row } from "../exams/styles";
 
+const NO_PRESCRIBER = "profissional sem nome no cadastro";
 const itemLine = { margin: 0, display: "flex", flexDirection: "column", gap: 2, fontSize: 12.5 } as const;
 
 export const prescriptionKindLabel = (kind: string): string => (kind === "external" ? "Receita externa" : "Receita digital");
 
-// ABCDE23456 → ABCDE-23456 (como vem impresso).
+// O api já manda "ABCDE-23456"; o formato de 10 caracteres (sem hífen) também se mostra como vem impresso.
 export const fmtShortCode = (code: string): string => (code.length === 10 ? `${code.slice(0, 5)}-${code.slice(5)}` : code);
 
-function itemValidity(i: PrescriptionItemView): string | null {
-  if (!i.valid_until) return i.expired ? "item vencido" : null;
+function itemValidity(i: PrescriptionItemView): string {
   return i.expired ? `vencido em ${fmtDay(i.valid_until)}` : `vale até ${fmtDay(i.valid_until)}`;
 }
 
@@ -36,8 +36,8 @@ export function PrescriptionCard({ p, onDispense, onHistory }: { p: Prescription
         {!p.patient.has_cpf && <Tag tone="warn">sem CPF</Tag>}
         {p.patient.cns_masked && <span className="mono" style={muted}>{`CNS ${p.patient.cns_masked}`}</span>}
       </div>
-      <p style={muted}>{p.valid_until ? `emitida em ${fmtDay(p.issued_on)} · vale até ${fmtDay(p.valid_until)}` : `emitida em ${fmtDay(p.issued_on)}`}</p>
-      <p style={muted}>{p.prescriber.council ? `${p.prescriber.name} · ${p.prescriber.council}` : p.prescriber.name}</p>
+      <p style={muted}>{`emitida em ${fmtDay(p.issued_on)} · vale até ${fmtDay(p.valid_until)}`}</p>
+      <p style={muted}>{[ p.prescriber.name ?? NO_PRESCRIBER, p.prescriber.council ].filter(Boolean).join(" · ")}</p>
       <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: 8 }}>
         {p.items.map((i) => {
           const validity = itemValidity(i);
@@ -52,7 +52,7 @@ export function PrescriptionCard({ p, onDispense, onHistory }: { p: Prescription
               </span>
               <span>{`${fmtQuantity(i.quantity)} ${i.quantity_unit} · já dispensado ${fmtQuantity(i.dispensed_total)}`}</span>
               <span style={muted}>{i.dosage_instructions}</span>
-              {validity && (i.expired ? <span style={row}><Tag tone="down" mono={false}>{validity}</Tag></span> : <span style={muted}>{validity}</span>)}
+              {i.expired ? <span style={row}><Tag tone="down" mono={false}>{validity}</Tag></span> : <span style={muted}>{validity}</span>}
             </li>
           );
         })}

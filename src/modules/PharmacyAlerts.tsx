@@ -7,7 +7,6 @@
 import { useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getPharmacyAlerts, listPositions, type LotBalance, type PharmacyLocation, type StockPosition } from "../lib/api";
-import { todayInCity } from "../lib/campaigns";
 import { fmtDay } from "../lib/exams";
 import {
   PHARMACY_ALERTS_REFRESH_MS, PH_ALERTS_KEY, PH_POSITIONS_KEY, STATIC_QUERY, fmtQuantity, locationRoles, pharmacyError, sortPositions
@@ -23,26 +22,25 @@ import { PharmacyGate } from "./pharmacy/PharmacyGate";
 const NOTHING = "nada aqui";
 const screenLink = (id: string) => toHash({ kind: "screen", id });
 
-// Lote por lote (o api marca `expiring_soon` / `expired`): só os que vencem ou venceram, e com saldo (defensivo).
-// Sem os campos (api antigo), mostra todos os lotes e a data decide o "vencido".
-const shown = (b: LotBalance) => (b.expiring_soon === undefined && b.expired === undefined ? true : !!(b.expiring_soon || b.expired)) && Number(b.balance) > 0;
-const isExpired = (b: LotBalance, today: string) => b.expired ?? b.lot.expires_on < today;
+// Lote por lote (o api marca `expiring_soon` / `expired`): só os que vencem ou venceram, e com saldo (defensivo: o api já só manda
+// lote com saldo ou em trânsito; um lote só em trânsito não entra na lista de vencimento).
+const shown = (b: LotBalance) => (b.expiring_soon || b.expired) && Number(b.balance) > 0;
 
 interface ExpiringRow { position: StockPosition; balance: LotBalance }
 
-export function PharmacyAlerts({ today = todayInCity() }: { today?: string } = {}) {
+export function PharmacyAlerts() {
   return (
     <PharmacyGate title="Alertas da farmácia" sub="vencendo, abaixo do mínimo, em trânsito e pendências" allow={(r) => r.pharmacist || r.assistant || r.keeper}>
       {() => (
         <LocationPick allow={() => true}>
-          {(loc) => <Body location={loc} today={today} />}
+          {(loc) => <Body location={loc} />}
         </LocationPick>
       )}
     </PharmacyGate>
   );
 }
 
-function Body({ location, today }: { location: PharmacyLocation; today: string }) {
+function Body({ location }: { location: PharmacyLocation }) {
   const roles = locationRoles(location);
   // "Todos os locais" nas listas: só o almoxarife do central; o api recusa de novo.
   const canAll = location.kind === "central" && roles.keeper;
@@ -61,7 +59,7 @@ function Body({ location, today }: { location: PharmacyLocation; today: string }
           <span style={muted}>as listas valem para todos os locais; as contagens, só para este</span>
         </div>
       )}
-      <ExpiringList scope={scope} today={today} />
+      <ExpiringList scope={scope} />
       <BelowMinimumList scope={scope} />
     </div>
   );
@@ -80,7 +78,7 @@ function Counts({ location, canTransfers, canAdjustments }: { location: Pharmacy
           {line(`Vencendo: ${data.expiring}`)}
           {line(`Vencidos: ${data.expired}`)}
           {line(`Abaixo do mínimo: ${data.below_minimum}`)}
-          {line(`Em trânsito: ${data.in_transit}`, canTransfers && <a href={screenLink("pharmacy-transfers")}>Transferências</a>)}
+          {line(`Transferências em trânsito: ${data.in_transit}`, canTransfers && <a href={screenLink("pharmacy-transfers")}>Transferências</a>)}
           {line(`Ajustes aguardando aprovação: ${data.pending_adjustments}`, canAdjustments && <a href={screenLink("pharmacy-adjustments")}>Inventário e ajustes</a>)}
         </ul>
       )}
@@ -108,7 +106,7 @@ function ListBody({ query, children }: { query: ReturnType<typeof usePositionLis
   );
 }
 
-function ExpiringList({ scope, today }: { scope: string | null; today: string }) {
+function ExpiringList({ scope }: { scope: string | null }) {
   const query = usePositionList(scope, "expiring");
   return (
     <Panel title="Vencendo e vencidos" sub="lotes a vencer e já vencidos (a contagem Vencendo não inclui os vencidos)">
@@ -119,7 +117,7 @@ function ExpiringList({ scope, today }: { scope: string | null; today: string })
               { label: "Lote · medicamento", w: "1.8fr", card: "title", render: (r) => `${r.balance.lot.lot_number} · ${r.position.item.name}` },
               { label: "Local", w: "1fr", render: (r) => r.position.location.name },
               { label: "Validade", w: "1fr", render: (r) => (
-                <span style={row}>{fmtDay(r.balance.lot.expires_on)}{isExpired(r.balance, today) && <Tag tone="down">vencido</Tag>}</span>
+                <span style={row}>{fmtDay(r.balance.lot.expires_on)}{r.balance.expired && <Tag tone="down">vencido</Tag>}</span>
               ) },
               { label: "Saldo", w: "0.8fr", align: "right", render: (r) => <span className="mono">{`${fmtQuantity(r.balance.balance)} ${r.position.item.dispensing_unit}`}</span> }
             ]}

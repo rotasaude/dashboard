@@ -405,6 +405,10 @@ describe("recusas do api", () => {
     expect(pharmacyError(e(422, { error: "too_early", next_allowed_on: "2026-11-03", path: "items[0]" }))).toBe("uso contínuo: próxima retirada deste item a partir de 03/11/2026");
     expect(pharmacyError(e(422, { error: "insufficient_balance", path: "items[0].quantity" }))).toBe("o saldo do lote mudou — os lotes foram relidos; confira a quantidade");
     expect(pharmacyError(e(403, { error: "controlled_requires_pharmacist" }))).toBe(CONTROLLED_PHARMACIST_ONLY);
+    expect(pharmacyError(e(409, { error: "adjustment_pending", path: "lot_id" }))).toBe("já há uma contagem deste lote esperando aprovação");
+    expect(pharmacyError(e(409, { error: "cpf_taken", path: "new_patient.cpf" }))).toBe("este CPF já pertence a outro paciente — confira o número");
+    expect(pharmacyError(e(409, { error: "cns_taken", path: "new_patient.cns" }))).toBe("este CNS já pertence a outro paciente — confira o número");
+    expect(pharmacyError(e(422, { error: "invalid_patient", path: "new_patient.full_name" }))).toBe("confira os dados do paciente novo");
     expect(pharmacyError(e(422, { error: "xyz_new" }))).toBe("não foi possível concluir (xyz_new) — tente de novo");
     expect(pharmacyError(new Error("offline"))).toBe("sem conexão com o servidor — tente de novo");
     expect(pharmacyProblems(e(422, { error: "insufficient_balance", problems: [ { path: "items[0].quantity", error: "insufficient_balance" },
@@ -498,6 +502,8 @@ describe("extrato e posição: rótulos, documento e ordem da página", () => {
   it("documento: o número quando houver; dispensação e transferência só o tipo; sem documento, traço", () => {
     expect(movementDocument({ type: "invoice", id: "n1", number: "NF 1234" })).toBe("NF 1234");
     expect(movementDocument({ type: "dispensation", id: "dp1", number: null })).toBe("dispensação");
+    // O api manda `entry` (nota, doação ou abertura); a abertura não tem número.
+    expect(movementDocument({ type: "entry", id: "e1", number: null })).toBe("entrada");
     expect(movementDocument({ type: "transfer", id: "t1", number: null })).toBe("transferência");
     expect(movementDocument({ type: "novo", id: null, number: null })).toBe("novo");
     expect(movementDocument(null)).toBe("—");

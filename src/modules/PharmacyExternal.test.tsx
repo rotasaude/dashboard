@@ -54,7 +54,7 @@ describe("PharmacyExternal", () => {
     // Antimicrobiano: o api calcula a retenção; a tela não tem campo para isso.
     expect(screen.queryByLabelText(/antimicrobiano|retenção|retida/i)).toBeNull();
     register();
-    await waitFor(() => expect(mocked(api.createExternalPrescription)).toHaveBeenCalledWith({ patient_id: "pa1",
+    await waitFor(() => expect(mocked(api.createExternalPrescription)).toHaveBeenCalledWith({ patient_id: "pa1", location_id: "l2",
       prescriber: { name: "Dr. Ivo Teles", council: "CRM", council_state: "SC", council_number: "45678" }, issued_on: "2026-10-28",
       items: [ { catalog_item_id: "ci1", quantity: "21", quantity_unit: "cápsula", dosage_instructions: "1 cápsula de 8 em 8 horas por 7 dias", continuous: false } ] }));
     expect(await screen.findByRole("button", { name: "Registrar dispensação" })).not.toBeNull();
@@ -74,6 +74,22 @@ describe("PharmacyExternal", () => {
     expect((await screen.findAllByRole("listitem")).map((li) => li.textContent))
       .toContain("Clonazepam 2 mg comprimido: receita externa de controlado só o farmacêutico registra");
     expect(mocked(api.createExternalPrescription)).not.toHaveBeenCalled();
+  });
+
+  it("recusas do api na receita externa: invalid_patient e cpf_taken têm frase, não o código cru", async () => {
+    mocked(api.createExternalPrescription)
+      .mockRejectedValueOnce(new ApiError(422, { error: "invalid_patient", path: "new_patient.full_name",
+        problems: [ { path: "new_patient.full_name", error: "invalid_patient" } ] }, "422"))
+      .mockRejectedValueOnce(new ApiError(409, { error: "cpf_taken", path: "new_patient.cpf" }, "409"));
+    renderWithProviders(<PharmacyExternal today={TODAY27} delayMs={0} />);
+    await choosePatient(); prescriber();
+    await addItem(AMOXI_NAME, "cápsula");
+    text("Quantidade prescrita", "21"); text("Posologia", "1 cápsula de 8 em 8 horas");
+    register();
+    expect(await screen.findByText("confira os dados do paciente novo")).not.toBeNull();
+    register();
+    expect(await screen.findByText("este CPF já pertence a outro paciente — confira o número")).not.toBeNull();
+    expect(screen.queryByText(/não foi possível concluir/)).toBeNull();
   });
 
   it("data no futuro, conselho incompleto e sem item: todas de uma vez; a recusa do api fica no formulário", async () => {
@@ -108,7 +124,7 @@ describe("PharmacyExternal", () => {
     text("Número da notificação", "B-123.456/26");
     register();
     await waitFor(() => expect(mocked(api.createExternalPrescription)).toHaveBeenCalledTimes(1));
-    expect(mocked(api.createExternalPrescription).mock.calls[0][0]).toEqual({ patient_id: "pa1",
+    expect(mocked(api.createExternalPrescription).mock.calls[0][0]).toEqual({ patient_id: "pa1", location_id: "l2",
       prescriber: { name: "Dr. Ivo Teles", council: "CRM", council_state: "SC", council_number: "45678" }, issued_on: "2026-10-28",
       notification_number: "B-123.456/26",
       items: [
@@ -174,6 +190,7 @@ describe("PharmacyExternal", () => {
     await waitFor(() => expect(mocked(api.createExternalPrescription)).toHaveBeenCalledTimes(1));
     const first = mocked(api.createExternalPrescription).mock.calls[0][0];
     expect(first.new_patient).toEqual({ full_name: "José Souza", birth_date: "1990-03-04", mother_name: "Maria Souza", sex: "male", cpf: "52998224725" });
+    expect(first.location_id).toBe("l2");
     expect("duplicates_reviewed" in first).toBe(false);
     expect("patient_id" in first).toBe(false);
     await waitFor(() => expect(mocked(api.findPharmacyDuplicates).mock.calls[0][0]).toEqual({ full_name: "José Souza", birth_date: "1990-03-04", mother_name: "Maria Souza" }));
@@ -184,6 +201,7 @@ describe("PharmacyExternal", () => {
     await waitFor(() => expect(mocked(api.createExternalPrescription)).toHaveBeenCalledTimes(2));
     const second = mocked(api.createExternalPrescription).mock.calls[1][0];
     expect(second.new_patient).toEqual(first.new_patient);
+    expect(second.location_id).toBe("l2");
     expect(second.duplicates_reviewed).toBe(true);
   });
 

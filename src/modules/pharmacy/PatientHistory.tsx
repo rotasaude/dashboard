@@ -96,7 +96,7 @@ export function PatientHistory({ patientId }: { patientId: string }) {
               {d.retention && <span style={row}><Tag tone="warn" mono={false}>receita retida</Tag></span>}
               </div>
             ) },
-            { label: "Por", w: "1.2fr", render: (d) => `${d.by.name} · ${pharmacyRoleLabel(d.by.role)}` }
+            { label: "Por", w: "1.2fr", render: (d) => `${d.by.name ?? "—"} · ${pharmacyRoleLabel(d.by.role)}` }
           ]}
           rows={dispensations}
           rowKey={(d) => d.id}

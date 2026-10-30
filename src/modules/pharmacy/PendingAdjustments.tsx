@@ -9,7 +9,7 @@ import { approveAdjustment, errorCode, listAdjustments, rejectAdjustment, type P
 import { useAuth } from "../../lib/auth";
 import { fmtDateTime } from "../../lib/format";
 import {
-  PH_ADJUSTMENTS_KEY, PH_POSITIONS_KEY, STATIC_QUERY, adjustmentKindLabel, fmtQuantity, fmtSigned, pharmacyError, reasonProblem
+  APPROVAL_NO_BALANCE, PH_ADJUSTMENTS_KEY, PH_POSITIONS_KEY, STATIC_QUERY, adjustmentKindLabel, fmtQuantity, fmtSigned, pharmacyError, reasonProblem
 } from "../../lib/pharmacy";
 import { DataTable } from "../../components/DataTable";
 import { Panel } from "../../components/Panel";
@@ -23,17 +23,20 @@ const STALE = new Set([ "same_user", "not_pending", "not_found" ]);
 
 type Action = { kind: "approve" | "reject"; adjustment: StockAdjustment } | null;
 
+// O nome vem do perfil profissional; o almoxarife não tem perfil (`name: null`): a frase fala de "outra pessoa do local".
+const requester = (a: StockAdjustment): string => a.requested_by.name ?? "outra pessoa do local";
+
 // O api aplica a DIFERENÇA guardada no pedido sobre o saldo de agora (não o contado): a frase diz isso, com o que o pedido via.
 function approvalText(a: StockAdjustment): string {
   const unit = a.lot.item.dispensing_unit;
   const request = a.counted_quantity === null
     ? `saldo ${fmtQuantity(a.balance_at_request)}`
     : `saldo ${fmtQuantity(a.balance_at_request)} → contado ${fmtQuantity(a.counted_quantity)}`;
-  return `Será aplicada ao saldo atual a diferença de ${fmtSigned(a.quantity)} ${unit} (no pedido de ${a.requested_by.name}: ${request}). Fica registrado em seu nome.`;
+  return `Será aplicada ao saldo atual a diferença de ${fmtSigned(a.quantity)} ${unit} (no pedido de ${requester(a)}: ${request}). Fica registrado em seu nome.`;
 }
 
 function rejectionText(a: StockAdjustment): string {
-  return `O saldo do lote não muda e o pedido de ${a.requested_by.name} é encerrado. Fica registrado em seu nome, com o motivo.`;
+  return `O saldo do lote não muda e o pedido de ${requester(a)} é encerrado. Fica registrado em seu nome, com o motivo.`;
 }
 
 export function PendingAdjustments({ location, onNotice, onStale, onGoToSecurity }: {
@@ -93,7 +96,7 @@ export function PendingAdjustments({ location, onNotice, onStale, onGoToSecurity
               { label: "Diferença", w: "1fr", render: (a) => `${fmtSigned(a.quantity)} ${a.lot.item.dispensing_unit}` },
               { label: "Motivo", w: "2fr", render: (a) => a.reason },
               { label: "Por", w: "1fr", render: (a) => (
-                <span>{a.requested_by.name}<br /><small className="mono" style={muted}>{fmtDateTime(a.created_at)}</small></span>
+                <span>{a.requested_by.name ?? "—"}<br /><small className="mono" style={muted}>{fmtDateTime(a.created_at)}</small></span>
               ) },
               { label: "", w: "auto", card: "actions", render: (a) => (a.requested_by.user_id === user?.id ? (
                 <span style={muted}>aguardando outra pessoa do local</span>
@@ -143,7 +146,7 @@ export function PendingAdjustments({ location, onNotice, onStale, onGoToSecurity
                 }}
                 onCancel={() => setAction(null)}
                 onGoToSecurity={onGoToSecurity}
-                translateError={(err) => pharmacyError(err)}
+                translateError={(err) => (errorCode(err) === "insufficient_balance" ? APPROVAL_NO_BALANCE : pharmacyError(err))}
               />
             )}
           </div>

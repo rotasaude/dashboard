@@ -163,6 +163,18 @@ describe("PharmacyAdjustments", () => {
     expect(screen.queryByRole("status")).toBeNull();
   });
 
+  it("409 adjustment_pending: já há uma contagem deste lote esperando aprovação; os lotes são relidos", async () => {
+    mocked(api.recordAdjustment).mockRejectedValue(new ApiError(409, { error: "adjustment_pending", path: "lot_id" }, "409"));
+    renderWithProviders(<PharmacyAdjustments today={TODAY27} />);
+    await screen.findByLabelText("Medicamento"); text("Medicamento", "ci1");
+    text("Lote", "lot1"); text("Tipo", "adjustment"); text("Quantidade contada", "20"); text("Motivo", "contagem do fim do mês");
+    fireEvent.click(screen.getByRole("button", { name: "Revisar ajuste" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Registrar ajuste" }));
+    expect(await screen.findByText("já há uma contagem deste lote esperando aprovação")).not.toBeNull();
+    await waitFor(() => expect(mocked(api.listAdjustments).mock.calls.length).toBeGreaterThanOrEqual(2));
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
   it("almoxarife do central também ajusta; auxiliar não entra", async () => {
     mocked(api.fetchCurrentSession).mockResolvedValue(phUser([ "stock_keeper" ]));
     mocked(api.listMyPharmacyLocations).mockResolvedValue([ CENTRAL ]);
@@ -199,6 +211,21 @@ describe("PharmacyAdjustments", () => {
     fireEvent.click(screen.getByRole("button", { name: "Rejeitar ajuste" }));
     await waitFor(() => expect(mocked(api.rejectAdjustment)).toHaveBeenCalledWith("a1", "contagem refeita, saldo confere"));
     expect(mocked(api.listAdjustments)).toHaveBeenCalledWith({ locationId: "l2", status: "pending", before: null });
+  });
+
+  it("pedido do almoxarife (sem perfil: name null) mostra \"—\"; aprovar sem saldo para a diferença dá a frase própria", async () => {
+    mocked(api.listAdjustments).mockResolvedValue({
+      adjustments: [ adjustment({ requested_by: { user_id: "u-7", name: null } }) ], next_before: null });
+    mocked(api.approveAdjustment).mockRejectedValueOnce(new ApiError(422, { error: "insufficient_balance", path: "id" }, "422"));
+    renderWithProviders(<PharmacyAdjustments today={TODAY27} />);
+    const panel = within(await screen.findByRole("region", { name: "Ajustes aguardando aprovação" }));
+    const row = await panel.findByRole("row", { name: /Contagem do fim do mês/ });
+    expect(row.textContent).toContain("—");
+    expect(row.textContent).not.toContain("null");
+    fireEvent.click(within(row).getByRole("button", { name: "Aprovar" }));
+    expect(await screen.findByText(/\(no pedido de outra pessoa do local: saldo 30 → contado 20\)/)).not.toBeNull();
+    fireEvent.click(await screen.findByRole("button", { name: "Aprovar ajuste" }));
+    expect(await screen.findByText("o saldo atual não comporta esta diferença — rejeite o pedido e peça uma contagem nova")).not.toBeNull();
   });
 
   it("aprovar com sucesso; same_user relê; motivo de rejeição curto não chama o api", async () => {

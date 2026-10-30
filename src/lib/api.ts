@@ -4740,8 +4740,9 @@ export interface PharmacySettings {
 // O api sempre manda `item` na saída (GET e PUT); na entrada só vão `catalog_item_id` e `minimum`. O GET omite o mínimo zero.
 export interface StockMinimum { catalog_item_id: string; minimum: string; item: StockItem }
 
-// expiring_soon / expired por lote: o api os produz; ausentes (api antigo) = a tela mostra todos os lotes e decide "vencido" pela data.
-export interface LotBalance { lot: StockLot; balance: string; in_transit: string; expiring_soon?: boolean; expired?: boolean }
+// `lots[]` só traz lote com saldo > 0 ou em trânsito > 0 (FEFO). Por lote: `expired` = validade < hoje; `expiring_soon` = não vencido e
+// dentro do alerta de validade da cidade. Na POSIÇÃO, `expiring_soon` inclui os já vencidos (é a lista "vencendo e vencidos").
+export interface LotBalance { lot: StockLot; balance: string; in_transit: string; expiring_soon: boolean; expired: boolean }
 export interface StockPosition {
   location: LocationRef; item: StockItem; lots: LotBalance[]; balance: string; minimum: string | null;
   below_minimum: boolean; expiring_soon: boolean;
@@ -4754,7 +4755,7 @@ export interface PositionPage { positions: StockPosition[]; next_before: string 
 export interface StockMovement {
   id: string; kind: StockMovementKind | string; quantity: string;
   document: { type: string; id: string | null; number: string | null } | null;
-  reason?: string | null; by: { name: string } | null; at: string;
+  reason?: string | null; by: { name: string | null } | null; at: string;
 }
 export interface MovementPage { movements: StockMovement[]; next_before: string | null }
 
@@ -4790,7 +4791,8 @@ export interface TransferPage { transfers: StockTransfer[]; next_before: string 
 export interface StockAdjustment {
   id: string; location: LocationRef; lot: StockLot; kind: AdjustmentKind | string; status: AdjustmentStatus | string;
   quantity: string; counted_quantity: string | null; balance_at_request: string; reason: string;
-  requested_by: { user_id: string; name: string }; decided_by: { user_id: string; name: string } | null;
+  // `name` é o do perfil profissional: o almoxarife não tem perfil e vem com `name: null` (a tela mostra "—").
+  requested_by: { user_id: string; name: string | null }; decided_by: { user_id: string; name: string | null } | null;
   decision_reason: string | null; created_at: string;
 }
 export interface AdjustmentInput {
@@ -4804,13 +4806,17 @@ export interface PrescriptionItemView {
   dosage_instructions: string; continuous: boolean; controlled: boolean;
   // H12: calculado pelo api (antimicrobiano do catálogo, controlado ou controle especial).
   retention_required: boolean;
+  // `dispensed_total` é LÍQUIDO (dispensado − devolvido): devolver libera nova retirada; linha devolvida por inteiro não conta em
+  // `last_dispensed_on` nem em `completed`.
   dispensed_total: string; last_dispensed_on: string | null; next_allowed_on: string | null; completed: boolean;
-  // P4: validade por item.
-  valid_until?: string; expired?: boolean;
+  // P4/H3: validade por item (sempre presentes) e o item do catálogo (nulo no texto livre), com a unidade de dispensação.
+  item: StockItem | null; valid_until: string; expired: boolean;
 }
 export interface PrescriptionView {
-  kind: PrescriptionKind | string; id: string; short_code: string | null; issued_on: string; valid_until: string | null;
-  expired: boolean; cancelled: boolean; prescriber: { name: string; council: string | null }; patient: PharmacyPatient;
+  // `short_code` já vem com hífen ("ABCDE-23456"); `valid_until` é o maior dos itens e `expired` só quando TODOS venceram;
+  // `prescriber.name` é nulo na receita digital de autor sem perfil profissional.
+  kind: PrescriptionKind | string; id: string; short_code: string | null; issued_on: string; valid_until: string;
+  expired: boolean; cancelled: boolean; prescriber: { name: string | null; council: string | null }; patient: PharmacyPatient;
   items: PrescriptionItemView[];
 }
 export type PrescriptionLookupInput = { location_id: string; short_code: string } | { location_id: string; patient_id: string };
@@ -4818,10 +4824,11 @@ export interface PrescriberInput { name: string; council: string; council_state:
 export interface ExternalItemInput {
   catalog_item_id: string; quantity: string; quantity_unit: string; dosage_instructions: string; continuous: boolean;
 }
-// D4: paciente existente ou novo (forma do 24a); notificação só nas listas A e B.
+// D4: paciente existente ou novo (forma do 24a); notificação só nas listas A e B. `location_id` é obrigatório no corpo (a farmácia da unidade
+// que registra; sem ele o api recusa com 422 `location_id`).
 export type ExternalPrescriptionInput =
   ({ patient_id: string } | { new_patient: NewPatient; duplicates_reviewed?: boolean })
-  & { prescriber: PrescriberInput; issued_on: string; notification_number?: string; items: ExternalItemInput[] };
+  & { location_id: string; prescriber: PrescriberInput; issued_on: string; notification_number?: string; items: ExternalItemInput[] };
 
 // D11: `complete` marca o item como dispensado por completo.
 export interface DispensationItemInput {
@@ -4840,13 +4847,14 @@ export interface DispensedItem {
 }
 export interface Dispensation {
   id: string; location: LocationRef; prescription: { kind: PrescriptionKind | string; id: string }; patient: PharmacyPatient;
-  by: { name: string; role: string }; at: string; items: DispensedItem[]; retention: { notification_number: string | null } | null;
+  by: { name: string | null; role: string }; at: string; items: DispensedItem[]; retention: { notification_number: string | null } | null;
 }
 export interface DispensationPage { dispensations: Dispensation[]; next_before: string | null }
 // Devolução (H12): volta ao mesmo lote; a resposta é a dispensação inteira, atualizada.
 export interface ReturnInput { location_id: string; dispensation_item_id: string; quantity: string; reason: string }
 
-// D15: contagens do local (as listas da tela vêm da posição).
+// D15: contagens do local (as listas da tela vêm da posição). `in_transit` conta TRANSFERÊNCIAS enviadas para o local (não quantidade);
+// `expiring` não inclui os vencidos (têm contagem própria).
 export interface PharmacyAlerts { expiring: number; expired: number; below_minimum: number; in_transit: number; pending_adjustments: number }
 // P3: o api cria o paciente do par validado; a farmácia não tem cadastro territorial.
 export interface PharmacyPerson extends TerritoryPerson { has_cpf: boolean; cns_masked: string | null }

@@ -160,7 +160,8 @@ export function DispenseForm({ location, prescription: p, today = todayInCity(),
         const position = positionOf(index);
         const read = reads[index];
         const chosenItem = picked[i.id];
-        const catalogItem = position?.item ?? chosenItem;
+        // O item do catálogo: o da posição lida, o escolhido no texto livre ou o que a própria receita traz (`item`, com a unidade de dispensação).
+        const catalogItem = position?.item ?? chosenItem ?? i.item ?? undefined;
         const unit = catalogItem?.dispensing_unit ?? i.quantity_unit;
         const controlledList = catalogItem?.controlled_list ?? null;
         const lots = availableLots(position, today);
