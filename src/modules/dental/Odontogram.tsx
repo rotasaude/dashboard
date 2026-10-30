@@ -75,7 +75,7 @@ export function Odontogram({ teeth, dentition, situations, pending, selected, on
   }
 
   function onFacePointer(e: PointerEvent<HTMLSpanElement>, tooth: string, face: ToothFace) {
-    if (e.button !== 0) return;
+    if (e.button) return; // só o botão primário; jsdom sem PointerEvent não traz button
     e.currentTarget.closest("button")?.focus();
     faceHandled.current = true;
     onSelect({ tooth, face });
