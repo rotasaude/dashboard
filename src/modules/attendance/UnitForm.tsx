@@ -84,7 +84,7 @@ export function UnitForm({ initial, neighborhoods, busy, cepTimeoutMs = VIACEP_T
       <label style={labelStyle}>
         Tipo
         <select value={value.kind} onChange={(e) => set({ kind: e.target.value })} style={inputStyle}>
-          {unitKindOptions(dentalOn).map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}
+          {unitKindOptions(dentalOn || value.kind === "ceo").map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}
         </select>
       </label>
       <label style={labelStyle}>
