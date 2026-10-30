@@ -2,7 +2,7 @@
 // A situação nunca é só cor: sigla visível + aria-label completo. Regras em `lib/dental`.
 import { useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from "react";
 import type { Dentition, DentalVocabulary, OdontogramTooth, ToothFace } from "../../lib/api";
-import { chartRows, faceLayout, situationAbbr, situationTone, toothAriaLabel } from "../../lib/dental";
+import { chartRows, faceLayout, isUpperTooth, situationAbbr, situationTone, toothAriaLabel } from "../../lib/dental";
 import { SegmentedControl } from "../../shell/SegmentedControl";
 import { toneColor } from "../../theme/tokens";
 
@@ -20,9 +20,10 @@ interface Props {
 
 const DENTITIONS: { key: Dentition; label: string }[] = [ { key: "permanent", label: "Permanente" }, { key: "deciduous", label: "Decídua" }, { key: "mixed", label: "Mista" } ];
 const CELL = 44;
-const isUpperRow = (row: string[]) => "1256".includes(row[0][0]);
+const isUpperRow = (row: string[]) => isUpperTooth(row[0]);
 const empty = (code: string | null | undefined) => !code || code === "none";
 
+// Setas verticais: mesma distância da linha média, do mesmo lado; se a linha de destino é mais curta, o dente mais externo.
 // Posição vizinha numa linha acima/abaixo: mesma distância da linha média, do mesmo lado; sem par, a mais externa.
 function verticalTarget(from: string[], index: number, to: string[]): string {
   const h = from.length / 2, h2 = to.length / 2;
@@ -40,7 +41,7 @@ function toothStyle(selected: boolean, pendingMark: boolean): CSSProperties {
 
 function faceStyle(code: string | null | undefined, chosen: boolean): CSSProperties {
   const c = toneColor(code ? situationTone(code) : undefined);
-  return { background: code ? c.bg : "var(--sunken)", border: `1px solid ${chosen ? "var(--accent)" : code ? c.fg : "var(--rule)"}`, boxSizing: "border-box" };
+  return { background: code ? c.bg : "var(--sunken)", border: `${chosen ? "2px double" : "1px solid"} ${chosen ? "var(--accent)" : code ? c.fg : "var(--rule)"}`, boxSizing: "border-box" };
 }
 
 export function Odontogram({ teeth, dentition, situations, pending, selected, onSelect, onDentitionChange }: Props) {
@@ -48,7 +49,7 @@ export function Odontogram({ teeth, dentition, situations, pending, selected, on
   const byTooth = useMemo(() => new Map(teeth.map((t) => [ t.tooth, t ])), [ teeth ]);
   const [ focused, setFocused ] = useState<string | null>(null);
   const root = useRef<HTMLDivElement>(null);
-  const faceTouchAt = useRef(0);
+  const faceHandled = useRef(false); // pointerUp na face já selecionou; o click seguinte não pode sobrescrever
 
   const all = rows.flat();
   const stop = focused && all.includes(focused) ? focused : selected && all.includes(selected.tooth) ? selected.tooth : rows[0][0];
@@ -56,6 +57,7 @@ export function Odontogram({ teeth, dentition, situations, pending, selected, on
   const focusTooth = (tooth: string) => root.current?.querySelector<HTMLButtonElement>(`[data-tooth="${tooth}"]`)?.focus();
 
   function onKey(e: KeyboardEvent<HTMLButtonElement>, tooth: string) {
+    if (e.altKey || e.ctrlKey || e.metaKey) return;
     const r = rows.findIndex((row) => row.includes(tooth));
     const row = rows[r], i = row.indexOf(tooth);
     let next: string | undefined;
@@ -73,8 +75,9 @@ export function Odontogram({ teeth, dentition, situations, pending, selected, on
   }
 
   function onFacePointer(e: PointerEvent<HTMLSpanElement>, tooth: string, face: ToothFace) {
+    if (e.button !== 0) return;
     e.currentTarget.closest("button")?.focus();
-    faceTouchAt.current = Date.now();
+    faceHandled.current = true;
     onSelect({ tooth, face });
   }
 
@@ -84,16 +87,17 @@ export function Odontogram({ teeth, dentition, situations, pending, selected, on
     const isSel = selected?.tooth === tooth;
     const lay = faceLayout(tooth);
     const faceAt = { [lay.top]: "top", [lay.bottom]: "bottom", [lay.left]: "left", [lay.right]: "right", O: "center" } as Record<ToothFace, string>;
-    const abbr = empty(t?.situation) ? "—" : situationAbbr(t!.situation!, situations, "crown");
+    const hasMore = !empty(t?.root) || Object.values(t?.faces ?? {}).some((c) => !empty(c));
+    const abbr = (empty(t?.situation) ? "—" : situationAbbr(t!.situation!, situations, "crown")) + (hasMore ? "+" : "");
     const rootCode = empty(t?.root) ? null : t!.root!;
     const rootBar = (
       <span data-part="root" aria-hidden="true" style={{ display: "block", width: 14, height: 4, borderRadius: 2, ...faceStyle(rootCode, false) }} />
     );
     return (
       <button key={tooth} type="button" data-tooth={tooth} aria-label={toothAriaLabel(t, tooth, situations, count)}
-        aria-pressed={isSel ? true : undefined} tabIndex={tooth === stop ? 0 : -1} style={toothStyle(isSel, count > 0)}
+        aria-pressed={isSel} tabIndex={tooth === stop ? 0 : -1} style={toothStyle(isSel, count > 0)}
         onFocus={() => setFocused(tooth)} onKeyDown={(e) => onKey(e, tooth)}
-        onClick={() => { if (Date.now() - faceTouchAt.current > 400) onSelect({ tooth, face: null }); }}>
+        onClick={() => { if (faceHandled.current) { faceHandled.current = false; return; } onSelect({ tooth, face: null }); }}>
         {!upper && rootBar}
         <span className="mono" style={{ fontSize: 11, fontWeight: 600 }}>{tooth}{count > 0 ? "•" : ""}</span>
         <span aria-hidden="true" style={{ display: "grid", gridTemplate: "7px 10px 7px / 7px 10px 7px", width: 24, height: 24 }}>

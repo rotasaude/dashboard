@@ -74,4 +74,34 @@ describe("Odontogram", () => {
     fireEvent.click(screen.getByRole("tab", { name: "Mista" }));
     expect(onDentitionChange).toHaveBeenCalledWith("mixed");
   });
+
+  it("pointerUp na face seguido de click no botão mantém dente e face", () => {
+    const onSelect = vi.fn();
+    render(<Odontogram teeth={teeth} dentition="permanent" situations={SITUATIONS} selected={null} onSelect={onSelect} />);
+    const b = screen.getByRole("button", { name: /^Dente 46:/ });
+    fireEvent.pointerUp(b.querySelector('[data-face="V"]')!);
+    fireEvent.click(b);
+    expect(onSelect).toHaveBeenCalledTimes(1);
+    expect(onSelect).toHaveBeenLastCalledWith({ tooth: "46", face: "V" });
+    fireEvent.click(b);
+    expect(onSelect).toHaveBeenLastCalledWith({ tooth: "46", face: null });
+  });
+
+  it("face ou raiz registrada ganha marca textual '+' além da cor", () => {
+    render(<Odontogram teeth={teeth} dentition="permanent" situations={SITUATIONS} selected={null} onSelect={vi.fn()} />);
+    expect(screen.getByRole("button", { name: /^Dente 16:/ }).textContent).toContain("+");
+    expect(screen.getByRole("button", { name: /^Dente 11:/ }).textContent).not.toContain("+");
+  });
+
+  it("mista: 11 desce para 51 e 51 sobe para 11; Ctrl+seta é ignorada", () => {
+    render(<Odontogram teeth={teeth} dentition="mixed" situations={SITUATIONS} selected={null} onSelect={vi.fn()} />);
+    const b11 = screen.getByRole("button", { name: /^Dente 11:/ });
+    b11.focus();
+    fireEvent.keyDown(b11, { key: "ArrowDown", ctrlKey: true });
+    expect(document.activeElement).toBe(b11);
+    fireEvent.keyDown(b11, { key: "ArrowDown" });
+    expect(document.activeElement?.getAttribute("aria-label")).toMatch(/^Dente 51:/);
+    fireEvent.keyDown(document.activeElement!, { key: "ArrowUp" });
+    expect(document.activeElement?.getAttribute("aria-label")).toMatch(/^Dente 11:/);
+  });
 });

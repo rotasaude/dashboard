@@ -93,8 +93,9 @@ export function toothSextant(tooth: string): Sextant {
 }
 
 // Mesial sempre para o meio da boca: quadrantes 1, 4, 5 e 8 ficam à esquerda da tela.
+export const isUpperTooth = (tooth: string): boolean => "1256".includes(tooth[0]);
 export function faceLayout(tooth: string): { top: ToothFace; bottom: ToothFace; left: ToothFace; right: ToothFace } {
-  const upper = "1256".includes(tooth[0]);
+  const upper = isUpperTooth(tooth);
   const leftSide = "1458".includes(tooth[0]);
   return {
     top: upper ? "V" : "L", bottom: upper ? "L" : "V",
