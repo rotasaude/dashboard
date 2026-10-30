@@ -1634,7 +1634,11 @@ export interface EvaluatedProblem {
 export interface ExamRequest { id?: string; sigtap_code: string; label: string; cid10_justification?: string | null; priority?: ExamPriority }
 // Divergência D4: `evaluated_problems` são eventos novos (mesma forma da
 // consulta); `conducts` e `exam_requests` são as listas finais.
-export interface AddendumChanges { evaluated_problems?: EvaluatedProblem[]; conducts?: string[]; exam_requests?: ExamRequest[] }
+export interface AddendumChanges {
+  evaluated_problems?: EvaluatedProblem[]; conducts?: string[]; exam_requests?: ExamRequest[];
+  // Módulo 28 (O14): o adendo odontológico leva achados e cancelamentos de item do plano.
+  dental?: { findings: DentalFinding[]; plan_changes: { cancel: PlanCancel[] } };
+}
 export interface Addendum {
   id: string; author_name: string; created_at: string; reason: string; text: string; changes: AddendumChanges | null;
   // Módulo 19b (contrato 2026-10-08 §2): calculado pelo api; ausente em api sem o 19b.
@@ -1657,6 +1661,8 @@ export interface Consultation {
   signature?: SignatureBlock;
   // Módulo 26a (contrato §13 G4): pedidos de regulação que não seguiram junto com a finalização.
   regulation_not_sent?: RegulationNotSent[];
+  // Módulo 28 (contrato §2/§4): ausente = consulta comum (`general`).
+  kind?: ConsultationKind; baseline?: boolean; dental?: DentalBlock | null;
 }
 export interface ConsultationSummary {
   id: string; finalized_at: string; author_name: string; cbo_label: string; care_type_label: string;
@@ -1672,11 +1678,17 @@ export interface ClinicalRecord {
   patient: RecordPatient; access: RecordAccess; problems: PatientProblem[];
   today_screening: Screening | null; consultations: ConsultationSummary[];
 }
-export interface ConsultationOptions { care_types: CodedOption[]; conducts: CodedOption[]; cid10_allowed_for_cbo: boolean }
+export interface ConsultationOptions {
+  care_types: CodedOption[]; conducts: CodedOption[]; cid10_allowed_for_cbo: boolean;
+  // Módulo 28 (O4, O20): `kinds` ausente = ["general"]; o bloco `dental` é o vocabulário fixo da FAO (sem dado pessoal).
+  kinds?: ConsultationKind[]; dental_role?: DentalRole | null; dental?: DentalVocabulary;
+}
 // Corpo do autosave (Divergência D5: todos os campos editáveis a cada PATCH).
 export interface ConsultationDraftInput {
   subjective: string; objective: string; assessment: string; plan: string; vitals: VitalSigns; care_type: string | null;
   evaluated_problems: EvaluatedProblem[]; conducts: string[]; exam_requests: ExamRequest[];
+  // Módulo 28 (contrato §2): só na consulta odontológica.
+  dental?: DentalFields;
 }
 // O mesmo corpo do POST /attendance/attendances/:id/close.
 export interface OutcomeBody { outcome: CareOutcome; referral_unit_id?: string; referral_note?: string }
@@ -1712,8 +1724,8 @@ export function getConsultationOptions(): Promise<ConsultationOptions> {
   return jsonFetch(`${ATTENDANCE_BASE}/consultation_options`);
 }
 
-export function startConsultation(attendanceId: string): Promise<Consultation> {
-  return jsonFetch(attendancePath(attendanceId, "consultation"), postProfessional({}));
+export function startConsultation(attendanceId: string, input?: { kind: ConsultationKind; baseline?: boolean }): Promise<Consultation> {
+  return jsonFetch(attendancePath(attendanceId, "consultation"), postProfessional(input ?? {}));
 }
 
 export function saveConsultationDraft(id: string, input: ConsultationDraftInput): Promise<Consultation> {
@@ -5019,4 +5031,207 @@ export async function findPharmacyDuplicates(q: DuplicateQuery): Promise<Duplica
   const b = await jsonFetch<{ candidates?: Omit<DuplicateCandidate, "registration_id">[] }>(
     phPath("patients", "duplicates"), phWrite("POST", q));
   return (b.candidates ?? []).map((c) => ({ ...c, registration_id: null }));
+}
+
+// ─── Saúde bucal (módulo 28; ADR 0046; contrato §3–§10, §16) ───
+export type ConsultationKind = "general" | "dental";
+export type DentalRole = "dentist" | "auxiliary";
+export type ToothFace = "M" | "D" | "O" | "V" | "L";
+export type DentalLocationKind = "tooth" | "face" | "sextant" | "arch" | "mouth";
+export type Sextant = "S1" | "S2" | "S3" | "S4" | "S5" | "S6";
+export type Arch = "upper" | "lower";
+export type Dentition = "permanent" | "deciduous" | "mixed";
+export type DentalPlanStatus = "open" | "completed" | "cancelled";
+export type DentalPlanItemStatus = "planned" | "done" | "cancelled";
+export type ProsthesisStage = "impression" | "sent" | "received" | "installed" | "cancelled";
+export type CeoType = "I" | "II" | "III";
+export type CeoSpecialty = "endodontics" | "periodontics" | "oral_surgery" | "stomatology" | "special_needs" | "prosthesis";
+export type PerioSite = "MV" | "V" | "DV" | "ML" | "L" | "DL";
+export type DentalPart = "crown" | "root";
+
+// O4: vocabulário da FAO que o api manda em consultation_options; o dashboard nunca traduz código por conta própria.
+export interface DentalVocabulary {
+  care_types: CodedOption[]; consultation_types: CodedOption[]; surveillance: CodedOption[]; supplies: CodedOption[]; outcomes: CodedOption[];
+  situations: { crown: CodedOption[]; root: CodedOption[]; arch: CodedOption[]; face: CodedOption[] };
+}
+
+export interface DentalLocation { kind: DentalLocationKind; tooth: string | null; face: ToothFace | null; sextant: Sextant | null; arch: Arch | null }
+export interface DentalUnitRef { id: string; name: string; kind: string }
+
+export interface OdontogramTooth {
+  tooth: string; situation: string | null; root: string | null; faces: Partial<Record<ToothFace, string | null>>;
+  last_event_at: string | null; notes_count: number;
+}
+export interface Odontogram {
+  patient: { id: string; display_name: string | null; has_cpf: boolean; cns_masked: string | null };
+  dentition: Dentition; teeth: OdontogramTooth[]; open_plans: { id: string; health_unit: DentalUnitRef }[];
+}
+export interface ChartEvent {
+  id: string; tooth: string; part: DentalPart; face: ToothFace | null; situation: string | null;
+  procedure: { sigtap: string; name: string } | null; consultation_id: string; addendum_id: string | null;
+  by: { name: string; cbo: string }; at: string;
+}
+export interface ChartEventPage { events: ChartEvent[]; next_before: string | null }
+
+export interface DentalPlanItem {
+  id: string; sigtap: string; name: string; location: DentalLocation; status: DentalPlanItemStatus | string;
+  done_in_consultation_id: string | null; cancel_reason: string | null;
+}
+export interface DentalPlan {
+  id: string; health_unit: DentalUnitRef; status: DentalPlanStatus | string; opened_in_consultation_id: string;
+  closed_in_consultation_id: string | null; items: DentalPlanItem[];
+}
+
+// `name` só na leitura e no estado da tela (o api ignora na escrita — O14).
+export interface DentalProcedureLine {
+  id?: string; sigtap: string; name?: string; location: DentalLocation; quantity: number; plan_item_id: string | null;
+  prosthesis_order_id?: string | null;
+}
+// O3: achado de coroa, raiz ou arcada (`tooth: null` + `arch` = prótese total).
+export interface DentalFinding { tooth: string | null; face: ToothFace | null; part: DentalPart; arch?: Arch; situation: string }
+export interface PlanAdd { sigtap: string; name?: string; location: DentalLocation }
+export interface PlanCancel { item_id: string; reason: string }
+export interface DentalPlanChanges { add: PlanAdd[]; cancel: PlanCancel[] }
+// `code: null` = sextante excluído "X" (O14, O23).
+export interface PeriodontalScreening { sextants: { sextant: Sextant; code: number | null; star: boolean }[] }
+export interface PeriodontalSiteValue { site: PerioSite; probing_depth_mm: number | null; recession_mm: number | null; bleeding: boolean }
+export interface PeriodontalTooth { tooth: string; mobility: number | null; furcation: number | null; sites: PeriodontalSiteValue[] }
+export interface PeriodontalChart { teeth: PeriodontalTooth[] }
+export interface EndodonticEntry { tooth: string; canals: number; status: "in_progress" | "completed" }
+
+// = <dental_fields>; códigos da FAO como string (O25).
+export interface DentalFields {
+  care_type: string | null; dental_consultation_type: string | null; oral_health_surveillance: string[]; supplies: string[];
+  dental_outcomes: string[]; pregnant: boolean | null; special_needs: boolean; procedures: DentalProcedureLine[];
+  findings: DentalFinding[]; plan_changes: DentalPlanChanges; periodontal_screening: PeriodontalScreening | null;
+  periodontal_chart: PeriodontalChart | null; endodontics: EndodonticEntry[];
+}
+export interface DentalBlock extends DentalFields { suggest_completed?: boolean }
+
+export interface DentalProcedureRef {
+  sigtap: string; name: string; locations: DentalLocationKind[]; max_quantity: number; auxiliary_allowed: boolean; prosthesis: boolean;
+}
+export interface EndodonticTreatment {
+  tooth: string; canals: number; status: string; sessions: { consultation_id: string; at: string; by: { name: string } | null }[];
+}
+
+export interface ProsthesisOrder {
+  id: string; patient: { id: string; display_name: string | null }; health_unit: { id: string; name: string }; sigtap: string; name: string;
+  laboratory: { care_provider_id: string | null; name: string }; stage: ProsthesisStage | string;
+  // O27: `created_at` e `stages[].reason` opcionais.
+  stages: { stage: string; at: string; by: { name: string } | null; reason?: string | null }[];
+  installed_in_consultation_id: string | null; created_at?: string;
+}
+export interface ProsthesisOrderInput {
+  patient_id: string; consultation_id: string; sigtap: string; laboratory: { care_provider_id: string } | { name: string };
+}
+export interface ProsthesisQuery { healthUnitId?: string | null; patientId?: string | null; stage?: string | null; before?: string | null }
+export interface ProsthesisPage { orders: ProsthesisOrder[]; next_before: string | null }
+export interface DentalLaboratory { id: string; name: string }
+
+export interface CeoProfile { health_unit: { id: string; name: string }; ceo_type: CeoType | null; specialties: CeoSpecialty[] }
+export interface AuxiliaryProcedure { sigtap: string; name: string }
+// O24: `value` é string percentual com ponto ("62.00"); a vírgula só aparece na tela.
+export interface CeoGoalRow {
+  key: string; goal: number; done: number; composition: { rule: string; ok: boolean; value: string } | null; met: boolean;
+}
+export interface CeoGoals {
+  ceo_type: CeoType | string; specialties: CeoGoalRow[]; misses_last_12: Record<string, { consecutive: number; total: number }>;
+  suspension_risk: boolean; history?: { month: string; specialties: { key: string; done: number; met: boolean }[] }[];
+}
+export interface DentalTeam { id: string; name: string; ine: string | null; health_unit: { id: string; name: string } }
+// O15: `denominator: null` quando a eSB não tem equipe associada.
+export interface DentalIndicators {
+  b1: { numerator: number; denominator: number | null }; b2: { numerator: number; denominator: number | null };
+}
+
+export const DENTAL_PAGE_SIZE = 50;
+
+const DENTAL_BASE = import.meta.env.VITE_DENTAL_BASE || "/dental";
+const dentalPath = (...parts: string[]) => [ DENTAL_BASE, ...parts.map(encodeURIComponent) ].join("/");
+// Parâmetro nulo ou vazio não entra na URL.
+const dentalParams = (pairs: [ string, string | null | undefined ][]) => {
+  const params = new URLSearchParams();
+  for (const [ key, value ] of pairs) if (value) params.set(key, value);
+  return params;
+};
+
+// Leituras nominais (geram trilha no api); ids na URL, nada clínico (O13).
+export function getDentalChart(patientId: string): Promise<Odontogram> {
+  return jsonFetch(dentalPath("patients", patientId, "dental_chart"));
+}
+
+export async function listChartEvents(patientId: string, q: { before?: string | null }): Promise<ChartEventPage> {
+  const b = await jsonFetch<{ events?: ChartEvent[]; next_before?: string | null }>(withQuery(
+    dentalPath("patients", patientId, "dental_chart", "events"),
+    dentalParams([ [ "before", q.before ], [ "limit", String(DENTAL_PAGE_SIZE) ] ])));
+  return { events: b.events ?? [], next_before: b.next_before ?? null };
+}
+
+export async function listDentalPlans(patientId: string, q: { healthUnitId?: string | null; status?: string | null }): Promise<DentalPlan[]> {
+  const b = await jsonFetch<{ plans?: DentalPlan[] }>(withQuery(
+    dentalPath("patients", patientId, "dental_plans"), dentalParams([ [ "health_unit_id", q.healthUnitId ], [ "status", q.status ] ])));
+  return b.plans ?? [];
+}
+
+export async function listEndodonticTreatments(patientId: string): Promise<EndodonticTreatment[]> {
+  const b = await jsonFetch<{ treatments?: EndodonticTreatment[] }>(dentalPath("patients", patientId, "endodontic_treatments"));
+  return b.treatments ?? [];
+}
+
+// A busca vai no corpo: o termo pode ser clínico.
+export async function searchDentalProcedures(q: string): Promise<DentalProcedureRef[]> {
+  const b = await jsonFetch<{ procedures?: DentalProcedureRef[] }>(dentalPath("procedures", "search"), postProfessional({ q }));
+  return b.procedures ?? [];
+}
+
+export function createProsthesisOrder(input: ProsthesisOrderInput): Promise<ProsthesisOrder> {
+  return jsonFetch(dentalPath("prosthesis_orders"), postProfessional(input));
+}
+
+export function changeProsthesisStage(id: string, input: { stage: "sent" | "received" | "cancelled"; reason?: string }): Promise<ProsthesisOrder> {
+  return jsonFetch(dentalPath("prosthesis_orders", id, "stages"), postProfessional(input));
+}
+
+export async function listProsthesisOrders(q: ProsthesisQuery): Promise<ProsthesisPage> {
+  const b = await jsonFetch<{ orders?: ProsthesisOrder[]; next_before?: string | null }>(withQuery(
+    dentalPath("prosthesis_orders"),
+    dentalParams([ [ "health_unit_id", q.healthUnitId ], [ "patient_id", q.patientId ], [ "stage", q.stage ], [ "before", q.before ],
+      [ "limit", String(DENTAL_PAGE_SIZE) ] ])));
+  return { orders: b.orders ?? [], next_before: b.next_before ?? null };
+}
+
+export async function listDentalLaboratories(): Promise<DentalLaboratory[]> {
+  return (await jsonFetch<{ laboratories?: DentalLaboratory[] }>(dentalPath("laboratories"))).laboratories ?? [];
+}
+
+// Administração e painéis.
+export async function listCeoProfiles(): Promise<CeoProfile[]> {
+  return (await jsonFetch<{ profiles?: CeoProfile[] }>(dentalPath("admin", "ceo_profiles"))).profiles ?? [];
+}
+
+export function putCeoProfile(unitId: string, input: { ceo_type: CeoType; specialties: CeoSpecialty[] }): Promise<CeoProfile> {
+  return jsonFetch(dentalPath("admin", "ceo_profiles", unitId), { method: "PUT", body: JSON.stringify(input) });
+}
+
+export async function getAuxiliaryProcedures(): Promise<AuxiliaryProcedure[]> {
+  return (await jsonFetch<{ procedures?: AuxiliaryProcedure[] }>(dentalPath("admin", "auxiliary_procedures"))).procedures ?? [];
+}
+
+export async function putAuxiliaryProcedures(sigtaps: string[]): Promise<AuxiliaryProcedure[]> {
+  const b = await jsonFetch<{ procedures?: AuxiliaryProcedure[] }>(dentalPath("admin", "auxiliary_procedures"),
+    { method: "PUT", body: JSON.stringify({ procedures: sigtaps.map((sigtap) => ({ sigtap })) }) });
+  return b.procedures ?? [];
+}
+
+export function getCeoGoals(unitId: string, month: string): Promise<CeoGoals> {
+  return jsonFetch(withQuery(dentalPath("ceo_goals"), dentalParams([ [ "health_unit_id", unitId ], [ "month", month ] ])));
+}
+
+export async function listDentalTeams(): Promise<DentalTeam[]> {
+  return (await jsonFetch<{ teams?: DentalTeam[] }>(dentalPath("teams"))).teams ?? [];
+}
+
+export function getDentalIndicators(teamId: string, period: string): Promise<DentalIndicators> {
+  return jsonFetch(withQuery(dentalPath("indicators"), dentalParams([ [ "team_id", teamId ], [ "period", period ] ])));
 }

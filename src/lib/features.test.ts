@@ -108,3 +108,9 @@ describe("módulo 27a", () => {
     expect(featureLabel("pharmacy")).toBe("Farmácia e almoxarifado");
   });
 });
+
+describe("módulo 28", () => {
+  it("dental_care tem nome em português", () => {
+    expect(featureLabel("dental_care")).toBe("Saúde bucal");
+  });
+});

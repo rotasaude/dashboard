@@ -87,7 +87,9 @@ export default defineConfig({
       // Módulo 26a: regulação municipal. Regex como os vizinhos.
       "^/regulation(/|$)": proxy(TARGET),
       // Módulo 27a: farmácia e almoxarifado. Regex como os vizinhos.
-      "^/pharmacy(/|$)": proxy(TARGET)
+      "^/pharmacy(/|$)": proxy(TARGET),
+      // Módulo 28: saúde bucal. Regex como os vizinhos.
+      "^/dental(/|$)": proxy(TARGET)
     }
   }
 });

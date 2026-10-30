@@ -10,7 +10,7 @@ export type FeatureKey =
   | "patient_timeline" | "exam_tracking" | "exam_fhir_inbound" | "exam_pec_bridge" | "fake_lab"
   | "municipal_lab" | "lab_hl7_inbound" | "fake_middleware" | "lab_quality_control" | "lab_inventory"
   | "procedure_billing" | "care_lines" | "territory_registry" | "surveillance" | "care_regulation"
-  | "pharmacy";
+  | "pharmacy" | "dental_care";
 
 export const FEATURE_DISABLED_MESSAGE = "esta funcionalidade está desligada para a cidade";
 
@@ -42,7 +42,9 @@ const FEATURE_LABEL: Record<string, string> = {
   // Módulo 26a (ADR 0044): exige clinical_record.
   care_regulation: "Regulação municipal",
   // Módulo 27a (ADR 0045): sem pré-requisito.
-  pharmacy: "Farmácia e almoxarifado"
+  pharmacy: "Farmácia e almoxarifado",
+  // Módulo 28 (ADR 0046): exige clinical_record.
+  dental_care: "Saúde bucal"
 };
 
 export function sessionFeatures(user: { features?: unknown } | null | undefined): string[] {
