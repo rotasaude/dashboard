@@ -36,6 +36,7 @@ import {
 } from "../lib/demographics";
 import { EMPTY_NAMES, namesBody, namesProblem, type NamesDraft } from "../lib/citizenNames";
 import { hasFeature } from "../lib/features";
+import { canUseDental } from "../lib/dental";
 import { canUseBilling, showUnitProcedures } from "../lib/billing";
 import { UnitProcedures } from "./billing/UnitProcedures";
 
@@ -149,7 +150,7 @@ export function Attendance({ onNavigate }: { onNavigate(id: ModuleId): void }) {
       {canVerify && <ErasureRequest />}
       {isAdmin && <History />}
       {isAdmin && <ErasureRequests onGoToSecurity={goToSecurity} />}
-      {isAdmin && <Units labOn={hasFeature(user, "municipal_lab")} surveillanceOn={hasFeature(user, "surveillance")} />}
+      {isAdmin && <Units labOn={hasFeature(user, "municipal_lab")} surveillanceOn={hasFeature(user, "surveillance")} dentalOn={canUseDental(user)} />}
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import type { Neighborhood, ScreeningScope } from "../../lib/api";
 import { SCOPE_LABEL } from "../../lib/screening";
-import { UNIT_KINDS, onlyDigits } from "../../lib/attendance";
+import { onlyDigits, unitKindOptions } from "../../lib/attendance";
 import { matchNeighborhood, sortByName } from "../../lib/territory";
 import { maskCep, zipError, type AddressFields } from "../../lib/unitAddress";
 import { VIACEP_TIMEOUT_MS, lookupCep } from "../../lib/viacep";
@@ -21,13 +21,15 @@ interface Props {
   neighborhoods: Neighborhood[];
   busy: boolean;
   cepTimeoutMs?: number;
+  // Módulo 28: `dental_care` ligado (canUseDental, vindo do Atendimento) — só então o CEO é oferecido.
+  dentalOn?: boolean;
   onSave(value: UnitFormValue): void;
   onCancel(): void;
 }
 
 type CepState = { kind: "idle" } | { kind: "loading" } | { kind: "found"; neighborhood: string } | { kind: "failed" };
 
-export function UnitForm({ initial, neighborhoods, busy, cepTimeoutMs = VIACEP_TIMEOUT_MS, onSave, onCancel }: Props) {
+export function UnitForm({ initial, neighborhoods, busy, cepTimeoutMs = VIACEP_TIMEOUT_MS, dentalOn = false, onSave, onCancel }: Props) {
   const [ value, setValue ] = useState<UnitFormValue>(initial);
   const [ cep, setCep ] = useState<CepState>({ kind: "idle" });
   const [ error, setError ] = useState<string | null>(null);
@@ -82,7 +84,7 @@ export function UnitForm({ initial, neighborhoods, busy, cepTimeoutMs = VIACEP_T
       <label style={labelStyle}>
         Tipo
         <select value={value.kind} onChange={(e) => set({ kind: e.target.value })} style={inputStyle}>
-          {UNIT_KINDS.map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}
+          {unitKindOptions(dentalOn).map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}
         </select>
       </label>
       <label style={labelStyle}>

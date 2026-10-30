@@ -11,7 +11,8 @@ import {
   IconHomeHeart, IconMap2, IconCalendarDue, IconHexagons,
   IconVirus, IconBellRinging, IconCalendarX, IconFileSpreadsheet, IconGridDots, IconVirusSearch,
   IconArrowsSplit2, IconListNumbers, IconArrowBackUp, IconBuildingStore, IconClockHour4,
-  IconBuildingWarehouse, IconPrescription, IconFilePlus, IconTransfer, IconTruckLoading, IconListSearch, IconScale, IconAlertTriangle, IconBuildingCog
+  IconBuildingWarehouse, IconPrescription, IconFilePlus, IconTransfer, IconTruckLoading, IconListSearch, IconScale, IconAlertTriangle, IconBuildingCog,
+  IconDental, IconDentalBroken
 } from "@tabler/icons-react";
 import type { Catalog } from "./types";
 
@@ -28,6 +29,7 @@ export const CATALOG: Catalog = {
     "Cadastro territorial": { icon: IconHomeHeart, description: "Microáreas, domicílios, famílias e cadastro individual" },
     "Vigilância": { icon: IconVirus, description: "Notificação compulsória, prazos, negativa semanal e painel" },
     "Regulação": { icon: IconArrowsSplit2, description: "Encaminhamentos a especialista e procedimento, fila, cotas e prazos" },
+    "Saúde bucal": { icon: IconDental, description: "Prontuário odontológico, CEO e prótese" },
     "Farmácia": { icon: IconBuildingWarehouse, description: "Almoxarifado, farmácia da unidade, dispensação e alertas" },
     "Exames":      { icon: IconMicroscope, description: "Pedidos, resultados e prestadores" },
     "Laboratório": { icon: IconFlask, description: "Amostras, laudos, controle de qualidade e estoque" },
@@ -108,6 +110,10 @@ export const CATALOG: Catalog = {
     "pharmacy-stock": { icon: IconListSearch, description: "Saldo por local e lote, extrato e estoque mínimo" },
     "pharmacy-adjustments": { icon: IconScale, description: "Ajustes, perdas e vencimentos, com aprovação" },
     "pharmacy-alerts": { icon: IconAlertTriangle, description: "Vencendo, abaixo do mínimo, em trânsito e pendências" },
+    "dental-prosthesis": { icon: IconDentalBroken, description: "Pedidos ao laboratório, etapas e instalação" },
+    "dental-ceo-goals": { icon: IconTargetArrow, description: "Meta mensal por especialidade e risco de suspensão" },
+    "dental-indicators": { icon: IconChartBar, description: "Primeira consulta e tratamento concluído por equipe" },
+    "dental-admin": { icon: IconSettings, description: "Tipo e especialidades do CEO; o que TSB e ASB registram" },
     "pharmacy-admin": { icon: IconBuildingCog, description: "Locais de estoque, equipe por local e prazos" },
     "campaigns": { icon: IconSpeakerphone, description: "Criar e enviar campanhas por SMS" },
     "team": { icon: IconUsers, description: "Usuários, convites e papéis" },

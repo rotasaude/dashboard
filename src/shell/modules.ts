@@ -9,6 +9,7 @@ import { canUseTerritory } from "../lib/territoryRegistry";
 import { canUseSurveillance } from "../lib/surveillance";
 import { canUseRegulation } from "../lib/regulation";
 import { canUsePharmacy } from "../lib/pharmacy";
+import { canUseDental, dentalRoles } from "../lib/dental";
 export type ModuleId =
   | "overview" | "ingestion" | "conversations" | "consent"
   | "triages" | "classification" | "reports" | "protocols" | "events"
@@ -26,7 +27,8 @@ export type ModuleId =
   | "surveillance-queue" | "surveillance-negatives" | "surveillance-reports" | "surveillance-panel" | "surveillance-diseases"
   | "regulation-queue" | "regulation-returned" | "regulation-offers" | "regulation-settings"
   | "pharmacy-dispensing" | "pharmacy-external" | "pharmacy-transfers" | "pharmacy-entries" | "pharmacy-stock" | "pharmacy-adjustments"
-  | "pharmacy-alerts" | "pharmacy-admin";
+  | "pharmacy-alerts" | "pharmacy-admin"
+  | "dental-prosthesis" | "dental-ceo-goals" | "dental-indicators" | "dental-admin";
 
 export interface NavItem { id: ModuleId; label: string; icon: string; }
 export interface NavGroupDef { label: string; items: NavItem[]; }
@@ -96,6 +98,12 @@ export const NAV_GROUPS: NavGroupDef[] = [
     { id: "pharmacy-adjustments", label: "Inventário e ajustes", icon: "±" },
     { id: "pharmacy-alerts", label: "Alertas da farmácia", icon: "⚠" },
     { id: "pharmacy-admin", label: "Locais e configurações", icon: "⚙" }
+  ]},
+  { label: "Saúde bucal", items: [
+    { id: "dental-prosthesis", label: "Próteses", icon: "⌓" },
+    { id: "dental-ceo-goals", label: "Metas do CEO", icon: "◎" },
+    { id: "dental-indicators", label: "Indicadores B1 e B2", icon: "◑" },
+    { id: "dental-admin", label: "CEO e lista do TSB/ASB", icon: "⚙" }
   ]},
   { label: "Exames", items: [
     { id: "exam-acknowledgements", label: "Resultados aguardando ciência", icon: "⚑" },
@@ -269,6 +277,10 @@ export function navGroupsFor(
   const isPharmacist = roles.includes("pharmacist");
   const isPharmacyAssistant = roles.includes("pharmacy_assistant");
   const isStockKeeper = roles.includes("stock_keeper");
+  // Módulo 28 (ADR 0046): dental_care E clinical_record (canUseDental). Próteses do profissional (o api confere o CBO 2232);
+  // metas e B1/B2 do admin e do analyst; cadastro do CEO e lista do TSB/ASB do admin.
+  const dentalOn = canUseDental(user);
+  const dental = dentalRoles(user);
   return NAV_GROUPS.filter((group) => {
     if (group.label === "Conta") return !user?.operator;
     if (group.label === "Equipe") return isAdmin;
@@ -347,6 +359,9 @@ export function navGroupsFor(
       if (item.id === "pharmacy-entries") return phOn && (isStockKeeper || isPharmacist);
       if (item.id === "pharmacy-adjustments") return phOn && (isPharmacist || isStockKeeper);
       if (item.id === "pharmacy-admin") return phOn && isAdmin;
+      if (item.id === "dental-prosthesis") return dentalOn && dental.professional;
+      if (item.id === "dental-ceo-goals" || item.id === "dental-indicators") return dentalOn && (dental.admin || dental.analyst);
+      if (item.id === "dental-admin") return dentalOn && dental.admin;
       if (item.id === "integrations" || item.id === "cnes") return canIntegrations;
       if (item.id === "production") return canProduction;
       return true;

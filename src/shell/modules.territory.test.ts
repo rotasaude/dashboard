@@ -29,7 +29,9 @@ describe("grupo Cadastro territorial (módulo 24a)", () => {
     expect(labels.indexOf("Vigilância")).toBe(labels.indexOf("Cadastro territorial") + 1);
     expect(labels.indexOf("Regulação")).toBe(labels.indexOf("Vigilância") + 1);
     expect(labels.indexOf("Farmácia")).toBe(labels.indexOf("Regulação") + 1);
-    expect(labels.indexOf("Exames")).toBe(labels.indexOf("Farmácia") + 1);
+    // O 28 pôs a Saúde bucal depois da Farmácia; é ela que antecede Exames.
+    expect(labels.indexOf("Saúde bucal")).toBe(labels.indexOf("Farmácia") + 1);
+    expect(labels.indexOf("Exames")).toBe(labels.indexOf("Saúde bucal") + 1);
     expect(CATALOG.groups["Cadastro territorial"].description).toBe("Microáreas, domicílios, famílias e cadastro individual");
     expect(CATALOG.screens["registry-status"].description).toBe("Vencidos, a vencer e quem falta cadastrar");
     expect(CATALOG.screens["territory-team"].description).toBe("Domicílios, famílias e moradores por microárea");

@@ -60,6 +60,10 @@ import { PharmacyStock } from "./modules/PharmacyStock";
 import { PharmacyAdjustments } from "./modules/PharmacyAdjustments";
 import { PharmacyAlerts } from "./modules/PharmacyAlerts";
 import { PharmacyAdmin } from "./modules/PharmacyAdmin";
+import { DentalProsthesis } from "./modules/DentalProsthesis";
+import { DentalCeoGoals } from "./modules/DentalCeoGoals";
+import { DentalIndicators } from "./modules/DentalIndicators";
+import { DentalAdmin } from "./modules/DentalAdmin";
 import { ProviderPortal } from "./modules/ProviderPortal";
 import { AcknowledgementNotice } from "./modules/exams/AcknowledgementNotice";
 import { Shell } from "./shell/Shell";
@@ -330,6 +334,10 @@ export function renderModule(active: ModuleId, setActive: (id: ModuleId) => void
     case "pharmacy-adjustments": return <PharmacyAdjustments onGoToSecurity={() => setActive("security")} />;
     case "pharmacy-alerts": return <PharmacyAlerts />;
     case "pharmacy-admin": return <PharmacyAdmin onGoToSecurity={() => setActive("security")} />;
+    case "dental-prosthesis": return <DentalProsthesis />;
+    case "dental-ceo-goals": return <DentalCeoGoals />;
+    case "dental-indicators": return <DentalIndicators />;
+    case "dental-admin": return <DentalAdmin onGoToSecurity={() => setActive("security")} />;
     default:               return <Placeholder title={labelFor(active)} />;
   }
 }

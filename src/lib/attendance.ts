@@ -35,6 +35,12 @@ export const UNIT_KINDS = [
   { value: "other", label: "Outra" }
 ];
 
+// Módulo 28: o CEO só é oferecido no cadastro com `dental_care` ligado; a unidade já criada continua legível (KIND_LABEL).
+export const CEO_UNIT_KIND = { value: "ceo", label: "CEO (Centro de Especialidades Odontológicas)" };
+export function unitKindOptions(dentalOn: boolean): { value: string; label: string }[] {
+  return dentalOn ? [ ...UNIT_KINDS, CEO_UNIT_KIND ] : UNIT_KINDS;
+}
+
 export function currentUnitKey(userId: string): string {
   return `attendance.unit.${userId}`;
 }

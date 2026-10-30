@@ -30,7 +30,8 @@ describe("modules", () => {
       expect(groups.some((g) => g.label === "Vigilância")).toBe(false);
       expect(groups.some((g) => g.label === "Regulação")).toBe(false);
       expect(groups.some((g) => g.label === "Farmácia")).toBe(false);
-      expect(groups.length).toBe(NAV_GROUPS.length - 15);
+      expect(groups.some((g) => g.label === "Saúde bucal")).toBe(false);
+      expect(groups.length).toBe(NAV_GROUPS.length - 16);
     });
 
     it("sem sessão, esconde Equipe, Atendimento e Cidade", () => {
@@ -49,7 +50,8 @@ describe("modules", () => {
       expect(groups.some((g) => g.label === "Vigilância")).toBe(false);
       expect(groups.some((g) => g.label === "Regulação")).toBe(false);
       expect(groups.some((g) => g.label === "Farmácia")).toBe(false);
-      expect(groups.length).toBe(NAV_GROUPS.length - 14);
+      expect(groups.some((g) => g.label === "Saúde bucal")).toBe(false);
+      expect(groups.length).toBe(NAV_GROUPS.length - 15);
     });
 
     it("Equipe só aparece para municipal_admin", () => {
