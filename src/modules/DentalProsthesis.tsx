@@ -36,7 +36,7 @@ function Body() {
   const [ busy, setBusy ] = useState(false);
   const seq = useRef(0);
 
-  async function load(u: string, s: string, before: string | null = null) {
+  async function load(u: string, s: string, before: string | null = null, keepError = false) {
     const mine = ++seq.current;
     setLoading(true);
     try {
@@ -44,7 +44,7 @@ function Body() {
       if (mine !== seq.current) return;
       setOrders((prev) => (before ? [ ...prev, ...page.orders ] : page.orders));
       setNext(page.next_before);
-      setError(null);
+      if (!keepError) setError(null);
     } catch (e) {
       if (mine === seq.current) setError(dentalError(e));
     } finally {
@@ -58,7 +58,8 @@ function Body() {
     void load(unit, stage);
   }, [ unit, stage ]);
 
-  const reload = () => load(unit, stage);
+  // Depois de uma ação a frase da recusa sobrevive à releitura.
+  const reload = () => load(unit, stage, null, true);
 
   async function change(order: ProsthesisOrder, input: { stage: "sent" | "received" | "cancelled"; reason?: string }) {
     setBusy(true); setError(null);
@@ -89,7 +90,7 @@ function Body() {
         </label>
         <label style={fieldLabel}>
           Etapa
-          <select value={stage} style={inputStyle} onChange={(e) => setStage(e.target.value)}>
+          <select value={stage} style={inputStyle} onChange={(e) => { setStage(e.target.value); setCancelling(null); }}>
             <option value="">Todas</option>
             {STAGE_FILTER.map((s) => <option key={s} value={s}>{prosthesisStageLabel(s)}</option>)}
           </select>

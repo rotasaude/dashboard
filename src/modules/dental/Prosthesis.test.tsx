@@ -145,4 +145,28 @@ describe("prótese", () => {
     await screen.findByRole("button", { name: /^Dente 16:/ });
     expect(screen.queryByRole("region", { name: "Prótese" })).toBeNull();
   });
+
+  it("tela: a frase da recusa 409 sobrevive à releitura atrasada", async () => {
+    let release: (v: { orders: ReturnType<typeof prosthesisOrder>[]; next_before: null }) => void = () => {};
+    mocked(api.listProsthesisOrders).mockResolvedValueOnce({ orders: [ prosthesisOrder() ], next_before: null })
+      .mockImplementationOnce(() => new Promise((res) => { release = res; }));
+    mocked(api.changeProsthesisStage).mockRejectedValueOnce(new ApiError(409, { error: "invalid_transition" }, "x"));
+    renderWithProviders(<DentalProsthesis />);
+    fireEvent.change(await screen.findByLabelText("Unidade"), { target: { value: "u1" } });
+    fireEvent.click(await screen.findByRole("button", { name: "Enviada ao laboratório — Joana Lima" }));
+    expect(await screen.findByText("o pedido de prótese mudou de etapa — a lista foi relida")).not.toBeNull();
+    release({ orders: [ prosthesisOrder({ stage: "sent" }) ], next_before: null });
+    expect(await screen.findByRole("button", { name: "Recebida — Joana Lima" })).not.toBeNull();
+    expect(screen.getByText("o pedido de prótese mudou de etapa — a lista foi relida")).not.toBeNull();
+  });
+
+  it("na consulta: a busca de locais usa o código e falha não fica guardada", async () => {
+    mocked(api.searchDentalProcedures).mockRejectedValueOnce(new Error("x")).mockResolvedValue([ DENTURE ]);
+    renderWithProviders(<ProsthesisPanel consultation={dentalDraft()} patientId="pa1" value={fields()} onChange={vi.fn()} searchDelayMs={0} />);
+    fireEvent.click(screen.getByRole("button", { name: "Ver pedidos de prótese do paciente" }));
+    expect(await screen.findByText("Locais do procedimento indisponíveis.")).not.toBeNull();
+    expect(mocked(api.searchDentalProcedures)).toHaveBeenCalledWith(DENTURE.sigtap);
+    fireEvent.click(screen.getByRole("button", { name: "Ver pedidos de prótese do paciente" }));
+    expect(await screen.findByRole("button", { name: `Registrar instalação nesta consulta — ${DENTURE.name}` })).not.toBeNull();
+  });
 });

@@ -39,31 +39,39 @@ export function ProsthesisPanel({ consultation, patientId, value, onChange, sear
   const [ listError, setListError ] = useState<string | null>(null);
   const [ locations, setLocations ] = useState<Record<string, DentalLocationKind[]>>({});
   const [ installing, setInstalling ] = useState<string | null>(null);
+  const [ unavailable, setUnavailable ] = useState<Record<string, true>>({});
+  const seq = useRef(0);
   const alive = useRef(true);
   useEffect(() => () => { alive.current = false; }, []);
 
   const labs = useQuery({ queryKey: [ LABS_KEY ], queryFn: listDentalLaboratories, enabled: creating, ...STATIC_QUERY });
 
   async function load() {
+    const mine = ++seq.current;
     setListError(null);
     try {
       const page = await listProsthesisOrders({ patientId, stage: null, before: null });
-      if (!alive.current) return;
+      if (!alive.current || mine !== seq.current) return;
       setOrders(page.orders);
       resolveLocations(page.orders.filter((o) => o.stage === "received"));
     } catch (e) {
-      if (alive.current) setListError(dentalError(e));
+      if (alive.current && mine === seq.current) setListError(dentalError(e));
     }
   }
 
-  // Os locais aceitos vêm do SIGTAP do pedido (busca pelo nome do procedimento do catálogo; recusar em vez de adivinhar).
+  // Os locais aceitos vêm do SIGTAP do pedido (busca pelo código, conferido pelo mesmo código). Só o resultado achado fica
+  // guardado: falha ou ausência não é lembrada, e a próxima leitura da lista tenta de novo.
   function resolveLocations(received: ProsthesisOrder[]) {
     for (const o of received) {
       if (locations[o.sigtap]) continue;
-      searchDentalProcedures(o.name).then((list) => {
+      setUnavailable((prev) => { const { [o.sigtap]: _gone, ...rest } = prev; return rest; });
+      const fail = () => { if (alive.current) setUnavailable((prev) => ({ ...prev, [o.sigtap]: true })); };
+      searchDentalProcedures(o.sigtap).then((list) => {
         const hit = list.find((r) => r.sigtap === o.sigtap);
-        if (alive.current) setLocations((prev) => ({ ...prev, [o.sigtap]: hit?.locations ?? [] }));
-      }).catch(() => { if (alive.current) setLocations((prev) => ({ ...prev, [o.sigtap]: [] })); });
+        if (!alive.current) return;
+        if (hit && hit.locations.length > 0) setLocations((prev) => ({ ...prev, [o.sigtap]: hit.locations }));
+        else fail();
+      }).catch(fail);
     }
   }
 
@@ -156,7 +164,7 @@ export function ProsthesisPanel({ consultation, patientId, value, onChange, sear
               <button type="button" style={secondaryButtonStyle} aria-label={`Registrar instalação nesta consulta — ${o.name}`}
                 onClick={() => setInstalling(o.id)}>Registrar instalação nesta consulta</button>
             )}
-            {o.stage === "received" && !installed && kinds && kinds.length === 0 && <p style={muted}>Locais do procedimento indisponíveis.</p>}
+            {o.stage === "received" && !installed && !kinds && unavailable[o.sigtap] && <p style={muted}>Locais do procedimento indisponíveis.</p>}
             {installing === o.id && kinds && <InstallPicker kinds={kinds} onConfirm={(loc) => install(o, loc)} onBack={() => setInstalling(null)} />}
           </div>
         );
