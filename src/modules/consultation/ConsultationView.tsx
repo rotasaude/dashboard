@@ -22,6 +22,7 @@ import { ConsultationExamStatus } from "../exams/ConsultationExamStatus";
 import { useReveal } from "../../lib/useReveal";
 import { RegulationRequestsField } from "./RegulationRequestsField";
 import { openGuide } from "../regulation/openGuide";
+import { DentalSummary, dentalChangesLines } from "../dental/DentalSummary";
 
 export interface ConsultationViewProps {
   consultation: Consultation;
@@ -110,6 +111,8 @@ export function ConsultationView(props: ConsultationViewProps) {
         </div>
       ) : null)}
 
+      {c.kind === "dental" && <DentalSummary consultation={c} vocabulary={options?.dental} />}
+
       <VitalsList vitals={c.vitals ?? {}} label="sinais vitais da consulta" />
 
       {c.evaluated_problems.length > 0 && (
@@ -149,7 +152,7 @@ export function ConsultationView(props: ConsultationViewProps) {
               )}
               <p style={textStyle}>{`Motivo: ${a.reason}`}</p>
               <p style={textStyle}>{a.text}</p>
-              {changesLines(a.changes, conductLabel).map((line) => <p key={line} style={textStyle}>{line}</p>)}
+              {[ ...changesLines(a.changes, conductLabel), ...dentalChangesLines(a.changes, options?.dental?.situations) ].map((line) => <p key={line} style={textStyle}>{line}</p>)}
             </li>
           ))}
         </ol>

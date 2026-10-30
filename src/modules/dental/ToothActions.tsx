@@ -8,6 +8,7 @@ import { archLoc, canAddPlanItems, FACE_LABEL, FACES, locationLabel, MOUTH, sext
 import { buttonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { alert, box, fieldLabel, muted, row } from "../exams/styles";
 import { ProcedureSearch } from "./ProcedureSearch";
+import { ToothHistory } from "./ToothHistory";
 
 interface Props {
   selection: { tooth: string; face: ToothFace | null } | null;
@@ -18,6 +19,7 @@ interface Props {
   baseline: boolean;
   situations?: DentalVocabulary["situations"];
   searchDelayMs?: number;
+  patientId?: string;
   onSelectFace(face: ToothFace | null): void;
   onChange(f: DentalFields): void;
 }
@@ -27,7 +29,7 @@ const ARCHES: { arch: Arch; label: string }[] = [ { arch: "upper", label: "super
 const KIND_LABEL: Record<DentalLocationKind, string> = { tooth: "dente", face: "face", sextant: "sextante", arch: "arcada", mouth: "boca toda" };
 const pressed = (on: boolean) => (on ? { ...buttonStyle } : { ...secondaryButtonStyle });
 
-export function ToothActions({ selection, value, plan, unit, role, baseline, situations, searchDelayMs, onSelectFace, onChange }: Props) {
+export function ToothActions({ selection, value, plan, unit, role, baseline, situations, searchDelayMs, patientId, onSelectFace, onChange }: Props) {
   const [ part, setPart ] = useState<DentalPart>("crown");
   const [ situation, setSituation ] = useState("");
   const [ picked, setPicked ] = useState<DentalProcedureRef | null>(null);
@@ -112,6 +114,7 @@ export function ToothActions({ selection, value, plan, unit, role, baseline, sit
             </select>
           </label>
           <div><button type="button" style={buttonStyle} disabled={!situation} onClick={markFinding}>Marcar achado</button></div>
+          {patientId && <ToothHistory patientId={patientId} tooth={tooth} situations={situations} />}
         </>
       )}
       {!tooth && <p style={muted}>Escolha um dente no odontograma.</p>}
@@ -139,7 +142,7 @@ export function ToothActions({ selection, value, plan, unit, role, baseline, sit
             })}
             <button type="button" aria-pressed={chosen?.kind === "mouth"} disabled={!offers("mouth")} style={pressed(chosen?.kind === "mouth")} onClick={() => setChosen(MOUTH)}>Boca toda</button>
           </div>
-          <ProcedureSearch role={role} delayMs={searchDelayMs} onPick={(r) => { setPicked(r); setRefusal(null); setItemId(""); }} />
+          <ProcedureSearch role={role} delayMs={searchDelayMs} onPick={(r) => { setPicked(r); setChosen(null); setRefusal(null); setItemId(""); }} />
           {picked && (
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               <p style={{ margin: 0, fontSize: 12.5 }}>

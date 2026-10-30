@@ -2,7 +2,7 @@
 // e achados do rascunho e, fora do registro inicial, os campos da FAO. Leituras nominais (com trilha), sem polling.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { getDentalChart, listDentalPlans, type ClinicalRecord, type Consultation, type ConsultationOptions, type DentalFields, type DentalFinding,
+import { getDentalChart, listDentalPlans, type ClinicalRecord, type Consultation, type ConsultationOptions, type DentalFields,
   type DentalPlan, type DentalRole, type Dentition, type HealthUnit } from "../../lib/api";
 import { DENTAL_CHART_KEY, DENTAL_PLANS_KEY, dentalError, locationLabel, NOMINAL_QUERY, quantityProblems, situationLabel, withoutFinding, withoutProcedure }
   from "../../lib/dental";
@@ -12,6 +12,7 @@ import { Odontogram, type ToothSelection } from "./Odontogram";
 import { TreatmentPlanPanel } from "./TreatmentPlanPanel";
 import { ToothActions } from "./ToothActions";
 import { FaoFields } from "./FaoFields";
+import { findingLocation } from "./DentalSummary";
 
 interface Props {
   consultation: Consultation;
@@ -25,12 +26,6 @@ interface Props {
   searchDelayMs?: number;
   onChange(f: DentalFields): void;
   onPlanRead?(plan: DentalPlan | null): void;
-}
-
-function findingLocation(f: DentalFinding): string {
-  if (f.tooth === null) return f.arch ? locationLabel({ kind: "arch", tooth: null, face: null, sextant: null, arch: f.arch }) : "arcada";
-  const where = locationLabel({ kind: f.face ? "face" : "tooth", tooth: f.tooth, face: f.face, sextant: null, arch: null });
-  return f.part === "root" ? `${where}, raiz` : where;
 }
 
 export function DentalEditor({ record, unit, options, value, role, baseline, planRefreshKey = 0, searchDelayMs, onChange, onPlanRead }: Props) {
@@ -74,7 +69,7 @@ export function DentalEditor({ record, unit, options, value, role, baseline, pla
               selected={selection} onSelect={setSelection} onDentitionChange={setDentition} />
           )}
           <ToothActions selection={selection} value={value} plan={plan} unit={unit} role={role} baseline={baseline} situations={situations}
-            searchDelayMs={searchDelayMs} onSelectFace={(face) => setSelection((s) => (s ? { tooth: s.tooth, face } : s))} onChange={onChange} />
+            searchDelayMs={searchDelayMs} patientId={patientId} onSelectFace={(face) => setSelection((s) => (s ? { tooth: s.tooth, face } : s))} onChange={onChange} />
         </div>
         {!baseline && (
           <TreatmentPlanPanel plan={plan} value={value} unit={unit} role={role} onChange={onChange}

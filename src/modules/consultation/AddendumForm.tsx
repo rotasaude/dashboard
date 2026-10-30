@@ -12,6 +12,7 @@ import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } fr
 import { ProblemsEditor } from "./ProblemsEditor";
 import { ConductsField } from "./ConductsField";
 import { ExamRequestsField } from "./ExamRequestsField";
+import { DentalAddendumFields, type DentalAddendumValue } from "../dental/DentalAddendumFields";
 
 interface Props {
   consultation: Consultation;
@@ -45,18 +46,24 @@ export function AddendumForm({ consultation, options, patientProblems, loadPatie
     const base = consultation.exam_requests.find((b) => b.sigtap_code === e.sigtap_code);
     return base ? { ...e, priority: base.priority } : e;
   }));
+  const isDental = consultation.kind === "dental";
+  const [ dental, setDental ] = useState<DentalAddendumValue>({ findings: [], cancel: [] });
   const [ busy, setBusy ] = useState(false);
   const [ error, setError ] = useState<string | null>(null);
 
   const touched = reason !== "" || text !== "";
-  const problem = addendumProblem(reason, text) ?? (withChanges ? examsProblem(exams) : null);
+  const problem = addendumProblem(reason, text) ?? (withChanges && !isDental ? examsProblem(exams) : null);
   const disabled = busy || problem !== null;
 
   async function submit() {
     if (disabled) return;
     setBusy(true); setError(null);
     try {
-      const changes = withChanges ? addendumChanges(consultation, { problems, conducts, exams }) : undefined;
+      // O14: o adendo odontológico leva só achados e cancelamentos de item do plano.
+      const dentalChanges = dental.findings.length > 0 || dental.cancel.length > 0
+        ? { dental: { findings: dental.findings, plan_changes: { cancel: dental.cancel } } } : undefined;
+      const changes = !withChanges ? undefined
+        : isDental ? dentalChanges : addendumChanges(consultation, { problems, conducts, exams });
       const addendum = await addAddendum(consultation.id, {
         reason: reason.trim(), text,
         ...(changes ? { changes } : {})
@@ -83,9 +90,12 @@ export function AddendumForm({ consultation, options, patientProblems, loadPatie
       </label>
       <label style={{ ...labelStyle, flexDirection: "row", alignItems: "center", gap: 8 }}>
         <input type="checkbox" checked={withChanges} onChange={(e) => setWithChanges(e.target.checked)} />
-        Mudar problemas, condutas ou exames
+        {isDental ? "Mudar o odontograma ou o plano" : "Mudar problemas, condutas ou exames"}
       </label>
-      {withChanges && (
+      {withChanges && isDental && (
+        <DentalAddendumFields consultation={consultation} value={dental} situations={options?.dental?.situations} onChange={setDental} />
+      )}
+      {withChanges && !isDental && (
         <>
           {full.isError && <p role="status" style={muted}>não foi possível carregar a lista completa de problemas; seguem os desta consulta</p>}
           <ProblemsEditor patientProblems={problemsWithConsultationAdds(baseProblems, consultation)} items={problems} onChange={setProblems}
