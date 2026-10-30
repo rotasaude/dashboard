@@ -39,12 +39,17 @@ export function ToothActions({ selection, value, plan, unit, role, baseline, sit
   const tooth = selection?.tooth ?? null;
   const face = selection?.face ?? null;
   useEffect(() => { setChosen(null); setSituation(""); setRefusal(null); if (face) setPart("crown"); }, [ tooth, face ]);
+  useEffect(() => { setPart("crown"); }, [ tooth ]);
 
   const group = face ? "face" : part;
   const options = situationsFor(group, situations, tooth);
   const fromSelection: DentalLocation | null = tooth
     ? { kind: face ? "face" : "tooth", tooth, face, sextant: null, arch: null } : null;
-  const location = chosen ?? fromSelection;
+  // Face selecionada mas o procedimento só aceita dente: o local padrão é o dente.
+  const defaultLoc: DentalLocation | null = fromSelection && fromSelection.kind === "face" && picked && !picked.locations.includes("face")
+    && picked.locations.includes("tooth") ? { ...fromSelection, kind: "tooth", face: null } : fromSelection;
+  const location = chosen ?? defaultLoc;
+  const offers = (kind: DentalLocationKind) => !picked || picked.locations.includes(kind);
   const planned = (plan?.items ?? []).filter((i) => i.status === "planned" && i.sigtap === picked?.sigtap
     && !value.procedures.some((p) => p.plan_item_id === i.id));
 
@@ -123,16 +128,16 @@ export function ToothActions({ selection, value, plan, unit, role, baseline, sit
             {SEXTANTS.map((s) => {
               const on = chosen?.kind === "sextant" && chosen.sextant === s;
               return (
-                <button key={s} type="button" aria-pressed={on} style={{ ...pressed(on), fontWeight: tooth && toothSextant(tooth) === s ? 700 : undefined }}
+                <button key={s} type="button" aria-pressed={on} disabled={!offers("sextant")} style={{ ...pressed(on), fontWeight: tooth && toothSextant(tooth) === s ? 700 : undefined }}
                   title={tooth && toothSextant(tooth) === s ? "sextante do dente selecionado" : undefined}
                   onClick={() => setChosen(sextantLoc(s))}>{`Sextante ${s}`}</button>
               );
             })}
             {ARCHES.map(({ arch, label }) => {
               const on = chosen?.kind === "arch" && chosen.arch === arch;
-              return <button key={arch} type="button" aria-pressed={on} style={pressed(on)} onClick={() => setChosen(archLoc(arch))}>{`Arcada ${label}`}</button>;
+              return <button key={arch} type="button" aria-pressed={on} disabled={!offers("arch")} style={pressed(on)} onClick={() => setChosen(archLoc(arch))}>{`Arcada ${label}`}</button>;
             })}
-            <button type="button" aria-pressed={chosen?.kind === "mouth"} style={pressed(chosen?.kind === "mouth")} onClick={() => setChosen(MOUTH)}>Boca toda</button>
+            <button type="button" aria-pressed={chosen?.kind === "mouth"} disabled={!offers("mouth")} style={pressed(chosen?.kind === "mouth")} onClick={() => setChosen(MOUTH)}>Boca toda</button>
           </div>
           <ProcedureSearch role={role} delayMs={searchDelayMs} onPick={(r) => { setPicked(r); setRefusal(null); setItemId(""); }} />
           {picked && (

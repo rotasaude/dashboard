@@ -114,8 +114,10 @@ describe("DentalEditor", () => {
     fireEvent.click(await screen.findByRole("button", { name: /^Dente 16:/ }));
     expect(screen.queryByLabelText("Encaminhamento: endodontia")).toBeNull();
     fireEvent.change(screen.getByLabelText("Procedimento (SIGTAP)"), { target: { value: "flu" } });
-    expect(await screen.findByRole("button", { name: `${FLUOR.sigtap} — ${FLUOR.name}` })).not.toBeNull();
+    const fluor = await screen.findByRole("button", { name: `${FLUOR.sigtap} — ${FLUOR.name}` });
     expect(screen.queryByRole("button", { name: `${RESIN.sigtap} — ${RESIN.name}` })).toBeNull();
+    fireEvent.click(fluor);
+    expect(screen.getByRole("button", { name: "Registrar procedimento" })).not.toBeNull();
     expect(screen.queryByRole("button", { name: "Incluir no plano" })).toBeNull();
   });
 
@@ -127,6 +129,36 @@ describe("DentalEditor", () => {
     fireEvent.click(await screen.findByRole("button", { name: `${RESIN.sigtap} — ${RESIN.name}` }));
     fireEvent.click(screen.getByRole("button", { name: "Incluir no plano" }));
     expect(last!.plan_changes.add).toEqual([ { sigtap: RESIN.sigtap, name: RESIN.name, location: { kind: "tooth", tooth: "16", face: null, sextant: null, arch: null } } ]);
+  });
+
+  it("gestante pré-preenchida: clicar em Sim confirma e mantém true", async () => {
+    renderWithProviders(<Harness initial={fields({ pregnant: true })} />);
+    await screen.findByText("pré-preenchido pela linha de pré-natal — confirme");
+    fireEvent.click(screen.getByLabelText("Sim"));
+    expect(screen.queryByText("pré-preenchido pela linha de pré-natal — confirme")).toBeNull();
+    expect(last).toBeNull();
+  });
+
+  it("procedimento escolhido desabilita locais de outro tipo; face cai para dente", async () => {
+    mocked(api.searchDentalProcedures).mockResolvedValue([ { ...RESIN, locations: [ "tooth" ] } ]);
+    renderWithProviders(<Harness />);
+    fireEvent.click(await screen.findByRole("button", { name: /^Dente 16:/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Face oclusal/incisal" }));
+    fireEvent.change(screen.getByLabelText("Procedimento (SIGTAP)"), { target: { value: "resina" } });
+    fireEvent.click(await screen.findByRole("button", { name: `${RESIN.sigtap} — ${RESIN.name}` }));
+    expect((screen.getByRole("button", { name: "Sextante S1" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "Boca toda" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Registrar procedimento" }));
+    expect(last!.procedures[0].location).toEqual({ kind: "tooth", tooth: "16", face: null, sextant: null, arch: null });
+  });
+
+  it("trocar de dente volta a parte para coroa", async () => {
+    renderWithProviders(<Harness />);
+    fireEvent.click(await screen.findByRole("button", { name: /^Dente 16:/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Raiz" }));
+    expect(screen.getByRole("button", { name: "Raiz" }).getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(screen.getByRole("button", { name: /^Dente 26:/ }));
+    expect(screen.getByRole("button", { name: "Coroa" }).getAttribute("aria-pressed")).toBe("true");
   });
 
   it("registro inicial: só achados; sem FAO, plano nem procedimento", async () => {

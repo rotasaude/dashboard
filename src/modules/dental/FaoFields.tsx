@@ -88,6 +88,7 @@ export function FaoFields({ value, sex, role, prefilledPregnant, vocabulary, onC
             {([ [ true, "Sim" ], [ false, "Não" ] ] as const).map(([ v, text ]) => (
               <label key={text} style={checkLabel}>
                 <input type="radio" name="dental-pregnant" checked={value.pregnant === v}
+                  onClick={() => setConfirmed(true)}
                   onChange={() => { setConfirmed(true); onChange({ ...value, pregnant: v }); }} />
                 {text}
               </label>
