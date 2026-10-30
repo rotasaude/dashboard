@@ -28,6 +28,9 @@ export const CEO_GOALS_KEY = "ceoGoals";
 export const DENTAL_TEAMS_KEY = "dentalTeams";
 export const DENTAL_INDICATORS_KEY = "dentalIndicators";
 
+// Só chave própria: "constructor" e afins caem no código cru.
+const own = (map: Record<string, string>, key: string): string | undefined => (Object.hasOwn(map, key) ? map[key] : undefined);
+
 type Situations = DentalVocabulary["situations"];
 type SessionLike = { operator: boolean; memberships?: { role: string }[]; features?: unknown } | null | undefined;
 
@@ -147,7 +150,7 @@ const TONES: Record<string, string> = {
   sound: "ok", sound_sealed: "ok"
 };
 export function situationTone(code: string): string {
-  return TONES[code] ?? "neutral";
+  return own(TONES, code) ?? "neutral";
 }
 
 // Decíduo nunca recebe estas (situation_not_allowed_for_tooth); furca só em molares e pré-molares.
@@ -309,7 +312,7 @@ const PROBLEM_TEXT: Record<string, string> = {
 
 // Código desconhecido aparece cru, nunca some.
 export function dentalProblemText(code: string): string {
-  return PROBLEM_TEXT[code] ?? code;
+  return own(PROBLEM_TEXT, code) ?? code;
 }
 
 export function pregnantFor(f: DentalFields, sex: "female" | "male"): boolean | null {
@@ -321,7 +324,7 @@ export function dentalFinalizeProblems(f: DentalFields, ctx: DentalCheckCtx): { 
   const add = (code: string, text = dentalProblemText(code)) => out.push({ code, text });
   if (ctx.baseline) {
     const extras = f.procedures.length > 0 || f.dental_outcomes.length > 0 || !!f.dental_consultation_type || !!f.care_type
-      || f.plan_changes.add.length > 0 || f.plan_changes.cancel.length > 0;
+      || f.plan_changes.add.length > 0 || f.plan_changes.cancel.length > 0 || !!f.plan_changes.cancel_plan;
     if (extras) add("baseline_only_findings");
     if (f.findings.length === 0) add("baseline_requires_findings");
     return out;
@@ -340,7 +343,7 @@ export function dentalFinalizeProblems(f: DentalFields, ctx: DentalCheckCtx): { 
   if (ctx.problemsCount === 0) add("problem_required");
   if (ctx.role === "auxiliary") {
     if (f.dental_outcomes.some(isReferralOutcome)) add("auxiliary_cannot_refer");
-    if (f.plan_changes.add.length > 0 || f.plan_changes.cancel.length > 0) add("auxiliary_cannot_plan");
+    if (f.plan_changes.add.length > 0 || f.plan_changes.cancel.length > 0 || f.plan_changes.cancel_plan) add("auxiliary_cannot_plan");
   }
   for (const text of quantityProblems(f.procedures)) add("quantity_exceeds_location_limit", text);
   return out;
@@ -354,7 +357,7 @@ export function dentalError(err: unknown): string {
   const body = bodyOf(err);
   if (body?.error === "feature_disabled" && body.feature === "dental_care") return DENTAL_DISABLED;
   if (body?.error === "missing_role") return DENTAL_NO_ROLE;
-  if (body?.error && body.error !== "feature_disabled" && body.error in PROBLEM_TEXT) return PROBLEM_TEXT[body.error];
+  if (body?.error && body.error !== "feature_disabled" && own(PROBLEM_TEXT, body.error)) return PROBLEM_TEXT[body.error];
   return consultationError(err);
 }
 
@@ -433,11 +436,8 @@ export function screeningProblems(s: PeriodontalScreening): string[] {
 
 export function endoProblems(list: EndodonticEntry[]): string[] {
   const out: string[] = [];
-  const seen = new Set<string>();
   for (const e of list) {
     if (!Number.isInteger(e.canals) || e.canals < 1 || e.canals > 5) out.push(`dente ${e.tooth}: canais de 1 a 5`);
-    if (seen.has(e.tooth)) out.push(`dente ${e.tooth}: tratamento repetido`);
-    seen.add(e.tooth);
   }
   return out;
 }
@@ -446,9 +446,9 @@ export function endoProblems(list: EndodonticEntry[]): string[] {
 const STAGE_LABEL: Record<string, string> = {
   impression: "Moldagem", sent: "Enviada ao laboratório", received: "Recebida do laboratório", installed: "Instalada", cancelled: "Cancelada"
 };
-export const prosthesisStageLabel = (code: string): string => STAGE_LABEL[code] ?? code;
+export const prosthesisStageLabel = (code: string): string => own(STAGE_LABEL, code) ?? code;
 const STAGE_TONE: Record<string, string> = { impression: "neutral", sent: "info", received: "warn", installed: "ok", cancelled: "down" };
-export const prosthesisStageTone = (code: string): string => STAGE_TONE[code] ?? "neutral";
+export const prosthesisStageTone = (code: string): string => own(STAGE_TONE, code) ?? "neutral";
 
 // `installed` só pela consulta (installation_through_consultation); a rota de etapas não o aceita.
 export function nextStages(stage: ProsthesisStage | string): ("sent" | "received" | "cancelled")[] {
@@ -479,12 +479,12 @@ export const CEO_SPECIALTIES: { key: CeoSpecialty; label: string }[] = [
 ];
 
 const GOAL_LABEL: Record<string, string> = { basic: "Procedimentos básicos", periodontics: "Periodontia", endodontics: "Endodontia", oral_surgery: "Cirurgia oral" };
-export const goalKeyLabel = (key: string): string => GOAL_LABEL[key] ?? key;
+export const goalKeyLabel = (key: string): string => own(GOAL_LABEL, key) ?? key;
 
 const COMPOSITION_LABEL: Record<string, string> = {
   restorations_min_50: "ao menos 50% de restaurações", three_roots_min_20: "ao menos 20% em dentes de três raízes ou mais"
 };
-export const compositionLabel = (rule: string): string => COMPOSITION_LABEL[rule] ?? rule;
+export const compositionLabel = (rule: string): string => own(COMPOSITION_LABEL, rule) ?? rule;
 
 const PERCENT = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 // Denominador nulo (eSB sem equipe associada) ou zero → "—".

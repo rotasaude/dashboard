@@ -5091,7 +5091,8 @@ export interface DentalProcedureLine {
 export interface DentalFinding { tooth: string | null; face: ToothFace | null; part: DentalPart; arch?: Arch; situation: string }
 export interface PlanAdd { sigtap: string; name?: string; location: DentalLocation }
 export interface PlanCancel { item_id: string; reason: string }
-export interface DentalPlanChanges { add: PlanAdd[]; cancel: PlanCancel[] }
+// O6: `cancel_plan` cancela o plano inteiro dentro da consulta.
+export interface DentalPlanChanges { add: PlanAdd[]; cancel: PlanCancel[]; cancel_plan?: { reason: string } }
 // `code: null` = sextante excluído "X" (O14, O23).
 export interface PeriodontalScreening { sextants: { sextant: Sextant; code: number | null; star: boolean }[] }
 export interface PeriodontalSiteValue { site: PerioSite; probing_depth_mm: number | null; recession_mm: number | null; bleeding: boolean }

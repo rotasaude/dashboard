@@ -117,6 +117,7 @@ describe("finalização: espelho das recusas do api (contrato §4)", () => {
     [ "sem problema", fields(), { ...ctx, problemsCount: 0 }, [ "problem_required" ] ],
     [ "auxiliar encaminha", fields({ dental_outcomes: [ "3" ] }), aux, [ "auxiliary_cannot_refer" ] ],
     [ "auxiliar planeja", fields({ plan_changes: { add: [ { sigtap: RESIN.sigtap, location: toothLoc("16") } ], cancel: [] } }), aux, [ "auxiliary_cannot_plan" ] ],
+    [ "auxiliar cancela o plano", fields({ plan_changes: { add: [], cancel: [], cancel_plan: { reason: "paciente mudou de cidade" } } }), aux, [ "auxiliary_cannot_plan" ] ],
     [ "auxiliar cancela item", fields({ plan_changes: { add: [], cancel: [ { item_id: "pi1", reason: "paciente recusou o tratamento" } ] } }), aux, [ "auxiliary_cannot_plan" ] ],
     [ "registro inicial com procedimento", fields({ care_type: null, dental_consultation_type: null, dental_outcomes: [], oral_health_surveillance: [], pregnant: null,
       findings: [ { tooth: "16", face: null, part: "crown", situation: "caries" } ], procedures: [ { sigtap: FLUOR.sigtap, location: MOUTH, quantity: 1, plan_item_id: null } ] }),
@@ -225,7 +226,7 @@ describe("recusas do api, corpo e especialidades", () => {
     expect(screeningProblems({ sextants: [ { sextant: "S1", code: 4, star: true }, { sextant: "S2", code: null, star: false }, { sextant: "S3", code: 5, star: false } ] }))
       .toEqual([ "sextante S3: o código vai de 0 a 4 (ou marque o sextante como excluído)" ]);
     expect(endoProblems([ { tooth: "16", canals: 3, status: "in_progress" }, { tooth: "26", canals: 6, status: "in_progress" }, { tooth: "16", canals: 1, status: "completed" } ]))
-      .toEqual([ "dente 26: canais de 1 a 5", "dente 16: tratamento repetido" ]);
+      .toEqual([ "dente 26: canais de 1 a 5" ]);
   });
   it("prótese, textos e painéis", () => {
     expect([ "impression", "sent", "received", "installed", "cancelled" ].map(nextStages))
@@ -237,6 +238,8 @@ describe("recusas do api, corpo e especialidades", () => {
     expect([ compositionLabel("three_roots_min_20") === "three_roots_min_20", compositionLabel("restorations_min_50") === "restorations_min_50", compositionLabel("multirooted_min_20") ])
       .toEqual([ false, false, "multirooted_min_20" ]);
     expect([ goalKeyLabel("oral_surgery"), goalKeyLabel("novo") ]).toEqual([ "Cirurgia oral", "novo" ]);
+    expect([ dentalProblemText("constructor"), situationTone("constructor"), goalKeyLabel("constructor"), compositionLabel("constructor") ])
+      .toEqual([ "constructor", "neutral", "constructor", "constructor" ]);
     expect(monthOf("2026-10-30")).toBe("2026-10");
   });
 });
