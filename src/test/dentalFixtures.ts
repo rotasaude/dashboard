@@ -9,24 +9,36 @@ export const TODAY28 = "2026-10-30";
 export const UBS = { id: "u1", name: "UBS Centro", kind: "ubs" };
 export const CEO_UNIT = { id: "u9", name: "CEO Boqueirão", kind: "ceo" };
 
-// O4: situações no formato do api (código em string; coroa, raiz, arcada e face). Sem `applies_to`.
+// O4: situações no formato do api (código em string), com os códigos reais do api (coroa 21, raiz 6, arcada, face 7).
+// Decíduo nunca recebe crown, abutment, removable_partial_denture, crown_unit_prosthesis, temporary_prosthesis;
+// furcation_lesion só em 14–18, 24–28, 34–38, 44–48.
 export const SITUATIONS: DentalVocabulary["situations"] = {
-  crown: [ { code: "sound", label: "Hígido" }, { code: "caries", label: "Cariado" }, { code: "restored", label: "Restaurado" },
-    { code: "missing", label: "Ausente" }, { code: "extraction_indicated", label: "Extração indicada" }, { code: "crown", label: "Coroa" } ],
-  root: [ { code: "root_remnant", label: "Resto radicular" }, { code: "endodontic_treated", label: "Tratamento endodôntico" } ],
+  crown: [ { code: "none", label: "Nenhuma" }, { code: "removable_partial_denture", label: "Prótese parcial removível" },
+    { code: "crown_unit_prosthesis", label: "Coroa unitária (prótese)" }, { code: "temporary_prosthesis", label: "Prótese provisória" },
+    { code: "missing", label: "Ausente" }, { code: "calculus", label: "Cálculo" }, { code: "caries", label: "Cariado" },
+    { code: "crown", label: "Coroa" }, { code: "extraction_indicated", label: "Extração indicada" }, { code: "extracted", label: "Extraído" },
+    { code: "fracture", label: "Fratura" }, { code: "sound", label: "Hígido" }, { code: "sound_sealed", label: "Hígido selado" },
+    { code: "unerupted", label: "Incluso" }, { code: "active_white_spot", label: "Mancha branca ativa" }, { code: "abutment", label: "Pilar" },
+    { code: "restored", label: "Restaurado" }, { code: "restored_with_caries", label: "Restaurado com cárie" },
+    { code: "residual_root", label: "Resto radicular" }, { code: "gingival_recession", label: "Recessão gengival" },
+    { code: "sealant_indicated", label: "Selante indicado" } ],
+  root: [ { code: "none", label: "Nenhuma" }, { code: "root_caries", label: "Cárie radicular" }, { code: "endodontics", label: "Endodontia" },
+    { code: "implant", label: "Implante" }, { code: "post", label: "Pino" }, { code: "furcation_lesion", label: "Lesão de furca" } ],
   arch: [ { code: "complete_denture", label: "Prótese total" } ],
-  face: [ { code: "sound", label: "Hígido" }, { code: "caries", label: "Cariado" }, { code: "restored", label: "Restaurado" } ]
+  face: [ { code: "caries", label: "Cariado" }, { code: "restored", label: "Restaurado" }, { code: "restored_with_caries", label: "Restaurado com cárie" },
+    { code: "fracture", label: "Fratura" }, { code: "active_white_spot", label: "Mancha branca ativa" },
+    { code: "sealant_indicated", label: "Selante indicado" }, { code: "sound_sealed", label: "Hígido selado" } ]
 };
-// O vocabulário que `consultation_options.dental` traz; os rótulos dos testes saem daqui.
+// O vocabulário que `consultation_options.dental` traz (códigos e rótulos da FAO/LEDI 8.7.0); os rótulos dos testes saem daqui.
 export const DENTAL_VOCABULARY: DentalVocabulary = {
-  care_types: [ { code: "2", label: "Consulta agendada" }, { code: "4", label: "Escuta inicial" }, { code: "5", label: "Consulta no dia" },
+  care_types: [ { code: "2", label: "Consulta agendada" }, { code: "4", label: "Escuta inicial / orientação" }, { code: "5", label: "Consulta no dia" },
     { code: "6", label: "Atendimento de urgência" } ],
   consultation_types: [ { code: "1", label: "Primeira consulta odontológica programática" }, { code: "2", label: "Consulta de retorno" },
     { code: "4", label: "Consulta de manutenção" } ],
   surveillance: [ { code: "1", label: "Abscesso dentoalveolar" }, { code: "3", label: "Dor de dente" }, { code: "99", label: "Não identificado" } ],
   supplies: [ { code: "1", label: "Escova dental" }, { code: "2", label: "Creme dental" }, { code: "3", label: "Fio dental" } ],
-  outcomes: [ { code: "1", label: "Encaminhamento: endodontia" }, { code: "10", label: "Retorno para consulta agendada" },
-    { code: "11", label: "Agendamento para outro profissional" }, { code: "16", label: "Tratamento concluído" } ],
+  outcomes: [ { code: "3", label: "Encaminhamento: endodontia" }, { code: "12", label: "Agendamento para outros profissionais da AB" },
+    { code: "15", label: "Tratamento concluído" }, { code: "16", label: "Retorno para consulta agendada" }, { code: "17", label: "Alta do episódio" } ],
   situations: SITUATIONS
 };
 export const RESIN: DentalProcedureRef = { sigtap: "0307010031", name: "RESTAURAÇÃO DE DENTE PERMANENTE POSTERIOR COM RESINA COMPOSTA",
