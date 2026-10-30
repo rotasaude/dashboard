@@ -8,7 +8,7 @@ import * as api from "../../lib/api";
 import { ApiError } from "../../lib/api";
 import { PatientHistory } from "./PatientHistory";
 import { renderWithProviders } from "../../test/campaignFixtures";
-import { UBS_FARM, dispensation, phUser } from "../../test/pharmacyFixtures";
+import { CLONA, UBS_FARM, dispensation, phUser } from "../../test/pharmacyFixtures";
 
 afterEach(cleanup);
 const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
@@ -92,6 +92,31 @@ describe("PatientHistory", () => {
       expect(await screen.findByRole("button", { name: /Registrar devolução/ })).not.toBeNull();
     });
 
+    it("item controlado: o auxiliar não vê o botão (catálogo ou número retido); no item comum vê; o farmacêutico vê nos dois", async () => {
+      const common = dispensation().items[0];
+      const mixed = dispensation({ items: [ { ...common, id: "di1" }, { ...common, id: "di2", item: CLONA } ] });
+      const byNumber = dispensation({ id: "dp2", retention: { notification_number: "B123456" }, items: [ { ...common, id: "di3" } ] });
+      const open = async (role: string, ds = [ mixed ]) => {
+        cleanup();
+        mocked(api.listDispensations).mockReset();
+        mocked(api.listDispensations).mockResolvedValue({ dispensations: ds, next_before: null });
+        mocked(api.listMyPharmacyLocations).mockResolvedValue([ { ...UBS_FARM, roles: [ role ] } ]);
+        renderWithProviders(<PatientHistory patientId="pa1" />);
+        await screen.findByRole("row", { name: /29\/10\/2026/ });
+      };
+      expect(CLONA.controlled).toBe(true);
+      await open("pharmacy_assistant");
+      expect(await screen.findByRole("button", { name: `Registrar devolução de ${common.item.name}` })).not.toBeNull();
+      expect(screen.queryByRole("button", { name: `Registrar devolução de ${CLONA.name}` })).toBeNull();
+      await open("pharmacy_assistant", [ byNumber ]);
+      expect(screen.queryByRole("button", { name: /Registrar devolução/ })).toBeNull();
+      await open("pharmacist");
+      expect(await screen.findByRole("button", { name: `Registrar devolução de ${common.item.name}` })).not.toBeNull();
+      expect(screen.getByRole("button", { name: `Registrar devolução de ${CLONA.name}` })).not.toBeNull();
+      await open("pharmacist", [ byNumber ]);
+      expect(await screen.findByRole("button", { name: /Registrar devolução/ })).not.toBeNull();
+    });
+
     it("item já devolvido por completo não oferece o botão", async () => {
       mocked(api.listDispensations).mockReset();
       mocked(api.listDispensations).mockResolvedValue({ next_before: null, dispensations: [ dispensation({
@@ -137,7 +162,8 @@ describe("PatientHistory", () => {
       [ "return_exceeds", 422, "a devolução passa do que ainda resta devolver deste item — abra o histórico de novo para ver o atual" ],
       [ "lot_expired", 422, "o lote desta retirada já venceu — a devolução não é aceita; registre o vencimento no ajuste de estoque" ],
       [ "invalid_quantity", 422, "quantidade inválida — use até 2 casas depois da vírgula" ],
-      [ "missing_role", 403, "seu papel não permite usar a farmácia" ]
+      [ "missing_role", 403, "seu papel não permite usar a farmácia" ],
+      [ "controlled_requires_pharmacist", 403, "medicamento controlado: só o farmacêutico dispensa" ]
     ])("recusa do api (%s) é mostrada e o que foi digitado fica", async (code, status, phrase) => {
       mocked(api.recordReturn).mockRejectedValue(new ApiError(status, { error: code }, String(status)));
       await openForm();

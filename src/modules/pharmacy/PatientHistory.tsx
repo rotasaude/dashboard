@@ -1,16 +1,16 @@
 // Histórico de retiradas do paciente (módulo 27a; F-27.5; contrato §7, H12) + "Registrar devolução" (acréscimo da coordenação).
 // É leitura NOMINAL (grava trilha por pessoa no api): lê ao abrir, "Carregar mais" pelo cursor e NUNCA relê sozinha (NOMINAL_QUERY,
 // gcTime 0); cada abertura do painel é uma leitura nova. O `patient_id` vai na URL (é id); CPF, CNS e nome nunca. A marca
-// "receita retida" aparece, o NÚMERO da notificação não. A devolução (só pharmacist/pharmacy_assistant do local da dispensação) troca
+// "receita retida" aparece, o NÚMERO da notificação não. A devolução (pharmacist, ou pharmacy_assistant em item comum, do local da dispensação) troca
 // o item na lista com a dispensação que o api devolveu — sem reler a leitura nominal. Nada em storage.
 import { useState, type CSSProperties } from "react";
 import { useInfiniteQuery, useQuery, useQueryClient, type InfiniteData } from "@tanstack/react-query";
-import { listDispensations, listMyPharmacyLocations, type Dispensation, type DispensationPage } from "../../lib/api";
+import { listDispensations, listMyPharmacyLocations, type Dispensation, type DispensationPage, type DispensedItem } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import { fmtDateTime } from "../../lib/format";
 import {
   NOMINAL_QUERY, PH_DISPENSATIONS_KEY, PH_LOCATIONS_KEY, PH_MOVEMENTS_KEY, PH_POSITIONS_KEY, STATIC_QUERY, cents, fmtQuantity, locationRoles, pharmacyError,
-  pharmacyRoleLabel, returnRemaining
+  pharmacyRoleLabel, returnControlled, returnRemaining
 } from "../../lib/pharmacy";
 import { DataTable } from "../../components/DataTable";
 import { Tag } from "../../components/Tag";
@@ -42,11 +42,12 @@ export function PatientHistory({ patientId }: { patientId: string }) {
 
   const dispensations = (query.data?.pages ?? []).flatMap((p) => p.dispensations);
   const patientName = dispensations.find((d) => d.patient.display_name)?.patient.display_name ?? null;
-  const canReturn = (d: Dispensation): boolean => {
+  // Item controlado: só o farmacêutico (o api recusa o auxiliar com `controlled_requires_pharmacist`).
+  const canReturn = (d: Dispensation, i: DispensedItem): boolean => {
     const loc = (locations.data ?? []).find((l) => l.id === d.location.id);
     if (!loc) return false;
     const r = locationRoles(loc);
-    return r.pharmacist || r.assistant;
+    return r.pharmacist || (r.assistant && !returnControlled(d, i));
   };
 
   const target = returning ? dispensations.find((d) => d.id === returning.dispensationId) : undefined;
@@ -83,7 +84,7 @@ export function PatientHistory({ patientId }: { patientId: string }) {
                     <span style={row}>
                       {cents(i.returned_total) > 0 && <small style={muted}>{`devolvido ${fmtQuantity(i.returned_total)}`}</small>}
                       {i.mapped_from_free_text && <small style={muted}>item da receita em texto livre</small>}
-                      {canReturn(d) && returnRemaining(i) > 0 && (
+                      {canReturn(d, i) && returnRemaining(i) > 0 && (
                         <button type="button" style={secondaryButtonStyle} aria-label={`Registrar devolução de ${i.item.name}`}
                           onClick={() => { setNotice(null); setReturning({ dispensationId: d.id, itemId: i.id }); }}>
                           Registrar devolução

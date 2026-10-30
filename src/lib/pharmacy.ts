@@ -3,7 +3,7 @@
 // controlado, aprovação acima do limite e retenção são dele. A tela só não envia o que já sabe que será recusado.
 import {
   ApiError, errorCode,
-  type AdjustmentInput, type AdjustmentKind, type DispensationInput, type DispensedItem, type ReturnInput, type LotBalance, type PharmacyLocation, type PharmacySettings,
+  type AdjustmentInput, type AdjustmentKind, type Dispensation, type DispensationInput, type DispensedItem, type ReturnInput, type LotBalance, type PharmacyLocation, type PharmacySettings,
   type PrescriberInput, type PrescriptionItemView, type PrescriptionView, type ReceiptItemInput, type ReceiveInput, type StockItem,
   type StockLot, type StockMovement, type StockPosition, type StockTransfer
 } from "./api";
@@ -459,6 +459,11 @@ export function adjustmentBody(d: AdjustmentDraft, locationId: string): Adjustme
 // ─── Devolução (histórico de retiradas; H12) ────────────────────────────────
 // O que ainda se pode devolver do item: dispensado − já devolvido (centésimos, sem erro de ponto flutuante).
 export const returnRemaining = (i: DispensedItem): number => cents(i.quantity) - cents(i.returned_total);
+// Espelha o que dá para saber do corpo do api em `RecordReturn.controlled?`: a retenção guardou o número da notificação, ou o item
+// (catálogo) é controlado. O resto (categoria do documento, lista do item da externa) só o api vê; ele recusa com
+// `controlled_requires_pharmacist`, que a tela mostra.
+export const returnControlled = (d: Dispensation, i: DispensedItem): boolean =>
+  !!d.retention?.notification_number || i.item.controlled || !!i.item.controlled_list;
 
 export interface ReturnDraft { quantity: string; reason: string }
 

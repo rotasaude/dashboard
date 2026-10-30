@@ -160,6 +160,18 @@ describe("PharmacyStock", () => {
     expect(mocked(api.listLotMovements)).toHaveBeenLastCalledWith("lot1", "l2", "m3");
   });
 
+  it("extrato: devolução com `reason` null (quem não dispensa no local) mostra \"—\", sem quebrar nem escrever null", async () => {
+    mocked(api.listLotMovements).mockResolvedValueOnce({ movements: [
+      { id: "m5", kind: "return", quantity: "3.00", document: { type: "dispensation_item", id: "di1", number: null }, reason: null, by: { name: "Marta Souza" }, at: "2026-10-29T12:00:00-03:00" } ], next_before: null });
+    renderWithProviders(<PharmacyStock />);
+    fireEvent.click(await screen.findByRole("button", { name: "Lotes de Amoxicilina 500 mg cápsula" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Extrato do lote AMX2611" }));
+    const region = within(await screen.findByRole("region", { name: "Extrato do lote AMX2611" }));
+    const row = await region.findByRole("row", { name: /devolução/ });
+    expect(row.textContent).toContain("—");
+    expect(row.textContent).not.toContain("null");
+  });
+
   it("lote vencido pela marca `expired` do api: etiqueta \"vencido\" só nele", async () => {
     mocked(api.listPositions).mockResolvedValue({ positions: [ position({ lots: [
       lotBalance({ lot: stockLot({ id: "old", lot_number: "VELHO1", expires_on: "2026-09-30" }), balance: "4", expiring_soon: false, expired: true }),
