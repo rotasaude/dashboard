@@ -1685,7 +1685,9 @@ export interface ConsultationOptions {
 }
 // Corpo do autosave (Divergência D5: todos os campos editáveis a cada PATCH).
 export interface ConsultationDraftInput {
-  subjective: string; objective: string; assessment: string; plan: string; vitals: VitalSigns; care_type: string | null;
+  subjective: string; objective: string; assessment: string; plan: string; vitals: VitalSigns;
+  // Módulo 28 (Ruling 5, O25): ausente na odontológica (o tipo vai em `dental.care_type`); sempre presente na comum.
+  care_type?: string | null;
   evaluated_problems: EvaluatedProblem[]; conducts: string[]; exam_requests: ExamRequest[];
   // Módulo 28 (contrato §2): só na consulta odontológica.
   dental?: DentalFields;

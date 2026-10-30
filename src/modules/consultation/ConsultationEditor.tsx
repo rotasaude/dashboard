@@ -6,12 +6,15 @@
 // espera o salvamento em curso e manda; a consulta finalizada não muda mais.
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import {
-  errorCode, finalizeConsultation, saveConsultationDraft,
-  type ClinicalRecord, type Consultation, type ConsultationOptions, type HealthUnit
+  ApiError, errorCode, finalizeConsultation, saveConsultationDraft,
+  type ClinicalRecord, type Consultation, type ConsultationOptions, type DentalRole, type HealthUnit, type Sex
 } from "../../lib/api";
 import {
-  SOAP_FIELDS, TEXT_MAX_LABEL, blockedReason, checkDraft, consultationError, draftFrom, finalizeProblems, type ConsultationDraft
+  SOAP_FIELDS, TEXT_MAX_LABEL, blockedReason, checkDraft, consultationError, consultationMessage, draftFrom, finalizeProblems,
+  type ConsultationDraft
 } from "../../lib/consultation";
+import { dentalApiProblems, dentalError, dentalFinalizeProblems, linkPlanItem, planItemPathIndex } from "../../lib/dental";
+import { DentalEditor } from "../dental/DentalEditor";
 import { EMPTY_OUTCOME, outcomeBody, outcomeProblem, outcomeView, type OutcomeDraft } from "../../lib/outcome";
 import { bmiOf } from "../../lib/screening";
 import { todayInCity } from "../../lib/campaigns";
@@ -43,12 +46,25 @@ export interface ConsultationEditorProps {
   units: HealthUnit[];
   autosaveDelayMs?: number;
   searchDelayMs?: number;
+  // Módulo 28: consulta odontológica — some o tipo de atendimento do 19a e as condutas; entra o bloco odontológico.
+  dental?: { role: DentalRole; baseline: boolean; sex: Sex };
   onFinalized(c: Consultation): void;
   onLocked(message: string): void;
 }
 
 // A consulta mudou de dono ou de estado fora desta tela: o editor para.
 const LOCKING = new Set([ "not_draft", "not_author" ]);
+// Módulo 28 (Ruling 8, Carry Task 7): o encaminhamento ao CEO sem pedido segue o caminho do `regulation_request_required` do 26a.
+const REGULATION_REFUSALS = new Set([ "regulation_request_required", "dental_referral_request_required" ]);
+
+interface Refusal { code: string; path: string | null; text: string }
+
+// A recusa da finalização com `problems` (27a §13 H8): todas, traduzidas; código desconhecido aparece cru.
+function finalizeRefusals(err: unknown): Refusal[] {
+  const body = err instanceof ApiError ? ((err.body ?? {}) as { problems?: unknown }) : null;
+  if (!body || !Array.isArray(body.problems) || body.problems.length === 0) return [];
+  return dentalApiProblems(err).map((p) => (p.text !== p.code ? p : { ...p, text: consultationMessage(p.code) ?? regulationFinalizeError(new ApiError(422, { error: p.code }, "")) ?? p.code }));
+}
 
 export function ConsultationEditor(props: ConsultationEditorProps) {
   const { consultation, record, options, unit, units } = props;
@@ -63,6 +79,11 @@ export function ConsultationEditor(props: ConsultationEditorProps) {
   const [ outcome, setOutcome ] = useState<OutcomeDraft>(EMPTY_OUTCOME);
   const [ busy, setBusy ] = useState(false);
   const [ error, setError ] = useState<string | null>(null);
+  // Módulo 28: as recusas do api de uma vez e a releitura do plano depois de `plan_item_not_open`.
+  const [ refusals, setRefusals ] = useState<Refusal[]>([]);
+  const [ planRefreshKey, setPlanRefreshKey ] = useState(0);
+  const dental = props.dental;
+  const mode = !dental ? "general" : dental.baseline ? "baseline" : "dental";
 
   function lock(err: unknown): boolean {
     const code = errorCode(err);
@@ -103,12 +124,17 @@ export function ConsultationEditor(props: ConsultationEditorProps) {
   const today = todayInCity();
   const { referralUnitId } = outcomeView(outcome, props.referenceUnitIds, unit, units);
   const outcomeIssue = outcomeProblem(outcome, referralUnitId, !!props.regulation && regulationCount > 0);
-  const missing = [ ...finalizeProblems(check), ...(outcomeIssue ? [ outcomeIssue ] : []) ];
+  // O problema da FAO (problem_required) já sai do finalizeProblems: uma frase só por falta.
+  const dentalMissing = dental && draft.dental
+    ? dentalFinalizeProblems(draft.dental, { ...dental, problemsCount: draft.problems.length })
+      .filter((p) => p.code !== "problem_required").map((p) => p.text)
+    : [];
+  const missing = [ ...new Set([ ...finalizeProblems(check, mode), ...dentalMissing, ...(outcomeIssue ? [ outcomeIssue ] : []) ]) ];
   const set = (patch: Partial<ConsultationDraft>) => setDraft((d) => ({ ...d, ...patch }));
 
   async function confirm() {
     if (busy || locked || missing.length > 0) return;
-    setBusy(true); setError(null);
+    setBusy(true); setError(null); setRefusals([]);
     try {
       if (!(await autosave.flush())) {
         if (!lockedRef.current) setError("o rascunho não foi salvo — veja o aviso no topo da consulta e tente de novo");
@@ -118,13 +144,30 @@ export function ConsultationEditor(props: ConsultationEditorProps) {
       props.onFinalized(await finalizeConsultation(consultation.id, outcomeBody(outcome, referralUnitId)));
     } catch (err) {
       if (!lock(err)) {
-        const regulationText = regulationFinalizeError(err);
-        if (regulationText) setRegulationKey((k) => k + 1);
-        setError(regulationText ?? consultationError(err));
+        if (dental) dentalRefused(err);
+        else {
+          const regulationText = regulationFinalizeError(err);
+          if (regulationText) setRegulationKey((k) => k + 1);
+          setError(regulationText ?? consultationError(err));
+        }
         setSealing(false);
       }
     } finally {
       setBusy(false);
+    }
+  }
+
+  // Nada é reenviado sozinho: o vínculo desfeito vai no autosave e a finalização espera o próximo clique.
+  function dentalRefused(err: unknown) {
+    const list = finalizeRefusals(err);
+    const codes = list.length > 0 ? list.map((p) => p.code) : [ errorCode(err) ?? "" ];
+    if (codes.some((c) => REGULATION_REFUSALS.has(c))) setRegulationKey((k) => k + 1);
+    if (list.length === 0) { setError(regulationFinalizeError(err) ?? dentalError(err)); return; }
+    setRefusals(list);
+    const stale = list.filter((p) => p.code === "plan_item_not_open").map((p) => planItemPathIndex(p.path)).filter((i): i is number => i !== null);
+    if (stale.length > 0) {
+      setDraft((d) => (d.dental ? { ...d, dental: stale.reduce((f, i) => linkPlanItem(f, i, null), d.dental) } : d));
+      setPlanRefreshKey((k) => k + 1);
     }
   }
 
@@ -155,19 +198,30 @@ export function ConsultationEditor(props: ConsultationEditorProps) {
       <VitalSignsFields form={draft.vitals} problems={check.vitalsProblems} alerts={[]}
         bmi={bmiOf(check.input.vitals.weight_kg, check.input.vitals.height_cm)} onChange={(vitals) => set({ vitals })} />
 
-      <label style={{ ...labelStyle, maxWidth: 320 }}>
-        Tipo de atendimento
-        <select value={draft.careType} style={inputStyle} onChange={(e) => set({ careType: e.target.value })}>
-          <option value="">—</option>
-          {options.care_types.map((o) => <option key={o.code} value={o.code}>{o.label}</option>)}
-        </select>
-      </label>
+      {!dental && (
+        <label style={{ ...labelStyle, maxWidth: 320 }}>
+          Tipo de atendimento
+          <select value={draft.careType} style={inputStyle} onChange={(e) => set({ careType: e.target.value })}>
+            <option value="">—</option>
+            {options.care_types.map((o) => <option key={o.code} value={o.code}>{o.label}</option>)}
+          </select>
+        </label>
+      )}
 
-      <ProblemsEditor patientProblems={record.problems} items={draft.problems} onChange={(problems) => set({ problems })}
-        cid10Allowed={options.cid10_allowed_for_cbo} today={today} searchDelayMs={props.searchDelayMs} />
-      <ConductsField options={options.conducts} value={draft.conducts} onChange={(conducts) => set({ conducts })} />
-      <ExamRequestsField value={draft.exams} onChange={(exams) => set({ exams })} cid10Allowed={options.cid10_allowed_for_cbo}
-        searchDelayMs={props.searchDelayMs} priorityOn={props.examPriority} />
+      {mode !== "baseline" && (
+        <ProblemsEditor patientProblems={record.problems} items={draft.problems} onChange={(problems) => set({ problems })}
+          cid10Allowed={options.cid10_allowed_for_cbo} today={today} searchDelayMs={props.searchDelayMs} />
+      )}
+      {dental && draft.dental && (
+        <DentalEditor consultation={consultation} record={record} unit={unit} options={options} value={draft.dental}
+          role={dental.role} baseline={dental.baseline} planRefreshKey={planRefreshKey} searchDelayMs={props.searchDelayMs}
+          onChange={(f) => set({ dental: f })} />
+      )}
+      {!dental && <ConductsField options={options.conducts} value={draft.conducts} onChange={(conducts) => set({ conducts })} />}
+      {mode !== "baseline" && (
+        <ExamRequestsField value={draft.exams} onChange={(exams) => set({ exams })} cid10Allowed={options.cid10_allowed_for_cbo}
+          searchDelayMs={props.searchDelayMs} priorityOn={props.examPriority} />
+      )}
       {/* Módulo 25 (ADR 0043): a notificação nunca bloqueia a finalização — fora de `missing`, de
           `finalizeProblems` e de `blockedFinal`; a falha dela só aparece nela. */}
       {props.notifications && (
@@ -202,6 +256,11 @@ export function ConsultationEditor(props: ConsultationEditorProps) {
             </ul>
           )}
           {error && <p role="alert" style={alert}>{error}</p>}
+          {refusals.length > 0 && (
+            <ul aria-label="recusas do api" style={{ margin: 0, paddingLeft: 18 }}>
+              {refusals.map((r, i) => <li key={`${r.code}-${r.path ?? ""}-${i}`} style={alert}>{r.text}</li>)}
+            </ul>
+          )}
           {/* Destino dos avisos de finalização das peças (portal): notificação pendente e pedidos de regulação. */}
           {(props.notifications || props.regulation) && <div ref={setNoteHost} style={{ display: "contents" }} />}
           <div style={{ display: "flex", gap: 8 }}>

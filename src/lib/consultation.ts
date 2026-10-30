@@ -5,9 +5,10 @@
 // repete texto clínico: só códigos e rótulos.
 import {
   ApiError, type Addendum, type AddendumChanges, type CodedOption, type Consultation, type ConsultationDraftInput,
-  type EvaluatedProblem, type ExamPriority, type ExamRequest, type OnsetPrecision, type PatientProblem, type ProblemAction, type Terminology
+  type DentalFields, type EvaluatedProblem, type ExamPriority, type ExamRequest, type OnsetPrecision, type PatientProblem, type ProblemAction, type Terminology
 } from "./api";
 import { fmtDay } from "./audiencePhrase";
+import { dentalFieldsFrom, dentalPayload } from "./dental";
 import { parseVitals, screeningError, vitalsFormFrom, type VitalsForm, type VitalsProblems } from "./screening";
 
 export const RECORD_KEY = "attendanceRecord";
@@ -51,6 +52,8 @@ export interface ConsultationDraft {
   problems: EvaluatedProblem[];
   conducts: string[];
   exams: ExamRequest[];
+  // Módulo 28: o bloco odontológico; null na consulta comum.
+  dental: DentalFields | null;
 }
 
 export function draftFrom(c: Consultation): ConsultationDraft {
@@ -60,7 +63,8 @@ export function draftFrom(c: Consultation): ConsultationDraft {
     careType: c.care_type ?? "",
     problems: c.evaluated_problems ?? [],
     conducts: c.conducts ?? [],
-    exams: c.exam_requests ?? []
+    exams: c.exam_requests ?? [],
+    dental: c.kind === "dental" ? dentalFieldsFrom(c) : null
   };
 }
 
@@ -69,12 +73,15 @@ export interface DraftCheck { input: ConsultationDraftInput; vitalsProblems: Vit
 // Sinal com problema fica fora do corpo (o api recusaria o PATCH inteiro).
 export function checkDraft(d: ConsultationDraft): DraftCheck {
   const { vitals, problems } = parseVitals(d.vitals);
+  // Módulo 28 (Ruling 5, O25): na odontológica o tipo de atendimento é só `dental.care_type` — nada no topo; a comum não muda.
+  const input: ConsultationDraftInput = {
+    subjective: d.soap.subjective, objective: d.soap.objective, assessment: d.soap.assessment, plan: d.soap.plan,
+    vitals, ...(d.dental ? {} : { care_type: d.careType === "" ? null : d.careType }),
+    evaluated_problems: d.problems, conducts: d.conducts, exam_requests: d.exams.map(examPayload),
+    ...(d.dental ? { dental: dentalPayload(d.dental) } : {})
+  };
   return {
-    input: {
-      subjective: d.soap.subjective, objective: d.soap.objective, assessment: d.soap.assessment, plan: d.soap.plan,
-      vitals, care_type: d.careType === "" ? null : d.careType,
-      evaluated_problems: d.problems, conducts: d.conducts, exam_requests: d.exams.map(examPayload)
-    },
+    input,
     vitalsProblems: problems,
     tooLong: SOAP_FIELDS.map((f) => f.key).filter((k) => d.soap[k].length > TEXT_MAX)
   };
@@ -85,13 +92,16 @@ export function blockedReason(check: DraftCheck): string | null {
   return check.tooLong.length > 0 ? `${textLabel(check.tooLong[0])} passa de ${TEXT_MAX_LABEL} caracteres` : null;
 }
 
-export function finalizeProblems(check: DraftCheck): string[] {
+// Módulo 28 (O8, O22): a odontológica não exige conduta; o registro inicial não exige problema, conduta nem A/P.
+export type FinalizeMode = "general" | "dental" | "baseline";
+
+export function finalizeProblems(check: DraftCheck, mode: FinalizeMode = "general"): string[] {
   const out: string[] = [];
   if (Object.keys(check.vitalsProblems).length > 0) out.push("corrija os sinais vitais marcados");
   for (const field of check.tooLong) out.push(`${textLabel(field)} passa de ${TEXT_MAX_LABEL} caracteres`);
-  if (check.input.evaluated_problems.length === 0) out.push("avalie, inclua ou resolva ao menos um problema");
-  if (check.input.conducts.length === 0) out.push("marque ao menos uma conduta");
-  if (check.input.assessment.trim() === "" && check.input.plan.trim() === "") out.push("escreva a avaliação (A) ou o plano (P)");
+  if (mode !== "baseline" && check.input.evaluated_problems.length === 0) out.push("avalie, inclua ou resolva ao menos um problema");
+  if (mode === "general" && check.input.conducts.length === 0) out.push("marque ao menos uma conduta");
+  if (mode !== "baseline" && check.input.assessment.trim() === "" && check.input.plan.trim() === "") out.push("escreva a avaliação (A) ou o plano (P)");
   const exam = examsProblem(check.input.exam_requests);
   if (exam) out.push(exam);
   return out;
@@ -313,6 +323,11 @@ const MESSAGES: Record<string, string> = {
   invalid_period: "o período informado não é válido",
   terminology_unavailable: "a terminologia não está disponível agora — tente de novo em instantes"
 };
+
+// A frase de um código da consulta (ou null): a lista de recusas do módulo 28 cai aqui quando o código não é odontológico.
+export function consultationMessage(code: string): string | null {
+  return Object.hasOwn(MESSAGES, code) ? MESSAGES[code] : null;
+}
 
 export function consultationError(err: unknown): string {
   if (err instanceof ApiError) {

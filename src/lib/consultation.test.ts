@@ -7,6 +7,7 @@ import {
   setJustification, withAddendum
 } from "./consultation";
 import { consultation, finalized, options, problem } from "../test/consultationFixtures";
+import { RESIN, dentalDraft, fields, toothLoc } from "../test/dentalFixtures";
 
 const T90 = problem();
 const K86 = problem({ id: "pp2", code: "K86", label: "Hipertensão sem complicações", onset_on: null, onset_precision: null });
@@ -283,5 +284,23 @@ describe("rótulos e recusas", () => {
     expect(existingConsultationId(err(409, { error: "already_exists" }))).toBeNull();
     expect(existingConsultationId(err(409, { error: "not_caller" }))).toBeNull();
     expect(existingConsultationId(new Error("x"))).toBeNull();
+  });
+});
+
+describe("módulo 28 — rascunho odontológico", () => {
+  it("consulta comum: corpo igual ao de antes; odontológica leva dental sem nome", () => {
+    expect("dental" in checkDraft(draftFrom(consultation())).input).toBe(false);
+    const d = draftFrom(dentalDraft({ dental: { ...fields(), suggest_completed: true,
+      procedures: [ { sigtap: RESIN.sigtap, name: RESIN.name, location: toothLoc("16"), quantity: 1, plan_item_id: null } ] } }));
+    expect(checkDraft(d).input.dental).toEqual(fields({ procedures: [ { sigtap: RESIN.sigtap, location: toothLoc("16"), quantity: 1, plan_item_id: null } ] }));
+  });
+  it("odontológica: sem care_type no topo do corpo (vale dental.care_type); a comum mantém", () => {
+    expect("care_type" in checkDraft(draftFrom(dentalDraft({ care_type: "2" }))).input).toBe(false);
+    expect(checkDraft(draftFrom(consultation())).input.care_type).toBe("5");
+  });
+  it("modos da finalização: odontológica sem conduta; registro inicial sem problema, conduta nem A/P", () => {
+    const check = checkDraft(draftFrom(consultation()));
+    expect(finalizeProblems(check, "dental")).toEqual([ "avalie, inclua ou resolva ao menos um problema", "escreva a avaliação (A) ou o plano (P)" ]);
+    expect(finalizeProblems(check, "baseline")).toEqual([]);
   });
 });

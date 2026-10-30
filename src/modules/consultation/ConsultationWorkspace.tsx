@@ -7,7 +7,7 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   getAttendanceRecord, getConsultation, getConsultationOptions, getConsultationProblems, startConsultation, type ClinicalRecord,
-  type Consultation, type HealthUnit, type RegulationNotSent
+  type Consultation, type ConsultationKind, type HealthUnit, type RegulationNotSent
 } from "../../lib/api";
 import { OPTIONS_KEY, RECORD_KEY, consultationError, existingConsultationId, withAddendum } from "../../lib/consultation";
 import { useAuth } from "../../lib/auth";
@@ -25,6 +25,7 @@ import { ConsultationLoader, ConsultationView } from "./ConsultationView";
 import { ProceduresPanel } from "../billing/ProceduresPanel";
 import { canUseBilling, unitBills } from "../../lib/billing";
 import { allowedTypes, canRequestRegulation } from "../../lib/regulation";
+import { canUseDental, dentalError, dentalRole, offeredKinds } from "../../lib/dental";
 
 interface Props {
   attendanceId: string;
@@ -61,14 +62,23 @@ export function ConsultationWorkspace(props: Props) {
   const [ rereadTick, setRereadTick ] = useState(0);
   const signer = canSign(user);
   // Módulo 19c: documentos clínicos e medicamentos em uso, com o interruptor ligado.
-  const documentsOn = canUseDocuments(user);
+  // Módulo 28: a consulta odontológica (o registro inicial não emite documento nem pede regulação; o auxiliar não emite).
+  const isDental = consultation?.kind === "dental";
+  const baseline = isDental && !!consultation?.baseline;
+  const role = isDental ? dentalRole(consultation?.cbo_code) ?? "auxiliary" : null;
+  const kinds = offeredKinds(options.data, canUseDental(user));
+  const dentalOffered = kinds.includes("dental");
+  // Enquanto as opções carregam (ou se nenhum tipo sobrar, ex.: interruptor desligado), a consulta comum continua à mão, como hoje.
+  const generalOffered = !options.data || kinds.includes("general") || kinds.length === 0;
+  const documentsOn = canUseDocuments(user) && (!isDental || (role === "dentist" && !baseline));
   // Módulo 20: a aba "Linha do tempo" no painel do paciente, pelo atendimento (em contexto).
   const timelineOn = hasFeature(user, "patient_timeline");
   const examsOn = hasFeature(user, "exam_tracking");
   // Módulo 22: procedimentos realizados no atendimento, nunca na UBS (ADR 0039).
-  const proceduresOn = canUseBilling(user) && unitBills(props.unit);
+  // Módulo 28 (spec §9): a consulta odontológica não gera BPA — o painel do 22 nunca aparece nela.
+  const proceduresOn = canUseBilling(user) && unitBills(props.unit) && !isDental;
   // Módulo 26a (F-26.2): "Pedir regulação" no rascunho e os pedidos na consulta finalizada; só quem pode pedir e com CBO que pede.
-  const regulationOn = canRequestRegulation(user) && allowedTypes(consultation?.cbo_code).length > 0;
+  const regulationOn = canRequestRegulation(user) && allowedTypes(consultation?.cbo_code).length > 0 && !baseline;
   // `regulation_not_sent` da finalização, só na memória (o GET da consulta não o traz).
   const [ notSent, setNotSent ] = useState<RegulationNotSent[]>([]);
   // Aba Documentos: o editor continua montado (escondido) para o autosave não
@@ -119,14 +129,15 @@ export function ConsultationWorkspace(props: Props) {
     setRereadTick((t) => t + 1);
   }
 
-  async function open() {
+  // A comum chama sem argumento (o corpo de hoje); a odontológica leva o tipo e, no registro inicial, `baseline`.
+  async function open(input?: { kind: ConsultationKind; baseline?: boolean }) {
     if (busy) return;
     setBusy(true); setError(null);
     try {
-      setConsultation(await startConsultation(props.attendanceId));
+      setConsultation(await (input ? startConsultation(props.attendanceId, input) : startConsultation(props.attendanceId)));
     } catch (err) {
       const existing = existingConsultationId(err);
-      if (!existing) { setError(consultationError(err)); return; }
+      if (!existing) { setError(input?.kind === "dental" ? dentalError(err) : consultationError(err)); return; }
       // Retomar também é "Iniciar consulta" (o painel só sabe que há rascunho
       // depois do clique): diz que retomou (AT-10).
       try { setConsultation(await getConsultation(existing)); setNotice("Rascunho retomado."); } catch (again) { setError(consultationError(again)); }
@@ -168,9 +179,24 @@ export function ConsultationWorkspace(props: Props) {
 
           {!consultation && (
             <div>
-              <button type="button" disabled={busy} style={busy ? disabledButtonStyle : buttonStyle} onClick={() => void open()}>
-                Iniciar consulta
-              </button>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {generalOffered && (
+                  <button type="button" disabled={busy} style={busy ? disabledButtonStyle : buttonStyle} onClick={() => void open()}>
+                    Iniciar consulta
+                  </button>
+                )}
+                {dentalOffered && (
+                  <button type="button" disabled={busy} style={busy ? disabledButtonStyle : buttonStyle} onClick={() => void open({ kind: "dental" })}>
+                    Iniciar consulta odontológica
+                  </button>
+                )}
+                {dentalOffered && options.data?.dental_role === "dentist" && (
+                  <button type="button" disabled={busy} style={busy ? disabledButtonStyle : secondaryButtonStyle}
+                    onClick={() => void open({ kind: "dental", baseline: true })}>
+                    Registro inicial do odontograma
+                  </button>
+                )}
+              </div>
               <p style={{ margin: "6px 0 0", fontSize: 12, color: "var(--ink3)" }}>Se você já começou esta consulta, o seu rascunho abre.</p>
             </div>
           )}
@@ -189,6 +215,7 @@ export function ConsultationWorkspace(props: Props) {
               <ConsultationEditor key={consultation.id} consultation={consultation} record={record.data} options={options.data}
                 referenceUnitIds={props.referenceUnitIds} unit={props.unit} units={props.units} examPriority={examsOn} regulation={regulationOn}
                 notifications={canSuggestNotification(user) && cboCanNotify(consultation.cbo_code)}
+                dental={isDental && role ? { role, baseline, sex: record.data.patient.sex } : undefined}
                 autosaveDelayMs={props.autosaveDelayMs} searchDelayMs={props.searchDelayMs}
                 onFinalized={(c) => { setNotSent(c.regulation_not_sent ?? []); setConsultation(c); restartRereads(); void rereadProblems(c.id); props.onFinalized(); }}
                 onLocked={(message) => void reload(message)} />
