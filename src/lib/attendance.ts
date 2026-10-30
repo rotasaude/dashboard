@@ -92,6 +92,8 @@ const MESSAGES: Record<string, string> = {
   invalid_time: "escolha um horário entre agora e 180 dias",
   not_today: "o código só vale no dia do horário",
   appointment_not_eligible: "este agendamento não está confirmado para check-in",
+  // Módulo 27a (H14): a farmácia da unidade com transferência `sent` (de ou para ela) ou ajuste `pending` prende a unidade ativa.
+  pharmacy_pending: "a farmácia desta unidade tem transferência a receber ou ajuste a decidir — resolva antes de desativar",
   unit_has_open_requests: "há pedidos de agendamento nesta unidade — use Esvaziar para movê-los antes de desativar",
   invalid_target: "escolha outra unidade ativa como destino",
   missing_link: "Você não tem vínculo com esta unidade",

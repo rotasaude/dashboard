@@ -40,6 +40,11 @@ describe("attendance helpers", () => {
       .toBe("há atendimentos abertos nesta unidade — encerre-os antes de desativar");
   });
 
+  it("traduz pharmacy_pending (módulo 27a, H14): transferência a receber ou ajuste a decidir", () => {
+    expect(attendanceError(new ApiError(409, { error: "pharmacy_pending" }, "x")))
+      .toBe("a farmácia desta unidade tem transferência a receber ou ajuste a decidir — resolva antes de desativar");
+  });
+
   it("traduz os erros da fila e do desfecho (Task 7)", () => {
     expect(attendanceError(new ApiError(409, { error: "already_called" }, "x")))
       .toBe("este atendimento já foi chamado por outro profissional");

@@ -131,6 +131,14 @@ describe("Units", () => {
     expect(await screen.findByText("há atendimentos abertos nesta unidade — encerre-os antes de desativar")).not.toBeNull();
   });
 
+  it("mostra a frase de pharmacy_pending ao tentar desativar a unidade com a farmácia pendente (módulo 27a, H14)", async () => {
+    mocked(api.setUnitActive).mockRejectedValue(new ApiError(409, { error: "pharmacy_pending" }, "x"));
+    renderUnits();
+    const btn = await screen.findByRole("button", { name: "Desativar" });
+    fireEvent.click(btn);
+    expect(await screen.findByText("a farmácia desta unidade tem transferência a receber ou ajuste a decidir — resolva antes de desativar")).not.toBeNull();
+  });
+
   it("mostra alerta quando listAllUnits falha, em vez de painel em branco" , async () => {
     mocked(api.listAllUnits).mockReset().mockRejectedValue(new ApiError(500, { error: "server_error" }, "x"));
     renderUnits();
