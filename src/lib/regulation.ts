@@ -24,6 +24,7 @@ export const REFERRAL_HINT =
   "Encaminhamento a especialista ou procedimento é pelo “Pedir regulação” na consulta; este desfecho é só para outra unidade da rede.";
 export const UNSAVED_REQUEST_NOTE = "O pedido de regulação que você está escrevendo ainda não foi salvo e não vai junto.";
 export const ADDENDUM_NOTE = "Pedidos feitos aqui ficam em rascunho e vão para a regulação quando você registrar um adendo.";
+export const REGULATION_REQUIRED_CODE = "regulation_request_required";
 export const REGULATION_REQUIRED_TEXT =
   "encaminhamento sem unidade de destino exige um pedido de regulação: escolha a unidade da rede ou use “Pedir regulação” na consulta";
 export const NOT_SENT_LABEL = "não enviado";
@@ -436,7 +437,7 @@ export function regulationError(err: unknown): string {
 // A finalização (e o adendo) nunca é recusada por rascunho (G4): o que sobra é o encaminhamento sem unidade de destino.
 // Outra recusa → null, e o editor usa a frase de hoje.
 export function regulationFinalizeError(err: unknown): string | null {
-  return errorCode(err) === "regulation_request_required" ? REGULATION_REQUIRED_TEXT : null;
+  return errorCode(err) === REGULATION_REQUIRED_CODE ? REGULATION_REQUIRED_TEXT : null;
 }
 
 // Por que um rascunho não seguiu junto (`regulation_not_sent`); a mesma frase da recusa avulsa.

@@ -25,7 +25,7 @@ import { ConsultationLoader, ConsultationView } from "./ConsultationView";
 import { ProceduresPanel } from "../billing/ProceduresPanel";
 import { canUseBilling, unitBills } from "../../lib/billing";
 import { allowedTypes, canRequestRegulation } from "../../lib/regulation";
-import { canUseDental, dentalError, dentalRole, offeredKinds } from "../../lib/dental";
+import { DENTAL_DISABLED, canUseDental, dentalError, dentalRole, offeredKinds } from "../../lib/dental";
 
 interface Props {
   attendanceId: string;
@@ -68,15 +68,20 @@ export function ConsultationWorkspace(props: Props) {
   const role = isDental ? dentalRole(consultation?.cbo_code) ?? "auxiliary" : null;
   const kinds = offeredKinds(options.data, canUseDental(user));
   const dentalOffered = kinds.includes("dental");
-  // Enquanto as opções carregam (ou se nenhum tipo sobrar, ex.: interruptor desligado), a consulta comum continua à mão, como hoje.
-  const generalOffered = !options.data || kinds.includes("general") || kinds.length === 0;
+  // Enquanto as opções carregam, a consulta comum continua à mão, como hoje; carregadas, só o que o api oferece.
+  const generalOffered = !options.data || kinds.includes("general");
+  // Nenhum tipo oferecido (o api recusaria qualquer início): uma linha no lugar dos botões.
+  const noKindReason = options.data && kinds.length === 0
+    ? ((options.data.kinds ?? []).includes("dental") ? DENTAL_DISABLED : "seu CBO não registra consulta neste atendimento")
+    : null;
   const documentsOn = canUseDocuments(user) && (!isDental || (role === "dentist" && !baseline));
   // Módulo 20: a aba "Linha do tempo" no painel do paciente, pelo atendimento (em contexto).
   const timelineOn = hasFeature(user, "patient_timeline");
   const examsOn = hasFeature(user, "exam_tracking");
   // Módulo 22: procedimentos realizados no atendimento, nunca na UBS (ADR 0039).
   // Módulo 28 (spec §9): a consulta odontológica não gera BPA — o painel do 22 nunca aparece nela.
-  const proceduresOn = canUseBilling(user) && unitBills(props.unit) && !isDental;
+  // Antes de iniciar, só para quem pode abrir a consulta comum (o tipo odontológico não fatura).
+  const proceduresOn = canUseBilling(user) && unitBills(props.unit) && (consultation ? !isDental : generalOffered);
   // Módulo 26a (F-26.2): "Pedir regulação" no rascunho e os pedidos na consulta finalizada; só quem pode pedir e com CBO que pede.
   const regulationOn = canRequestRegulation(user) && allowedTypes(consultation?.cbo_code).length > 0 && !baseline;
   // `regulation_not_sent` da finalização, só na memória (o GET da consulta não o traz).
@@ -177,7 +182,8 @@ export function ConsultationWorkspace(props: Props) {
               patientProblems={record.data.problems} searchDelayMs={props.searchDelayMs} onClose={() => setViewing(null)} />
           )}
 
-          {!consultation && (
+          {!consultation && noKindReason && <p role="status" style={{ margin: 0, fontSize: 12.5, color: "var(--ink3)" }}>{noKindReason}</p>}
+          {!consultation && !noKindReason && (
             <div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 {generalOffered && (

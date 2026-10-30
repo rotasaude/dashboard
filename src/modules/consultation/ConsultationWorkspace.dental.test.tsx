@@ -57,15 +57,31 @@ describe("ConsultationWorkspace — consulta odontológica (módulo 28)", () => 
     await waitFor(() => expect(mocked(api.startConsultation)).toHaveBeenLastCalledWith("a1", { kind: "dental", baseline: true }));
   });
 
-  it("médico: só 'Iniciar consulta', sem argumento; sem dental_care o dentista não vê o tipo", async () => {
+  it("médico: só 'Iniciar consulta', sem argumento; sem dental_care o dentista não vê o tipo nem a comum", async () => {
     mocked(api.startConsultation).mockResolvedValue(dentalDraft({ kind: "general", cbo_code: "225142", dental: null }));
     open(undefined, options());
     fireEvent.click(await screen.findByRole("button", { name: "Iniciar consulta" }));
     await waitFor(() => expect(mocked(api.startConsultation)).toHaveBeenCalledWith("a1"));
     cleanup();
     open([ "clinical_record" ], dentalOptions());
-    await screen.findByText("Se você já começou esta consulta, o seu rascunho abre.");
+    await screen.findByText("a saúde bucal está desligada nesta cidade");
     expect(screen.queryByRole("button", { name: "Iniciar consulta odontológica" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Iniciar consulta" })).toBeNull();
+    cleanup();
+    // Sem tipo nenhum e sem o interruptor como causa: a linha do CBO.
+    open(undefined, dentalOptions({ kinds: [] }));
+    expect(await screen.findByText("seu CBO não registra consulta neste atendimento")).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Iniciar consulta" })).toBeNull();
+  });
+
+  it("CEO antes de iniciar: sem \"general\" nos tipos, o painel do faturamento não aparece", async () => {
+    open([ "clinical_record", "clinical_documents", "dental_care", "procedure_billing" ], dentalOptions(), CEO_UNIT);
+    await screen.findByRole("button", { name: "Iniciar consulta odontológica" });
+    expect(screen.queryByText("painel do faturamento")).toBeNull();
+    cleanup();
+    open([ "clinical_record", "clinical_documents", "dental_care", "procedure_billing" ], dentalOptions({ kinds: [ "general", "dental" ] }), CEO_UNIT);
+    await screen.findByRole("button", { name: "Iniciar consulta odontológica" });
+    expect(screen.getByText("painel do faturamento")).not.toBeNull();
   });
 
   it("recusa do início vira frase", async () => {
@@ -128,6 +144,10 @@ describe("ConsultationWorkspace — consulta odontológica (módulo 28)", () => 
     const refusals = await screen.findByRole("list", { name: "recusas do api" });
     expect(refusals.textContent).toContain("um item do plano já foi feito ou cancelado em outra consulta");
     expect(refusals.textContent).toContain("informe se a paciente está gestante");
+    // Fechar e reabrir a finalização limpa as recusas antigas.
+    fireEvent.click(screen.getByRole("button", { name: "Voltar ao rascunho" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Finalizar consulta" }));
+    expect(screen.queryByRole("list", { name: "recusas do api" })).toBeNull();
     await waitFor(() => expect(mocked(api.listDentalPlans)).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(mocked(api.saveConsultationDraft)).toHaveBeenLastCalledWith("cs1", expect.objectContaining({
       dental: expect.objectContaining({ procedures: [ { id: "dpr1", sigtap: RESIN.sigtap, location: toothLoc("16", "O"), quantity: 1, plan_item_id: null } ] }) })));

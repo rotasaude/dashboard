@@ -29,7 +29,7 @@ import { ConductsField } from "./ConductsField";
 import { ExamRequestsField } from "./ExamRequestsField";
 import { NotificationSuggestions } from "./NotificationSuggestions";
 import { RegulationRequestsField } from "./RegulationRequestsField";
-import { regulationFinalizeError } from "../../lib/regulation";
+import { REGULATION_REQUIRED_CODE, REGULATION_REQUIRED_TEXT, regulationFinalizeError } from "../../lib/regulation";
 
 export interface ConsultationEditorProps {
   // Módulo 21a: prioridade de cada exame (com exam_tracking ligado).
@@ -63,7 +63,7 @@ interface Refusal { code: string; path: string | null; text: string }
 function finalizeRefusals(err: unknown): Refusal[] {
   const body = err instanceof ApiError ? ((err.body ?? {}) as { problems?: unknown }) : null;
   if (!body || !Array.isArray(body.problems) || body.problems.length === 0) return [];
-  return dentalApiProblems(err).map((p) => (p.text !== p.code ? p : { ...p, text: consultationMessage(p.code) ?? regulationFinalizeError(new ApiError(422, { error: p.code }, "")) ?? p.code }));
+  return dentalApiProblems(err).map((p) => (p.text !== p.code ? p : { ...p, text: consultationMessage(p.code) ?? (p.code === REGULATION_REQUIRED_CODE ? REGULATION_REQUIRED_TEXT : p.code) }));
 }
 
 export function ConsultationEditor(props: ConsultationEditorProps) {
@@ -238,7 +238,7 @@ export function ConsultationEditor(props: ConsultationEditorProps) {
 
       {!finalizing ? (
         <div>
-          <button type="button" disabled={locked} style={locked ? disabledButtonStyle : buttonStyle} onClick={() => setFinalizing(true)}>
+          <button type="button" disabled={locked} style={locked ? disabledButtonStyle : buttonStyle} onClick={() => { setRefusals([]); setFinalizing(true); }}>
             Finalizar consulta
           </button>
         </div>
@@ -268,7 +268,7 @@ export function ConsultationEditor(props: ConsultationEditorProps) {
               onClick={() => void confirm()}>
               Confirmar finalização
             </button>
-            <button type="button" disabled={busy} style={secondaryButtonStyle} onClick={() => setFinalizing(false)}>
+            <button type="button" disabled={busy} style={secondaryButtonStyle} onClick={() => { setRefusals([]); setFinalizing(false); }}>
               Voltar ao rascunho
             </button>
           </div>
