@@ -62,6 +62,10 @@ export function TreatmentPlanPanel({ plan, value, unit, role, readOnly = false, 
                 <span style={muted}>{locationLabel(item.location)}</span>
                 <Tag tone={STATE[state].tone}>{STATE[state].label}</Tag>
               </span>
+              {isDentist && state === "cancelled_here" && (
+                <button type="button" style={secondaryButtonStyle} aria-label={`Desfazer cancelamento — ${item.name}`}
+                  onClick={() => onChange(withoutPlanChange(value, "cancel", value.plan_changes.cancel.findIndex((c) => c.item_id === item.id)))}>Desfazer cancelamento</button>
+              )}
               {isDentist && state === "planned" && cancelling !== item.id && (
                 <button type="button" style={secondaryButtonStyle} aria-label={`Cancelar item — ${item.name}`}
                   onClick={() => { setCancelling(item.id); setReason(""); setProblem(null); }}>Cancelar item</button>

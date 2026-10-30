@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getCeoGoals, listCeoProfiles, type CeoGoalRow, type CeoGoals } from "../lib/api";
-import { CEO_GOALS_KEY, CEO_PROFILES_KEY, STATIC_QUERY, compositionLabel, dentalError, goalKeyLabel, monthOf, percentLabel } from "../lib/dental";
+import { CEO_GOALS_KEY, CEO_PROFILES_KEY, STATIC_QUERY, compositionShortLabel, dentalError, goalKeyLabel, monthOf, percentLabel } from "../lib/dental";
 import { DataTable, type Column } from "../components/DataTable";
 import { Panel } from "../components/Panel";
 import { Tag } from "../components/Tag";
@@ -13,11 +13,10 @@ import { alert, fieldLabel, muted, row, stack } from "./exams/styles";
 import { todayInCity } from "../lib/campaigns";
 import { DentalGate } from "./dental/DentalGate";
 
-export const SUSPENSION_TEXT = "Risco de suspensão do incentivo: meta não atingida 2 meses seguidos ou 3 em 12 meses em alguma especialidade.";
+const SUSPENSION_TEXT = "Risco de suspensão do incentivo: meta não atingida 2 meses seguidos ou 3 em 12 meses em alguma especialidade.";
 
-const RULE_SHORT: Record<string, string> = { restorations_min_50: "restaurações ≥ 50%", three_roots_min_20: "dentes com 3+ raízes ≥ 20%" };
 function compositionText(c: NonNullable<CeoGoalRow["composition"]>): string {
-  const name = Object.prototype.hasOwnProperty.call(RULE_SHORT, c.rule) ? RULE_SHORT[c.rule] : compositionLabel(c.rule);
+  const name = compositionShortLabel(c.rule);
   return `${name}: ${percentLabel(c.value)} · ${c.ok ? "ok" : "abaixo"}`;
 }
 function missesText(m: { consecutive: number; total: number } | undefined): string {

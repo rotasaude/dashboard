@@ -37,6 +37,8 @@ export function DentalEditor({ consultation, record, unit, options, value, role,
   const situations = options.dental?.situations;
   const [ selection, setSelection ] = useState<ToothSelection | null>(null);
   const [ dentition, setDentition ] = useState<Dentition | null>(null);
+  // `open` só no estado inicial: tirar o último item não pode fechar a seção debaixo do dentista.
+  const openAtMount = useRef({ screening: value.periodontal_screening !== null, chart: value.periodontal_chart !== null, endo: value.endodontics.length > 0 });
   const [ prefilledPregnant ] = useState(value.pregnant === true);
 
   const chart = useQuery({ queryKey: [ DENTAL_CHART_KEY, patientId ], queryFn: () => getDentalChart(patientId), ...NOMINAL_QUERY });
@@ -123,17 +125,17 @@ export function DentalEditor({ consultation, record, unit, options, value, role,
       {!baseline && (
         <section aria-label="Especialidades" style={panel}>
           <h3 style={{ margin: 0, fontSize: 14 }}>Especialidades</h3>
-          <details open={value.periodontal_screening !== null}>
+          <details open={openAtMount.current.screening}>
             <summary style={{ cursor: "pointer", fontSize: 13 }}>Registro periodontal simplificado</summary>
             <PeriodontalScreeningFields value={value.periodontal_screening} onChange={(v) => onChange({ ...value, periodontal_screening: v })} />
           </details>
           {dentist && (
             <>
-              <details open={value.periodontal_chart !== null}>
+              <details open={openAtMount.current.chart}>
                 <summary style={{ cursor: "pointer", fontSize: 13 }}>Periograma</summary>
                 <PeriodontalChartFields value={value.periodontal_chart} teeth={presentTeeth} onChange={(v) => onChange({ ...value, periodontal_chart: v })} />
               </details>
-              <details open={value.endodontics.length > 0}>
+              <details open={openAtMount.current.endo}>
                 <summary style={{ cursor: "pointer", fontSize: 13 }}>Endodontia</summary>
                 <EndodonticsFields value={value.endodontics} teeth={presentTeeth} patientId={patientId} onChange={(v) => onChange({ ...value, endodontics: v })} />
               </details>

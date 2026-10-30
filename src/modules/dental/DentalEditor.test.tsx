@@ -171,6 +171,15 @@ describe("DentalEditor", () => {
     await waitFor(() => expect(mocked(api.listDentalPlans)).not.toHaveBeenCalled());
   });
 
+  it("seção de especialidade continua aberta ao remover o último item", async () => {
+    const { container } = renderWithProviders(<Harness initial={fields({ endodontics: [ { tooth: "16", canals: 3, status: "in_progress" } ] })} />);
+    await screen.findByRole("button", { name: /^Dente 16:/ });
+    const endo = () => Array.from(container.querySelectorAll("details")).find((d) => d.textContent?.includes("Endodontia"))!;
+    expect(endo().open).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Remover dente 16" }));
+    expect(endo().open).toBe(true);
+  });
+
   it("especialidades: dentista vê as três; auxiliar só o registro simplificado; registro inicial nenhuma", async () => {
     const { unmount } = renderWithProviders(<Harness />);
     await screen.findByRole("button", { name: /^Dente 16:/ });

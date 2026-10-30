@@ -1,14 +1,11 @@
 // Periograma: dente a dente, seis sítios (PS, recessão, sangramento), mobilidade e furca. Campo vazio vai nulo, nunca 0.
 import { useState } from "react";
 import type { PerioSite, PeriodontalChart, PeriodontalSiteValue, PeriodontalTooth } from "../../lib/api";
-import { PERIO_SITES, perioProblems } from "../../lib/dental";
+import { PERIO_SITES, hasFurcation, perioProblems } from "../../lib/dental";
 import { inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { alert, box, checkLabel, fieldLabel, fieldset, legend, muted, row } from "../exams/styles";
 
 interface Props { value: PeriodontalChart | null; teeth: string[]; onChange(v: PeriodontalChart | null): void }
-
-// Furca: pré-molares e molares (14–18, 24–28, 34–38, 44–48).
-export const hasFurcation = (tooth: string): boolean => /^[1-4][4-8]$/.test(tooth);
 
 const BUCCAL: PerioSite[] = [ "MV", "V", "DV" ];
 const LINGUAL: PerioSite[] = [ "ML", "L", "DL" ];

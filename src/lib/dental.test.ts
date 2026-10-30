@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { ApiError } from "./api";
 import {
-  archLoc, canAddPlanItems, canUseDental, chartRows, compositionLabel, dentalApiProblems, dentalError, dentalFieldsFrom, dentalFinalizeProblems,
+  archLoc, canAddPlanItems, canUseDental, chartRows, compositionLabel, compositionShortLabel, dentalApiProblems, dentalError, dentalFieldsFrom, dentalFinalizeProblems,
   dentalPayload, dentalProblemText, dentalRole, endoProblems, faceLayout, goalKeyLabel, labNameProblem, linkPlanItem, locationLabel, MOUTH, monthOf,
   nextStages, offeredKinds, percentLabel, perioProblems, planItemPathIndex, planItemsAfter, pregnantFor, quantityProblems, ratioLabel, reasonProblem,
   screeningProblems, sextantLoc, situationAbbr, situationLabel, situationsFor, situationTone, suggestCompleted, toggleSurveillance, toothAriaLabel,
-  toothSextant, withFinding, withoutPlanChange, withPlanCancel
+  toothSextant, hasFurcation, withFinding, withoutPlanChange, withPlanCancel
 } from "./dental";
 import type { DentalCheckCtx } from "./dental";
 import { CEO_UNIT, DENTURE, FLUOR, RESIN, SCALING, SITUATIONS, UBS, dentalDraft, fields, plan, planItem, toothLoc } from "../test/dentalFixtures";
@@ -168,6 +168,12 @@ describe("plano", () => {
       { item_id: "pi3", reason: "paciente recusou o tratamento" });
     expect(planItemsAfter(p, f).map((x) => x.state)).toEqual([ "done_here", "done", "cancelled_here", "planned", "cancelled" ]);
     expect(withoutPlanChange(f, "cancel", 0).plan_changes.cancel).toEqual([]);
+    const withCancelPlan = { ...f, plan_changes: { ...f.plan_changes, cancel_plan: { reason: "tratamento abandonado pelo paciente" } } };
+    expect("cancel_plan" in withoutPlanChange(withCancelPlan, "cancel_plan").plan_changes).toBe(false);
+    expect(compositionShortLabel("restorations_min_50")).toBe("restaurações ≥ 50%");
+    expect(compositionShortLabel("three_roots_min_20")).toBe("dentes com 3+ raízes ≥ 20%");
+    expect(compositionShortLabel("constructor")).toBe("constructor");
+    expect([ hasFurcation("16"), hasFurcation("44"), hasFurcation("13"), hasFurcation("51") ]).toEqual([ true, true, false, false ]);
     expect(withPlanCancel(f, { item_id: "pi3", reason: "outro motivo suficiente" }).plan_changes.cancel).toHaveLength(1);
   });
   it("quem acrescenta item: dentista; na UBS sem plano só na primeira consulta; no CEO sempre", () => {

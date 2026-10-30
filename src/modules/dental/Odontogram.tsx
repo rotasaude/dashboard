@@ -23,7 +23,6 @@ const CELL = 44;
 const isUpperRow = (row: string[]) => isUpperTooth(row[0]);
 const empty = (code: string | null | undefined) => !code || code === "none";
 
-// Setas verticais: mesma distância da linha média, do mesmo lado; se a linha de destino é mais curta, o dente mais externo.
 // Posição vizinha numa linha acima/abaixo: mesma distância da linha média, do mesmo lado; sem par, a mais externa.
 function verticalTarget(from: string[], index: number, to: string[]): string {
   const h = from.length / 2, h2 = to.length / 2;
@@ -41,7 +40,7 @@ function toothStyle(selected: boolean, pendingMark: boolean): CSSProperties {
 
 function faceStyle(code: string | null | undefined, chosen: boolean): CSSProperties {
   const c = toneColor(code ? situationTone(code) : undefined);
-  return { background: code ? c.bg : "var(--sunken)", border: `${chosen ? "2px double" : "1px solid"} ${chosen ? "var(--accent)" : code ? c.fg : "var(--rule)"}`, boxSizing: "border-box" };
+  return { background: code ? c.bg : "var(--sunken)", border: `${chosen ? "3px double" : "1px solid"} ${chosen ? "var(--accent)" : code ? c.fg : "var(--rule)"}`, boxSizing: "border-box" };
 }
 
 export function Odontogram({ teeth, dentition, situations, pending, selected, onSelect, onDentitionChange }: Props) {
@@ -96,7 +95,7 @@ export function Odontogram({ teeth, dentition, situations, pending, selected, on
     return (
       <button key={tooth} type="button" data-tooth={tooth} aria-label={toothAriaLabel(t, tooth, situations, count)}
         aria-pressed={isSel} tabIndex={tooth === stop ? 0 : -1} style={toothStyle(isSel, count > 0)}
-        onFocus={() => setFocused(tooth)} onKeyDown={(e) => onKey(e, tooth)}
+        onFocus={() => setFocused(tooth)} onPointerDown={() => { faceHandled.current = false; }} onPointerCancel={() => { faceHandled.current = false; }} onKeyDown={(e) => onKey(e, tooth)}
         onClick={() => { if (faceHandled.current) { faceHandled.current = false; return; } onSelect({ tooth, face: null }); }}>
         {!upper && rootBar}
         <span className="mono" style={{ fontSize: 11, fontWeight: 600 }}>{tooth}{count > 0 ? "•" : ""}</span>

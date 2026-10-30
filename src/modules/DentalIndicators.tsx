@@ -11,7 +11,7 @@ import { inputStyle } from "../components/formStyles";
 import { alert, fieldLabel, muted, row, stack } from "./exams/styles";
 import { DentalGate } from "./dental/DentalGate";
 
-export const DENTAL_ESTIMATE_NOTICE = "Estimativa — o valor oficial é calculado pelo SIAPS.";
+const DENTAL_ESTIMATE_NOTICE = "Estimativa — o valor oficial é calculado pelo SIAPS.";
 const NO_TEAM = "a eSB não tem equipe associada";
 
 export function DentalIndicators({ today }: { today?: string }) {

@@ -157,6 +157,8 @@ export function situationTone(code: string): string {
 // Decíduo nunca recebe estas (situation_not_allowed_for_tooth); furca só em molares e pré-molares.
 const NOT_DECIDUOUS = [ "crown", "abutment", "removable_partial_denture", "crown_unit_prosthesis", "temporary_prosthesis" ];
 const FURCATION_TEETH = /^[1-4][4-8]$/;
+// Furca: pré-molares e molares (14–18, 24–28, 34–38, 44–48).
+export const hasFurcation = (tooth: string): boolean => FURCATION_TEETH.test(tooth);
 export function situationAllowedFor(code: string, group: SituationGroup, tooth?: string | null): boolean {
   if (!tooth) return true;
   if (group === "crown" && isDeciduous(tooth)) return !NOT_DECIDUOUS.includes(code);
@@ -218,7 +220,8 @@ export function withPlanAdd(f: DentalFields, add: PlanAdd): DentalFields {
 export function withPlanCancel(f: DentalFields, c: PlanCancel): DentalFields {
   return { ...f, plan_changes: { ...f.plan_changes, cancel: [ ...f.plan_changes.cancel.filter((x) => x.item_id !== c.item_id), c ] } };
 }
-export function withoutPlanChange(f: DentalFields, kind: "add" | "cancel", i: number): DentalFields {
+export function withoutPlanChange(f: DentalFields, kind: "add" | "cancel" | "cancel_plan", i = 0): DentalFields {
+  if (kind === "cancel_plan") { const { cancel_plan: _gone, ...rest } = f.plan_changes; return { ...f, plan_changes: rest }; }
   return { ...f, plan_changes: { ...f.plan_changes, [kind]: without(f.plan_changes[kind] as unknown[], i) } as DentalFields["plan_changes"] };
 }
 
@@ -489,6 +492,8 @@ const COMPOSITION_LABEL: Record<string, string> = {
   restorations_min_50: "ao menos 50% de restaurações", three_roots_min_20: "ao menos 20% em dentes de três raízes ou mais"
 };
 export const compositionLabel = (rule: string): string => own(COMPOSITION_LABEL, rule) ?? rule;
+const COMPOSITION_SHORT: Record<string, string> = { restorations_min_50: "restaurações ≥ 50%", three_roots_min_20: "dentes com 3+ raízes ≥ 20%" };
+export const compositionShortLabel = (rule: string): string => own(COMPOSITION_SHORT, rule) ?? compositionLabel(rule);
 
 const PERCENT = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 // Denominador nulo (eSB sem equipe associada) ou zero → "—".

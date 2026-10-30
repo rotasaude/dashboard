@@ -32,7 +32,7 @@ describe("DentalAdmin", () => {
     await waitFor(() => expect(mocked(api.putCeoProfile)).toHaveBeenCalledWith("u9", { ceo_type: "II", specialties: [ "endodontics", "prosthesis" ] }));
   });
 
-  it("recusa do api mostra a frase junto do campo", async () => {
+  it("recusa do api: o alerta traz o caminho do campo e a frase traduzida", async () => {
     const { ApiError } = await import("../lib/api");
     mocked(api.listCeoProfiles).mockResolvedValue([ ceoProfile() ]);
     mocked(api.putCeoProfile).mockRejectedValue(new ApiError(422, { error: "unit_not_ceo", path: "health_unit_id" }, "422"));
@@ -41,6 +41,7 @@ describe("DentalAdmin", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Confirmar" }));
     const alerts = await screen.findAllByRole("alert");
     expect(alerts.some((a) => (a.textContent ?? "").startsWith("health_unit_id:"))).toBe(true);
+    expect(alerts.some((a) => (a.textContent ?? "").includes("esta unidade não é um CEO"))).toBe(true);
   });
 
   it("lista do TSB/ASB: acrescenta sem repetir, remove e salva", async () => {

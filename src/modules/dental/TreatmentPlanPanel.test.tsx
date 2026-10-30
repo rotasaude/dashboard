@@ -51,6 +51,14 @@ describe("TreatmentPlanPanel", () => {
     expect(screen.queryByRole("button", { name: /^Cancelar item/ })).toBeNull();
   });
 
+  it("item cancelado no rascunho pode ter o cancelamento desfeito", () => {
+    const onChange = vi.fn();
+    const f = fields({ plan_changes: { add: [], cancel: [ { item_id: "pi1", reason: "dente indicado para extração" } ] } });
+    render(<TreatmentPlanPanel plan={plan()} value={f} unit={UBS} role="dentist" onChange={onChange} onMarkCompleted={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: `Desfazer cancelamento — ${RESIN.name}` }));
+    expect(onChange).toHaveBeenCalledWith(fields({ plan_changes: { add: [], cancel: [] } }));
+  });
+
   it("somente leitura: sem cancelar, desfazer nem marcar", () => {
     const withAdd = fields({ plan_changes: { add: [ { sigtap: FLUOR.sigtap, name: FLUOR.name, location: MOUTH } ], cancel: [] } });
     render(<TreatmentPlanPanel plan={plan()} value={withAdd} unit={UBS} role="dentist" readOnly onChange={vi.fn()} onMarkCompleted={vi.fn()} />);

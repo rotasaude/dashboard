@@ -64,7 +64,7 @@ export function ProsthesisPanel({ consultation, patientId, value, onChange, sear
   function resolveLocations(received: ProsthesisOrder[]) {
     for (const o of received) {
       if (locations[o.sigtap]) continue;
-      setUnavailable((prev) => { const { [o.sigtap]: _gone, ...rest } = prev; return rest; });
+      setUnavailable((prev) => { const rest = { ...prev }; delete rest[o.sigtap]; return rest; });
       const fail = () => { if (alive.current) setUnavailable((prev) => ({ ...prev, [o.sigtap]: true })); };
       searchDentalProcedures(o.sigtap).then((list) => {
         const hit = list.find((r) => r.sigtap === o.sigtap);

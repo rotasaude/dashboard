@@ -87,6 +87,16 @@ describe("Odontogram", () => {
     expect(onSelect).toHaveBeenLastCalledWith({ tooth: "46", face: null });
   });
 
+  it("pointerdown limpa a marca de face: um click posterior sem pointerUp seleciona o dente", () => {
+    const onSelect = vi.fn();
+    render(<Odontogram teeth={teeth} dentition="permanent" situations={SITUATIONS} selected={null} onSelect={onSelect} />);
+    const b = screen.getByRole("button", { name: /^Dente 46:/ });
+    fireEvent.pointerUp(b.querySelector('[data-face="V"]')!); // sem click depois: a marca ficaria velha
+    fireEvent.pointerDown(b);
+    fireEvent.click(b);
+    expect(onSelect).toHaveBeenLastCalledWith({ tooth: "46", face: null });
+  });
+
   it("face ou raiz registrada ganha marca textual '+' além da cor", () => {
     render(<Odontogram teeth={teeth} dentition="permanent" situations={SITUATIONS} selected={null} onSelect={vi.fn()} />);
     expect(screen.getByRole("button", { name: /^Dente 16:/ }).textContent).toContain("+");
