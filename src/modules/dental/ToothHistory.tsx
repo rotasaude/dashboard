@@ -1,6 +1,6 @@
 // Histórico do dente (F-28.3): leitura nominal (com trilha) só no clique. O api pagina os eventos do paciente — o dente não
 // vai na URL (O13) —, então a tela filtra o dente e "Ver mais" segue o `next_before`.
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { listChartEvents, type ChartEvent, type DentalVocabulary } from "../../lib/api";
 import { dentalError, FACE_LABEL, situationLabel } from "../../lib/dental";
 import { fmtDateTime } from "../../lib/format";
@@ -22,20 +22,23 @@ export function ToothHistory({ patientId, tooth, situations }: Props) {
   const [ busy, setBusy ] = useState(false);
   const [ error, setError ] = useState<string | null>(null);
 
-  useEffect(() => { setEvents(null); setNext(null); setLastEmpty(false); setError(null); }, [ patientId, tooth ]);
+  const token = useRef(0);
+  useEffect(() => { token.current += 1; setBusy(false); setEvents(null); setNext(null); setLastEmpty(false); setError(null); }, [ patientId, tooth ]);
 
   async function load(before: string | null) {
+    const mine0 = ++token.current;
     setBusy(true); setError(null);
     try {
       const page = await listChartEvents(patientId, { before });
+      if (mine0 !== token.current) return;
       const mine = page.events.filter((e) => e.tooth === tooth);
       setEvents((prev) => [ ...(before ? prev ?? [] : []), ...mine ]);
       setNext(page.next_before);
       setLastEmpty(mine.length === 0);
     } catch (err) {
-      setError(dentalError(err));
+      if (mine0 === token.current) setError(dentalError(err));
     } finally {
-      setBusy(false);
+      if (mine0 === token.current) setBusy(false);
     }
   }
 

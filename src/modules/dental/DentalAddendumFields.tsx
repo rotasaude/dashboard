@@ -1,6 +1,6 @@
 // Mudanças do adendo da consulta odontológica (contrato §4, O14): achado novo e, só para o dentista, cancelamento de item do
 // plano. Nada de procedimento novo. O plano é lido (com trilha) no clique em "Ver plano", nunca sozinho.
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { listDentalPlans, type Consultation, type DentalFinding, type DentalPlan, type DentalVocabulary, type PlanCancel, type ToothFace } from "../../lib/api";
 import { chartRows, dentalError, dentalRole, FACE_LABEL, FACES, locationLabel, reasonProblem, situationsFor } from "../../lib/dental";
 import { buttonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
@@ -12,12 +12,16 @@ interface Props {
   consultation: Consultation;
   value: DentalAddendumValue;
   situations?: DentalVocabulary["situations"];
+  // Unidade do atendimento; sem ela, planos de todas as unidades (agrupados pelo nome).
+  unitId?: string;
+  // Muda quando o api recusa um item (já não está aberto): relê o plano.
+  refreshKey?: number;
   onChange(v: DentalAddendumValue): void;
 }
 
 const TEETH = chartRows("mixed").flat();
 
-export function DentalAddendumFields({ consultation: c, value, situations, onChange }: Props) {
+export function DentalAddendumFields({ consultation: c, value, situations, unitId, refreshKey = 0, onChange }: Props) {
   const isDentist = dentalRole(c.cbo_code) === "dentist";
   const [ tooth, setTooth ] = useState("");
   const [ face, setFace ] = useState<ToothFace | "">("");
@@ -38,16 +42,19 @@ export function DentalAddendumFields({ consultation: c, value, situations, onCha
     onChange({ ...value, findings: [ ...value.findings.filter((x) => !same(x)), f ] });
     setSituation("");
   }
+  const readRef = useRef<() => Promise<void>>(async () => {});
+  useEffect(() => { if (refreshKey > 0) void readRef.current(); }, [ refreshKey ]);
   async function readPlan() {
     setLoading(true); setError(null);
     try {
-      setPlans(await listDentalPlans(c.patient_id, { status: "open" }));
+      setPlans(await listDentalPlans(c.patient_id, { status: "open", healthUnitId: unitId }));
     } catch (err) {
       setError(dentalError(err));
     } finally {
       setLoading(false);
     }
   }
+  readRef.current = readPlan;
   function closeCancel() { setCancelling(null); setReason(""); setProblem(null); }
   function confirm(itemId: string) {
     const p = reasonProblem(reason);
@@ -55,7 +62,8 @@ export function DentalAddendumFields({ consultation: c, value, situations, onCha
     onChange({ ...value, cancel: [ ...value.cancel.filter((x) => x.item_id !== itemId), { item_id: itemId, reason: reason.trim() } ] });
     closeCancel();
   }
-  const items = (plans ?? []).flatMap((p) => p.items.filter((i) => i.status === "planned"));
+  const groups = (plans ?? []).map((p) => ({ plan: p, items: p.items.filter((i) => i.status === "planned") })).filter((g) => g.items.length > 0);
+  const items = groups.flatMap((g) => g.items);
   const nameOf = (id: string) => items.find((i) => i.id === id)?.name ?? "item do plano";
 
   return (
@@ -105,7 +113,10 @@ export function DentalAddendumFields({ consultation: c, value, situations, onCha
           {plans === null && <div><button type="button" style={secondaryButtonStyle} disabled={loading} onClick={() => void readPlan()}>Ver plano</button></div>}
           {error && <p role="alert" style={alert}>{error}</p>}
           {plans !== null && items.length === 0 && <p style={muted}>Nenhum item planejado em aberto.</p>}
-          {items.map((i) => (
+          {groups.map(({ plan: p, items: planItems }) => (
+            <div key={p.id} role="group" aria-label={unitId ? undefined : `Plano — ${p.health_unit.name}`} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {!unitId && <strong style={{ fontSize: 12 }}>{p.health_unit.name}</strong>}
+              {planItems.map((i) => (
             <div key={i.id} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               <span style={{ fontSize: 12.5 }}><span className="mono">{i.sigtap}</span> {i.name} · {locationLabel(i.location)}</span>
               {cancelling !== i.id && !value.cancel.some((x) => x.item_id === i.id) && (
@@ -125,6 +136,8 @@ export function DentalAddendumFields({ consultation: c, value, situations, onCha
                   </span>
                 </div>
               )}
+            </div>
+              ))}
             </div>
           ))}
           {value.cancel.length > 0 && (

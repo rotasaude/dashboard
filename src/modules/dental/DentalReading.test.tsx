@@ -7,9 +7,10 @@ import { DentalSummary } from "./DentalSummary";
 import { ToothHistory } from "./ToothHistory";
 import { ToothActions } from "./ToothActions";
 import { AddendumForm } from "../consultation/AddendumForm";
+import { ApiError } from "../../lib/api";
 import { ConsultationView } from "../consultation/ConsultationView";
 import { renderWithProviders } from "../../test/campaignFixtures";
-import { DENTAL_VOCABULARY, RESIN, SCALING, SITUATIONS, UBS, chartEvent, dentalFinalized, dentalOptions, dentalUser, fields, plan } from "../../test/dentalFixtures";
+import { DENTAL_VOCABULARY, RESIN, SCALING, SITUATIONS, UBS, chartEvent, planItem, dentalFinalized, dentalOptions, dentalUser, fields, plan } from "../../test/dentalFixtures";
 
 afterEach(cleanup);
 const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
@@ -18,6 +19,7 @@ describe("leitura odontológica", () => {
   beforeEach(() => {
     mocked(api.fetchCurrentSession).mockResolvedValue(dentalUser());
     mocked(api.listChartEvents).mockReset();
+    mocked(api.listDentalPlans).mockReset();
     mocked(api.searchDentalProcedures).mockResolvedValue([ RESIN, SCALING ]);
     mocked(api.addAddendum).mockResolvedValue({ id: "ad1", author_name: "Dr. Caio Nunes", created_at: "2026-10-30T11:00:00-03:00", reason: "", text: "", changes: null });
   });
@@ -109,5 +111,55 @@ describe("leitura odontológica", () => {
     fireEvent.click(await screen.findByRole("button", { name: `${RESIN.sigtap} — ${RESIN.name}` }));
     expect(screen.getByRole("button", { name: "Sextante S1" }).getAttribute("aria-pressed")).toBe("false");
     expect(within(screen.getByRole("region", { name: "Dente selecionado" })).getByRole("button", { name: "Histórico do dente 16" })).not.toBeNull();
+  });
+
+  it("adendo com unitId lê só o plano da unidade; sem unitId, agrupa pelo nome da unidade", async () => {
+    mocked(api.listDentalPlans).mockResolvedValue([ plan(), plan({ id: "dp2", health_unit: { id: "u9", name: "CEO Boqueirão", kind: "ceo" }, items: [ planItem({ id: "pi9", name: "Outro item" }) ] }) ]);
+    const { unmount } = renderWithProviders(<AddendumForm consultation={dentalFinalized()} options={dentalOptions()} patientProblems={[]} unitId="u1" onDone={vi.fn()} onCancel={vi.fn()} />);
+    fireEvent.click(screen.getByLabelText("Mudar o odontograma ou o plano"));
+    fireEvent.click(screen.getByRole("button", { name: "Ver plano" }));
+    await screen.findByRole("button", { name: `Cancelar item — ${RESIN.name}` });
+    expect(mocked(api.listDentalPlans)).toHaveBeenCalledWith("pa1", { status: "open", healthUnitId: "u1" });
+    expect(screen.queryByRole("group", { name: /^Plano — / })).toBeNull();
+    unmount();
+    renderWithProviders(<AddendumForm consultation={dentalFinalized()} options={dentalOptions()} patientProblems={[]} onDone={vi.fn()} onCancel={vi.fn()} />);
+    fireEvent.click(screen.getByLabelText("Mudar o odontograma ou o plano"));
+    fireEvent.click(screen.getByRole("button", { name: "Ver plano" }));
+    const g = await screen.findByRole("group", { name: "Plano — CEO Boqueirão" });
+    expect(within(g).getByRole("button", { name: "Cancelar item — Outro item" })).not.toBeNull();
+    expect(screen.getByRole("group", { name: "Plano — UBS Centro" })).not.toBeNull();
+  });
+
+  it("recusa do adendo: frase odontológica; plan_item_not_open tira o cancelamento e relê o plano", async () => {
+    mocked(api.listDentalPlans).mockResolvedValue([ plan() ]);
+    mocked(api.addAddendum).mockRejectedValue(new ApiError(422, { error: "invalid", problems: [ { error: "plan_item_not_open", path: "changes.dental.plan_changes.cancel[0].item_id" } ] }, "x"));
+    renderWithProviders(<AddendumForm consultation={dentalFinalized()} options={dentalOptions()} patientProblems={[]} onDone={vi.fn()} onCancel={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText("Motivo do adendo"), { target: { value: "achado depois da radiografia" } });
+    fireEvent.change(screen.getByLabelText("Texto do adendo"), { target: { value: "Cancelar o item." } });
+    fireEvent.click(screen.getByLabelText("Mudar o odontograma ou o plano"));
+    fireEvent.click(screen.getByRole("button", { name: "Ver plano" }));
+    fireEvent.click(await screen.findByRole("button", { name: `Cancelar item — ${RESIN.name}` }));
+    fireEvent.change(screen.getByLabelText("Motivo do cancelamento"), { target: { value: "dente indicado para extração" } });
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar cancelamento" }));
+    expect(screen.getByRole("list", { name: "cancelamentos do adendo" })).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Registrar adendo" }));
+    expect(await screen.findByText(/já foi feito ou cancelado em outra consulta/)).not.toBeNull();
+    await waitFor(() => expect(screen.queryByRole("list", { name: "cancelamentos do adendo" })).toBeNull());
+    await waitFor(() => expect(mocked(api.listDentalPlans)).toHaveBeenCalledTimes(2));
+  });
+
+  it("histórico do dente: erro de leitura aparece; resposta de dente anterior é ignorada", async () => {
+    mocked(api.listChartEvents).mockRejectedValueOnce(new ApiError(500, {}, "x"));
+    const { rerender } = renderWithProviders(<ToothHistory patientId="pa1" tooth="16" />);
+    fireEvent.click(screen.getByRole("button", { name: "Histórico do dente 16" }));
+    expect(await screen.findByRole("alert")).not.toBeNull();
+    let resolve: (v: unknown) => void = () => {};
+    mocked(api.listChartEvents).mockReturnValueOnce(new Promise((r) => { resolve = r; }));
+    fireEvent.click(screen.getByRole("button", { name: "Histórico do dente 16" }));
+    rerender(<ToothHistory patientId="pa1" tooth="26" />);
+    resolve({ events: [ chartEvent() ], next_before: null });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.getByRole("button", { name: "Histórico do dente 26" })).not.toBeNull();
+    expect(screen.queryByText(/Cariado|caries/)).toBeNull();
   });
 });

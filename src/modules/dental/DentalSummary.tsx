@@ -49,7 +49,7 @@ export function DentalSummary({ consultation: c, vocabulary, situations }: Props
       {fao.filter(([ , items ]) => items.length > 0).map(([ label, items ]) => (
         <div key={label} style={{ fontSize: 12.5 }}>
           <span style={muted}>{label}</span>
-          <ul style={{ ...listStyle, listStyle: "none", paddingLeft: 0 }}>{items.map((t) => <li key={t}>{t}</li>)}</ul>
+          <ul style={{ ...listStyle, listStyle: "none", paddingLeft: 0 }}>{items.map((t, i) => <li key={`${t}-${i}`}>{t}</li>)}</ul>
         </div>
       ))}
       {d.special_needs && <p style={{ margin: 0, fontSize: 12.5 }}>Paciente com necessidades especiais</p>}
@@ -65,7 +65,7 @@ export function DentalSummary({ consultation: c, vocabulary, situations }: Props
       {d.findings.length > 0 && (
         <div style={{ fontSize: 12.5 }}>
           <span style={muted}>Achados</span>
-          <ul aria-label="achados" style={listStyle}>{d.findings.map((f, i) => <li key={i}>{findingText(f, sit)}</li>)}</ul>
+          <ul aria-label="achados" style={listStyle}>{d.findings.map((f, i) => <li key={`${findingText(f, sit)}-${i}`}>{findingText(f, sit)}</li>)}</ul>
         </div>
       )}
       {(adds.length > 0 || cancels.length > 0 || d.plan_changes.cancel_plan) && (
@@ -73,7 +73,7 @@ export function DentalSummary({ consultation: c, vocabulary, situations }: Props
           <span style={muted}>Plano de tratamento</span>
           <ul aria-label="mudanças do plano" style={listStyle}>
             {adds.map((a, i) => <li key={`a${i}`}>{`incluído: ${a.name ?? a.sigtap} · ${locationLabel(a.location)}`}</li>)}
-            {cancels.map((x) => <li key={x.item_id}>{`item cancelado — ${x.reason}`}</li>)}
+            {cancels.map((x) => <li key={`${x.item_id}`}>{`item cancelado — ${x.reason}`}</li>)}
             {d.plan_changes.cancel_plan && <li>{`plano cancelado — ${d.plan_changes.cancel_plan.reason}`}</li>}
           </ul>
         </div>
@@ -88,7 +88,7 @@ export function DentalSummary({ consultation: c, vocabulary, situations }: Props
         <div style={{ fontSize: 12.5 }}>
           <span style={muted}>Endodontia</span>
           <ul aria-label="endodontia" style={listStyle}>
-            {d.endodontics.map((e) => <li key={e.tooth}>{`dente ${e.tooth} · ${e.canals} ${e.canals === 1 ? "canal" : "canais"} · ${e.status === "completed" ? "concluída" : "em andamento"}`}</li>)}
+            {d.endodontics.map((e, i) => <li key={`${e.tooth}-${i}`}>{`dente ${e.tooth} · ${e.canals} ${e.canals === 1 ? "canal" : "canais"} · ${e.status === "completed" ? "concluída" : "em andamento"}`}</li>)}
           </ul>
         </div>
       )}

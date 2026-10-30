@@ -229,7 +229,7 @@ export function ConsultationWorkspace(props: Props) {
 
             {consultation?.status === "finalized" && (
               <ConsultationView consultation={consultation} options={options.data ?? null} patientProblems={record.data.problems}
-                signatureSettled={signatureSettled} regulation={regulationOn} notSent={notSent}
+                unitId={props.unit.id} signatureSettled={signatureSettled} regulation={regulationOn} notSent={notSent}
                 searchDelayMs={props.searchDelayMs}
                 onAddendumAdded={(addendum) => {
                   setConsultation((c) => (c ? withAddendum(c, addendum) : c)); restartRereads();

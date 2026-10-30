@@ -34,6 +34,8 @@ export interface ConsultationViewProps {
   signatureSettled?: boolean;
   // Administrador: leitura sem Imprimir e sem Adendo, mesmo que o id coincida.
   readOnly?: boolean;
+  // Unidade do atendimento: o adendo odontológico lê só o plano dela; sem ela, os planos abertos de todas as unidades.
+  unitId?: string;
   searchDelayMs?: number;
   // Módulo 26a (F-26.2): a autora, na consulta finalizada, vê os pedidos de regulação (peça em modo adendo, com a guia).
   regulation?: boolean;
@@ -172,7 +174,7 @@ export function ConsultationView(props: ConsultationViewProps) {
       </div>
 
       {adding && (
-        <AddendumForm consultation={c} options={options} patientProblems={props.patientProblems}
+        <AddendumForm consultation={c} options={options} unitId={props.unitId} patientProblems={props.patientProblems}
           loadPatientProblems={props.loadPatientProblems}
           searchDelayMs={props.searchDelayMs} examPriority={hasFeature(user, "exam_tracking")}
           onDone={(addendum) => {

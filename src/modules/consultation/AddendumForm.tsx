@@ -7,6 +7,7 @@ import {
   addAddendum, type Addendum, type Consultation, type ConsultationOptions, type EvaluatedProblem, type ExamRequest, type PatientProblem
 } from "../../lib/api";
 import { addendumChanges, addendumProblem, consultationError, examsProblem, problemsWithConsultationAdds } from "../../lib/consultation";
+import { dentalApiProblems, dentalError } from "../../lib/dental";
 import { todayInCity } from "../../lib/campaigns";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { ProblemsEditor } from "./ProblemsEditor";
@@ -21,13 +22,14 @@ interface Props {
   // "Minhas consultas" (dashboard#12): a lista completa do paciente, buscada ao abrir o adendo.
   loadPatientProblems?: () => Promise<PatientProblem[]>;
   searchDelayMs?: number;
+  unitId?: string;
   // Módulo 21a: prioridade dos exames novos (exam_tracking); os já pedidos ficam só para leitura (A33).
   examPriority?: boolean;
   onDone(addendum: Addendum): void;
   onCancel(): void;
 }
 
-export function AddendumForm({ consultation, options, patientProblems, loadPatientProblems, searchDelayMs, examPriority, onDone, onCancel }: Props) {
+export function AddendumForm({ consultation, options, patientProblems, loadPatientProblems, searchDelayMs, unitId, examPriority, onDone, onCancel }: Props) {
   const full = useQuery({
     queryKey: [ "consultationProblems", consultation.id ], queryFn: () => loadPatientProblems!(),
     enabled: !!loadPatientProblems, gcTime: 0, staleTime: 0, retry: false
@@ -48,6 +50,7 @@ export function AddendumForm({ consultation, options, patientProblems, loadPatie
   }));
   const isDental = consultation.kind === "dental";
   const [ dental, setDental ] = useState<DentalAddendumValue>({ findings: [], cancel: [] });
+  const [ planKey, setPlanKey ] = useState(0);
   const [ busy, setBusy ] = useState(false);
   const [ error, setError ] = useState<string | null>(null);
 
@@ -70,7 +73,17 @@ export function AddendumForm({ consultation, options, patientProblems, loadPatie
       });
       onDone(addendum);
     } catch (err) {
-      setError(consultationError(err));
+      if (isDental) {
+        // plan_item_not_open: o item já saiu do plano; tira o cancelamento dele e relê o plano.
+        const all = dentalApiProblems(err);
+        const stale = all.filter((p) => p.code === "plan_item_not_open")
+          .map((p) => Number(p.path?.match(/cancel\[(\d+)\]/)?.[1])).filter((n) => !Number.isNaN(n));
+        if (stale.length > 0) {
+          setDental((d) => ({ ...d, cancel: d.cancel.filter((_, i) => !stale.includes(i)) }));
+          setPlanKey((k) => k + 1);
+        }
+        setError(all.length > 1 || stale.length > 0 ? all.map((p) => p.text).join("; ") : dentalError(err));
+      } else setError(consultationError(err));
     } finally {
       setBusy(false);
     }
@@ -93,7 +106,8 @@ export function AddendumForm({ consultation, options, patientProblems, loadPatie
         {isDental ? "Mudar o odontograma ou o plano" : "Mudar problemas, condutas ou exames"}
       </label>
       {withChanges && isDental && (
-        <DentalAddendumFields consultation={consultation} value={dental} situations={options?.dental?.situations} onChange={setDental} />
+        <DentalAddendumFields consultation={consultation} value={dental} situations={options?.dental?.situations} unitId={unitId}
+          refreshKey={planKey} onChange={setDental} />
       )}
       {withChanges && !isDental && (
         <>
