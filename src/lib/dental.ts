@@ -347,6 +347,9 @@ export function dentalFinalizeProblems(f: DentalFields, ctx: DentalCheckCtx): { 
     if (f.plan_changes.add.length > 0 || f.plan_changes.cancel.length > 0 || f.plan_changes.cancel_plan) add("auxiliary_cannot_plan");
   }
   for (const text of quantityProblems(f.procedures)) add("quantity_exceeds_location_limit", text);
+  if (f.periodontal_screening) for (const text of screeningProblems(f.periodontal_screening)) add("specialty_out_of_range", text);
+  if (f.periodontal_chart) for (const text of perioProblems(f.periodontal_chart)) add("specialty_out_of_range", text);
+  for (const text of endoProblems(f.endodontics)) add("specialty_out_of_range", text);
   return out;
 }
 

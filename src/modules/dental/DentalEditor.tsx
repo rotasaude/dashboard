@@ -12,6 +12,9 @@ import { Odontogram, type ToothSelection } from "./Odontogram";
 import { TreatmentPlanPanel } from "./TreatmentPlanPanel";
 import { ToothActions } from "./ToothActions";
 import { FaoFields } from "./FaoFields";
+import { PeriodontalScreeningFields } from "./PeriodontalScreeningFields";
+import { PeriodontalChartFields } from "./PeriodontalChartFields";
+import { EndodonticsFields } from "./EndodonticsFields";
 import { findingLocation } from "./DentalSummary";
 
 interface Props {
@@ -55,6 +58,9 @@ export function DentalEditor({ record, unit, options, value, role, baseline, pla
   }, [ value.findings, value.procedures ]);
 
   const problems = quantityProblems(value.procedures);
+  // Dentes oferecidos às especialidades: os do odontograma que não estão ausentes.
+  const presentTeeth = (chart.data?.teeth ?? []).filter((t) => t.situation !== "missing").map((t) => t.tooth);
+  const dentist = role === "dentist";
   const loadError = chart.error ?? plans.error;
 
   return (
@@ -110,6 +116,27 @@ export function DentalEditor({ record, unit, options, value, role, baseline, pla
           );
         })}
       </section>
+      {!baseline && (
+        <section aria-label="Especialidades" style={panel}>
+          <h3 style={{ margin: 0, fontSize: 14 }}>Especialidades</h3>
+          <details open={value.periodontal_screening !== null}>
+            <summary style={{ cursor: "pointer", fontSize: 13 }}>Registro periodontal simplificado</summary>
+            <PeriodontalScreeningFields value={value.periodontal_screening} onChange={(v) => onChange({ ...value, periodontal_screening: v })} />
+          </details>
+          {dentist && (
+            <>
+              <details open={value.periodontal_chart !== null}>
+                <summary style={{ cursor: "pointer", fontSize: 13 }}>Periograma</summary>
+                <PeriodontalChartFields value={value.periodontal_chart} teeth={presentTeeth} onChange={(v) => onChange({ ...value, periodontal_chart: v })} />
+              </details>
+              <details open={value.endodontics.length > 0}>
+                <summary style={{ cursor: "pointer", fontSize: 13 }}>Endodontia</summary>
+                <EndodonticsFields value={value.endodontics} teeth={presentTeeth} patientId={patientId} onChange={(v) => onChange({ ...value, endodontics: v })} />
+              </details>
+            </>
+          )}
+        </section>
+      )}
       {!baseline && (
         <FaoFields value={value} sex={record.patient.sex} role={role} prefilledPregnant={prefilledPregnant} vocabulary={options.dental} onChange={onChange} />
       )}

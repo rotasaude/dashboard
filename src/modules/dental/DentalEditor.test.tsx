@@ -170,4 +170,38 @@ describe("DentalEditor", () => {
     expect(screen.queryByLabelText("Tipo de atendimento")).toBeNull();
     await waitFor(() => expect(mocked(api.listDentalPlans)).not.toHaveBeenCalled());
   });
+
+  it("especialidades: dentista vê as três; auxiliar só o registro simplificado; registro inicial nenhuma", async () => {
+    const { unmount } = renderWithProviders(<Harness />);
+    await screen.findByRole("button", { name: /^Dente 16:/ });
+    expect(screen.queryByRole("group", { name: "Registro periodontal simplificado" })).not.toBeNull();
+    expect(screen.queryByRole("group", { name: "Periograma" })).not.toBeNull();
+    expect(screen.queryByRole("group", { name: "Endodontia" })).not.toBeNull();
+    unmount();
+    cleanup();
+    const aux = renderWithProviders(<Harness role="auxiliary" />);
+    await screen.findByRole("button", { name: /^Dente 16:/ });
+    expect(screen.queryByRole("group", { name: "Registro periodontal simplificado" })).not.toBeNull();
+    expect(screen.queryByRole("group", { name: "Periograma" })).toBeNull();
+    expect(screen.queryByRole("group", { name: "Endodontia" })).toBeNull();
+    aux.unmount();
+    cleanup();
+    renderWithProviders(<Harness baseline />);
+    await screen.findByRole("button", { name: /^Dente 16:/ });
+    expect(screen.queryByRole("group", { name: "Registro periodontal simplificado" })).toBeNull();
+  });
+
+  it("periograma e endodontia entram no rascunho com os dentes presentes do odontograma", async () => {
+    renderWithProviders(<Harness />);
+    await screen.findByRole("button", { name: /^Dente 16:/ });
+    const [ chartPick, endoPick ] = screen.getAllByLabelText("Dente");
+    expect(chartPick.querySelector('option[value="36"]')).toBeNull();
+    expect(chartPick.querySelector('option[value="16"]')).not.toBeNull();
+    fireEvent.change(chartPick, { target: { value: "16" } });
+    fireEvent.click(screen.getAllByRole("button", { name: "Acrescentar dente" })[0]);
+    expect(last!.periodontal_chart?.teeth.map((t) => t.tooth)).toEqual([ "16" ]);
+    fireEvent.change(endoPick, { target: { value: "46" } });
+    fireEvent.click(screen.getAllByRole("button", { name: "Acrescentar dente" })[1]);
+    expect(last!.endodontics).toEqual([ { tooth: "46", canals: 1, status: "in_progress" } ]);
+  });
 });
