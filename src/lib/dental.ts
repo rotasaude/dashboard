@@ -322,6 +322,13 @@ const PROBLEM_TEXT: Record<string, string> = {
   patient_name_missing: "falta o nome completo do paciente — peça à recepção para completar o cadastro",
   already_installed: "a prótese já foi instalada",
   terminology_unavailable: "a terminologia não está disponível agora — tente de novo em instantes",
+  assessment_or_plan_required: "escreva a avaliação (A) ou o plano (P)",
+  invalid_reason: "o motivo do cancelamento precisa de 10 a 500 caracteres",
+  not_found: "não encontrado — a tela foi atualizada",
+  not_author: "só quem escreveu a consulta pode editá-la ou fazer adendo",
+  not_draft: "esta consulta já foi finalizada — a tela foi atualizada",
+  no_conduct: "marque ao menos uma conduta",
+  no_problem_evaluated: "avalie, inclua ou resolva ao menos um problema",
   feature_disabled: DENTAL_DISABLED
 };
 

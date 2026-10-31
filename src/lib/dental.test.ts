@@ -215,8 +215,10 @@ describe("recusas do api, corpo e especialidades", () => {
       "plan_requires_first_consultation", "invalid_changes", "care_type_required", "baseline_requires_findings", "prosthesis_order_not_received",
       "prosthesis_order_mismatch", "dental_referral_request_required", "invalid_location", "invalid_procedure", "situation_not_allowed_for_tooth",
       "invalid_situation", "quantity_exceeds_location_limit", "feature_disabled", "invalid_limit", "invalid_care_type", "invalid_request",
-      "patient_name_missing", "already_installed", "terminology_unavailable" ]) {
+      "patient_name_missing", "already_installed", "terminology_unavailable", "assessment_or_plan_required", "invalid_reason", "not_found",
+      "not_author", "not_draft", "no_conduct", "no_problem_evaluated" ]) {
       expect(dentalProblemText(code), code).not.toBe(code);
+      expect(dentalProblemText(code).trim().length, code).toBeGreaterThan(10);
     }
     expect(dentalProblemText("regulation_request_required")).toBe("regulation_request_required");
   });

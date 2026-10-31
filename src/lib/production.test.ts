@@ -127,7 +127,8 @@ describe("Produção — erros", () => {
         + "perfil da cidade incompleto (UF ou código IBGE)");
   });
   it("motivos odontológicos da geração têm frase", () => {
-    expect(reasonsLabel([ "too_many_procedure_codes", "quantity_exceeds_location_limit" ])).not.toMatch(/_/);
+    expect(reasonsLabel([ "too_many_procedure_codes", "quantity_exceeds_location_limit" ]))
+      .toBe("procedimentos odontológicos com códigos diferentes demais para uma ficha, quantidade de procedimento acima do limite do local");
   });
 });
 
