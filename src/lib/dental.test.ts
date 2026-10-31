@@ -210,6 +210,14 @@ describe("recusas do api, corpo e especialidades", () => {
       "prosthesis_order_mismatch", "installation_through_consultation", "reason_required", "unit_not_ceo" ]) {
       expect(dentalProblemText(code)).not.toBe(code);
     }
+    for (const code of [ "cancel_plan_conflicts_with_completed", "too_many_procedure_codes", "auxiliary_cannot_plan", "reason_required",
+      "installation_through_consultation", "invalid_cursor", "unit_has_ceo_profile", "unit_not_ceo", "baseline_only_findings",
+      "plan_requires_first_consultation", "invalid_changes", "care_type_required", "baseline_requires_findings", "prosthesis_order_not_received",
+      "prosthesis_order_mismatch", "dental_referral_request_required", "invalid_location", "invalid_procedure", "situation_not_allowed_for_tooth",
+      "invalid_situation", "quantity_exceeds_location_limit", "feature_disabled", "invalid_limit", "invalid_care_type", "invalid_request",
+      "patient_name_missing", "already_installed", "terminology_unavailable" ]) {
+      expect(dentalProblemText(code), code).not.toBe(code);
+    }
     expect(dentalProblemText("regulation_request_required")).toBe("regulation_request_required");
   });
   it("corpo sem nome e sem sugestão", () => {

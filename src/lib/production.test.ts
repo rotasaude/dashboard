@@ -126,5 +126,8 @@ describe("Produção — erros", () => {
       .toBe("paciente sem CPF nem CNS, responsável pela família sem CPF nem CNS, CBO do profissional fora da tabela do LEDI, "
         + "perfil da cidade incompleto (UF ou código IBGE)");
   });
+  it("motivos odontológicos da geração têm frase", () => {
+    expect(reasonsLabel([ "too_many_procedure_codes", "quantity_exceeds_location_limit" ])).not.toMatch(/_/);
+  });
 });
 

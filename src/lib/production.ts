@@ -57,7 +57,10 @@ export const GENERATION_REASON: Record<string, string> = {
   patient_without_identifier: "paciente sem CPF nem CNS",
   responsible_without_identifier: "responsável pela família sem CPF nem CNS",
   cbo_not_in_ledi_table: "CBO do profissional fora da tabela do LEDI",
-  city_profile_incomplete: "perfil da cidade incompleto (UF ou código IBGE)"
+  city_profile_incomplete: "perfil da cidade incompleto (UF ou código IBGE)",
+  // Módulo 28 (saúde bucal): a ficha odontológica excede o que o LEDI aceita.
+  too_many_procedure_codes: "procedimentos odontológicos com códigos diferentes demais para uma ficha",
+  quantity_exceeds_location_limit: "quantidade de procedimento acima do limite do local"
 };
 export const SOURCE_LABEL: Record<string, string> = { Screening: "escuta inicial", Consultation: "consulta" };
 

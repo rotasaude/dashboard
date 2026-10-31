@@ -311,6 +311,17 @@ const PROBLEM_TEXT: Record<string, string> = {
   installation_through_consultation: "a instalação da prótese se registra pela consulta, não pelas etapas",
   reason_required: "informe o motivo (10 a 500 caracteres)",
   unit_not_ceo: "esta unidade não é um CEO",
+  cancel_plan_conflicts_with_completed: "não dá para cancelar o plano inteiro: há item dele feito nesta consulta",
+  too_many_procedure_codes: "há procedimentos demais na consulta — reduza a quantidade de códigos diferentes",
+  invalid_changes: "o adendo só aceita a situação dos dentes e o cancelamento de itens do plano",
+  invalid_cursor: "a lista mudou — recarregue para continuar",
+  invalid_limit: "o tamanho da página não é válido",
+  invalid_care_type: "tipo de atendimento não reconhecido",
+  invalid_request: "dado inválido — confira o campo indicado",
+  unit_has_ceo_profile: "esta unidade tem perfil de CEO — remova o perfil antes de mudar o tipo",
+  patient_name_missing: "falta o nome completo do paciente — peça à recepção para completar o cadastro",
+  already_installed: "a prótese já foi instalada",
+  terminology_unavailable: "a terminologia não está disponível agora — tente de novo em instantes",
   feature_disabled: DENTAL_DISABLED
 };
 
