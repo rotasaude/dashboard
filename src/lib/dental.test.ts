@@ -198,6 +198,17 @@ describe("recusas do api, corpo e especialidades", () => {
     expect(planItemPathIndex("dental.procedures[1].plan_item_id")).toBe(1);
     expect(planItemPathIndex("dental.findings[0]")).toBeNull();
   });
+  it("plan_items_pending: desfecho 15 com item do plano ainda planejado depois do rascunho", () => {
+    const f15 = fields({ dental_outcomes: [ "15" ] });
+    const open = { ...ctx, plan: plan() };
+    expect(codes(f15, open)).toContain("plan_items_pending");
+    expect(codes(f15, ctx)).not.toContain("plan_items_pending");
+    expect(codes(fields({ dental_outcomes: [ "16" ] }), open)).not.toContain("plan_items_pending");
+    const done = fields({ dental_outcomes: [ "15" ], procedures: [ { id: "dpr1", sigtap: "x", name: "x", location: toothLoc("16", "O"), quantity: 1, plan_item_id: "pi1" } ] });
+    expect(codes(done, open)).not.toContain("plan_items_pending");
+    const cancelled = fields({ dental_outcomes: [ "15" ], plan_changes: { add: [], cancel: [ { item_id: "pi1", reason: "motivo longo o bastante" } ] } });
+    expect(codes(cancelled, open)).not.toContain("plan_items_pending");
+  });
   it("frases do api: início, documento, encaminhamento e prótese", () => {
     expect(dentalError(e(403, { error: "feature_disabled", feature: "dental_care" }))).toBe("a saúde bucal está desligada nesta cidade");
     expect(dentalError(e(403, { error: "cbo_not_allowed" }))).toBe("seu CBO não registra consulta odontológica");
@@ -216,7 +227,7 @@ describe("recusas do api, corpo e especialidades", () => {
       "prosthesis_order_mismatch", "dental_referral_request_required", "invalid_location", "invalid_procedure", "situation_not_allowed_for_tooth",
       "invalid_situation", "quantity_exceeds_location_limit", "feature_disabled", "invalid_limit", "invalid_care_type", "invalid_request",
       "patient_name_missing", "already_installed", "terminology_unavailable", "assessment_or_plan_required", "invalid_reason", "not_found",
-      "not_author", "not_draft", "no_conduct", "no_problem_evaluated" ]) {
+      "not_author", "not_draft", "no_conduct", "no_problem_evaluated", "plan_items_pending" ]) {
       expect(dentalProblemText(code), code).not.toBe(code);
       expect(dentalProblemText(code).trim().length, code).toBeGreaterThan(10);
     }

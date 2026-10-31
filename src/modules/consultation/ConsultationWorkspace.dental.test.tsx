@@ -154,6 +154,22 @@ describe("ConsultationWorkspace — consulta odontológica (módulo 28)", () => 
     expect(mocked(api.finalizeConsultation)).toHaveBeenCalledTimes(1);
   });
 
+  it("dental_care desligada: 403 no PATCH e na finalização mostra a frase da saúde bucal", async () => {
+    const off = new ApiError(403, { error: "feature_disabled", feature: "dental_care" }, "x");
+    mocked(api.startConsultation).mockResolvedValue(dentalDraft({ ...withProblem, assessment: "Cárie." }));
+    open();
+    fireEvent.click(await screen.findByRole("button", { name: "Iniciar consulta odontológica" }));
+    mocked(api.saveConsultationDraft).mockRejectedValue(off);
+    fireEvent.change(await screen.findByLabelText(/Avaliação/), { target: { value: "Cárie no 16." } });
+    expect(await screen.findByText(/a saúde bucal está desligada nesta cidade/)).not.toBeNull();
+    mocked(api.saveConsultationDraft).mockReset();
+    mocked(api.saveConsultationDraft).mockImplementation((_id: string, input: unknown) => Promise.resolve({ ...dentalDraft(), ...(input as object) }));
+    mocked(api.finalizeConsultation).mockRejectedValue(off);
+    fireEvent.click(await screen.findByRole("button", { name: "Finalizar consulta" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar finalização" }));
+    await waitFor(() => expect(screen.getAllByRole("alert").map((a) => a.textContent)).toContain("a saúde bucal está desligada nesta cidade"));
+  });
+
   it("dental_referral_request_required: frase na lista e a peça \"Pedir regulação\" relê os pedidos", async () => {
     const draft = dentalDraft({ ...withProblem, assessment: "Pulpite no 36.", dental: fields({ dental_outcomes: [ "3" ] }) });
     mocked(api.startConsultation).mockResolvedValue(draft);

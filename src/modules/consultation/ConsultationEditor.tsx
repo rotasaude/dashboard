@@ -7,7 +7,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import {
   ApiError, errorCode, finalizeConsultation, saveConsultationDraft,
-  type ClinicalRecord, type Consultation, type ConsultationOptions, type DentalRole, type HealthUnit, type Sex
+  type ClinicalRecord, type Consultation, type ConsultationOptions, type DentalPlan, type DentalRole, type HealthUnit, type Sex
 } from "../../lib/api";
 import {
   SOAP_FIELDS, TEXT_MAX_LABEL, blockedReason, checkDraft, consultationError, consultationMessage, draftFrom, finalizeProblems,
@@ -83,6 +83,7 @@ export function ConsultationEditor(props: ConsultationEditorProps) {
   const [ refusals, setRefusals ] = useState<Refusal[]>([]);
   const [ planRefreshKey, setPlanRefreshKey ] = useState(0);
   const dental = props.dental;
+  const [ dentalPlan, setDentalPlan ] = useState<DentalPlan | null>(null);
   const mode = !dental ? "general" : dental.baseline ? "baseline" : "dental";
 
   function lock(err: unknown): boolean {
@@ -99,7 +100,7 @@ export function ConsultationEditor(props: ConsultationEditorProps) {
   const autosave = useAutosave({
     value: check.input, initialKey, blockedReason: blocked, enabled: !locked && !sealing, delayMs: props.autosaveDelayMs ?? 1500,
     save: (input) => saveConsultationDraft(consultation.id, input),
-    describe: consultationError,
+    describe: dental ? dentalError : consultationError,
     onError: (err) => { lock(err); }
   });
 
@@ -126,7 +127,7 @@ export function ConsultationEditor(props: ConsultationEditorProps) {
   const outcomeIssue = outcomeProblem(outcome, referralUnitId, !!props.regulation && regulationCount > 0);
   // O problema da FAO (problem_required) já sai do finalizeProblems: uma frase só por falta.
   const dentalMissing = dental && draft.dental
-    ? dentalFinalizeProblems(draft.dental, { ...dental, problemsCount: draft.problems.length })
+    ? dentalFinalizeProblems(draft.dental, { ...dental, problemsCount: draft.problems.length, plan: dentalPlan })
       .filter((p) => p.code !== "problem_required").map((p) => p.text)
     : [];
   const missing = [ ...new Set([ ...finalizeProblems(check, mode), ...dentalMissing, ...(outcomeIssue ? [ outcomeIssue ] : []) ]) ];
@@ -214,7 +215,7 @@ export function ConsultationEditor(props: ConsultationEditorProps) {
       )}
       {dental && draft.dental && (
         <DentalEditor consultation={consultation} record={record} unit={unit} options={options} value={draft.dental}
-          role={dental.role} baseline={dental.baseline} planRefreshKey={planRefreshKey} searchDelayMs={props.searchDelayMs}
+          role={dental.role} baseline={dental.baseline} planRefreshKey={planRefreshKey} onPlanRead={setDentalPlan} searchDelayMs={props.searchDelayMs}
           onChange={(f) => set({ dental: f })} />
       )}
       {!dental && <ConductsField options={options.conducts} value={draft.conducts} onChange={(conducts) => set({ conducts })} />}

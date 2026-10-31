@@ -275,7 +275,7 @@ export function canAddPlanItems(unit: { kind: string }, plan: DentalPlan | null,
 }
 
 // ─── Finalização (espelho das recusas do contrato §4, O7, O8, O22) ───────────
-export interface DentalCheckCtx { role: DentalRole; baseline: boolean; sex: "female" | "male"; problemsCount: number }
+export interface DentalCheckCtx { role: DentalRole; baseline: boolean; sex: "female" | "male"; problemsCount: number; plan?: DentalPlan | null }
 
 const PROBLEM_TEXT: Record<string, string> = {
   care_type_required: "escolha o tipo de atendimento",
@@ -297,6 +297,7 @@ const PROBLEM_TEXT: Record<string, string> = {
   baseline_only_findings: "o registro inicial só aceita a situação dos dentes",
   baseline_requires_findings: "marque ao menos um dente no registro inicial",
   baseline_requires_dentist: "só o dentista faz o registro inicial do odontograma",
+  plan_items_pending: "para marcar tratamento concluído, conclua ou cancele com motivo os itens do plano que faltam",
   plan_item_not_open: "um item do plano já foi feito ou cancelado em outra consulta — o plano foi relido; confira o procedimento",
   plan_requires_first_consultation: "na UBS, o plano começa na primeira consulta programática",
   dental_referral_request_required: "o encaminhamento ao CEO precisa do pedido de regulação da especialidade",
@@ -359,6 +360,7 @@ export function dentalFinalizeProblems(f: DentalFields, ctx: DentalCheckCtx): { 
   if (f.care_type === "6" && f.dental_consultation_type === "2") add("return_forbidden_on_urgency");
   if (f.dental_outcomes.length === 0) add("dental_outcome_required");
   if (f.dental_outcomes.includes("15") && !firstOrReturn) add("completed_requires_first_or_return");
+  if (f.dental_outcomes.includes("15") && planItemsAfter(ctx.plan ?? null, f).some((x) => x.state === "planned")) add("plan_items_pending");
   if (f.dental_outcomes.includes("17") && firstOrReturn) add("discharge_forbidden_with_first_or_return");
   if (ctx.sex === "female" && f.pregnant === null) add("pregnant_required");
   if (ctx.sex === "male" && f.pregnant === true) add("pregnant_forbidden_male");
