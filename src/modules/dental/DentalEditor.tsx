@@ -33,7 +33,8 @@ interface Props {
 }
 
 export function DentalEditor({ consultation, record, unit, options, value, role, baseline, planRefreshKey = 0, searchDelayMs, onChange, onPlanRead }: Props) {
-  const patientId = record.patient.id;
+  // A consulta sempre traz o paciente; o prontuário lido antes dela vem sem id para quem ainda não tem registro.
+  const patientId = consultation.patient_id ?? record.patient.id;
   const situations = options.dental?.situations;
   const [ selection, setSelection ] = useState<ToothSelection | null>(null);
   const [ dentition, setDentition ] = useState<Dentition | null>(null);

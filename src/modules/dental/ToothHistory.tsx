@@ -10,7 +10,7 @@ import { alert, muted, list } from "../exams/styles";
 interface Props { patientId: string; tooth: string; situations?: DentalVocabulary["situations"] }
 
 function eventText(e: ChartEvent, situations?: DentalVocabulary["situations"]): string {
-  const what = e.procedure ? e.procedure.name : e.situation ? situationLabel(e.situation, situations, e.face ? "face" : e.part) : "—";
+  const what = e.procedure ? (e.procedure.name ?? e.procedure.sigtap) : e.situation ? situationLabel(e.situation, situations, e.face ? "face" : e.part) : "—";
   const where = e.face ? `face ${FACE_LABEL[e.face]}` : e.part === "root" ? "raiz" : "coroa";
   return `${fmtDateTime(e.at)} · ${what} · ${where} · ${e.by.name} (${e.by.cbo}) · ${e.addendum_id ? "adendo" : "consulta"}`;
 }

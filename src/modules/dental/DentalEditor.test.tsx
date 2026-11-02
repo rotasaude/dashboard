@@ -38,6 +38,15 @@ describe("DentalEditor", () => {
     expect(mocked(api.getDentalChart)).toHaveBeenCalledTimes(1);
   });
 
+  it("lê o odontograma pelo paciente da consulta quando o prontuário não tem id (primeiro atendimento)", async () => {
+    const noRecord = record({ patient: { ...record().patient, id: null as unknown as string } });
+    renderWithProviders(<DentalEditor consultation={dentalDraft({ patient_id: "pa9" })} record={noRecord} unit={UBS} options={dentalOptions()}
+      value={fields()} role="dentist" baseline searchDelayMs={0} onChange={() => {}} />);
+    expect(await screen.findByRole("button", { name: /^Dente 16:/ })).not.toBeNull();
+    expect(mocked(api.getDentalChart)).toHaveBeenCalledWith("pa9");
+    expect(mocked(api.getDentalChart)).not.toHaveBeenCalledWith(null);
+  });
+
   it("achado na face e procedimento ligado ao plano entram no rascunho", async () => {
     renderWithProviders(<Harness />);
     fireEvent.click(await screen.findByRole("button", { name: /^Dente 16:/ }));

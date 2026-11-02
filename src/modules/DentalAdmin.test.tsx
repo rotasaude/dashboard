@@ -58,6 +58,13 @@ describe("DentalAdmin", () => {
     await waitFor(() => expect(mocked(api.putAuxiliaryProcedures)).toHaveBeenCalledWith([ FLUOR.sigtap, SCALING.sigtap ]));
   });
 
+  it("procedimento sem nome mostra só o código, nunca \"null\"", async () => {
+    mocked(api.getAuxiliaryProcedures).mockResolvedValue([ { sigtap: "0101020058", name: null } ]);
+    renderWithProviders(<DentalAdmin />);
+    expect(await screen.findByText("0101020058")).not.toBeNull();
+    expect(screen.queryByText(/null/)).toBeNull();
+  });
+
   it("remover tira o item da lista a salvar", async () => {
     renderWithProviders(<DentalAdmin />);
     await screen.findByText(`${FLUOR.sigtap} — ${FLUOR.name}`);

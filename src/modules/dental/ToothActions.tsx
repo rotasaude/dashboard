@@ -69,7 +69,7 @@ export function ToothActions({ selection, value, plan, unit, role, baseline, sit
   function validLocation(): DentalLocation | null {
     if (!picked) return null;
     if (!location || !picked.locations.includes(location.kind)) {
-      setRefusal(`${picked.name}: escolha um local do tipo ${picked.locations.map((k) => KIND_LABEL[k]).join(" ou ")}`);
+      setRefusal(`${picked.name ?? picked.sigtap}: escolha um local do tipo ${picked.locations.map((k) => KIND_LABEL[k]).join(" ou ")}`);
       return null;
     }
     setRefusal(null);
@@ -146,7 +146,7 @@ export function ToothActions({ selection, value, plan, unit, role, baseline, sit
           {picked && (
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               <p style={{ margin: 0, fontSize: 12.5 }}>
-                <span className="mono">{picked.sigtap}</span> {picked.name}
+                <span className="mono">{picked.sigtap}</span> {picked.name ?? ""}
                 {location ? ` · ${locationLabel(location)}` : ""}
               </p>
               <label style={fieldLabel}>

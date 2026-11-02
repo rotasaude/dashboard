@@ -8,7 +8,7 @@ import {
   type Consultation, type DentalFields, type DentalLocation, type DentalLocationKind, type DentalProcedureRef, type ProsthesisOrder
 } from "../../lib/api";
 import {
-  LABS_KEY, STATIC_QUERY, archLoc, chartRows, dentalError, labNameProblem, locationLabel, MOUTH, prosthesisStageLabel, prosthesisStageTone, withProcedure
+  LABS_KEY, STATIC_QUERY, archLoc, chartRows, dentalError, labNameProblem, locationLabel, MOUTH, prosthesisStageLabel, prosthesisStageTone, procedureLabel, withProcedure
 } from "../../lib/dental";
 import { fmtDay } from "../../lib/exams";
 import { Tag } from "../../components/Tag";
@@ -117,7 +117,7 @@ export function ProsthesisPanel({ consultation, patientId, value, onChange, sear
       {creating && (
         <div style={box}>
           <ProcedureSearch role="dentist" only="prosthesis" delayMs={searchDelayMs} onPick={(r) => { setPicked(r); setProblem(null); }} />
-          {picked && <p style={{ margin: 0, fontSize: 12.5 }}>{`Prótese: ${picked.sigtap} — ${picked.name}`}</p>}
+          {picked && <p style={{ margin: 0, fontSize: 12.5 }}>{`Prótese: ${procedureLabel(picked.sigtap, picked.name)}`}</p>}
           <label style={fieldLabel}>
             Laboratório
             <select value={lab} style={inputStyle} onChange={(e) => { setLab(e.target.value); setProblem(null); }}>
@@ -148,7 +148,7 @@ export function ProsthesisPanel({ consultation, patientId, value, onChange, sear
         return (
           <div key={o.id} style={box}>
             <span style={row}>
-              <strong style={{ fontSize: 12.5 }}>{o.name}</strong>
+              <strong style={{ fontSize: 12.5 }}>{o.name ?? o.sigtap}</strong>
               <Tag tone={prosthesisStageTone(o.stage)}>{prosthesisStageLabel(o.stage)}</Tag>
             </span>
             <span style={muted}>{`Laboratório: ${o.laboratory.name} · ${o.health_unit.name}`}</span>
@@ -161,7 +161,7 @@ export function ProsthesisPanel({ consultation, patientId, value, onChange, sear
             </ul>
             {o.stage === "received" && installed && <p style={muted}>Instalação registrada nesta consulta.</p>}
             {o.stage === "received" && !installed && installing !== o.id && kinds && kinds.length > 0 && (
-              <button type="button" style={secondaryButtonStyle} aria-label={`Registrar instalação nesta consulta — ${o.name}`}
+              <button type="button" style={secondaryButtonStyle} aria-label={`Registrar instalação nesta consulta — ${o.name ?? o.sigtap}`}
                 onClick={() => setInstalling(o.id)}>Registrar instalação nesta consulta</button>
             )}
             {o.stage === "received" && !installed && !kinds && unavailable[o.sigtap] && <p style={muted}>Locais do procedimento indisponíveis.</p>}

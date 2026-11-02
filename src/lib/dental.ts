@@ -546,3 +546,6 @@ export function percentLabel(value: string | number | null | undefined): string 
 }
 
 export const monthOf = (today: string): string => today.slice(0, 7);
+
+// SIGTAP sem nome vindo da api (name null): mostra só o código, nunca "null".
+export const procedureLabel = (sigtap: string, name?: string | null): string => (name ? `${sigtap} — ${name}` : sigtap);

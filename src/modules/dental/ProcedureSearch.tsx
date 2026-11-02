@@ -2,7 +2,7 @@
 // (o termo pode ser clínico — nunca na URL). O auxiliar só vê a lista da cidade; `only` restringe a prótese.
 import { useEffect, useState } from "react";
 import { searchDentalProcedures, type DentalProcedureRef, type DentalRole } from "../../lib/api";
-import { dentalError } from "../../lib/dental";
+import { dentalError, procedureLabel } from "../../lib/dental";
 import { inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { alert, fieldLabel, muted } from "../exams/styles";
 
@@ -38,7 +38,7 @@ export function ProcedureSearch({ role, only, delayMs = 300, onPick }: Props) {
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           {shown.map((r) => (
             <button key={r.sigtap} type="button" style={{ ...secondaryButtonStyle, textAlign: "left" }}
-              onClick={() => { onPick(r); setTerm(""); setResults([]); }}>{`${r.sigtap} — ${r.name}`}</button>
+              onClick={() => { onPick(r); setTerm(""); setResults([]); }}>{procedureLabel(r.sigtap, r.name)}</button>
           ))}
         </div>
       )}

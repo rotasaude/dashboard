@@ -6,7 +6,7 @@ import {
   getAuxiliaryProcedures, listCeoProfiles, putAuxiliaryProcedures, putCeoProfile,
   type AuxiliaryProcedure, type CeoProfile, type CeoSpecialty, type CeoType
 } from "../lib/api";
-import { AUX_PROCEDURES_KEY, CEO_PROFILES_KEY, CEO_SPECIALTIES, CEO_TYPES, STATIC_QUERY, dentalApiProblems, dentalError } from "../lib/dental";
+import { AUX_PROCEDURES_KEY, CEO_PROFILES_KEY, CEO_SPECIALTIES, CEO_TYPES, STATIC_QUERY, dentalApiProblems, dentalError, procedureLabel } from "../lib/dental";
 import { Panel } from "../components/Panel";
 import { EmptyState } from "../components/EmptyState";
 import { SensitiveAction } from "../components/SensitiveAction";
@@ -137,7 +137,7 @@ function AuxEditor({ initial, onGoToSecurity }: { initial: AuxiliaryProcedure[] 
         <ul style={{ margin: 0, paddingLeft: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: 6 }}>
           {items.map((i) => (
             <li key={i.sigtap} style={row}>
-              <span>{`${i.sigtap} — ${i.name}`}</span>
+              <span>{procedureLabel(i.sigtap, i.name)}</span>
               <button type="button" style={secondaryButtonStyle} aria-label={`Remover ${i.sigtap}`} onClick={() => remove(i.sigtap)}>Remover</button>
             </li>
           ))}

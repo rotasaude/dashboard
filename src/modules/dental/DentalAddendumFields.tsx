@@ -118,9 +118,9 @@ export function DentalAddendumFields({ consultation: c, value, situations, unitI
               {!unitId && <strong style={{ fontSize: 12 }}>{p.health_unit.name}</strong>}
               {planItems.map((i) => (
             <div key={i.id} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              <span style={{ fontSize: 12.5 }}><span className="mono">{i.sigtap}</span> {i.name} · {locationLabel(i.location)}</span>
+              <span style={{ fontSize: 12.5 }}><span className="mono">{i.sigtap}</span> {i.name ?? ""} · {locationLabel(i.location)}</span>
               {cancelling !== i.id && !value.cancel.some((x) => x.item_id === i.id) && (
-                <div><button type="button" style={secondaryButtonStyle} aria-label={`Cancelar item — ${i.name}`}
+                <div><button type="button" style={secondaryButtonStyle} aria-label={`Cancelar item — ${i.name ?? i.sigtap}`}
                   onClick={() => { setCancelling(i.id); setReason(""); setProblem(null); }}>Cancelar item</button></div>
               )}
               {cancelling === i.id && (

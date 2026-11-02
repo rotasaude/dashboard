@@ -67,18 +67,18 @@ export function TreatmentPlanPanel({ plan, value, unit, role, readOnly = false, 
           {planItemsAfter(plan, value).map(({ item, state }) => (
             <li key={item.id} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               <span style={{ fontSize: 12.5 }}>
-                <span className="mono">{item.sigtap}</span> {item.name}
+                <span className="mono">{item.sigtap}</span> {item.name ?? ""}
               </span>
               <span style={row}>
                 <span style={muted}>{locationLabel(item.location)}</span>
                 <Tag tone={STATE[state].tone}>{STATE[state].label}</Tag>
               </span>
               {isDentist && state === "cancelled_here" && (
-                <button type="button" style={secondaryButtonStyle} aria-label={`Desfazer cancelamento — ${item.name}`}
+                <button type="button" style={secondaryButtonStyle} aria-label={`Desfazer cancelamento — ${item.name ?? item.sigtap}`}
                   onClick={() => onChange(withoutPlanChange(value, "cancel", value.plan_changes.cancel.findIndex((c) => c.item_id === item.id)))}>Desfazer cancelamento</button>
               )}
               {isDentist && state === "planned" && cancelling !== item.id && (
-                <button type="button" style={secondaryButtonStyle} aria-label={`Cancelar item — ${item.name}`}
+                <button type="button" style={secondaryButtonStyle} aria-label={`Cancelar item — ${item.name ?? item.sigtap}`}
                   onClick={() => { setCancelling(item.id); setReason(""); setProblem(null); }}>Cancelar item</button>
               )}
               {isDentist && cancelling === item.id && (
