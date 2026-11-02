@@ -1637,7 +1637,8 @@ export interface ExamRequest { id?: string; sigtap_code: string; label: string; 
 export interface AddendumChanges {
   evaluated_problems?: EvaluatedProblem[]; conducts?: string[]; exam_requests?: ExamRequest[];
   // Módulo 28 (O14): o adendo odontológico leva achados e cancelamentos de item do plano.
-  dental?: { findings: DentalFinding[]; plan_changes: { cancel: PlanCancel[] } };
+  // Na leitura, o api devolve só as partes que o adendo mudou: as duas chaves podem faltar.
+  dental?: { findings?: DentalFinding[]; plan_changes?: { cancel: PlanCancel[] } };
 }
 export interface Addendum {
   id: string; author_name: string; created_at: string; reason: string; text: string; changes: AddendumChanges | null;

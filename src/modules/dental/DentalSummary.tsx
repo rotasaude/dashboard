@@ -20,8 +20,9 @@ export function dentalChangesLines(changes: AddendumChanges | null | undefined, 
   const d = changes?.dental;
   if (!d) return [];
   const lines: string[] = [];
-  if (d.findings.length > 0) lines.push(`Achados: ${d.findings.map((f) => findingText(f, situations)).join("; ")}`);
-  const n = d.plan_changes.cancel.length;
+  const findings = d.findings ?? [];
+  if (findings.length > 0) lines.push(`Achados: ${findings.map((f) => findingText(f, situations)).join("; ")}`);
+  const n = d.plan_changes?.cancel.length ?? 0;
   if (n > 0) lines.push(`Plano: ${n} ${n === 1 ? "item cancelado" : "itens cancelados"}`);
   return lines;
 }

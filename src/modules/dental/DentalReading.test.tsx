@@ -51,6 +51,18 @@ describe("leitura odontológica", () => {
     expect(screen.getByText("Consulta agendada")).not.toBeNull();
   });
 
+  it("adendo lido traz só a parte que mudou: só achado ou só cancelamento não quebra a leitura", async () => {
+    const addendum = (id: string, dental: api.AddendumChanges["dental"]) =>
+      ({ id, author_name: "Dr. Caio Nunes", created_at: "2026-10-30T11:00:00-03:00", reason: "achado", text: "texto", changes: { dental } });
+    renderWithProviders(<ConsultationView options={dentalOptions()} patientProblems={[]} onAddendumAdded={vi.fn()} onClose={vi.fn()}
+      consultation={dentalFinalized({ addenda: [
+        addendum("ad1", { findings: [ { tooth: "36", face: "O", part: "crown", situation: "caries" } ] }),
+        addendum("ad2", { plan_changes: { cancel: [ { item_id: "i1", reason: "paciente recusou" } ] } })
+      ] })} />);
+    expect(await screen.findByText(/Achados: dente 36, face oclusal\/incisal/)).not.toBeNull();
+    expect(screen.getByText("Plano: 1 item cancelado")).not.toBeNull();
+  });
+
   it("histórico do dente só no clique; sem tooth na chamada; filtra na tela e pagina", async () => {
     mocked(api.listChartEvents).mockResolvedValueOnce({ events: [ chartEvent(), chartEvent({ id: "evx", tooth: "26", situation: "restored" }) ], next_before: "c1" })
       .mockResolvedValueOnce({ events: [ chartEvent({ id: "evy", tooth: "26" }) ], next_before: "c2" })
