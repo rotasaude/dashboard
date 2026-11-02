@@ -25,7 +25,7 @@ export function FaoFields({ value, sex, role, prefilledPregnant, vocabulary, onC
     if (male && value.pregnant !== null) onChange({ ...value, pregnant: null });
   }, [ male, value, onChange ]);
 
-  const outcomes = (vocabulary?.outcomes ?? []).filter((o) => role !== "auxiliary" || !isReferralOutcome(o.code));
+  const outcomes = (vocabulary?.outcomes ?? []).filter((o) => role !== "auxiliary" || !(isReferralOutcome(o.code) || o.code === "15"));
   const consultTypeOff = value.care_type === "4";
 
   return (

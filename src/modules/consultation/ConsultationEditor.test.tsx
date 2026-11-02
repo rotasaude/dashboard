@@ -181,6 +181,22 @@ describe("ConsultationEditor", () => {
     expect(api.finalizeConsultation).not.toHaveBeenCalled();
   });
 
+  it("422 no autosave e depois 200: o aviso de rascunho não salvo some e dá para confirmar", async () => {
+    mocked(api.saveConsultationDraft).mockRejectedValueOnce(new ApiError(422, { error: "invalid_request" }, "422"));
+    renderEditor(60_000);
+    fillMinimum();
+    fireEvent.click(screen.getByRole("button", { name: "Finalizar consulta" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar finalização" }));
+    expect((await screen.findByRole("alert")).textContent).toContain("o rascunho não foi salvo");
+    mocked(api.saveConsultationDraft).mockImplementation(async () => consultation());
+    text("Plano (P)", "Ajuste de dose; retorno em 31 dias.");
+    fireEvent.blur(screen.getByLabelText("Plano (P)"));
+    await waitFor(() => expect(screen.getByText(/^salvo às/)).not.toBeNull());
+    await waitFor(() => expect(screen.queryByText(/o rascunho não foi salvo/)).toBeNull());
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar finalização" }));
+    await waitFor(() => expect(api.finalizeConsultation).toHaveBeenCalled());
+  });
+
   it("durante a finalização o editor fica selado; depois de finalizar, desmontar não salva nem avisa", async () => {
     let resolveFinalize: (c: ReturnType<typeof finalized>) => void = () => {};
     mocked(api.finalizeConsultation).mockImplementation(() => new Promise((r) => { resolveFinalize = r; }));

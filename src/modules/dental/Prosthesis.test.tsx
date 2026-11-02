@@ -3,7 +3,7 @@ import { StrictMode } from "react";
 import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 vi.mock("../../lib/api", async (importOriginal) => ({ ...(await importOriginal<typeof import("../../lib/api")>()), fetchCurrentSession: vi.fn(),
   listProsthesisOrders: vi.fn(), createProsthesisOrder: vi.fn(), changeProsthesisStage: vi.fn(), listDentalLaboratories: vi.fn(),
-  listActiveUnits: vi.fn(), searchDentalProcedures: vi.fn(), getDentalChart: vi.fn(), listDentalPlans: vi.fn() }));
+  listActiveUnits: vi.fn(), getMyProfessional: vi.fn(), searchDentalProcedures: vi.fn(), getDentalChart: vi.fn(), listDentalPlans: vi.fn() }));
 import * as api from "../../lib/api";
 import { ApiError } from "../../lib/api";
 import { DENTAL_DISABLED, DENTAL_NO_ROLE } from "../../lib/dental";
@@ -17,12 +17,17 @@ import { DENTURE, UBS, dentalDraft, dentalOptions, dentalUser, fields, odontogra
 afterEach(cleanup);
 const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
 
+const link = (unitId: string, cbo: string, ended: string | null = null) => ({ id: `l-${unitId}-${cbo}`, health_unit_id: unitId, unit_name: unitId, cbo_code: cbo,
+  cbo_title: null, started_at: "2026-01-01", started_by: "x", ended_at: ended, ended_by: null });
+const myProfessional = (links: ReturnType<typeof link>[]) => ({ professional: {}, links, shifts: [] }) as unknown as Awaited<ReturnType<typeof api.getMyProfessional>>;
+
 describe("prótese", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocked(api.fetchCurrentSession).mockResolvedValue(dentalUser());
     mocked(api.listDentalLaboratories).mockResolvedValue([ { id: "cp1", name: "LRPD Municipal" } ]);
     mocked(api.listActiveUnits).mockResolvedValue([ UBS ]);
+    mocked(api.getMyProfessional).mockResolvedValue(myProfessional([ link("u1", "223208") ]));
     mocked(api.searchDentalProcedures).mockResolvedValue([ DENTURE ]);
     mocked(api.createProsthesisOrder).mockResolvedValue(prosthesisOrder());
     mocked(api.listProsthesisOrders).mockResolvedValue({ orders: [ prosthesisOrder({ stage: "received" }) ], next_before: null });
@@ -128,6 +133,21 @@ describe("prótese", () => {
     expect(mocked(api.listProsthesisOrders)).toHaveBeenNthCalledWith(2, { healthUnitId: "u1", stage: null, before: "cur1" });
     fireEvent.change(screen.getByLabelText("Etapa"), { target: { value: "sent" } });
     await waitFor(() => expect(mocked(api.listProsthesisOrders)).toHaveBeenLastCalledWith({ healthUnitId: "u1", stage: "sent", before: null }));
+  });
+
+  it("seletor de unidade: só as com vínculo odontológico ativo; admin vê todas", async () => {
+    mocked(api.listActiveUnits).mockResolvedValue([ UBS, { id: "u2", name: "UPA", kind: "upa" }, { id: "u3", name: "Posto Sul", kind: "ubs" }, { id: "u4", name: "Posto Norte", kind: "ubs" } ]);
+    mocked(api.getMyProfessional).mockResolvedValue(myProfessional([ link("u1", "223208"), link("u2", "225125"), link("u3", "322405", "2026-05-01") ]));
+    renderWithProviders(<DentalProsthesis />);
+    await screen.findByRole("option", { name: "UBS Centro" });
+    expect(screen.queryByRole("option", { name: "UPA" })).toBeNull();
+    expect(screen.queryByRole("option", { name: "Posto Sul" })).toBeNull();
+    expect(screen.queryByRole("option", { name: "Posto Norte" })).toBeNull();
+    cleanup();
+    mocked(api.fetchCurrentSession).mockResolvedValue(dentalUser([ "health_professional", "municipal_admin" ]));
+    renderWithProviders(<DentalProsthesis />);
+    expect(await screen.findByRole("option", { name: "Posto Norte" })).not.toBeNull();
+    expect(screen.getByRole("option", { name: "UPA" })).not.toBeNull();
   });
 
   it("portão: interruptor desligado e papel errado não leem nada", async () => {

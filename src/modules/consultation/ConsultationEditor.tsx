@@ -66,6 +66,8 @@ function finalizeRefusals(err: unknown): Refusal[] {
   return dentalApiProblems(err).map((p) => (p.text !== p.code ? p : { ...p, text: consultationMessage(p.code) ?? (p.code === REGULATION_REQUIRED_CODE ? REGULATION_REQUIRED_TEXT : p.code) }));
 }
 
+const UNSAVED_DRAFT_TEXT = "o rascunho não foi salvo — veja o aviso no topo da consulta e tente de novo";
+
 export function ConsultationEditor(props: ConsultationEditorProps) {
   const { consultation, record, options, unit, units } = props;
   const [ draft, setDraft ] = useState<ConsultationDraft>(() => draftFrom(consultation));
@@ -133,12 +135,17 @@ export function ConsultationEditor(props: ConsultationEditorProps) {
   const missing = [ ...new Set([ ...finalizeProblems(check, mode), ...dentalMissing, ...(outcomeIssue ? [ outcomeIssue ] : []) ]) ];
   const set = (patch: Partial<ConsultationDraft>) => setDraft((d) => ({ ...d, ...patch }));
 
+  // Um salvamento que dá certo depois da falha apaga o aviso velho de "rascunho não salvo".
+  useEffect(() => {
+    if (autosave.status.kind === "saved") setError((e) => (e === UNSAVED_DRAFT_TEXT ? null : e));
+  }, [ autosave.status ]);
+
   async function confirm() {
     if (busy || locked || missing.length > 0) return;
     setBusy(true); setError(null); setRefusals([]);
     try {
       if (!(await autosave.flush())) {
-        if (!lockedRef.current) setError("o rascunho não foi salvo — veja o aviso no topo da consulta e tente de novo");
+        if (!lockedRef.current) setError(UNSAVED_DRAFT_TEXT);
         return;
       }
       setSealing(true);

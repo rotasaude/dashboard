@@ -325,6 +325,7 @@ const PROBLEM_TEXT: Record<string, string> = {
   unit_not_ceo: "esta unidade não é um CEO",
   cancel_plan_conflicts_with_completed: "não dá para cancelar o plano inteiro: há item dele feito nesta consulta",
   too_many_procedure_codes: "há procedimentos demais na consulta — reduza a quantidade de códigos diferentes",
+  periodontal_chart_incomplete: "periograma: preencha profundidade e recessão dos 6 sítios de cada dente",
   invalid_changes: "o adendo só aceita a situação dos dentes e o cancelamento de itens do plano",
   invalid_cursor: "a lista mudou — recarregue para continuar",
   invalid_limit: "o tamanho da página não é válido",
@@ -382,6 +383,7 @@ export function dentalFinalizeProblems(f: DentalFields, ctx: DentalCheckCtx): { 
   }
   for (const text of quantityProblems(f.procedures)) add("quantity_exceeds_location_limit", text);
   if (f.periodontal_screening) for (const text of screeningProblems(f.periodontal_screening)) add("specialty_out_of_range", text);
+  if (f.periodontal_chart && perioIncomplete(f.periodontal_chart)) add("periodontal_chart_incomplete");
   if (f.periodontal_chart) for (const text of perioProblems(f.periodontal_chart)) add("specialty_out_of_range", text);
   for (const text of endoProblems(f.endodontics)) add("specialty_out_of_range", text);
   return out;
@@ -457,6 +459,11 @@ function outOfRange(v: number | null, min: number, max: number, label: string, r
   if (v === null) return null;
   if (!Number.isInteger(v)) return `${label}: ${wholePhrase}`;
   return v < min || v > max ? `${label}: ${rangePhrase}` : null;
+}
+
+// O rascunho aceita sítios vazios (vão como null); a finalização exige os 6 sítios de cada dente do periograma preenchidos (O39).
+export function perioIncomplete(chart: PeriodontalChart): boolean {
+  return chart.teeth.some((t) => t.sites.length < 6 || t.sites.some((s) => s.probing_depth_mm === null || s.recession_mm === null));
 }
 
 export function perioProblems(chart: PeriodontalChart): string[] {

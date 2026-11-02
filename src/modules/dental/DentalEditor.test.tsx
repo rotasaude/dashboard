@@ -134,6 +134,8 @@ describe("DentalEditor", () => {
     renderWithProviders(<Harness role="auxiliary" />);
     fireEvent.click(await screen.findByRole("button", { name: /^Dente 16:/ }));
     expect(screen.queryByLabelText("Encaminhamento: endodontia")).toBeNull();
+    expect(screen.queryByLabelText("Tratamento concluído")).toBeNull();
+    expect(screen.getByLabelText("Retorno para consulta agendada")).not.toBeNull();
     fireEvent.change(screen.getByLabelText("Procedimento (SIGTAP)"), { target: { value: "flu" } });
     const fluor = await screen.findByRole("button", { name: `${FLUOR.sigtap} — ${FLUOR.name}` });
     expect(screen.queryByRole("button", { name: `${RESIN.sigtap} — ${RESIN.name}` })).toBeNull();

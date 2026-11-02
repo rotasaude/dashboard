@@ -256,6 +256,15 @@ describe("recusas do api, corpo e especialidades", () => {
       .toEqual([ "dente 16, sítio V: profundidade de sondagem de 0 a 20 mm", "dente 16, sítio DV: recessão de -10 a 20 mm",
         "dente 16, sítio ML: profundidade de sondagem em milímetros inteiros", "dente 26: mobilidade de 0 a 3" ]);
   });
+  it("periograma incompleto no rascunho barra a finalização (O39), completo não", () => {
+    const six = (over = {}) => [ "MV", "V", "DV", "ML", "L", "DL" ].map((site) => ({ site: site as "MV", probing_depth_mm: 3, recession_mm: 0, bleeding: false, ...over }));
+    const chart = (sites: ReturnType<typeof six>) => ({ teeth: [ { tooth: "16", mobility: null, furcation: null, sites } ] });
+    expect(codes(fields({ periodontal_chart: chart(six()) }))).not.toContain("periodontal_chart_incomplete");
+    expect(codes(fields({ periodontal_chart: chart(six({ probing_depth_mm: null })) }))).toContain("periodontal_chart_incomplete");
+    expect(codes(fields({ periodontal_chart: chart(six({ recession_mm: null })) }))).toContain("periodontal_chart_incomplete");
+    expect(codes(fields({ periodontal_chart: chart(six().slice(0, 5)) }))).toContain("periodontal_chart_incomplete");
+    expect(dentalProblemText("periodontal_chart_incomplete")).toBe("periograma: preencha profundidade e recessão dos 6 sítios de cada dente");
+  });
   it("triagem periodontal e endodontia", () => {
     expect(screeningProblems({ sextants: [ { sextant: "S1", code: 4, star: true }, { sextant: "S2", code: null, star: false }, { sextant: "S3", code: 5, star: false } ] }))
       .toEqual([ "sextante S3: o código vai de 0 a 4 (ou marque o sextante como excluído)" ]);

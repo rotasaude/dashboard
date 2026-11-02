@@ -2,8 +2,8 @@
 // escolha; lida ao escolher/filtrar e depois de cada ação — nunca sozinha (sem polling). A instalação só pela consulta.
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ApiError, changeProsthesisStage, listActiveUnits, listProsthesisOrders, type ProsthesisOrder } from "../lib/api";
-import { STATIC_QUERY, dentalError, nextStages, prosthesisStageLabel, prosthesisStageTone, reasonProblem } from "../lib/dental";
+import { ApiError, changeProsthesisStage, getMyProfessional, listActiveUnits, listProsthesisOrders, type ProsthesisOrder } from "../lib/api";
+import { STATIC_QUERY, dentalError, dentalRole, nextStages, prosthesisStageLabel, prosthesisStageTone, reasonProblem } from "../lib/dental";
 import { fmtDay } from "../lib/exams";
 import { DataTable } from "../components/DataTable";
 import { Panel } from "../components/Panel";
@@ -18,13 +18,17 @@ const STAGE_FILTER = [ "impression", "sent", "received" ];
 export function DentalProsthesis() {
   return (
     <DentalGate title="Próteses" sub="pedidos ao laboratório, etapas e instalação" allow={(r) => r.professional}>
-      {() => <Body />}
+      {(roles) => <Body admin={roles.admin} />}
     </DentalGate>
   );
 }
 
-function Body() {
-  const units = useQuery({ queryKey: [ "activeUnits" ], queryFn: listActiveUnits, ...STATIC_QUERY });
+function Body({ admin }: { admin: boolean }) {
+  const allUnits = useQuery({ queryKey: [ "activeUnits" ], queryFn: listActiveUnits, ...STATIC_QUERY });
+  // O api só lista onde há vínculo ativo com papel odontológico (403 nas outras); o admin municipal vê todas.
+  const mine = useQuery({ queryKey: [ "myProfessional" ], queryFn: getMyProfessional, enabled: !admin, ...STATIC_QUERY });
+  const linked = new Set((mine.data?.links ?? []).filter((l) => !l.ended_at && dentalRole(l.cbo_code)).map((l) => l.health_unit_id));
+  const units = { ...allUnits, data: admin ? allUnits.data : (allUnits.data ?? []).filter((u) => linked.has(u.id)) };
   const [ unit, setUnit ] = useState("");
   const [ stage, setStage ] = useState("");
   const [ orders, setOrders ] = useState<ProsthesisOrder[]>([]);
@@ -96,7 +100,8 @@ function Body() {
           </select>
         </label>
       </div>
-      {units.isError && <p role="alert" style={alert}>{dentalError(units.error)}</p>}
+      {allUnits.isError && <p role="alert" style={alert}>{dentalError(allUnits.error)}</p>}
+      {mine.isError && <p role="alert" style={alert}>{dentalError(mine.error)}</p>}
       {error && <p role="alert" style={alert}>{error}</p>}
       {!unit ? <p style={muted}>Escolha a unidade para ver os pedidos.</p> : (
         <Panel title="Pedidos de prótese" sub="lidos ao escolher a unidade e ao filtrar">
