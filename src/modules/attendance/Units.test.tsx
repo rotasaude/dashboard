@@ -131,6 +131,14 @@ describe("Units", () => {
     expect(await screen.findByText("há atendimentos abertos nesta unidade — encerre-os antes de desativar")).not.toBeNull();
   });
 
+  it("unit_has_ceo_profile ao trocar o tipo mostra a frase própria", async () => {
+    mocked(api.updateUnit).mockRejectedValue(new ApiError(409, { error: "unit_has_ceo_profile" }, "x"));
+    renderUnits();
+    fireEvent.click((await screen.findAllByRole("button", { name: /Editar/ }))[0]);
+    fireEvent.click(await screen.findByRole("button", { name: "Salvar" }));
+    expect(await screen.findByText("esta unidade tem perfil de CEO; remova o perfil antes de trocar o tipo")).not.toBeNull();
+  });
+
   it("mostra a frase de pharmacy_pending ao tentar desativar a unidade com a farmácia pendente (módulo 27a, H14)", async () => {
     mocked(api.setUnitActive).mockRejectedValue(new ApiError(409, { error: "pharmacy_pending" }, "x"));
     renderUnits();

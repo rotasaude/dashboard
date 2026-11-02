@@ -13,7 +13,7 @@ import {
   SOAP_FIELDS, TEXT_MAX_LABEL, blockedReason, checkDraft, consultationError, consultationMessage, draftFrom, finalizeProblems,
   type ConsultationDraft
 } from "../../lib/consultation";
-import { dentalApiProblems, dentalError, dentalFinalizeProblems, linkPlanItem, planItemPathIndex } from "../../lib/dental";
+import { dentalApiProblems, dentalError, dentalFinalizeProblems, isCancelPlanPath, linkPlanItem, planCancelPathIndex, planItemPathIndex, withoutPlanChange } from "../../lib/dental";
 import { DentalEditor } from "../dental/DentalEditor";
 import { EMPTY_OUTCOME, outcomeBody, outcomeProblem, outcomeView, type OutcomeDraft } from "../../lib/outcome";
 import { bmiOf } from "../../lib/screening";
@@ -165,9 +165,19 @@ export function ConsultationEditor(props: ConsultationEditorProps) {
     if (codes.some((c) => REGULATION_REFUSALS.has(c))) setRegulationKey((k) => k + 1);
     if (list.length === 0) { setError(regulationFinalizeError(err) ?? dentalError(err)); return; }
     setRefusals(list);
-    const stale = list.filter((p) => p.code === "plan_item_not_open").map((p) => planItemPathIndex(p.path)).filter((i): i is number => i !== null);
-    if (stale.length > 0) {
-      setDraft((d) => (d.dental ? { ...d, dental: stale.reduce((f, i) => linkPlanItem(f, i, null), d.dental) } : d));
+    const notOpen = list.filter((p) => p.code === "plan_item_not_open");
+    const stale = notOpen.map((p) => planItemPathIndex(p.path)).filter((i): i is number => i !== null);
+    // Cancelamentos velhos saem do fim para o começo, para os índices continuarem valendo.
+    const staleCancels = notOpen.map((p) => planCancelPathIndex(p.path)).filter((i): i is number => i !== null).sort((a, b) => b - a);
+    const staleCancelPlan = notOpen.some((p) => isCancelPlanPath(p.path));
+    if (stale.length > 0 || staleCancels.length > 0 || staleCancelPlan) {
+      setDraft((d) => {
+        if (!d.dental) return d;
+        let f = stale.reduce((acc, i) => linkPlanItem(acc, i, null), d.dental);
+        f = staleCancels.reduce((acc, i) => withoutPlanChange(acc, "cancel", i), f);
+        if (staleCancelPlan) f = withoutPlanChange(f, "cancel_plan");
+        return { ...d, dental: f };
+      });
       setPlanRefreshKey((k) => k + 1);
     }
   }

@@ -136,8 +136,19 @@ export function situationLabel(code: string, situations?: Situations, group?: Si
   return code;
 }
 
-// Sigla visível (a situação nunca é só cor): 3 letras do rótulo; sem rótulo, o código cru curto.
+// Sigla visível (a situação nunca é só cor). Siglas do PEC por código; prótese e raiz não têm sigla no PEC,
+// então: PPR (parcial removível), CUP (coroa unitária), PRV (provisória), PT (total), CR (cárie radicular),
+// End (endodontia), Imp (implante), Pi (pino), Fu (furca). Código novo cai na regra antiga (3 letras do rótulo).
+export const KNOWN_ABBR: Record<string, string> = {
+  missing: "A", calculus: "Cd", caries: "C", crown: "Co", extraction_indicated: "Ei", extracted: "E", fracture: "Fr", sound: "H",
+  sound_sealed: "Hs", unerupted: "I", active_white_spot: "M", abutment: "P", restored: "R", restored_with_caries: "Rc", residual_root: "RR",
+  gingival_recession: "Rg", sealant_indicated: "Si",
+  removable_partial_denture: "PPR", crown_unit_prosthesis: "CUP", temporary_prosthesis: "PRV", complete_denture: "PT",
+  root_caries: "CR", endodontics: "End", implant: "Imp", post: "Pi", furcation_lesion: "Fu"
+};
 export function situationAbbr(code: string, situations?: Situations, group?: SituationGroup): string {
+  const known = own(KNOWN_ABBR, code);
+  if (known) return known;
   const label = situationLabel(code, situations, group);
   return label === code ? code.slice(0, 4).toUpperCase() : label.normalize("NFD").replace(/[^\p{L}]/gu, "").slice(0, 3).toUpperCase();
 }
@@ -403,6 +414,14 @@ export function dentalApiProblems(err: unknown): { code: string; path: string | 
 export function planItemPathIndex(path: string | null): number | null {
   const m = path?.match(/procedures\[(\d+)\]\.plan_item_id$/);
   return m ? Number(m[1]) : null;
+}
+// "dental.plan_changes.cancel[1].item_id" → 1
+export function planCancelPathIndex(path: string | null): number | null {
+  const m = path?.match(/plan_changes\.cancel\[(\d+)\]\.item_id$/);
+  return m ? Number(m[1]) : null;
+}
+export function isCancelPlanPath(path: string | null): boolean {
+  return !!path?.match(/plan_changes\.cancel_plan$/);
 }
 
 // ─── Corpo ───────────────────────────────────────────────────────────────────

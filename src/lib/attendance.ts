@@ -78,6 +78,7 @@ const MESSAGES: Record<string, string> = {
   own_verification: "quem validou não pode desfazer a própria validação",
   reason_too_short: "o motivo precisa de pelo menos 10 caracteres",
   forbidden: "seu papel não permite esta ação",
+  unit_has_ceo_profile: "esta unidade tem perfil de CEO; remova o perfil antes de trocar o tipo",
   too_many_requests: "muitas tentativas — aguarde alguns minutos",
   triage_too_old: "triagem com mais de 3 dias — peça ao cidadão para gerar outro código",
   triage_not_eligible: "essa triagem não é elegível para atendimento",

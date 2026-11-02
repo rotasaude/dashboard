@@ -4,7 +4,7 @@ import {
   archLoc, canAddPlanItems, canUseDental, chartRows, compositionLabel, compositionShortLabel, dentalApiProblems, dentalError, dentalFieldsFrom, dentalFinalizeProblems,
   dentalPayload, dentalProblemText, dentalRole, endoProblems, faceLayout, goalKeyLabel, labNameProblem, linkPlanItem, locationLabel, MOUTH, monthOf,
   nextStages, offeredKinds, percentLabel, perioProblems, planItemPathIndex, planItemsAfter, pregnantFor, quantityProblems, ratioLabel, reasonProblem,
-  screeningProblems, sextantLoc, situationAbbr, situationLabel, situationsFor, situationTone, suggestCompleted, toggleSurveillance, toothAriaLabel,
+  screeningProblems, sextantLoc, situationAbbr, KNOWN_ABBR, situationLabel, situationsFor, situationTone, suggestCompleted, toggleSurveillance, toothAriaLabel,
   toothSextant, hasFurcation, withFinding, withoutPlanChange, withPlanCancel
 } from "./dental";
 import type { DentalCheckCtx } from "./dental";
@@ -52,8 +52,15 @@ describe("dentes, faces e locais", () => {
     expect(situationLabel("complete_denture", SITUATIONS)).toBe("Prótese total");
     expect(situationLabel("novo_codigo", SITUATIONS)).toBe("novo_codigo");
     expect(situationLabel("caries")).toBe("caries");
-    expect([ situationAbbr("caries", SITUATIONS), situationAbbr("novo_codigo", SITUATIONS) ]).toEqual([ "CAR", "NOVO" ]);
+    expect([ situationAbbr("caries", SITUATIONS), situationAbbr("novo_codigo", SITUATIONS) ]).toEqual([ "C", "NOVO" ]);
+    expect(situationAbbr("novo_codigo", { crown: [ { code: "novo_codigo", label: "Árvore" } ], root: [], face: [], arch: [] })).toBe("ARV");
     expect([ "caries", "extraction_indicated", "restored", "sound", "missing", "x" ].map(situationTone)).toEqual([ "down", "warn", "info", "ok", "neutral", "neutral" ]);
+  });
+  it("siglas conhecidas são do PEC e nunca repetem", () => {
+    const abbrs = Object.keys(KNOWN_ABBR).map((c) => situationAbbr(c));
+    expect(new Set(abbrs).size).toBe(abbrs.length);
+    expect([ "missing", "calculus", "restored", "restored_with_caries", "residual_root", "extraction_indicated", "extracted", "sound", "sound_sealed" ].map((c) => situationAbbr(c)))
+      .toEqual([ "A", "Cd", "R", "Rc", "RR", "Ei", "E", "H", "Hs" ]);
   });
   it("decíduo não recebe coroa de prótese; furca só em posteriores; face só o subconjunto", () => {
     const codesOf = (l: { code: string }[]) => l.map((o) => o.code);

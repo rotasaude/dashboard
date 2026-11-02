@@ -154,6 +154,23 @@ describe("ConsultationWorkspace — consulta odontológica (módulo 28)", () => 
     expect(mocked(api.finalizeConsultation)).toHaveBeenCalledTimes(1);
   });
 
+  it("plan_item_not_open em plan_changes.cancel[i] e cancel_plan: tira do rascunho, relê o plano e não reenvia", async () => {
+    const draft = dentalDraft({ ...withProblem, assessment: "Cárie oclusal no 16.",
+      dental: fields({ plan_changes: { add: [], cancel: [ { item_id: "pi1", reason: "dente indicado para extração" } ], cancel_plan: { reason: "paciente abandonou" } } }) });
+    mocked(api.startConsultation).mockResolvedValue(draft);
+    mocked(api.finalizeConsultation).mockRejectedValue(new ApiError(422, { error: "plan_item_not_open",
+      problems: [ { path: "dental.plan_changes.cancel[0].item_id", error: "plan_item_not_open" }, { path: "dental.plan_changes.cancel_plan", error: "plan_item_not_open" } ] }, "x"));
+    open();
+    fireEvent.click(await screen.findByRole("button", { name: "Iniciar consulta odontológica" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Finalizar consulta" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar finalização" }));
+    await screen.findByRole("list", { name: "recusas do api" });
+    await waitFor(() => expect(mocked(api.listDentalPlans)).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(mocked(api.saveConsultationDraft)).toHaveBeenLastCalledWith("cs1", expect.objectContaining({
+      dental: expect.objectContaining({ plan_changes: { add: [], cancel: [] } }) })));
+    expect(mocked(api.finalizeConsultation)).toHaveBeenCalledTimes(1);
+  });
+
   it("dental_care desligada: 403 no PATCH e na finalização mostra a frase da saúde bucal", async () => {
     const off = new ApiError(403, { error: "feature_disabled", feature: "dental_care" }, "x");
     mocked(api.startConsultation).mockResolvedValue(dentalDraft({ ...withProblem, assessment: "Cárie." }));

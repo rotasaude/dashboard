@@ -31,6 +31,17 @@ export function TreatmentPlanPanel({ plan, value, unit, role, readOnly = false, 
   const [problem, setProblem] = useState<string | null>(null);
   const isDentist = role === "dentist" && !readOnly;
   const completedMarked = value.dental_outcomes.includes("15");
+  const planCancelPending = !!value.plan_changes.cancel_plan;
+  const [cancellingPlan, setCancellingPlan] = useState(false);
+  const [planReason, setPlanReason] = useState("");
+  const [planProblem, setPlanProblem] = useState<string | null>(null);
+  function closePlan() { setCancellingPlan(false); setPlanReason(""); setPlanProblem(null); }
+  function confirmPlan() {
+    const p = reasonProblem(planReason);
+    if (p) { setPlanProblem(p); return; }
+    onChange({ ...value, plan_changes: { ...value.plan_changes, cancel_plan: { reason: planReason.trim() } } });
+    closePlan();
+  }
 
   function close() { setCancelling(null); setReason(""); setProblem(null); }
   function confirm(itemId: string) {
@@ -96,8 +107,33 @@ export function TreatmentPlanPanel({ plan, value, unit, role, readOnly = false, 
           )}
         </div>
       ))}
+      {planCancelPending && (
+        <div style={row}>
+          <span style={{ fontSize: 12.5 }}>plano a cancelar ao finalizar</span>
+          {!readOnly && (
+            <button type="button" style={secondaryButtonStyle} aria-label="Desfazer cancelamento do plano"
+              onClick={() => onChange(withoutPlanChange(value, "cancel_plan"))}>Desfazer</button>
+          )}
+        </div>
+      )}
+      {isDentist && plan && !planCancelPending && !cancellingPlan && (
+        <button type="button" style={secondaryButtonStyle} onClick={() => setCancellingPlan(true)}>Cancelar o plano</button>
+      )}
+      {isDentist && cancellingPlan && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <label style={fieldLabel}>
+            Motivo do cancelamento do plano
+            <textarea rows={2} value={planReason} style={inputStyle} onChange={(e) => setPlanReason(e.target.value)} />
+          </label>
+          {planProblem && <p role="alert" style={alert}>{planProblem}</p>}
+          <span style={row}>
+            <button type="button" style={buttonStyle} onClick={confirmPlan}>Confirmar cancelamento do plano</button>
+            <button type="button" style={secondaryButtonStyle} onClick={closePlan}>Voltar</button>
+          </span>
+        </div>
+      )}
       {completedMarked && plan && <p style={muted}>Tratamento concluído marcado — o plano fecha ao finalizar.</p>}
-      {!completedMarked && suggestCompleted(plan, value) && (
+      {!completedMarked && !planCancelPending && suggestCompleted(plan, value) && (
         <>
           <p role="status" style={{ margin: 0, fontSize: 12.5 }}>
             Todos os itens do plano estão feitos ou cancelados. Marque o desfecho "Tratamento concluído".

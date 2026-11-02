@@ -65,7 +65,7 @@ describe("Odontogram", () => {
       expect(parseInt(b.style.minWidth, 10)).toBeGreaterThanOrEqual(44);
       expect(parseInt(b.style.minHeight, 10)).toBeGreaterThanOrEqual(44);
     }
-    expect(screen.getByRole("button", { name: /^Dente 36:/ }).textContent).toContain("AUS");
+    expect(screen.getByRole("button", { name: /^Dente 36:/ }).textContent).toContain("A");
   });
 
   it("troca de dentição pelo controle", () => {

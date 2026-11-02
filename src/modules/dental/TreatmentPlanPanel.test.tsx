@@ -83,4 +83,31 @@ describe("TreatmentPlanPanel", () => {
     rerender(<TreatmentPlanPanel plan={null} value={fields()} unit={CEO_UNIT} role="dentist" onChange={vi.fn()} onMarkCompleted={vi.fn()} />);
     expect(screen.queryByText("O plano começa na primeira consulta programática.")).toBeNull();
   });
+
+  it("cancelar o plano pede motivo de 10 a 500, fica pendente com Desfazer e esconde o concluído", () => {
+    const onChange = vi.fn();
+    const { rerender } = render(<TreatmentPlanPanel plan={plan()} value={fields()} unit={UBS} role="dentist" onChange={onChange} onMarkCompleted={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar o plano" }));
+    fireEvent.change(screen.getByLabelText("Motivo do cancelamento do plano"), { target: { value: "curto" } });
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar cancelamento do plano" }));
+    expect(screen.getByText("o motivo precisa de 10 a 500 caracteres")).not.toBeNull();
+    expect(onChange).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText("Motivo do cancelamento do plano"), { target: { value: "paciente abandonou o tratamento" } });
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar cancelamento do plano" }));
+    const pending = fields({ plan_changes: { add: [], cancel: [], cancel_plan: { reason: "paciente abandonou o tratamento" } } });
+    expect(onChange).toHaveBeenCalledWith(pending);
+    rerender(<TreatmentPlanPanel plan={plan({ items: [ planItem({ status: "done" }) ] })} value={pending} unit={UBS} role="dentist" onChange={onChange} onMarkCompleted={vi.fn()} />);
+    expect(screen.getByText("plano a cancelar ao finalizar")).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Marcar tratamento concluído" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Cancelar o plano" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Desfazer cancelamento do plano" }));
+    expect(onChange).toHaveBeenLastCalledWith(fields({ plan_changes: { add: [], cancel: [] } }));
+  });
+
+  it("auxiliar e somente leitura não cancelam o plano", () => {
+    const { rerender } = render(<TreatmentPlanPanel plan={plan()} value={fields()} unit={UBS} role="auxiliary" onChange={vi.fn()} onMarkCompleted={vi.fn()} />);
+    expect(screen.queryByRole("button", { name: "Cancelar o plano" })).toBeNull();
+    rerender(<TreatmentPlanPanel plan={plan()} value={fields()} unit={UBS} role="dentist" readOnly onChange={vi.fn()} onMarkCompleted={vi.fn()} />);
+    expect(screen.queryByRole("button", { name: "Cancelar o plano" })).toBeNull();
+  });
 });
