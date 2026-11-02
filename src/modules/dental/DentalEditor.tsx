@@ -76,7 +76,7 @@ export function DentalEditor({ consultation, record, unit, options, value, role,
           {chart.isPending && <p style={muted}>Carregando odontograma…</p>}
           {chart.data && (
             <Odontogram teeth={chart.data.teeth} dentition={dentition ?? chart.data.dentition} situations={situations} pending={pending}
-              selected={selection} onSelect={(sel) => setSelection((prev) => (sel && prev && sel.tooth !== prev.tooth ? { tooth: sel.tooth, face: null } : sel))} onDentitionChange={setDentition} />
+              selected={selection} onSelect={setSelection} onDentitionChange={setDentition} />
           )}
           <ToothActions selection={selection} value={value} plan={plan} unit={unit} role={role} baseline={baseline} situations={situations}
             searchDelayMs={searchDelayMs} patientId={patientId} onSelectFace={(face) => setSelection((s) => (s ? { tooth: s.tooth, face } : s))} onChange={onChange} />

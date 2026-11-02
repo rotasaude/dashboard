@@ -75,6 +75,19 @@ describe("DentalEditor", () => {
     expect(last!.findings).toEqual([ { tooth: "17", face: null, part: "crown", situation: "caries" } ]);
   });
 
+  it("atalho de ponteiro: tocar a face de OUTRO dente seleciona aquele dente com aquela face", async () => {
+    renderWithProviders(<Harness />);
+    fireEvent.click(await screen.findByRole("button", { name: /^Dente 16:/ }));
+    const other = screen.getByRole("button", { name: /^Dente 17:/ });
+    fireEvent.pointerDown(other);
+    fireEvent.pointerUp(other.querySelector('[data-face="O"]')!);
+    fireEvent.click(other);
+    expect(screen.getByRole("button", { name: "Face oclusal/incisal" }).getAttribute("aria-pressed")).toBe("true");
+    fireEvent.change(screen.getByLabelText("Achado"), { target: { value: "caries" } });
+    fireEvent.click(screen.getByRole("button", { name: "Marcar achado" }));
+    expect(last!.findings).toEqual([ { tooth: "17", face: "O", part: "crown", situation: "caries" } ]);
+  });
+
   it("raiz e prótese total por arcada entram como achado (O3)", async () => {
     renderWithProviders(<Harness />);
     fireEvent.click(await screen.findByRole("button", { name: /^Dente 16:/ }));

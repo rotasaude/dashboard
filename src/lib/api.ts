@@ -5077,7 +5077,7 @@ export interface ChartEvent {
 export interface ChartEventPage { events: ChartEvent[]; next_before: string | null }
 
 export interface DentalPlanItem {
-  id: string; sigtap: string; name: string; location: DentalLocation; status: DentalPlanItemStatus | string;
+  id: string; sigtap: string; name: string | null; location: DentalLocation; status: DentalPlanItemStatus | string;
   done_in_consultation_id: string | null; cancel_reason: string | null;
 }
 export interface DentalPlan {
@@ -5120,7 +5120,7 @@ export interface EndodonticTreatment {
 }
 
 export interface ProsthesisOrder {
-  id: string; patient: { id: string; display_name: string | null }; health_unit: { id: string; name: string }; sigtap: string; name: string;
+  id: string; patient: { id: string; display_name: string | null }; health_unit: { id: string; name: string }; sigtap: string; name: string | null;
   laboratory: { care_provider_id: string | null; name: string }; stage: ProsthesisStage | string;
   // O27: `created_at` e `stages[].reason` opcionais.
   stages: { stage: string; at: string; by: { name: string } | null; reason?: string | null }[];
@@ -5134,7 +5134,7 @@ export interface ProsthesisPage { orders: ProsthesisOrder[]; next_before: string
 export interface DentalLaboratory { id: string; name: string }
 
 export interface CeoProfile { health_unit: { id: string; name: string }; ceo_type: CeoType | null; specialties: CeoSpecialty[] }
-export interface AuxiliaryProcedure { sigtap: string; name: string }
+export interface AuxiliaryProcedure { sigtap: string; name: string | null }
 // O24: `value` é string percentual com ponto ("62.00"); a vírgula só aparece na tela.
 export interface CeoGoalRow {
   key: string; goal: number; done: number; composition: { rule: string; ok: boolean; value: string } | null; met: boolean;

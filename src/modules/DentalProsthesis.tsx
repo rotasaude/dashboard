@@ -109,7 +109,7 @@ function Body({ admin }: { admin: boolean }) {
             rows={orders} rowKey={(o) => o.id} empty={loading ? "carregando…" : "nenhum pedido nesta unidade"}
             cols={[
               { label: "Paciente", w: "1.2fr", card: "title", render: who },
-              { label: "Prótese", w: "1.6fr", render: (o) => o.name },
+              { label: "Prótese", w: "1.6fr", render: (o) => o.name ?? o.sigtap },
               { label: "Laboratório", w: "1fr", render: (o) => o.laboratory.name },
               { label: "Etapa", w: "1fr", render: (o) => <Tag tone={prosthesisStageTone(o.stage)}>{prosthesisStageLabel(o.stage)}</Tag> },
               { label: "Desde", w: "0.8fr", card: "hide", render: (o) => (o.stages[0] ? fmtDay(o.stages[0].at) : "—") },
@@ -127,7 +127,7 @@ function Body({ admin }: { admin: boolean }) {
         </Panel>
       )}
       {cancelling && (
-        <Panel title="Cancelar pedido" sub={`${who(cancelling)} — ${cancelling.name}`}>
+        <Panel title="Cancelar pedido" sub={`${who(cancelling)} — ${cancelling.name ?? cancelling.sigtap}`}>
           <label style={fieldLabel}>
             Motivo do cancelamento
             <textarea rows={2} value={reason} style={inputStyle} onChange={(e) => setReason(e.target.value)} />

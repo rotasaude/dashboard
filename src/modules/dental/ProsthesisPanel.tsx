@@ -105,7 +105,7 @@ export function ProsthesisPanel({ consultation, patientId, value, onChange, sear
   }
 
   function install(order: ProsthesisOrder, location: DentalLocation) {
-    onChange(withProcedure(value, { sigtap: order.sigtap, name: order.name, location, quantity: 1, plan_item_id: null, prosthesis_order_id: order.id }));
+    onChange(withProcedure(value, { sigtap: order.sigtap, name: order.name ?? undefined, location, quantity: 1, plan_item_id: null, prosthesis_order_id: order.id }));
     setInstalling(null);
   }
 

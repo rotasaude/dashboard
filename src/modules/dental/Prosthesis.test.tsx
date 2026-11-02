@@ -119,6 +119,15 @@ describe("prótese", () => {
     expect(mocked(api.listProsthesisOrders)).toHaveBeenCalledWith({ healthUnitId: "u1", stage: null, before: null });
   });
 
+  it("tela: pedido sem nome de procedimento mostra o código, nunca \"null\"", async () => {
+    mocked(api.listProsthesisOrders).mockResolvedValue({ orders: [ prosthesisOrder({ name: null }) ], next_before: null });
+    renderWithProviders(<DentalProsthesis />);
+    fireEvent.change(await screen.findByLabelText("Unidade"), { target: { value: "u1" } });
+    fireEvent.click(await screen.findByRole("button", { name: "Cancelar pedido — Joana Lima" }));
+    expect(screen.queryByText(/null/)).toBeNull();
+    expect(screen.getAllByText(new RegExp(prosthesisOrder().sigtap)).length).toBeGreaterThanOrEqual(2);
+  });
+
   it("tela: filtro por etapa e Ver mais pelo next_before", async () => {
     mocked(api.listProsthesisOrders)
       .mockResolvedValueOnce({ orders: [ prosthesisOrder() ], next_before: "cur1" })
