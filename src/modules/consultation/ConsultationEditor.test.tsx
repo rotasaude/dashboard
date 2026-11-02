@@ -76,6 +76,16 @@ describe("ConsultationEditor", () => {
     await waitFor(() => expect(screen.getByRole("status").textContent).toBe("salvo às 10:00"));
   });
 
+  it("registro inicial: o texto de Finalizar não promete a ficha do e-SUS", () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={client}><ConsultationEditor consultation={consultation()} record={record()} options={options()} unit={unit} units={units}
+      autosaveDelayMs={0} searchDelayMs={0} dental={{ role: "dentist", baseline: true, sex: "female" }} onFinalized={vi.fn()} onLocked={vi.fn()} /></QueryClientProvider>);
+    fireEvent.click(screen.getByRole("button", { name: "Finalizar consulta" }));
+    const section = screen.getByRole("region", { name: "Finalizar consulta" });
+    expect(section.textContent).toContain("Finalizar encerra o atendimento com o desfecho abaixo.");
+    expect(section.textContent).not.toContain("ficha do e-SUS");
+  });
+
   it("Finalizar lista o que falta e não chama a API", () => {
     renderEditor();
     fireEvent.click(screen.getByRole("button", { name: "Finalizar consulta" }));

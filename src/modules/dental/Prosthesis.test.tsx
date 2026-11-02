@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { StrictMode } from "react";
 import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 vi.mock("../../lib/api", async (importOriginal) => ({ ...(await importOriginal<typeof import("../../lib/api")>()), fetchCurrentSession: vi.fn(),
   listProsthesisOrders: vi.fn(), createProsthesisOrder: vi.fn(), changeProsthesisStage: vi.fn(), listDentalLaboratories: vi.fn(),
@@ -48,6 +49,19 @@ describe("prótese", () => {
     fireEvent.click(screen.getByRole("button", { name: "Confirmar instalação" }));
     expect(onChange).toHaveBeenCalledWith(fields({ procedures: [ { sigtap: DENTURE.sigtap, name: DENTURE.name,
       location: { kind: "arch", tooth: null, face: null, sextant: null, arch: "upper" }, quantity: 1, plan_item_id: null, prosthesis_order_id: "po1" } ] }));
+  });
+
+  it("sob StrictMode: o pedido confirma e a lista aparece", async () => {
+    renderWithProviders(<StrictMode><ProsthesisPanel consultation={dentalDraft()} patientId="pa1" value={fields()} onChange={vi.fn()} searchDelayMs={0} /></StrictMode>);
+    fireEvent.click(screen.getByRole("button", { name: "Ver pedidos de prótese do paciente" }));
+    expect(await screen.findByText(/Lab Sorriso/)).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Novo pedido" }));
+    fireEvent.change(screen.getByLabelText("Procedimento (SIGTAP)"), { target: { value: "total" } });
+    fireEvent.click(await screen.findByRole("button", { name: `${DENTURE.sigtap} — ${DENTURE.name}` }));
+    fireEvent.change(await screen.findByLabelText("Laboratório"), { target: { value: "cp1" } });
+    fireEvent.click(screen.getByRole("button", { name: "Registrar pedido" }));
+    await waitFor(() => expect(mocked(api.createProsthesisOrder)).toHaveBeenCalled());
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Registrar pedido" })).toBeNull());
   });
 
   it("na consulta: laboratório do município vai por id; nome curto é recusado sem enviar", async () => {

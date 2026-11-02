@@ -42,7 +42,10 @@ export function ProsthesisPanel({ consultation, patientId, value, onChange, sear
   const [ unavailable, setUnavailable ] = useState<Record<string, true>>({});
   const seq = useRef(0);
   const alive = useRef(true);
-  useEffect(() => () => { alive.current = false; }, []);
+  useEffect(() => {
+    alive.current = true;
+    return () => { alive.current = false; };
+  }, []);
 
   const labs = useQuery({ queryKey: [ LABS_KEY ], queryFn: listDentalLaboratories, enabled: creating, ...STATIC_QUERY });
 

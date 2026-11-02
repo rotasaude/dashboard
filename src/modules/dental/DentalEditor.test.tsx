@@ -63,6 +63,18 @@ describe("DentalEditor", () => {
     expect(screen.getByRole("button", { name: /^Dente 16:.*2 marcações nesta consulta$/ })).not.toBeNull();
   });
 
+  it("trocar de dente zera a face escolhida (dente inteiro)", async () => {
+    renderWithProviders(<Harness />);
+    fireEvent.click(await screen.findByRole("button", { name: /^Dente 16:/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Face oclusal/incisal" }));
+    expect(screen.getByRole("button", { name: "Face oclusal/incisal" }).getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(screen.getByRole("button", { name: /^Dente 17:/ }));
+    expect(screen.getByRole("button", { name: "Dente inteiro" }).getAttribute("aria-pressed")).toBe("true");
+    fireEvent.change(screen.getByLabelText("Achado"), { target: { value: "caries" } });
+    fireEvent.click(screen.getByRole("button", { name: "Marcar achado" }));
+    expect(last!.findings).toEqual([ { tooth: "17", face: null, part: "crown", situation: "caries" } ]);
+  });
+
   it("raiz e prótese total por arcada entram como achado (O3)", async () => {
     renderWithProviders(<Harness />);
     fireEvent.click(await screen.findByRole("button", { name: /^Dente 16:/ }));

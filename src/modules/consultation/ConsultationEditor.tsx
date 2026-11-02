@@ -257,7 +257,7 @@ export function ConsultationEditor(props: ConsultationEditorProps) {
         <section aria-label="Finalizar consulta" style={box}>
           <strong>Finalizar consulta</strong>
           <p style={muted}>
-            Finalizar encerra o atendimento com o desfecho abaixo e gera a ficha do e-SUS. Encaminhamento e retorno geram o pedido de agendamento.
+            Finalizar encerra o atendimento com o desfecho abaixo{mode !== "baseline" && " e gera a ficha do e-SUS"}. Encaminhamento e retorno geram o pedido de agendamento.
           </p>
           <OutcomeFields idPrefix="consultation-" value={outcome} onChange={setOutcome}
             referenceIds={props.referenceUnitIds} unit={unit} units={units} regulationHint={props.regulation} />
