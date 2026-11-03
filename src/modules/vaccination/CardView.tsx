@@ -18,7 +18,9 @@ import { ImmunizationRow } from "./ImmunizationRow";
 
 export interface CardViewProps {
   room: VaccineLocation; card: VaccinationCard; catalog: VaccinationCatalog; now: Date;
-  onCard(c: VaccinationCard): void; onRecord(item: CardItem | null): void; onTranscribe(): void; onGoToSecurity?(): void;
+  onCard(c: VaccinationCard): void; onTranscribe?(): void;
+  // Sem `onRecord`/`onTranscribe` (a caderneta aberta nas pendências) a caderneta é só leitura: sem "Registrar", "Outra vacina" nem "Transcrever".
+  onRecord?(item: CardItem | null): void; onGoToSecurity?(): void;
   onCancelDose?(imm: Immunization): void;
 }
 
@@ -59,7 +61,7 @@ export function CardView({ room, card, catalog, now, onCard, onRecord, onTranscr
     { label: "Data", w: "1fr", render: (item) => fmtDay(item.due_on) },
     statusCol
   ];
-  const withAction: Column<CardItem>[] = [
+  const withAction: Column<CardItem>[] = !onRecord ? base : [
     ...base,
     { label: "Ação", w: "1.6fr", card: "actions", render: (item) => (
       <button type="button" style={secondaryButtonStyle} onClick={() => onRecord(item)}>
@@ -96,7 +98,7 @@ export function CardView({ room, card, catalog, now, onCard, onRecord, onTranscr
         {!card.checked && <p role="note" style={{ margin: 0, fontSize: 12.5 }}>{UNCHECKED_NOTICE}</p>}
         <div style={row}>
           {/* A transcrição vale em qualquer caderneta (o api aceita); fechar a conferência só é oferecido sem conferência (TranscriptionForm). */}
-          <button type="button" style={secondaryButtonStyle} onClick={onTranscribe}>Transcrever caderneta</button>
+          {onTranscribe && <button type="button" style={secondaryButtonStyle} onClick={onTranscribe}>Transcrever caderneta</button>}
           {!card.checked && (confirming ? (
             <>
               <button type="button" style={confirm.isPending ? disabledButtonStyle : buttonStyle} disabled={confirm.isPending} onClick={sendConfirm}>
@@ -109,9 +111,11 @@ export function CardView({ room, card, catalog, now, onCard, onRecord, onTranscr
           ))}
         </div>
         {problem && <p role="alert" style={alert}>{problem}</p>}
-        <div style={row}>
-          <button type="button" style={secondaryButtonStyle} onClick={() => onRecord(null)}>Outra vacina</button>
-        </div>
+        {onRecord && (
+          <div style={row}>
+            <button type="button" style={secondaryButtonStyle} onClick={() => onRecord(null)}>Outra vacina</button>
+          </div>
+        )}
       </section>
       {block("Devidas hoje", withAction, groups.today, "nenhuma vacina devida hoje")}
       {card.checked

@@ -7,6 +7,7 @@ import type { Immunization } from "../../lib/api";
 import { fmtDateTime } from "../../lib/format";
 import { KeyValue } from "../../components/KeyValue";
 import { Tag } from "../../components/Tag";
+import { RndsStatusTag } from "./RndsStatusTag";
 import { secondaryButtonStyle } from "../../components/formStyles";
 import { box, row } from "../exams/styles";
 
@@ -38,6 +39,7 @@ export function ImmunizationRow({ imm, actions, onCancelDose }: ImmunizationRowP
         <KeyValue k="Lote" v={imm.lot.number ?? "—"} />
         <KeyValue k="Sala" v={imm.room?.name ?? "—"} mono={false} />
         <KeyValue k="Quem aplicou" v={imm.by.name ?? "—"} mono={false} />
+        <KeyValue k="Envio à RNDS" v={<RndsStatusTag rnds={imm.rnds} />} mono={false} />
       </div>
       {(actions || cancellable) && (
         <div style={row}>
