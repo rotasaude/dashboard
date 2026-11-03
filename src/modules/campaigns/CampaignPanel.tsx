@@ -123,6 +123,9 @@ function Aggregates({ campaign: c, stats }: { campaign: Campaign; stats: Campaig
           <Stat label="Destinatários" value={fmtNumber(c.recipients_count)} />
           <Stat label="Telefones" value={fmtNumber(c.phones_count)} />
           <Stat label="Lidos" value={`${fmtNumber(stats.read_count)} (${readPct})`} />
+          {typeof c.vaccinated_count === "number" && (
+            <Stat label="Vacinados depois do envio" value={fmtNumber(c.vaccinated_count)} />
+          )}
         </dl>
         {c.sms_enabled === false ? (
           <p style={noteStyle}>SMS desligado nesta cidade no momento do envio: só o aviso no wpda.</p>

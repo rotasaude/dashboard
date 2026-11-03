@@ -2,10 +2,10 @@
 // O público em português (spec 2026-09-29 §7): no modal de envio e no painel
 // da campanha. Os nomes vêm de GET /campaigns/options (bairros e unidades
 // ATIVOS); id que não está lá é nomeado como inativo, nunca some da frase.
-import type { Audience, AudienceGeo, Criterion, CriterionPeriod, NamedRef } from "./api";
+import type { Audience, AudienceGeo, CodeName, Criterion, CriterionPeriod, NamedRef } from "./api";
 import { OUTCOME_LABEL, REQUEST_KIND_LABEL } from "./campaigns";
 
-export interface PhraseLookup { neighborhoods: NamedRef[]; units: NamedRef[] }
+export interface PhraseLookup { neighborhoods: NamedRef[]; units: NamedRef[]; immunobiologicals?: CodeName[] }
 
 // "YYYY-MM-DD" → "DD/MM/AAAA" por texto: new Date("2026-07-01") seria meia-noite
 // UTC, que em São Paulo ainda é 30/06.
@@ -25,6 +25,14 @@ function nameOf(list: NamedRef[], id: string, fallback: string): string {
 
 function period(p: CriterionPeriod): string {
   return p.from === p.to ? `em ${fmtDay(p.from)}` : `entre ${fmtDay(p.from)} e ${fmtDay(p.to)}`;
+}
+
+function ageRange(c: { age_min_months?: number; age_max_months?: number }): string {
+  const { age_min_months: min, age_max_months: max } = c;
+  if (min !== undefined && max !== undefined) return `, com idade de ${min} a ${max} meses`;
+  if (min !== undefined) return `, com ${min} meses de idade ou mais`;
+  if (max !== undefined) return `, com até ${max} meses de idade`;
+  return "";
 }
 
 function geoPhrase(geo: AudienceGeo, lookup: PhraseLookup): string {
@@ -57,11 +65,12 @@ function criterionPhrase(c: Criterion, lookup: PhraseLookup): string {
       const kinds = c.kinds && c.kinds.length > 0 ? ` de ${joinPt(c.kinds.map((k) => REQUEST_KIND_LABEL[k] ?? k), "ou")}` : "";
       return `têm pedido de agendamento${kinds} aberto${c.target_unit_id ? ` para ${unit(c.target_unit_id)}` : ""}`;
     }
-    // Módulo 29: frase provisória; a Task 14 a refina (nome da vacina e faixa de idade).
-    case "vaccine_overdue":
-      return "estão com vacina em atraso";
+    case "vaccine_overdue": {
+      const names = c.immunobiological_codes.map((code) => lookup.immunobiologicals?.find((i) => i.code === code)?.name ?? code);
+      return `estão com a vacina ${joinPt(names)} em atraso, com a caderneta conferida${ageRange(c)}`;
+    }
     case "vaccination_record_unchecked":
-      return "têm a caderneta de vacinação ainda não conferida";
+      return `ainda não tiveram a caderneta de vacina conferida${ageRange(c)}`;
   }
 }
 

@@ -85,3 +85,19 @@ describe("desfechos do acolhimento", () => {
       .toBe("cidadãos de toda a cidade que tiveram atendimento encerrado como agendado pelo acolhimento ou orientado no acolhimento entre 01/07/2026 e 29/09/2026");
   });
 });
+
+describe("frases de vacina (módulo 29)", () => {
+  const withVac = { ...OPTIONS, immunobiologicals: [ { code: "42", name: "Penta" }, { code: "15", name: "BCG" } ] };
+  const phrase = (c: Criterion) => describeAudience(aud({ scope: "city" }, [ c ]), withVac);
+  it("vacina em atraso com nomes e faixa de idade", () => {
+    expect(phrase({ kind: "vaccine_overdue", immunobiological_codes: [ "42", "15" ], age_min_months: 2, age_max_months: 12 }))
+      .toBe("cidadãos de toda a cidade que estão com a vacina Penta e BCG em atraso, com a caderneta conferida, com idade de 2 a 12 meses");
+    expect(phrase({ kind: "vaccine_overdue", immunobiological_codes: [ "99" ], age_max_months: 23 }))
+      .toBe("cidadãos de toda a cidade que estão com a vacina 99 em atraso, com a caderneta conferida, com até 23 meses de idade");
+  });
+  it("caderneta não conferida", () => {
+    expect(phrase({ kind: "vaccination_record_unchecked" })).toBe("cidadãos de toda a cidade que ainda não tiveram a caderneta de vacina conferida");
+    expect(phrase({ kind: "vaccination_record_unchecked", age_min_months: 6 }))
+      .toBe("cidadãos de toda a cidade que ainda não tiveram a caderneta de vacina conferida, com 6 meses de idade ou mais");
+  });
+});

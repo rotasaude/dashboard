@@ -2,7 +2,7 @@
 import { Fragment, useState } from "react";
 import type { AudienceGeo, CampaignOptions, Criterion, CriterionKind, NamedRef } from "../../lib/api";
 import {
-  CRITERION_KINDS, CRITERION_LABEL, MAX_CRITERIA, MAX_NEIGHBORHOODS, newCriterion, nextCriterionKey, validateGeo,
+  CRITERION_LABEL, MAX_CRITERIA, criterionKindsFor, MAX_NEIGHBORHOODS, newCriterion, nextCriterionKey, validateGeo,
   type AudienceDraft
 } from "../../lib/campaigns";
 import { normalizeName, sortByName } from "../../lib/territory";
@@ -99,7 +99,7 @@ export function AudienceBuilder({ draft, options, today, onChange }: AudienceBui
         ))}
         {adding ? (
           <div role="group" aria-label="Tipos de critério" style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            {CRITERION_KINDS.map((kind) => (
+            {criterionKindsFor(options).map((kind) => (
               <button key={kind} type="button" style={secondaryButtonStyle} onClick={() => add(kind)}>{CRITERION_LABEL[kind]}</button>
             ))}
             <button type="button" style={secondaryButtonStyle} onClick={() => setAdding(false)}>Fechar lista</button>

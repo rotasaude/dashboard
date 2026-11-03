@@ -1,6 +1,6 @@
 // src/modules/campaigns/CriterionCard.tsx
 import type { AttendanceOutcome, CampaignOptions, Criterion, CriterionPeriod, NamedRef, RequestKind } from "../../lib/api";
-import { CRITERION_LABEL, OUTCOME_LABEL, REQUEST_KIND_LABEL, validateCriterion } from "../../lib/campaigns";
+import { CRITERION_LABEL, OUTCOME_LABEL, REQUEST_KIND_LABEL, VACCINE_OVERDUE_NOTE, validateCriterion } from "../../lib/campaigns";
 import { sortByName } from "../../lib/territory";
 import { inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { alertStyle, cardStyle, checkStyle, fieldsetStyle, labelStyle, legendStyle, noteStyle, rowStyle } from "./styles";
@@ -73,12 +73,41 @@ export function CriterionCard({ criterion: c, options, today, onChange, onRemove
         </>
       )}
 
+      {c.kind === "vaccine_overdue" && (
+        <>
+          <CheckboxGroup legend="Vacinas" values={sortByName(options.immunobiologicals ?? []).map((i) => i.code)}
+            selected={c.immunobiological_codes} label={(code) => options.immunobiologicals?.find((i) => i.code === code)?.name ?? code}
+            emptyText="nenhuma vacina no catálogo"
+            onToggle={(code) => onChange({ ...c, immunobiological_codes: toggleValue(c.immunobiological_codes, code) })} />
+          <p style={noteStyle}>{VACCINE_OVERDUE_NOTE}</p>
+        </>
+      )}
+
+      {(c.kind === "vaccine_overdue" || c.kind === "vaccination_record_unchecked") && (
+        <div style={rowStyle}>
+          <AgeField label="Idade mínima (meses)" value={c.age_min_months} onChange={(n) => onChange({ ...c, age_min_months: n })} />
+          <AgeField label="Idade máxima (meses)" value={c.age_max_months} onChange={(n) => onChange({ ...c, age_max_months: n })} />
+        </div>
+      )}
+
       {"from" in c && (
         <PeriodFields period={c} today={today} onChange={(p) => onChange({ ...c, ...p })} />
       )}
 
       {problem && <p role="alert" style={alertStyle}>{problem}</p>}
     </section>
+  );
+}
+
+// Vazio = sem limite: sai como undefined e buildAudience tira a chave. Valor
+// não inteiro fica no campo (NaN não existe em number) e validateCriterion recusa.
+function AgeField({ label, value, onChange }: { label: string; value: number | undefined; onChange(n: number | undefined): void }) {
+  return (
+    <label style={labelStyle}>
+      {label}
+      <input type="number" step="any" value={value ?? ""} style={inputStyle}
+        onChange={(e) => onChange(e.target.value === "" ? undefined : Number(e.target.value))} />
+    </label>
   );
 }
 

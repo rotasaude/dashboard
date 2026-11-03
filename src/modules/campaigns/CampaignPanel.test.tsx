@@ -52,6 +52,21 @@ describe("CampaignPanel", () => {
     expect(await screen.findByText(/moradores de Boqueirão e Xaxim que faltaram a um agendamento/)).toBeTruthy();
   });
 
+  it("vacinados depois do envio: só quando o api manda o número", async () => {
+    mocked(api.getCampaign).mockResolvedValue(sent({ vaccinated_count: 7 }));
+    renderPanel();
+    const result = within(await screen.findByRole("region", { name: "Resultado" }));
+    expect(result.getByText("Vacinados depois do envio")).toBeTruthy();
+    expect(result.getByText("7")).toBeTruthy();
+  });
+
+  it("vaccinated_count nulo: o rótulo não aparece", async () => {
+    mocked(api.getCampaign).mockResolvedValue(sent({ vaccinated_count: null }));
+    renderPanel();
+    await screen.findByRole("region", { name: "Resultado" });
+    expect(screen.queryByText("Vacinados depois do envio")).toBeNull();
+  });
+
   it("SMS por status, sem nenhuma lista de pessoas", async () => {
     mocked(api.getCampaign).mockResolvedValue(sent());
     renderPanel();

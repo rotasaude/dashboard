@@ -3,7 +3,8 @@
 // de cache, rótulos, período padrão dos critérios, validação que espelha o
 // schema do api, montagem do JSON do público e tradução das recusas.
 import {
-  ApiError, type Audience, type AudienceGeo, type CampaignStatus, type Criterion, type CriterionKind, type SmsStatus
+  ApiError, type Audience, type AudienceGeo, type CampaignOptions, type CampaignStatus, type Criterion, type CriterionKind,
+  type SmsStatus
 } from "./api";
 import { cityIsoDate, parseCityLocal } from "./format";
 
@@ -60,10 +61,19 @@ export const CRITERION_LABEL: Record<CriterionKind, string> = {
   appointment_request_open: "Pedido de agendamento aberto",
   // Módulo 29 (D12): só oferecidos quando o api manda `immunobiologicals` nas opções (Task 14).
   vaccine_overdue: "Vacina em atraso",
-  vaccination_record_unchecked: "Caderneta de vacinação não conferida"
+  vaccination_record_unchecked: "Caderneta de vacina não conferida"
 };
 export const VACCINE_CRITERION_KINDS: CriterionKind[] = [ "vaccine_overdue", "vaccination_record_unchecked" ];
 export const CRITERION_KINDS = (Object.keys(CRITERION_LABEL) as CriterionKind[]).filter((k) => !VACCINE_CRITERION_KINDS.includes(k));
+export const MAX_AGE_MONTHS = 1200;
+export const VACCINE_OVERDUE_NOTE =
+  "Só entram cadernetas conferidas na sala de vacina. Para chamar quem ainda não trouxe a caderneta, use “Caderneta de vacina não conferida”.";
+
+// O api só manda o catálogo de vacinas com `vaccination` ligado (D12; V13):
+// sem ele, os critérios de vacina não são oferecidos.
+export function criterionKindsFor(options: CampaignOptions): CriterionKind[] {
+  return options.immunobiologicals ? [ ...CRITERION_KINDS, ...VACCINE_CRITERION_KINDS ] : CRITERION_KINDS;
+}
 
 export const OUTCOME_LABEL: Record<string, string> = {
   discharged: "atendido e liberado", referred: "encaminhado", return: "retorno", left: "saiu sem atendimento",
@@ -135,6 +145,13 @@ export function validateCriterion(c: Criterion, today: string): string | null {
   if (c.kind === "protocol_period" && !c.protocol_name) return "escolha o protocolo";
   if (c.kind === "triage_tier" && c.tiers.length === 0) return "marque ao menos uma faixa";
   if (c.kind === "attendance_outcome" && c.outcomes.length === 0) return "marque ao menos um desfecho";
+  if (c.kind === "vaccine_overdue" && c.immunobiological_codes.length === 0) return "marque ao menos uma vacina";
+  if (c.kind === "vaccine_overdue" || c.kind === "vaccination_record_unchecked") {
+    const { age_min_months: min, age_max_months: max } = c;
+    const valid = (n: number | undefined) => n === undefined || (Number.isInteger(n) && n >= 0 && n <= MAX_AGE_MONTHS);
+    if (!valid(min) || !valid(max)) return `idade em meses: número inteiro de 0 a ${MAX_AGE_MONTHS}`;
+    if (min !== undefined && max !== undefined && min > max) return "a idade mínima é maior que a máxima";
+  }
   return null;
 }
 
@@ -180,6 +197,16 @@ function cleanCriterion(c: Criterion): Criterion {
       ...(c.kinds && c.kinds.length > 0 ? { kinds: c.kinds } : {}),
       ...(c.target_unit_id ? { target_unit_id: c.target_unit_id } : {})
     };
+  }
+  if (c.kind === "vaccine_overdue" || c.kind === "vaccination_record_unchecked") {
+    const { age_min_months, age_max_months } = c;
+    const age = {
+      ...(typeof age_min_months === "number" ? { age_min_months } : {}),
+      ...(typeof age_max_months === "number" ? { age_max_months } : {})
+    };
+    return c.kind === "vaccine_overdue"
+      ? { kind: c.kind, immunobiological_codes: [ ...new Set(c.immunobiological_codes) ], ...age }
+      : { kind: c.kind, ...age };
   }
   return c;
 }
@@ -230,6 +257,7 @@ const MESSAGES: Record<string, string> = {
   invalid_send_at: "horário fora da janela: agende de 5 minutos a 90 dias a partir de agora",
   not_found: "campanha não encontrada — volte à lista",
   invalid_setting: "valor inválido para a chave de SMS",
+  feature_disabled: "a sala de vacina não está ligada nesta cidade — os critérios de vacina não podem ser usados; tire-os do público",
   city_profile_missing: "a cidade ainda não tem perfil configurado; fale com o suporte"
 };
 const GENERIC = "não foi possível concluir — tente de novo";
