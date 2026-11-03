@@ -80,6 +80,47 @@ describe("resumo mensal (F-29.5)", () => {
     await waitFor(() => expect(api.getMonthlySummary).toHaveBeenLastCalledWith({ central: true }, "2026-10"));
   });
 
+  it("colunas completas: o saldo final se reproduz só com o que está na tela; Total soma tudo", async () => {
+    vi.mocked(api.listMyVaccineLocations).mockResolvedValue([ ROOM ]);
+    const base = monthly().rows[0];
+    // 1.200 + 300 + 0 − 0 − 400 (frascos) − 50 (unidose) − 30 (ajuste negativo) − 10 (perda física) = 1.010; um frasco abriu e segue aberto.
+    const a: typeof base = { ...base, opening_balance: 1200, received: 300, vial_doses: 400, unit_doses: 50, adjustment: -30, physical_loss: { broken: 10 }, closing_balance: 1010, vials_opened: 40 };
+    const b: typeof base = { ...base, lot: { ...base.lot, id: "lot16", number: "BCG2611" }, opening_balance: 10, received: 0, vial_doses: 0, unit_doses: 0, adjustment: 3,
+      physical_loss: {}, closing_balance: 13, vials_opened: 1 };
+    const calc = (r: typeof base) => r.opening_balance + r.received + r.transferred_in - r.transferred_out - r.vial_doses - r.unit_doses + r.adjustment
+      - Object.values(r.physical_loss).reduce((n, v) => n + v, 0);
+    expect(calc(a)).toBe(a.closing_balance);
+    expect(calc(b)).toBe(b.closing_balance);
+    vi.mocked(api.getMonthlySummary).mockResolvedValue(monthly({ rows: [ a, b ] }));
+    renderWithProviders(<VaccinationSummary today={TODAY29} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Ver resumo" }));
+    const table = await screen.findByRole("region", { name: "Movimentação do mês" });
+    for (const h of [ "Doses de frascos abertos", "Doses unidose aplicadas", "Ajuste de inventário", "Frascos abertos" ]) expect(within(table).getByText(h)).not.toBeNull();
+    const rows = within(table).getAllByRole("row");
+    const cells = (i: number) => within(rows[i]).getAllByRole("cell").map((c) => c.textContent);
+    expect(cells(1)).toContain("−30");
+    expect(cells(1)).toContain("1.200");
+    expect(cells(1)).toContain("1.010");
+    expect(cells(2)).toContain("+3");
+    const total = cells(3);
+    expect(total[0]).toBe("Total");
+    expect(total).toContain("1.210"); // saldo inicial
+    expect(total).toContain("−27");   // ajuste
+    expect(total).toContain("1.023"); // saldo final
+    expect(total).toContain("41");    // frascos abertos
+  });
+
+  it("trocar o local não busca sozinho", async () => {
+    vi.mocked(api.listMyVaccineLocations).mockResolvedValue([ ROOM, COLD_CENTRAL ]);
+    vi.mocked(api.getMonthlySummary).mockResolvedValue(monthly());
+    renderWithProviders(<VaccinationSummary today={TODAY29} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Ver resumo" }));
+    await screen.findByRole("region", { name: "Movimentação do mês" });
+    fireEvent.change(screen.getByLabelText("Local"), { target: { value: "l9" } });
+    expect(screen.queryByRole("region", { name: "Movimentação do mês" })).toBeNull();
+    expect(api.getMonthlySummary).toHaveBeenCalledTimes(1);
+  });
+
   it("código de perda desconhecido aparece cru; mês inválido do api vira frase", async () => {
     vi.mocked(api.listMyVaccineLocations).mockResolvedValue([ ROOM ]);
     vi.mocked(api.getMonthlySummary).mockResolvedValue(monthly({ rows: [ { ...monthly().rows[0], physical_loss: { mystery: 4 } } ] }));

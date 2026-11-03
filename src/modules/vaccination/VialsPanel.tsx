@@ -65,7 +65,7 @@ export function VialsPanel({ room, now, lead }: { room: VaccineLocation; now?: D
             { label: "Lote", w: "1fr", render: (v) => <span className="mono">{v.lot.number}</span> },
             { label: "Aberto em", w: "1.2fr", render: (v) => <span className="mono">{fmtDateTime(v.opened_at)}</span> },
             { label: "Doses", w: "1.2fr", render: (v) => (
-              v.status === "open" ? `restam ${v.doses_left} de ${v.doses_per_vial} doses` : `sobraram ${v.doses_left} de ${v.doses_per_vial} doses`
+              v.status === "open" && !expiredNow(v, at) ? `restam ${v.doses_left} de ${v.doses_per_vial} doses` : `sobraram ${v.doses_left} de ${v.doses_per_vial} doses`
             ) },
             { label: "Tempo restante", w: "1.2fr", render: (v) => <span className="mono">{v.status === "open" && !expiredNow(v, at) ? vialRemaining(v, at) : "—"}</span> },
             { label: "Situação", w: "1fr", card: "pair", render: (v) => (

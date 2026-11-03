@@ -18,6 +18,7 @@ import { VaccineLocationPick } from "./vaccination/VaccineLocationPick";
 type Line = { kind: "row"; row: MonthlySummaryRow } | { kind: "total" };
 
 const sum = (rows: MonthlySummaryRow[], pick: (r: MonthlySummaryRow) => number): number => rows.reduce((n, r) => n + pick(r), 0);
+const signed = (n: number): string => (n > 0 ? `+${fmtNumber(n)}` : n < 0 ? `−${fmtNumber(-n)}` : "0");
 const physical = (r: MonthlySummaryRow): number => Object.values(r.physical_loss).reduce((n, v) => n + v, 0);
 
 export function VaccinationSummary({ today }: { today?: string } = {}) {
@@ -89,8 +90,13 @@ function SummaryBody({ location, today }: { location: VaccineLocation; today?: s
               { label: "Transferências recebidas", w: "0.9fr", align: "right", render: cell((r) => r.transferred_in) },
               { label: "Transferências enviadas", w: "0.9fr", align: "right", render: cell((r) => r.transferred_out) },
               { label: "Frascos abertos", w: "0.8fr", align: "right", render: cell((r) => r.vials_opened) },
+              { label: "Doses de frascos abertos", w: "0.9fr", align: "right", render: cell((r) => r.vial_doses) },
+              { label: "Doses unidose aplicadas", w: "0.9fr", align: "right", render: cell((r) => r.unit_doses) },
               { label: "Doses aplicadas", w: "0.8fr", align: "right", render: cell((r) => r.doses_applied) },
               { label: "Perda técnica", w: "0.8fr", align: "right", render: cell((r) => r.technical_loss) },
+              { label: "Ajuste de inventário", w: "0.8fr", align: "right", render: (l) => (
+                <span className="mono">{signed(l.kind === "row" ? l.row.adjustment : sum(rows, (r) => r.adjustment))}</span>
+              ) },
               { label: "Perda física", w: "1.3fr", align: "right", render: (l) => {
                 if (l.kind === "total") return num(sum(rows, physical));
                 const detail = Object.entries(l.row.physical_loss).filter(([ , n ]) => n !== 0).map(([ code, n ]) => `${lossLabel(code)}: ${fmtNumber(n)}`);
@@ -105,6 +111,7 @@ function SummaryBody({ location, today }: { location: VaccineLocation; today?: s
             ]}
             rows={lines} rowKey={(l, i) => l.kind === "total" ? "total" : `${l.row.lot.id}-${i}`} empty="nenhuma movimentação neste mês"
           />
+          <p style={muted}>Saldo final = saldo inicial + entradas + transferências recebidas − enviadas − doses de frascos abertos − doses unidose + ajuste − perda física.</p>
         </section>
       )}
     </div>
