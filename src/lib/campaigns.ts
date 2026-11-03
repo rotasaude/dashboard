@@ -66,6 +66,7 @@ export const CRITERION_LABEL: Record<CriterionKind, string> = {
 export const VACCINE_CRITERION_KINDS: CriterionKind[] = [ "vaccine_overdue", "vaccination_record_unchecked" ];
 export const CRITERION_KINDS = (Object.keys(CRITERION_LABEL) as CriterionKind[]).filter((k) => !VACCINE_CRITERION_KINDS.includes(k));
 export const MAX_AGE_MONTHS = 1200;
+export const MAX_IMMUNOBIOLOGICALS = 20;
 export const VACCINE_OVERDUE_NOTE =
   "Só entram cadernetas conferidas na sala de vacina. Para chamar quem ainda não trouxe a caderneta, use “Caderneta de vacina não conferida”.";
 
@@ -146,6 +147,9 @@ export function validateCriterion(c: Criterion, today: string): string | null {
   if (c.kind === "triage_tier" && c.tiers.length === 0) return "marque ao menos uma faixa";
   if (c.kind === "attendance_outcome" && c.outcomes.length === 0) return "marque ao menos um desfecho";
   if (c.kind === "vaccine_overdue" && c.immunobiological_codes.length === 0) return "marque ao menos uma vacina";
+  if (c.kind === "vaccine_overdue" && new Set(c.immunobiological_codes).size > MAX_IMMUNOBIOLOGICALS) {
+    return `no máximo ${MAX_IMMUNOBIOLOGICALS} vacinas por critério`;
+  }
   if (c.kind === "vaccine_overdue" || c.kind === "vaccination_record_unchecked") {
     const { age_min_months: min, age_max_months: max } = c;
     const valid = (n: number | undefined) => n === undefined || (Number.isInteger(n) && n >= 0 && n <= MAX_AGE_MONTHS);

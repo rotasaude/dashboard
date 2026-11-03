@@ -105,7 +105,7 @@ function AgeField({ label, value, onChange }: { label: string; value: number | u
   return (
     <label style={labelStyle}>
       {label}
-      <input type="number" step="any" value={value ?? ""} style={inputStyle}
+      <input type="number" min={0} step={1} value={value ?? ""} style={inputStyle}
         onChange={(e) => onChange(e.target.value === "" ? undefined : Number(e.target.value))} />
     </label>
   );

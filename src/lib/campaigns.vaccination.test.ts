@@ -28,6 +28,12 @@ describe("critérios de vacina (módulo 29)", () => {
       { kind: "vaccine_overdue", immunobiological_codes: [ "42", "15" ], age_max_months: 23 },
       { kind: "vaccination_record_unchecked" } ]);
   });
+  it("no máximo 20 vacinas por critério", () => {
+    const codes = (n: number) => Array.from({ length: n }, (_, i) => String(i + 1));
+    expect(validateCriterion({ kind: "vaccine_overdue", immunobiological_codes: codes(20) }, "2026-11-02")).toBeNull();
+    expect(validateCriterion({ kind: "vaccine_overdue", immunobiological_codes: codes(21) }, "2026-11-02"))
+      .toBe("no máximo 20 vacinas por critério");
+  });
   it("feature_disabled tem frase própria", () => {
     const msg = campaignError(new ApiError(403, { error: "feature_disabled", feature: "vaccination" }, "403"));
     expect(msg).toMatch(/sala de vacina não está ligada/);
