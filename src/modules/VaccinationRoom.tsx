@@ -6,13 +6,14 @@
 // cancelar (com ou sem substituição) relê a caderneta e diz "Dose cancelada." / "Dose cancelada e substituída.". Respostas que chegam
 // depois de trocar de cidadão são descartadas (`seq` e a guarda de paciente em `replaceCard`).
 import { useEffect, useRef, useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   errorCode, getVaccinationCard, getVaccinationCatalog, type CardItem, type CardRequest, type Immunization, type VaccinationCard, type VaccineLocation
 } from "../lib/api";
 import { cityIsoDate } from "../lib/format";
+import { PH_POSITIONS_KEY } from "../lib/pharmacy";
 import {
-  DOSE_CANCELLED, DOSE_REPLACED, DOSE_SAVED, STATIC_QUERY, TRANSCRIPTION_SAVED, VAC_CATALOG_KEY, doseSavedText, vaccinationError
+  DOSE_CANCELLED, DOSE_REPLACED, DOSE_SAVED, STATIC_QUERY, TRANSCRIPTION_SAVED, VAC_CATALOG_KEY, VAC_VIALS_KEY, doseSavedText, vaccinationError
 } from "../lib/vaccination";
 import { secondaryButtonStyle } from "../components/formStyles";
 import { alert, muted, panel, row, stack, title } from "./exams/styles";
@@ -40,6 +41,7 @@ export function VaccinationRoom({ now, onGoToSecurity }: { now?: Date; onGoToSec
 
 function RoomBody({ room, now: fixedNow, onGoToSecurity }: { room: VaccineLocation; now?: Date; onGoToSecurity?(): void }) {
   const roomId = room.room_id as string;
+  const client = useQueryClient();
   const now = fixedNow ?? new Date();
   const today = cityIsoDate(now);
   const catalog = useQuery({ queryKey: [ VAC_CATALOG_KEY ], queryFn: getVaccinationCatalog, ...STATIC_QUERY });
@@ -94,14 +96,22 @@ function RoomBody({ room, now: fixedNow, onGoToSecurity }: { room: VaccineLocati
     setView(next);
   }
 
+  // A dose debita a posição e pode gastar frasco: a próxima leitura de estoque e de frascos da sala vem fresca.
+  function refreshStock() {
+    void client.invalidateQueries({ queryKey: [ PH_POSITIONS_KEY, room.id ] });
+    void client.invalidateQueries({ queryKey: [ VAC_VIALS_KEY, roomId ] });
+  }
+
   function onSaved(imm: Immunization) {
     setView(null);
+    refreshStock();
     const code = imm.immunobiological.code;
     rereadCard({ after: (c) => doseSavedText(c, code, catalog.data), fallback: DOSE_SAVED });
   }
 
   function onCancelled(res: CancelResult) {
     setView(null);
+    if (res.replacement) refreshStock();
     const text = res.replacement ? DOSE_REPLACED : DOSE_CANCELLED;
     rereadCard({ after: () => text, fallback: text });
   }

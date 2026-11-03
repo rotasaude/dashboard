@@ -210,6 +210,8 @@ export function DoseFields({ room, patient, catalog, item = null, draft, onChang
       onSuccess: (v) => {
         // O frasco novo entra na lista sem reler (a escolha não pode depender de uma releitura).
         client.setQueryData<Vial[]>(vialsKey, (old) => [ ...(old ?? []).filter((x) => x.id !== v.id), v ]);
+        void client.invalidateQueries({ queryKey: [ PH_POSITIONS_KEY, room.id ] });
+        void client.invalidateQueries({ queryKey: [ VAC_VIALS_KEY, roomId ] });
         onChange("vialId", v.id);
       },
       onError: (err) => setOpenProblem(vaccinationRefusals(err).map((r) => r.text).join("; "))

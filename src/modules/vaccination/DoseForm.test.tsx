@@ -6,6 +6,8 @@ import {
   BCG, BCG_ITEM, CATALOG29, NOW29, ROOM, card, cardItem, cardPatient, immunization, vacLotBalance, vacPosition, vacUser, vial
 } from "../../test/vaccinationFixtures";
 import * as api from "../../lib/api";
+import { PH_POSITIONS_KEY } from "../../lib/pharmacy";
+import { VAC_VIALS_KEY } from "../../lib/vaccination";
 import { DoseForm, STALE_REFUSAL } from "./DoseForm";
 import { VaccinationRoom } from "../VaccinationRoom";
 
@@ -145,13 +147,36 @@ describe("registro da dose (F-29.3)", () => {
   it("multidose sem frasco aberto: abre o frasco do lote e o escolhe", async () => {
     const bcgLot = vacLotBalance({ lot: { ...vacLotBalance().lot, id: "lot15", item: BCG_ITEM, lot_number: "BCG2610" } });
     vi.mocked(api.listPositions).mockResolvedValue({ positions: [ vacPosition({ item: BCG_ITEM, lots: [ bcgLot ] }) ], next_before: null });
-    vi.mocked(api.openVial).mockResolvedValue(vial({ id: "v7", doses_used: 0, doses_left: 10 }));
+    // O frasco aberto passa a constar na releitura que a abertura dispara (como no api).
+    vi.mocked(api.openVial).mockImplementation(async () => {
+      const opened = vial({ id: "v7", doses_used: 0, doses_left: 10 });
+      vi.mocked(api.listVials).mockResolvedValue([ opened ]);
+      return opened;
+    });
     mount(cardItem({ immunobiological: { code: BCG.code, name: BCG.name }, dose: { code: "D1", name: "1ª dose" } }));
     await waitFor(() => expect((screen.getByLabelText("Lote") as HTMLSelectElement).options.length).toBe(2));
     fireEvent.change(screen.getByLabelText("Lote"), { target: { value: "lot15" } });
     fireEvent.click(await screen.findByRole("button", { name: "Abrir frasco deste lote" }));
     await waitFor(() => expect(api.openVial).toHaveBeenCalledWith("r1", "lot15"));
     await waitFor(() => expect((screen.getByLabelText("Frasco aberto") as HTMLSelectElement).value).toBe("v7"));
+  });
+
+  it("M4: abrir o frasco relê a posição e os frascos da sala", async () => {
+    const bcgLot = vacLotBalance({ lot: { ...vacLotBalance().lot, id: "lot15", item: BCG_ITEM, lot_number: "BCG2610" } });
+    vi.mocked(api.listPositions).mockResolvedValue({ positions: [ vacPosition({ item: BCG_ITEM, lots: [ bcgLot ] }) ], next_before: null });
+    // O frasco aberto passa a constar na releitura que a abertura dispara (como no api).
+    vi.mocked(api.openVial).mockImplementation(async () => {
+      const opened = vial({ id: "v7", doses_used: 0, doses_left: 10 });
+      vi.mocked(api.listVials).mockResolvedValue([ opened ]);
+      return opened;
+    });
+    const { client } = mount(cardItem({ immunobiological: { code: BCG.code, name: BCG.name }, dose: { code: "D1", name: "1ª dose" } }));
+    const spy = vi.spyOn(client, "invalidateQueries");
+    await waitFor(() => expect((screen.getByLabelText("Lote") as HTMLSelectElement).options.length).toBe(2));
+    fireEvent.change(screen.getByLabelText("Lote"), { target: { value: "lot15" } });
+    fireEvent.click(await screen.findByRole("button", { name: "Abrir frasco deste lote" }));
+    await waitFor(() => expect(spy).toHaveBeenCalledWith({ queryKey: [ PH_POSITIONS_KEY, ROOM.id ] }));
+    expect(spy).toHaveBeenCalledWith({ queryKey: [ VAC_VIALS_KEY, "r1" ] });
   });
 
   it("C1: sem `now` fixo, o relógio é lido na hora — a hora real não é futura e o frasco vencido sai", async () => {
@@ -304,7 +329,7 @@ describe("dose na sala: aprazamento", () => {
     if (pending) vi.mocked(api.getVaccinationCard).mockReturnValueOnce(reread as unknown as Promise<api.VaccinationCard>);
     else vi.mocked(api.getVaccinationCard).mockResolvedValueOnce(reread);
     vi.mocked(api.recordImmunization).mockResolvedValue(immunization({ id: "im9", dose: { code: "D2", name: "2ª dose" } }));
-    renderWithProviders(<VaccinationRoom now={NOW29} />);
+    const view = renderWithProviders(<VaccinationRoom now={NOW29} />);
     fireEvent.change(await screen.findByLabelText("CPF"), { target: { value: "123.456.789-09" } });
     fireEvent.click(screen.getByRole("button", { name: "Buscar pelo CPF" }));
     fireEvent.click(await screen.findByRole("button", { name: "Abrir a caderneta de Joana Lima" }));
@@ -315,8 +340,16 @@ describe("dose na sala: aprazamento", () => {
     fireEvent.change(screen.getByLabelText("Condição maternal"), { target: { value: "N" } });
     await waitFor(() => expect((screen.getByLabelText("Lote") as HTMLSelectElement).options.length).toBe(2));
     fireEvent.change(screen.getByLabelText("Lote"), { target: { value: "lot9" } });
+    const spy = vi.spyOn(view.client, "invalidateQueries");
     fireEvent.submit(screen.getByRole("form", { name: "Registrar dose" }));
+    return { client: view.client, spy };
   }
+
+  it("M4: dose registrada relê a posição e os frascos da sala", async () => {
+    const { spy } = await recordFromCard(card());
+    await waitFor(() => expect(spy).toHaveBeenCalledWith({ queryKey: [ PH_POSITIONS_KEY, ROOM.id ] }));
+    expect(spy).toHaveBeenCalledWith({ queryKey: [ VAC_VIALS_KEY, "r1" ] });
+  });
 
   it("relê a caderneta e anuncia a próxima dose com foco", async () => {
     await recordFromCard(card({ items: [ cardItem({ status: "complete", applied: { id: "im9", applied_at: "2026-11-02T10:00:00-03:00", transcription: false } }),

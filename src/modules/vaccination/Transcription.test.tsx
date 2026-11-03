@@ -4,6 +4,8 @@ import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/re
 import { renderWithProviders } from "../../test/campaignFixtures";
 import { CATALOG29, NOW29, ROOM, TODAY29, card, cardPatient, immunization, vacPosition, vacUser } from "../../test/vaccinationFixtures";
 import * as api from "../../lib/api";
+import { PH_POSITIONS_KEY } from "../../lib/pharmacy";
+import { VAC_VIALS_KEY } from "../../lib/vaccination";
 import { TranscriptionForm } from "./TranscriptionForm";
 import { CancelDose } from "./CancelDose";
 import { ImmunizationRow } from "./ImmunizationRow";
@@ -338,6 +340,31 @@ describe("botão de cancelar na dose", () => {
   });
 });
 
+describe("ESAVI só onde o api aceita (M6)", () => {
+  const sv = (roles: string[]) => vacUser(roles, { features: [ "clinical_record", "vaccination", "surveillance" ] });
+  const row = (roomId?: string | null) => renderWithProviders(<ul><ImmunizationRow imm={immunization()} onChanged={vi.fn()} roomId={roomId} /></ul>);
+
+  it("vacinador: na sala da dose vê o botão; em outra sala ou sem sala, não", async () => {
+    vi.mocked(api.fetchCurrentSession).mockResolvedValue(sv([ "health_professional" ]));
+    row("r1");
+    expect(await screen.findByRole("button", { name: /^Notificar ESAVI/ })).not.toBeNull();
+    cleanup();
+    row("r2");
+    await waitFor(() => expect(api.fetchCurrentSession).toHaveBeenCalledTimes(2));
+    expect(screen.queryByRole("button", { name: /^Notificar ESAVI/ })).toBeNull();
+    cleanup();
+    row();
+    await waitFor(() => expect(api.fetchCurrentSession).toHaveBeenCalledTimes(3));
+    expect(screen.queryByRole("button", { name: /^Notificar ESAVI/ })).toBeNull();
+  });
+
+  it("papel surveillance vê o botão em qualquer sala", async () => {
+    vi.mocked(api.fetchCurrentSession).mockResolvedValue(sv([ "health_professional", "surveillance" ]));
+    row("r2");
+    expect(await screen.findByRole("button", { name: /^Notificar ESAVI/ })).not.toBeNull();
+  });
+});
+
 describe("na sala", () => {
   beforeEach(() => {
     vi.mocked(api.listMyVaccineLocations).mockResolvedValue([ ROOM ]);
@@ -347,11 +374,12 @@ describe("na sala", () => {
   });
   async function openCard(first: api.VaccinationCard) {
     vi.mocked(api.getVaccinationCard).mockResolvedValueOnce(first);
-    renderWithProviders(<VaccinationRoom now={NOW29} />);
+    const view = renderWithProviders(<VaccinationRoom now={NOW29} />);
     fireEvent.change(await screen.findByLabelText("CPF"), { target: { value: "123.456.789-09" } });
     fireEvent.click(screen.getByRole("button", { name: "Buscar pelo CPF" }));
     fireEvent.click(await screen.findByRole("button", { name: "Abrir a caderneta de Joana Lima" }));
     await screen.findByRole("heading", { name: "Joana Lima" });
+    return view;
   }
 
   it("transcrição troca a caderneta pela da resposta, sem nova leitura", async () => {
@@ -368,6 +396,24 @@ describe("na sala", () => {
     expect((await screen.findByRole("status")).textContent).toBe("Transcrição registrada.");
     expect(screen.queryByText("não conferida")).toBeNull();
     expect(api.getVaccinationCard).toHaveBeenCalledTimes(1);
+  });
+
+  it("M4: cancelar com substituição relê a posição e os frascos; sem substituição, não", async () => {
+    const { client } = await openCard(card());
+    const spy = vi.spyOn(client, "invalidateQueries");
+    vi.mocked(api.cancelImmunization).mockResolvedValue({ cancelled: immunization({ status: "cancelled" }), replacement: immunization({ id: "im8" }) });
+    vi.mocked(api.getVaccinationCard).mockResolvedValueOnce(card());
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar dose — Penta (DTP/HepB/Hib) 1ª dose" }));
+    fireEvent.change(screen.getByLabelText("Motivo do cancelamento"), { target: { value: "lote errado digitado na sala" } });
+    fireEvent.click(screen.getByLabelText("Registrar a dose correta agora"));
+    fireEvent.change(await screen.findByLabelText("Estratégia"), { target: { value: "1" } });
+    fireEvent.change(screen.getByLabelText("Grupo de atendimento"), { target: { value: "1" } });
+    await waitFor(() => expect((screen.getByLabelText("Lote") as HTMLSelectElement).options.length).toBe(2));
+    fireEvent.change(screen.getByLabelText("Lote"), { target: { value: "lot9" } });
+    fireEvent.click(screen.getByRole("button", { name: "Revisar" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Cancelar e substituir" }));
+    await waitFor(() => expect(spy).toHaveBeenCalledWith({ queryKey: [ PH_POSITIONS_KEY, ROOM.id ] }));
+    expect(spy).toHaveBeenCalledWith({ queryKey: [ VAC_VIALS_KEY, "r1" ] });
   });
 
   it("cancelar pela dose: frase e caderneta relida", async () => {
