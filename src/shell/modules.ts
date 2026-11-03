@@ -10,6 +10,7 @@ import { canUseSurveillance } from "../lib/surveillance";
 import { canUseRegulation } from "../lib/regulation";
 import { canUsePharmacy } from "../lib/pharmacy";
 import { canUseDental, dentalRoles } from "../lib/dental";
+import { canUseVaccination } from "../lib/vaccination";
 export type ModuleId =
   | "overview" | "ingestion" | "conversations" | "consent"
   | "triages" | "classification" | "reports" | "protocols" | "events"
@@ -28,6 +29,8 @@ export type ModuleId =
   | "regulation-queue" | "regulation-returned" | "regulation-offers" | "regulation-settings"
   | "pharmacy-dispensing" | "pharmacy-external" | "pharmacy-transfers" | "pharmacy-entries" | "pharmacy-stock" | "pharmacy-adjustments"
   | "pharmacy-alerts" | "pharmacy-admin"
+  | "vaccination-room" | "vaccination-pending" | "vaccination-stock" | "vaccination-cold-chain" | "vaccination-summary" | "vaccination-panel"
+  | "vaccination-admin"
   | "dental-prosthesis" | "dental-ceo-goals" | "dental-indicators" | "dental-admin";
 
 export interface NavItem { id: ModuleId; label: string; icon: string; }
@@ -98,6 +101,15 @@ export const NAV_GROUPS: NavGroupDef[] = [
     { id: "pharmacy-adjustments", label: "Inventário e ajustes", icon: "±" },
     { id: "pharmacy-alerts", label: "Alertas da farmácia", icon: "⚠" },
     { id: "pharmacy-admin", label: "Locais e configurações", icon: "⚙" }
+  ]},
+  { label: "Vacinação", items: [
+    { id: "vaccination-room", label: "Sala de vacina", icon: "✚" },
+    { id: "vaccination-pending", label: "Pendências do envio", icon: "⇪" },
+    { id: "vaccination-stock", label: "Imunobiológicos e frascos", icon: "▣" },
+    { id: "vaccination-cold-chain", label: "Cadeia de frio", icon: "❄" },
+    { id: "vaccination-summary", label: "Resumo mensal", icon: "▤" },
+    { id: "vaccination-panel", label: "Painel de vacinação", icon: "▦" },
+    { id: "vaccination-admin", label: "Salas e rede de frio", icon: "⚙" }
   ]},
   { label: "Saúde bucal", items: [
     { id: "dental-prosthesis", label: "Próteses", icon: "⌓" },
@@ -277,6 +289,9 @@ export function navGroupsFor(
   const isPharmacist = roles.includes("pharmacist");
   const isPharmacyAssistant = roles.includes("pharmacy_assistant");
   const isStockKeeper = roles.includes("stock_keeper");
+  // Módulo 29 (ADR 0047): vaccination, sem exigir pharmacy. Sala e pendências: profissional (o papel na sala vem de
+  // /vaccination/my_locations); estoque, frio e resumo: profissional ou almoxarife; painel: admin e analyst; administração: admin.
+  const vacOn = canUseVaccination(user);
   // Módulo 28 (ADR 0046): dental_care E clinical_record (canUseDental). Próteses do profissional (o api confere o CBO 2232);
   // metas e B1/B2 do admin e do analyst; cadastro do CEO e lista do TSB/ASB do admin.
   const dentalOn = canUseDental(user);
@@ -359,6 +374,12 @@ export function navGroupsFor(
       if (item.id === "pharmacy-entries") return phOn && (isStockKeeper || isPharmacist);
       if (item.id === "pharmacy-adjustments") return phOn && (isPharmacist || isStockKeeper);
       if (item.id === "pharmacy-admin") return phOn && isAdmin;
+      if (item.id === "vaccination-room" || item.id === "vaccination-pending") return vacOn && isProfessional;
+      if (item.id === "vaccination-stock" || item.id === "vaccination-cold-chain" || item.id === "vaccination-summary") {
+        return vacOn && (isProfessional || isStockKeeper);
+      }
+      if (item.id === "vaccination-panel") return vacOn && (isAdmin || isAnalyst);
+      if (item.id === "vaccination-admin") return vacOn && isAdmin;
       if (item.id === "dental-prosthesis") return dentalOn && dental.professional;
       if (item.id === "dental-ceo-goals" || item.id === "dental-indicators") return dentalOn && (dental.admin || dental.analyst);
       if (item.id === "dental-admin") return dentalOn && dental.admin;

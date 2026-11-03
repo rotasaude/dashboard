@@ -12,7 +12,8 @@ import {
   IconVirus, IconBellRinging, IconCalendarX, IconFileSpreadsheet, IconGridDots, IconVirusSearch,
   IconArrowsSplit2, IconListNumbers, IconArrowBackUp, IconBuildingStore, IconClockHour4,
   IconBuildingWarehouse, IconPrescription, IconFilePlus, IconTransfer, IconTruckLoading, IconListSearch, IconScale, IconAlertTriangle, IconBuildingCog,
-  IconDental, IconDentalBroken
+  IconDental, IconDentalBroken,
+  IconVaccine, IconNeedle, IconCloudUpload, IconVaccineBottle, IconTemperatureSnow, IconCalendarMonth, IconReportMedical, IconFridge
 } from "@tabler/icons-react";
 import type { Catalog } from "./types";
 
@@ -31,6 +32,7 @@ export const CATALOG: Catalog = {
     "Regulação": { icon: IconArrowsSplit2, description: "Encaminhamentos a especialista e procedimento, fila, cotas e prazos" },
     "Saúde bucal": { icon: IconDental, description: "Prontuário odontológico, CEO e prótese" },
     "Farmácia": { icon: IconBuildingWarehouse, description: "Almoxarifado, farmácia da unidade, dispensação e alertas" },
+    "Vacinação": { icon: IconVaccine, description: "Sala de vacina, caderneta, envio à RNDS, estoque e cadeia de frio" },
     "Exames":      { icon: IconMicroscope, description: "Pedidos, resultados e prestadores" },
     "Laboratório": { icon: IconFlask, description: "Amostras, laudos, controle de qualidade e estoque" },
     "Faturamento": { icon: IconReceipt, description: "Procedimentos, competências e arquivo BPA" },
@@ -111,6 +113,13 @@ export const CATALOG: Catalog = {
     "pharmacy-adjustments": { icon: IconScale, description: "Ajustes, perdas e vencimentos, com aprovação" },
     "pharmacy-alerts": { icon: IconAlertTriangle, description: "Vencendo, abaixo do mínimo, em trânsito e pendências" },
     "pharmacy-admin": { icon: IconBuildingCog, description: "Locais de estoque, equipe por local e prazos" },
+    "vaccination-room": { icon: IconNeedle, description: "Caderneta do cidadão, dose com lote e frasco, transcrição" },
+    "vaccination-pending": { icon: IconCloudUpload, description: "Doses paradas, recusadas ou perto do prazo de 24 h" },
+    "vaccination-stock": { icon: IconVaccineBottle, description: "Entrada, transferência, frascos abertos, posição e perdas" },
+    "vaccination-cold-chain": { icon: IconTemperatureSnow, description: "Equipamentos, temperatura duas vezes ao dia e conduta" },
+    "vaccination-summary": { icon: IconCalendarMonth, description: "Movimentação do mês para lançar no SIES/SIPNI" },
+    "vaccination-panel": { icon: IconReportMedical, description: "Doses, cobertura do C2, envio à RNDS e perdas" },
+    "vaccination-admin": { icon: IconFridge, description: "Salas, vacinadores, rede de frio e início na cidade" },
     "dental-prosthesis": { icon: IconDentalBroken, description: "Pedidos ao laboratório, etapas e instalação" },
     "dental-ceo-goals": { icon: IconTargetArrow, description: "Meta mensal por especialidade e risco de suspensão" },
     "dental-indicators": { icon: IconChartBar, description: "Primeira consulta e tratamento concluído por equipe" },
