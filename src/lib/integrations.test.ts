@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ApiError } from "./api";
 import {
-  checkLabel, checkSummary, credentialLabel, featureState, integrationsError, missingPhrase, recordModeLabel, setSummary
+  checkLabel, checkSummary, cnesProblem, credentialLabel, featureState, integrationsError, missingPhrase, pfxProblem, recordModeLabel, setSummary
 } from "./integrations";
 import { credential } from "../test/recordModeFixtures";
 
@@ -15,7 +15,8 @@ describe("integrações — rótulos", () => {
     expect(recordModeLabel("hybrid")).toBe("hybrid");
     expect(credentialLabel("ledi")).toBe("e-SUS PEC (envio LEDI)");
     expect(credentialLabel("cadsus")).toBe("CADSUS");
-    expect(credentialLabel("rnds")).toBe("rnds");
+    expect(credentialLabel("rnds")).toBe("RNDS — vacinação (certificado A1)");
+    expect(credentialLabel("outra")).toBe("outra");
   });
 
   it("cadastro: quando e por quem; não cadastrada", () => {
@@ -50,7 +51,7 @@ describe("integrações — o que falta (contratos §2)", () => {
 
   it("código desconhecido nunca some", () => {
     expect(missingPhrase("rnds_certificate_missing")).toBe("pendência não reconhecida: rnds_certificate_missing");
-    expect(missingPhrase("credential_missing:rnds")).toBe("cadastre a credencial do rnds, no quadro Credenciais");
+    expect(missingPhrase("credential_missing:rnds")).toBe("cadastre a credencial do RNDS — vacinação (certificado A1), no quadro Credenciais");
   });
 
   it("estado da funcionalidade: ligada e funcionando, ligada e parada, desligada", () => {
@@ -71,5 +72,29 @@ describe("integrações — erros", () => {
     expect(integrationsError(apiError(403, { error: "missing_role" }))).toBe("seu papel não permite esta ação");
     expect(integrationsError(apiError(401, ""))).toBe("sessão expirada — entre de novo");
     expect(integrationsError(new Error("x"))).toBe("não foi possível concluir — tente de novo");
+  });
+});
+
+describe("integrações — certificado A1 da RNDS", () => {
+  it("pfxProblem e cnesProblem", () => {
+    expect(pfxProblem(null)).toBe("escolha o arquivo do certificado (.pfx ou .p12)");
+    expect(pfxProblem(new File([ "x" ], "a.pdf"))).toBe("o certificado A1 é um arquivo .pfx ou .p12");
+    expect(pfxProblem(new File([ new Uint8Array(102_401) ], "a.pfx"))).toBe("o arquivo passa de 100 KB — confira se é o certificado A1");
+    expect(pfxProblem(new File([ "x" ], "A.P12"))).toBeNull();
+    expect(cnesProblem(" 2001234 ")).toBeNull();
+    expect(cnesProblem("20012")).toBe("o CNES solicitante tem 7 dígitos");
+  });
+
+  it("recusas do api viram frase", () => {
+    expect(integrationsError(apiError(422, { error: "invalid_certificate" }))).toMatch(/não abriu com essa senha/);
+    expect(integrationsError(apiError(422, { error: "certificate_expired" }))).toMatch(/vencido/);
+    expect(integrationsError(apiError(422, { error: "invalid_requester_cnes" }))).toBe("o CNES solicitante tem 7 dígitos");
+  });
+
+  it("pendências dos interruptores", () => {
+    expect(missingPhrase("rnds_immunization_disabled")).toBe("ligue antes: Envio das vacinas à RNDS");
+    expect(missingPhrase("vaccination_catalog_under_review")).toMatch(/em revisão/);
+    expect(missingPhrase("credential_unauthorized:rnds")).toMatch(/RNDS recusou o certificado/);
+    expect(missingPhrase("credential_missing:rnds")).toMatch(/RNDS — vacinação/);
   });
 });

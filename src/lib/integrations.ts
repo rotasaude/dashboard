@@ -4,6 +4,7 @@
 import { ApiError, type CityFeatureState, type CredentialCheckStatus, type IntegrationCredential } from "./api";
 import { describeActionError } from "./actionErrors";
 import { fmtDateTime } from "./format";
+import { featureLabel } from "./features";
 
 export const INTEGRATIONS_KEY = [ "integrations" ] as const;
 
@@ -13,7 +14,7 @@ const RECORD_MODE_LABEL: Record<string, string> = {
   record: "prontuário — o Rota Saúde é o prontuário da cidade"
 };
 
-const CREDENTIAL_LABEL: Record<string, string> = { ledi: "e-SUS PEC (envio LEDI)", cadsus: "CADSUS" };
+const CREDENTIAL_LABEL: Record<string, string> = { ledi: "e-SUS PEC (envio LEDI)", cadsus: "CADSUS", rnds: "RNDS — vacinação (certificado A1)" };
 
 const CHECK_LABEL: Record<CredentialCheckStatus, string> = {
   ok: "conexão ok",
@@ -25,8 +26,26 @@ const CHECK_LABEL: Record<CredentialCheckStatus, string> = {
 const MESSAGES: Record<string, string> = {
   invalid_credential: "preencha usuário e senha",
   unknown_kind: "tipo de credencial desconhecido — recarregue a página",
-  credential_missing: "cadastre a credencial antes de testar"
+  credential_missing: "cadastre a credencial antes de testar",
+  // Módulo 29 (ADR 0047): certificado A1 da RNDS. Nada do segredo aparece na frase.
+  invalid_certificate: "o certificado não abriu com essa senha — confira o arquivo .pfx e a senha",
+  certificate_expired: "o certificado está vencido — use um certificado A1 válido",
+  invalid_requester_cnes: "o CNES solicitante tem 7 dígitos"
 };
+
+const PFX_MAX_BYTES = 100 * 1024;
+
+// Conferência do arquivo antes de pedir a senha (o api confere de novo, abrindo o PFX).
+export function pfxProblem(file: File | null): string | null {
+  if (!file) return "escolha o arquivo do certificado (.pfx ou .p12)";
+  if (!/\.(pfx|p12)$/i.test(file.name)) return "o certificado A1 é um arquivo .pfx ou .p12";
+  if (file.size > PFX_MAX_BYTES) return "o arquivo passa de 100 KB — confira se é o certificado A1";
+  return null;
+}
+
+export function cnesProblem(raw: string): string | null {
+  return /^\d{7}$/.test(raw.trim()) ? null : "o CNES solicitante tem 7 dígitos";
+}
 
 export function recordModeLabel(mode: string): string {
   return RECORD_MODE_LABEL[mode] ?? mode;
@@ -66,9 +85,15 @@ export function missingPhrase(code: string): string {
       return "falta o código IBGE da cidade (quem cadastra é o operador da plataforma)";
     case "credential_missing":
       return `cadastre a credencial do ${credentialLabel(kind)}, no quadro Credenciais`;
+    case "record_mode_not_record":
+      return "o modo de prontuário da cidade não é o prontuário do Rota Saúde (quem define é o operador da plataforma)";
+    case "vaccination_catalog_under_review":
+      return "o catálogo de imunobiológicos ainda está em revisão (a equipe do Rota Saúde libera)";
     case "credential_unauthorized":
+      if (kind === "rnds") return `a RNDS recusou o certificado — troque o certificado A1 e teste de novo`;
       return `a credencial do ${credentialLabel(kind)} foi recusada — troque o usuário e a senha e teste de novo`;
     default:
+      if (head.endsWith("_disabled")) return `ligue antes: ${featureLabel(head.slice(0, -"_disabled".length))}`;
       return `pendência não reconhecida: ${code}`;
   }
 }

@@ -23,6 +23,7 @@ import { DataTable } from "../components/DataTable";
 import { Tag } from "../components/Tag";
 import { KeyValue } from "../components/KeyValue";
 import { EmptyState } from "../components/EmptyState";
+import { RndsCredentialForm } from "./integrations/RndsCredentialForm";
 import { SensitiveAction } from "../components/SensitiveAction";
 import { buttonStyle, disabledButtonStyle, secondaryButtonStyle } from "../components/formStyles";
 
@@ -75,7 +76,17 @@ export function Integrations({ onGoToSecurity }: { onGoToSecurity?(): void }) {
       {notice && <p role="status" style={statusStyle}>{notice}</p>}
       {query.isPending && <p className="mono" style={loadingStyle}>carregando…</p>}
 
-      {editing && (
+      {editing?.kind === "rnds" && (
+        <RndsCredentialForm
+          key="rnds"
+          credential={editing}
+          onDone={(message) => { setEditing(null); setError(null); setNotice(message); reload(); }}
+          onCancel={() => setEditing(null)}
+          onGoToSecurity={onGoToSecurity}
+        />
+      )}
+
+      {editing && editing.kind !== "rnds" && (
         <SensitiveAction
           key={editing.kind}
           title={`${editing.set ? "Trocar" : "Cadastrar"} credencial — ${credentialLabel(editing.kind)}`}
