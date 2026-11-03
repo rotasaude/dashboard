@@ -5,7 +5,8 @@ import {
   type ReadingInput, type StockPosition, type TranscriptionInput, type VaccinationCard, type VaccinationCatalog, type VaccineLocation, type Vial
 } from "./api";
 import { NOMINAL_QUERY, STATIC_QUERY } from "./careLines";
-import { featureDisabledKey, hasFeature } from "./features";
+import { featureDisabledKey, featureLabel, hasFeature } from "./features";
+import { fmtDay } from "./exams";
 import { cityDateFormat, cityIsoDate, parseCityLocal } from "./format";
 import { cents, pharmacyRefusals, type Problem, type Refusal } from "./pharmacy";
 
@@ -80,6 +81,12 @@ export const cardStatusLabel = pick({
 const CARD_TONE: Record<string, string> = { due: "info", overdue: "down", upcoming: "neutral", complete: "ok", unchecked: "warn" };
 export const cardStatusTone = (code: string): string => CARD_TONE[code] ?? "neutral";
 
+// Rótulo do item na caderneta: `due` com data passada (o api mantém `due` na janela) não é "devida hoje".
+export function cardItemStatusLabel(item: CardItem, status: string, today: string): string {
+  if (status === "due" && item.due_on && item.due_on < today) return `já pode tomar desde ${fmtDay(item.due_on)}`;
+  return cardStatusLabel(status);
+}
+
 export const checkModeLabel = pick({
   transcribed: "conferida por transcrição", confirmed_complete: "conferida: caderneta completa",
   born_after_go_live: "nasceu depois do início — conferida desde o nascimento"
@@ -134,10 +141,12 @@ export function newDoseDraft(imm: Immunobiological | null, doseCode: string, now
   };
 }
 
-// Saldo > 0, não vencido, não bloqueado, do imunobiológico; o que vence primeiro no começo.
-export function lotsForDose(positions: StockPosition[], code: string, today: string): LotBalance[] {
+// Saldo > 0, não vencido, não bloqueado, do imunobiológico; o que vence primeiro no começo. Abrir frasco debita o saldo: o lote com
+// frasco aberto (não vencido e com sobra) continua oferecido mesmo com saldo 0 (o api só confere saldo da unidose).
+export function lotsForDose(positions: StockPosition[], code: string, today: string, vials: Vial[] = [], now: Date = new Date()): LotBalance[] {
   return positions.flatMap((p) => p.lots)
-    .filter((b) => b.lot.item.immunobiological_code === code && cents(b.balance) > 0 && !b.expired && !b.blocked && b.lot.expires_on >= today)
+    .filter((b) => b.lot.item.immunobiological_code === code && !b.expired && !b.blocked && b.lot.expires_on >= today
+      && (cents(b.balance) > 0 || vialsForDose(vials, [ b.lot.id ], now).length > 0))
     .sort((a, b) => a.lot.expires_on.localeCompare(b.lot.expires_on) || a.lot.lot_number.localeCompare(b.lot.lot_number));
 }
 
@@ -168,7 +177,9 @@ export function doseProblems(
   else if (at.getTime() > ctx.now.getTime()) add("applied_at", "a hora da aplicação não pode ser futura");
   if (d.lotId === "") add("lot_id", "escolha o lote do estoque da sala");
   else if (!ctx.lots.some((b) => b.lot.id === d.lotId)) add("lot_id", LOT_REREAD);
-  if (d.vialId === "") {
+  if (imm && !imm.multidose) {
+    // unidose não tem frasco: o resíduo de um rascunho que trocou de vacina não é recusa (doseBody não o envia)
+  } else if (d.vialId === "") {
     if (imm?.multidose) add("vial_id", `${imm.name} é multidose: escolha o frasco aberto ou abra um frasco`);
   } else {
     const known = ctx.vials.find((v) => v.id === d.vialId);
@@ -182,7 +193,8 @@ export function doseProblems(
   return out;
 }
 
-export function doseBody(d: DoseDraft, patientId: string): ImmunizationInput {
+export function doseBody(d: DoseDraft, patientId: string, catalog?: VaccinationCatalog): ImmunizationInput {
+  const unidose = catalog?.immunobiologicals.find((i) => i.code === d.immunobiologicalCode)?.multidose === false;
   const body: ImmunizationInput = {
     patient_id: patientId, immunobiological_code: d.immunobiologicalCode, dose_code: d.doseCode, strategy: d.strategy, care_group: d.careGroup,
     route: d.route, site: d.site, applied_at: (parseCityLocal(d.appliedAt) ?? new Date(NaN)).toISOString(), lot_id: d.lotId
@@ -190,7 +202,7 @@ export function doseBody(d: DoseDraft, patientId: string): ImmunizationInput {
   const maternal = d.maternalCondition.trim();
   const reason = d.overrideReason.trim();
   if (maternal !== "") body.maternal_condition = maternal;
-  if (d.vialId !== "") body.vial_id = d.vialId;
+  if (d.vialId !== "" && !unidose) body.vial_id = d.vialId;
   if (d.campaignId !== "") body.campaign_id = d.campaignId;
   if (reason !== "") body.override_reason = reason;
   return body;
@@ -337,7 +349,7 @@ const ERRORS: Record<string, string> = {
   cancel_not_allowed: "só quem registrou ou o responsável pela sala cancela",
   already_cancelled: "esta dose já foi cancelada — abra a caderneta de novo",
   immunization_cancelled: "esta dose foi cancelada — não tem notificação de ESAVI",
-  not_room_staff: "você não está na equipe desta sala",
+  missing_role: "você não está na equipe desta sala",
   cbo_not_allowed: "o CBO desta pessoa não permite vacinar",
   room_lead_requires_nurse: "o responsável pela sala precisa ser enfermeiro (CBO 2235)",
   professional_link_missing: "a pessoa precisa de vínculo profissional na unidade da sala",
@@ -352,6 +364,7 @@ const ERRORS: Record<string, string> = {
   already_closed: "este frasco já foi encerrado — a lista foi relida",
   not_multidose: "esta vacina não é multidose: não tem frasco para abrir",
   room_lead_required: "só o responsável pela sala faz isso",
+  invalid_range: "a mínima, a atual e a máxima precisam estar em ordem",
   invalid_value: "valor inválido — confira o campo destacado",
   invalid_requester_cnes: "o CNES do solicitante é inválido — confira os 7 dígitos",
   invalid_certificate: "o certificado não abriu — confira o arquivo e a senha",
@@ -374,7 +387,7 @@ export function vaccinationError(err: unknown): string {
 export function vaccinationRefusals(err: unknown): VaccinationRefusal[] {
   const feature = featureDisabledKey(err);
   if (feature !== null) {
-    const text = feature === "" || feature === "vaccination" ? VACCINATION_DISABLED : `${feature} está desligado nesta cidade`;
+    const text = feature === "" || feature === "vaccination" ? VACCINATION_DISABLED : `${featureLabel(feature)} está desligado nesta cidade`;
     return [ { path: "", code: "feature_disabled", text } ];
   }
   const raw = err instanceof ApiError && err.body && typeof err.body === "object" ? (err.body as Record<string, unknown>).problems : undefined;

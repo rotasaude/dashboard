@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { ApiError } from "./api";
 import { itemKey, locationKindLabel } from "./pharmacy";
 import {
-  OVERRIDABLE, VACCINATION_DISABLED, canUseVaccination, cardGroups, doseBody, doseProblems, effectiveStatus, locationAbilities, lotsForDose, monthProblem, newDoseDraft,
+  OVERRIDABLE, VACCINATION_DISABLED, cardItemStatusLabel, canUseVaccination, cardGroups, doseBody, doseProblems, effectiveStatus, locationAbilities, lotsForDose, monthProblem, newDoseDraft,
   newTranscriptionLine, outOfRange, parseCelsius, readingBody, readingProblems, reasonProblem, rndsStatusLabel, blockReasonLabel, splitRefusals,
   termName, transcriptionProblems, vaccinationRefusals, vialRemaining, vialsForDose
 } from "./vaccination";
@@ -155,5 +155,29 @@ describe("recusas do api real", () => {
     expect(vacUser().features).toBeDefined();
     expect(locationAbilities({ ...ROOM, roles: [] })).toEqual({ vaccinate: false, lead: false, keeper: false });
     expect(effectiveStatus(cardItem({ status: "complete" }), null)).toBe("complete");
+  });
+});
+
+describe("fix round 1", () => {
+  it("lote com saldo 0 e frasco aberto continua oferecido", () => {
+    const bal0 = vacLotBalance({ balance: "0" });
+    const pos = [ vacPosition({ lots: [ bal0 ] }) ];
+    expect(lotsForDose(pos, "42", TODAY29)).toEqual([]);
+    const open = vial({ lot: { id: "lot9", number: "PNT2611", immunobiological_code: "42" } });
+    expect(lotsForDose(pos, "42", TODAY29, [ open ], NOW29).map((b) => b.lot.id)).toEqual([ "lot9" ]);
+    expect(lotsForDose(pos, "42", TODAY29, [ { ...open, doses_left: 0 } ], NOW29)).toEqual([]);
+  });
+  it("missing_role e invalid_range com frase da sala; feature alheia com rótulo", () => {
+    expect(vaccinationRefusals(new ApiError(403, { error: "missing_role" }, "403"))[0].text).toBe("você não está na equipe desta sala");
+    expect(vaccinationRefusals(refusal([ { path: "current_c", error: "invalid_range" } ]))[0].text).toBe("a mínima, a atual e a máxima precisam estar em ordem");
+    expect(vaccinationRefusals(refusal([ { path: "lots[0].lot_id", error: "adjustment_pending" } ]))[0].text).toBe("o descarte deste lote já aguarda aprovação");
+    expect(vaccinationRefusals(new ApiError(403, { error: "feature_disabled", feature: "surveillance" }, "403"))[0].text).not.toMatch(/^surveillance /);
+  });
+  it("unidose não manda frasco; due passado não é hoje", () => {
+    const d = { ...newDoseDraft(PENTA, "D2", NOW29), strategy: "1", careGroup: "1", lotId: "lot9", vialId: "v-velho" };
+    expect(doseBody(d, "pa1", CATALOG29)).not.toHaveProperty("vial_id");
+    expect(doseProblems(d, { catalog: CATALOG29, lots: [ vacLotBalance() ], vials: [], now: NOW29 })).toEqual([]);
+    expect(cardItemStatusLabel(cardItem({ due_on: "2026-10-20" }), "due", TODAY29)).toBe("já pode tomar desde 20/10/2026");
+    expect(cardItemStatusLabel(cardItem({ due_on: TODAY29 }), "due", TODAY29)).toBe("devida hoje");
   });
 });
