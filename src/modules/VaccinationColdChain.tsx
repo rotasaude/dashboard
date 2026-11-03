@@ -17,7 +17,7 @@ import {
 import { cityDateFormat, fmtDateTime } from "../lib/format";
 import { PH_POSITIONS_KEY } from "../lib/pharmacy";
 import {
-  STATIC_QUERY, VAC_COLD_KEY, VAC_EQUIPMENTS_KEY, equipmentKindLabel, fmtCelsius, locationAbilities, vaccinationError
+  STATIC_QUERY, VAC_COLD_KEY, VAC_EQUIPMENTS_KEY, VAC_VIALS_KEY, equipmentKindLabel, fmtCelsius, locationAbilities, vaccinationError
 } from "../lib/vaccination";
 import { Panel } from "../components/Panel";
 import { Tag } from "../components/Tag";
@@ -81,7 +81,8 @@ function ColdChainBody({ location, now, onGoToSecurity }: { location: VaccineLoc
   const [ reading, setReading ] = useState<string | null>(null);
 
   const reload = () => Promise.all([
-    client.invalidateQueries({ queryKey: [ VAC_COLD_KEY, location.id ] }), client.invalidateQueries({ queryKey: [ PH_POSITIONS_KEY ] })
+    client.invalidateQueries({ queryKey: [ VAC_COLD_KEY, location.id ] }), client.invalidateQueries({ queryKey: [ PH_POSITIONS_KEY ] }),
+    client.invalidateQueries({ queryKey: [ VAC_VIALS_KEY ] })
   ]);
   const data: ColdChainStatus | undefined = status.data;
   const at = now ?? new Date();

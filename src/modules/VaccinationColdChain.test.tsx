@@ -4,13 +4,14 @@ import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/re
 import { renderWithProviders } from "../test/campaignFixtures";
 import { LEAD_ROOM, NOW29, ROOM, coldStatus, equipment, vacUser } from "../test/vaccinationFixtures";
 import * as api from "../lib/api";
+import { VAC_VIALS_KEY } from "../lib/vaccination";
 import { VaccinationColdChain } from "./VaccinationColdChain";
 
 vi.mock("../lib/api", async (orig) => ({ ...(await orig<typeof api>()), fetchCurrentSession: vi.fn(), listMyVaccineLocations: vi.fn(),
   getColdChainStatus: vi.fn(), listEquipments: vi.fn(), recordReading: vi.fn(), decideExcursion: vi.fn(), createEquipment: vi.fn() }));
 const reading = { id: "rd1", read_at: "2026-11-02T08:00:00-03:00", current_c: 8.5, min_c: 3, max_c: 9, out_of_range: true, by: { name: "Ana" } };
 const excursion = { id: "ex1", equipment_id: "eq1", reading, opened_at: "2026-11-02T08:00:00-03:00",
-  lots: [ { lot_id: "lot9", number: "PNT2611", immunobiological: { code: "42", name: "Penta (DTP/HepB/Hib)" }, balance: "20", pending_adjustment_id: null },
+  lots: [ { lot_id: "lot9", number: "PNT2611", immunobiological: { code: "42", name: "Penta (DTP/HepB/Hib)" }, balance: "20.00", pending_adjustment_id: null },
     { lot_id: "lot15", number: "BCG2610", immunobiological: { code: "15", name: "BCG" }, balance: "40", pending_adjustment_id: null } ] };
 
 beforeEach(() => {
@@ -49,6 +50,67 @@ describe("cadeia de frio (F-29.6)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Salvar leitura" }));
     expect(screen.getByText("informe a temperatura atual (ex.: 4,5)")).not.toBeNull();
     expect(api.recordReading).not.toHaveBeenCalled();
+  });
+
+  it("M5: atual 4 com mínima 5 recusa a mínima acima da atual, sem enviar", async () => {
+    vi.mocked(api.listMyVaccineLocations).mockResolvedValue([ ROOM ]);
+    renderWithProviders(<VaccinationColdChain now={NOW29} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Registrar temperatura — Geladeira 1" }));
+    fireEvent.change(screen.getByLabelText("Temperatura atual"), { target: { value: "4" } });
+    fireEvent.change(screen.getByLabelText("Mínima"), { target: { value: "5" } });
+    fireEvent.change(screen.getByLabelText("Máxima"), { target: { value: "6" } });
+    fireEvent.click(screen.getByRole("button", { name: "Salvar leitura" }));
+    expect(screen.getByText("a mínima não pode ser maior que a atual")).not.toBeNull();
+    expect(screen.queryByText("informe a temperatura atual (ex.: 4,5)")).toBeNull();
+    expect(api.recordReading).not.toHaveBeenCalled();
+  });
+
+  it("M1: o saldo da conduta sai formatado, sem as casas do api", async () => {
+    vi.mocked(api.getColdChainStatus).mockResolvedValue(coldStatus({ open_excursions: [ excursion ] }));
+    vi.mocked(api.listMyVaccineLocations).mockResolvedValue([ LEAD_ROOM ]);
+    renderWithProviders(<VaccinationColdChain now={NOW29} />);
+    const box = await screen.findByRole("region", { name: "Conduta — Geladeira 1" });
+    expect(within(box).getByText("saldo no local: 20 doses")).not.toBeNull();
+    expect(within(box).queryByText(/20\.00/)).toBeNull();
+  });
+
+  it("M2: recusa do api devolve o foco ao lote com erro ou ao alerta do topo", async () => {
+    vi.mocked(api.getColdChainStatus).mockResolvedValue(coldStatus({ open_excursions: [ excursion ] }));
+    vi.mocked(api.listMyVaccineLocations).mockResolvedValue([ LEAD_ROOM ]);
+    vi.mocked(api.decideExcursion).mockRejectedValueOnce(new api.ApiError(422, { error: "lot_blocked", problems: [ { path: "lots[1].reason", error: "lot_blocked" } ] }, "422"));
+    renderWithProviders(<VaccinationColdChain now={NOW29} />);
+    const box = await screen.findByRole("region", { name: "Conduta — Geladeira 1" });
+    const [ penta, bcg ] = within(box).getAllByRole("group");
+    for (const g of [ penta, bcg ]) {
+      fireEvent.click(within(g).getByLabelText("Usar"));
+      fireEvent.change(within(g).getByLabelText("Motivo"), { target: { value: "laudo do fabricante permite uso" } });
+    }
+    fireEvent.click(within(box).getByRole("button", { name: "Revisar" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Registrar conduta" }));
+    await waitFor(() => expect(api.decideExcursion).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(document.activeElement).toBe(within(within(box).getAllByRole("group")[1]).getByLabelText("Usar")));
+    // Recusa sem lote: o foco vai ao alerta do topo.
+    vi.mocked(api.decideExcursion).mockRejectedValueOnce(new api.ApiError(409, { error: "excursion_closed" }, "409"));
+    fireEvent.click(within(box).getByRole("button", { name: "Revisar" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Registrar conduta" }));
+    const top = await screen.findByText("a conduta desta excursão já foi decidida — recarregue");
+    await waitFor(() => expect(document.activeElement).toBe(top));
+  });
+
+  it("M3: depois da conduta, os frascos também são relidos", async () => {
+    vi.mocked(api.getColdChainStatus).mockResolvedValue(coldStatus({ open_excursions: [ excursion ] }));
+    vi.mocked(api.listMyVaccineLocations).mockResolvedValue([ LEAD_ROOM ]);
+    vi.mocked(api.decideExcursion).mockResolvedValue({ excursion_id: "ex1", adjustments: [] });
+    const { client } = renderWithProviders(<VaccinationColdChain now={NOW29} />);
+    const spy = vi.spyOn(client, "invalidateQueries");
+    const box = await screen.findByRole("region", { name: "Conduta — Geladeira 1" });
+    for (const g of within(box).getAllByRole("group")) {
+      fireEvent.click(within(g).getByLabelText("Usar"));
+      fireEvent.change(within(g).getByLabelText("Motivo"), { target: { value: "laudo do fabricante permite uso" } });
+    }
+    fireEvent.click(within(box).getByRole("button", { name: "Revisar" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Registrar conduta" }));
+    await waitFor(() => expect(spy).toHaveBeenCalledWith({ queryKey: [ VAC_VIALS_KEY ] }));
   });
 
   it("conduta: todas as linhas conferidas; vacinador não decide", async () => {

@@ -6,10 +6,11 @@
 // `pending_adjustment_id` e ele reaparece aqui). O descarte passa pelo ajuste do 27a com o motivo `temperature_excursion` (o api põe o
 // loss_code; a tela não manda). Recusa do api (409 excursion_closed, 422 por lote) aparece inteira, na linha do lote ou no topo, com
 // "Atualizar" — nada relê sozinho. Nada em URL, log ou storage.
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ApiError, decideExcursion, type ColdChainExcursion, type ExcursionDecisionLine, type ExcursionDecisionResult, type ExcursionLot
 } from "../../lib/api";
+import { fmtQuantity } from "../../lib/pharmacy";
 import { reasonProblem, vaccinationError, vaccinationRefusals } from "../../lib/vaccination";
 import { SensitiveAction } from "../../components/SensitiveAction";
 import { buttonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
@@ -50,6 +51,14 @@ export function ExcursionDecision({ excursion, equipmentName, onDone, onRefresh,
   const [ refused, setRefused ] = useState(false);
   const [ review, setReview ] = useState<ExcursionDecisionLine[] | null>(null);
   const saved = useRef<ExcursionDecisionResult | null>(null);
+  // Depois de uma recusa do api o SensitiveAction some e o foco cairia no body: vai ao primeiro lote com erro ou ao alerta do topo.
+  const root = useRef<HTMLElement>(null);
+  const [ refocus, setRefocus ] = useState(0);
+  useEffect(() => {
+    if (refocus === 0) return;
+    const target = root.current?.querySelector<HTMLElement>("fieldset[aria-describedby] input") ?? root.current?.querySelector<HTMLElement>('[role="alert"]');
+    target?.focus();
+  }, [ refocus ]);
 
   const open = excursion.lots.filter((l) => !l.pending_adjustment_id);
   const pending = excursion.lots.filter((l) => l.pending_adjustment_id);
@@ -86,13 +95,13 @@ export function ExcursionDecision({ excursion, equipmentName, onDone, onRefresh,
       if (line && lot) errs[line.lot_id] = [ ...(errs[line.lot_id] ?? []), `${lot.number}: ${r.text}` ];
       else top.push(r.text);
     }
-    setLineErrors(errs); setGeneral(top); setRefused(true);
+    setLineErrors(errs); setGeneral(top); setRefused(true); setRefocus((n) => n + 1);
   }
 
   return (
-    <section aria-label={`Conduta — ${equipmentName}`} style={panel}>
+    <section ref={root} aria-label={`Conduta — ${equipmentName}`} style={panel}>
       <h4 style={title}>{`Conduta — ${equipmentName}`}</h4>
-      {general.map((t) => <p key={t} role="alert" style={alert}>{t}</p>)}
+      {general.map((t) => <p key={t} role="alert" tabIndex={-1} style={alert}>{t}</p>)}
       {refused && <div style={row}><button type="button" style={secondaryButtonStyle} onClick={() => { setRefused(false); setGeneral([]); onRefresh(); }}>Atualizar</button></div>}
       {pending.map((lot) => (
         <p key={lot.lot_id} style={muted}>{`${lot.number}: ${PENDING_DISCARD}`}</p>
@@ -104,7 +113,7 @@ export function ExcursionDecision({ excursion, equipmentName, onDone, onRefresh,
         return (
           <fieldset key={lot.lot_id} style={fieldset} disabled={!!review} {...(errs.length > 0 ? { "aria-describedby": `${base}-err` } : {})}>
             <legend style={legend}>{lotLabel(lot)}</legend>
-            <small className="mono" style={muted}>{`saldo no local: ${lot.balance} doses`}</small>
+            <small className="mono" style={muted}>{`saldo no local: ${fmtQuantity(lot.balance)} doses`}</small>
             <div style={row}>
               <label style={checkLabel}>
                 <input id={`${base}-use`} type="radio" name={`${base}-decision`} checked={c.decision === "use"} onChange={() => set(lot.lot_id, { decision: "use" })} />
