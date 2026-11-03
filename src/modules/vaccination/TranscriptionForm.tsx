@@ -37,10 +37,11 @@ export function TranscriptionLineFields({ legend, line, catalog, today, birthDat
   const uid = useId();
   const errId = `${uid}-err`;
   const described = errors.length > 0 ? { "aria-describedby": errId } : {};
-  const text = (key: "lotNumber" | "manufacturerName" | "place", label: string, max: number) => (
+  // Sem maxLength: texto longo (colado) não é cortado; a conferência antes de enviar recusa com a frase (lote 40, fabricante e local 120).
+  const text = (key: "lotNumber" | "manufacturerName" | "place", label: string) => (
     <div style={fieldLabel}>
       <label htmlFor={`${uid}-${key}`}>{label}</label>
-      <input id={`${uid}-${key}`} style={inputStyle} maxLength={max} value={line[key]} onChange={(e) => onChange({ [key]: e.target.value })} />
+      <input id={`${uid}-${key}`} style={inputStyle} value={line[key]} onChange={(e) => onChange({ [key]: e.target.value })} />
     </div>
   );
   return (
@@ -65,9 +66,9 @@ export function TranscriptionLineFields({ legend, line, catalog, today, birthDat
         <input id={`${uid}-on`} type="date" style={inputStyle} max={today} min={birthDate} value={line.appliedOn}
           onChange={(e) => onChange({ appliedOn: e.target.value })} />
       </div>
-      {text("lotNumber", "Lote (opcional)", 40)}
-      {text("manufacturerName", "Fabricante (opcional)", 120)}
-      {text("place", "Local da aplicação (opcional)", 120)}
+      {text("lotNumber", "Lote (opcional)")}
+      {text("manufacturerName", "Fabricante (opcional)")}
+      {text("place", "Local da aplicação (opcional)")}
       {errors.length > 0 && <div id={errId}>{errors.map((t) => <p key={t} style={alert}>{t}</p>)}</div>}
       {onRemove && (
         <div style={row}>

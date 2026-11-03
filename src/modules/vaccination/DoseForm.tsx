@@ -301,7 +301,7 @@ export function DoseFields({ room, patient, catalog, item = null, draft, onChang
         </div>
       )}
       {showReason && field("overrideReason", "Motivo para aplicar mesmo assim", (props) => (
-        <textarea {...props} style={inputStyle} rows={2} maxLength={500} value={draft.overrideReason}
+        <textarea {...props} style={inputStyle} rows={2} value={draft.overrideReason}
           onChange={(e) => onChange("overrideReason", e.target.value)} />
       ))}
     </>

@@ -70,11 +70,45 @@ describe("transcrição (F-29.3)", () => {
     const [ l1 ] = screen.getAllByRole("group", { name: /^Dose transcrita/ });
     const date = within(l1).getByLabelText("Data da aplicação") as HTMLInputElement;
     expect([ date.type, date.max, date.min ]).toEqual([ "date", TODAY29, "2026-07-01" ]);
-    expect((within(l1).getByLabelText("Lote (opcional)") as HTMLInputElement).maxLength).toBe(40);
-    expect((within(l1).getByLabelText("Fabricante (opcional)") as HTMLInputElement).maxLength).toBe(120);
-    expect((within(l1).getByLabelText("Local da aplicação (opcional)") as HTMLInputElement).maxLength).toBe(120);
     fireEvent.click(within(l1).getByRole("button", { name: "Remover dose transcrita 1" }));
     expect(screen.getAllByRole("group", { name: /^Dose transcrita/ })).toHaveLength(1);
+  });
+
+  it("lote colado com 41 caracteres: não corta, recusa na linha e não envia (recusar em vez de cortar)", () => {
+    renderWithProviders(<TranscriptionForm room={ROOM} card={card({ checked: null })} catalog={CATALOG29} today={TODAY29} onDone={vi.fn()} onCancel={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Acrescentar dose" }));
+    const line = screen.getByRole("group", { name: /^Dose transcrita/ });
+    fireEvent.change(within(line).getByLabelText("Vacina"), { target: { value: "15" } });
+    fireEvent.change(within(line).getByLabelText("Dose"), { target: { value: "D1" } });
+    fireEvent.change(within(line).getByLabelText("Data da aplicação"), { target: { value: "2026-07-02" } });
+    const lot = within(line).getByLabelText("Lote (opcional)") as HTMLInputElement;
+    fireEvent.change(lot, { target: { value: "L".repeat(41) } });
+    for (const label of [ "Lote (opcional)", "Fabricante (opcional)", "Local da aplicação (opcional)" ]) {
+      expect((within(line).getByLabelText(label) as HTMLInputElement).hasAttribute("maxlength")).toBe(false);
+    }
+    fireEvent.click(screen.getByRole("button", { name: "Registrar transcrição" }));
+    expect(lot.value).toHaveLength(41);
+    expect(within(line).getByText("BCG: o lote tem até 40 caracteres")).not.toBeNull();
+    expect(api.recordTranscriptions).not.toHaveBeenCalled();
+  });
+
+  it("fabricante e local com 121 caracteres também são recusados, sem cortar", () => {
+    renderWithProviders(<TranscriptionForm room={ROOM} card={card({ checked: null })} catalog={CATALOG29} today={TODAY29} onDone={vi.fn()} onCancel={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Acrescentar dose" }));
+    fireEvent.click(screen.getByRole("button", { name: "Acrescentar dose" }));
+    const [ l1, l2 ] = screen.getAllByRole("group", { name: /^Dose transcrita/ });
+    for (const l of [ l1, l2 ]) {
+      fireEvent.change(within(l).getByLabelText("Vacina"), { target: { value: "15" } });
+      fireEvent.change(within(l).getByLabelText("Dose"), { target: { value: "D1" } });
+      fireEvent.change(within(l).getByLabelText("Data da aplicação"), { target: { value: "2026-07-02" } });
+    }
+    fireEvent.change(within(l1).getByLabelText("Fabricante (opcional)"), { target: { value: "F".repeat(121) } });
+    fireEvent.change(within(l2).getByLabelText("Local da aplicação (opcional)"), { target: { value: "P".repeat(121) } });
+    fireEvent.click(screen.getByRole("button", { name: "Registrar transcrição" }));
+    expect(within(l1).getByText("BCG: o fabricante tem até 120 caracteres")).not.toBeNull();
+    expect(within(l2).getByText("BCG: o local tem até 120 caracteres")).not.toBeNull();
+    expect((within(l1).getByLabelText("Fabricante (opcional)") as HTMLInputElement).value).toHaveLength(121);
+    expect(api.recordTranscriptions).not.toHaveBeenCalled();
   });
 
   it("recusa do api aparece na linha pelo índice; nada é reenviado sozinho", async () => {
@@ -156,6 +190,17 @@ describe("cancelamento (F-29.3)", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Cancelar e substituir" }));
     await waitFor(() => expect(api.cancelImmunization).toHaveBeenCalledWith("im1", { reason: "lote errado digitado na sala",
       replacement: expect.objectContaining({ patient_id: "pa1", immunobiological_code: "42", dose_code: "D1", lot_id: "lot9" }) }));
+  });
+
+  it("motivo colado com 501 caracteres: não corta e é recusado", () => {
+    mount();
+    const reason = screen.getByLabelText("Motivo do cancelamento") as HTMLTextAreaElement;
+    expect(reason.hasAttribute("maxlength")).toBe(false);
+    fireEvent.change(reason, { target: { value: "m".repeat(501) } });
+    fireEvent.click(screen.getByRole("button", { name: "Revisar" }));
+    expect(reason.value).toHaveLength(501);
+    expect(screen.getByText("o motivo precisa ter de 10 a 500 caracteres")).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Cancelar dose" })).toBeNull();
   });
 
   it("dose já cancelada: só a frase", () => {

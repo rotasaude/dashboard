@@ -187,7 +187,7 @@ function CancelForm({ imm, room, patient, catalog, now: fixedNow, onDone, onCanc
       <form ref={formRef} aria-label="Cancelar dose" style={form} onSubmit={review} noValidate>
         <div style={fieldLabel}>
           <label htmlFor={`${uid}-reason`}>Motivo do cancelamento</label>
-          <textarea id={`${uid}-reason`} style={inputStyle} rows={2} maxLength={500} value={reason}
+          <textarea id={`${uid}-reason`} style={inputStyle} rows={2} value={reason}
             {...(reasonErr ? { "aria-describedby": `${uid}-reason-err`, "aria-invalid": true } : {})}
             onChange={(e) => { setReason(e.target.value); setReasonErr(null); }} />
           {reasonErr && <p id={`${uid}-reason-err`} style={alert}>{reasonErr}</p>}
