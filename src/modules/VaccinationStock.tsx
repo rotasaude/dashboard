@@ -3,7 +3,7 @@
 // - Rede de frio (stock_keeper): entrada por nota ou doação e inventário inicial; transferência às salas ativas (com from_location_id);
 //   posição; inventário e ajustes (perda e vencimento com o motivo do SIES) e os ajustes pendentes (inclusive o descarte de excursão).
 // - Sala: posição e recebimento de transferência para toda a equipe; inventário inicial e ajustes só para o responsável (room_lead).
-//   A sala não lança nota (o api dá 403). Os frascos abertos entram na Task 11.
+//   A sala não lança nota (o api dá 403). Os frascos abertos e o descarte (só do room_lead) ficam no VialsPanel.
 // As frases de sucesso ficam aqui, fora dos formulários que se limpam. Sem polling; nada em URL, log ou storage. "Hoje" é o da prop
 // (testes) ou lido a cada render.
 import { useEffect, useRef, useState, type ReactNode } from "react";
@@ -19,6 +19,7 @@ import { AdjustmentForm, adjustmentSavedText } from "./pharmacy/AdjustmentForm";
 import { PendingAdjustments } from "./pharmacy/PendingAdjustments";
 import { TransfersBody } from "./PharmacyTransfers";
 import { VaccinationGate } from "./vaccination/VaccinationGate";
+import { VialsPanel } from "./vaccination/VialsPanel";
 import { VaccineLocationPick } from "./vaccination/VaccineLocationPick";
 import { VaccinePositions } from "./vaccination/VaccinePositions";
 import { VaccineReceiptForm } from "./vaccination/VaccineReceiptForm";
@@ -26,13 +27,13 @@ import { VaccineReceiptForm } from "./vaccination/VaccineReceiptForm";
 export const RECEIPT_SAVED = "Entrada registrada: o saldo da rede de frio foi atualizado.";
 export const OPENING_SAVED = "Inventário inicial registrado.";
 
-// `now` fica na assinatura do plano (os frascos abertos, Task 11, leem o relógio); aqui só o dia conta.
-export function VaccinationStock({ today, onGoToSecurity }: { today?: string; now?: Date; onGoToSecurity?(): void } = {}) {
+// `now` é só dos testes (os frascos abertos leem o relógio a cada render); sem ele vale a hora de agora.
+export function VaccinationStock({ today, now, onGoToSecurity }: { today?: string; now?: Date; onGoToSecurity?(): void } = {}) {
   return (
     <VaccinationGate title="Imunobiológicos e frascos" sub="entrada, transferência, frascos abertos, posição e perdas" allow={(r) => r.professional || r.keeper}>
       {() => (
         <VaccineLocationPick allow={(a) => a.vaccinate || a.keeper}>
-          {(loc) => <StockBody location={loc} today={today ?? todayInCity()} onGoToSecurity={onGoToSecurity} />}
+          {(loc) => <StockBody location={loc} today={today ?? todayInCity()} now={now} onGoToSecurity={onGoToSecurity} />}
         </VaccineLocationPick>
       )}
     </VaccinationGate>
@@ -44,7 +45,7 @@ function Section({ title, sub, children }: { title: string; sub?: string; childr
   return <Panel title={title} sub={sub}>{children}</Panel>;
 }
 
-function StockBody({ location, today, onGoToSecurity }: { location: VaccineLocation; today: string; onGoToSecurity?(): void }) {
+function StockBody({ location, today, now, onGoToSecurity }: { location: VaccineLocation; today: string; now?: Date; onGoToSecurity?(): void }) {
   const { user } = useAuth();
   const abilities = locationAbilities(location);
   const coldChain = location.kind === "cold_chain_central" && abilities.keeper;
@@ -69,6 +70,7 @@ function StockBody({ location, today, onGoToSecurity }: { location: VaccineLocat
       <Section title="Posição" sub="saldo em doses por lote">
         <VaccinePositions location={location} today={today} />
       </Section>
+      {location.kind === "vaccine_room" && (abilities.vaccinate || abilities.lead) && <VialsPanel room={location} now={now} lead={abilities.lead} />}
       {(coldChain || abilities.lead) && (
         <Section title="Inventário e ajustes" sub="ajustes, perdas e vencimentos, com aprovação">
           <AdjustmentsBlock location={location} today={today} catalog={catalog} withOpening={!coldChain} onGoToSecurity={onGoToSecurity} />
