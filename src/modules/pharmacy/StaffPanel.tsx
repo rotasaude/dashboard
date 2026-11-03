@@ -13,13 +13,14 @@ import { buttonStyle, inputStyle, secondaryButtonStyle } from "../../components/
 import { alert, box, fieldLabel, list, muted, row } from "../exams/styles";
 import { fieldsetStyle, statusStyle } from "../regulation/styles";
 
-const ROLES: PharmacyRole[] = [ "pharmacist", "pharmacy_assistant", "stock_keeper" ];
+const DEFAULT_ROLES: PharmacyRole[] = [ "pharmacist", "pharmacy_assistant", "stock_keeper" ];
 
 type Pending = { kind: "add"; userId: string; role: PharmacyRole } | { kind: "remove"; staff: LocationStaff } | null;
 
-export function StaffPanel({ location, memberships, onChanged, onGoToSecurity }: {
-  location: AdminLocation; memberships: MembershipRow[]; onChanged(): void; onGoToSecurity?(): void;
+export function StaffPanel({ location, memberships, onChanged, onGoToSecurity, roles }: {
+  location: AdminLocation; memberships: MembershipRow[]; onChanged(): void; onGoToSecurity?(): void; roles?: PharmacyRole[];
 }) {
+  const ROLES = roles ?? DEFAULT_ROLES;
   const [ role, setRole ] = useState("");
   const [ userId, setUserId ] = useState("");
   const [ error, setError ] = useState<string | null>(null);
