@@ -8,7 +8,7 @@ import { NOMINAL_QUERY, STATIC_QUERY } from "./careLines";
 import { featureDisabledKey, featureLabel, hasFeature } from "./features";
 import { fmtDay } from "./exams";
 import { cityDateFormat, cityIsoDate, parseCityLocal } from "./format";
-import { cents, pharmacyRefusals, type Problem, type Refusal } from "./pharmacy";
+import { cents, fmtQuantity, pharmacyRefusals, type Problem, type Refusal } from "./pharmacy";
 
 export { NOMINAL_QUERY, STATIC_QUERY };
 
@@ -152,6 +152,12 @@ export function lotsForDose(positions: StockPosition[], code: string, today: str
     .filter((b) => b.lot.item.immunobiological_code === code && !b.expired && !b.blocked && b.lot.expires_on >= today
       && (cents(b.balance) > 0 || vialsForDose(vials, [ b.lot.id ], now).length > 0))
     .sort((a, b) => a.lot.expires_on.localeCompare(b.lot.expires_on) || a.lot.lot_number.localeCompare(b.lot.lot_number));
+}
+
+// Lotes da vacina presos por excursão de temperatura aberta (V4): a sala os mostra como bloqueados, não como ausentes (V29).
+export function blockedLotsForDose(positions: StockPosition[], code: string, today: string): LotBalance[] {
+  return positions.flatMap((p) => p.lots)
+    .filter((b) => b.lot.item.immunobiological_code === code && !b.expired && !!b.blocked && b.lot.expires_on >= today && cents(b.balance) > 0);
 }
 
 // Abertos (situação do api), dos lotes dados, não vencidos agora e com sobra.
@@ -349,7 +355,17 @@ export function vialRemaining(v: Vial, now: Date): string {
   const ms = new Date(v.expires_at).getTime() - now.getTime();
   if (!(ms > 0)) return "vencido";
   const min = Math.floor(ms / 60000);
-  return `vence em ${Math.floor(min / 60)} h ${min % 60} min`;
+  const days = Math.floor(min / 1440);
+  if (days < 1) return `vence em ${Math.floor(min / 60)} h ${min % 60} min`;
+  // Frasco de 28 dias: em dias (V29), com as horas que sobram.
+  const hours = Math.floor((min % 1440) / 60);
+  return `vence em ${days} ${days === 1 ? "dia" : "dias"}${hours > 0 ? ` e ${hours} h` : ""}`;
+}
+
+// Quantidade em doses, no singular só até 1 (V29).
+export function fmtDoses(qty: string | number): string {
+  const text = fmtQuantity(String(qty));
+  return `${text} ${Number(String(qty)) <= 1 ? "dose" : "doses"}`;
 }
 
 export function monthProblem(m: string, today: string): string | null {

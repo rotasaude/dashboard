@@ -4,7 +4,7 @@ import { itemKey, locationKindLabel } from "./pharmacy";
 import {
   OVERRIDABLE, VACCINATION_DISABLED, cardItemStatusLabel, doseSavedText, maternalRequired, canUseVaccination, cardGroups, doseBody, doseProblems, effectiveStatus, locationAbilities, lotsForDose, monthProblem, newDoseDraft,
   newTranscriptionLine, outOfRange, parseCelsius, readingBody, readingProblems, reasonProblem, rndsStatusLabel, blockReasonLabel, splitRefusals,
-  termName, transcriptionProblems, vaccinationRefusals, vialRemaining, vialsForDose
+  termName, transcriptionProblems, vaccinationRefusals, vialRemaining, vialsForDose, fmtDoses, blockedLotsForDose
 } from "./vaccination";
 import {
   BCG, CATALOG29, COLD_CENTRAL, LEAD_ROOM, NOW29, PENTA, PENTA_ITEM, ROOM, TERMS, TODAY29, card, cardItem, vacLotBalance, vacPosition, vacUser, vial
@@ -127,9 +127,24 @@ describe("temperatura", () => {
     expect(outOfRange(readingBody(d), { min_c: 2, max_c: 8 })).toBe(true);
     expect(outOfRange({ ...readingBody(d), current_c: 5, max_c: 8 }, { min_c: 2, max_c: 8 })).toBe(false);
   });
+  it("doses no singular e no plural (F, V29)", () => {
+    expect([ fmtDoses("1"), fmtDoses("50"), fmtDoses("0.5"), fmtDoses(9) ]).toEqual([ "1 dose", "50 doses", "0,5 dose", "9 doses" ]);
+  });
+  it("lote bloqueado pela excursão é achado à parte (E, V29)", () => {
+    const blocked = vacLotBalance({ blocked: true });
+    const code = blocked.lot.item.immunobiological_code as string;
+    const positions = [ vacPosition({ lots: [ blocked ] }) ];
+    expect(lotsForDose(positions, code, TODAY29)).toEqual([]);
+    expect(blockedLotsForDose(positions, code, TODAY29).map((b) => b.lot.id)).toEqual([ blocked.lot.id ]);
+    expect(blockedLotsForDose(positions, "outro", TODAY29)).toEqual([]);
+  });
   it("frasco e mês", () => {
     expect(vialRemaining(vial(), NOW29)).toBe("vence em 4 h 0 min");
     expect(vialRemaining(vial({ expires_at: "2026-11-02T09:00:00-03:00" }), NOW29)).toBe("vencido");
+    // F (V29): a validade do frasco em dias quando passa de um dia.
+    expect(vialRemaining(vial({ expires_at: "2026-11-30T09:59:00-03:00" }), NOW29)).toBe("vence em 27 dias e 23 h");
+    expect(vialRemaining(vial({ expires_at: "2026-11-03T10:00:00-03:00" }), NOW29)).toBe("vence em 1 dia");
+    expect(vialRemaining(vial({ expires_at: "2026-11-04T12:00:00-03:00" }), NOW29)).toBe("vence em 2 dias e 2 h");
     expect([ monthProblem("2026-11", TODAY29), monthProblem("2026-12", TODAY29), monthProblem("2026-13", TODAY29) ])
       .toEqual([ null, "o mês não pode ser futuro", "informe o mês (AAAA-MM)" ]);
   });

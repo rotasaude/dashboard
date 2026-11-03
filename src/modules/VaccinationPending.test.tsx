@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { createAppQueryClient } from "../lib/queryClient";
+import { AuthProvider } from "../lib/auth";
 import { renderWithProviders } from "../test/campaignFixtures";
 import { CATALOG29, LEAD_ROOM, NOW29, ROOM, card, immunization, pendingItem, vacUser } from "../test/vaccinationFixtures";
 import * as api from "../lib/api";
@@ -21,6 +24,18 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
 describe("pendências do envio (F-29.4)", () => {
+  it("reabrir a tela relê a lista, mesmo dentro do tempo de cache do app (D, V29)", async () => {
+    vi.mocked(api.listRndsPending).mockReset().mockResolvedValue({ items: [], counts: counts(0), next_before: null });
+    const client = createAppQueryClient(vi.fn());
+    const ui = <QueryClientProvider client={client}><AuthProvider><VaccinationPending now={NOW29} /></AuthProvider></QueryClientProvider>;
+    const first = render(ui);
+    expect(await screen.findByText("nenhuma dose pendente")).not.toBeNull();
+    first.unmount();
+    vi.mocked(api.listRndsPending).mockResolvedValue({ items: [ pendingItem() ], counts: counts(0), next_before: null });
+    render(ui);
+    expect(await screen.findByText("o CNS de quem vacinou não está no CNES importado da cidade")).not.toBeNull();
+    expect(api.listRndsPending).toHaveBeenCalledTimes(2);
+  });
   it("lista sem nome, motivo em português, paginação e sem releitura sozinha", async () => {
     renderWithProviders(<VaccinationPending now={NOW29} />);
     expect(await screen.findByText("o CNS de quem vacinou não está no CNES importado da cidade")).not.toBeNull();

@@ -86,6 +86,21 @@ describe("registro da dose (F-29.3)", () => {
     expect(api.recordImmunization).not.toHaveBeenCalled();
   });
 
+  it("só há lote bloqueado pela excursão: diz que está bloqueado, não que não há lote (E, V29)", async () => {
+    vi.mocked(api.listPositions).mockResolvedValue({ positions: [ vacPosition({ lots: [ vacLotBalance({ blocked: true }) ] }) ], next_before: null });
+    mount();
+    const lot = await screen.findByLabelText("Lote") as HTMLSelectElement;
+    await waitFor(() => expect(lot.options[0].text).toBe("lote bloqueado pela temperatura — aguarda a conduta"));
+    expect(screen.getByText(/bloqueado por temperatura fora da faixa até a conduta do responsável pela sala/)).not.toBeNull();
+    expect(screen.queryByText("nenhum lote desta vacina na sala")).toBeNull();
+  });
+
+  it("saldo do lote no plural de doses (F, V29)", async () => {
+    mount();
+    await waitFor(() => expect((screen.getByLabelText("Lote") as HTMLSelectElement).options.length).toBe(2));
+    expect((screen.getByLabelText("Lote") as HTMLSelectElement).options[1].text).toMatch(/saldo \d+ doses/);
+  });
+
   it("lot_blocked: relê a posição, limpa o lote e mantém o resto", async () => {
     vi.mocked(api.recordImmunization).mockRejectedValue(refuse([ { path: "lot_id", error: "lot_blocked" } ]));
     await fill();

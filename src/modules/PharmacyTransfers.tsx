@@ -17,16 +17,19 @@ import { buttonStyle, secondaryButtonStyle } from "../components/formStyles";
 import { alert, muted, okText, row, stack, title } from "./exams/styles";
 import { LocationPick } from "./pharmacy/LocationPick";
 import { PharmacyGate } from "./pharmacy/PharmacyGate";
+import { fmtDoses } from "../lib/vaccination";
 import { ReceiveForm, receivedText } from "./pharmacy/ReceiveForm";
 import { TRANSFER_SENT_TEXT, TransferForm } from "./pharmacy/TransferForm";
 
 function itemText(i: TransferItem): string {
   const unit = i.lot.item.dispensing_unit;
-  const base = `${i.lot.item.name} · lote ${i.lot.lot_number} · enviado ${fmtQuantity(i.quantity_sent)} ${unit}`;
+  // Vacina conta em dose: plural de "dose" (V29); as outras unidades seguem como o api manda.
+  const qty = (q: string) => unit === "dose" ? fmtDoses(q) : `${fmtQuantity(q)} ${unit}`;
+  const base = `${i.lot.item.name} · lote ${i.lot.lot_number} · enviado ${qty(i.quantity_sent)}`;
   if (i.quantity_received === null) return base;
   // O api manda enviado − recebido (nunca negativo): é o que faltou chegar.
-  const diff = i.difference !== null && Number(i.difference) !== 0 ? ` (faltaram ${fmtQuantity(i.difference)} ${unit})` : "";
-  return `${base} · recebido ${fmtQuantity(i.quantity_received)} ${unit}${diff}`;
+  const diff = i.difference !== null && Number(i.difference) !== 0 ? ` (faltaram ${qty(i.difference)})` : "";
+  return `${base} · recebido ${qty(i.quantity_received)}${diff}`;
 }
 
 export function PharmacyTransfers({ today = todayInCity() }: { today?: string } = {}) {

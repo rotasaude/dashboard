@@ -13,9 +13,10 @@ import {
   type VaccinationCatalog, type VaccineLocation, type Vial
 } from "../../lib/api";
 import { cityIsoDate, parseCityLocal } from "../../lib/format";
-import { PH_POSITIONS_KEY, lotOptionLabel, type Problem } from "../../lib/pharmacy";
+import { PH_POSITIONS_KEY, type Problem } from "../../lib/pharmacy";
+import { fmtDay } from "../../lib/exams";
 import {
-  STATIC_QUERY, VAC_VIALS_KEY, cityLocalInput, doseBody, doseProblems, lotsForDose, maternalRequired, newDoseDraft, reasonProblem, splitRefusals,
+  STATIC_QUERY, VAC_VIALS_KEY, blockedLotsForDose, cityLocalInput, doseBody, doseProblems, fmtDoses, lotsForDose, maternalRequired, newDoseDraft, reasonProblem, splitRefusals,
   vaccinationRefusals, vialRemaining, vialsForDose, type DoseDraft, type VaccinationRefusal
 } from "../../lib/vaccination";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
@@ -192,6 +193,8 @@ export function DoseFields({ room, patient, catalog, item = null, draft, onChang
   const stock = useDoseStock(room, catalog, draft.immunobiologicalCode);
   const { imm, multidose, positions, vials, allPositions, vialsKey } = stock;
   const lots = lotsForDose(allPositions, draft.immunobiologicalCode, today, vials, now);
+  // Sem lote usável, o que está preso por excursão aparece como bloqueado, não como ausente (V29).
+  const blockedLots = lots.length === 0 ? blockedLotsForDose(allPositions, draft.immunobiologicalCode, today) : [];
   const lotVials = draft.lotId === "" ? [] : vialsForDose(vials, [ draft.lotId ], now)
     .sort((a, b) => a.expires_at.localeCompare(b.expires_at));
   const showReason = warnings.length > 0 || draft.overrideReason !== "" || problems.some((p) => p.path === "override_reason");
@@ -264,11 +267,19 @@ export function DoseFields({ room, patient, catalog, item = null, draft, onChang
       ))}
       {field("lotId", "Lote", (props) => (
         <select {...props} style={inputStyle} value={draft.lotId} onChange={(e) => onChange("lotId", e.target.value, { vialId: "" })}>
-          <option value="">{lots.length === 0 && !positions.isPending ? "nenhum lote desta vacina na sala" : "escolha o lote"}</option>
-          {lots.map((b, i) => <option key={b.lot.id} value={b.lot.id}>{lotOptionLabel(b, i === 0)}</option>)}
+          <option value="">{lots.length > 0 || positions.isPending ? "escolha o lote"
+            : blockedLots.length > 0 ? "lote bloqueado pela temperatura — aguarda a conduta" : "nenhum lote desta vacina na sala"}</option>
+          {lots.map((b, i) => (
+            <option key={b.lot.id} value={b.lot.id}>
+              {`${b.lot.lot_number} · vence ${fmtDay(b.lot.expires_on)} · saldo ${fmtDoses(b.balance)}${i === 0 ? " · sugerido (vence primeiro)" : ""}`}
+            </option>
+          ))}
         </select>
       ), (
         <>
+          {blockedLots.length > 0 && (
+            <p style={muted}>{`${blockedLots.map((b) => b.lot.lot_number).join(", ")}: bloqueado por temperatura fora da faixa até a conduta do responsável pela sala`}</p>
+          )}
           {positions.isError && <p style={alert}>{vaccinationRefusals(positions.error)[0].text}</p>}
           {positions.hasNextPage && (
             <button type="button" style={secondaryButtonStyle} disabled={positions.isFetchingNextPage} onClick={() => void positions.fetchNextPage()}>
@@ -282,7 +293,7 @@ export function DoseFields({ room, patient, catalog, item = null, draft, onChang
           <option value="">{draft.lotId === "" ? "escolha o lote primeiro" : lotVials.length === 0 ? "nenhum frasco aberto deste lote" : "escolha o frasco"}</option>
           {lotVials.map((v, i) => (
             <option key={v.id} value={v.id}>
-              {`restam ${v.doses_left} doses · ${vialRemaining(v, now)}${i === 0 ? " · sugerido (vence primeiro)" : ""}`}
+              {`restam ${fmtDoses(v.doses_left)} · ${vialRemaining(v, now)}${i === 0 ? " · sugerido (vence primeiro)" : ""}`}
             </option>
           ))}
         </select>

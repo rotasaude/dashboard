@@ -40,7 +40,9 @@ function PendingBody({ room, now: fixedNow, onGoToSecurity }: { room: VaccineLoc
   const canSeeAlert = locationAbilities(room).lead || vaccinationRoles(user).admin;
   const pending = useInfiniteQuery({
     queryKey: [ VAC_PENDING_KEY, roomId ], queryFn: ({ pageParam }) => listRndsPending(roomId, pageParam),
-    initialPageParam: null as string | null, getNextPageParam: (last) => last.next_before ?? undefined, ...STATIC_QUERY
+    initialPageParam: null as string | null, getNextPageParam: (last) => last.next_before ?? undefined, ...STATIC_QUERY,
+    // Reabrir a tela relê (V29): o cache de 30 s do app mostraria a lista antiga.
+    staleTime: 0, refetchOnMount: "always"
   });
   const catalog = useQuery({ queryKey: [ VAC_CATALOG_KEY ], queryFn: getVaccinationCatalog, ...STATIC_QUERY });
   const [ card, setCard ] = useState<VaccinationCard | null>(null);

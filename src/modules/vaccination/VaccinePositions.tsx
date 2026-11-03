@@ -8,7 +8,7 @@ import { listPositions, type LotBalance, type StockPosition, type VaccineLocatio
 import { todayInCity } from "../../lib/campaigns";
 import { fmtDay } from "../../lib/exams";
 import { PH_POSITIONS_KEY, STATIC_QUERY, fmtQuantity, itemKey } from "../../lib/pharmacy";
-import { vaccinationError } from "../../lib/vaccination";
+import { fmtDoses, vaccinationError } from "../../lib/vaccination";
 import { DataTable } from "../../components/DataTable";
 import { Tag } from "../../components/Tag";
 import { buttonStyle, secondaryButtonStyle } from "../../components/formStyles";
@@ -57,7 +57,7 @@ export function VaccinePositions({ location, today, onStatement }: {
             { label: "Fabricante", w: "1.2fr", render: (r) => r.lot.lot.manufacturer ?? "—" },
             { label: "Validade", w: "0.8fr", render: (r) => <span className="mono">{fmtDay(r.lot.lot.expires_on)}</span> },
             { label: "Saldo", w: "0.8fr", align: "right", render: (r) => (
-              <span className="mono">{`${fmtQuantity(r.lot.balance)} ${r.lot.lot.item.dispensing_unit}`}</span>
+              <span className="mono">{r.lot.lot.item.dispensing_unit === "dose" ? fmtDoses(r.lot.balance) : `${fmtQuantity(r.lot.balance)} ${r.lot.lot.item.dispensing_unit}`}</span>
             ) },
             { label: "Situação", w: "1.4fr", card: "pair", render: (r) => (
               <span style={row}>{lotTags(r.lot, day).map((t) => <Tag key={t.text} tone={t.tone}>{t.text}</Tag>)}</span>

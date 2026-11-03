@@ -40,8 +40,9 @@ export function ImmunizationRow({ imm, actions, onCancelDose, roomId }: Immuniza
       <div style={{ ...row, gap: 24, alignItems: "flex-start" }}>
         <KeyValue k="Aplicada em" v={fmtDateTime(imm.applied_at)} />
         <KeyValue k="Lote" v={imm.lot.number ?? "—"} />
-        <KeyValue k="Sala" v={imm.room?.name ?? "—"} mono={false} />
-        <KeyValue k="Quem aplicou" v={imm.by.name ?? "—"} mono={false} />
+        {/* Transcrita: a dose foi dada fora daqui; quem registrou só transcreveu e a sala não é o local (V29). */}
+        {!imm.transcription && <KeyValue k="Sala" v={imm.room?.name ?? "—"} mono={false} />}
+        <KeyValue k={imm.transcription ? "Transcrita por" : "Quem aplicou"} v={imm.by.name ?? "—"} mono={false} />
         <KeyValue k="Envio à RNDS" v={<RndsStatusTag rnds={imm.rnds} cancelled={cancelled} />} mono={false} />
       </div>
       {(actions || cancellable) && (
