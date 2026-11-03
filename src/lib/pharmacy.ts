@@ -68,7 +68,9 @@ export function locationRoles(loc: PharmacyLocation): { pharmacist: boolean; ass
 }
 
 // ─── Rótulos (contrato §1). Código novo do api aparece cru. ────────────────
-const KIND_LABEL: Record<string, string> = { central: "Almoxarifado central", unit: "Farmácia da unidade" };
+const KIND_LABEL: Record<string, string> = {
+  central: "Almoxarifado central", unit: "Farmácia da unidade", vaccine_room: "Sala de vacina", cold_chain_central: "Rede de frio municipal"
+};
 export const locationKindLabel = (code: string): string => KIND_LABEL[code] ?? code;
 
 const MOVEMENT_LABEL: Record<string, string> = {
@@ -155,6 +157,9 @@ export function normalizeShortCode(raw: string): string | null {
   const code = raw.toUpperCase().replace(/[\s-]/g, "");
   return SHORT_CODE.test(code) ? code : null;
 }
+
+// Chave do item no estoque: o do catálogo de medicamentos, ou o imunobiológico (sem `catalog_item_id`).
+export const itemKey = (item: StockItem): string => item.catalog_item_id ?? `imm:${item.immunobiological_code ?? ""}`;
 
 // ─── Lotes ──────────────────────────────────────────────────────────────────
 const byExpiry = (a: LotBalance, b: LotBalance) =>
