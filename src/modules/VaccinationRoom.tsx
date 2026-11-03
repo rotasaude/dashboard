@@ -58,6 +58,9 @@ function RoomBody({ room, now, onGoToSecurity }: { room: VaccineLocation; now: D
     });
   }
 
+  // Releitura vinda de uma ação na caderneta: só vale para a pessoa que está aberta (resposta atrasada de outra é descartada).
+  const replaceCard = (c: VaccinationCard) => setCard((cur) => (cur && cur.patient.id === c.patient.id ? c : cur));
+
   // Desistiu da busca: a caderneta que ainda esteja chegando é descartada.
   function drop() {
     seq.current += 1;
@@ -81,7 +84,7 @@ function RoomBody({ room, now, onGoToSecurity }: { room: VaccineLocation; now: D
           </div>
           {catalog.data ? (
             // Registro, transcrição e ESAVI entram nas Tasks 7, 8 e 15.
-            <CardView room={room} card={card} catalog={catalog.data} now={now} onCard={setCard} onGoToSecurity={onGoToSecurity}
+            <CardView room={room} card={card} catalog={catalog.data} now={now} onCard={replaceCard} onGoToSecurity={onGoToSecurity}
               onRecord={() => undefined} onTranscribe={() => undefined} />
           ) : catalog.isError ? <p role="alert" style={alert}>{vaccinationError(catalog.error)}</p>
             : <p className="mono" style={muted}>carregando…</p>}

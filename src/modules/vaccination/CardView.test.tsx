@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { renderWithProviders } from "../../test/campaignFixtures";
-import { CATALOG29, NOW29, ROOM, card, cardItem, immunization, vacUser } from "../../test/vaccinationFixtures";
+import { CATALOG29, NOW29, ROOM, card, cardItem, cardPatient, immunization, vacUser } from "../../test/vaccinationFixtures";
 import * as api from "../../lib/api";
 import { VaccinationRoom } from "../VaccinationRoom";
 
@@ -125,5 +125,32 @@ describe("caderneta na sala (F-29.2)", () => {
     late(card());
     await new Promise((r) => setTimeout(r, 0));
     expect(screen.queryByRole("heading", { name: "Joana Lima" })).toBeNull();
+  });
+  it("confirmação atrasada da pessoa A não troca a caderneta já aberta da pessoa B", async () => {
+    let late: (c: ReturnType<typeof card>) => void = () => undefined;
+    vi.mocked(api.getVaccinationCard).mockResolvedValueOnce(card({ checked: null }))
+      .mockResolvedValueOnce(card({ patient: cardPatient({ id: "pa2", display_name: "Bruno Reis" }) }));
+    vi.mocked(api.confirmCardComplete).mockReturnValueOnce(new Promise((resolve) => { late = resolve; }));
+    await openCard();
+    fireEvent.click(await screen.findByRole("button", { name: "Confirmar caderneta completa" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sim, a caderneta está completa" }));
+    await waitFor(() => expect(api.confirmCardComplete).toHaveBeenCalledWith("r1", "pa1"));
+    fireEvent.click(screen.getByRole("button", { name: "Outro cidadão" }));
+    fireEvent.change(await screen.findByLabelText("CPF"), { target: { value: "123.456.789-09" } });
+    fireEvent.click(screen.getByRole("button", { name: "Buscar pelo CPF" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Abrir a caderneta de Joana Lima" }));
+    expect(await screen.findByRole("heading", { name: "Bruno Reis" })).not.toBeNull();
+    late(card({ checked: { mode: "confirmed_complete", at: "2026-11-02T10:00:00-03:00", by_name: "Ana" } }));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(screen.getByRole("heading", { name: "Bruno Reis" })).not.toBeNull();
+    expect(screen.queryByRole("heading", { name: "Joana Lima" })).toBeNull();
+  });
+
+  it("transcrever aparece também na caderneta conferida", async () => {
+    vi.mocked(api.getVaccinationCard).mockResolvedValue(card());
+    await openCard();
+    await screen.findByRole("heading", { name: "Joana Lima" });
+    expect(screen.getByRole("button", { name: "Transcrever caderneta" })).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Confirmar caderneta completa" })).toBeNull();
   });
 });

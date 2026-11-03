@@ -29,12 +29,17 @@ export function CardView({ room, card, catalog, now, onCard, onRecord, onTranscr
 
   const [ confirming, setConfirming ] = useState(false);
   const [ problem, setProblem ] = useState<string | null>(null);
-  const confirm = useMutation({
-    gcTime: 0,
-    mutationFn: () => confirmCardComplete(room.room_id as string, p.id),
-    onSuccess: (c) => { setConfirming(false); onCard(c); },
-    onError: (err) => setProblem(vaccinationError(err))
-  });
+  // Callbacks no mutate(), não nas opções: no TanStack v5 os das opções disparam mesmo depois de desmontar (outra pessoa aberta).
+  // A tela de cima ainda confere o paciente da resposta (onCard).
+  const confirm = useMutation({ gcTime: 0, mutationFn: (patientId: string) => confirmCardComplete(room.room_id as string, patientId) });
+  function sendConfirm() {
+    if (confirm.isPending) return;
+    setProblem(null);
+    confirm.mutate(p.id, {
+      onSuccess: (c) => { setConfirming(false); onCard(c); },
+      onError: (err) => setProblem(vaccinationError(err))
+    });
+  }
 
   const groups = cardGroups(card);
   const vaccineName = (item: CardItem) =>
@@ -87,25 +92,21 @@ export function CardView({ room, card, catalog, now, onCard, onRecord, onTranscr
             ? <Tag tone="ok">{checkModeLabel(card.checked.mode)}</Tag>
             : <Tag tone="warn">não conferida</Tag>}
         </div>
-        {!card.checked && (
-          <>
-            <p role="note" style={{ margin: 0, fontSize: 12.5 }}>{UNCHECKED_NOTICE}</p>
-            <div style={row}>
-              <button type="button" style={secondaryButtonStyle} onClick={onTranscribe}>Transcrever caderneta</button>
-              {confirming ? (
-                <>
-                  <button type="button" style={confirm.isPending ? disabledButtonStyle : buttonStyle} disabled={confirm.isPending}
-                    onClick={() => { if (!confirm.isPending) { setProblem(null); confirm.mutate(); } }}>
-                    Sim, a caderneta está completa
-                  </button>
-                  <button type="button" style={secondaryButtonStyle} disabled={confirm.isPending} onClick={() => setConfirming(false)}>Voltar</button>
-                </>
-              ) : (
-                <button type="button" style={buttonStyle} onClick={() => { setProblem(null); setConfirming(true); }}>Confirmar caderneta completa</button>
-              )}
-            </div>
-          </>
-        )}
+        {!card.checked && <p role="note" style={{ margin: 0, fontSize: 12.5 }}>{UNCHECKED_NOTICE}</p>}
+        <div style={row}>
+          {/* A transcrição vale em qualquer caderneta (o api aceita); fechar a conferência é escolha do formulário (Task 8). */}
+          <button type="button" style={secondaryButtonStyle} onClick={onTranscribe}>Transcrever caderneta</button>
+          {!card.checked && (confirming ? (
+            <>
+              <button type="button" style={confirm.isPending ? disabledButtonStyle : buttonStyle} disabled={confirm.isPending} onClick={sendConfirm}>
+                Sim, a caderneta está completa
+              </button>
+              <button type="button" style={secondaryButtonStyle} disabled={confirm.isPending} onClick={() => setConfirming(false)}>Voltar</button>
+            </>
+          ) : (
+            <button type="button" style={buttonStyle} onClick={() => { setProblem(null); setConfirming(true); }}>Confirmar caderneta completa</button>
+          ))}
+        </div>
         {problem && <p role="alert" style={alert}>{problem}</p>}
         <div style={row}>
           <button type="button" style={secondaryButtonStyle} onClick={() => onRecord(null)}>Outra vacina</button>
