@@ -39,7 +39,7 @@ export function ImmunizationRow({ imm, actions, onCancelDose }: ImmunizationRowP
         <KeyValue k="Lote" v={imm.lot.number ?? "—"} />
         <KeyValue k="Sala" v={imm.room?.name ?? "—"} mono={false} />
         <KeyValue k="Quem aplicou" v={imm.by.name ?? "—"} mono={false} />
-        <KeyValue k="Envio à RNDS" v={<RndsStatusTag rnds={imm.rnds} />} mono={false} />
+        <KeyValue k="Envio à RNDS" v={<RndsStatusTag rnds={imm.rnds} cancelled={cancelled} />} mono={false} />
       </div>
       {(actions || cancellable) && (
         <div style={row}>

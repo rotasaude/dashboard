@@ -61,4 +61,22 @@ describe("pendências do envio (F-29.4)", () => {
     await screen.findByText("o CNS de quem vacinou não está no CNES importado da cidade");
     expect(screen.queryByText(/mais de 24 horas/)).toBeNull();
   });
+
+  it("diz de qual dose a caderneta foi aberta", async () => {
+    vi.mocked(api.getVaccinationCard).mockResolvedValue(card());
+    renderWithProviders(<VaccinationPending now={NOW29} />);
+    fireEvent.click((await screen.findAllByRole("button", { name: /^Abrir caderneta/ }))[0]);
+    expect(await screen.findByText(/^Aberta pela pendência: Penta/)).not.toBeNull();
+  });
+
+  it("resposta atrasada de uma caderneta fechada não a repõe", async () => {
+    let resolve!: (c: ReturnType<typeof card>) => void;
+    vi.mocked(api.getVaccinationCard).mockReturnValue(new Promise((r) => { resolve = r; }));
+    renderWithProviders(<VaccinationPending now={NOW29} />);
+    fireEvent.click((await screen.findAllByRole("button", { name: /^Abrir caderneta/ }))[0]);
+    await screen.findByText("abrindo a caderneta…");
+    resolve(card());
+    await waitFor(() => expect(screen.queryByText("abrindo a caderneta…")).toBeNull());
+    expect(screen.getByRole("region", { name: "Caderneta aberta" })).not.toBeNull();
+  });
 });

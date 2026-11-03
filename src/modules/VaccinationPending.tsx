@@ -44,6 +44,7 @@ function PendingBody({ room, now: fixedNow, onGoToSecurity }: { room: VaccineLoc
   });
   const catalog = useQuery({ queryKey: [ VAC_CATALOG_KEY ], queryFn: getVaccinationCatalog, ...STATIC_QUERY });
   const [ card, setCard ] = useState<VaccinationCard | null>(null);
+  const [ openedBy, setOpenedBy ] = useState("");
   const [ problem, setProblem ] = useState<string | null>(null);
   const seq = useRef(0);
   const read = useMutation({ gcTime: 0, mutationFn: (patientId: string) => getVaccinationCard(roomId, { patient_id: patientId }) });
@@ -58,7 +59,7 @@ function PendingBody({ room, now: fixedNow, onGoToSecurity }: { room: VaccineLoc
     const mine = ++seq.current;
     setProblem(null);
     read.mutate(i.patient_id, {
-      onSuccess: (c) => { if (mine === seq.current) setCard(c); },
+      onSuccess: (c) => { if (mine === seq.current) { setOpenedBy(`${vaccineName(i)} de ${fmtDateTime(i.applied_at)}`); setCard(c); } },
       onError: (err) => { if (mine === seq.current) setProblem(vaccinationError(err)); }
     });
   }
@@ -111,6 +112,7 @@ function PendingBody({ room, now: fixedNow, onGoToSecurity }: { room: VaccineLoc
           <div style={row}>
             <button type="button" style={secondaryButtonStyle} onClick={close}>Fechar caderneta</button>
           </div>
+          <p style={{ margin: 0, fontSize: 12.5 }}>{`Aberta pela pendência: ${openedBy}`}</p>
           {catalog.data ? (
             <CardView room={room} card={card} catalog={catalog.data} now={fixedNow ?? new Date()}
               onCard={(c) => setCard((cur) => (cur && cur.patient.id === c.patient.id ? c : cur))} onGoToSecurity={onGoToSecurity} />

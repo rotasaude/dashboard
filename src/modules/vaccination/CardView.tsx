@@ -19,7 +19,7 @@ import { ImmunizationRow } from "./ImmunizationRow";
 export interface CardViewProps {
   room: VaccineLocation; card: VaccinationCard; catalog: VaccinationCatalog; now: Date;
   onCard(c: VaccinationCard): void; onTranscribe?(): void;
-  // Sem `onRecord`/`onTranscribe` (a caderneta aberta nas pendências) a caderneta é só leitura: sem "Registrar", "Outra vacina" nem "Transcrever".
+  // Sem `onRecord`/`onTranscribe` (a caderneta aberta nas pendências) a caderneta não oferece "Registrar", "Outra vacina" nem "Transcrever" (a conferência da caderneta continua).
   onRecord?(item: CardItem | null): void; onGoToSecurity?(): void;
   onCancelDose?(imm: Immunization): void;
 }
