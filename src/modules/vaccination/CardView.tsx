@@ -4,7 +4,7 @@
 // completa" é em dois passos e devolve a caderneta conferida (POST …/checks). O foco vai ao nome quando a caderneta abre.
 import { useEffect, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { confirmCardComplete, type CardItem, type VaccinationCard, type VaccinationCatalog, type VaccineLocation } from "../../lib/api";
+import { confirmCardComplete, type CardItem, type Immunization, type VaccinationCard, type VaccinationCatalog, type VaccineLocation } from "../../lib/api";
 import { fmtDateTime, cityIsoDate } from "../../lib/format";
 import {
   UNCHECKED_NOTICE, cardGroups, cardItemStatusLabel, cardStatusTone, checkModeLabel, effectiveStatus, vaccinationError
@@ -19,9 +19,10 @@ import { ImmunizationRow } from "./ImmunizationRow";
 export interface CardViewProps {
   room: VaccineLocation; card: VaccinationCard; catalog: VaccinationCatalog; now: Date;
   onCard(c: VaccinationCard): void; onRecord(item: CardItem | null): void; onTranscribe(): void; onGoToSecurity?(): void;
+  onCancelDose?(imm: Immunization): void;
 }
 
-export function CardView({ room, card, catalog, now, onCard, onRecord, onTranscribe, onGoToSecurity }: CardViewProps) {
+export function CardView({ room, card, catalog, now, onCard, onRecord, onTranscribe, onGoToSecurity, onCancelDose }: CardViewProps) {
   const today = cityIsoDate(now);
   const p = card.patient;
   const heading = useRef<HTMLHeadingElement>(null);
@@ -94,7 +95,7 @@ export function CardView({ room, card, catalog, now, onCard, onRecord, onTranscr
         </div>
         {!card.checked && <p role="note" style={{ margin: 0, fontSize: 12.5 }}>{UNCHECKED_NOTICE}</p>}
         <div style={row}>
-          {/* A transcrição vale em qualquer caderneta (o api aceita); fechar a conferência é escolha do formulário (Task 8). */}
+          {/* A transcrição vale em qualquer caderneta (o api aceita); fechar a conferência só é oferecido sem conferência (TranscriptionForm). */}
           <button type="button" style={secondaryButtonStyle} onClick={onTranscribe}>Transcrever caderneta</button>
           {!card.checked && (confirming ? (
             <>
@@ -123,7 +124,7 @@ export function CardView({ room, card, catalog, now, onCard, onRecord, onTranscr
         {card.immunizations.length === 0 ? <p style={muted}>nenhuma dose registrada</p> : (
           <ul style={{ ...list, paddingLeft: 0, gap: 8 }}>
             {card.immunizations.map((imm) => (
-              <ImmunizationRow key={imm.id} imm={imm} onGoToSecurity={onGoToSecurity} onChanged={() => undefined} />
+              <ImmunizationRow key={imm.id} imm={imm} onGoToSecurity={onGoToSecurity} onChanged={() => undefined} onCancelDose={onCancelDose} />
             ))}
           </ul>
         )}

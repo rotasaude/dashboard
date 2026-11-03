@@ -1,11 +1,13 @@
 // Uma dose registrada na caderneta aberta (módulo 29; F-29.2). Só aparece dentro da caderneta (leitura nominal com trilha): o motivo
 // do cancelamento é dado clínico e nunca vai a lista sem pessoa. Código de vacina que o catálogo não conhece aparece cru.
-// `actions` é o espaço que o cancelamento, a situação do envio e o ESAVI preenchem (Tasks 8, 9 e 15).
+// `actions` é o espaço que a situação do envio e o ESAVI preenchem (Tasks 9 e 15). "Cancelar dose" (Task 8) só aparece com `can_cancel`
+// (autor ou responsável pela sala, calculado pelo api) e dose ativa.
 import type { ReactNode } from "react";
 import type { Immunization } from "../../lib/api";
 import { fmtDateTime } from "../../lib/format";
 import { KeyValue } from "../../components/KeyValue";
 import { Tag } from "../../components/Tag";
+import { secondaryButtonStyle } from "../../components/formStyles";
 import { box, row } from "../exams/styles";
 
 export interface ImmunizationRowProps {
@@ -13,11 +15,14 @@ export interface ImmunizationRowProps {
   // Depois de uma ação na dose (cancelar, substituir), a tela relê a caderneta. Usado pelas Tasks 8, 9 e 15.
   onChanged(): void;
   onGoToSecurity?(): void;
+  // Abre o cancelamento (CancelDose) no lugar da caderneta.
+  onCancelDose?(imm: Immunization): void;
   actions?: ReactNode;
 }
 
-export function ImmunizationRow({ imm, actions }: ImmunizationRowProps) {
+export function ImmunizationRow({ imm, actions, onCancelDose }: ImmunizationRowProps) {
   const cancelled = imm.status === "cancelled";
+  const cancellable = !!onCancelDose && imm.can_cancel === true && imm.status === "active";
   return (
     <li style={{ ...box, listStyle: "none" }}>
       <div style={row}>
@@ -34,7 +39,16 @@ export function ImmunizationRow({ imm, actions }: ImmunizationRowProps) {
         <KeyValue k="Sala" v={imm.room?.name ?? "—"} mono={false} />
         <KeyValue k="Quem aplicou" v={imm.by.name ?? "—"} mono={false} />
       </div>
-      {actions && <div style={row}>{actions}</div>}
+      {(actions || cancellable) && (
+        <div style={row}>
+          {cancellable && (
+            <button type="button" style={secondaryButtonStyle} onClick={() => onCancelDose?.(imm)}>
+              {`Cancelar dose — ${imm.immunobiological.name ?? imm.immunobiological.code} ${imm.dose.name ?? imm.dose.code}`}
+            </button>
+          )}
+          {actions}
+        </div>
+      )}
     </li>
   );
 }

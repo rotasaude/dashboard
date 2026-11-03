@@ -107,6 +107,12 @@ describe("transcrição", () => {
     expect(transcriptionProblems([ { ...line, lotNumber: "x".repeat(41) } ], ctx).map((p) => p.text)).toEqual([ "BCG: o lote tem até 40 caracteres" ]);
     expect(transcriptionProblems([], ctx).map((p) => p.text)).toEqual([ "acrescente ao menos uma dose ou use “Confirmar caderneta completa”" ]);
   });
+  it("no máximo 40 doses (MAX_TRANSCRIPTION_ITEMS do api)", () => {
+    const ctx = { today: TODAY29, birthDate: "2026-07-01", closeCheck: true, catalog: CATALOG29 };
+    const many = (n: number) => Array.from({ length: n }, (_, i) => ({ ...line, key: `k${i}` }));
+    expect(transcriptionProblems(many(40), ctx)).toEqual([]);
+    expect(transcriptionProblems(many(41), ctx)).toEqual([ { path: "items", text: "no máximo 40 doses por transcrição" } ]);
+  });
 });
 
 describe("temperatura", () => {

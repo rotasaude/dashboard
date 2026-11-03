@@ -5339,8 +5339,11 @@ export interface TranscriptionItemInput {
   immunobiological_code: string; dose_code: string; applied_on: string; lot_number?: string; manufacturer_name?: string; place?: string;
 }
 export interface TranscriptionInput { patient_id: string; items: TranscriptionItemInput[]; close_check: boolean }
-// V6: a substituta vai sem `patient_id` (o api aceita, mas só o da própria dose); problemas dela vêm com path `replacement.<campo>`.
-export interface CancelInput { reason: string; replacement?: Omit<ImmunizationInput, "patient_id"> & { patient_id?: string } }
+// V6: `patient_id` na substituta é opcional (o api aceita, mas só o da própria dose); problemas dela vêm com path `replacement.<campo>`.
+// A substituta de uma dose transcrita vai como item de transcrição (Vaccination::CancelImmunization#transcribed).
+export interface CancelInput {
+  reason: string; replacement?: (Omit<ImmunizationInput, "patient_id"> & { patient_id?: string }) | TranscriptionItemInput;
+}
 
 export interface RndsPendingItem { immunization_id: string; patient_id: string; immunobiological: ImmunobiologicalRef; applied_at: string; rnds: ImmunizationRnds }
 // V8/V23: `counts` ao lado de `items`; `late` inclui `sending`. Cursor opaco: repasse como veio.

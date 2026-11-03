@@ -2,14 +2,18 @@
 // nominal com trilha: lida por MUTAÇÃO no clique (`gcTime: 0`), nunca sozinha nem em cache; uma resposta de uma busca já trocada
 // (outro cidadão, outra sala) é ignorada (`seq`). O catálogo é sem pessoa (STATIC_QUERY). "Outro cidadão" limpa tudo.
 // Registrar (F-29.3): o DoseForm toma o lugar da caderneta; depois do 201 a caderneta é relida (mutação) e a frase do aprazamento
-// (`doseSavedText`, da caderneta relida) recebe o foco.
+// (`doseSavedText`, da caderneta relida) recebe o foco. Transcrever (F-29.3) troca a caderneta pela da resposta (sem nova leitura);
+// cancelar (com ou sem substituição) relê a caderneta e diz "Dose cancelada." / "Dose cancelada e substituída.". Respostas que chegam
+// depois de trocar de cidadão são descartadas (`seq` e a guarda de paciente em `replaceCard`).
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   errorCode, getVaccinationCard, getVaccinationCatalog, type CardItem, type CardRequest, type Immunization, type VaccinationCard, type VaccineLocation
 } from "../lib/api";
 import { cityIsoDate } from "../lib/format";
-import { DOSE_SAVED, STATIC_QUERY, VAC_CATALOG_KEY, doseSavedText, vaccinationError } from "../lib/vaccination";
+import {
+  DOSE_CANCELLED, DOSE_REPLACED, DOSE_SAVED, STATIC_QUERY, TRANSCRIPTION_SAVED, VAC_CATALOG_KEY, doseSavedText, vaccinationError
+} from "../lib/vaccination";
 import { secondaryButtonStyle } from "../components/formStyles";
 import { alert, muted, panel, row, stack, title } from "./exams/styles";
 import { VaccinationGate } from "./vaccination/VaccinationGate";
@@ -17,6 +21,8 @@ import { VaccineLocationPick } from "./vaccination/VaccineLocationPick";
 import { PatientPick } from "./vaccination/PatientPick";
 import { CardView } from "./vaccination/CardView";
 import { DoseForm } from "./vaccination/DoseForm";
+import { TranscriptionForm } from "./vaccination/TranscriptionForm";
+import { CancelDose, type CancelResult } from "./vaccination/CancelDose";
 import type { PersonRestart } from "./territory/PersonStart";
 
 // `now` só para testes: sem ele, cada tela lê o relógio na hora (um padrão aqui congelaria a hora da abertura da sala).
@@ -44,10 +50,11 @@ function RoomBody({ room, now: fixedNow, onGoToSecurity }: { room: VaccineLocati
   const seq = useRef(0);
   const read = useMutation({ gcTime: 0, mutationFn: (req: CardRequest) => getVaccinationCard(roomId, req) });
   const reread = useMutation({ gcTime: 0, mutationFn: (patientId: string) => getVaccinationCard(roomId, { patient_id: patientId }) });
-  // Formulário da dose aberto (item da caderneta ou "Outra vacina") e a frase depois do registro.
-  const [ dose, setDose ] = useState<{ item: CardItem | null } | null>(null);
-  // `code`: o imunobiológico da dose, para refazer a frase se a releitura falhar e for repetida.
-  const [ saved, setSaved ] = useState<{ text: string; problem: string | null; code: string } | null>(null);
+  // O que toma o lugar da caderneta: o registro da dose (item ou "Outra vacina"), a transcrição ou o cancelamento de uma dose.
+  const [ view, setView ] = useState<{ kind: "dose"; item: CardItem | null } | { kind: "transcribe" } | { kind: "cancel"; imm: Immunization } | null>(null);
+  // A frase depois de uma ação. `redo`: como refazer a frase se a releitura falhar e for repetida ("Reabrir a caderneta").
+  type Redo = { after(c: VaccinationCard): string; fallback: string };
+  const [ saved, setSaved ] = useState<{ text: string; problem: string | null; redo: Redo | null } | null>(null);
   const savedRef = useRef<HTMLParagraphElement>(null);
   useEffect(() => { if (saved) savedRef.current?.focus(); }, [ saved ]);
 
@@ -82,33 +89,48 @@ function RoomBody({ room, now: fixedNow, onGoToSecurity }: { room: VaccineLocati
     setProblem(null);
   }
 
-  function record(item: CardItem | null) {
+  function show(next: typeof view) {
     setSaved(null);
-    setDose({ item });
+    setView(next);
   }
 
   function onSaved(imm: Immunization) {
-    setDose(null);
-    rereadCard(imm.immunobiological.code);
+    setView(null);
+    const code = imm.immunobiological.code;
+    rereadCard({ after: (c) => doseSavedText(c, code, catalog.data), fallback: DOSE_SAVED });
   }
 
-  // Enquanto relê (e se a releitura falhar) a caderneta velha não aparece: ela ainda ofereceria "Registrar" na dose recém-aplicada.
-  function rereadCard(code: string) {
+  function onCancelled(res: CancelResult) {
+    setView(null);
+    const text = res.replacement ? DOSE_REPLACED : DOSE_CANCELLED;
+    rereadCard({ after: () => text, fallback: text });
+  }
+
+  // A transcrição devolve a caderneta (já com a conferência, se fechada): sem nova leitura.
+  function onTranscribed(c: VaccinationCard) {
+    setView(null);
+    replaceCard(c);
+    setSaved({ text: TRANSCRIPTION_SAVED, problem: null, redo: null });
+  }
+
+  // Enquanto relê (e se a releitura falhar) a caderneta velha não aparece: ela ainda ofereceria "Registrar" na dose recém-aplicada
+  // (ou "Cancelar dose" na já cancelada).
+  function rereadCard(redo: Redo) {
     if (!card || reread.isPending) return;
     const mine = ++seq.current;
     reread.mutate(card.patient.id, {
       onSuccess: (c) => {
         if (mine !== seq.current) return;
         replaceCard(c);
-        setSaved({ text: doseSavedText(c, code, catalog.data), problem: null, code });
+        setSaved({ text: redo.after(c), problem: null, redo });
       },
-      onError: (err) => { if (mine === seq.current) setSaved({ text: DOSE_SAVED, problem: vaccinationError(err), code }); }
+      onError: (err) => { if (mine === seq.current) setSaved({ text: redo.fallback, problem: vaccinationError(err), redo }); }
     });
   }
 
   function another() {
     drop();
-    setDose(null);
+    setView(null);
     setSaved(null);
     setCard(null);
     setSearch((s) => ({ round: s.round + 1 }));
@@ -129,17 +151,24 @@ function RoomBody({ room, now: fixedNow, onGoToSecurity }: { room: VaccineLocati
             </>
           )}
           {reread.isPending ? <p className="mono" style={muted}>relendo a caderneta…</p>
-          : saved?.problem ? (
+          : saved?.problem && saved.redo ? (
             <div style={row}>
-              <button type="button" style={secondaryButtonStyle} onClick={() => rereadCard(saved.code)}>Reabrir a caderneta</button>
+              <button type="button" style={secondaryButtonStyle} onClick={() => rereadCard(saved.redo as Redo)}>Reabrir a caderneta</button>
             </div>
-          ) : catalog.data && dose ? (
-            <DoseForm room={room} patient={card.patient} catalog={catalog.data} item={dose.item} now={now} onSaved={onSaved}
-              onCancel={() => setDose(null)} />
+          ) : catalog.data && view?.kind === "dose" ? (
+            <DoseForm room={room} patient={card.patient} catalog={catalog.data} item={view.item} now={fixedNow} onSaved={onSaved}
+              onCancel={() => setView(null)} />
+          ) : catalog.data && view?.kind === "transcribe" ? (
+            <TranscriptionForm room={room} card={card} catalog={catalog.data} today={fixedNow ? today : undefined} onDone={onTranscribed}
+              onCancel={() => setView(null)} />
+          ) : catalog.data && view?.kind === "cancel" ? (
+            <CancelDose imm={view.imm} room={room} patient={card.patient} catalog={catalog.data} now={fixedNow} onDone={onCancelled}
+              onCancel={() => setView(null)} onGoToSecurity={onGoToSecurity} />
           ) : catalog.data ? (
-            // Transcrição e ESAVI entram nas Tasks 8 e 15.
+            // ESAVI entra na Task 15.
             <CardView room={room} card={card} catalog={catalog.data} now={now} onCard={replaceCard} onGoToSecurity={onGoToSecurity}
-              onRecord={record} onTranscribe={() => undefined} />
+              onRecord={(item) => show({ kind: "dose", item })} onTranscribe={() => show({ kind: "transcribe" })}
+              onCancelDose={(imm) => show({ kind: "cancel", imm })} />
           ) : catalog.isError ? <p role="alert" style={alert}>{vaccinationError(catalog.error)}</p>
             : <p className="mono" style={muted}>carregando…</p>}
         </>

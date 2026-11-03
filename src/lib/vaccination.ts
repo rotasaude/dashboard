@@ -19,6 +19,9 @@ export const NO_VACCINE_LOCATION = "você não está na equipe de nenhuma sala d
 // Sem a palavra "atraso": a tela inteira não a usa enquanto não há conferência.
 export const UNCHECKED_NOTICE = "Caderneta não conferida: transcreva as doses de fora ou confirme que está completa para ver as vacinas pendentes.";
 export const DOSE_SAVED = "Dose registrada.";
+export const DOSE_CANCELLED = "Dose cancelada.";
+export const DOSE_REPLACED = "Dose cancelada e substituída.";
+export const TRANSCRIPTION_SAVED = "Transcrição registrada.";
 export const LOT_REREAD = "o lote mudou — a lista de lotes foi relida; escolha de novo";
 const MATERNAL_REQUIRED = "informe a condição maternal (nenhuma, gestante ou puérpera)";
 export const VIAL_REREAD = "o frasco mudou — a lista de frascos foi relida; abra outro frasco ou escolha outro";
@@ -258,12 +261,15 @@ export const newTranscriptionLine = (key: string): TranscriptionLine =>
   ({ key, immunobiologicalCode: "", doseCode: "", appliedOn: "", lotNumber: "", manufacturerName: "", place: "" });
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
+// Teto do api (Vaccination::Catalog::MAX_TRANSCRIPTION_ITEMS).
+export const MAX_TRANSCRIPTION_ITEMS = 40;
 
 // Uma recusa por linha (a primeira), todas as linhas de uma vez. O nome da vacina vem do catálogo, quando a tela o passa; sem ele, o código.
 export function transcriptionProblems(
   lines: TranscriptionLine[], ctx: { today: string; birthDate: string; closeCheck: boolean; catalog?: VaccinationCatalog }
 ): Problem[] {
   if (lines.length === 0) return [ { path: "items", text: "acrescente ao menos uma dose ou use “Confirmar caderneta completa”" } ];
+  if (lines.length > MAX_TRANSCRIPTION_ITEMS) return [ { path: "items", text: `no máximo ${MAX_TRANSCRIPTION_ITEMS} doses por transcrição` } ];
   const out: Problem[] = [];
   lines.forEach((l, i) => {
     const name = ctx.catalog?.immunobiologicals.find((m) => m.code === l.immunobiologicalCode)?.name ?? (l.immunobiologicalCode || "dose");
