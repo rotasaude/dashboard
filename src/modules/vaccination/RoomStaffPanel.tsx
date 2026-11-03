@@ -1,7 +1,7 @@
 // Equipe da sala (módulo 29; F-29.1): quem vacina e quem responde pela sala. Só pessoas com o papel health_professional na Equipe da
 // cidade, uma opção por pessoa e sem quem já tem o papel na sala. O api recusa o resto (cbo_not_allowed, room_lead_requires_nurse,
 // professional_link_missing…) e a frase vem do mapa da vacinação. Vincular e desvincular passam pelo step-up. E-mail só na tela.
-import { useState } from "react";
+import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { addRoomStaff, removeRoomStaff } from "../../lib/api";
 import type { MembershipRow, VaccineRoom, VaccineRoomStaff, VaccineStaffRole } from "../../lib/api";
 import { vaccinationError } from "../../lib/vaccination";
@@ -24,6 +24,9 @@ export function RoomStaffPanel({ room, memberships, onChanged, onGoToSecurity }:
   const [ error, setError ] = useState<string | null>(null);
   const [ pending, setPending ] = useState<Pending>(null);
   const [ notice, setNotice ] = useState<string | null>(null);
+  const region = useRef<HTMLElement | null>(null);
+  useEffect(() => { region.current?.focus(); }, []);
+  const hint = useId();
 
   const emailOf = (id: string) => memberships.find((m) => m.user.id === id)?.user.email_address ?? null;
   const shown = (s: VaccineRoomStaff) => s.name ?? emailOf(s.user_id) ?? "pessoa sem nome";
@@ -36,7 +39,8 @@ export function RoomStaffPanel({ room, memberships, onChanged, onGoToSecurity }:
     people.push({ id: m.user.id, email: m.user.email_address });
   }
 
-  function link() {
+  function link(e?: FormEvent) {
+    e?.preventDefault();
     if (userId === "") { setError("escolha a pessoa"); return; }
     setError(null); setNotice(null);
     setPending({ kind: "add", userId, role });
@@ -49,8 +53,8 @@ export function RoomStaffPanel({ room, memberships, onChanged, onGoToSecurity }:
 
   return (
     <Panel title={`Equipe de ${room.name}`} sub="quem vacina nesta sala e quem responde por ela">
-      <section aria-label="Equipe da sala" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-        {notice && <p role="status" style={statusStyle}>{notice}</p>}
+      <section aria-label="Equipe da sala" tabIndex={-1} ref={region} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <div role="status">{notice && <p style={statusStyle}>{notice}</p>}</div>
         {room.staff.length === 0 && <p style={muted}>ninguém vinculado a esta sala</p>}
         {room.staff.length > 0 && (
           <ul style={list}>
@@ -66,7 +70,7 @@ export function RoomStaffPanel({ room, memberships, onChanged, onGoToSecurity }:
             ))}
           </ul>
         )}
-        <div style={box}>
+        <form style={box} onSubmit={link} noValidate>
           <fieldset disabled={pending !== null} style={fieldsetStyle}>
             <div style={row}>
               <label style={fieldLabel}>
@@ -78,17 +82,17 @@ export function RoomStaffPanel({ room, memberships, onChanged, onGoToSecurity }:
               </label>
               <label style={fieldLabel}>
                 Pessoa
-                <select value={userId} style={inputStyle} onChange={(e) => { setError(null); setUserId(e.target.value); }}>
+                <select value={userId} aria-describedby={hint} style={inputStyle} onChange={(e) => { setError(null); setUserId(e.target.value); }}>
                   <option value="">{people.length === 0 ? "ninguém disponível" : "escolha…"}</option>
                   {people.map((p) => <option key={p.id} value={p.id}>{p.email}</option>)}
                 </select>
               </label>
-              <button type="button" style={buttonStyle} onClick={link}>Vincular</button>
+              <button type="submit" style={buttonStyle}>Vincular</button>
             </div>
           </fieldset>
           {error && <p role="alert" style={alert}>{error}</p>}
-          <span style={muted}>A pessoa precisa ser profissional de saúde da cidade, com vínculo na unidade da sala; o responsável pela sala é enfermeiro (CBO 2235).</span>
-        </div>
+          <span id={hint} style={muted}>A pessoa precisa ser profissional de saúde da cidade, com vínculo na unidade da sala; o responsável pela sala é enfermeiro (CBO 2235).</span>
+        </form>
         {pending?.kind === "add" && (
           <SensitiveAction
             title={`Vincular ${emailOf(pending.userId) ?? "a pessoa"} como ${roleLabel(pending.role).toLowerCase()} em ${room.name}`}
