@@ -13,6 +13,7 @@ import { ConsultationLoader } from "../consultation/ConsultationView";
 import { ScreeningDetailLoader } from "../attendance/ScreeningDetail";
 import { RequestDetailPanel } from "../attendance/RequestDetailPanel";
 import { ExamOrderDetail } from "../exams/ExamOrderDetail";
+import { ImmunizationDetail } from "../vaccination/ImmunizationDetail";
 import { DocumentDetail } from "./DocumentDetail";
 
 interface Props {
@@ -58,5 +59,7 @@ export function TimelineDetail({
       return <RequestDetailPanel requestId={target.id} onClose={onClose} />;
     case "exam_order":
       return <ExamOrderDetail id={target.id} onClose={onClose} />;
+    case "immunization":
+      return <ImmunizationDetail id={target.id} onClose={onClose} />;
   }
 }

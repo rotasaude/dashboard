@@ -57,11 +57,11 @@ export function careLineRoles(user: SessionLike): CareRoles {
 }
 
 // ─── Rótulos (contrato §1). Código novo do api aparece cru. ────────────────
-const STATUS_LABEL: Record<string, string> = { ok: "em dia", due_soon: "vence em até 30 dias", overdue: "vencida", untracked: UNTRACKED_TEXT };
+const STATUS_LABEL: Record<string, string> = { ok: "em dia", due_soon: "vence em até 30 dias", overdue: "vencida", untracked: UNTRACKED_TEXT, unchecked: "não conferido" };
 export function statusLabel(code: string | null | undefined): string {
   return code ? STATUS_LABEL[code] ?? code : "sem boa prática acompanhada";
 }
-const STATUS_TONE: Record<string, string> = { ok: "ok", due_soon: "warn", overdue: "down", untracked: "neutral" };
+const STATUS_TONE: Record<string, string> = { ok: "ok", due_soon: "warn", overdue: "down", untracked: "neutral", unchecked: "neutral" };
 export function statusTone(code: string | null | undefined): string {
   return (code && STATUS_TONE[code]) || "neutral";
 }
@@ -140,8 +140,11 @@ export function decimalBr(n: number | string | null | undefined): string {
   return String(Math.round(v * 10) / 10).replace(".", ",");
 }
 
+// Módulo 29: a caderneta ainda não foi conferida; fora de "pendente" e de "vencido".
+export const UNCHECKED_TEXT = "não conferido — a caderneta de vacina ainda não foi conferida na sala de vacina";
 export function practiceText(p: CarePracticeStatus): string {
   if (p.status === "untracked") return UNTRACKED_TEXT;
+  if (p.status === "unchecked") return UNCHECKED_TEXT;
   const parts = [ statusLabel(p.status) ];
   if (p.count !== null && p.expected !== null) parts.push(`${p.count} de ${p.expected} esperadas até agora`);
   parts.push(p.done_at ? `última em ${fmtDay(p.done_at)}` : "nunca registrada");
@@ -149,7 +152,7 @@ export function practiceText(p: CarePracticeStatus): string {
   return parts.join(" · ");
 }
 
-// untracked (e código desconhecido) não piora a pessoa (ADR 0040).
+// untracked, unchecked (e código desconhecido) não piora a pessoa (ADR 0040).
 const SEVERITY: Record<string, number> = { ok: 0, due_soon: 1, overdue: 2 };
 export function worstStatus(practices: Pick<CarePracticeStatus, "status">[]): CareStatus | null {
   let worst: string | null = null;

@@ -23,16 +23,17 @@ export const TIMELINE_KINDS: { key: TimelineKind; label: string }[] = [
   { key: "campaign", label: "Campanha" },
   { key: "exam", label: "Exame" },
   { key: "procedure", label: "Procedimento" },
-  { key: "dispensation", label: "Dispensação" }
+  { key: "dispensation", label: "Dispensação" },
+  { key: "vaccination", label: "Vacina" }
 ];
 
 // O tipo Exame só existe com o rastreamento de exames ligado (módulo 21a); o
 // Procedimento, com o faturamento de procedimentos (módulo 22); a Dispensação,
-// com a farmácia — módulo 27a. O interruptor só tira o filtro: a entrada que o
+// com a farmácia — módulo 27a; a Vacina, com a sala de vacina — módulo 29. O interruptor só tira o filtro: a entrada que o
 // api devolve continua na lista (registro clínico retido).
-export function timelineKinds(examTracking: boolean, procedureBilling = false, pharmacy = false): typeof TIMELINE_KINDS {
+export function timelineKinds(examTracking: boolean, procedureBilling = false, pharmacy = false, vaccination = false): typeof TIMELINE_KINDS {
   return TIMELINE_KINDS.filter((k) =>
-    (k.key !== "exam" || examTracking) && (k.key !== "procedure" || procedureBilling) && (k.key !== "dispensation" || pharmacy));
+    (k.key !== "exam" || examTracking) && (k.key !== "procedure" || procedureBilling) && (k.key !== "dispensation" || pharmacy) && (k.key !== "vaccination" || vaccination));
 }
 
 export const ALL_FILTERS: TimelineFilters = { kinds: [], from: "", to: "" };
@@ -90,9 +91,9 @@ export function mergePages(pages: TimelinePage[]): TimelineEntry[] {
   return out;
 }
 
-export type DetailType = "consultation" | "clinical_document" | "screening" | "appointment_request" | "exam_order";
+export type DetailType = "consultation" | "clinical_document" | "screening" | "appointment_request" | "exam_order" | "immunization";
 export interface DetailTarget { type: DetailType; id: string }
-const OPENABLE: ReadonlySet<string> = new Set<DetailType>([ "consultation", "clinical_document", "screening", "appointment_request", "exam_order" ]);
+const OPENABLE: ReadonlySet<string> = new Set<DetailType>([ "consultation", "clinical_document", "screening", "appointment_request", "exam_order", "immunization" ]);
 
 // Pela abertura justificada (fora de contexto) só a consulta abre: as rotas de
 // documento, escuta e pedido não aceitam a abertura (contrato §9). O pedido de
@@ -157,7 +158,9 @@ const STATUS_LABEL: Record<string, string> = {
   // Módulo 22 (contrato §1): procedimento realizado (cancelled já está acima).
   recorded: "registrado",
   // Módulo 27a: retirada na farmácia (a entrada não abre detalhe — detail_ref nulo).
-  dispensed: "dispensado"
+  dispensed: "dispensado",
+  // Módulo 29: dose de vacina (cancelled já está acima).
+  active: "aplicada"
 };
 
 export function statusLabel(status: string | null, apiLabel?: string | null): string {

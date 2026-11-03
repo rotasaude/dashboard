@@ -429,3 +429,13 @@ describe("consultas e recusas", () => {
     expect(isStaleCare(refusal(409, "already_enrolled"))).toBe(false);
   });
 });
+
+describe("vacina não conferida (módulo 29)", () => {
+  it("rótulo, tom e texto; não piora a pessoa", () => {
+    expect([ statusLabel("unchecked"), statusTone("unchecked") ]).toEqual([ "não conferido", "neutral" ]);
+    expect(practiceText({ key: "vaccine:42", label: "Penta", status: "unchecked", done_at: null, due_on: null, count: null, expected: null }))
+      .toBe("não conferido — a caderneta de vacina ainda não foi conferida na sala de vacina");
+    expect(worstStatus([ { status: "unchecked" }, { status: "ok" } ])).toBe("ok");
+    expect(worstStatus([ { status: "unchecked" } ])).toBeNull();
+  });
+});

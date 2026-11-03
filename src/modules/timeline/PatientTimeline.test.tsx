@@ -185,14 +185,14 @@ describe("PatientTimeline", () => {
 
   it("entrada de tipo desconhecido: aparece crua e sem Abrir", async () => {
     m(api.getTimeline).mockResolvedValue(page({ entries: [
-      entry({ id: "vaccination:v1", kind: "vaccination", title: "Vacina contra a gripe", summary: null, status: null, unit: null,
-        professional: null, detail_ref: { type: "vaccination", id: "v1" } }),
+      entry({ id: "something_new:v1", kind: "something_new", title: "Vacina contra a gripe", summary: null, status: null, unit: null,
+        professional: null, detail_ref: { type: "something_new", id: "v1" } }),
       CONSULTATION
     ] }));
     renderWithProviders(<PatientTimeline subject={{ attendanceId: "a1" }} />);
     expect(await screen.findByText("Vacina contra a gripe")).not.toBeNull();
-    expect(screen.getByText("vaccination")).not.toBeNull();
-    expect(screen.queryByRole("button", { name: /^Abrir vaccination/ })).toBeNull();
+    expect(screen.getByText("something_new")).not.toBeNull();
+    expect(screen.queryByRole("button", { name: /^Abrir something_new/ })).toBeNull();
     expect(screen.getByRole("button", { name: "Abrir consulta de 10/09/2026, 14:30" })).not.toBeNull();
     expect(document.body.textContent).not.toMatch(/undefined|null/);
   });

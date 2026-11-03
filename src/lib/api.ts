@@ -3797,7 +3797,7 @@ const CARE_BASE = import.meta.env.VITE_CARE_LINES_BASE || "/care_lines";
 const carePath = (...parts: string[]) => [ CARE_BASE, ...parts.map(encodeURIComponent) ].join("/");
 const carePost = (body: unknown): RequestInit => ({ method: "POST", body: JSON.stringify(body) });
 
-export type CareStatus = "ok" | "due_soon" | "overdue" | "untracked";
+export type CareStatus = "ok" | "due_soon" | "overdue" | "untracked" | "unchecked";
 export type CareSchedule = "proportional" | "end_of_window";
 export type CareAnchor = "enrollment" | "birth" | "lmp" | "rolling";
 export type SuggestionReason = "problem" | "age_sex" | "declared" | "resolved_problem";
