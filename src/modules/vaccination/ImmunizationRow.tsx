@@ -8,6 +8,7 @@ import { fmtDateTime } from "../../lib/format";
 import { KeyValue } from "../../components/KeyValue";
 import { Tag } from "../../components/Tag";
 import { RndsStatusTag } from "./RndsStatusTag";
+import { EsaviButton } from "./EsaviButton";
 import { secondaryButtonStyle } from "../../components/formStyles";
 import { box, row } from "../exams/styles";
 
@@ -51,6 +52,7 @@ export function ImmunizationRow({ imm, actions, onCancelDose }: ImmunizationRowP
           {actions}
         </div>
       )}
+      <EsaviButton imm={imm} />
     </li>
   );
 }
