@@ -34,16 +34,20 @@ export function PharmacyTransfers({ today = todayInCity() }: { today?: string } 
     <PharmacyGate title="Transferências" sub="envio do almoxarifado e recebimento conferido na unidade" allow={(r) => r.pharmacist || r.assistant || r.keeper}>
       {() => (
         <LocationPick allow={(r) => r.pharmacist || r.assistant || r.keeper}>
-          {(loc) => <Body location={loc} today={today} />}
+          {(loc) => <TransfersBody location={loc} today={today} />}
         </LocationPick>
       )}
     </PharmacyGate>
   );
 }
 
-function Body({ location, today }: { location: PharmacyLocation; today: string }) {
+// Módulo 29: a tela de imunobiológicos monta este corpo com `canSend` (a rede de frio envia; a sala só recebe) e os `destinations`
+// (as salas ativas). Sem as props, a regra de hoje: só o almoxarife do central envia, às farmácias da lista de locais.
+export function TransfersBody({ location, today, canSend: allowSend, destinations }: {
+  location: PharmacyLocation; today: string; canSend?: boolean; destinations?: PharmacyLocation[];
+}) {
   const roles = locationRoles(location);
-  const canSend = location.kind === "central" && roles.keeper;
+  const canSend = allowSend ?? (location.kind === "central" && roles.keeper);
   const [ notice, setNotice ] = useState<string | null>(null);
   const [ stale, setStale ] = useState<string | null>(null);
   const [ receiving, setReceiving ] = useState<StockTransfer | null>(null);
@@ -66,7 +70,7 @@ function Body({ location, today }: { location: PharmacyLocation; today: string }
       {notice && <p role="status" style={okText}>{notice}</p>}
       {stale && <p role="alert" style={alert}>{stale}</p>}
 
-      {canSend && <TransferForm central={location} today={today} onStart={clear} onDone={() => { clear(); setNotice(TRANSFER_SENT_TEXT); }} />}
+      {canSend && <TransferForm central={location} today={today} destinations={destinations} onStart={clear} onDone={() => { clear(); setNotice(TRANSFER_SENT_TEXT); }} />}
 
       {open && (
         <ReceiveForm key={open.id} transfer={open} onStart={clear} onCancel={() => setReceiving(null)}

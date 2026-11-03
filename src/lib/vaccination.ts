@@ -2,7 +2,7 @@
 import {
   ApiError,
   type CardCheck, type CardItem, type CodeName, type ColdChainEquipment, type ImmunizationInput, type Immunobiological, type LotBalance,
-  type ReadingInput, type StockPosition, type TranscriptionInput, type VaccinationCard, type VaccinationCatalog, type VaccineLocation, type Vial
+  type ReadingInput, type StockPosition, type TranscriptionInput, type VaccineReceiptItemInput, type VaccinationCard, type VaccinationCatalog, type VaccineLocation, type Vial
 } from "./api";
 import { NOMINAL_QUERY, STATIC_QUERY } from "./careLines";
 import { featureDisabledKey, featureLabel, hasFeature } from "./features";
@@ -359,6 +359,99 @@ export function monthProblem(m: string, today: string): string | null {
 
 export const currentMonth = (today: string): string => today.slice(0, 7);
 
+// ─── Entrada e inventário inicial de imunobiológico (rotas do 27a; V4, V19) ──
+// Uma linha por lote, em FRASCOS fechados: o api conta as doses por `doses_per_vial` do catálogo (package obrigatório; outro tamanho de
+// frasco → items[i].package invalid_quantity). Fabricante pela `key` da lista daquela vacina (`manufacturer_not_in_catalog`).
+export interface VaccineReceiptLine { key: string; immunobiologicalCode: string; manufacturerKey: string; lotNumber: string; expiresOn: string; vials: string }
+
+export const newVaccineReceiptLine = (key: string): VaccineReceiptLine =>
+  ({ key, immunobiologicalCode: "", manufacturerKey: "", lotNumber: "", expiresOn: "", vials: "" });
+
+// Catalog::LOT_NUMBER e Catalog::DOCUMENT_NUMBER do api: letras, dígitos, ponto, barra e hífen (sem espaço).
+const LOT_NUMBER = /^[0-9A-Za-z./-]{1,40}$/;
+const DOCUMENT_NUMBER = /^[0-9A-Za-z./-]{1,60}$/;
+const MAX_ENTRY_DOSES = 99_999;
+const productOf = (catalog: VaccinationCatalog, code: string): Immunobiological | undefined =>
+  catalog.immunobiologicals.find((i) => i.code === code);
+
+// Doses da linha (frascos × doses por frasco), ou null quando ainda não dá para calcular.
+export function vaccineLineDoses(l: VaccineReceiptLine, catalog: VaccinationCatalog): number | null {
+  const product = productOf(catalog, l.immunobiologicalCode);
+  if (!product || !/^\d+$/.test(l.vials.trim())) return null;
+  const vials = Number(l.vials.trim());
+  return vials >= 1 && vials <= 10000 ? vials * product.doses_per_vial : null;
+}
+
+function vaccineLineProblem(l: VaccineReceiptLine, catalog: VaccinationCatalog, today: string): string | null {
+  const product = productOf(catalog, l.immunobiologicalCode);
+  if (!product) return "escolha a vacina";
+  const lot = l.lotNumber.trim();
+  const vials = l.vials.trim();
+  let text: string | null = null;
+  if (!product.manufacturers.some((m) => m.key === l.manufacturerKey)) text = "escolha o fabricante da lista desta vacina";
+  else if (lot === "") text = "informe o número do lote";
+  else if (lot.length > 40) text = "o número do lote tem até 40 caracteres";
+  else if (!LOT_NUMBER.test(lot)) text = "número do lote: só letras, números, ponto, barra e hífen";
+  else if (l.expiresOn === "") text = "informe a validade";
+  else if (l.expiresOn < today) text = "lote vencido — não entra no estoque";
+  else if (!/^\d+$/.test(vials) || Number(vials) < 1 || Number(vials) > 10000) text = "frascos: número inteiro de 1 a 10000";
+  else if (Number(vials) * product.doses_per_vial > MAX_ENTRY_DOSES) text = `frascos × ${product.doses_per_vial} doses passa de ${MAX_ENTRY_DOSES} doses — divida em duas entradas`;
+  return text === null ? null : `${product.name}: ${text}`;
+}
+
+// Documento como no 27a (só fora do inventário inicial), com o formato do api; por linha, a primeira recusa; todas de uma vez.
+export function vaccineReceiptProblems(lines: VaccineReceiptLine[], ctx: {
+  catalog: VaccinationCatalog; today: string; doc: { kind: "invoice" | "donation" | "opening"; number: string; supplier: string };
+}): Problem[] {
+  const out: Problem[] = [];
+  if (ctx.doc.kind !== "opening") {
+    const number = ctx.doc.number.trim(); const supplier = ctx.doc.supplier.trim();
+    if (number === "") out.push({ path: "document.number", text: "informe o número do documento" });
+    else if (number.length > 60) out.push({ path: "document.number", text: "o número do documento tem até 60 caracteres" });
+    else if (!DOCUMENT_NUMBER.test(number)) out.push({ path: "document.number", text: "número do documento: só letras, números, ponto, barra e hífen (sem espaço)" });
+    if (supplier === "") out.push({ path: "document.supplier", text: "informe o fornecedor ou doador" });
+    else if (supplier.length > 120) out.push({ path: "document.supplier", text: "o fornecedor ou doador tem até 120 caracteres" });
+  }
+  if (lines.length === 0) out.push({ path: "items", text: "acrescente ao menos um lote" });
+  for (const l of lines) {
+    const text = vaccineLineProblem(l, ctx.catalog, ctx.today);
+    if (text) out.push({ path: l.key, text });
+  }
+  return out;
+}
+
+// Só depois de vaccineReceiptProblems == []. `quantity` (doses, texto) = frascos × doses por frasco, e a conta em `package`.
+export function vaccineReceiptItems(lines: VaccineReceiptLine[], catalog: VaccinationCatalog): VaccineReceiptItemInput[] {
+  return lines.map((l) => {
+    const perVial = productOf(catalog, l.immunobiologicalCode)?.doses_per_vial ?? 0;
+    const vials = Number(l.vials.trim());
+    return {
+      immunobiological_code: l.immunobiologicalCode, manufacturer_key: l.manufacturerKey, lot_number: l.lotNumber.trim(), expires_on: l.expiresOn,
+      quantity: String(vials * perVial), package: { units_per_package: perVial, packages: vials }
+    };
+  });
+}
+
+// Frase de uma recusa do api na entrada: `invalid_quantity` em `package` é o tamanho do frasco (o catálogo mudou desde que a tela leu).
+export function receiptRefusalText(r: Refusal): string {
+  if (r.code === "invalid_quantity" && /\.package$/.test(r.path)) return "as doses por frasco não batem com o catálogo — recarregue a tela";
+  return r.text;
+}
+
+// ─── Perda física de vacina: motivos do SIES (config/vaccination/physical_loss_reasons.yml do api; o api não os expõe) ──
+// Perda e vencimento de lote de vacina exigem `loss_code` desta lista (ausente → required; fora → invalid_request).
+export const PHYSICAL_LOSS_REASONS: CodeName[] = [
+  { code: "broken", name: "Frasco quebrado" },
+  { code: "expired", name: "Validade vencida" },
+  { code: "equipment_failure", name: "Falha de equipamento" },
+  { code: "power_outage", name: "Falta de energia" },
+  { code: "transport_failure", name: "Falha no transporte" },
+  { code: "temperature_excursion", name: "Excursão de temperatura" },
+  { code: "wrong_procedure", name: "Procedimento incorreto" },
+  { code: "other", name: "Outro motivo" }
+];
+export const lossReasonLabel = (code: string): string => PHYSICAL_LOSS_REASONS.find((r) => r.code === code)?.name ?? code;
+
 // ─── Recusas do api (frase, nunca o corpo nem o valor enviado) ──────────────
 // Vale sobre as frases da farmácia: o vocabulário do 29 (frasco descartado ≠ vencido, lote de outra vacina...). O que não está aqui e
 // a farmácia conhece (saldo, motivo, CPF...) usa a frase dela; código que nenhuma conhece vira "recusado pelo servidor (<código>)".
@@ -408,7 +501,11 @@ const ERRORS: Record<string, string> = {
   invalid_requester_cnes: "o CNES do solicitante é inválido — confira os 7 dígitos",
   invalid_certificate: "o certificado não abriu — confira o arquivo e a senha",
   certificate_expired: "o certificado está vencido",
-  invalid_credential: "confira o certificado, a senha e o CNES"
+  invalid_credential: "confira o certificado, a senha e o CNES",
+  manufacturer_not_in_catalog: "o fabricante não está na lista desta vacina — escolha de novo",
+  immunobiological_unknown: "vacina fora do catálogo — recarregue a tela",
+  item_not_allowed_here: "este item não entra neste local",
+  expired_lot: "lote vencido — não entra no estoque"
 };
 
 // `adjustment_pending` muda de sentido pelo campo: na conduta da excursão é o descarte que espera aprovação.

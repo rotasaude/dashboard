@@ -4,12 +4,14 @@
 // O envio confere TODAS as linhas antes (transferProblems); a recusa do api com `problems` mostra cada uma na linha dela (`items[i]` é o
 // índice do corpo enviado = a linha i da tela) e o formulário fica como estava — nada é reenviado sozinho. A posição de cada linha é lida
 // do cache, que é relido depois de cada escrita (saldo mudou: a tela mostra o saldo novo). Nada em URL, log ou storage.
+// Módulo 29: a rede de frio envia às salas de vacina — quem chama passa os `destinations` (a lista de locais da pessoa NÃO é lida) e
+// o corpo leva `from_location_id` (fora do central de medicamentos). O item é identificado por `itemKey` (vacina não tem catalog_item_id).
 import { useState, type CSSProperties } from "react";
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { listMyPharmacyLocations, listPositions, sendTransfer, type PharmacyLocation, type StockPosition, type StockTransfer } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import {
-  PH_LOCATIONS_KEY, PH_POSITIONS_KEY, PH_TRANSFERS_KEY, STATIC_QUERY, availableLots, errorPath, locationKindLabel, lotOptionLabel,
+  PH_LOCATIONS_KEY, PH_POSITIONS_KEY, PH_TRANSFERS_KEY, STATIC_QUERY, availableLots, errorPath, itemKey, locationKindLabel, lotOptionLabel,
   pharmacyError, pharmacyProblems, problemItemIndex, suggestedLotId, toApiQuantity, transferProblems, type TransferLine
 } from "../../lib/pharmacy";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
@@ -21,12 +23,16 @@ const DESTINATION_TEXT = "escolha o destino da transferência";
 interface Line { key: string; snapshot: StockPosition; lotId: string; quantity: string }
 type Shown = { key: string; text: string };
 
-export function TransferForm({ central, today, onStart, onDone }: {
-  central: PharmacyLocation; today: string; onStart?(): void; onDone(t: StockTransfer): void;
+export function TransferForm({ central, today, destinations: given, onStart, onDone }: {
+  central: PharmacyLocation; today: string; destinations?: PharmacyLocation[]; onStart?(): void; onDone(t: StockTransfer): void;
 }) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const locations = useQuery({ queryKey: [ PH_LOCATIONS_KEY, user?.id ?? null ], queryFn: listMyPharmacyLocations, enabled: !!user, ...STATIC_QUERY });
+  const locations = useQuery({
+    queryKey: [ PH_LOCATIONS_KEY, user?.id ?? null ], queryFn: listMyPharmacyLocations, enabled: !!user && !given, ...STATIC_QUERY
+  });
+  const vaccine = central.kind === "cold_chain_central";
+  const words = vaccine ? VACCINE_WORDS : MEDICATION_WORDS;
   const positions = useInfiniteQuery({
     queryKey: [ PH_POSITIONS_KEY, central.id, "transfer" ],
     queryFn: ({ pageParam }) => listPositions({ locationId: central.id, before: pageParam }),
@@ -40,10 +46,10 @@ export function TransferForm({ central, today, onStart, onDone }: {
   const [ shown, setShown ] = useState<Shown[]>([]);
   const [ busy, setBusy ] = useState(false);
 
-  const destinations = (locations.data ?? []).filter((l) => l.kind === "unit" && l.active && l.id !== central.id);
+  const destinations = given ?? (locations.data ?? []).filter((l) => l.kind === "unit" && l.active && l.id !== central.id);
   const all = (positions.data?.pages ?? []).flatMap((p) => p.positions);
   const offered = all.filter((p) => availableLots(p, today).length > 0);
-  const current = (l: Line): StockPosition => all.find((p) => p.item.catalog_item_id === l.snapshot.item.catalog_item_id) ?? l.snapshot;
+  const current = (l: Line): StockPosition => all.find((p) => itemKey(p.item) === itemKey(l.snapshot.item)) ?? l.snapshot;
   const toLine = (l: Line): TransferLine => ({ key: l.key, position: current(l), lotId: l.lotId, quantity: l.quantity });
   const flagged = new Set(shown.map((s) => s.key));
   const many = lines.length > 1;
@@ -81,6 +87,7 @@ export function TransferForm({ central, today, onStart, onDone }: {
     try {
       const result = await sendTransfer({
         to_location_id: destination,
+        ...(central.kind === "central" ? {} : { from_location_id: central.id }),
         items: sent.map((l) => ({ lot_id: l.lotId, quantity: toApiQuantity(l.quantity) }))
       });
       setLines([]);
@@ -101,20 +108,20 @@ export function TransferForm({ central, today, onStart, onDone }: {
         Destino
         <select value={destination} style={{ ...inputStyle, ...(flagged.has("destination") ? flaggedStyle : null) }} disabled={busy}
           onChange={(e) => setDestination(e.target.value)}>
-          <option value="">Escolha a farmácia de destino</option>
+          <option value="">{words.pick}</option>
           {destinations.map((l) => <option key={l.id} value={l.id}>{l.name} — {locationKindLabel(l.kind)}</option>)}
         </select>
       </label>
-      {locations.isError && !locations.data && <p role="alert" style={alert}>{pharmacyError(locations.error)}</p>}
+      {!given && locations.isError && !locations.data && <p role="alert" style={alert}>{pharmacyError(locations.error)}</p>}
 
       <div style={box}>
-        <strong style={{ fontSize: 12.5 }}>Medicamentos com saldo no almoxarifado</strong>
+        <strong style={{ fontSize: 12.5 }}>{words.heading}</strong>
         {positions.isPending && <p className="mono" style={muted}>carregando…</p>}
         {positions.isError && !positions.data && <p role="alert" style={alert}>{pharmacyError(positions.error)}</p>}
-        {positions.data && offered.length === 0 && <p style={muted}>nenhum medicamento com lote disponível para enviar</p>}
+        {positions.data && offered.length === 0 && <p style={muted}>{words.none}</p>}
         <div style={row}>
           {offered.map((p) => (
-            <button key={p.item.catalog_item_id} type="button" style={secondaryButtonStyle} disabled={busy} aria-label={`Acrescentar ${p.item.name}`}
+            <button key={itemKey(p.item)} type="button" style={secondaryButtonStyle} disabled={busy} aria-label={`Acrescentar ${p.item.name}`}
               onClick={() => add(p)}>
               {`+ ${p.item.name}`}
             </button>
@@ -123,7 +130,7 @@ export function TransferForm({ central, today, onStart, onDone }: {
         {positions.hasNextPage && (
           <div style={row}>
             <button type="button" style={secondaryButtonStyle} disabled={positions.isFetchingNextPage} onClick={() => void positions.fetchNextPage()}>
-              {positions.isFetchingNextPage ? "Carregando…" : "Carregar mais medicamentos"}
+              {positions.isFetchingNextPage ? "Carregando…" : words.more}
             </button>
           </div>
         )}
@@ -175,3 +182,11 @@ export function TransferForm({ central, today, onStart, onDone }: {
 }
 
 const flaggedStyle: CSSProperties = { borderColor: "var(--down)" };
+const MEDICATION_WORDS = {
+  pick: "Escolha a farmácia de destino", heading: "Medicamentos com saldo no almoxarifado",
+  none: "nenhum medicamento com lote disponível para enviar", more: "Carregar mais medicamentos"
+};
+const VACCINE_WORDS = {
+  pick: "Escolha a sala de destino", heading: "Vacinas com saldo na rede de frio",
+  none: "nenhuma vacina com lote disponível para enviar (lote bloqueado ou vencido não sai)", more: "Carregar mais vacinas"
+};

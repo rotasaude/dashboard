@@ -27,6 +27,7 @@ export const NOTHING_TO_DISPENSE = "informe a quantidade de ao menos um item";
 export const NO_PATIENT_RECORD =
   "esta pessoa ainda não tem receita no Rota Saúde — se trouxe receita de fora da rede, use Receita externa";
 export const NOTIFICATION_REQUIRED = "receita de lista A ou B exige o número da notificação";
+export const LOT_BLOCKED_TEXT = "lote bloqueado por temperatura fora da faixa até a conduta — escolha outro lote";
 export const BALANCE_CHANGED = "o saldo do lote mudou — os lotes foram relidos; confira a quantidade";
 export const PRESCRIPTION_CHANGED = "a receita mudou enquanto você dispensava — busque a receita de novo";
 
@@ -165,9 +166,10 @@ export const itemKey = (item: StockItem): string => item.catalog_item_id ?? `imm
 const byExpiry = (a: LotBalance, b: LotBalance) =>
   a.lot.expires_on.localeCompare(b.lot.expires_on) || a.lot.lot_number.localeCompare(b.lot.lot_number);
 
-// Saldo > 0 e não vencido (o lote vence ao fim do dia da validade), o que vence primeiro no começo.
+// Saldo > 0, não vencido (o lote vence ao fim do dia da validade) e não bloqueado (módulo 29: excursão de temperatura aberta — o api
+// recusa `lot_blocked`), o que vence primeiro no começo.
 export function availableLots(p: StockPosition | undefined, today: string): LotBalance[] {
-  return (p?.lots ?? []).filter((b) => cents(b.balance) > 0 && b.lot.expires_on >= today).sort(byExpiry);
+  return (p?.lots ?? []).filter((b) => cents(b.balance) > 0 && b.lot.expires_on >= today && !b.blocked).sort(byExpiry);
 }
 
 export function suggestedLotId(p: StockPosition | undefined, today: string): string {
@@ -182,8 +184,9 @@ export function lotsWithBalance(p: StockPosition | undefined): LotBalance[] {
 // Contagem de inventário (e tipo ainda não escolhido): TODOS os lotes da posição, inclusive os de saldo zero — o inventário que não acha
 // estoque zerado não serve (o api trata saldo zero como acima do limite e pede aprovação). Perda: só lote não vencido e com saldo;
 // vencimento: só lote já vencido e com saldo (o api devolve lot_expired / lot_not_expired). Do que vence primeiro ao que vence depois.
+// Lote bloqueado por excursão de temperatura (módulo 29) nunca: o api recusa qualquer ajuste dele (`lot_blocked`) até a conduta.
 export function lotsForKind(p: StockPosition | undefined, kind: AdjustmentKind | "", today: string): LotBalance[] {
-  const all = [ ...(p?.lots ?? []) ].sort(byExpiry);
+  const all = (p?.lots ?? []).filter((b) => !b.blocked).sort(byExpiry);
   const stocked = (b: LotBalance) => cents(b.balance) > 0;
   if (kind === "loss") return all.filter((b) => stocked(b) && b.lot.expires_on >= today);
   if (kind === "expiry") return all.filter((b) => stocked(b) && b.lot.expires_on < today);
@@ -374,7 +377,7 @@ export function transferProblems(lines: TransferLine[], today: string): Problem[
     const lot = l.position.lots.find((b) => b.lot.id === l.lotId);
     if (!l.lotId || !lot) { out.push({ path: l.key, text: `${name}: escolha o lote` }); continue; }
     const who = `${name}, lote ${lot.lot.lot_number}`;
-    const q = lot.lot.expires_on < today ? "lote vencido — escolha outro lote" : quantityProblem(l.quantity)
+    const q = lot.blocked ? LOT_BLOCKED_TEXT : lot.lot.expires_on < today ? "lote vencido — escolha outro lote" : quantityProblem(l.quantity)
       ?? (cents(toApiQuantity(l.quantity)) > cents(lot.balance) ? `saída maior que o saldo do lote (${fmtQuantity(lot.balance)})` : null);
     if (q) out.push({ path: l.key, text: `${who}: ${q}` });
   }
@@ -549,6 +552,7 @@ const ERRORS: Record<string, string> = {
   free_text_requires_pharmacist: FREE_TEXT_PHARMACIST_ONLY,
   retention_required: RETENTION_REQUIRED,
   lot_expired: "lote vencido — escolha outro lote",
+  lot_blocked: LOT_BLOCKED_TEXT,
   expired_lot: "lote vencido — escolha outro lote",
   invalid_item: "item do catálogo inválido ou inativo",
   invalid_quantity: QUANTITY_TEXT,

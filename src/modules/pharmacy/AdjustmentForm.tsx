@@ -4,13 +4,17 @@
 // aplicados na hora; só a contagem acima do limite da cidade fica pendente (o limite é do api — a tela não o calcula) e a frase de
 // sucesso vem do `status` da resposta. O lote só oferece o que vale para o tipo: perda, lote não vencido; vencimento, lote já vencido.
 // "Revisar" confere tudo de uma vez e abre o SensitiveAction (step-up). Nada em URL, log ou storage; nada de editar ou apagar movimento.
+// Módulo 29: o item é identificado por `itemKey` (vacina não tem catalog_item_id); lote bloqueado por excursão não é oferecido; perda e
+// vencimento de lote de vacina pedem o motivo do SIES (`loss_code`, da lista que quem chama passa em `lossReasons`).
 import { useRef, useState } from "react";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
-import { listPositions, recordAdjustment, type AdjustmentKind, type PharmacyLocation, type StockAdjustment, type StockPosition } from "../../lib/api";
+import {
+  listPositions, recordAdjustment, type AdjustmentKind, type CodeName, type PharmacyLocation, type StockAdjustment, type StockPosition
+} from "../../lib/api";
 import { fmtDay } from "../../lib/exams";
 import {
   PH_ADJUSTMENTS_KEY, PH_POSITIONS_KEY, STATIC_QUERY, adjustmentBody, adjustmentDelta, adjustmentKindLabel, adjustmentProblem, cents,
-  fmtQuantity, fmtSigned, lotKindProblem, lotOptionLabel, lotsForKind, pharmacyError, reasonProblem, type AdjustmentDraft
+  fmtQuantity, fmtSigned, itemKey, lotKindProblem, lotOptionLabel, lotsForKind, pharmacyError, reasonProblem, type AdjustmentDraft
 } from "../../lib/pharmacy";
 import { SensitiveAction } from "../../components/SensitiveAction";
 import { buttonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
@@ -30,9 +34,16 @@ const EMPTY: AdjustmentDraft = { lotId: "", kind: "", amount: "", reason: "" };
 const KINDS: AdjustmentKind[] = [ "adjustment", "loss", "expiry" ];
 const KIND_OPTION: Record<AdjustmentKind, string> = { adjustment: "Contagem de inventário", loss: "Perda", expiry: "Vencimento" };
 
-export function AdjustmentForm({ location, today, onStart, onDone, onGoToSecurity }: {
-  location: PharmacyLocation; today: string; onStart?(): void; onDone(saved: StockAdjustment, kind: AdjustmentKind): void; onGoToSecurity?(): void;
+export const LOSS_CODE_REQUIRED = "escolha o motivo da perda (lista do SIES)";
+const VACCINE_KINDS = new Set([ "vaccine_room", "cold_chain_central" ]);
+
+export function AdjustmentForm({ location, today, lossReasons = [], onStart, onDone, onGoToSecurity }: {
+  location: PharmacyLocation; today: string; lossReasons?: CodeName[]; onStart?(): void; onDone(saved: StockAdjustment, kind: AdjustmentKind): void;
+  onGoToSecurity?(): void;
 }) {
+  const noun = VACCINE_KINDS.has(location.kind)
+    ? { label: "Vacina", pick: "Escolha a vacina", none: "nenhuma vacina com lote", more: "Carregar mais vacinas" }
+    : { label: "Medicamento", pick: "Escolha o medicamento", none: "nenhum medicamento com saldo", more: "Carregar mais medicamentos" };
   const queryClient = useQueryClient();
   const positions = useInfiniteQuery({
     queryKey: [ PH_POSITIONS_KEY, location.id, "adjustment" ],
@@ -43,36 +54,40 @@ export function AdjustmentForm({ location, today, onStart, onDone, onGoToSecurit
   });
   const [ itemId, setItemId ] = useState("");
   const [ draft, setDraft ] = useState<AdjustmentDraft>(EMPTY);
+  const [ lossCode, setLossCode ] = useState("");
   const [ problems, setProblems ] = useState<string[]>([]);
-  const [ review, setReview ] = useState<AdjustmentDraft | null>(null);
+  const [ review, setReview ] = useState<(AdjustmentDraft & { lossCode: string }) | null>(null);
   const saved = useRef<StockAdjustment | null>(null);
 
   const all = (positions.data?.pages ?? []).flatMap((p) => p.positions);
   // Contagem parte de zero: o medicamento só some quando não tem lote nenhum (perda e vencimento ainda exigem saldo, no seletor de lotes).
   const offered = all.filter((p) => p.lots.length > 0);
-  const position: StockPosition | undefined = all.find((p) => p.item.catalog_item_id === itemId);
+  const position: StockPosition | undefined = all.find((p) => itemKey(p.item) === itemId);
   const unit = position?.item.dispensing_unit ?? "";
   const lots = lotsForKind(position, draft.kind, today);
   const lot = (position?.lots ?? []).find((b) => b.lot.id === draft.lotId);
   const counting = draft.kind === "adjustment";
   const amountLabel = counting ? "Quantidade contada" : "Quantidade";
   const locked = review !== null;
+  const needsLossCode = position?.item.item_kind === "immunobiological" && (draft.kind === "loss" || draft.kind === "expiry");
 
   const patch = (over: Partial<AdjustmentDraft>) => { setProblems([]); setDraft((cur) => ({ ...cur, ...over })); };
   // Trocar o tipo tira o lote que não vale para o novo tipo (perda, não vencido; vencimento, vencido).
   const chooseKind = (kind: AdjustmentKind | "") => {
     const keep = lotsForKind(position, kind, today).some((b) => b.lot.id === draft.lotId);
     patch({ kind, lotId: keep ? draft.lotId : "" });
+    if (kind === "expiry" && lossCode === "") setLossCode("expired");
   };
   const chooseItem = (id: string) => { setItemId(id); patch({ lotId: "" }); };
 
   function problemsOf(): string[] {
-    if (!position) return [ "escolha o medicamento" ];
+    if (!position) return [ noun.pick.toLowerCase() ];
     const out: string[] = [];
     const first = adjustmentProblem(draft, lot?.balance ?? "0") ?? lotKindProblem(draft.kind, lot?.lot, today);
     const reason = reasonProblem(draft.reason);
     if (first) out.push(first);
     if (reason && reason !== first) out.push(reason);
+    if (needsLossCode && !lossReasons.some((r) => r.code === lossCode)) out.push(LOSS_CODE_REQUIRED);
     return out;
   }
 
@@ -80,7 +95,7 @@ export function AdjustmentForm({ location, today, onStart, onDone, onGoToSecurit
     onStart?.();
     const found = problemsOf();
     setProblems(found);
-    if (found.length === 0) setReview(draft);
+    if (found.length === 0) setReview({ ...draft, lossCode: needsLossCode ? lossCode : "" });
   }
 
   function reread() {
@@ -88,7 +103,7 @@ export function AdjustmentForm({ location, today, onStart, onDone, onGoToSecurit
     void queryClient.invalidateQueries({ queryKey: [ PH_ADJUSTMENTS_KEY ] });
   }
 
-  function reset() { setReview(null); setDraft(EMPTY); setItemId(""); setProblems([]); }
+  function reset() { setReview(null); setDraft(EMPTY); setItemId(""); setLossCode(""); setProblems([]); }
 
   // O que o saldo vira, na régua do que a tela leu (o saldo relido atualiza este resumo).
   const summary = review && lot ? (() => {
@@ -110,12 +125,11 @@ export function AdjustmentForm({ location, today, onStart, onDone, onGoToSecurit
       <fieldset disabled={locked} style={{ border: 0, padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 10 }}>
         <div style={row}>
           <label style={{ ...fieldLabel, flex: "1 1 28ch" }}>
-            Medicamento
+            {noun.label}
             <select value={itemId} style={inputStyle} onChange={(e) => chooseItem(e.target.value)}>
-              <option value="">{offered.length === 0 ? "nenhum medicamento com saldo" : "Escolha o medicamento"}</option>
+              <option value="">{offered.length === 0 ? noun.none : noun.pick}</option>
               {offered.map((p) => (
-                // só medicamento: local de vacina nunca chega aqui
-                <option key={p.item.catalog_item_id ?? ""} value={p.item.catalog_item_id ?? ""}>{`${p.item.name} — saldo ${fmtQuantity(p.balance)} ${p.item.dispensing_unit}`}</option>
+                <option key={itemKey(p.item)} value={itemKey(p.item)}>{`${p.item.name} — saldo ${fmtQuantity(p.balance)} ${p.item.dispensing_unit}`}</option>
               ))}
             </select>
           </label>
@@ -140,6 +154,15 @@ export function AdjustmentForm({ location, today, onStart, onDone, onGoToSecurit
             <input value={draft.amount} inputMode="decimal" style={inputStyle} aria-label={amountLabel} onChange={(e) => patch({ amount: e.target.value })} />
           </label>
         </div>
+        {needsLossCode && (
+          <label style={{ ...fieldLabel, maxWidth: 360 }}>
+            Motivo da perda (SIES)
+            <select value={lossCode} style={inputStyle} onChange={(e) => { setProblems([]); setLossCode(e.target.value); }}>
+              <option value="">Escolha o motivo</option>
+              {lossReasons.map((r) => <option key={r.code} value={r.code}>{r.name}</option>)}
+            </select>
+          </label>
+        )}
         <label style={fieldLabel}>
           Motivo
           <textarea value={draft.reason} rows={2} style={inputStyle} onChange={(e) => patch({ reason: e.target.value })} />
@@ -148,7 +171,7 @@ export function AdjustmentForm({ location, today, onStart, onDone, onGoToSecurit
       {positions.hasNextPage && (
         <div style={row}>
           <button type="button" style={secondaryButtonStyle} disabled={locked || positions.isFetchingNextPage} onClick={() => void positions.fetchNextPage()}>
-            {positions.isFetchingNextPage ? "Carregando…" : "Carregar mais medicamentos"}
+            {positions.isFetchingNextPage ? "Carregando…" : noun.more}
           </button>
         </div>
       )}
@@ -174,6 +197,7 @@ export function AdjustmentForm({ location, today, onStart, onDone, onGoToSecurit
         <strong>{`${adjustmentKindLabel(review.kind)}: ${position.item.name}`}</strong>
         <small className="mono" style={muted}>{`lote ${lot.lot.lot_number} · vence ${fmtDay(lot.lot.expires_on)}`}</small>
         <p style={{ margin: 0 }}>{summary}</p>
+        {review.lossCode && <small style={muted}>{`Motivo da perda (SIES): ${lossReasons.find((r) => r.code === review.lossCode)?.name ?? review.lossCode}`}</small>}
         <small style={muted}>{`Motivo: ${review.reason.trim()}`}</small>
         <SensitiveAction
           title={`Confirmar: ${adjustmentKindLabel(review.kind).toLowerCase()}`}
@@ -184,7 +208,8 @@ export function AdjustmentForm({ location, today, onStart, onDone, onGoToSecurit
           confirmLabel="Registrar ajuste"
           run={async () => {
             try {
-              saved.current = await recordAdjustment(adjustmentBody(review, location.id));
+              const body = adjustmentBody(review, location.id);
+              saved.current = await recordAdjustment(review.lossCode ? { ...body, loss_code: review.lossCode } : body);
             } catch (err) {
               reread(); // o saldo pode ter mudado: a tela mostra o novo e mantém o que foi digitado
               throw err;
