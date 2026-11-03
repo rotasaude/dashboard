@@ -107,6 +107,20 @@ describe("transcrição (F-29.3)", () => {
     await waitFor(() => expect(api.recordTranscriptions).toHaveBeenCalledWith("r1", expect.objectContaining({ close_check: false })));
   });
 
+  it("foco: a vacina da linha nova; ao remover, a linha que ficou no lugar ou \"Acrescentar dose\"", async () => {
+    renderWithProviders(<TranscriptionForm room={ROOM} card={card({ checked: null })} catalog={CATALOG29} today={TODAY29} onDone={vi.fn()} onCancel={vi.fn()} />);
+    const add = screen.getByRole("button", { name: "Acrescentar dose" });
+    fireEvent.click(add);
+    fireEvent.click(add);
+    const [ , l2 ] = screen.getAllByRole("group", { name: /^Dose transcrita/ });
+    await waitFor(() => expect(document.activeElement).toBe(within(l2).getByLabelText("Vacina")));
+    fireEvent.click(screen.getByRole("button", { name: "Remover dose transcrita 1" }));
+    const [ left ] = screen.getAllByRole("group", { name: /^Dose transcrita/ });
+    await waitFor(() => expect(document.activeElement).toBe(within(left).getByLabelText("Vacina")));
+    fireEvent.click(screen.getByRole("button", { name: "Remover dose transcrita 1" }));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: "Acrescentar dose" })));
+  });
+
   it("no máximo 40 doses por transcrição", () => {
     renderWithProviders(<TranscriptionForm room={ROOM} card={card({ checked: null })} catalog={CATALOG29} today={TODAY29} onDone={vi.fn()} onCancel={vi.fn()} />);
     const add = screen.getByRole("button", { name: "Acrescentar dose" }) as HTMLButtonElement;
@@ -144,6 +158,68 @@ describe("cancelamento (F-29.3)", () => {
       replacement: expect.objectContaining({ patient_id: "pa1", immunobiological_code: "42", dose_code: "D1", lot_id: "lot9" }) }));
   });
 
+  it("dose já cancelada: só a frase", () => {
+    mount(immunization({ status: "cancelled", can_cancel: true }));
+    expect(screen.queryByLabelText("Motivo do cancelamento")).toBeNull();
+    expect(screen.getByText("esta dose já foi cancelada")).not.toBeNull();
+  });
+
+  it("dose de outra sala: cancela, sem oferecer substituição", () => {
+    mount(immunization({ room: { id: "r2", name: "Sala de vacina UBS Norte", health_unit: { id: "u2", name: "UBS Norte" } } }));
+    expect(screen.getByLabelText("Motivo do cancelamento")).not.toBeNull();
+    expect(screen.queryByLabelText("Registrar a dose correta agora")).toBeNull();
+    expect(screen.getByText(/Esta dose é de outra sala \(Sala de vacina UBS Norte\)/)).not.toBeNull();
+  });
+
+  it("a substituta de sala vem com estratégia, grupo, via e local da dose cancelada", async () => {
+    mount();
+    fireEvent.click(screen.getByLabelText("Registrar a dose correta agora"));
+    const value = (label: string) => (screen.getByLabelText(label) as HTMLSelectElement).value;
+    await screen.findByLabelText("Estratégia");
+    expect([ value("Estratégia"), value("Grupo de atendimento"), value("Via"), value("Local de aplicação") ]).toEqual([ "1", "1", "IM", "VLD" ]);
+  });
+
+  it("step-up expira (401 mfa_required) e a pessoa desiste: motivo e rascunho intactos, foco no título", async () => {
+    vi.mocked(api.cancelImmunization).mockRejectedValue(new api.ApiError(401, { error: "mfa_required" }, "401"));
+    mount();
+    fireEvent.change(screen.getByLabelText("Motivo do cancelamento"), { target: { value: "lote errado digitado na sala" } });
+    fireEvent.click(screen.getByLabelText("Registrar a dose correta agora"));
+    await waitFor(() => expect((screen.getByLabelText("Lote") as HTMLSelectElement).options.length).toBe(2));
+    fireEvent.change(screen.getByLabelText("Lote"), { target: { value: "lot9" } });
+    fireEvent.click(screen.getByRole("button", { name: "Revisar" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Cancelar e substituir" }));
+    expect(await screen.findByLabelText("Código do autenticador")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+    const heading = await screen.findByRole("heading", { name: "Cancelar dose" });
+    expect((screen.getByLabelText("Motivo do cancelamento") as HTMLTextAreaElement).value).toBe("lote errado digitado na sala");
+    expect((screen.getByLabelText("Registrar a dose correta agora") as HTMLInputElement).checked).toBe(true);
+    await waitFor(() => expect((screen.getByLabelText("Lote") as HTMLSelectElement).value).toBe("lot9"));
+    await waitFor(() => expect(document.activeElement).toBe(heading));
+    expect(api.cancelImmunization).toHaveBeenCalledTimes(1);
+  });
+
+  it("aviso V5 na substituta (replacement.dose_code, overridable): pede o motivo e reenvia com override_reason", async () => {
+    vi.mocked(api.cancelImmunization)
+      .mockRejectedValueOnce(refuse([ { path: "replacement.dose_code", error: "interval_too_short", overridable: true } ]))
+      .mockResolvedValueOnce({ cancelled: immunization({ status: "cancelled" }), replacement: immunization({ id: "im8" }) });
+    mount();
+    fireEvent.change(screen.getByLabelText("Motivo do cancelamento"), { target: { value: "dose registrada com a dose errada" } });
+    fireEvent.click(screen.getByLabelText("Registrar a dose correta agora"));
+    await waitFor(() => expect((screen.getByLabelText("Lote") as HTMLSelectElement).options.length).toBe(2));
+    fireEvent.change(screen.getByLabelText("Lote"), { target: { value: "lot9" } });
+    fireEvent.click(screen.getByRole("button", { name: "Revisar" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Cancelar e substituir" }));
+    expect(await screen.findByText("intervalo menor que o mínimo desde a dose anterior")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Revisar" }));
+    expect(screen.getByText("o motivo precisa ter de 10 a 500 caracteres")).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Cancelar e substituir" })).toBeNull();
+    fireEvent.change(screen.getByLabelText("Motivo para aplicar mesmo assim"), { target: { value: "esquema atrasado de viagem" } });
+    fireEvent.click(screen.getByRole("button", { name: "Revisar" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Cancelar e substituir" }));
+    await waitFor(() => expect(api.cancelImmunization).toHaveBeenLastCalledWith("im1", { reason: "dose registrada com a dose errada",
+      replacement: expect.objectContaining({ override_reason: "esquema atrasado de viagem", lot_id: "lot9" }) }));
+  });
+
   it("sem substituição: confirma \"Cancelar dose\" e devolve o resultado", async () => {
     const res = { cancelled: immunization({ status: "cancelled" }), replacement: null };
     vi.mocked(api.cancelImmunization).mockResolvedValue(res);
@@ -171,13 +247,15 @@ describe("cancelamento (F-29.3)", () => {
     expect(await screen.findByText("o lote está bloqueado por temperatura fora da faixa até a conduta")).not.toBeNull();
     expect((screen.getByLabelText("Motivo do cancelamento") as HTMLTextAreaElement).value).toBe("lote errado digitado na sala");
     expect((screen.getByLabelText("Lote") as HTMLSelectElement).value).toBe("");
+    expect(screen.getByRole("alert").textContent).toBe("confira os campos destacados");
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText("Lote")));
     expect(onDone).not.toHaveBeenCalled();
     expect(api.cancelImmunization).toHaveBeenCalledTimes(1);
   });
 
   it("dose transcrita: a substituta vai como item de transcrição", async () => {
     vi.mocked(api.cancelImmunization).mockResolvedValue({ cancelled: immunization({ status: "cancelled" }), replacement: immunization({ id: "im8" }) });
-    mount(immunization({ transcription: true, room: null, applied_at: "2026-08-01T12:00:00-03:00",
+    mount(immunization({ transcription: true, applied_at: "2026-08-01T12:00:00-03:00",
       lot: { id: null, number: "PNT0801", manufacturer: { code: null, name: "Serum" }, expires_on: null } }));
     fireEvent.change(screen.getByLabelText("Motivo do cancelamento"), { target: { value: "dose transcrita com a data errada" } });
     fireEvent.click(screen.getByLabelText("Registrar a dose correta agora"));

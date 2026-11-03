@@ -44,7 +44,7 @@ export function TranscriptionLineFields({ legend, line, catalog, today, birthDat
     </div>
   );
   return (
-    <fieldset style={{ ...box, margin: 0 }} {...described}>
+    <fieldset style={{ ...box, margin: 0 }} data-line={line.key} {...described}>
       <legend style={{ fontSize: 12.5, fontWeight: 600 }}>{legend}</legend>
       <div style={fieldLabel}>
         <label htmlFor={`${uid}-imm`}>Vacina</label>
@@ -88,6 +88,17 @@ export function TranscriptionForm({ room, card, catalog, today: fixedToday, onDo
   const [ problems, setProblems ] = useState<Problem[]>([]);
   const [ refusals, setRefusals ] = useState<VaccinationRefusal[]>([]);
   const nextKey = useRef(0);
+  // Foco depois de acrescentar (a vacina da linha nova) e de remover (a vacina da linha que ficou no lugar, ou "Acrescentar dose").
+  const formRef = useRef<HTMLFormElement>(null);
+  const addRef = useRef<HTMLButtonElement>(null);
+  const focusAfter = useRef<string | null | undefined>(undefined);
+  useEffect(() => {
+    const key = focusAfter.current;
+    if (key === undefined) return;
+    focusAfter.current = undefined;
+    const target = key === null ? null : formRef.current?.querySelector<HTMLElement>(`fieldset[data-line="${key}"] select`);
+    (target ?? addRef.current)?.focus();
+  }, [ lines ]);
   const busy = useRef(false);
   const alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
@@ -96,7 +107,9 @@ export function TranscriptionForm({ room, card, catalog, today: fixedToday, onDo
 
   function add() {
     if (lines.length >= MAX_TRANSCRIPTION_ITEMS) return;
-    setLines((ls) => [ ...ls, newTranscriptionLine(`t${++nextKey.current}`) ]);
+    const line = newTranscriptionLine(`t${++nextKey.current}`);
+    focusAfter.current = line.key;
+    setLines((ls) => [ ...ls, line ]);
     setProblems((ps) => ps.filter((p) => p.path !== "items"));
   }
 
@@ -109,6 +122,7 @@ export function TranscriptionForm({ room, card, catalog, today: fixedToday, onDo
 
   // Remover desloca os índices: as recusas por linha somem (a conferência refaz as locais no próximo envio).
   function remove(i: number) {
+    focusAfter.current = (lines[i + 1] ?? lines[i - 1])?.key ?? null;
     setLines((ls) => ls.filter((_, j) => j !== i));
     setProblems((ps) => ps.filter((p) => problemItemIndex(p.path) === null));
     setRefusals((rs) => rs.filter((r) => problemItemIndex(r.path) === null));
@@ -147,13 +161,13 @@ export function TranscriptionForm({ room, card, catalog, today: fixedToday, onDo
     <section aria-label="Transcrição da caderneta" style={panel}>
       <h3 style={title}>Transcrever caderneta</h3>
       <p style={muted}>Uma linha por dose da caderneta de papel. Lote, fabricante e local são opcionais.</p>
-      <form aria-label="Transcrever caderneta" style={form} onSubmit={submit} noValidate>
+      <form ref={formRef} aria-label="Transcrever caderneta" style={form} onSubmit={submit} noValidate>
         {lines.map((l, i) => (
           <TranscriptionLineFields key={l.key} legend={`Dose transcrita ${i + 1}`} line={l} catalog={catalog} today={today} birthDate={birthDate}
             errors={lineErrors(i)} onChange={(patch) => change(i, patch)} onRemove={() => remove(i)} />
         ))}
         <div style={row}>
-          <button type="button" style={full ? disabledButtonStyle : secondaryButtonStyle} disabled={full} onClick={add}>Acrescentar dose</button>
+          <button ref={addRef} type="button" style={full ? disabledButtonStyle : secondaryButtonStyle} disabled={full} onClick={add}>Acrescentar dose</button>
           {full && <span style={muted}>{`no máximo ${MAX_TRANSCRIPTION_ITEMS} doses por transcrição`}</span>}
         </div>
         {unchecked && (

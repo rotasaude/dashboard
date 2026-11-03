@@ -41,7 +41,6 @@ const PATH: Record<string, string> = {
 const KNOWN_PATHS = FIELDS.map((f) => PATH[f]);
 const WARNING_INPUTS: (keyof DoseDraft)[] = [ "immunobiologicalCode", "doseCode", "appliedAt" ];
 export const STALE_REFUSAL = "corrija o que o servidor recusou antes de enviar de novo";
-const STALE = STALE_REFUSAL;
 
 // Posição da sala e frascos abertos da vacina do rascunho (sem pessoa: STATIC_QUERY). Quem chama com as mesmas chaves divide o cache.
 export function useDoseStock(room: VaccineLocation, catalog: VaccinationCatalog, code: string) {
@@ -97,7 +96,7 @@ export function doseCheck(s: DoseDraftState, stock: DoseStock, catalog: Vaccinat
   if (s.warnings.length > 0 && s.draft.overrideReason.trim() === "") found.push({ path: "override_reason", text: reasonProblem("", "o motivo") as string });
   // Recusa dura de campo ainda na tela = o campo não mudou desde a resposta (editar tira a recusa): o motivo não basta.
   // Recusa solta (sem campo, ex.: missing_role) não trava: pode ser passageira.
-  if (s.blocking.some((b) => KNOWN_PATHS.includes(b.path))) found.push({ path: "", text: STALE });
+  if (s.blocking.some((b) => KNOWN_PATHS.includes(b.path))) found.push({ path: "", text: STALE_REFUSAL });
   return found;
 }
 

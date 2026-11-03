@@ -61,10 +61,13 @@ function CancelForm({ imm, room, patient, catalog, now: fixedNow, onDone, onCanc
   const [ stage, setStage ] = useState<"form" | "confirm">("form");
   const [ general, setGeneral ] = useState<string[]>([]);
 
-  // Dose de sala: o rascunho começa com a vacina, a dose e a hora da dose cancelada; lote e frasco ficam por escolher.
+  // Dose de sala: o rascunho começa com o que a dose cancelada tinha (vacina, dose, estratégia, grupo, via, local, condição maternal e
+  // hora); lote e frasco ficam por escolher.
   const dose = useDoseDraft(() => {
     const def = catalog.immunobiologicals.find((i) => i.code === imm.immunobiological.code) ?? null;
-    return { ...newDoseDraft(def, imm.dose.code, clock()), immunobiologicalCode: imm.immunobiological.code, appliedAt: cityLocalInput(new Date(imm.applied_at)) };
+    return { ...newDoseDraft(def, imm.dose.code, clock()), immunobiologicalCode: imm.immunobiological.code, strategy: imm.strategy ?? "",
+      careGroup: imm.care_group ?? "", route: imm.route || def?.default_route || "", site: imm.site || def?.default_site || "",
+      maternalCondition: imm.maternal_condition ?? "", appliedAt: cityLocalInput(new Date(imm.applied_at)) };
   });
   const stock = useDoseStock(room, catalog, dose.draft.immunobiologicalCode);
   // Dose transcrita: a linha começa com o que a transcrição tinha.
@@ -79,6 +82,20 @@ function CancelForm({ imm, room, patient, catalog, now: fixedNow, onDone, onCanc
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   const back = useRef<VaccinationRefusal[] | null>(null);
   const withReplacement = replace && canReplace;
+  // Volta ao formulário (recusa de campo, desistência ou recusa no step-up): o botão de confirmação some com o SensitiveAction, então o
+  // foco vai ao primeiro campo com problema ou, sem nenhum, ao título.
+  const heading = useRef<HTMLHeadingElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+  const [ refocus, setRefocus ] = useState(0);
+  useEffect(() => {
+    if (refocus === 0) return;
+    const target = formRef.current?.querySelector<HTMLElement>('[aria-invalid="true"], fieldset[aria-describedby] select');
+    (target ?? heading.current)?.focus();
+  }, [ refocus ]);
+  function backToForm() {
+    setStage("form");
+    setRefocus((n) => n + 1);
+  }
 
   function body(): CancelInput {
     const clean = reason.trim();
@@ -128,7 +145,7 @@ function CancelForm({ imm, room, patient, catalog, now: fixedNow, onDone, onCanc
     const list = back.current;
     if (!list) { if (result.current) onDone(result.current); return; }
     back.current = null;
-    setStage("form");
+    backToForm();
     const reasonRefusal = list.find((x) => x.path === "reason");
     setReasonErr(reasonRefusal ? reasonProblem("", "o motivo") : null);
     const mine = list.filter((x) => x.path.startsWith(PREFIX)).map((x) => ({ ...x, path: x.path.slice(PREFIX.length) }));
@@ -140,6 +157,7 @@ function CancelForm({ imm, room, patient, catalog, now: fixedNow, onDone, onCanc
   const vaccine = imm.immunobiological.name ?? catalog.immunobiologicals.find((i) => i.code === imm.immunobiological.code)?.name ?? imm.immunobiological.code;
   const doseLabel = `${vaccine} ${imm.dose.name ?? imm.dose.code}`;
   const lineErrors = [ ...lineProblems, ...lineRefusals.map((x) => `${lineName(line, catalog)}: ${x.text}`) ];
+  const fieldError = reasonErr !== null || (withReplacement && (transcribed ? lineErrors.length > 0 : dose.fieldProblems.length > 0));
 
   if (stage === "confirm") {
     return (
@@ -155,7 +173,7 @@ function CancelForm({ imm, room, patient, catalog, now: fixedNow, onDone, onCanc
         confirmLabel={withReplacement ? "Cancelar e substituir" : "Cancelar dose"}
         run={run}
         onDone={done}
-        onCancel={() => setStage("form")}
+        onCancel={backToForm}
         onGoToSecurity={onGoToSecurity}
         translateError={(err) => vaccinationError(err)}
       />
@@ -164,9 +182,9 @@ function CancelForm({ imm, room, patient, catalog, now: fixedNow, onDone, onCanc
 
   return (
     <section aria-label="Cancelar dose" style={panel}>
-      <h3 style={title}>Cancelar dose</h3>
+      <h3 ref={heading} tabIndex={-1} style={title}>Cancelar dose</h3>
       <p style={muted}>{`${doseLabel} · aplicada em ${fmtDateTime(imm.applied_at)}${transcribed ? " · transcrição" : ""}`}</p>
-      <form aria-label="Cancelar dose" style={form} onSubmit={review} noValidate>
+      <form ref={formRef} aria-label="Cancelar dose" style={form} onSubmit={review} noValidate>
         <div style={fieldLabel}>
           <label htmlFor={`${uid}-reason`}>Motivo do cancelamento</label>
           <textarea id={`${uid}-reason`} style={inputStyle} rows={2} maxLength={500} value={reason}
@@ -194,6 +212,7 @@ function CancelForm({ imm, room, patient, catalog, now: fixedNow, onDone, onCanc
           </fieldset>
         ))}
         {general.map((t) => <p key={t} role="alert" style={alert}>{t}</p>)}
+        {fieldError && general.length === 0 && <p role="alert" style={alert}>confira os campos destacados</p>}
         <div style={row}>
           <button type="submit" style={buttonStyle}>Revisar</button>
           <button type="button" style={secondaryButtonStyle} onClick={onCancel}>Voltar à caderneta</button>
