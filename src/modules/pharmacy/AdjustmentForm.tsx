@@ -5,7 +5,7 @@
 // sucesso vem do `status` da resposta. O lote só oferece o que vale para o tipo: perda, lote não vencido; vencimento, lote já vencido.
 // "Revisar" confere tudo de uma vez e abre o SensitiveAction (step-up). Nada em URL, log ou storage; nada de editar ou apagar movimento.
 // Módulo 29: o item é identificado por `itemKey` (vacina não tem catalog_item_id); lote bloqueado por excursão não é oferecido; perda e
-// vencimento de lote de vacina pedem o motivo do SIES (`loss_code`, da lista que quem chama passa em `lossReasons`).
+// vencimento de lote de vacina pedem o motivo do SIES (`loss_code`, da lista que quem chama passa em `lossReasons` — a do catálogo, V28).
 import { useRef, useState } from "react";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -76,9 +76,11 @@ export function AdjustmentForm({ location, today, lossReasons = [], onStart, onD
   const chooseKind = (kind: AdjustmentKind | "") => {
     const keep = lotsForKind(position, kind, today).some((b) => b.lot.id === draft.lotId);
     patch({ kind, lotId: keep ? draft.lotId : "" });
+    // Vencimento já vem com "expired"; ao sair dele, esse motivo não vale para perda de lote não vencido: a pessoa escolhe de novo.
     if (kind === "expiry" && lossCode === "") setLossCode("expired");
+    else if (kind !== "expiry" && lossCode === "expired") setLossCode("");
   };
-  const chooseItem = (id: string) => { setItemId(id); patch({ lotId: "" }); };
+  const chooseItem = (id: string) => { setItemId(id); setLossCode(""); patch({ lotId: "" }); };
 
   function problemsOf(): string[] {
     if (!position) return [ noun.pick.toLowerCase() ];

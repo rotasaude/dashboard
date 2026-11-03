@@ -58,7 +58,8 @@ describe("estoque de imunobiológicos (F-29.5)", () => {
       document: { kind: "invoice", number: "NF-88", supplier: "SESA-PR" },
       items: [ { immunobiological_code: "15", manufacturer_key: "fap", lot_number: "BCG2611", expires_on: "2027-05-31", quantity: "50",
         package: { units_per_package: 10, packages: 5 } } ] }));
-    expect(await within(entry).findByRole("status")).not.toBeNull();
+    const done = await within(entry).findByRole("status");
+    await waitFor(() => expect(document.activeElement).toBe(done));
   });
 
   it("transferência: destino são as salas; vacinas diferentes não se confundem (itemKey)", async () => {
@@ -85,6 +86,8 @@ describe("estoque de imunobiológicos (F-29.5)", () => {
     fireEvent.click(within(transfers).getByRole("button", { name: "Enviar transferência" }));
     await waitFor(() => expect(api.sendTransfer).toHaveBeenCalledWith({ to_location_id: "l5", from_location_id: "l9",
       items: [ { lot_id: "a", quantity: "5" } ] }));
+    const done = await within(transfers).findByRole("status");
+    await waitFor(() => expect(document.activeElement).toBe(done));
   });
 
   it("sala: lote bloqueado na posição; vacinador sem ajustes, responsável com", async () => {
@@ -146,7 +149,13 @@ describe("estoque de imunobiológicos (F-29.5)", () => {
     expect(await within(inv).findByText(/L-exc/)).not.toBeNull();
     const form = await within(inv).findByRole("form", { name: "Registrar ajuste, perda ou vencimento" });
     fireEvent.change(within(form).getByLabelText("Vacina"), { target: { value: "imm:42" } });
+    // Vencimento vem com "Validade vencida"; de volta à perda, o motivo sai (a pessoa escolhe de novo).
+    fireEvent.change(within(form).getByLabelText("Tipo"), { target: { value: "expiry" } });
+    expect((within(form).getByLabelText("Motivo da perda (SIES)") as HTMLSelectElement).value).toBe("expired");
     fireEvent.change(within(form).getByLabelText("Tipo"), { target: { value: "loss" } });
+    expect((within(form).getByLabelText("Motivo da perda (SIES)") as HTMLSelectElement).value).toBe("");
+    expect([ ...(within(form).getByLabelText("Motivo da perda (SIES)") as HTMLSelectElement).options ].map((o) => o.value))
+      .toEqual([ "", "broken", "expired", "temperature_excursion", "other" ]);
     expect([ ...(within(form).getByLabelText("Lote") as HTMLSelectElement).options ].map((o) => o.value)).toEqual([ "", "a" ]);
     fireEvent.change(within(form).getByLabelText("Lote"), { target: { value: "a" } });
     fireEvent.change(within(form).getByLabelText("Quantidade"), { target: { value: "2" } });
@@ -158,5 +167,28 @@ describe("estoque de imunobiológicos (F-29.5)", () => {
     fireEvent.click(await within(inv).findByRole("button", { name: "Registrar ajuste" }));
     await waitFor(() => expect(api.recordAdjustment).toHaveBeenCalledWith({ location_id: "l9", lot_id: "a", kind: "loss", quantity: "2",
       reason: "Frasco caiu no chão da sala", loss_code: "broken" }));
+    const done = await within(inv).findByRole("status");
+    await waitFor(() => expect(document.activeElement).toBe(done));
+  });
+
+  it("ajuste com a verificação vencida (401 mfa_required): pede código novo e mantém o rascunho", async () => {
+    vi.mocked(api.recordAdjustment).mockRejectedValue(new api.ApiError(401, { error: "mfa_required" }, "401"));
+    mount();
+    const inv = await screen.findByRole("region", { name: "Inventário e ajustes" });
+    const form = await within(inv).findByRole("form", { name: "Registrar ajuste, perda ou vencimento" });
+    fireEvent.change(within(form).getByLabelText("Vacina"), { target: { value: "imm:42" } });
+    fireEvent.change(within(form).getByLabelText("Tipo"), { target: { value: "loss" } });
+    fireEvent.change(within(form).getByLabelText("Lote"), { target: { value: "a" } });
+    fireEvent.change(within(form).getByLabelText("Quantidade"), { target: { value: "2" } });
+    fireEvent.change(within(form).getByLabelText("Motivo da perda (SIES)"), { target: { value: "broken" } });
+    fireEvent.change(within(form).getByLabelText("Motivo"), { target: { value: "Frasco caiu no chão da sala" } });
+    fireEvent.click(within(form).getByRole("button", { name: "Revisar ajuste" }));
+    fireEvent.click(await within(inv).findByRole("button", { name: "Registrar ajuste" }));
+    expect(await within(inv).findByText("sua verificação expirou — informe um novo código")).not.toBeNull();
+    expect(api.recordAdjustment).toHaveBeenCalledTimes(1);
+    expect(within(inv).getByText("Motivo da perda (SIES): Frasco quebrado")).not.toBeNull();
+    expect((within(form).getByLabelText("Quantidade") as HTMLInputElement).value).toBe("2");
+    expect((within(form).getByLabelText("Motivo") as HTMLTextAreaElement).value).toBe("Frasco caiu no chão da sala");
+    expect(within(inv).queryByRole("status")).toBeNull();
   });
 });

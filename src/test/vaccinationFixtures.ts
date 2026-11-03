@@ -28,7 +28,10 @@ export const TERMS = {
   care_group: t([ [ "1", "Criança" ], [ "2", "Gestante" ] ]),
   maternal_condition: t([ [ "N", "Nenhuma" ], [ "G", "Gestante" ], [ "P", "Puérpera" ] ])
 };
-export const CATALOG29: VaccinationCatalog = { calendar_version: "2026.1", immunobiologicals: [ PENTA, BCG ], terminologies: TERMS };
+export const LOSS_REASONS = t([ [ "broken", "Frasco quebrado" ], [ "expired", "Validade vencida" ], [ "temperature_excursion", "Excursão de temperatura" ],
+  [ "other", "Outro motivo" ] ]);
+export const CATALOG29: VaccinationCatalog = { calendar_version: "2026.1", immunobiologicals: [ PENTA, BCG ], terminologies: TERMS,
+  physical_loss_reasons: LOSS_REASONS };
 const vacItem = (code: string, name: string): StockItem => ({ catalog_item_id: null, catmat_code: null, immunobiological_code: code,
   item_kind: "immunobiological", name, unit: "dose", dispensing_unit: "dose", controlled: false, controlled_list: null });
 export const PENTA_ITEM = vacItem("42", "Penta (DTP/HepB/Hib)");

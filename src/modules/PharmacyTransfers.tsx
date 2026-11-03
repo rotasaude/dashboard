@@ -3,7 +3,7 @@
 // uma transferência em trânsito, conferindo lote a lote. Em qualquer local a lista mostra as transferências em que ele é origem ou
 // destino (sem dado pessoal: leitura ao abrir e depois de cada escrita, sem polling). As frases de sucesso e de "já recebida" ficam
 // aqui, fora dos formulários que se fecham ou se limpam.
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { listTransfers, type PharmacyLocation, type StockTransfer, type TransferItem } from "../lib/api";
 import { todayInCity } from "../lib/campaigns";
@@ -43,14 +43,17 @@ export function PharmacyTransfers({ today = todayInCity() }: { today?: string } 
 
 // Módulo 29: a tela de imunobiológicos monta este corpo com `canSend` (a rede de frio envia; a sala só recebe) e os `destinations`
 // (as salas ativas). Sem as props, a regra de hoje: só o almoxarife do central envia, às farmácias da lista de locais.
-export function TransfersBody({ location, today, canSend: allowSend, destinations }: {
-  location: PharmacyLocation; today: string; canSend?: boolean; destinations?: PharmacyLocation[];
+// `focusNotice` (módulo 29, regra de teclado): a frase de sucesso recebe o foco quando aparece.
+export function TransfersBody({ location, today, canSend: allowSend, destinations, focusNotice = false }: {
+  location: PharmacyLocation; today: string; canSend?: boolean; destinations?: PharmacyLocation[]; focusNotice?: boolean;
 }) {
   const roles = locationRoles(location);
   const canSend = allowSend ?? (location.kind === "central" && roles.keeper);
   const [ notice, setNotice ] = useState<string | null>(null);
   const [ stale, setStale ] = useState<string | null>(null);
   const [ receiving, setReceiving ] = useState<StockTransfer | null>(null);
+  const noticeRef = useRef<HTMLParagraphElement>(null);
+  useEffect(() => { if (notice && focusNotice) noticeRef.current?.focus(); }, [ notice, focusNotice ]);
 
   const transfers = useInfiniteQuery({
     queryKey: [ PH_TRANSFERS_KEY, location.id ],
@@ -67,7 +70,7 @@ export function TransfersBody({ location, today, canSend: allowSend, destination
   return (
     <div style={stack}>
       <p className="mono" style={muted}>{`Local: ${location.name}`}</p>
-      {notice && <p role="status" style={okText}>{notice}</p>}
+      {notice && <p ref={noticeRef} tabIndex={focusNotice ? -1 : undefined} role="status" style={okText}>{notice}</p>}
       {stale && <p role="alert" style={alert}>{stale}</p>}
 
       {canSend && <TransferForm central={location} today={today} destinations={destinations} onStart={clear} onDone={() => { clear(); setNotice(TRANSFER_SENT_TEXT); }} />}

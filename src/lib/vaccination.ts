@@ -438,20 +438,6 @@ export function receiptRefusalText(r: Refusal): string {
   return r.text;
 }
 
-// ─── Perda física de vacina: motivos do SIES (config/vaccination/physical_loss_reasons.yml do api; o api não os expõe) ──
-// Perda e vencimento de lote de vacina exigem `loss_code` desta lista (ausente → required; fora → invalid_request).
-export const PHYSICAL_LOSS_REASONS: CodeName[] = [
-  { code: "broken", name: "Frasco quebrado" },
-  { code: "expired", name: "Validade vencida" },
-  { code: "equipment_failure", name: "Falha de equipamento" },
-  { code: "power_outage", name: "Falta de energia" },
-  { code: "transport_failure", name: "Falha no transporte" },
-  { code: "temperature_excursion", name: "Excursão de temperatura" },
-  { code: "wrong_procedure", name: "Procedimento incorreto" },
-  { code: "other", name: "Outro motivo" }
-];
-export const lossReasonLabel = (code: string): string => PHYSICAL_LOSS_REASONS.find((r) => r.code === code)?.name ?? code;
-
 // ─── Recusas do api (frase, nunca o corpo nem o valor enviado) ──────────────
 // Vale sobre as frases da farmácia: o vocabulário do 29 (frasco descartado ≠ vencido, lote de outra vacina...). O que não está aqui e
 // a farmácia conhece (saldo, motivo, CPF...) usa a frase dela; código que nenhuma conhece vira "recusado pelo servidor (<código>)".

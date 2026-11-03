@@ -5298,7 +5298,10 @@ export interface Immunobiological {
 export interface VaccinationTerminologies {
   dose: CodeName[]; strategy: CodeName[]; route: CodeName[]; site: CodeName[]; care_group: CodeName[]; maternal_condition: CodeName[];
 }
-export interface VaccinationCatalog { calendar_version: string; immunobiologicals: Immunobiological[]; terminologies: VaccinationTerminologies }
+// V28: `physical_loss_reasons` = motivos de perda física do SIES (config/vaccination/physical_loss_reasons.yml), exigidos em `loss_code`.
+export interface VaccinationCatalog {
+  calendar_version: string; immunobiologicals: Immunobiological[]; terminologies: VaccinationTerminologies; physical_loss_reasons: CodeName[];
+}
 
 // D2: `id` é o do local de estoque; `room_id` é o da sala (nulo na rede de frio). `roles` ⊂ vaccinator, room_lead, stock_keeper.
 export interface VaccineLocation extends PharmacyLocation { room_id: string | null }
