@@ -24,7 +24,7 @@ function existingId(err: unknown): string | null {
   return b.error === "already_notified" && typeof b.notification_id === "string" ? b.notification_id : null;
 }
 
-export function EsaviButton({ imm }: { imm: Immunization }) {
+export function EsaviButton({ imm, roomId }: { imm: Immunization; roomId?: string | null }) {
   const { user } = useAuth();
   const [ confirming, setConfirming ] = useState(false);
   const [ done, setDone ] = useState<{ id: string; existing: boolean } | null>(null);
@@ -45,6 +45,8 @@ export function EsaviButton({ imm }: { imm: Immunization }) {
 
   if (!canUseSurveillance(user) || imm.status !== "active") return null;
   const reviewer = surveillanceRoles(user).surveillance;
+  // O api só aceita do papel surveillance ou da equipe da sala da dose (senão 404): a tela não oferece o que já sabe que será recusado.
+  if (!reviewer && !(roomId && imm.room?.id === roomId)) return null;
   const name = `${imm.immunobiological.name ?? imm.immunobiological.code} ${imm.dose.name ?? imm.dose.code}`;
 
   return (

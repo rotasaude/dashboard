@@ -24,7 +24,7 @@ describe("ESAVI (F-29.8)", () => {
 
   it("vacinador: dois passos, uma chamada, frase e dica", async () => {
     vi.mocked(api.fetchCurrentSession).mockResolvedValue(vacUser([ "health_professional" ], { features: [ "clinical_record", "vaccination", "surveillance" ] }));
-    renderWithProviders(<EsaviButton imm={immunization()} />);
+    renderWithProviders(<EsaviButton imm={immunization()} roomId="r1" />);
     fireEvent.click(await screen.findByRole("button", { name: "Notificar ESAVI — Penta (DTP/HepB/Hib) 1ª dose" }));
     expect(api.notifyEsavi).not.toHaveBeenCalled();
     const yes = screen.getByRole("button", { name: "Sim, abrir a notificação" });

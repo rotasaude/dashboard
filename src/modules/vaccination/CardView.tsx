@@ -128,7 +128,7 @@ export function CardView({ room, card, catalog, now, onCard, onRecord, onTranscr
         {card.immunizations.length === 0 ? <p style={muted}>nenhuma dose registrada</p> : (
           <ul style={{ ...list, paddingLeft: 0, gap: 8 }}>
             {card.immunizations.map((imm) => (
-              <ImmunizationRow key={imm.id} imm={imm} onGoToSecurity={onGoToSecurity} onChanged={() => undefined} onCancelDose={onCancelDose} />
+              <ImmunizationRow key={imm.id} imm={imm} roomId={room.room_id} onGoToSecurity={onGoToSecurity} onChanged={() => undefined} onCancelDose={onCancelDose} />
             ))}
           </ul>
         )}

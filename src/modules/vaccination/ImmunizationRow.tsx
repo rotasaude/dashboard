@@ -20,9 +20,11 @@ export interface ImmunizationRowProps {
   // Abre o cancelamento (CancelDose) no lugar da caderneta.
   onCancelDose?(imm: Immunization): void;
   actions?: ReactNode;
+  // Sala aberta na tela (`room_id`). O ESAVI só é oferecido a quem tem o papel surveillance ou na dose da própria sala.
+  roomId?: string | null;
 }
 
-export function ImmunizationRow({ imm, actions, onCancelDose }: ImmunizationRowProps) {
+export function ImmunizationRow({ imm, actions, onCancelDose, roomId }: ImmunizationRowProps) {
   const cancelled = imm.status === "cancelled";
   const cancellable = !!onCancelDose && imm.can_cancel === true && imm.status === "active";
   return (
@@ -52,7 +54,7 @@ export function ImmunizationRow({ imm, actions, onCancelDose }: ImmunizationRowP
           {actions}
         </div>
       )}
-      <EsaviButton imm={imm} />
+      <EsaviButton imm={imm} roomId={roomId} />
     </li>
   );
 }
