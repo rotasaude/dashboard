@@ -10,17 +10,19 @@ import {
   listPositions, listVials, openVial, recordImmunization, type CardItem, type CardPatient, type CodeName, type Immunization,
   type VaccinationCatalog, type VaccineLocation, type Vial
 } from "../../lib/api";
-import { cityIsoDate } from "../../lib/format";
+import { cityIsoDate, parseCityLocal } from "../../lib/format";
 import { PH_POSITIONS_KEY, lotOptionLabel, type Problem } from "../../lib/pharmacy";
 import {
-  STATIC_QUERY, VAC_VIALS_KEY, cityLocalInput, doseBody, doseProblems, lotsForDose, newDoseDraft, reasonProblem, splitRefusals,
+  STATIC_QUERY, VAC_VIALS_KEY, cityLocalInput, doseBody, doseProblems, lotsForDose, maternalRequired, newDoseDraft, reasonProblem, splitRefusals,
   vaccinationRefusals, vialRemaining, vialsForDose, type DoseDraft, type VaccinationRefusal
 } from "../../lib/vaccination";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { alert, box, fieldLabel, form, list, muted, panel, row, title } from "../exams/styles";
 
 export interface DoseFormProps {
-  room: VaccineLocation; patient: CardPatient; catalog: VaccinationCatalog; item: CardItem | null; now: Date;
+  room: VaccineLocation; patient: CardPatient; catalog: VaccinationCatalog; item: CardItem | null;
+  // Só para testes: sem ela, o relógio é lido na hora de usar (abrir, filtrar frascos, conferir antes de enviar).
+  now?: Date;
   onSaved(imm: Immunization): void; onCancel(): void;
 }
 
@@ -35,15 +37,19 @@ const PATH: Record<string, string> = {
   maternalCondition: "maternal_condition", appliedAt: "applied_at", lotId: "lot_id", vialId: "vial_id", overrideReason: "override_reason"
 };
 const KNOWN_PATHS = FIELDS.map((f) => PATH[f]);
+const WARNING_INPUTS: (keyof DoseDraft)[] = [ "immunobiologicalCode", "doseCode", "appliedAt" ];
+export const STALE_REFUSAL = "corrija o que o servidor recusou antes de enviar de novo";
 
-export function DoseForm({ room, patient, catalog, item, now, onSaved, onCancel }: DoseFormProps) {
+export function DoseForm({ room, patient, catalog, item, now: fixedNow, onSaved, onCancel }: DoseFormProps) {
   const roomId = room.room_id as string;
+  const clock = () => fixedNow ?? new Date();
+  const now = clock(); // a cada render: frascos, lotes e o `max` não ficam presos à abertura da sala
   const today = cityIsoDate(now);
   const client = useQueryClient();
   const uid = useId();
   const [ draft, setDraft ] = useState<DoseDraft>(() => {
     const imm = item ? catalog.immunobiologicals.find((i) => i.code === item.immunobiological.code) ?? null : null;
-    return { ...newDoseDraft(imm, item?.dose.code ?? "", now), immunobiologicalCode: item?.immunobiological.code ?? "" };
+    return { ...newDoseDraft(imm, item?.dose.code ?? "", clock()), immunobiologicalCode: item?.immunobiological.code ?? "" };
   });
   const [ problems, setProblems ] = useState<Problem[]>([]);
   const [ refusals, setRefusals ] = useState<VaccinationRefusal[]>([]);
@@ -65,20 +71,25 @@ export function DoseForm({ room, patient, catalog, item, now, onSaved, onCancel 
   const vialsKey = [ VAC_VIALS_KEY, roomId, "open" ];
   const vialsQuery = useQuery({ queryKey: vialsKey, queryFn: () => listVials(roomId, "open"), enabled: multidose, ...STATIC_QUERY });
   const vials = multidose ? vialsQuery.data ?? [] : [];
-  const lots = lotsForDose(positions.data?.pages.flatMap((p) => p.positions) ?? [], draft.immunobiologicalCode, today, vials, now);
+  const allPositions = positions.data?.pages.flatMap((p) => p.positions) ?? [];
+  const lots = lotsForDose(allPositions, draft.immunobiologicalCode, today, vials, now);
   const lotVials = draft.lotId === "" ? [] : vialsForDose(vials, [ draft.lotId ], now)
     .sort((a, b) => a.expires_at.localeCompare(b.expires_at));
 
   const { warnings, blocking } = splitRefusals(refusals);
   const showReason = warnings.length > 0 || draft.overrideReason !== "" || refusals.some((r) => r.path === "override_reason");
 
-  // Edição do usuário: some a recusa daquele campo (a estratégia também desfaz "fora do calendário"); os avisos ficam.
+  // Edição do usuário: some a recusa daquele campo (a estratégia também desfaz "fora do calendário"). Os avisos do servidor
+  // (intervalo, idade) dependem da vacina, da dose e da hora: mudar qualquer um os descarta; o resto não.
   function set<K extends keyof DoseDraft>(key: K, value: DoseDraft[K], extra: Partial<DoseDraft> = {}) {
     setDraft((d) => ({ ...d, ...extra, [key]: value }));
-    const paths = [ PATH[key], ...Object.keys(extra).map((k) => PATH[k]) ];
+    const keys = [ key, ...Object.keys(extra) ];
+    const paths = keys.map((k) => PATH[k]);
+    const dropWarnings = keys.some((k) => WARNING_INPUTS.includes(k as keyof DoseDraft));
     setProblems((ps) => ps.filter((p) => !paths.includes(p.path)));
     setRefusals((rs) => rs.filter((r) => splitRefusals([ r ]).warnings.length > 0
-      || !(paths.includes(r.path) || (key === "strategy" && r.code === "dose_not_in_calendar"))));
+      ? !dropWarnings
+      : !(paths.includes(r.path) || (key === "strategy" && r.code === "dose_not_in_calendar"))));
   }
 
   function chooseVaccine(code: string) {
@@ -94,8 +105,14 @@ export function DoseForm({ room, patient, catalog, item, now, onSaved, onCancel 
   function submit(e: { preventDefault(): void }) {
     e.preventDefault();
     if (busy.current) return;
-    const found = doseProblems(draft, { catalog, lots, vials, now, sex: patient.sex });
+    const at = clock();
+    const fresh = multidose ? vialsQuery.data ?? [] : [];
+    const found = doseProblems(draft, { catalog, lots: lotsForDose(allPositions, draft.immunobiologicalCode, cityIsoDate(at), fresh, at), vials: fresh,
+      now: at, sex: patient.sex, birthDate: patient.birth_date });
     if (warnings.length > 0 && draft.overrideReason.trim() === "") found.push({ path: "override_reason", text: reasonProblem("", "o motivo") as string });
+    // Recusa dura de campo ainda na tela = o campo não mudou desde a resposta (editar tira a recusa): o motivo não basta.
+    // Recusa solta (sem campo, ex.: missing_role) não trava: pode ser passageira.
+    if (blocking.some((b) => KNOWN_PATHS.includes(b.path))) found.push({ path: "", text: STALE_REFUSAL });
     setProblems(found);
     if (found.length > 0) return;
     busy.current = true;
@@ -141,6 +158,8 @@ export function DoseForm({ room, patient, catalog, item, now, onSaved, onCancel 
   ];
   const loose = blocking.filter((r) => !KNOWN_PATHS.includes(r.path));
   const anyError = problems.length > 0 || blocking.length > 0;
+  const general = problems.filter((p) => p.path === "").map((p) => p.text);
+  const appliedOn = cityIsoDate(parseCityLocal(draft.appliedAt) ?? now);
 
   function field(key: keyof DoseDraft, label: string, control: (props: { id: string; "aria-describedby"?: string; "aria-invalid"?: boolean }) => ReactNode, after?: ReactNode) {
     const id = `${uid}-${key}`;
@@ -181,7 +200,8 @@ export function DoseForm({ room, patient, catalog, item, now, onSaved, onCancel 
         {field("careGroup", "Grupo de atendimento", select("careGroup", t.care_group, "escolha o grupo"))}
         {field("route", "Via", select("route", t.route, "escolha a via"))}
         {field("site", "Local de aplicação", select("site", t.site, "escolha o local"))}
-        {patient.sex === "female" && field("maternalCondition", "Condição maternal", select("maternalCondition", t.maternal_condition, "escolha"))}
+        {patient.sex === "female" && field("maternalCondition", "Condição maternal", select("maternalCondition", t.maternal_condition, "escolha"),
+          maternalRequired(patient.sex, patient.birth_date, appliedOn) ? undefined : <span style={muted}>opcional nesta idade (obrigatória de 10 a 49 anos)</span>)}
         {field("appliedAt", "Data e hora da aplicação", (props) => (
           <input {...props} type="datetime-local" style={inputStyle} max={cityLocalInput(now)} value={draft.appliedAt}
             onChange={(e) => set("appliedAt", e.target.value)} />
@@ -231,7 +251,8 @@ export function DoseForm({ room, patient, catalog, item, now, onSaved, onCancel 
             onChange={(e) => set("overrideReason", e.target.value)} />
         ))}
         {loose.length > 0 && <ul role="alert" style={{ ...list, color: "var(--down)" }}>{loose.map((r) => <li key={`${r.path}-${r.code}`}>{r.text}</li>)}</ul>}
-        {anyError && loose.length === 0 && <p role="alert" style={alert}>confira os campos destacados</p>}
+        {general.map((t) => <p key={t} role="alert" style={alert}>{t}</p>)}
+        {anyError && loose.length === 0 && general.length === 0 && <p role="alert" style={alert}>confira os campos destacados</p>}
         <div style={row}>
           <button type="submit" style={sending ? disabledButtonStyle : buttonStyle} disabled={sending}>Registrar dose</button>
           <button type="button" style={secondaryButtonStyle} disabled={sending} onClick={onCancel}>Voltar à caderneta</button>

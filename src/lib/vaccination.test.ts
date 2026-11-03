@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { ApiError } from "./api";
 import { itemKey, locationKindLabel } from "./pharmacy";
 import {
-  OVERRIDABLE, VACCINATION_DISABLED, cardItemStatusLabel, doseSavedText, canUseVaccination, cardGroups, doseBody, doseProblems, effectiveStatus, locationAbilities, lotsForDose, monthProblem, newDoseDraft,
+  OVERRIDABLE, VACCINATION_DISABLED, cardItemStatusLabel, doseSavedText, maternalRequired, canUseVaccination, cardGroups, doseBody, doseProblems, effectiveStatus, locationAbilities, lotsForDose, monthProblem, newDoseDraft,
   newTranscriptionLine, outOfRange, parseCelsius, readingBody, readingProblems, reasonProblem, rndsStatusLabel, blockReasonLabel, splitRefusals,
   termName, transcriptionProblems, vaccinationRefusals, vialRemaining, vialsForDose
 } from "./vaccination";
@@ -195,6 +195,21 @@ describe("fix round 1", () => {
       .toBe("Dose registrada. Próxima dose: Penta (DTP/HepB/Hib) D3 em 01/10/2026");
     expect(doseSavedText(card({ items: [ cardItem({ status: "complete" }), cardItem({ immunobiological: { code: "15", name: "BCG" }, status: "upcoming" }) ] }), "42"))
       .toBe("Dose registrada. Esquema desta vacina completo no calendário.");
+  });
+  it("V27: condição maternal só de 10 a 49 anos completos no dia da aplicação", () => {
+    const d = { ...newDoseDraft(PENTA, "D2", NOW29), strategy: "1", careGroup: "1", lotId: "lot9" };
+    const ctx3 = { catalog: CATALOG29, lots: [ vacLotBalance() ], vials: [], now: NOW29, sex: "female" };
+    expect(doseProblems(d, { ...ctx3, birthDate: "2026-09-02" })).toEqual([]); // 2 meses
+    expect(doseProblems(d, { ...ctx3, birthDate: "1996-05-10" }).map((p) => p.path)).toEqual([ "maternal_condition" ]); // 30 anos
+    expect(maternalRequired("female", "2016-11-02", "2026-11-02")).toBe(true); // faz 10 hoje
+    expect(maternalRequired("female", "2016-11-03", "2026-11-02")).toBe(false); // véspera dos 10
+    expect(maternalRequired("female", "1976-11-03", "2026-11-02")).toBe(true); // véspera dos 50
+    expect(maternalRequired("female", "1976-11-02", "2026-11-02")).toBe(false); // faz 50 hoje
+    expect(maternalRequired("female", "2016-02-29", "2026-02-28")).toBe(true); // 29/02 → 28/02 em ano comum
+    expect(maternalRequired("female", null, "2026-11-02")).toBe(true);
+    expect(maternalRequired("male", "1996-05-10", "2026-11-02")).toBe(false);
+    // a data que vale é a da aplicação, não a de hoje
+    expect(doseProblems({ ...d, appliedAt: "2026-11-01T09:00" }, { ...ctx3, birthDate: "2016-11-02" })).toEqual([]);
   });
   it("dose fora do calendário na rotina aponta a estratégia", () => {
     expect(vaccinationRefusals(refusal([ { path: "dose_code", error: "dose_not_in_calendar" } ]))[0].text)

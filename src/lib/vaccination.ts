@@ -161,9 +161,24 @@ export function reasonProblem(text: string, label: string): string | null {
   return n >= 10 && n <= 500 ? null : `${label} precisa ter de 10 a 500 caracteres`;
 }
 
-// `sex`: o api exige a condição maternal para o sexo feminino (maternal_condition_required; a terminologia tem "Nenhuma").
+// Aniversário de `years` anos (aritmética de calendário; 29/02 cai em 28/02 em ano comum, como o `advance` do api).
+function birthdayAt(birth: string, years: number): string {
+  const [ y, m, d ] = birth.split("-").map(Number);
+  const last = new Date(Date.UTC(y + years, m, 0)).getUTCDate();
+  return `${String(y + years).padStart(4, "0")}-${String(m).padStart(2, "0")}-${String(Math.min(d, last)).padStart(2, "0")}`;
+}
+
+// V27: condição maternal obrigatória só para o sexo feminino de 10 a 49 anos completos no dia da aplicação (do aniversário de 10
+// até a véspera dos 50). Sem nascimento conhecido, continua exigida (como o api).
+export function maternalRequired(sex: string | undefined, birthDate: string | null | undefined, appliedOn: string): boolean {
+  if (sex !== "female") return false;
+  if (!birthDate || !DATE.test(birthDate)) return true;
+  return appliedOn >= birthdayAt(birthDate, 10) && appliedOn < birthdayAt(birthDate, 50);
+}
+
+// `sex`/`birthDate`: condição maternal (V27; maternal_condition_required; a terminologia tem "Nenhuma").
 export function doseProblems(
-  d: DoseDraft, ctx: { catalog: VaccinationCatalog; lots: LotBalance[]; vials: Vial[]; now: Date; sex?: string }
+  d: DoseDraft, ctx: { catalog: VaccinationCatalog; lots: LotBalance[]; vials: Vial[]; now: Date; sex?: string; birthDate?: string | null }
 ): Problem[] {
   const out: Problem[] = [];
   const add = (path: string, text: string) => out.push({ path, text });
@@ -174,8 +189,8 @@ export function doseProblems(
   if (d.careGroup === "") add("care_group", "informe o grupo de atendimento");
   if (d.route === "") add("route", "informe a via");
   if (d.site === "") add("site", "informe o local de aplicação");
-  if (ctx.sex === "female" && d.maternalCondition === "") add("maternal_condition", MATERNAL_REQUIRED);
   const at = d.appliedAt === "" ? null : parseCityLocal(d.appliedAt);
+  if (d.maternalCondition === "" && maternalRequired(ctx.sex, ctx.birthDate, cityIsoDate(at ?? ctx.now))) add("maternal_condition", MATERNAL_REQUIRED);
   if (!at) add("applied_at", "informe data e hora da aplicação");
   else if (at.getTime() > ctx.now.getTime()) add("applied_at", "a hora da aplicação não pode ser futura");
   if (d.lotId === "") add("lot_id", "escolha o lote do estoque da sala");

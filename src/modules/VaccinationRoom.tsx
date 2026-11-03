@@ -19,7 +19,8 @@ import { CardView } from "./vaccination/CardView";
 import { DoseForm } from "./vaccination/DoseForm";
 import type { PersonRestart } from "./territory/PersonStart";
 
-export function VaccinationRoom({ now = new Date(), onGoToSecurity }: { now?: Date; onGoToSecurity?(): void } = {}) {
+// `now` só para testes: sem ele, cada tela lê o relógio na hora (um padrão aqui congelaria a hora da abertura da sala).
+export function VaccinationRoom({ now, onGoToSecurity }: { now?: Date; onGoToSecurity?(): void } = {}) {
   return (
     <VaccinationGate title="Sala de vacina" sub="caderneta, dose com lote e frasco, transcrição" allow={(r) => r.professional}>
       {() => (
@@ -31,8 +32,9 @@ export function VaccinationRoom({ now = new Date(), onGoToSecurity }: { now?: Da
   );
 }
 
-function RoomBody({ room, now, onGoToSecurity }: { room: VaccineLocation; now: Date; onGoToSecurity?(): void }) {
+function RoomBody({ room, now: fixedNow, onGoToSecurity }: { room: VaccineLocation; now?: Date; onGoToSecurity?(): void }) {
   const roomId = room.room_id as string;
+  const now = fixedNow ?? new Date();
   const today = cityIsoDate(now);
   const catalog = useQuery({ queryKey: [ VAC_CATALOG_KEY ], queryFn: getVaccinationCatalog, ...STATIC_QUERY });
   const [ card, setCard ] = useState<VaccinationCard | null>(null);
@@ -44,7 +46,8 @@ function RoomBody({ room, now, onGoToSecurity }: { room: VaccineLocation; now: D
   const reread = useMutation({ gcTime: 0, mutationFn: (patientId: string) => getVaccinationCard(roomId, { patient_id: patientId }) });
   // Formulário da dose aberto (item da caderneta ou "Outra vacina") e a frase depois do registro.
   const [ dose, setDose ] = useState<{ item: CardItem | null } | null>(null);
-  const [ saved, setSaved ] = useState<{ text: string; problem: string | null } | null>(null);
+  // `code`: o imunobiológico da dose, para refazer a frase se a releitura falhar e for repetida.
+  const [ saved, setSaved ] = useState<{ text: string; problem: string | null; code: string } | null>(null);
   const savedRef = useRef<HTMLParagraphElement>(null);
   useEffect(() => { if (saved) savedRef.current?.focus(); }, [ saved ]);
 
@@ -85,17 +88,21 @@ function RoomBody({ room, now, onGoToSecurity }: { room: VaccineLocation; now: D
   }
 
   function onSaved(imm: Immunization) {
-    if (!card) return;
-    const mine = ++seq.current;
-    const patientId = card.patient.id;
     setDose(null);
-    reread.mutate(patientId, {
+    rereadCard(imm.immunobiological.code);
+  }
+
+  // Enquanto relê (e se a releitura falhar) a caderneta velha não aparece: ela ainda ofereceria "Registrar" na dose recém-aplicada.
+  function rereadCard(code: string) {
+    if (!card || reread.isPending) return;
+    const mine = ++seq.current;
+    reread.mutate(card.patient.id, {
       onSuccess: (c) => {
         if (mine !== seq.current) return;
         replaceCard(c);
-        setSaved({ text: doseSavedText(c, imm.immunobiological.code, catalog.data), problem: null });
+        setSaved({ text: doseSavedText(c, code, catalog.data), problem: null, code });
       },
-      onError: (err) => { if (mine === seq.current) setSaved({ text: DOSE_SAVED, problem: vaccinationError(err) }); }
+      onError: (err) => { if (mine === seq.current) setSaved({ text: DOSE_SAVED, problem: vaccinationError(err), code }); }
     });
   }
 
@@ -121,7 +128,12 @@ function RoomBody({ room, now, onGoToSecurity }: { room: VaccineLocation; now: D
               {saved.problem && <p role="alert" style={alert}>{saved.problem}</p>}
             </>
           )}
-          {catalog.data && dose ? (
+          {reread.isPending ? <p className="mono" style={muted}>relendo a caderneta…</p>
+          : saved?.problem ? (
+            <div style={row}>
+              <button type="button" style={secondaryButtonStyle} onClick={() => rereadCard(saved.code)}>Reabrir a caderneta</button>
+            </div>
+          ) : catalog.data && dose ? (
             <DoseForm room={room} patient={card.patient} catalog={catalog.data} item={dose.item} now={now} onSaved={onSaved}
               onCancel={() => setDose(null)} />
           ) : catalog.data ? (
