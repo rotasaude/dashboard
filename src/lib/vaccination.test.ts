@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { ApiError } from "./api";
 import { itemKey, locationKindLabel } from "./pharmacy";
 import {
-  OVERRIDABLE, VACCINATION_DISABLED, cardItemStatusLabel, canUseVaccination, cardGroups, doseBody, doseProblems, effectiveStatus, locationAbilities, lotsForDose, monthProblem, newDoseDraft,
+  OVERRIDABLE, VACCINATION_DISABLED, cardItemStatusLabel, doseSavedText, canUseVaccination, cardGroups, doseBody, doseProblems, effectiveStatus, locationAbilities, lotsForDose, monthProblem, newDoseDraft,
   newTranscriptionLine, outOfRange, parseCelsius, readingBody, readingProblems, reasonProblem, rndsStatusLabel, blockReasonLabel, splitRefusals,
   termName, transcriptionProblems, vaccinationRefusals, vialRemaining, vialsForDose
 } from "./vaccination";
@@ -179,5 +179,25 @@ describe("fix round 1", () => {
     expect(doseProblems(d, { catalog: CATALOG29, lots: [ vacLotBalance() ], vials: [], now: NOW29 })).toEqual([]);
     expect(cardItemStatusLabel(cardItem({ due_on: "2026-10-20" }), "due", TODAY29)).toBe("já pode tomar desde 20/10/2026");
     expect(cardItemStatusLabel(cardItem({ due_on: TODAY29 }), "due", TODAY29)).toBe("devida hoje");
+  });
+  it("sexo feminino exige a condição maternal (api: maternal_condition_required); masculino não", () => {
+    const d = { ...newDoseDraft(PENTA, "D2", NOW29), strategy: "1", careGroup: "1", lotId: "lot9" };
+    const ctx2 = { catalog: CATALOG29, lots: [ vacLotBalance() ], vials: [], now: NOW29 };
+    expect(doseProblems(d, { ...ctx2, sex: "female" })).toEqual([ { path: "maternal_condition", text: "informe a condição maternal (nenhuma, gestante ou puérpera)" } ]);
+    expect(doseProblems({ ...d, maternalCondition: "N" }, { ...ctx2, sex: "female" })).toEqual([]);
+    expect(doseProblems(d, { ...ctx2, sex: "male" })).toEqual([]);
+    expect(vaccinationRefusals(refusal([ { path: "maternal_condition", error: "maternal_condition_required" } ]))[0].text)
+      .toBe("informe a condição maternal (nenhuma, gestante ou puérpera)");
+  });
+  it("aprazamento: primeiro item a fazer do mesmo imunobiológico; nenhum → completo", () => {
+    expect(doseSavedText(card(), "42")).toBe("Dose registrada. Próxima dose: Penta (DTP/HepB/Hib) 2ª dose em 02/11/2026");
+    expect(doseSavedText(card({ items: [ cardItem({ status: "overdue", due_on: "2026-10-01", dose: { code: "D3", name: null } }) ] }), "42"))
+      .toBe("Dose registrada. Próxima dose: Penta (DTP/HepB/Hib) D3 em 01/10/2026");
+    expect(doseSavedText(card({ items: [ cardItem({ status: "complete" }), cardItem({ immunobiological: { code: "15", name: "BCG" }, status: "upcoming" }) ] }), "42"))
+      .toBe("Dose registrada. Esquema desta vacina completo no calendário.");
+  });
+  it("dose fora do calendário na rotina aponta a estratégia", () => {
+    expect(vaccinationRefusals(refusal([ { path: "dose_code", error: "dose_not_in_calendar" } ]))[0].text)
+      .toBe("esta dose não está no calendário de rotina desta vacina — fora da rotina, troque a estratégia");
   });
 });

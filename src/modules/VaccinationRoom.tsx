@@ -1,17 +1,22 @@
 // Sala de vacina (módulo 29; F-29.2): portão → sala onde a pessoa vacina → busca do cidadão → caderneta. A caderneta é leitura
 // nominal com trilha: lida por MUTAÇÃO no clique (`gcTime: 0`), nunca sozinha nem em cache; uma resposta de uma busca já trocada
 // (outro cidadão, outra sala) é ignorada (`seq`). O catálogo é sem pessoa (STATIC_QUERY). "Outro cidadão" limpa tudo.
-import { useRef, useState } from "react";
+// Registrar (F-29.3): o DoseForm toma o lugar da caderneta; depois do 201 a caderneta é relida (mutação) e a frase do aprazamento
+// (`doseSavedText`, da caderneta relida) recebe o foco.
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { errorCode, getVaccinationCard, getVaccinationCatalog, type CardRequest, type VaccinationCard, type VaccineLocation } from "../lib/api";
+import {
+  errorCode, getVaccinationCard, getVaccinationCatalog, type CardItem, type CardRequest, type Immunization, type VaccinationCard, type VaccineLocation
+} from "../lib/api";
 import { cityIsoDate } from "../lib/format";
-import { STATIC_QUERY, VAC_CATALOG_KEY, vaccinationError } from "../lib/vaccination";
+import { DOSE_SAVED, STATIC_QUERY, VAC_CATALOG_KEY, doseSavedText, vaccinationError } from "../lib/vaccination";
 import { secondaryButtonStyle } from "../components/formStyles";
 import { alert, muted, panel, row, stack, title } from "./exams/styles";
 import { VaccinationGate } from "./vaccination/VaccinationGate";
 import { VaccineLocationPick } from "./vaccination/VaccineLocationPick";
 import { PatientPick } from "./vaccination/PatientPick";
 import { CardView } from "./vaccination/CardView";
+import { DoseForm } from "./vaccination/DoseForm";
 import type { PersonRestart } from "./territory/PersonStart";
 
 export function VaccinationRoom({ now = new Date(), onGoToSecurity }: { now?: Date; onGoToSecurity?(): void } = {}) {
@@ -36,6 +41,12 @@ function RoomBody({ room, now, onGoToSecurity }: { room: VaccineLocation; now: D
   const [ search, setSearch ] = useState<{ round: number; restart?: PersonRestart }>({ round: 0 });
   const seq = useRef(0);
   const read = useMutation({ gcTime: 0, mutationFn: (req: CardRequest) => getVaccinationCard(roomId, req) });
+  const reread = useMutation({ gcTime: 0, mutationFn: (patientId: string) => getVaccinationCard(roomId, { patient_id: patientId }) });
+  // Formulário da dose aberto (item da caderneta ou "Outra vacina") e a frase depois do registro.
+  const [ dose, setDose ] = useState<{ item: CardItem | null } | null>(null);
+  const [ saved, setSaved ] = useState<{ text: string; problem: string | null } | null>(null);
+  const savedRef = useRef<HTMLParagraphElement>(null);
+  useEffect(() => { if (saved) savedRef.current?.focus(); }, [ saved ]);
 
   function open(req: CardRequest) {
     if (read.isPending) return;
@@ -68,8 +79,30 @@ function RoomBody({ room, now, onGoToSecurity }: { room: VaccineLocation; now: D
     setProblem(null);
   }
 
+  function record(item: CardItem | null) {
+    setSaved(null);
+    setDose({ item });
+  }
+
+  function onSaved(imm: Immunization) {
+    if (!card) return;
+    const mine = ++seq.current;
+    const patientId = card.patient.id;
+    setDose(null);
+    reread.mutate(patientId, {
+      onSuccess: (c) => {
+        if (mine !== seq.current) return;
+        replaceCard(c);
+        setSaved({ text: doseSavedText(c, imm.immunobiological.code, catalog.data), problem: null });
+      },
+      onError: (err) => { if (mine === seq.current) setSaved({ text: DOSE_SAVED, problem: vaccinationError(err) }); }
+    });
+  }
+
   function another() {
     drop();
+    setDose(null);
+    setSaved(null);
     setCard(null);
     setSearch((s) => ({ round: s.round + 1 }));
   }
@@ -82,10 +115,19 @@ function RoomBody({ room, now, onGoToSecurity }: { room: VaccineLocation; now: D
           <div style={row}>
             <button type="button" style={secondaryButtonStyle} onClick={another}>Outro cidadão</button>
           </div>
-          {catalog.data ? (
-            // Registro, transcrição e ESAVI entram nas Tasks 7, 8 e 15.
+          {saved && (
+            <>
+              <p ref={savedRef} role="status" tabIndex={-1} style={{ margin: 0, fontSize: 13, color: "var(--ok)" }}>{saved.text}</p>
+              {saved.problem && <p role="alert" style={alert}>{saved.problem}</p>}
+            </>
+          )}
+          {catalog.data && dose ? (
+            <DoseForm room={room} patient={card.patient} catalog={catalog.data} item={dose.item} now={now} onSaved={onSaved}
+              onCancel={() => setDose(null)} />
+          ) : catalog.data ? (
+            // Transcrição e ESAVI entram nas Tasks 8 e 15.
             <CardView room={room} card={card} catalog={catalog.data} now={now} onCard={replaceCard} onGoToSecurity={onGoToSecurity}
-              onRecord={() => undefined} onTranscribe={() => undefined} />
+              onRecord={record} onTranscribe={() => undefined} />
           ) : catalog.isError ? <p role="alert" style={alert}>{vaccinationError(catalog.error)}</p>
             : <p className="mono" style={muted}>carregando…</p>}
         </>

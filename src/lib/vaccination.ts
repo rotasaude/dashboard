@@ -20,6 +20,7 @@ export const NO_VACCINE_LOCATION = "você não está na equipe de nenhuma sala d
 export const UNCHECKED_NOTICE = "Caderneta não conferida: transcreva as doses de fora ou confirme que está completa para ver as vacinas pendentes.";
 export const DOSE_SAVED = "Dose registrada.";
 export const LOT_REREAD = "o lote mudou — a lista de lotes foi relida; escolha de novo";
+const MATERNAL_REQUIRED = "informe a condição maternal (nenhuma, gestante ou puérpera)";
 export const VIAL_REREAD = "o frasco mudou — a lista de frascos foi relida; abra outro frasco ou escolha outro";
 
 export const VAC_LOCATIONS_KEY = "vaccinationLocations";
@@ -126,7 +127,7 @@ export interface DoseDraft {
 }
 
 // "2026-11-02T10:00" na hora de parede da cidade (valor de <input type="datetime-local">).
-function cityLocalInput(at: Date): string {
+export function cityLocalInput(at: Date): string {
   const p = Object.fromEntries(
     cityDateFormat({ hourCycle: "h23", hour: "2-digit", minute: "2-digit" }, "en-US").formatToParts(at).map((x) => [ x.type, x.value ])
   );
@@ -160,8 +161,9 @@ export function reasonProblem(text: string, label: string): string | null {
   return n >= 10 && n <= 500 ? null : `${label} precisa ter de 10 a 500 caracteres`;
 }
 
+// `sex`: o api exige a condição maternal para o sexo feminino (maternal_condition_required; a terminologia tem "Nenhuma").
 export function doseProblems(
-  d: DoseDraft, ctx: { catalog: VaccinationCatalog; lots: LotBalance[]; vials: Vial[]; now: Date }
+  d: DoseDraft, ctx: { catalog: VaccinationCatalog; lots: LotBalance[]; vials: Vial[]; now: Date; sex?: string }
 ): Problem[] {
   const out: Problem[] = [];
   const add = (path: string, text: string) => out.push({ path, text });
@@ -172,6 +174,7 @@ export function doseProblems(
   if (d.careGroup === "") add("care_group", "informe o grupo de atendimento");
   if (d.route === "") add("route", "informe a via");
   if (d.site === "") add("site", "informe o local de aplicação");
+  if (ctx.sex === "female" && d.maternalCondition === "") add("maternal_condition", MATERNAL_REQUIRED);
   const at = d.appliedAt === "" ? null : parseCityLocal(d.appliedAt);
   if (!at) add("applied_at", "informe data e hora da aplicação");
   else if (at.getTime() > ctx.now.getTime()) add("applied_at", "a hora da aplicação não pode ser futura");
@@ -206,6 +209,16 @@ export function doseBody(d: DoseDraft, patientId: string, catalog?: VaccinationC
   if (d.campaignId !== "") body.campaign_id = d.campaignId;
   if (reason !== "") body.override_reason = reason;
   return body;
+}
+
+// Aprazamento depois do registro, lido da caderneta RELIDA (o api calcula): o primeiro item ainda a fazer do mesmo imunobiológico.
+// `overdue` entra também (dose de recuperação já devida), sem a palavra "atraso"; nenhum → esquema completo.
+export function doseSavedText(card: VaccinationCard, immunobiologicalCode: string, catalog?: VaccinationCatalog): string {
+  const next = card.items.find((i) => i.immunobiological.code === immunobiologicalCode && [ "upcoming", "due", "overdue" ].includes(i.status));
+  if (!next) return `${DOSE_SAVED} Esquema desta vacina completo no calendário.`;
+  const name = next.immunobiological.name ?? catalog?.immunobiologicals.find((m) => m.code === immunobiologicalCode)?.name ?? immunobiologicalCode;
+  const when = next.due_on ? ` em ${fmtDay(next.due_on)}` : "";
+  return `${DOSE_SAVED} Próxima dose: ${name} ${next.dose.name ?? next.dose.code}${when}`;
 }
 
 // ─── Avisos (recusa que um motivo libera) ───────────────────────────────────
@@ -341,11 +354,12 @@ const ERRORS: Record<string, string> = {
   applied_at_in_future: "a hora da aplicação não pode ser futura",
   applied_on_in_future: "a data da aplicação não pode ser futura",
   applied_before_birth: "a data da aplicação é antes do nascimento",
-  dose_not_in_calendar: "esta dose não existe no calendário para esta vacina",
+  // O api só recusa na estratégia de rotina ("1"); as outras aceitam qualquer dose da terminologia.
+  dose_not_in_calendar: "esta dose não está no calendário de rotina desta vacina — fora da rotina, troque a estratégia",
   interval_too_short: "intervalo menor que o mínimo desde a dose anterior",
   age_out_of_range: "idade fora da faixa do calendário para esta dose",
   sex_not_allowed: "esta vacina não é indicada para o sexo do cadastro",
-  maternal_condition_required: "informe a condição maternal (gestante ou puérpera)",
+  maternal_condition_required: MATERNAL_REQUIRED,
   cancel_not_allowed: "só quem registrou ou o responsável pela sala cancela",
   already_cancelled: "esta dose já foi cancelada — abra a caderneta de novo",
   immunization_cancelled: "esta dose foi cancelada — não tem notificação de ESAVI",

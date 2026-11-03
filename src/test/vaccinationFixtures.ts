@@ -26,7 +26,7 @@ export const TERMS = {
   route: t([ [ "IM", "Intramuscular" ], [ "ID", "Intradérmica" ], [ "VO", "Oral" ] ]),
   site: t([ [ "VLD", "Vasto lateral da coxa direita" ], [ "DD", "Deltoide direito" ] ]),
   care_group: t([ [ "1", "Criança" ], [ "2", "Gestante" ] ]),
-  maternal_condition: t([ [ "G", "Gestante" ], [ "P", "Puérpera" ] ])
+  maternal_condition: t([ [ "N", "Nenhuma" ], [ "G", "Gestante" ], [ "P", "Puérpera" ] ])
 };
 export const CATALOG29: VaccinationCatalog = { calendar_version: "2026.1", immunobiologicals: [ PENTA, BCG ], terminologies: TERMS };
 const vacItem = (code: string, name: string): StockItem => ({ catalog_item_id: null, catmat_code: null, immunobiological_code: code,
