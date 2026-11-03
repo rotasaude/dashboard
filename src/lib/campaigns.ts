@@ -57,9 +57,13 @@ export const CRITERION_LABEL: Record<CriterionKind, string> = {
   attendance_outcome: "Desfecho de atendimento",
   triaged_not_attended: "Triado e não atendido",
   appointment_no_show: "Falta em agendamento",
-  appointment_request_open: "Pedido de agendamento aberto"
+  appointment_request_open: "Pedido de agendamento aberto",
+  // Módulo 29 (D12): só oferecidos quando o api manda `immunobiologicals` nas opções (Task 14).
+  vaccine_overdue: "Vacina em atraso",
+  vaccination_record_unchecked: "Caderneta de vacinação não conferida"
 };
-export const CRITERION_KINDS = Object.keys(CRITERION_LABEL) as CriterionKind[];
+export const VACCINE_CRITERION_KINDS: CriterionKind[] = [ "vaccine_overdue", "vaccination_record_unchecked" ];
+export const CRITERION_KINDS = (Object.keys(CRITERION_LABEL) as CriterionKind[]).filter((k) => !VACCINE_CRITERION_KINDS.includes(k));
 
 export const OUTCOME_LABEL: Record<string, string> = {
   discharged: "atendido e liberado", referred: "encaminhado", return: "retorno", left: "saiu sem atendimento",
@@ -115,6 +119,8 @@ export function newCriterion(kind: CriterionKind, today: string): Criterion {
     case "triaged_not_attended": return { kind, from, to: today };
     case "appointment_no_show": return { kind, from, to: today };
     case "appointment_request_open": return { kind };
+    case "vaccine_overdue": return { kind, immunobiological_codes: [] };
+    case "vaccination_record_unchecked": return { kind };
   }
 }
 

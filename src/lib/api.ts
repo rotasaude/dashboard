@@ -889,7 +889,10 @@ export type Criterion =
   | ({ kind: "attendance_outcome"; outcomes: AttendanceOutcome[]; health_unit_id?: string } & CriterionPeriod)
   | ({ kind: "triaged_not_attended" } & CriterionPeriod)
   | ({ kind: "appointment_no_show" } & CriterionPeriod)
-  | { kind: "appointment_request_open"; kinds?: RequestKind[]; target_unit_id?: string };
+  | { kind: "appointment_request_open"; kinds?: RequestKind[]; target_unit_id?: string }
+  // Módulo 29 (contrato §10; D12): vacina em atraso e caderneta não conferida.
+  | { kind: "vaccine_overdue"; immunobiological_codes: string[]; age_min_months?: number; age_max_months?: number }
+  | { kind: "vaccination_record_unchecked"; age_min_months?: number; age_max_months?: number };
 
 export type CriterionKind = Criterion["kind"];
 
@@ -915,6 +918,8 @@ export interface Campaign extends CampaignSummary {
   phones_count: number | null;
   created_at: string;
   stats: CampaignStats | null;
+  // Módulo 29 (D12; V13): número só com campanha enviada e critério vaccine_overdue.
+  vaccinated_count?: number | null;
 }
 
 export interface NamedRef { id: string; name: string }
@@ -924,6 +929,8 @@ export interface CampaignOptions {
   outcomes: string[];
   neighborhoods: NamedRef[];
   units: NamedRef[];
+  // Módulo 29 (D12; V13): só com `vaccination` ligado.
+  immunobiologicals?: CodeName[];
 }
 export type AudiencePreview = { citizens: number; phones: number } | { below_minimum: true };
 export interface SmsSetting { enabled: boolean; gateway_configured: boolean }
@@ -1206,7 +1213,8 @@ const CNES_BASE = import.meta.env.VITE_CNES_BASE || "/cnes";
 const PRODUCTION_BASE = import.meta.env.VITE_PRODUCTION_BASE || "/production";
 
 export type RecordMode = "off" | "integrated" | "record";
-export type CredentialKind = "ledi" | "cadsus";
+// Módulo 29 (D1; V1): a credencial rnds é um certificado A1, não usuário e senha.
+export type CredentialKind = "ledi" | "cadsus" | "rnds";
 export type CredentialCheckStatus = "ok" | "unauthorized" | "unreachable" | "error";
 
 export interface IntegrationCredential {
@@ -2342,7 +2350,9 @@ export type TimelineKind =
   | "triage" | "attendance" | "screening" | "appointment" | "consultation"
   | "clinical_document" | "controlled_notification" | "campaign" | "exam" | "procedure"
   // Módulo 27a (D22): retirada na farmácia (o api manda detail_ref nulo e status "dispensed").
-  | "dispensation";
+  | "dispensation"
+  // Módulo 29 (D11; V10): dose de vacina, com detail_ref { type: "immunization", id }.
+  | "vaccination";
 
 export interface TimelineDetailRef { type: string; id: string }
 export interface TimelineEntry {
@@ -4729,18 +4739,27 @@ export const PHARMACY_PAGE_SIZE = 50;
 export type PharmacyRole = "pharmacist" | "pharmacy_assistant" | "stock_keeper";
 export type StockLocationKind = "central" | "unit";
 export type StockMovementKind =
-  | "opening" | "receipt" | "donation" | "transfer_out" | "transfer_in" | "dispensing" | "loss" | "expiry" | "adjustment" | "return";
+  | "opening" | "receipt" | "donation" | "transfer_out" | "transfer_in" | "dispensing" | "loss" | "expiry" | "adjustment" | "return"
+  // Módulo 29 (V4): abertura de frasco, dose de unidose e a devolução por cancelamento.
+  | "vial_opening" | "immunization" | "immunization_reversal";
 export type TransferStatus = "sent" | "received" | "received_with_difference";
 export type AdjustmentStatus = "applied" | "pending" | "approved" | "rejected";
 export type AdjustmentKind = "adjustment" | "loss" | "expiry";
 export type PrescriptionKind = "digital" | "external";
 
 // H1: `unit` é a unidade da CONCENTRAÇÃO (mg); `dispensing_unit` é a que se conta no balcão (cápsula).
+// Módulo 29 (D5; V4): imunobiológico vem com catalog_item_id e catmat_code nulos, immunobiological_code, item_kind e unidade "dose".
 export interface StockItem {
-  catalog_item_id: string; catmat_code: number; name: string; unit: string; dispensing_unit: string;
+  catalog_item_id: string | null; catmat_code: number | null; name: string; unit: string; dispensing_unit: string;
   controlled: boolean; controlled_list: string | null;
+  immunobiological_code?: string | null; item_kind?: "medication" | "immunobiological";
 }
-export interface StockLot { id: string; item: StockItem; lot_number: string; expires_on: string; manufacturer: string | null }
+// Módulo 29 (V19): lote de vacina leva `manufacturer_key` (chave do catálogo); o api não manda código RNDS no lote
+// (o plano dizia `manufacturer_code`), e `manufacturer` é o NOME. Lote de medicamento não traz a chave.
+export interface StockLot {
+  id: string; item: StockItem; lot_number: string; expires_on: string; manufacturer: string | null;
+  manufacturer_key?: string | null;
+}
 export interface LocationRef { id: string; name: string; kind: StockLocationKind | string }
 
 // D1: os locais da pessoa com o papel dela em cada um. O almoxarife do central vê todos; os alheios vêm com `roles: []`.
@@ -4757,7 +4776,8 @@ export interface StockMinimum { catalog_item_id: string; minimum: string; item: 
 
 // `lots[]` só traz lote com saldo > 0 ou em trânsito > 0 (FEFO). Por lote: `expired` = validade < hoje; `expiring_soon` = não vencido e
 // dentro do alerta de validade da cidade. Na POSIÇÃO, `expiring_soon` inclui os já vencidos (é a lista "vencendo e vencidos").
-export interface LotBalance { lot: StockLot; balance: string; in_transit: string; expiring_soon: boolean; expired: boolean }
+// Módulo 29 (D5; V4): `blocked` = excursão de temperatura aberta para o lote naquele local (só em posição de vacina).
+export interface LotBalance { lot: StockLot; balance: string; in_transit: string; expiring_soon: boolean; expired: boolean; blocked?: boolean }
 export interface StockPosition {
   location: LocationRef; item: StockItem; lots: LotBalance[]; balance: string; minimum: string | null;
   below_minimum: boolean; expiring_soon: boolean;
@@ -4797,7 +4817,8 @@ export interface TransferItem {
 export interface StockTransfer {
   id: string; from: LocationRef; to: LocationRef; status: TransferStatus | string; sent_at: string; received_at: string | null; items: TransferItem[];
 }
-export interface TransferInput { to_location_id: string; items: { lot_id: string; quantity: string }[] }
+// Módulo 29 (V4): `from_location_id` opcional; ausente = o central de medicamentos (a rede de frio informa a origem).
+export interface TransferInput { to_location_id: string; from_location_id?: string; items: { lot_id: string; quantity: string }[] }
 export interface ReceiveInput { items: { lot_id: string; quantity_received: string; reason?: string }[] }
 export interface TransferQuery { locationId: string; status?: string | null; before?: string | null }
 export interface TransferPage { transfers: StockTransfer[]; next_before: string | null }
@@ -4809,9 +4830,12 @@ export interface StockAdjustment {
   // `name` é o do perfil profissional: o almoxarife não tem perfil e vem com `name: null` (a tela mostra "—").
   requested_by: { user_id: string; name: string | null }; decided_by: { user_id: string; name: string | null } | null;
   decision_reason: string | null; created_at: string;
+  // Módulo 29 (V4): só em lote de vacina (motivo do SIES); nulo fora de perda e vencimento.
+  loss_code?: string | null;
 }
 export interface AdjustmentInput {
   location_id: string; lot_id: string; kind: AdjustmentKind; counted_quantity?: string; quantity?: string; reason: string;
+  loss_code?: string;
 }
 export interface AdjustmentPage { adjustments: StockAdjustment[]; next_before: string | null }
 
@@ -5238,4 +5262,321 @@ export async function listDentalTeams(): Promise<DentalTeam[]> {
 
 export function getDentalIndicators(teamId: string, period: string): Promise<DentalIndicators> {
   return jsonFetch(withQuery(dentalPath("indicators"), dentalParams([ [ "team_id", teamId ], [ "period", period ] ])));
+}
+
+// ─── Sala de vacina (módulo 29; ADR 0047; contrato 2026-11-02 §2–§11, §15 V1–V25) ───
+// Na URL só ids (sala, local, unidade), status, mês e cursor. CPF, nome, vacina, dose, lote, motivo, senha e certificado vão no
+// corpo; a busca, a caderneta e a dose são POST (gravam trilha no api). Formas conferidas contra o api (apps/api, módulo 29):
+// onde o plano do dashboard diz outra coisa, vale o api (fabricante por `key`, V19; busca na rota da sala, V3/V21; pendências com
+// `counts`; painel com `suppressed`; excursão com `pending_adjustment_id`). Toda escrita leva corpo (`{}` quando não há campo).
+
+const VACCINATION_BASE = import.meta.env.VITE_VACCINATION_BASE || "/vaccination";
+const vacPath = (...parts: string[]) => [ VACCINATION_BASE, ...parts.map(encodeURIComponent) ].join("/");
+const vacWrite = (method: "POST" | "PATCH" | "PUT" | "DELETE", body: unknown = {}): RequestInit => ({ method, body: JSON.stringify(body) });
+
+export const VACCINATION_PAGE_SIZE = 50;
+
+export type VaccineLocationKind = "vaccine_room" | "cold_chain_central";
+export type VaccineStaffRole = "vaccinator" | "room_lead";
+export type RndsStatus = "not_sent" | "pending" | "sending" | "accepted" | "rejected" | "failed" | "blocked";
+export type RndsBlockReason = "professional_cns_not_in_cnes" | "patient_identity_unverified" | "patient_without_cns_or_cpf";
+export type RecordCheckMode = "transcribed" | "confirmed_complete" | "born_after_go_live";
+export type CardItemStatus = "due" | "overdue" | "upcoming" | "complete" | "not_applicable" | "unchecked";
+export type VialStatus = "open" | "expired" | "closed_out";
+export type ColdChainEquipmentKind = "refrigerator" | "chamber" | "freezer";
+
+export interface CodeName { code: string; name: string }
+// Imunobiológico vindo de dose, caderneta, pendência ou resumo: o nome pode ser nulo se o código não está no catálogo (mostrar o código cru).
+export interface ImmunobiologicalRef { code: string; name: string | null }
+
+// V19: fabricante por `key` (estável, obrigatória); `code` (RNDS) pode ser nulo. O select usa a key.
+export interface ImmunobiologicalManufacturer { key: string; code: string | null; name: string; validity_after_opening_hours: number | null }
+export interface Immunobiological {
+  code: string; name: string; multidose: boolean; doses_per_vial: number; default_route: string | null; default_site: string | null;
+  manufacturers: ImmunobiologicalManufacturer[];
+}
+export interface VaccinationTerminologies {
+  dose: CodeName[]; strategy: CodeName[]; route: CodeName[]; site: CodeName[]; care_group: CodeName[]; maternal_condition: CodeName[];
+}
+export interface VaccinationCatalog { calendar_version: string; immunobiologicals: Immunobiological[]; terminologies: VaccinationTerminologies }
+
+// D2: `id` é o do local de estoque; `room_id` é o da sala (nulo na rede de frio). `roles` ⊂ vaccinator, room_lead, stock_keeper.
+export interface VaccineLocation extends PharmacyLocation { room_id: string | null }
+
+export interface ImmunizationRnds {
+  status: RndsStatus | string; sent_at: string | null; accepted_at: string | null; block_reason: RndsBlockReason | string | null; error: string | null;
+}
+// <immunization> (§2; V6 can_cancel; V10). Lote da transcrição: texto livre, sem id nem validade; fabricante só com nome e `code` nulo.
+export interface Immunization {
+  id: string; immunobiological: ImmunobiologicalRef; dose: { code: string; name: string | null };
+  strategy: string; care_group: string; route: string; site: string; maternal_condition: string | null; applied_at: string;
+  lot: { id: string | null; number: string | null; manufacturer: { code: string | null; name: string | null }; expires_on: string | null };
+  transcription: boolean; room: { id: string; name: string; health_unit: { id: string; name: string } } | null;
+  by: { name: string | null; cbo: string | null }; campaign_id: string | null; status: "active" | "cancelled" | string;
+  cancel_reason: string | null; replaces_id: string | null; replaced_by_id: string | null; can_cancel?: boolean; rnds: ImmunizationRnds;
+}
+
+export interface CardPatient {
+  id: string; display_name: string | null; birth_date: string; sex: string; has_cpf: boolean; cns_masked: string | null;
+}
+export interface CardCheck { mode: RecordCheckMode | string; at: string; by_name: string | null }
+export interface CardItem {
+  immunobiological: ImmunobiologicalRef; dose: { code: string; name: string | null }; status: CardItemStatus | string; due_on: string | null;
+  applied: { id: string; applied_at: string; transcription: boolean } | null;
+}
+export interface VaccinationCard {
+  patient: CardPatient; checked: CardCheck | null; calendar_version: string; items: CardItem[]; immunizations: Immunization[];
+}
+
+// V3: o api aceita `patient_id` OU `new_patient` (com `duplicates_reviewed?`); `citizen_id` (D3) não existe: a busca por CPF
+// já devolve `patient_id` (cria o paciente do par validado).
+export type CardRequest = { patient_id: string } | { new_patient: NewPatient; duplicates_reviewed?: boolean };
+export interface ImmunizationInput {
+  patient_id: string; immunobiological_code: string; dose_code: string; strategy: string; care_group: string; route: string; site: string;
+  maternal_condition?: string; applied_at: string; lot_id: string; vial_id?: string; campaign_id?: string; override_reason?: string;
+}
+export interface TranscriptionItemInput {
+  immunobiological_code: string; dose_code: string; applied_on: string; lot_number?: string; manufacturer_name?: string; place?: string;
+}
+export interface TranscriptionInput { patient_id: string; items: TranscriptionItemInput[]; close_check: boolean }
+// V6: a substituta vai sem `patient_id` (o api aceita, mas só o da própria dose); problemas dela vêm com path `replacement.<campo>`.
+export interface CancelInput { reason: string; replacement?: Omit<ImmunizationInput, "patient_id"> & { patient_id?: string } }
+
+export interface RndsPendingItem { immunization_id: string; patient_id: string; immunobiological: ImmunobiologicalRef; applied_at: string; rnds: ImmunizationRnds }
+// V8/V23: `counts` ao lado de `items`; `late` inclui `sending`. Cursor opaco: repasse como veio.
+export interface RndsPendingCounts { blocked: number; rejected: number; failed: number; late: number }
+export interface RndsPendingPage { items: RndsPendingItem[]; counts: RndsPendingCounts; next_before: string | null }
+
+export interface Vial {
+  id: string; lot: { id: string; number: string; immunobiological_code: string }; opened_at: string; expires_at: string;
+  doses_per_vial: number; doses_used: number; doses_left: number; status: VialStatus | string;
+}
+
+// D8 + V25: doses inteiras; closing = opening + received + transferred_in − transferred_out − vial_doses − unit_doses + adjustment − Σ physical_loss.
+// `physical_loss` por código do SIES (mais `unspecified` e `transfer_difference`); `adjustment` vem com sinal.
+export interface MonthlySummaryRow {
+  immunobiological: ImmunobiologicalRef; lot: { id: string; number: string; expires_on: string };
+  opening_balance: number; received: number; transferred_in: number; transferred_out: number; vials_opened: number; doses_applied: number;
+  technical_loss: number; physical_loss: Record<string, number>; closing_balance: number;
+  vial_doses: number; unit_doses: number; adjustment: number;
+}
+export interface MonthlySummary { month: string; location: LocationRef; rows: MonthlySummaryRow[] }
+
+export interface ColdChainEquipment {
+  id: string; location_id: string; name: string; kind: ColdChainEquipmentKind | string; min_c: number; max_c: number; active: boolean;
+}
+export type EquipmentInput = Omit<ColdChainEquipment, "id">;
+export interface ReadingInput { read_at: string; current_c: number; min_c: number; max_c: number }
+export interface ColdChainReading extends ReadingInput { id: string; out_of_range: boolean; by: { name: string | null } | null }
+export interface ReadingResult { reading: ColdChainReading; excursion_id: string | null; blocked_lots: number }
+// V24: `pending_adjustment_id` = o descarte desse lote espera aprovação ("aguardando aprovação do descarte"); `balance` é texto ("20.00").
+export interface ExcursionLot {
+  lot_id: string; number: string; immunobiological: ImmunobiologicalRef; balance: string; pending_adjustment_id: string | null;
+}
+export interface ColdChainExcursion { id: string; equipment_id: string; reading: ColdChainReading; lots: ExcursionLot[]; opened_at: string }
+export interface ColdChainStatus {
+  equipments: (ColdChainEquipment & { last_reading: ColdChainReading | null; readings_today: number })[];
+  open_excursions: ColdChainExcursion[];
+}
+export interface ExcursionDecisionLine { lot_id: string; decision: "use" | "discard"; reason: string }
+export interface ExcursionDecisionResult { excursion_id: string; adjustments: StockAdjustment[] }
+
+export interface VaccineRoomStaff { user_id: string; name: string | null; role: VaccineStaffRole | string; cbo: string | null }
+export interface VaccineRoom {
+  id: string; name: string; active: boolean; health_unit: { id: string; name: string }; stock_location_id: string; staff: VaccineRoomStaff[];
+}
+export interface VaccineRoomInput { health_unit_id: string; name: string; active: boolean }
+export interface VaccineRoomsAdmin { rooms: VaccineRoom[]; cold_chain_central: AdminLocation | null }
+export interface VaccinationSettings { go_live_on: string | null }
+
+// V19/V4: fabricante pela `key` do catálogo e `package` obrigatório (doses por frasco × frascos); `quantity` em doses, texto.
+export interface VaccineReceiptItemInput {
+  immunobiological_code: string; manufacturer_key: string; lot_number: string; expires_on: string; quantity: string; package: PackageInput;
+}
+export interface VaccineReceiptInput {
+  location_id: string; document: { kind: "invoice" | "donation"; number: string; supplier: string }; items: VaccineReceiptItemInput[];
+}
+export interface VaccineOpeningInput { location_id: string; items: VaccineReceiptItemInput[] }
+
+// D13 + supressão (Admin::SmallCount): contagem de 1 a 4 vira null, com `suppressed: true` no topo (mostrar "menos de 5"; nunca somar null).
+export interface VaccinationDashboard {
+  month: string; suppressed: boolean;
+  doses_by_immunobiological: { immunobiological: ImmunobiologicalRef; room: { id: string; name: string }; count: number | null }[];
+  c2_coverage_by_team: { team: { id: string; name: string }; eligible: number | null; complete: number | null }[];
+  rnds: { pending: number; blocked: number; rejected: number; late: number };
+  losses: { technical: number; physical: number };
+  unchecked_cards: number;
+}
+
+// ── Locais, catálogo e pessoa ──
+export async function listMyVaccineLocations(): Promise<VaccineLocation[]> {
+  return (await jsonFetch<{ locations?: VaccineLocation[] }>(vacPath("my_locations"))).locations ?? [];
+}
+
+export function getVaccinationCatalog(): Promise<VaccinationCatalog> {
+  return jsonFetch<VaccinationCatalog>(vacPath("catalog"));
+}
+
+// V3: a busca é da sala (autoriza pela equipe dela) e devolve o paciente (cria o do par validado). Ninguém → 404 person_not_found;
+// par só declarado → 409 citizen_not_verified.
+export async function lookupVaccinationPerson(roomId: string, cpf: string): Promise<PharmacyPerson> {
+  const b = await jsonFetch<Omit<PharmacyPerson, "citizen_id" | "registration_id">>(
+    vacPath("rooms", roomId, "person_lookup"), vacWrite("POST", { cpf }));
+  return { ...b, citizen_id: null, registration_id: null };
+}
+
+// V21: duplicados do recém-nascido, também na rota da sala (máximo 10 candidatos).
+export async function findVaccinationDuplicates(roomId: string, q: DuplicateQuery): Promise<DuplicateCandidate[]> {
+  const b = await jsonFetch<{ candidates?: Omit<DuplicateCandidate, "registration_id">[] }>(
+    vacPath("rooms", roomId, "patients", "duplicates"), vacWrite("POST", q));
+  return (b.candidates ?? []).map((c) => ({ ...c, registration_id: null }));
+}
+
+// ── Caderneta, dose, transcrição e cancelamento ──
+export function getVaccinationCard(roomId: string, req: CardRequest): Promise<VaccinationCard> {
+  return jsonFetch<VaccinationCard>(vacPath("rooms", roomId, "card"), vacWrite("POST", req));
+}
+
+export function confirmCardComplete(roomId: string, patientId: string): Promise<VaccinationCard> {
+  return jsonFetch<VaccinationCard>(vacPath("rooms", roomId, "checks"), vacWrite("POST", { patient_id: patientId, mode: "confirmed_complete" }));
+}
+
+export function recordImmunization(roomId: string, input: ImmunizationInput): Promise<Immunization> {
+  return jsonFetch<Immunization>(vacPath("rooms", roomId, "immunizations"), vacWrite("POST", input));
+}
+
+export function recordTranscriptions(roomId: string, input: TranscriptionInput): Promise<{ immunizations: Immunization[]; card: VaccinationCard }> {
+  return jsonFetch(vacPath("rooms", roomId, "transcriptions"), vacWrite("POST", input));
+}
+
+export function cancelImmunization(id: string, input: CancelInput): Promise<{ cancelled: Immunization; replacement: Immunization | null }> {
+  return jsonFetch(vacPath("immunizations", id, "cancel"), vacWrite("POST", input));
+}
+
+// D11/V10: leitura nominal da dose (trilha no api).
+export function getImmunization(id: string): Promise<Immunization> {
+  return jsonFetch<Immunization>(vacPath("immunizations", id));
+}
+
+export async function listRndsPending(roomId: string, before: string | null): Promise<RndsPendingPage> {
+  const p = new URLSearchParams();
+  if (before) p.set("before", before);
+  p.set("limit", String(VACCINATION_PAGE_SIZE));
+  const b = await jsonFetch<Partial<RndsPendingPage>>(withQuery(vacPath("rooms", roomId, "pending"), p));
+  return {
+    items: b.items ?? [],
+    counts: { blocked: b.counts?.blocked ?? 0, rejected: b.counts?.rejected ?? 0, failed: b.counts?.failed ?? 0, late: b.counts?.late ?? 0 },
+    next_before: b.next_before ?? null
+  };
+}
+
+// ── Frascos e resumo mensal ──
+export function openVial(roomId: string, lotId: string): Promise<Vial> {
+  return jsonFetch<Vial>(vacPath("rooms", roomId, "vials"), vacWrite("POST", { lot_id: lotId }));
+}
+
+export async function listVials(roomId: string, status: VialStatus | null): Promise<Vial[]> {
+  const p = new URLSearchParams();
+  if (status) p.set("status", status);
+  return (await jsonFetch<{ vials?: Vial[] }>(withQuery(vacPath("rooms", roomId, "vials"), p))).vials ?? [];
+}
+
+export function closeOutVial(id: string, reason: string): Promise<Vial> {
+  return jsonFetch<Vial>(vacPath("vials", id, "close_out"), vacWrite("POST", { reason }));
+}
+
+export function getMonthlySummary(scope: { roomId: string } | { central: true }, month: string): Promise<MonthlySummary> {
+  const path = "roomId" in scope ? vacPath("rooms", scope.roomId, "monthly_summary") : vacPath("cold_chain_central", "monthly_summary");
+  return jsonFetch<MonthlySummary>(withQuery(path, new URLSearchParams({ month })));
+}
+
+// ── Cadeia de frio ──
+export async function listEquipments(locationId: string): Promise<ColdChainEquipment[]> {
+  const p = new URLSearchParams({ location_id: locationId });
+  return (await jsonFetch<{ equipments?: ColdChainEquipment[] }>(withQuery(vacPath("cold_chain", "equipments"), p))).equipments ?? [];
+}
+
+export function createEquipment(input: EquipmentInput): Promise<ColdChainEquipment> {
+  return jsonFetch<ColdChainEquipment>(vacPath("cold_chain", "equipments"), vacWrite("POST", input));
+}
+
+export function updateEquipment(id: string, input: EquipmentInput): Promise<ColdChainEquipment> {
+  return jsonFetch<ColdChainEquipment>(vacPath("cold_chain", "equipments", id), vacWrite("PATCH", input));
+}
+
+export function recordReading(equipmentId: string, input: ReadingInput): Promise<ReadingResult> {
+  return jsonFetch<ReadingResult>(vacPath("cold_chain", "equipments", equipmentId, "readings"), vacWrite("POST", input));
+}
+
+export function decideExcursion(id: string, lots: ExcursionDecisionLine[]): Promise<ExcursionDecisionResult> {
+  return jsonFetch<ExcursionDecisionResult>(vacPath("cold_chain", "excursions", id, "decide"), vacWrite("POST", { lots }));
+}
+
+export async function getColdChainStatus(locationId: string): Promise<ColdChainStatus> {
+  const b = await jsonFetch<Partial<ColdChainStatus>>(withQuery(vacPath("cold_chain", "status"), new URLSearchParams({ location_id: locationId })));
+  return { equipments: b.equipments ?? [], open_excursions: b.open_excursions ?? [] };
+}
+
+// ── ESAVI e painel ──
+// V12: dose já notificada → 200 com `existing: true` (a tela abre a mesma notificação); primeira vez → 201.
+export function notifyEsavi(immunizationId: string): Promise<{ notification_id: string; existing?: boolean }> {
+  return jsonFetch(vacPath("immunizations", immunizationId, "esavi"), vacWrite("POST", {}));
+}
+
+export function getVaccinationDashboard(q: { month: string; healthUnitId?: string | null }): Promise<VaccinationDashboard> {
+  const p = new URLSearchParams({ month: q.month });
+  if (q.healthUnitId) p.set("health_unit_id", q.healthUnitId);
+  return jsonFetch<VaccinationDashboard>(withQuery(vacPath("dashboard"), p));
+}
+
+// ── Administração (municipal_admin; escrita com step-up) ──
+export async function listVaccineRooms(): Promise<VaccineRoomsAdmin> {
+  const b = await jsonFetch<Partial<VaccineRoomsAdmin>>(vacPath("admin", "rooms"));
+  return { rooms: b.rooms ?? [], cold_chain_central: b.cold_chain_central ?? null };
+}
+
+export function createVaccineRoom(input: VaccineRoomInput): Promise<VaccineRoom> {
+  return jsonFetch<VaccineRoom>(vacPath("admin", "rooms"), vacWrite("POST", input));
+}
+
+export function updateVaccineRoom(id: string, input: VaccineRoomInput): Promise<VaccineRoom> {
+  return jsonFetch<VaccineRoom>(vacPath("admin", "rooms", id), vacWrite("PATCH", input));
+}
+
+export function addRoomStaff(roomId: string, userId: string, role: VaccineStaffRole): Promise<VaccineRoom> {
+  return jsonFetch<VaccineRoom>(vacPath("admin", "rooms", roomId, "staff"), vacWrite("POST", { user_id: userId, role }));
+}
+
+export async function removeRoomStaff(roomId: string, userId: string, role: string): Promise<void> {
+  await jsonFetch<void>(vacPath("admin", "rooms", roomId, "staff"), vacWrite("DELETE", { user_id: userId, role }));
+}
+
+// O api exige `name` (3 a 120; único); o plano mandava corpo vazio. Uma só rede de frio por cidade (409 already_exists).
+export function createColdChainCentral(name: string): Promise<AdminLocation> {
+  return jsonFetch<AdminLocation>(vacPath("admin", "cold_chain_central"), vacWrite("POST", { name }));
+}
+
+export function getVaccinationSettings(): Promise<VaccinationSettings> {
+  return jsonFetch<VaccinationSettings>(vacPath("admin", "settings"));
+}
+
+export function updateVaccinationSettings(s: VaccinationSettings): Promise<VaccinationSettings> {
+  return jsonFetch<VaccinationSettings>(vacPath("admin", "settings"), vacWrite("PATCH", s));
+}
+
+// D1/V1: certificado A1 em base64, senha e CNES só no corpo; nada volta. O nome do arquivo não sai da tela.
+export async function setRndsCredential(file: Blob, password: string, requesterCnes: string): Promise<IntegrationCredential> {
+  const pfx_base64 = await readBase64(file);
+  return jsonFetch<IntegrationCredential>(`${INTEGRATIONS_BASE}/credentials/rnds`, {
+    method: "PUT", body: JSON.stringify({ pfx_base64, pfx_password: password, requester_cnes: requesterCnes })
+  });
+}
+
+// ── Entrada e inventário inicial de imunobiológico (rotas do 27a; D6, V4, V19) ──
+export function recordVaccineReceipt(input: VaccineReceiptInput): Promise<StockReceipt> {
+  return jsonFetch<StockReceipt>(phPath("receipts"), phWrite("POST", input));
+}
+
+export function recordVaccineOpening(input: VaccineOpeningInput): Promise<StockReceipt> {
+  return jsonFetch<StockReceipt>(phPath("openings"), phWrite("POST", input));
 }

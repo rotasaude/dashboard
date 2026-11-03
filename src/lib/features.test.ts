@@ -114,3 +114,11 @@ describe("módulo 28", () => {
     expect(featureLabel("dental_care")).toBe("Saúde bucal");
   });
 });
+
+describe("módulo 29", () => {
+  it("as três chaves têm nome em português", () => {
+    expect(featureLabel("vaccination")).toBe("Sala de vacina");
+    expect(featureLabel("rnds_immunization")).toBe("Envio das vacinas à RNDS");
+    expect(featureLabel("rnds_mock")).toBe("RNDS simulada (fora de produção)");
+  });
+});

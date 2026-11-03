@@ -114,7 +114,8 @@ export function AdjustmentForm({ location, today, onStart, onDone, onGoToSecurit
             <select value={itemId} style={inputStyle} onChange={(e) => chooseItem(e.target.value)}>
               <option value="">{offered.length === 0 ? "nenhum medicamento com saldo" : "Escolha o medicamento"}</option>
               {offered.map((p) => (
-                <option key={p.item.catalog_item_id} value={p.item.catalog_item_id}>{`${p.item.name} — saldo ${fmtQuantity(p.balance)} ${p.item.dispensing_unit}`}</option>
+                // só medicamento: local de vacina nunca chega aqui
+                <option key={p.item.catalog_item_id ?? ""} value={p.item.catalog_item_id ?? ""}>{`${p.item.name} — saldo ${fmtQuantity(p.balance)} ${p.item.dispensing_unit}`}</option>
               ))}
             </select>
           </label>

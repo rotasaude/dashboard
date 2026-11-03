@@ -140,7 +140,8 @@ export function ExternalPrescriptionForm({ choice, location, today = todayInCity
     if (found.length > 0 || who === null) { setRows(found); return; }
     setRows([]);
     const items: ExternalItemInput[] = lines.map((l) => ({
-      catalog_item_id: l.item.catalog_item_id, quantity: toApiQuantity(l.quantity), quantity_unit: squish(l.unit),
+      // só medicamento: local de vacina nunca chega aqui
+      catalog_item_id: l.item.catalog_item_id ?? "", quantity: toApiQuantity(l.quantity), quantity_unit: squish(l.unit),
       dosage_instructions: squish(l.dosage), continuous: l.continuous
     }));
     const input: ExternalPrescriptionInput = {

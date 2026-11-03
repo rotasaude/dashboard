@@ -56,7 +56,8 @@ function MinimumsForm({ location, initial }: { location: PharmacyLocation; initi
     });
     setProblems(found);
     if (found.length > 0) return;
-    const sent = rows.map((r) => ({ catalog_item_id: r.item.catalog_item_id, minimum: toApiQuantity(r.value) }));
+    // só medicamento: local de vacina nunca chega aqui
+    const sent = rows.map((r) => ({ catalog_item_id: r.item.catalog_item_id ?? "", minimum: toApiQuantity(r.value) }));
     setSaving(true);
     try {
       const saved = await putMinimums(location.id, sent);
@@ -79,14 +80,15 @@ function MinimumsForm({ location, initial }: { location: PharmacyLocation; initi
       {rows.length === 0 ? <p style={muted}>nenhum mínimo definido neste local</p> : (
         <ul style={{ ...list, listStyle: "none", paddingLeft: 0, gap: 8 }}>
           {rows.map((r) => (
-            <li key={r.item.catalog_item_id} style={row}>
+            // só medicamento: local de vacina nunca chega aqui
+            <li key={r.item.catalog_item_id ?? ""} style={row}>
               <span style={{ flex: "1 1 14ch" }}>{r.item.name}</span>
               <label style={{ ...fieldLabel, flex: "0 1 16ch" }}>
                 {`Mínimo (${r.item.dispensing_unit})`}
                 <input value={r.value} inputMode="decimal" aria-label={`Mínimo de ${r.item.name} (${r.item.dispensing_unit})`} style={inputStyle}
-                  onChange={(e) => edit(r.item.catalog_item_id, e.target.value)} />
+                  onChange={(e) => edit(r.item.catalog_item_id ?? "", e.target.value)} />
               </label>
-              <button type="button" style={secondaryButtonStyle} aria-label={`Remover ${r.item.name}`} onClick={() => remove(r.item.catalog_item_id)}>Remover</button>
+              <button type="button" style={secondaryButtonStyle} aria-label={`Remover ${r.item.name}`} onClick={() => remove(r.item.catalog_item_id ?? "")}>Remover</button>
             </li>
           ))}
         </ul>

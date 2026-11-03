@@ -10,7 +10,7 @@ export type FeatureKey =
   | "patient_timeline" | "exam_tracking" | "exam_fhir_inbound" | "exam_pec_bridge" | "fake_lab"
   | "municipal_lab" | "lab_hl7_inbound" | "fake_middleware" | "lab_quality_control" | "lab_inventory"
   | "procedure_billing" | "care_lines" | "territory_registry" | "surveillance" | "care_regulation"
-  | "pharmacy" | "dental_care";
+  | "pharmacy" | "dental_care" | "vaccination" | "rnds_immunization" | "rnds_mock";
 
 export const FEATURE_DISABLED_MESSAGE = "esta funcionalidade está desligada para a cidade";
 
@@ -44,7 +44,11 @@ const FEATURE_LABEL: Record<string, string> = {
   // Módulo 27a (ADR 0045): sem pré-requisito.
   pharmacy: "Farmácia e almoxarifado",
   // Módulo 28 (ADR 0046): exige clinical_record.
-  dental_care: "Saúde bucal"
+  dental_care: "Saúde bucal",
+  // Módulo 29 (ADR 0047): vaccination exige record_mode:record; o envio exige a credencial rnds.
+  vaccination: "Sala de vacina",
+  rnds_immunization: "Envio das vacinas à RNDS",
+  rnds_mock: "RNDS simulada (fora de produção)"
 };
 
 export function sessionFeatures(user: { features?: unknown } | null | undefined): string[] {

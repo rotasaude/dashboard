@@ -22,6 +22,7 @@ import react from "@vitejs/plugin-react";
 //   /surveillance → vigilância epidemiológica (módulo 25: lista de doenças, fila, ficha, negativa semanal, painel).
 //   /regulation → regulação municipal (módulo 26a: fila, autorização, ofertas, prazos e exportação para o estado).
 //   /pharmacy   → farmácia e almoxarifado (módulo 27a: locais, estoque, transferências, ajustes e dispensação).
+//   /vaccination → sala de vacina (módulo 29: caderneta, dose, frascos, cadeia de frio, resumo e painel).
 //   /signature  → assinatura digital (módulo 19b). O prestador devolve a pessoa a
 //                 /dashboard/signature/callback (base do Vite), que NÃO casa com este
 //                 prefixo: o retorno é do dashboard, e só o POST /signature/oauth/callback vai ao api.
@@ -89,7 +90,9 @@ export default defineConfig({
       // Módulo 27a: farmácia e almoxarifado. Regex como os vizinhos.
       "^/pharmacy(/|$)": proxy(TARGET),
       // Módulo 28: saúde bucal. Regex como os vizinhos.
-      "^/dental(/|$)": proxy(TARGET)
+      "^/dental(/|$)": proxy(TARGET),
+      // Módulo 29: sala de vacina. Regex como os vizinhos.
+      "^/vaccination(/|$)": proxy(TARGET)
     }
   }
 });

@@ -57,6 +57,11 @@ function criterionPhrase(c: Criterion, lookup: PhraseLookup): string {
       const kinds = c.kinds && c.kinds.length > 0 ? ` de ${joinPt(c.kinds.map((k) => REQUEST_KIND_LABEL[k] ?? k), "ou")}` : "";
       return `têm pedido de agendamento${kinds} aberto${c.target_unit_id ? ` para ${unit(c.target_unit_id)}` : ""}`;
     }
+    // Módulo 29: frase provisória; a Task 14 a refina (nome da vacina e faixa de idade).
+    case "vaccine_overdue":
+      return "estão com vacina em atraso";
+    case "vaccination_record_unchecked":
+      return "têm a caderneta de vacinação ainda não conferida";
   }
 }
 
