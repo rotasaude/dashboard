@@ -59,4 +59,37 @@ describe("credencial RNDS (F-29.1)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Salvar certificado" }));
     expect(await screen.findByText("o certificado não abriu com essa senha — confira o arquivo .pfx e a senha")).not.toBeNull();
   });
+
+  async function openPassword() {
+    renderWithProviders(<Integrations />);
+    fireEvent.click(await screen.findByRole("button", { name: "Cadastrar — RNDS — vacinação (certificado A1)" }));
+    fireEvent.change(screen.getByLabelText("Certificado A1"), { target: { files: [ pfx() ] } });
+    fireEvent.change(screen.getByLabelText("CNES solicitante"), { target: { value: "2001234" } });
+    fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
+    return await screen.findByLabelText("Senha do certificado");
+  }
+
+  it("senha acima de 200 caracteres: recusada na tela, sem enviar", async () => {
+    fireEvent.change(await openPassword(), { target: { value: "x".repeat(201) } });
+    fireEvent.click(screen.getByRole("button", { name: "Salvar certificado" }));
+    expect(await screen.findByText("a senha do certificado tem de 1 a 200 caracteres")).not.toBeNull();
+    expect(api.setRndsCredential).not.toHaveBeenCalled();
+  });
+
+  it("invalid_credential do api: frase do certificado, não de usuário e senha", async () => {
+    vi.mocked(api.setRndsCredential).mockRejectedValue(new api.ApiError(422, { error: "invalid_credential" }, "422"));
+    fireEvent.change(await openPassword(), { target: { value: "s3nh4" } });
+    fireEvent.click(screen.getByRole("button", { name: "Salvar certificado" }));
+    expect(await screen.findByText("confira o certificado, a senha e o CNES")).not.toBeNull();
+    expect(screen.queryByText(/usuário e senha/)).toBeNull();
+  });
+
+  it("teste de conexão recusado: tag fala em certificado", async () => {
+    vi.mocked(api.getIntegrations).mockResolvedValue({ record_mode: "record", pec_url_set: true, ibge_code_set: true,
+      credentials: [ { ...RNDS, set: true, set_at: "2026-11-02T10:00:00-03:00", last_check_at: "2026-11-02T11:00:00-03:00",
+        last_check_status: "unauthorized", last_check_message: "A RNDS recusou o certificado" } ], features: [] });
+    renderWithProviders(<Integrations />);
+    expect(await screen.findByText(/certificado recusado/)).not.toBeNull();
+    expect(screen.queryByText(/usuário ou senha recusados/)).toBeNull();
+  });
 });

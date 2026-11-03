@@ -4,11 +4,12 @@
 // aparece na tela e não vai a lugar nenhum (nem URL, nem console, nem storage).
 import { useState, type FormEvent } from "react";
 import { setRndsCredential, type IntegrationCredential } from "../../lib/api";
-import { cnesProblem, credentialLabel, integrationsError, pfxProblem } from "../../lib/integrations";
+import { RNDS_INVALID_CREDENTIAL, cnesProblem, credentialLabel, integrationsError, pfxProblem, rndsPasswordProblem } from "../../lib/integrations";
 import { SensitiveAction } from "../../components/SensitiveAction";
 import { buttonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 
 const SCREEN_ERRORS = [ "invalid_credential", "invalid_certificate", "certificate_expired", "invalid_requester_cnes" ];
+class PasswordProblem extends Error {}
 const SAVED = "Certificado da RNDS salvo. Teste a conexão para conferir a troca de token.";
 
 export function RndsCredentialForm({ credential, onDone, onCancel, onGoToSecurity }: {
@@ -31,12 +32,17 @@ export function RndsCredentialForm({ credential, onDone, onCancel, onGoToSecurit
         requiresStepUp
         fields={[ { name: "password", label: "Senha do certificado", type: "password", required: true } ]}
         confirmLabel="Salvar certificado"
-        run={async (values) => { await setRndsCredential(file, values.password, cnes.trim()); }}
+        run={async (values) => {
+          const bad = rndsPasswordProblem(values.password);
+          if (bad) throw new PasswordProblem(bad);
+          await setRndsCredential(file, values.password, cnes.trim()); }}
         onDone={() => { setFile(null); onDone(SAVED); }}
         onCancel={() => { setFile(null); onCancel(); }}
         onGoToSecurity={onGoToSecurity}
         translateError={(err) => {
+          if (err instanceof PasswordProblem) return err.message;
           const code = (err as { body?: { error?: string } })?.body?.error;
+          if (code === "invalid_credential") return RNDS_INVALID_CREDENTIAL;
           return code && SCREEN_ERRORS.includes(code) ? integrationsError(err) : null;
         }}
       />

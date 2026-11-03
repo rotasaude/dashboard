@@ -33,6 +33,15 @@ const MESSAGES: Record<string, string> = {
   invalid_requester_cnes: "o CNES solicitante tem 7 dígitos"
 };
 
+// invalid_credential da RNDS (forma, tamanho, senha fora de 1–200): nunca a frase de usuário e senha.
+export const RNDS_INVALID_CREDENTIAL = "confira o certificado, a senha e o CNES";
+export const RNDS_PASSWORD_MAX = 200;
+
+export function rndsPasswordProblem(password: string): string | null {
+  return password.length >= 1 && password.length <= RNDS_PASSWORD_MAX
+    ? null : `a senha do certificado tem de 1 a ${RNDS_PASSWORD_MAX} caracteres`;
+}
+
 const PFX_MAX_BYTES = 100 * 1024;
 
 // Conferência do arquivo antes de pedir a senha (o api confere de novo, abrindo o PFX).
@@ -55,7 +64,8 @@ export function credentialLabel(kind: string): string {
   return CREDENTIAL_LABEL[kind] ?? kind;
 }
 
-export function checkLabel(status: CredentialCheckStatus | null): string {
+export function checkLabel(status: CredentialCheckStatus | null, kind?: string): string {
+  if (status === "unauthorized" && kind === "rnds") return "certificado recusado";
   return status ? CHECK_LABEL[status] ?? status : "nunca testada";
 }
 
@@ -68,7 +78,7 @@ export function checkSummary(c: IntegrationCredential): { text: string; tone: "o
   if (!c.set) return { text: "não cadastrada", tone: "neutral" };
   if (!c.last_check_status) return { text: "nunca testada", tone: "neutral" };
   const tone = c.last_check_status === "ok" ? "ok" : c.last_check_status === "unauthorized" ? "down" : "warn";
-  return { text: `${checkLabel(c.last_check_status)} · ${fmtDateTime(c.last_check_at)}`, tone };
+  return { text: `${checkLabel(c.last_check_status, c.kind)} · ${fmtDateTime(c.last_check_at)}`, tone };
 }
 
 // Pré-requisito que falta (contratos §2), dizendo quem resolve. Código novo
@@ -90,7 +100,7 @@ export function missingPhrase(code: string): string {
     case "vaccination_catalog_under_review":
       return "o catálogo de imunobiológicos ainda está em revisão (a equipe do Rota Saúde libera)";
     case "credential_unauthorized":
-      if (kind === "rnds") return `a RNDS recusou o certificado — troque o certificado A1 e teste de novo`;
+      if (kind === "rnds") return "a RNDS recusou o certificado — troque o certificado A1 e teste de novo";
       return `a credencial do ${credentialLabel(kind)} foi recusada — troque o usuário e a senha e teste de novo`;
     default:
       if (head.endsWith("_disabled")) return `ligue antes: ${featureLabel(head.slice(0, -"_disabled".length))}`;

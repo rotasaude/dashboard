@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ApiError } from "./api";
 import {
-  checkLabel, checkSummary, cnesProblem, credentialLabel, featureState, integrationsError, missingPhrase, pfxProblem, recordModeLabel, setSummary
+  checkLabel, checkSummary, cnesProblem, credentialLabel, featureState, integrationsError, missingPhrase, pfxProblem, recordModeLabel, rndsPasswordProblem, setSummary
 } from "./integrations";
 import { credential } from "../test/recordModeFixtures";
 
@@ -96,5 +96,16 @@ describe("integrações — certificado A1 da RNDS", () => {
     expect(missingPhrase("vaccination_catalog_under_review")).toMatch(/em revisão/);
     expect(missingPhrase("credential_unauthorized:rnds")).toMatch(/RNDS recusou o certificado/);
     expect(missingPhrase("credential_missing:rnds")).toMatch(/RNDS — vacinação/);
+  });
+});
+
+describe("integrações — recusa da RNDS fala em certificado", () => {
+  it("checkLabel por tipo; senha de 1 a 200", () => {
+    expect(checkLabel("unauthorized", "rnds")).toBe("certificado recusado");
+    expect(checkLabel("unauthorized", "ledi")).toBe("usuário ou senha recusados");
+    expect(checkLabel("unauthorized")).toBe("usuário ou senha recusados");
+    expect(rndsPasswordProblem("")).not.toBeNull();
+    expect(rndsPasswordProblem("x".repeat(200))).toBeNull();
+    expect(rndsPasswordProblem("x".repeat(201))).not.toBeNull();
   });
 });

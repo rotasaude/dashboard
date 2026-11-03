@@ -44,7 +44,7 @@ export function Integrations({ onGoToSecurity }: { onGoToSecurity?(): void }) {
   if (!isAdmin) {
     return (
       <div style={column}>
-        <PageHeader title="Integrações" sub="e-SUS PEC · CADSUS" />
+        <PageHeader title="Integrações" sub="e-SUS PEC · CADSUS · RNDS" />
         <EmptyState title="seu papel não permite ver as integrações" />
       </div>
     );
@@ -57,7 +57,7 @@ export function Integrations({ onGoToSecurity }: { onGoToSecurity?(): void }) {
     setChecking(c.kind); setNotice(null); setError(null);
     try {
       const updated = await checkIntegrationCredential(c.kind);
-      setNotice(`Teste de conexão — ${credentialLabel(c.kind)}: ${checkLabel(updated.last_check_status)}`);
+      setNotice(`Teste de conexão — ${credentialLabel(c.kind)}: ${checkLabel(updated.last_check_status, c.kind)}`);
       reload();
     } catch (err) {
       setError(integrationsError(err));
@@ -70,7 +70,7 @@ export function Integrations({ onGoToSecurity }: { onGoToSecurity?(): void }) {
 
   return (
     <div style={column}>
-      <PageHeader title="Integrações" sub="e-SUS PEC · CADSUS" />
+      <PageHeader title="Integrações" sub="e-SUS PEC · CADSUS · RNDS" />
       {query.isError && <p role="alert" style={alertStyle}>{integrationsError(query.error)}</p>}
       {error && <p role="alert" style={alertStyle}>{error}</p>}
       {notice && <p role="status" style={statusStyle}>{notice}</p>}
