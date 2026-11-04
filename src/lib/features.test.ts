@@ -38,6 +38,8 @@ describe("features da sessão (contratos §1)", () => {
     expect(hasFeature({ features: [ "clinical_documents" ] }, "clinical_documents")).toBe(true);
     expect(featureLabel("controlled_prescriptions")).toBe("Receita de controle especial e de antimicrobiano (SNCR)");
     expect(hasFeature({ features: [ "controlled_prescriptions" ] }, "controlled_prescriptions")).toBe(true);
+    expect(featureLabel("sanitary_transport")).toBe("Transporte sanitário");
+    expect(featureLabel("tfd")).toBe("Tratamento Fora de Domicílio (TFD)");
     expect(featureLabel("rnds_sync")).toBe("rnds_sync");
   });
   it("patient_timeline (módulo 20) tem rótulo e é lida da sessão", () => {

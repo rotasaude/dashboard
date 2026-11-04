@@ -2352,7 +2352,9 @@ export type TimelineKind =
   // Módulo 27a (D22): retirada na farmácia (o api manda detail_ref nulo e status "dispensed").
   | "dispensation"
   // Módulo 29 (D11; V10): dose de vacina, com detail_ref { type: "immunization", id }.
-  | "vaccination";
+  | "vaccination"
+  // Módulo 30 (D12): viagem e TFD, detail_ref nulo.
+  | "transport";
 
 export interface TimelineDetailRef { type: string; id: string }
 export interface TimelineEntry {
@@ -3587,7 +3589,8 @@ const BILLING_BASE = import.meta.env.VITE_BILLING_BASE || "/billing";
 const billingPath = (...parts: string[]) => [ BILLING_BASE, ...parts.map(encodeURIComponent) ].join("/");
 const billingPost = (body: unknown): RequestInit => ({ method: "POST", body: JSON.stringify(body) });
 
-export type ProcedureSource = "attendance" | "consultation" | "lab_report" | "manual";
+// Módulo 30: "tfd" (ajuda de custo; source_ref { type: "tfd_allowance", id }).
+export type ProcedureSource = "attendance" | "consultation" | "lab_report" | "manual" | "tfd";
 export type BillingInstrument = "bpa_i" | "bpa_c" | "not_bpa";
 export type ProcedureCharacter = "elective" | "urgent";
 export type ProcedureStatus = "recorded" | "cancelled";
@@ -4539,7 +4542,7 @@ export interface RegulationRequest {
     offer_id: string; provider: { id: string; name: string; kind: ProviderKind | string }; month: string;
     skip_reason: string | null; at: string; by: { name: string };
   } | null;
-  appointment_request_id: string | null; schedule: { at: string; place: string; notes: string | null } | null;
+  appointment_request_id: string | null; schedule: { at: string; place: string; notes: string | null; care_provider?: { id: string; name: string } | null } | null;
   outcome: "completed" | "missed" | string | null; misses: number; external: { system: ExternalSystem | string; number: string } | null;
   state_regulated: boolean; version: number; events?: RegulationEvent[];
 }
@@ -4555,11 +4558,14 @@ export interface RegulationCounts { pending: number; overdue: number; returned: 
 export interface AuthorizeInput { offer_id: string; color?: RiskColor; color_reason?: string; skip_reason?: string; version: number }
 export interface ComplementInput { justification: string; cid10?: string | null; ciap2?: string | null; suggested_color?: RiskColor; version: number }
 // Nome próprio: `ScheduleInput` já é o agendamento de exame (21a).
-export interface RegulationScheduleInput { at: string; place: string; notes?: string | null; version: number }
+// Módulo 30 (D13): `care_provider_id` opcional; reagendar sem ele limpa o prestador — reenvie o atual.
+export interface RegulationScheduleInput { at: string; place: string; notes?: string | null; care_provider_id?: string | null; version: number }
 export interface CareProvider {
   id: string; name: string; cnes: string | null; kind: ProviderKind | string; health_unit: { id: string; name: string } | null; active: boolean;
+  // Módulo 30 (D13): município do prestador (7 dígitos), que liga o agendamento ao destino do transporte; nulo para `own`.
+  ibge_code: string | null;
 }
-export interface CareProviderInput { name: string; cnes?: string; kind: ProviderKind; health_unit_id?: string | null; active: boolean }
+export interface CareProviderInput { name: string; cnes?: string; kind: ProviderKind; health_unit_id?: string | null; active: boolean; ibge_code?: string | null }
 export interface CareOffer {
   id: string; provider: { id: string; name: string; kind: ProviderKind | string };
   target: RegulationTarget; month: string; quantity: number; used: number; available: number;
@@ -5585,4 +5591,403 @@ export function recordVaccineReceipt(input: VaccineReceiptInput): Promise<StockR
 
 export function recordVaccineOpening(input: VaccineOpeningInput): Promise<StockReceipt> {
   return jsonFetch<StockReceipt>(phPath("openings"), phWrite("POST", input));
+}
+
+// ─── Transporte sanitário e TFD (módulo 30; ADR 0048; contrato 2026-11-03 §2–§9) ───
+// Na URL só ids, data, mês, período, situação e cursor; CPF, CNH, nome, documento do acompanhante, CID, justificativa e arquivo
+// vão no corpo. Formas conferidas contra o api (api-surface do módulo 30): onde o plano diz outra coisa, vale o api (retirar
+// passageiro devolve a viagem; duplicados em `{ candidates }`; meus pedidos sem cursor; ajuda em `{ items, total_cents }`;
+// atendimentos marcados com `health_unit_id`; motorista com `active`; série com `return_time`/`boarding_label`; trecho com
+// `companion`/`outbound_leg_id`/`voided`; painel com `month` e `occupancy_pct` número ou nulo). O api recusa chave desconhecida:
+// mande só as chaves de cada rota. Toda escrita leva corpo (`{}` quando não há campo), inclusive o DELETE.
+
+const TRANSPORT_BASE = import.meta.env.VITE_TRANSPORT_BASE || "/transport";
+const TFD_BASE = import.meta.env.VITE_TFD_BASE || "/tfd";
+const trPath = (...parts: string[]) => [ TRANSPORT_BASE, ...parts.map(encodeURIComponent) ].join("/");
+const tfdPath = (...parts: string[]) => [ TFD_BASE, ...parts.map(encodeURIComponent) ].join("/");
+const trWrite = (method: "POST" | "PATCH" | "DELETE", body: unknown = {}): RequestInit => ({ method, body: JSON.stringify(body) });
+
+export type VehicleKind = "van" | "minibus" | "bus" | "car" | "ambulance_a";
+export type LicenseCategory = "B" | "C" | "D" | "E";
+export type LicenseStatus = "valid" | "expiring" | "expired";
+export type TripStatus = "planned" | "confirmed" | "in_progress" | "done" | "cancelled";
+export type TripStopKind = "boarding" | "destination";
+export type PassengerOrigin = "regulation" | "appointment" | "tfd" | "series" | "exception";
+export type ExceptionReason = "follow_up_return" | "legacy_patient" | "scheduling_pending" | "other";
+// Nome próprio: `Attendance` já é o atendimento do balcão.
+export type TripAttendance = "pending" | "boarded" | "no_show";
+export type PendingReason = "no_seat" | "no_wheelchair_spot" | "refused";
+export type SeriesStatus = "active" | "suspended" | "ended";
+export type TfdStatus = "draft" | "submitted" | "returned" | "authorized" | "denied" | "scheduled" | "travelling" | "completed" | "cancelled";
+export type TfdDecision = "authorize" | "return" | "deny";
+export type TfdLegMode = "fleet" | "bus_ticket" | "air" | "river";
+export type TfdLegDirection = "outbound" | "return";
+export type TfdAllowanceKind = "meal_overnight" | "meal_day" | "ground_km" | "air_miles" | "river_miles";
+export type TfdPaymentMethod = "cash" | "transfer" | "pix" | "check";
+// D7: o api aceita observação (≤ 120) em qualquer tipo; em branco vira nulo.
+export type ExpenseKind = "toll" | "parking" | "meal" | "other";
+// Painel: 1 a 4 chegam como "lt5" (0 fica 0).
+export type TransportCount = number | "lt5";
+
+// ── Frota (só transport_dispatcher) ──
+export interface TransportVehicle {
+  id: string; plate: string; renavam: string; model: string; kind: VehicleKind | string; renem_code: string | null;
+  seats: number; wheelchair_spots: number; cnes: string | null; active: boolean;
+}
+export type VehicleInput = Omit<TransportVehicle, "id">;
+// `license_status` é calculado para HOJE (expiring = vence em até 30 dias); a data da viagem é conferida no confirm.
+export interface TransportDriver {
+  id: string; user: { id: string; name: string }; license_category: LicenseCategory | string; license_expires_on: string;
+  license_status: LicenseStatus | string; license_number_last4: string; active: boolean;
+}
+// No PATCH: `license_number` ausente = mantém; `user_id` não muda (por isso o tipo da edição não o tem).
+export interface DriverInput {
+  user_id: string; license_number?: string; license_category: LicenseCategory; license_expires_on: string; active?: boolean;
+}
+export type DriverUpdate = Partial<Omit<DriverInput, "user_id">>;
+// D2: usuários com papel `driver` ainda sem cadastro de motorista.
+export interface DriverCandidate { user_id: string; name: string }
+export interface TransportDestination { id: string; ibge_code: string; name: string; distance_km: number; metropolitan: boolean; active: boolean }
+export type DestinationInput = Omit<TransportDestination, "id">;
+
+// ── Viagens ──
+// A visão do motorista (`/transport/my_trips`) não traz `has_cpf` nem `cns_masked`.
+export interface TripPatient { id: string; display_name: string | null; has_cpf?: boolean; cns_masked?: string | null; phone_masked: string | null }
+export interface TripCompanion { name: string; document_last4: string | null }
+export interface TripPassenger {
+  id: string; patient: TripPatient; stop_id: string;
+  // D16: nome do destino cadastrado.
+  destination: { destination_id: string; name: string; provider_name: string | null; address: string | null };
+  appointment_at: string | null; takes_seat: boolean; wheelchair: boolean; companion: TripCompanion | null;
+  origin: PassengerOrigin | string; exception_reason: ExceptionReason | string | null;
+  attendance: TripAttendance | string; companion_attendance: TripAttendance | string | null;
+}
+export interface TripStop { id: string; position: number; kind: TripStopKind | string; destination_id: string | null; label: string }
+// D3: `id` mantém a parada existente; embarque sem `destination_id`; rótulo de destino em branco vira o nome do destino.
+export interface TripStopInput { id?: string; position: number; kind: TripStopKind; destination_id?: string | null; label: string }
+export interface TripFuel { liters: number; amount_cents: number; station: string }
+export interface TripExpense { kind: ExpenseKind | string; amount_cents: number; note: string | null }
+export interface TripLog {
+  odometer_start: number; odometer_end: number; fuel: TripFuel[]; expenses: TripExpense[]; closed_at: string; closed_by_name: string;
+}
+export interface Trip {
+  id: string; date: string; departure_at: string; return_at: string;
+  vehicle: { id: string; plate: string; model: string; kind: VehicleKind | string; seats: number; wheelchair_spots: number } | null;
+  // Sem CNH: quem escala confere pela lista de motoristas.
+  driver: { id: string; name: string } | null; status: TripStatus | string; stops: TripStop[];
+  // Só os ativos (não retirados), na ordem de inclusão. `seats_used` conta acompanhantes.
+  passengers: TripPassenger[];
+  occupancy: { seats_used: number; seats: number | null; wheelchair_used: number; wheelchair_spots: number | null };
+  series_id: string | null; log: TripLog | null;
+}
+// `date` é o dia local de `departure_at` (o api confere). No PATCH: ausente = mantém; `null` = tira veículo/motorista.
+export interface TripInput {
+  date: string; departure_at: string; return_at: string; vehicle_id?: string | null; driver_id?: string | null; stops: TripStopInput[];
+}
+export interface CompanionInput { name: string; document?: string | null; reason?: string | null }
+// Texto opcional vazio é recusado: omita ou mande null. `origin_id` só fora de `exception`; motivo e nota só em `exception`.
+export interface PassengerInput {
+  patient_id: string; origin?: PassengerOrigin; origin_id?: string | null; exception_reason?: ExceptionReason | null;
+  exception_note?: string | null; stop_id: string; destination_id: string; provider_name?: string | null; address?: string | null;
+  appointment_at?: string | null; takes_seat: boolean; wheelchair: boolean; companion?: CompanionInput | null;
+}
+// D4: sugestão de atendimento marcado no dia (regulação, TFD e, com `health_unit_id`, agenda do 17). Série não entra.
+export interface ScheduledCareItem {
+  patient: { id: string; display_name: string | null; has_cpf: boolean; cns_masked: string | null; phone_masked: string | null };
+  origin: PassengerOrigin | string; origin_id: string; appointment_at: string;
+  destination: { destination_id: string | null; provider_name: string | null; address: string | null };
+}
+
+// ── Séries, pendências e faltas ──
+// D5: `status` é o de HOJE; suspensão futura vem `active` com `suspended_from` preenchido.
+export interface TransportSeries {
+  id: string; patient: { id: string; display_name: string | null }; destination: { id: string; name: string }; provider_name: string | null;
+  weekdays: number[]; appointment_time: string; departure_time: string; return_time: string; boarding_label: string;
+  starts_on: string; ends_on: string | null; wheelchair: boolean; companion: TripCompanion | null;
+  status: SeriesStatus | string; suspended_from: string | null;
+}
+export interface SeriesInput {
+  patient_id: string; destination_id: string; provider_name?: string | null; weekdays: number[]; appointment_time: string;
+  departure_time: string; return_time: string; boarding_label: string; starts_on: string; ends_on?: string | null;
+  wheelchair?: boolean; companion?: CompanionInput | null;
+}
+// O paciente da série não muda.
+export type SeriesUpdate = Partial<Omit<SeriesInput, "patient_id">>;
+// Nome próprio: `PendingItem` já é a pendência do faturamento (22).
+export interface TransportPendingItem { series_id: string; date: string; reason: PendingReason | string }
+// D6.
+export interface NoShowRow { patient: { id: string; display_name: string | null }; count: number; dates: string[] }
+
+// ── Motorista ──
+export interface AttendanceItem { passenger_id: string; attendance: TripAttendance; companion_attendance?: TripAttendance }
+export interface FuelInput { liters: number; amount_cents: number; station: string }
+export interface ExpenseInput { kind: ExpenseKind; amount_cents: number; note?: string | null }
+export interface TripCloseInput { odometer_start: number; odometer_end: number; fuel?: FuelInput[]; expenses?: ExpenseInput[] }
+// D7: correção da central (step-up), só `boarded`/`no_show`, em viagem `done`.
+export interface AttendanceCorrectionInput { items: AttendanceItem[]; reason: string }
+
+// ── Regras da cidade e painel ──
+// D17: sem `person` (dois códigos por tipo); `name` é "" quando o SIGTAP do dia não traz o código.
+export interface AllowanceCode { code: string; name: string; kind: TfdAllowanceKind | string }
+export interface TransportSettings {
+  tfd_min_distance_km: number; companion_rule: { max_age_child: number; min_age_elderly: number };
+  tfd_billing_health_unit_id: string | null; allowance_complements: Record<string, number>; allowance_codes: AllowanceCode[];
+}
+// PATCH aceita qualquer subconjunto; `allowance_complements` substitui o mapa inteiro (mande o mapa todo).
+export type TransportSettingsInput = Partial<Omit<TransportSettings, "allowance_codes">>;
+// `occupancy_pct` nunca é "lt5" (nulo sem viagem feita); `tfd_by_status` só traz situação com processo (chave ausente = 0).
+export interface TransportDashboard {
+  month: string; trips: TransportCount; occupancy_pct: number | null; no_shows: TransportCount; km: number; fuel_cents: number;
+  tfd_by_status: Partial<Record<TfdStatus, TransportCount>>; tfd_paid_cents: number; exceptions: TransportCount;
+}
+
+// ── TFD ──
+export interface TfdReport {
+  sigtap_code: string | null; sigtap_name: string | null; cid10: string | null; justification: string | null;
+  companion_indicated: boolean; companion_reason: string | null; transport_mode: TfdLegMode | string;
+}
+export type TfdReportInput = Omit<TfdReport, "sigtap_name">;
+export interface TfdLeg {
+  id: string; direction: TfdLegDirection | string; mode: TfdLegMode | string; date: string; distance_km: number;
+  trip_passenger_id: string | null; ticket: { amount_cents: number; carrier: string } | null;
+  // D10: acompanhante só em passagem; `voided` = anulado (fora das pendências, do par e da ajuda).
+  companion: boolean; outbound_leg_id: string | null; done: boolean; voided: boolean;
+}
+// Frota: `trip_passenger_id`, sem `ticket` nem `companion`. Passagem: `ticket`, sem `trip_passenger_id`.
+export interface TfdLegInput {
+  direction: TfdLegDirection; mode: TfdLegMode; date: string; trip_passenger_id?: string;
+  ticket?: { amount_cents: number; carrier: string }; companion?: boolean;
+}
+export interface TfdAllowance {
+  id: string; person: "patient" | "companion" | string; kind: TfdAllowanceKind | string; sigtap_code: string; quantity: number;
+  table_cents: number; complement_cents: number; total_cents: number;
+}
+export interface TfdPayment {
+  id: string; paid_on: string; amount_cents: number; method: TfdPaymentMethod | string; receipt_number: string; by_name: string;
+}
+export interface TfdPaymentInput { paid_on: string; amount_cents: number; method: TfdPaymentMethod; receipt_number: string }
+export interface TfdEvent { kind: string; at: string; by_name: string | null; reason: string | null }
+export interface TfdCase {
+  id: string; patient: { id: string; display_name: string | null; birth_date: string | null; has_cpf: boolean; cns_masked: string | null };
+  status: TfdStatus | string; version: number; submitted_at: string | null; requested_by: { name: string; cbo: string };
+  consultation_id: string | null; regulation_request_id: string | null; report: TfdReport; destination: TransportDestination;
+  provider: { id: string; name: string } | null; appointment_at: string | null; inpatient: { from: string; to: string | null }[];
+  legs: TfdLeg[]; allowances: TfdAllowance[]; payments: TfdPayment[];
+  accountability: { closed_at: string; document: { id: string; filename: string } } | null;
+  events: TfdEvent[];
+  // D10: passageiros `origin: "tfd"` ativos deste processo.
+  trip_passengers: { id: string; date: string; departure_at: string; attendance: TripAttendance | string; companion_attendance: TripAttendance | string | null }[];
+}
+export interface TfdCaseRow {
+  id: string; patient: { display_name: string | null }; destination: { name: string }; status: TfdStatus | string; submitted_at: string | null;
+}
+// PATCH é substituição inteira: sem `provider_id`, o prestador some (inclusive o posto pela comissão) — reenvie.
+export interface TfdCaseInput {
+  patient_id: string; consultation_id?: string | null; regulation_request_id?: string | null; report: TfdReportInput;
+  destination_id: string; provider_id?: string | null;
+}
+// D8.
+export interface TfdOptions {
+  destinations: TransportDestination[]; providers: { id: string; name: string; ibge_code: string | null }[]; min_distance_km: number;
+}
+export interface TfdPrefill { patient_id: string; cid10: string | null; sigtap_code: string | null }
+
+const activeQuery = (q?: { active?: boolean }) => new URLSearchParams(q?.active ? { active: "true" } : {});
+
+// ── Frota ──
+export async function listVehicles(q?: { active?: boolean }): Promise<TransportVehicle[]> {
+  return (await jsonFetch<{ items?: TransportVehicle[] }>(withQuery(trPath("vehicles"), activeQuery(q)))).items ?? [];
+}
+export function createVehicle(i: VehicleInput): Promise<TransportVehicle> {
+  return jsonFetch<TransportVehicle>(trPath("vehicles"), trWrite("POST", i));
+}
+export function updateVehicle(id: string, i: Partial<VehicleInput>): Promise<TransportVehicle> {
+  return jsonFetch<TransportVehicle>(trPath("vehicles", id), trWrite("PATCH", i));
+}
+export async function listDrivers(q?: { active?: boolean }): Promise<TransportDriver[]> {
+  return (await jsonFetch<{ items?: TransportDriver[] }>(withQuery(trPath("drivers"), activeQuery(q)))).items ?? [];
+}
+export async function listDriverCandidates(): Promise<DriverCandidate[]> {
+  return (await jsonFetch<{ items?: DriverCandidate[] }>(trPath("driver_candidates"))).items ?? [];
+}
+export function createDriver(i: DriverInput): Promise<TransportDriver> {
+  return jsonFetch<TransportDriver>(trPath("drivers"), trWrite("POST", i));
+}
+export function updateDriver(id: string, i: DriverUpdate): Promise<TransportDriver> {
+  return jsonFetch<TransportDriver>(trPath("drivers", id), trWrite("PATCH", i));
+}
+export async function listDestinations(q?: { active?: boolean }): Promise<TransportDestination[]> {
+  return (await jsonFetch<{ items?: TransportDestination[] }>(withQuery(trPath("destinations"), activeQuery(q)))).items ?? [];
+}
+export function createDestination(i: DestinationInput): Promise<TransportDestination> {
+  return jsonFetch<TransportDestination>(trPath("destinations"), trWrite("POST", i));
+}
+export function updateDestination(id: string, i: Partial<DestinationInput>): Promise<TransportDestination> {
+  return jsonFetch<TransportDestination>(trPath("destinations", id), trWrite("PATCH", i));
+}
+
+// ── Viagens e passageiros ──
+export async function listTrips(q: { date: string; vehicleId?: string | null }): Promise<Trip[]> {
+  const p = new URLSearchParams({ date: q.date });
+  if (q.vehicleId) p.set("vehicle_id", q.vehicleId);
+  return (await jsonFetch<{ items?: Trip[] }>(withQuery(trPath("trips"), p))).items ?? [];
+}
+export function createTrip(i: TripInput): Promise<Trip> {
+  return jsonFetch<Trip>(trPath("trips"), trWrite("POST", i));
+}
+export function updateTrip(id: string, i: Partial<TripInput>): Promise<Trip> {
+  return jsonFetch<Trip>(trPath("trips", id), trWrite("PATCH", i));
+}
+export function confirmTrip(id: string): Promise<Trip> {
+  return jsonFetch<Trip>(trPath("trips", id, "confirm"), trWrite("POST"));
+}
+export function cancelTrip(id: string, reason: string): Promise<Trip> {
+  return jsonFetch<Trip>(trPath("trips", id, "cancel"), trWrite("POST", { reason }));
+}
+// D4: tudo no corpo (o api recusa query). Sem `healthUnitId` não vem a agenda do 17; com `destinationId` ela sai.
+export async function findScheduledCare(q: { date: string; destinationId?: string | null; healthUnitId?: string | null }): Promise<ScheduledCareItem[]> {
+  const body: Record<string, string> = { date: q.date };
+  if (q.destinationId) body.destination_id = q.destinationId;
+  if (q.healthUnitId) body.health_unit_id = q.healthUnitId;
+  return (await jsonFetch<{ items?: ScheduledCareItem[] }>(trPath("scheduled_care"), trWrite("POST", body))).items ?? [];
+}
+export function addPassenger(tripId: string, i: PassengerInput): Promise<TripPassenger> {
+  return jsonFetch<TripPassenger>(trPath("trips", tripId, "passengers"), trWrite("POST", i));
+}
+// O api devolve a viagem inteira (200), não 204.
+export function removePassenger(tripId: string, passengerId: string, reason: string): Promise<Trip> {
+  return jsonFetch<Trip>(trPath("trips", tripId, "passengers", passengerId), trWrite("DELETE", { reason }));
+}
+// Lista impressa por fetch (e não por navegação) para a tela mostrar a recusa.
+export function fetchTripManifest(tripId: string): Promise<{ blob: Blob; filename: string | null }> {
+  return binaryFetch(trPath("trips", tripId, "manifest.pdf"), "application/pdf");
+}
+export function correctAttendance(tripId: string, i: AttendanceCorrectionInput): Promise<Trip> {
+  return jsonFetch<Trip>(trPath("trips", tripId, "attendance_correction"), trWrite("POST", i));
+}
+
+// D1: a central busca por CPF (POST; o api materializa o paciente do par validado) e nunca cria paciente.
+export async function lookupTransportPerson(cpf: string): Promise<PharmacyPerson> {
+  const b = await jsonFetch<Omit<PharmacyPerson, "citizen_id" | "registration_id">>(trPath("person_lookup"), trWrite("POST", { cpf }));
+  return { ...b, citizen_id: null, registration_id: null };
+}
+export async function findTransportDuplicates(q: DuplicateQuery): Promise<DuplicateCandidate[]> {
+  const b = await jsonFetch<{ candidates?: Omit<DuplicateCandidate, "registration_id">[] }>(trPath("patients", "duplicates"), trWrite("POST", q));
+  return (b.candidates ?? []).map((c) => ({ ...c, registration_id: null }));
+}
+
+// ── Séries, pendências e faltas ──
+export async function listSeries(): Promise<TransportSeries[]> {
+  return (await jsonFetch<{ items?: TransportSeries[] }>(trPath("series"))).items ?? [];
+}
+export function createSeries(i: SeriesInput): Promise<TransportSeries> {
+  return jsonFetch<TransportSeries>(trPath("series"), trWrite("POST", i));
+}
+export function updateSeries(id: string, i: SeriesUpdate): Promise<TransportSeries> {
+  return jsonFetch<TransportSeries>(trPath("series", id), trWrite("PATCH", i));
+}
+// Irreversível: para retomar, crie uma série nova.
+export function suspendSeries(id: string, i: { from_on: string; reason: string }): Promise<TransportSeries> {
+  return jsonFetch<TransportSeries>(trPath("series", id, "suspend"), trWrite("POST", i));
+}
+export async function listTransportPending(): Promise<TransportPendingItem[]> {
+  return (await jsonFetch<{ items?: TransportPendingItem[] }>(trPath("pending"))).items ?? [];
+}
+export async function listNoShows(q: { from: string; to: string }): Promise<NoShowRow[]> {
+  return (await jsonFetch<{ items?: NoShowRow[] }>(withQuery(trPath("no_shows"), new URLSearchParams({ from: q.from, to: q.to })))).items ?? [];
+}
+
+// ── Motorista (papel `driver` com cadastro ativo) ──
+export async function listMyTrips(date?: string | null): Promise<Trip[]> {
+  const p = new URLSearchParams(date ? { date } : {});
+  return (await jsonFetch<{ items?: Trip[] }>(withQuery(trPath("my_trips"), p))).items ?? [];
+}
+export function startMyTrip(id: string): Promise<Trip> {
+  return jsonFetch<Trip>(trPath("my_trips", id, "start"), trWrite("POST"));
+}
+export function recordAttendance(id: string, items: AttendanceItem[]): Promise<Trip> {
+  return jsonFetch<Trip>(trPath("my_trips", id, "attendance"), trWrite("POST", { items }));
+}
+export function closeMyTrip(id: string, i: TripCloseInput): Promise<Trip> {
+  return jsonFetch<Trip>(trPath("my_trips", id, "close"), trWrite("POST", i));
+}
+
+// ── Regras da cidade (municipal_admin; PATCH com step-up) e painel ──
+export function getTransportSettings(): Promise<TransportSettings> {
+  return jsonFetch<TransportSettings>(trPath("admin", "settings"));
+}
+export function updateTransportSettings(i: TransportSettingsInput): Promise<TransportSettings> {
+  return jsonFetch<TransportSettings>(trPath("admin", "settings"), trWrite("PATCH", i));
+}
+export function getTransportDashboard(month?: string | null): Promise<TransportDashboard> {
+  return jsonFetch<TransportDashboard>(withQuery(trPath("dashboard"), new URLSearchParams(month ? { month } : {})));
+}
+
+// ── TFD (D12: toda escrita devolve o processo inteiro) ──
+export function getTfdOptions(): Promise<TfdOptions> {
+  return jsonFetch<TfdOptions>(tfdPath("options"));
+}
+export function getTfdPrefill(consultationId: string): Promise<TfdPrefill> {
+  return jsonFetch<TfdPrefill>(withQuery(tfdPath("prefill"), new URLSearchParams({ consultation_id: consultationId })));
+}
+export function createTfdCase(i: TfdCaseInput): Promise<TfdCase> {
+  return jsonFetch<TfdCase>(tfdPath("cases"), trWrite("POST", i));
+}
+export function updateTfdCase(id: string, i: TfdCaseInput): Promise<TfdCase> {
+  return jsonFetch<TfdCase>(tfdPath("cases", id), trWrite("PATCH", i));
+}
+export function submitTfdCase(id: string): Promise<TfdCase> {
+  return jsonFetch<TfdCase>(tfdPath("cases", id, "submit"), trWrite("POST"));
+}
+// D14: ordem crescente; `before` é o cursor devolvido em `next_before` ("os itens depois deste").
+export async function listTfdCases(q: { status?: string | null; before?: string | null }): Promise<{ items: TfdCaseRow[]; next_before: string | null }> {
+  const p = new URLSearchParams();
+  if (q.status) p.set("status", q.status);
+  if (q.before) p.set("before", q.before);
+  const b = await jsonFetch<{ items?: TfdCaseRow[]; next_before?: string | null }>(withQuery(tfdPath("cases"), p));
+  return { items: b.items ?? [], next_before: b.next_before ?? null };
+}
+// D9: pedidos do próprio médico, com rascunhos, sem cursor (máximo 100).
+export async function listMyTfdCases(): Promise<TfdCaseRow[]> {
+  return (await jsonFetch<{ items?: TfdCaseRow[] }>(tfdPath("my_cases"))).items ?? [];
+}
+// Leitura nominal com trilha: POST, só no clique.
+export function readTfdCase(id: string): Promise<TfdCase> {
+  return jsonFetch<TfdCase>(tfdPath("cases", id, "read"), trWrite("POST"));
+}
+export function decideTfdCase(id: string, i: { decision: TfdDecision; reason: string }): Promise<TfdCase> {
+  return jsonFetch<TfdCase>(tfdPath("cases", id, "decide"), trWrite("POST", i));
+}
+// `provider_id` ausente mantém o prestador do laudo.
+export function setTfdAppointment(id: string, i: { appointment_at: string; provider_id?: string | null }): Promise<TfdCase> {
+  return jsonFetch<TfdCase>(tfdPath("cases", id, "appointment"), trWrite("POST", i));
+}
+export function setTfdInpatient(id: string, i: { from: string; to?: string | null }): Promise<TfdCase> {
+  return jsonFetch<TfdCase>(tfdPath("cases", id, "inpatient"), trWrite("POST", i));
+}
+export function cancelTfdCase(id: string, reason: string): Promise<TfdCase> {
+  return jsonFetch<TfdCase>(tfdPath("cases", id, "cancel"), trWrite("POST", { reason }));
+}
+export function addTfdLeg(caseId: string, i: TfdLegInput): Promise<TfdCase> {
+  return jsonFetch<TfdCase>(tfdPath("cases", caseId, "legs"), trWrite("POST", i));
+}
+export function markTfdLegDone(legId: string): Promise<TfdCase> {
+  return jsonFetch<TfdCase>(tfdPath("legs", legId, "done"), trWrite("POST"));
+}
+// O processo já traz `allowances`; esta rota soma o total no api.
+export async function listTfdAllowances(caseId: string): Promise<{ items: TfdAllowance[]; total_cents: number }> {
+  const b = await jsonFetch<{ items?: TfdAllowance[]; total_cents?: number }>(tfdPath("cases", caseId, "allowances"));
+  return { items: b.items ?? [], total_cents: b.total_cents ?? 0 };
+}
+export function recordTfdPayment(caseId: string, i: TfdPaymentInput): Promise<TfdCase> {
+  return jsonFetch<TfdCase>(tfdPath("cases", caseId, "payments"), trWrite("POST", i));
+}
+// D11: só o tipo e o conteúdo em base64 — o nome do arquivo pode trazer o nome do paciente (o api gera um).
+export async function uploadTfdAccountability(caseId: string, file: File): Promise<TfdCase> {
+  const data = await readBase64(file);
+  return jsonFetch<TfdCase>(tfdPath("cases", caseId, "accountability"), trWrite("POST", { content_type: file.type, data }));
+}
+// Endereço curto (5 min, preso ao usuário) para abrir o comprovante.
+export async function getTfdAccountabilityUrl(caseId: string): Promise<string> {
+  return (await jsonFetch<{ url: string }>(tfdPath("cases", caseId, "accountability", "url"), trWrite("POST"))).url;
 }

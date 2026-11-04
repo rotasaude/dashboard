@@ -26,7 +26,7 @@ export function regCounts(over: Partial<RegulationCounts> = {}): RegulationCount
   return { pending: 12, overdue: 3, returned: 2, authorized: 5, external: 1, ...over };
 }
 export function provider(over: Partial<CareProvider> = {}): CareProvider {
-  return { id: "pr1", name: "Ambulatório de Especialidades", cnes: "2384310", kind: "own", health_unit: AMB_ESPEC, active: true, ...over };
+  return { id: "pr1", name: "Ambulatório de Especialidades", cnes: "2384310", kind: "own", health_unit: AMB_ESPEC, active: true, ibge_code: null, ...over };
 }
 export function offer(over: Partial<CareOffer> = {}): CareOffer {
   return { id: "of1", provider: { id: "pr1", name: "Ambulatório de Especialidades", kind: "own" }, target: CARDIO, month: "2026-10",
