@@ -383,8 +383,11 @@ export function deadlinesProblem(raw: Record<RiskColor, string>): string | null 
 // ─── Recusas do api ────────────────────────────────────────────────────────
 const FIELD_LABEL: Record<string, string> = {
   justification: "justificativa", cid10: "CID-10", ciap2: "CIAP-2", reason: "motivo", place: "local", at: "data e hora", number: "número",
-  cnes: "CNES", quantity: "quantidade"
+  cnes: "CNES", quantity: "quantidade", care_provider_id: "prestador cadastrado", ibge_code: "código IBGE"
 };
+
+// O api recusa no agendamento o prestador inativo ou da rede própria (`invalid_request` em `care_provider_id`).
+export const PROVIDER_INACTIVE_TEXT = "o prestador foi desativado — escolha outro ou Nenhum";
 
 const MESSAGES: Record<string, string> = {
   color_reason_required: COLOR_REASON_TEXT,
@@ -434,6 +437,7 @@ export function regulationError(err: unknown): string {
         : "a quantidade não pode ficar abaixo do que já foi autorizado no mês";
     case "invalid_request":
       if (path === "consultation") return "no máximo 10 pedidos em rascunho por consulta";
+      if (path === "care_provider_id") return PROVIDER_INACTIVE_TEXT;
       return path ? `confira o campo: ${FIELD_LABEL[path] ?? path}` : GENERIC;
     default:
       return (code && MESSAGES[code]) || GENERIC;

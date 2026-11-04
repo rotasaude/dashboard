@@ -252,6 +252,8 @@ describe("frases das recusas, sem repetir o que foi enviado", () => {
     [ err(422, "invalid_target"), "especialidade ou procedimento inválido" ],
     [ err(422, "skip_reason_required"), "Há pedido mais antigo, de cor igual ou mais grave, esperando nesta especialidade ou procedimento com oferta disponível. Para autorizar este antes, registre o motivo." ],
     [ err(422, "invalid_request", { path: "estranho" }), "confira o campo: estranho" ],
+    [ err(422, "invalid_request", { path: "care_provider_id" }), "o prestador foi desativado — escolha outro ou Nenhum" ],
+    [ err(422, "invalid_request", { path: "ibge_code" }), "confira o campo: código IBGE" ],
     [ err(500, "boom"), "não foi possível concluir — tente de novo" ],
     [ new TypeError("Failed to fetch"), "sem conexão com o servidor — tente de novo" ]
   ])("%#", (e, text) => expect(regulationError(e)).toBe(text));

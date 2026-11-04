@@ -83,6 +83,31 @@ describe("agendamento externo com prestador (módulo 30, D13)", () => {
     await waitFor(() => expect(vi.mocked(api.scheduleRegulationRequest).mock.calls[0][1]).toMatchObject({ care_provider_id: "cp2" }));
   });
 
+  it("prestador atual desativado: a opção diz \"(desativado)\", há aviso, e a recusa do api diz o que fazer (A3)", async () => {
+    setup();
+    const req = regRequest({ status: "scheduled", authorization: authorized().authorization,
+      schedule: { at: "2026-11-20T08:00:00-03:00", place: "Clínica", notes: null, care_provider: { id: "cp2", name: "Clínica Inativa" } } });
+    vi.mocked(api.scheduleRegulationRequest).mockRejectedValue(new api.ApiError(422, { error: "invalid_request", path: "care_provider_id" }, "422"));
+    renderWithProviders(<ScheduleOutcome request={req} onChanged={() => {}} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Remarcar" }));
+    const select = (await screen.findByLabelText("Prestador cadastrado")) as HTMLSelectElement;
+    await waitFor(() => expect([ ...select.options ].map((o) => o.textContent)).toEqual([ "Nenhum (só o local)", "Hospital de Olhos", "Clínica Inativa (desativado)" ]));
+    expect(screen.getByText("o prestador foi desativado — escolha outro ou Nenhum")).not.toBeNull();
+    fireEvent.change(screen.getByLabelText("Data e hora"), { target: { value: "2026-11-25T09:00" } });
+    fireEvent.click(screen.getByRole("button", { name: "Salvar agendamento" }));
+    expect((await screen.findByRole("alert")).textContent).toBe("o prestador foi desativado — escolha outro ou Nenhum");
+    fireEvent.change(select, { target: { value: "cp1" } });
+    expect(screen.queryByText("o prestador foi desativado — escolha outro ou Nenhum")).toBeNull();
+  });
+
+  it("falha ao ler os prestadores aparece no formulário (A4)", async () => {
+    vi.mocked(api.fetchCurrentSession).mockResolvedValue(regUser());
+    vi.mocked(api.listCareProviders).mockRejectedValue(new TypeError("network"));
+    renderWithProviders(<ScheduleOutcome request={authorized()} onChanged={() => {}} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Registrar agendamento" }));
+    expect((await screen.findByRole("alert")).textContent).toContain("não foi possível ler os prestadores");
+  });
+
   it("prestador externo: IBGE com 7 dígitos ou vazio", async () => {
     setup();
     renderWithProviders(<ProviderForm provider={null} units={[]} onSaved={() => {}} onCancel={() => {}} />);

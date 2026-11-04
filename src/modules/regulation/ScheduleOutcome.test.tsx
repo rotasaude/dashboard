@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 
 vi.mock("../../lib/api", async (importOriginal) => ({ ...(await importOriginal<typeof import("../../lib/api")>()), fetchCurrentSession: vi.fn(),
-  scheduleRegulationRequest: vi.fn(), recordRegulationOutcome: vi.fn() }));
+  scheduleRegulationRequest: vi.fn(), recordRegulationOutcome: vi.fn(), listCareProviders: vi.fn() }));
 import * as api from "../../lib/api";
 import { ApiError } from "../../lib/api";
 import { ScheduleOutcome } from "./ScheduleOutcome";
@@ -24,6 +24,7 @@ describe("ScheduleOutcome", () => {
   beforeEach(() => {
     for (const fn of [ api.scheduleRegulationRequest, api.recordRegulationOutcome ]) mocked(fn).mockReset();
     mocked(api.fetchCurrentSession).mockResolvedValue(regUser());
+    mocked(api.listCareProviders).mockResolvedValue([]);
     onChanged = vi.fn();
     onApplied = vi.fn();
     // Hoje da cidade = dia do agendamento (2026-11-10), salvo nos testes que mudam o relógio.

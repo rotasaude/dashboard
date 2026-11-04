@@ -9,7 +9,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { errorCode, listCareProviders, recordRegulationOutcome, scheduleRegulationRequest } from "../../lib/api";
 import type { RegulationRequest } from "../../lib/api";
-import { OUTCOME_BEFORE_SCHEDULE_TEXT, REG_PROVIDERS_KEY, STATIC_QUERY, actionsFor, notesProblem, placeProblem, regulationError, scheduleAtProblem } from "../../lib/regulation";
+import { OUTCOME_BEFORE_SCHEDULE_TEXT, PROVIDER_INACTIVE_TEXT, REG_PROVIDERS_KEY, STATIC_QUERY, actionsFor, notesProblem, placeProblem, regulationError, scheduleAtProblem } from "../../lib/regulation";
 import { cityIsoDate, cityLocalIso } from "../../lib/format";
 import { ConfirmButton } from "../../components/ConfirmButton";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
@@ -119,12 +119,17 @@ function ScheduleForm({ request, onSaved, onRefused, onCancel, onStart }: {
   const providers = useQuery({ queryKey: [ REG_PROVIDERS_KEY ], queryFn: listCareProviders, ...STATIC_QUERY });
   const current = request.schedule?.care_provider ?? null;
   const options = (providers.data ?? []).filter((p) => p.active && p.kind !== "own").map((p) => ({ id: p.id, name: p.name }));
-  // O prestador atual aparece mesmo se deixou de ser elegível (desativado): sem ele o select o perderia em silêncio.
-  if (current && !options.some((o) => o.id === current.id)) options.push({ id: current.id, name: current.name });
+  // O prestador atual aparece mesmo se deixou de ser elegível (desativado): sem ele o select o perderia em silêncio. Lida a
+  // lista, ele é marcado "(desativado)" e um aviso diz que o api vai recusá-lo (A3).
+  const currentInactive = !!current && !!providers.data && !options.some((o) => o.id === current.id);
+  if (current && !options.some((o) => o.id === current.id)) {
+    options.push({ id: current.id, name: currentInactive ? `${current.name} (desativado)` : current.name });
+  }
 
   function pick(id: string) {
     setProviderId(id);
-    const found = options.find((o) => o.id === id);
+    if (problem === PROVIDER_INACTIVE_TEXT) setProblem(null);
+    const found = (providers.data ?? []).find((o) => o.id === id) ?? options.find((o) => o.id === id);
     if (found && place.trim() === "") setPlace(found.name);
   }
 
@@ -163,6 +168,8 @@ function ScheduleForm({ request, onSaved, onRefused, onCancel, onStart }: {
           {options.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
         </select>
       </label>
+      {providers.isError && <p role="alert" style={alert}>{`não foi possível ler os prestadores: ${regulationError(providers.error)}`}</p>}
+      {currentInactive && providerId === current?.id && problem !== PROVIDER_INACTIVE_TEXT && <p style={muted}>{PROVIDER_INACTIVE_TEXT}</p>}
       <label style={fieldLabel}>
         Local
         <input type="text" value={place} style={inputStyle} onChange={(e) => setPlace(e.target.value)} />
