@@ -17,6 +17,9 @@ export function ScheduledCare({ trip, onPick }: { trip: Trip; onPick(item: Sched
   const search = useMutation({ gcTime: 0, mutationFn: () => findScheduledCare({ date: trip.date, destinationId: null, healthUnitId: unitId || null }) });
 
   const onTrip = new Set(trip.passengers.map((p) => p.patient.id));
+  // Destino cadastrado sem prestador (ex.: TFD sem prestador): o município vem da parada de destino da própria viagem.
+  const stopName = (destinationId: string | null) =>
+    trip.stops.find((s) => s.kind === "destination" && s.destination_id !== null && s.destination_id === destinationId)?.label;
   const unitList = units.data ?? [];
 
   return (
@@ -42,7 +45,7 @@ export function ScheduledCare({ trip, onPick }: { trip: Trip; onPick(item: Sched
         <ul style={list}>
           {search.data.map((item) => {
             const name = item.patient.display_name ?? NO_NAME;
-            const where = item.destination.provider_name ?? "destino a escolher";
+            const where = item.destination.provider_name ?? stopName(item.destination.destination_id) ?? "destino a escolher";
             return (
               <li key={`${item.origin}:${item.origin_id}`} style={row}>
                 <span>{`${name} · ${originLabel(item.origin)} · ${fmtHourMinute(item.appointment_at)} · ${where}`}</span>

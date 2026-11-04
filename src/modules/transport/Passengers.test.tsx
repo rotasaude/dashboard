@@ -33,6 +33,15 @@ async function pickSuggestion(item: unknown = SUGGESTION) {
 }
 
 describe("passageiros da viagem", () => {
+  it("sugestão com destino conhecido e sem prestador mostra o município, não 'destino a escolher'", async () => {
+    mount(trip({ stops: TWO_DESTINATIONS as never }));
+    vi.mocked(api.findScheduledCare).mockResolvedValue([ { ...SUGGESTION, origin: "tfd", origin_id: "c9",
+      destination: { destination_id: "t2", provider_name: null, address: null } } ] as never);
+    fireEvent.click(await screen.findByRole("button", { name: "Buscar atendimentos marcados na data" }));
+    expect(await screen.findByText(/Carlos Souza · TFD · 10:00 · Ponta Grossa/)).not.toBeNull();
+    expect(screen.queryByText(/destino a escolher/)).toBeNull();
+  });
+
   it("a lista não mostra dado clínico; mostra origem pelo rótulo", async () => {
     // Campo clínico que o api nunca manda: se viesse, a tela não o mostraria (só os campos de <passenger>).
     const leaky = { ...passenger({ origin: "tfd" }), cid10: "H25.1", sigtap_name: "FACOEMULSIFICACAO", justification: "oftalmo cirúrgica" } as never;
