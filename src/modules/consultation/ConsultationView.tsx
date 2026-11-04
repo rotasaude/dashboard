@@ -8,7 +8,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../../lib/auth";
 import {
   errorCode, fetchConsultationPdf, getConsultation,
-  type Addendum, type Consultation, type ConsultationOptions, type PatientProblem, type RegulationNotSent
+  type Addendum, type Consultation, type ConsultationOptions, type PatientProblem, type RegulationNotSent, type TfdCase
 } from "../../lib/api";
 import { ACTION_LABEL, CONSULTATION_KEY, SOAP_FIELDS, changesLines, codedLabel, consultationError, withAddendum } from "../../lib/consultation";
 import { fmtDateTime } from "../../lib/format";
@@ -74,6 +74,9 @@ export function ConsultationView(props: ConsultationViewProps) {
   const showTfd = !!props.tfd && isAuthor && c.status === "finalized";
   const [ tfdOpen, setTfdOpen ] = useState(false);
   const [ tfdNote, setTfdNote ] = useState<string | null>(null);
+  // O pedido de TFD gravado a partir desta consulta, enquanto ainda é editável: "Pedir TFD" o reabre (PATCH) em vez de criar outro (A5).
+  const [ tfdCase, setTfdCase ] = useState<TfdCase | null>(null);
+  const keepTfd = (k?: TfdCase) => { if (k) setTfdCase(k.status === "draft" || k.status === "returned" ? k : null); };
   // Abre à vista, com o foco no título (AT-07).
   const revealRef = useReveal<HTMLElement>(true);
   const conductLabel = (code: string) => codedLabel(options?.conducts, code);
@@ -184,8 +187,8 @@ export function ConsultationView(props: ConsultationViewProps) {
       </div>
 
       {showTfd && tfdOpen && (
-        <TfdRequestForm source={{ consultationId: c.id }} searchDelayMs={props.searchDelayMs}
-          onDone={(_case, text) => { setTfdOpen(false); setTfdNote(text); }} onCancel={() => setTfdOpen(false)} />
+        <TfdRequestForm source={tfdCase ? { tfdCase } : { consultationId: c.id }} searchDelayMs={props.searchDelayMs}
+          onDone={(saved, text) => { keepTfd(saved); setTfdOpen(false); setTfdNote(text); }} onCancel={(created) => { keepTfd(created); setTfdOpen(false); }} />
       )}
 
       {adding && (

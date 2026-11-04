@@ -7,7 +7,7 @@ import type { ReactNode } from "react";
 vi.mock("../../lib/api", async (importOriginal) => {
   const real = await importOriginal<typeof import("../../lib/api")>();
   return { ...real, fetchConsultationPdf: vi.fn(), getConsultation: vi.fn(), addAddendum: vi.fn(), fetchCurrentSession: vi.fn(),
-    getTfdOptions: vi.fn(), getTfdPrefill: vi.fn() };
+    getTfdOptions: vi.fn(), getTfdPrefill: vi.fn(), createTfdCase: vi.fn(), updateTfdCase: vi.fn(), submitTfdCase: vi.fn() };
 });
 
 import * as api from "../../lib/api";
@@ -15,6 +15,7 @@ import { ApiError } from "../../lib/api";
 import { ConsultationLoader, ConsultationView } from "./ConsultationView";
 import { finalized, options, problem } from "../../test/consultationFixtures";
 import { renderWithProviders, sessionWith } from "../../test/campaignFixtures";
+import { DEST_CURITIBA, tfdCase } from "../../test/transportFixtures";
 
 const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
 let win: { location: { href: string }; close: ReturnType<typeof vi.fn> };
@@ -173,7 +174,7 @@ describe("ConsultationView — à vista (AT-07)", () => {
 
 describe("ConsultationView — Pedir TFD (módulo 30)", () => {
   beforeEach(() => {
-    for (const fn of [ api.fetchCurrentSession, api.getTfdOptions, api.getTfdPrefill ]) mocked(fn).mockReset();
+    for (const fn of [ api.fetchCurrentSession, api.getTfdOptions, api.getTfdPrefill, api.createTfdCase, api.updateTfdCase, api.submitTfdCase ]) mocked(fn).mockReset();
     sessionAs("us1");
     mocked(api.getTfdOptions).mockResolvedValue({ destinations: [], providers: [], min_distance_km: 50 });
     mocked(api.getTfdPrefill).mockResolvedValue({ patient_id: "pt1", cid10: null, sigtap_code: null });
@@ -184,6 +185,45 @@ describe("ConsultationView — Pedir TFD (módulo 30)", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Pedir TFD" }));
     expect(await screen.findByRole("form", { name: "Laudo de TFD" })).not.toBeNull();
     expect(api.getTfdPrefill).toHaveBeenCalledWith("cs1");
+  });
+
+  it("reabrir Pedir TFD depois de salvar o rascunho edita o mesmo pedido (PATCH), sem criar outro (A5)", async () => {
+    mocked(api.getTfdOptions).mockResolvedValue({ destinations: [ DEST_CURITIBA ], providers: [], min_distance_km: 50 });
+    mocked(api.createTfdCase).mockResolvedValue(tfdCase({ status: "draft" }));
+    mocked(api.updateTfdCase).mockResolvedValue(tfdCase({ status: "draft" }));
+    wrap(<ConsultationView consultation={finalized()} options={options()} patientProblems={[]} tfd onAddendumAdded={vi.fn()} onClose={vi.fn()} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Pedir TFD" }));
+    const form = await screen.findByRole("form", { name: "Laudo de TFD" });
+    fireEvent.change(within(form).getByLabelText("Cidade de destino"), { target: { value: DEST_CURITIBA.id } });
+    fireEvent.click(within(form).getByRole("button", { name: "Salvar rascunho" }));
+    await waitFor(() => expect(api.createTfdCase).toHaveBeenCalledTimes(1));
+    fireEvent.click(await screen.findByRole("button", { name: "Pedir TFD" }));
+    const again = await screen.findByRole("form", { name: "Laudo de TFD" });
+    fireEvent.click(within(again).getByRole("button", { name: "Salvar rascunho" }));
+    await waitFor(() => expect(api.updateTfdCase).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(api.updateTfdCase).mock.calls[0][0]).toBe("c1");
+    expect(api.createTfdCase).toHaveBeenCalledTimes(1);
+  });
+
+  it("envio recusado depois de criar o rascunho, Cancelar e reabrir: segue o mesmo pedido (A5)", async () => {
+    mocked(api.getTfdOptions).mockResolvedValue({ destinations: [ DEST_CURITIBA ], providers: [], min_distance_km: 50 });
+    mocked(api.createTfdCase).mockResolvedValue(tfdCase({ status: "draft" }));
+    mocked(api.updateTfdCase).mockResolvedValue(tfdCase({ status: "draft" }));
+    mocked(api.submitTfdCase).mockRejectedValue(new ApiError(422, { error: "invalid_transition" }, "422"));
+    mocked(api.getTfdPrefill).mockResolvedValue({ patient_id: "pt1", cid10: "H25.1", sigtap_code: "0405050372" });
+    wrap(<ConsultationView consultation={finalized()} options={options()} patientProblems={[]} tfd onAddendumAdded={vi.fn()} onClose={vi.fn()} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Pedir TFD" }));
+    const form = await screen.findByRole("form", { name: "Laudo de TFD" });
+    fireEvent.change(within(form).getByLabelText("Cidade de destino"), { target: { value: DEST_CURITIBA.id } });
+    fireEvent.change(within(form).getByLabelText("Justificativa"), { target: { value: "Sem oftalmologia cirúrgica no município." } });
+    fireEvent.click(within(form).getByRole("button", { name: "Enviar à comissão" }));
+    await waitFor(() => expect(api.submitTfdCase).toHaveBeenCalledTimes(1));
+    fireEvent.click(within(form).getByRole("button", { name: "Cancelar" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Pedir TFD" }));
+    const again = await screen.findByRole("form", { name: "Laudo de TFD" });
+    fireEvent.click(within(again).getByRole("button", { name: "Salvar rascunho" }));
+    await waitFor(() => expect(api.updateTfdCase).toHaveBeenCalledTimes(1));
+    expect(api.createTfdCase).toHaveBeenCalledTimes(1);
   });
 
   it("sem tfd, com outra pessoa lendo ou em rascunho, não há Pedir TFD", async () => {

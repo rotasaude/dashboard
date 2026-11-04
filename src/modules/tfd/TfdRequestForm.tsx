@@ -34,7 +34,8 @@ export interface TfdRequestFormProps {
   source: TfdRequestSource;
   searchDelayMs?: number;
   onDone(c: TfdCase, text: string): void;
-  onCancel(): void;
+  // `created`: o pedido que este formulário gravou (rascunho criado ou editado) antes de fechar — quem chama o reabre em vez de criar outro.
+  onCancel(created?: TfdCase): void;
 }
 
 export function TfdRequestForm({ source, searchDelayMs, onDone, onCancel }: TfdRequestFormProps) {
@@ -51,7 +52,7 @@ export function TfdRequestForm({ source, searchDelayMs, onDone, onCancel }: TfdR
     return (
       <div style={box}>
         <p role="alert" style={alert}>{tfdError(failed)}</p>
-        <div style={row}><button type="button" style={secondaryButtonStyle} onClick={onCancel}>Fechar</button></div>
+        <div style={row}><button type="button" style={secondaryButtonStyle} onClick={() => onCancel()}>Fechar</button></div>
       </div>
     );
   }
@@ -87,12 +88,13 @@ function group(list: { path: string; text: string }[]): { fields: Errors; genera
 
 function ReportForm({ options, initial, existing, ctx, searchDelayMs, onDone, onCancel }: {
   options: TfdOptions; initial: ReportDraft; existing?: TfdCase; ctx: { patientId: string; consultationId?: string; regulationRequestId?: string };
-  searchDelayMs?: number; onDone(c: TfdCase, text: string): void; onCancel(): void;
+  searchDelayMs?: number; onDone(c: TfdCase, text: string): void; onCancel(created?: TfdCase): void;
 }) {
   const [ d, setD ] = useState<ReportDraft>(initial);
   const [ sigtapName, setSigtapName ] = useState<string | null>(existing?.report.sigtap_name ?? null);
   const [ cidName, setCidName ] = useState<string | null>(null);
   const [ caseId, setCaseId ] = useState<string | null>(existing?.id ?? null);
+  const [ savedCase, setSavedCase ] = useState<TfdCase | null>(null);
   const [ errors, setErrors ] = useState<Errors>({});
   const [ general, setGeneral ] = useState<string[]>([]);
   const [ kept, setKept ] = useState<string | null>(null);
@@ -124,6 +126,7 @@ function ReportForm({ options, initial, existing, ctx, searchDelayMs, onDone, on
         const body = caseBody(d, ctx);
         saved = caseId ? await updateTfdCase(caseId, body) : await createTfdCase(body);
         setCaseId(saved.id);
+        setSavedCase(saved);
       } catch (err) {
         show(tfdRefusals(err));
         return;
@@ -199,7 +202,7 @@ function ReportForm({ options, initial, existing, ctx, searchDelayMs, onDone, on
       <div style={row}>
         <button type="submit" disabled={busy} style={busy ? disabledButtonStyle : secondaryButtonStyle}>Salvar rascunho</button>
         <button type="button" disabled={busy} style={busy ? disabledButtonStyle : buttonStyle} onClick={() => void save(true)}>Enviar à comissão</button>
-        <button type="button" style={secondaryButtonStyle} onClick={onCancel}>Cancelar</button>
+        <button type="button" style={secondaryButtonStyle} onClick={() => onCancel(savedCase ?? undefined)}>Cancelar</button>
       </div>
     </form>
   );
