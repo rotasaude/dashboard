@@ -476,7 +476,7 @@ export interface UnitAddress {
 
 // `screening_scope` (módulo 18; contrato §5): ausente em api anterior = `walk_in`.
 export interface HealthUnit extends Partial<UnitAddress> {
-  id: string; name: string; kind: string; screening_scope?: ScreeningScope;
+  id: string; name: string; kind: string; cnes?: string | null; screening_scope?: ScreeningScope;
   // Módulo 21b: a unidade coleta amostras para o laboratório municipal.
   collects_samples?: boolean;
   // Módulo 25 (D15): unidade notificadora (notificação negativa semanal).

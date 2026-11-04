@@ -124,7 +124,7 @@ describe("módulo 21b", () => {
 });
 
 describe("módulo 30", () => {
-  it("unidade de gestão só com o TFD ligado (módulo 30)", () => {
+  it("unidade de gestão só com o transporte usável (módulo 30)", () => {
     expect(unitKindOptions(false, true).map((k) => k.value)).toContain("health_management");
     expect(unitKindOptions(false).map((k) => k.value)).not.toContain("health_management");
   });

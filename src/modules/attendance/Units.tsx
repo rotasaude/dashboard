@@ -27,7 +27,7 @@ interface Editing { id: string | null; initial: UnitFormValue }
 
 // Módulo 21b: `labOn` = `municipal_lab` ligado (vem do Atendimento, que já lê a sessão).
 // Módulo 25: `surveillanceOn` = `surveillance` ligado; só então a unidade mostra e edita a marca notificadora.
-// Módulo 30: `tfdOn` = canUseTfd; só então o cadastro oferece a unidade de gestão.
+// Módulo 30: `tfdOn` = canUseTransport; só então o cadastro oferece a unidade de gestão.
 // Módulo 28: `dentalOn` = canUseDental; só então o cadastro oferece a unidade CEO.
 export function Units({ labOn = false, surveillanceOn = false, dentalOn = false, tfdOn = false }: { labOn?: boolean; surveillanceOn?: boolean; dentalOn?: boolean; tfdOn?: boolean } = {}) {
   const queryClient = useQueryClient();

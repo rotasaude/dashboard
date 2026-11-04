@@ -23,7 +23,7 @@ interface Props {
   cepTimeoutMs?: number;
   // Módulo 28: `dental_care` ligado (canUseDental, vindo do Atendimento) — só então o CEO é oferecido.
   dentalOn?: boolean;
-  // Módulo 30: TFD usável (canUseTfd) — só então a unidade de gestão é oferecida.
+  // Módulo 30: transporte usável (canUseTransport) — só então a unidade de gestão é oferecida.
   tfdOn?: boolean;
   onSave(value: UnitFormValue): void;
   onCancel(): void;

@@ -9,7 +9,8 @@ vi.mock("../lib/api", async (orig) => ({ ...(await orig<typeof api>()), fetchCur
   updateTransportSettings: vi.fn(), listAllUnits: vi.fn() }));
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
-const UNITS = [ { id: "u1", name: "UBS Centro", kind: "ubs", active: true }, { id: "u9", name: "Secretaria de Saúde", kind: "health_management", active: true } ];
+const UNITS = [ { id: "u1", name: "UBS Centro", kind: "ubs", active: true }, { id: "u9", name: "Secretaria de Saúde", kind: "health_management", cnes: "1234567", active: true },
+  { id: "u8", name: "Gestão sem CNES", kind: "health_management", cnes: null, active: true } ];
 function mount(roles = [ "municipal_admin" ], settings = SETTINGS) {
   vi.mocked(api.fetchCurrentSession).mockResolvedValue(trUser(roles));
   vi.mocked(api.getTransportSettings).mockResolvedValue(settings);
@@ -66,6 +67,14 @@ describe("regras do TFD e do acompanhante", () => {
     await screen.findByLabelText("Distância mínima do TFD (km)");
     await save();
     expect((await screen.findByRole("alert")).textContent).toContain("unidade de faturamento do TFD");
+  });
+  it("a frase de billing_unit_invalid aparece sob o seletor da unidade", async () => {
+    vi.mocked(api.updateTransportSettings).mockRejectedValue(new api.ApiError(422, { error: "billing_unit_invalid", problems: [ { path: "tfd_billing_health_unit_id", error: "billing_unit_invalid" } ] }, "422"));
+    mount();
+    await screen.findByLabelText("Distância mínima do TFD (km)");
+    await save();
+    await screen.findByRole("alert");
+    expect(screen.getAllByText(/unidade de faturamento do TFD/).length).toBe(2);
   });
   it("sem unidade escolhida vai null; só o administrador abre a tela", async () => {
     vi.mocked(api.updateTransportSettings).mockResolvedValue(SETTINGS);

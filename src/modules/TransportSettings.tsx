@@ -4,7 +4,7 @@
 import { useState, type CSSProperties } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getTransportSettings, listAllUnits, updateTransportSettings, type TransportSettings as Settings, type TransportSettingsInput } from "../lib/api";
-import { STATIC_QUERY, TR_SETTINGS_KEY, fmtCents, parseReais, transportError } from "../lib/transport";
+import { STATIC_QUERY, TR_SETTINGS_KEY, fmtCents, parseReais, transportError, transportRefusals } from "../lib/transport";
 import type { Problem } from "../lib/pharmacy";
 import { Panel } from "../components/Panel";
 import { SensitiveAction } from "../components/SensitiveAction";
@@ -61,7 +61,7 @@ function Body({ onGoToSecurity }: { onGoToSecurity?: () => void }) {
         {settings.isError && <p role="alert" style={alert}>{transportError(settings.error)}</p>}
         {units.isError && <p role="alert" style={alert}>{transportError(units.error)}</p>}
         {settings.data && units.data && (
-          <SettingsForm key={JSON.stringify(settings.data)} saved={settings.data} gestao={units.data.filter((u) => u.kind === "health_management" && (u.active || u.id === settings.data.tfd_billing_health_unit_id))}
+          <SettingsForm key={JSON.stringify(settings.data)} saved={settings.data} gestao={units.data.filter((u) => u.kind === "health_management" && !!u.cnes && (u.active || u.id === settings.data.tfd_billing_health_unit_id))}
             onGoToSecurity={onGoToSecurity} />
         )}
       </div>
@@ -114,7 +114,9 @@ function SettingsForm({ saved, gestao, onGoToSecurity }: { saved: Settings; gest
           {gestao.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
         </select>
       </label>
-      <p style={muted}>A unidade precisa ter CNES; é obrigatória enquanto o faturamento de procedimentos estiver ligado.</p>
+      {gestao.length === 0 && <p style={muted}>Nenhuma unidade de gestão com CNES cadastrada: crie uma em Unidades.</p>}
+      {err("tfd_billing_health_unit_id")}
+      <p style={muted}>Só aparecem unidades de gestão com CNES; a unidade é obrigatória enquanto o faturamento de procedimentos estiver ligado.</p>
       <fieldset style={{ ...stack, border: "1px solid var(--rule)", borderRadius: 8, padding: 12, margin: 0 }}>
         <legend style={{ fontSize: 12.5, fontWeight: 600 }}>Complemento por código SIGTAP (R$; vazio = sem complemento)</legend>
         {saved.allowance_codes.map((c) => (
@@ -138,7 +140,12 @@ function SettingsForm({ saved, gestao, onGoToSecurity }: { saved: Settings; gest
           onDone={() => { setConfirming(false); setDone(true); void queryClient.invalidateQueries({ queryKey: [ TR_SETTINGS_KEY ] }); }}
           onCancel={() => setConfirming(false)}
           onGoToSecurity={onGoToSecurity}
-          translateError={(e) => transportError(e)}
+          translateError={(e) => {
+            const unit = transportRefusals(e).filter((r) => r.path === "tfd_billing_health_unit_id");
+            if (unit.length === 0) return transportError(e);
+            setProblems(unit.map((r) => ({ path: r.path, text: r.text })));
+            return unit[0].text;
+          }}
         />
       )}
     </form>

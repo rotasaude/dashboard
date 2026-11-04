@@ -37,7 +37,7 @@ export const UNIT_KINDS = [
 
 // Módulo 28: o CEO só é oferecido no cadastro com `dental_care` ligado; a unidade já criada continua legível (KIND_LABEL).
 export const CEO_UNIT_KIND = { value: "ceo", label: "CEO (Centro de Especialidades Odontológicas)" };
-// Módulo 30: a unidade de gestão (CNES do BPA do TFD) só é oferecida com o TFD usável; a já criada continua legível (KIND_LABEL).
+// Módulo 30: a unidade de gestão (CNES do BPA do TFD) é oferecida com o transporte usável (a mesma condição da tela de regras, que a exige para faturar); a já criada continua legível (KIND_LABEL).
 export const HEALTH_MANAGEMENT_UNIT_KIND = { value: "health_management", label: "Gestão (secretaria ou central de regulação)" };
 export function unitKindOptions(dentalOn: boolean, tfdOn = false): { value: string; label: string }[] {
   return [ ...UNIT_KINDS, ...(dentalOn ? [ CEO_UNIT_KIND ] : []), ...(tfdOn ? [ HEALTH_MANAGEMENT_UNIT_KIND ] : []) ];

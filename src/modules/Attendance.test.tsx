@@ -88,6 +88,13 @@ describe("Attendance", () => {
     expect(await screen.findByText("Coleta")).not.toBeNull();
   });
 
+  it.each([ [ [ "sanitary_transport" ], true ], [ [], false ] ])("módulo 30: com features %j o cadastro de unidade oferece Gestão = %s", async (features, offered) => {
+    mocked(api.fetchCurrentSession).mockResolvedValue({ ...session("municipal_admin"), features });
+    renderAttendance();
+    fireEvent.click(await screen.findByRole("button", { name: "Nova unidade" }));
+    expect(screen.queryByRole("option", { name: "Gestão (secretaria ou central de regulação)" }) !== null).toBe(offered);
+  });
+
   it("administrador sem municipal_lab não vê a coluna Coleta", async () => {
     mocked(api.fetchCurrentSession).mockResolvedValue(session("municipal_admin"));
     mocked(api.listAllUnits).mockResolvedValue([ { id: "u1", name: "UBS Centro", kind: "ubs", active: true, collects_samples: true } ]);
