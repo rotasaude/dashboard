@@ -110,7 +110,7 @@ function TripsAgenda({ today, onGoToSecurity }: { today: string; onGoToSecurity?
           : trips.isPending ? <p style={muted}>carregando…</p>
           : sorted.length === 0 ? <EmptyState title="nenhuma viagem neste dia" />
           : sorted.map((t) => (
-            <TripCard key={t.id} trip={t} today={today} vehicles={vehicleList} drivers={driverList} destinations={destinationList}
+            <TripCard key={t.id} trip={t} vehicles={vehicleList} drivers={driverList} destinations={destinationList}
               editBlocked={loadError} onChanged={changed} onReload={refused} onGoToSecurity={onGoToSecurity}>
               {/* A frase da ação fica junto da lista de passageiros; aqui a agenda só relê. */}
               <PassengerList trip={t} onChanged={() => changed(t, "")} onReload={refused} />

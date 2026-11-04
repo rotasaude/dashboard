@@ -27,8 +27,8 @@ export function tripTitle(t: Trip): string {
 }
 
 // `editBlocked`: frase de por que não dá para editar agora (ex.: a lista de veículos, motoristas ou destinos não carregou).
-export function TripCard({ trip, today: _today, vehicles, drivers, destinations, editBlocked = null, children, onChanged, onReload, onGoToSecurity }: {
-  trip: Trip; today: string; vehicles: TransportVehicle[]; drivers: TransportDriver[]; destinations: TransportDestination[];
+export function TripCard({ trip, vehicles, drivers, destinations, editBlocked = null, children, onChanged, onReload, onGoToSecurity }: {
+  trip: Trip; vehicles: TransportVehicle[]; drivers: TransportDriver[]; destinations: TransportDestination[];
   editBlocked?: string | null; children?: ReactNode; onChanged(t: Trip | null, text: string): void; onReload(): void; onGoToSecurity?(): void;
 }) {
   const [ mode, setMode ] = useState<"view" | "edit" | "cancel">("view");

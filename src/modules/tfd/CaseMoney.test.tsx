@@ -11,8 +11,7 @@ import { AccountabilityForm } from "./AccountabilityForm";
 import { TfdQueue } from "../TfdQueue";
 
 vi.mock("../../lib/api", async (orig) => ({ ...(await orig<typeof api>()), fetchCurrentSession: vi.fn(), addTfdLeg: vi.fn(), markTfdLegDone: vi.fn(),
-  recordTfdPayment: vi.fn(), uploadTfdAccountability: vi.fn(), getTfdAccountabilityUrl: vi.fn(), fetchTfdAccountabilityFile: vi.fn(), listTfdCases: vi.fn(), readTfdCase: vi.fn(),
-  listTfdAllowances: vi.fn() }));
+  recordTfdPayment: vi.fn(), uploadTfdAccountability: vi.fn(), getTfdAccountabilityUrl: vi.fn(), fetchTfdAccountabilityFile: vi.fn(), listTfdCases: vi.fn(), readTfdCase: vi.fn() }));
 afterEach(() => { cleanup(); vi.clearAllMocks(); vi.restoreAllMocks(); });
 const authorized = tfdCase({ status: "authorized", appointment_at: "2026-11-20T08:00:00-03:00",
   trip_passengers: [ { id: "p5", date: "2026-11-20", departure_at: "2026-11-20T04:00:00-03:00", attendance: "pending", companion_attendance: null } ] });
@@ -174,7 +173,6 @@ describe("ajuda de custo e pagamento", () => {
     expect(screen.getByText("acompanhante")).not.toBeNull();
     expect(screen.getByText("O valor é calculado pela regra (tabela SIGTAP da competência + complemento da cidade); a tela não recalcula.")).not.toBeNull();
     expect(screen.getByText("0803010133")).not.toBeNull();
-    expect(api.listTfdAllowances).not.toHaveBeenCalled();
   });
 
   it("sem ajuda: a frase de quando ela é calculada; código desconhecido aparece cru", async () => {

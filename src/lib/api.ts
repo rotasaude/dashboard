@@ -5981,11 +5981,6 @@ export function addTfdLeg(caseId: string, i: TfdLegInput): Promise<TfdCase> {
 export function markTfdLegDone(legId: string): Promise<TfdCase> {
   return jsonFetch<TfdCase>(tfdPath("legs", legId, "done"), trWrite("POST"));
 }
-// O processo já traz `allowances`; esta rota soma o total no api.
-export async function listTfdAllowances(caseId: string): Promise<{ items: TfdAllowance[]; total_cents: number }> {
-  const b = await jsonFetch<{ items?: TfdAllowance[]; total_cents?: number }>(tfdPath("cases", caseId, "allowances"));
-  return { items: b.items ?? [], total_cents: b.total_cents ?? 0 };
-}
 export function recordTfdPayment(caseId: string, i: TfdPaymentInput): Promise<TfdCase> {
   return jsonFetch<TfdCase>(tfdPath("cases", caseId, "payments"), trWrite("POST", i));
 }

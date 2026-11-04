@@ -367,7 +367,7 @@ export function renderModule(active: ModuleId, setActive: (id: ModuleId) => void
     case "transport-trips": return <TransportTrips onGoToSecurity={() => setActive("security")} />;
     case "transport-series": return <TransportSeries onGoToSecurity={() => setActive("security")} />;
     case "transport-pending": return <TransportPending />;
-    case "transport-fleet": return <TransportFleet onGoToSecurity={() => setActive("security")} />;
+    case "transport-fleet": return <TransportFleet />;
     case "transport-my-trips": return <TransportMyTrips />;
     case "transport-panel": return <TransportPanel />;
     case "transport-settings": return <TransportSettings onGoToSecurity={() => setActive("security")} />;

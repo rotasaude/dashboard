@@ -102,7 +102,7 @@ function DashboardView({ data, tfd }: { data: TransportDashboard; tfd: boolean }
               { label: "Situação", w: "1.4fr", card: "title", render: (r) => tfdStatusLabel(r.status) },
               { label: "Quantidade", w: "0.8fr", align: "right", render: (r) => <span className="mono">{fmtTransportCount(r.count)}</span> }
             ]}
-            rows={rows} rowKey={(r) => r.status} empty="nenhum processo neste mês" />
+            rows={rows} rowKey={(r) => r.status} />
         </Panel>
       )}
     </div>

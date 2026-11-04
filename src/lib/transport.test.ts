@@ -137,10 +137,10 @@ describe("viagem", () => {
   });
   it("edição manda null para veículo e motorista limpos; criação omite", () => {
     const d = { ...tripDraftFrom(trip()), vehicleId: "", driverId: "" };
-    expect(tripBody(d, trip().stops, { edit: true })).toMatchObject({ vehicle_id: null, driver_id: null });
+    expect(tripBody(d, { edit: true })).toMatchObject({ vehicle_id: null, driver_id: null });
     const create = tripBody(d);
     expect("vehicle_id" in create || "driver_id" in create).toBe(false);
-    expect(tripBody({ ...d, vehicleId: "v1" }, undefined, { edit: true })).toMatchObject({ vehicle_id: "v1", driver_id: null });
+    expect(tripBody({ ...d, vehicleId: "v1" }, { edit: true })).toMatchObject({ vehicle_id: "v1", driver_id: null });
   });
   it("trip_not_open cobre viagem já iniciada", () => {
     expect(transportError(refuse(422, { error: "trip_not_open" }))).toContain("já começou");
@@ -150,12 +150,10 @@ describe("viagem", () => {
       boardingLabel: "Praça", startsOn: "2026-01-01", endsOn: "2026-02-01", wheelchair: false, companion: null };
     expect(seriesProblems(d, TODAY30)).toEqual([]);
   });
-  it("corpo de viagem existente mantém o id das paradas que continuam (D3)", () => {
-    const t = trip();
-    const d = { ...tripDraftFrom(t), boarding: [ "Praça da Matriz", "Distrito novo" ] };
-    const body = tripBody(d, t.stops);
-    expect(body.stops.map((s) => [ s.id, s.kind ])).toEqual([ [ "s1", "boarding" ], [ undefined, "boarding" ], [ "s2", "destination" ] ]);
-    expect(body.stops.every((s) => Object.keys(s).every((k) => [ "id", "position", "kind", "destination_id", "label" ].includes(k)))).toBe(true);
+  it("paradas saem sem id e só com as chaves do contrato (o TripForm devolve os ids, D3)", () => {
+    const body = tripBody({ ...tripDraftFrom(trip()), boarding: [ "Praça da Matriz", "Distrito novo" ] });
+    expect(body.stops.map((s) => [ s.id, s.kind ])).toEqual([ [ undefined, "boarding" ], [ undefined, "boarding" ], [ undefined, "destination" ] ]);
+    expect(body.stops.every((s) => Object.keys(s).every((k) => [ "position", "kind", "destination_id", "label" ].includes(k)))).toBe(true);
   });
   it("tripDraftFrom lê a viagem na hora da cidade", () => {
     const d = tripDraftFrom(trip());

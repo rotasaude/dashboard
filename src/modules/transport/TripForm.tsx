@@ -93,7 +93,7 @@ export function TripForm({ trip, date, vehicles, drivers, destinations, onSaved,
   const destinationOptions = destinations.filter((d) => d.active || rows.destinations.some((r) => r.destinationId === d.id));
 
   function body() {
-    const base = tripBody(draft, undefined, { edit: !!trip });
+    const base = tripBody(draft, { edit: !!trip });
     const boarding = rows.boarding.filter((b) => b.label.trim() !== "");
     const dests = rows.destinations.filter((d) => d.destinationId !== "");
     let bi = 0;

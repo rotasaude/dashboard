@@ -55,8 +55,6 @@ const STATUS_TONE: Record<string, string> = {
   draft: "neutral", submitted: "info", returned: "warn", authorized: "ok", denied: "down", scheduled: "ok", travelling: "info", completed: "neutral", cancelled: "down"
 };
 export const tfdStatusTone = (code: string): string => (Object.prototype.hasOwnProperty.call(STATUS_TONE, code) ? STATUS_TONE[code] : "neutral");
-// `scheduled` nasce com o primeiro trecho registrado; `travelling`, com a primeira ida cumprida.
-export const tfdStatusHint = pick({ scheduled: "primeiro trecho registrado", travelling: "primeira ida cumprida" });
 
 // Eventos do processo: os três próprios e as situações (código novo aparece cru).
 const EVENT_LABEL: Record<string, string> = { created: "pedido criado", appointment_set: "atendimento marcado", inpatient_recorded: "internação registrada" };

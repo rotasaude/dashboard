@@ -4,7 +4,7 @@ import {
   ApiError, errorCode,
   type DestinationInput, type DriverInput, type DriverUpdate, type ExpenseInput, type FuelInput, type PassengerInput, type PassengerOrigin,
   type ScheduledCareItem, type SeriesInput, type TransportCount, type TransportDriver, type TransportVehicle, type Trip, type TripCloseInput,
-  type TripInput, type TripStop, type TripStopInput, type VehicleInput
+  type TripInput, type TripStopInput, type VehicleInput
 } from "./api";
 import { NOMINAL_QUERY, STATIC_QUERY } from "./careLines";
 import { featureDisabledKey, featureLabel, hasFeature } from "./features";
@@ -275,20 +275,14 @@ export function tripProblems(d: TripDraft, ctx: { vehicles: TransportVehicle[]; 
 
 // `vehicle_id`/`driver_id` só quando escolhidos; na edição (`edit`) o campo vazio manda `null`, que desfaz a escolha (ausente = mantém). Com as paradas da viagem existente, as que continuam mantêm o `id` (D3): embarque pelo
 // rótulo, destino pelo `destination_id`. O rótulo do destino vai vazio: o api põe o nome.
-export function tripBody(d: TripDraft, stops?: TripStop[], opts: { edit?: boolean } = {}): TripInput {
-  const free = [ ...(stops ?? []) ];
-  const take = (match: (s: TripStop) => boolean): string | undefined => {
-    const i = free.findIndex(match);
-    return i < 0 ? undefined : free.splice(i, 1)[0].id;
-  };
+// As paradas saem sem id: o TripForm devolve o id das linhas que continuam (por linha, não por rótulo).
+export function tripBody(d: TripDraft, opts: { edit?: boolean } = {}): TripInput {
   const out: TripStopInput[] = [];
   d.boarding.map((b) => b.trim()).filter((b) => b !== "").forEach((label) => {
-    const id = take((s) => s.kind === "boarding" && s.label === label);
-    out.push({ ...(id ? { id } : {}), position: out.length + 1, kind: "boarding", label });
+    out.push({ position: out.length + 1, kind: "boarding", label });
   });
   d.destinationIds.filter((x) => x !== "").forEach((destination_id) => {
-    const id = take((s) => s.kind === "destination" && s.destination_id === destination_id);
-    out.push({ ...(id ? { id } : {}), position: out.length + 1, kind: "destination", destination_id, label: "" });
+    out.push({ position: out.length + 1, kind: "destination", destination_id, label: "" });
   });
   return {
     date: d.date, departure_at: cityLocalIso(`${d.date}T${d.departureTime}`) ?? "", return_at: cityLocalIso(`${d.returnDate}T${d.returnTime}`) ?? "",

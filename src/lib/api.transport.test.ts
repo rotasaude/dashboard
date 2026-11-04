@@ -148,12 +148,6 @@ describe("cliente do transporte e TFD (módulo 30)", () => {
     expect(last().url).toBe("/tfd/my_cases");
     expect(mine[0].status).toBe("draft");
   });
-  it("ajuda de custo: { items, total_cents }", async () => {
-    stub({ items: [], total_cents: 0 });
-    const a = await api.listTfdAllowances("c1");
-    expect(last().url).toBe("/tfd/cases/c1/allowances");
-    expect(a).toEqual({ items: [], total_cents: 0 });
-  });
   it("o arquivo da prestação de contas respeita VITE_TFD_BASE (C6)", async () => {
     stub("%PDF", 200, { "Content-Type": "application/pdf" });
     await api.fetchTfdAccountabilityFile("/tfd/files/tok1");

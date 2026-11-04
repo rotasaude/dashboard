@@ -13,7 +13,7 @@ import { DriverTrip } from "./transport/DriverTrip";
 
 const NOT_IN_FLEET = "você ainda não está cadastrado como motorista na frota";
 
-export function TransportMyTrips({ today }: { today?: string; now?: Date }) {
+export function TransportMyTrips({ today }: { today?: string }) {
   return (
     <TransportGate title="Minhas viagens" sub="Viagens do dia, embarque e fechamento" area="transport" allow={(r) => r.driver}>
       {() => <MyTrips today={today ?? todayInCity()} />}

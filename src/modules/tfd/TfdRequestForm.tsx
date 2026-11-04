@@ -29,7 +29,7 @@ const CHANGES_KEPT = "As mudanças ficaram salvas em Meus pedidos de TFD.";
 const MODES = [ "fleet", "bus_ticket", "air", "river" ] as const;
 const FIELDS = [ "report.sigtap_code", "report.cid10", "report.justification", "report.companion_reason", "report.transport_mode", "destination_id", "provider_id" ];
 
-export type TfdRequestSource = { consultationId: string; patientId?: string } | { tfdCase: TfdCase };
+export type TfdRequestSource = { consultationId: string } | { tfdCase: TfdCase };
 
 export interface TfdRequestFormProps {
   source: TfdRequestSource;
