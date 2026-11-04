@@ -208,6 +208,9 @@ describe("viagens do dia", () => {
     expect(within(articles[1]).getByText("ABC1D23 · Sprinter 415")).not.toBeNull();
     expect(within(articles[1]).getByText("João Motorista")).not.toBeNull();
     expect(within(articles[1]).getByText("1 de 15 lugares · 0 de 1 cadeira")).not.toBeNull();
+    // Os passageiros entram no cartão (Task 9).
+    expect(within(articles[1]).getByRole("region", { name: "Passageiros" })).not.toBeNull();
+    expect(within(articles[1]).getByText("Maria da Silva")).not.toBeNull();
     expect(screen.getByText("A lista não leva diagnóstico, procedimento nem especialidade.")).not.toBeNull();
   });
 });
