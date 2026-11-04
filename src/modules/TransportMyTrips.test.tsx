@@ -212,6 +212,25 @@ describe("tela do motorista (celular)", () => {
     expect(api.closeMyTrip).not.toHaveBeenCalled();
   });
 
+  it("recusa local leva o foco ao primeiro campo marcado; sem campo, à lista de problemas (C3)", async () => {
+    mount(driverView(trip({ status: "in_progress", passengers: [ passenger({ attendance: "boarded" }) ] })));
+    fireEvent.click(await screen.findByRole("button", { name: "Fechar viagem" }));
+    const form = screen.getByRole("form", { name: "Fechamento da viagem" });
+    fireEvent.change(within(form).getByLabelText("Odômetro na saída"), { target: { value: "500" } });
+    fireEvent.change(within(form).getByLabelText("Odômetro na chegada"), { target: { value: "400" } });
+    fireEvent.submit(form);
+    await waitFor(() => expect(document.activeElement).toBe(within(form).getByLabelText("Odômetro na chegada")));
+    cleanup();
+    vi.mocked(api.closeMyTrip).mockRejectedValue(new ApiError(422, { error: "attendance_pending" }, "422"));
+    mount(driverView(trip({ status: "in_progress", passengers: [ passenger({ attendance: "boarded" }) ] })));
+    fireEvent.click(await screen.findByRole("button", { name: "Fechar viagem" }));
+    const f2 = screen.getByRole("form", { name: "Fechamento da viagem" });
+    fireEvent.change(within(f2).getByLabelText("Odômetro na saída"), { target: { value: "1" } });
+    fireEvent.change(within(f2).getByLabelText("Odômetro na chegada"), { target: { value: "2" } });
+    fireEvent.submit(f2);
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("list", { name: "Problemas do fechamento" })));
+  });
+
   it("recusa attendance_pending do api também aparece", async () => {
     vi.mocked(api.closeMyTrip).mockRejectedValue(new ApiError(422, { error: "attendance_pending" }, "422"));
     mount(driverView(trip({ status: "in_progress", passengers: [ passenger({ attendance: "boarded" }) ] })));

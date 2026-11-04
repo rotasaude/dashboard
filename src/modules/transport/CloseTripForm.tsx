@@ -1,7 +1,7 @@
 // Fechamento da viagem pelo motorista (módulo 30, F-30.4): odômetro, abastecimentos e despesas. A tela confere tudo antes
 // (`closeProblems`, inclusive presença pendente) e mostra cada problema; a recusa do api vem traduzida, todas de uma vez
 // (caminhos pontuados `fuel.0.liters`, `attendance_pending` em `passengers`). Sem duplo envio.
-import { useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { closeMyTrip, type Trip } from "../../lib/api";
 import { closeBody, closeProblems, expenseKindLabel, transportRefusals, type CloseDraft } from "../../lib/transport";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
@@ -18,6 +18,14 @@ export function CloseTripForm({ trip, onClosed, onCancel, onRefused }: {
   const [ problems, setProblems ] = useState<{ path: string; text: string }[]>([]);
   const [ busy, setBusy ] = useState(false);
   const inFlight = useRef(false);
+  const formRef = useRef<HTMLFormElement | null>(null);
+  // A lista de problemas fica no topo de um formulário longo: no celular, o foco vai ao primeiro campo marcado (ou à lista,
+  // quando a recusa não tem campo) para o motorista ver que algo mudou.
+  useEffect(() => {
+    if (problems.length === 0) return;
+    const form = formRef.current;
+    (form?.querySelector<HTMLElement>("[aria-invalid='true']") ?? form?.querySelector<HTMLElement>("[data-problems]"))?.focus();
+  }, [ problems ]);
 
   const bad = new Set(problems.map((p) => p.path));
   const invalid = (path: string) => (bad.has(path) ? true : undefined);
@@ -57,9 +65,9 @@ export function CloseTripForm({ trip, onClosed, onCancel, onRefused }: {
   const base = `close-${trip.id}`;
 
   return (
-    <form aria-label="Fechamento da viagem" style={stack} onSubmit={(e) => { void submit(e); }} noValidate>
+    <form ref={formRef} aria-label="Fechamento da viagem" style={stack} onSubmit={(e) => { void submit(e); }} noValidate>
       {texts.length > 0 && (
-        <ul aria-label="Problemas do fechamento" style={{ ...list, color: "var(--down)" }}>
+        <ul aria-label="Problemas do fechamento" tabIndex={-1} data-problems style={{ ...list, color: "var(--down)" }}>
           {texts.map((t) => <li key={t} role="alert" style={alert}>{t}</li>)}
         </ul>
       )}
