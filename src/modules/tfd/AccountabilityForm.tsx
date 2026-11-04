@@ -12,30 +12,19 @@ import { SensitiveAction } from "../../components/SensitiveAction";
 import { buttonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { alert, fieldLabel, form, muted, okText, row } from "../exams/styles";
 import { refusalText } from "./stepUpText";
+import { openBlobWindow } from "../transport/openBlobWindow";
 
 export const ACCOUNTABILITY_DONE = "Processo concluído com a prestação de contas.";
 const LEGS_PENDING = "há trecho sem baixa — dê baixa antes da prestação de contas";
 const FLEET_PENDING = "o trecho da frota fecha com a viagem — peça à central";
 export const PROOF_POPUP_BLOCKED = "o navegador bloqueou a janela nova — permita janelas deste site para ver o comprovante";
 const PROOF_MISSING = "o comprovante não está disponível — feche e abra o processo de novo";
-const BLOB_TTL_MS = 60_000;
 
-// Mesmo caminho do openExamPdf/openLabPdf: a janela abre no clique (depois de um await o navegador a trataria como pop-up), sem
-// `opener`, e recebe o arquivo por um endereço blob:. Recusa (410 link_expired, 404) vira frase na tela, nunca JSON na aba.
+// Mesmo caminho do openLabPdf (`openBlobWindow`): recusa (410 link_expired, 404) vira frase na tela, nunca JSON na aba.
 async function openProofWindow(caseId: string): Promise<string | null> {
-  const win = window.open("", "_blank");
-  if (!win) return PROOF_POPUP_BLOCKED;
-  try { win.opener = null; } catch { /* algumas janelas não deixam */ }
-  try {
-    const file = await fetchTfdAccountabilityFile(await getTfdAccountabilityUrl(caseId));
-    const url = URL.createObjectURL(file.blob);
-    win.location.href = url;
-    setTimeout(() => URL.revokeObjectURL(url), BLOB_TTL_MS);
-    return null;
-  } catch (err) {
-    win.close();
-    return err instanceof ApiError && err.status === 404 ? PROOF_MISSING : tfdError(err);
-  }
+  const r = await openBlobWindow(async () => fetchTfdAccountabilityFile(await getTfdAccountabilityUrl(caseId)), PROOF_POPUP_BLOCKED,
+    (err) => (err instanceof ApiError && err.status === 404 ? PROOF_MISSING : tfdError(err)));
+  return r.ok ? null : r.text;
 }
 
 function pendingLegsProblem(c: TfdCase): string | null {
