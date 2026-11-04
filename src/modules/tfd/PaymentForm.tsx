@@ -10,7 +10,7 @@ import { DataTable, type Column } from "../../components/DataTable";
 import { SensitiveAction } from "../../components/SensitiveAction";
 import { buttonStyle, inputStyle } from "../../components/formStyles";
 import { alert, fieldLabel, form, muted, row } from "../exams/styles";
-import { refusalText } from "./stepUpText";
+import { useTfdRefusalText } from "./stepUpText";
 
 export const PAYMENT_IMMUTABLE = "O pagamento registrado não se apaga nem se edita.";
 const PAYMENT_STATUSES = [ "scheduled", "travelling" ];
@@ -27,6 +27,7 @@ const cols: Column<TfdPayment>[] = [
 export function PaymentForm({ tfdCase: c, today, onSaved, onGoToSecurity }: {
   tfdCase: TfdCase; today: string; onSaved(c: TfdCase): void; onGoToSecurity?(): void;
 }) {
+  const refusalText = useTfdRefusalText();
   const ids = useId();
   const empty = (): PaymentDraft => ({ paidOn: today, amount: "", method: "", receiptNumber: "" });
   const [ d, setD ] = useState<PaymentDraft>(empty);

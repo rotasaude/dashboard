@@ -18,6 +18,7 @@ import type { Problem } from "../../lib/pharmacy";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { CodeSearch } from "../consultation/CodeSearch";
 import { CheckField, SelectField, TextField } from "../transport/fleetForm";
+import { useTfdStale } from "./stepUpText";
 import { alert, box, fieldLabel, fieldset, form, legend, muted, row } from "../exams/styles";
 
 export const TFD_PREFILL_KEY = "tfdPrefill";
@@ -101,6 +102,7 @@ function ReportForm({ options, initial, existing, ctx, searchDelayMs, onDone, on
   const [ busy, setBusy ] = useState(false);
   const [ focusTick, setFocusTick ] = useState(0);
   const formRef = useRef<HTMLFormElement | null>(null);
+  const stale = useTfdStale();
   const set = (patch: Partial<ReportDraft>) => setD((x) => ({ ...x, ...patch }));
 
   // Foco na primeira recusa (campo marcado ou, sem campo, o aviso geral).
@@ -128,6 +130,7 @@ function ReportForm({ options, initial, existing, ctx, searchDelayMs, onDone, on
         setCaseId(saved.id);
         setSavedCase(saved);
       } catch (err) {
+        stale(err);
         show(tfdRefusals(err));
         return;
       }
@@ -135,6 +138,7 @@ function ReportForm({ options, initial, existing, ctx, searchDelayMs, onDone, on
       try {
         onDone(await submitTfdCase(saved.id), TFD_SENT);
       } catch (err) {
+        stale(err);
         show(tfdRefusals(err));
         setKept(existing ? CHANGES_KEPT : DRAFT_KEPT);
       }

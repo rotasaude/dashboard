@@ -13,6 +13,7 @@ import { Tag } from "../../components/Tag";
 import { ConfirmButton } from "../../components/ConfirmButton";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { alert, checkLabel, fieldLabel, form, muted, row } from "../exams/styles";
+import { useTfdStale } from "./stepUpText";
 
 const NEW_LEG_STATUSES = [ "authorized", "scheduled", "travelling" ];
 const DONE_STATUSES = [ "scheduled", "travelling" ];
@@ -37,6 +38,7 @@ function legSituation(l: TfdLeg) {
 }
 
 export function LegsPanel({ tfdCase: c, today, onChanged }: { tfdCase: TfdCase; today: string; onChanged(c: TfdCase, text: string): void }) {
+  const stale = useTfdStale();
   const [ adding, setAdding ] = useState(false);
   const [ doneError, setDoneError ] = useState<string[]>([]);
   const canAdd = NEW_LEG_STATUSES.includes(c.status);
@@ -48,6 +50,7 @@ export function LegsPanel({ tfdCase: c, today, onChanged }: { tfdCase: TfdCase; 
     try {
       onChanged(await markTfdLegDone(l.id), "Trecho dado como realizado.");
     } catch (err) {
+      stale(err);
       setDoneError(textsOf(err));
     }
   }
@@ -96,6 +99,7 @@ export function LegsPanel({ tfdCase: c, today, onChanged }: { tfdCase: TfdCase; 
 }
 
 function LegForm({ tfdCase: c, onSaved, onCancel }: { tfdCase: TfdCase; onSaved(c: TfdCase): void; onCancel(): void }) {
+  const stale = useTfdStale();
   const ids = useId();
   const [ d, setD ] = useState<LegDraft>(() => emptyDraft(c));
   const [ problems, setProblems ] = useState<Problem[]>([]);
@@ -123,6 +127,7 @@ function LegForm({ tfdCase: c, onSaved, onCancel }: { tfdCase: TfdCase; onSaved(
     try {
       onSaved(await addTfdLeg(c.id, legBody(d)));
     } catch (err) {
+      stale(err);
       setRefused(textsOf(err));
     } finally {
       running.current = false;

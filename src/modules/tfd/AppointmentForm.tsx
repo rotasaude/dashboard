@@ -9,13 +9,14 @@ import type { Problem } from "../../lib/pharmacy";
 import { SensitiveAction } from "../../components/SensitiveAction";
 import { buttonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { alert, fieldLabel, form, row } from "../exams/styles";
-import { refusalText } from "./stepUpText";
+import { useTfdRefusalText } from "./stepUpText";
 
 type Body = { appointment_at: string; provider_id?: string };
 
 export function AppointmentForm({ tfdCase, providers, now = new Date(), onSaved, onCancel, onGoToSecurity }: {
   tfdCase: TfdCase; providers: { id: string; name: string }[]; now?: Date; onSaved(c: TfdCase): void; onCancel?(): void; onGoToSecurity?(): void;
 }) {
+  const refusalText = useTfdRefusalText();
   const [ at, setAt ] = useState("");
   const [ providerId, setProviderId ] = useState("");
   const [ problems, setProblems ] = useState<Problem[]>([]);

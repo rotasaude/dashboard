@@ -11,7 +11,7 @@ import type { Problem } from "../../lib/pharmacy";
 import { SensitiveAction } from "../../components/SensitiveAction";
 import { buttonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { alert, fieldLabel, form, muted, row } from "../exams/styles";
-import { refusalText } from "./stepUpText";
+import { useTfdRefusalText } from "./stepUpText";
 
 export const NO_ALLOWANCE_WHILE_INPATIENT = "Sem diária enquanto o paciente está internado no destino.";
 
@@ -32,6 +32,7 @@ export function inpatientFloor(c: TfdCase): string | null {
 export function InpatientForm({ tfdCase, today = cityIsoDate(), onSaved, onCancel, onGoToSecurity }: {
   tfdCase: TfdCase; today?: string; onSaved(c: TfdCase): void; onCancel?(): void; onGoToSecurity?(): void;
 }) {
+  const refusalText = useTfdRefusalText();
   const open = tfdCase.inpatient.find((s) => s.to === null);
   const [ from, setFrom ] = useState(open?.from ?? "");
   const [ to, setTo ] = useState("");

@@ -303,6 +303,17 @@ describe("comissão de TFD", () => {
     await waitFor(() => expect(api.listTfdCases).toHaveBeenCalledTimes(2));
   });
 
+  it("recusa de processo que mudou (invalid_transition, not_found): a frase e a fila relida (C7)", async () => {
+    vi.mocked(api.readTfdCase).mockResolvedValue(tfdCase({ status: "authorized" }));
+    vi.mocked(api.cancelTfdCase).mockRejectedValue(new ApiError(422, { error: "invalid_transition" }, "422"));
+    mount();
+    await openCase();
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar processo" }));
+    fireEvent.change(screen.getByLabelText("Motivo"), { target: { value: "paciente mudou de cidade" } });
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+    expect(await screen.findByText("o processo mudou de situação — feche e abra de novo")).not.toBeNull();
+    await waitFor(() => expect(api.listTfdCases).toHaveBeenCalledTimes(2));
+  });
   it("processo encerrado não oferece ação; leitura recusada mostra a frase", async () => {
     vi.mocked(api.readTfdCase).mockRejectedValueOnce(new ApiError(404, { error: "not_found" }, "404"));
     mount();

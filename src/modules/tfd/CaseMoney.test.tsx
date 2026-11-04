@@ -128,6 +128,18 @@ describe("trechos", () => {
     expect(await screen.findByText("o processo mudou de situação — feche e abra de novo")).not.toBeNull();
   });
 
+  it("baixa recusada por processo que mudou relê a fila e os meus pedidos (C7)", async () => {
+    as();
+    const c = tfdCase({ status: "scheduled", legs: [ tfdLeg({ id: "l1", direction: "outbound", date: "2026-11-02", ticket: { amount_cents: 8500, carrier: "Viação Sul" } }) ] });
+    vi.mocked(api.markTfdLegDone).mockRejectedValue(refusal(404, { error: "not_found" }));
+    const { client } = renderWithProviders(<LegsPanel tfdCase={c} today={TODAY30} onChanged={() => {}} />);
+    const spy = vi.spyOn(client, "invalidateQueries");
+    fireEvent.click(await screen.findByRole("button", { name: "Marcar ida de 02/11/2026 como realizada" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+    await waitFor(() => expect(spy).toHaveBeenCalledWith({ queryKey: [ "tfdCases" ] }));
+    expect(spy).toHaveBeenCalledWith({ queryKey: [ "tfdMyCases" ] });
+  });
+
   it("sentido padrão: volta com ida em aberto; ida quando todos os pares estão completos", async () => {
     as();
     const open = tfdCase({ status: "scheduled", legs: [ tfdLeg({ id: "o1", direction: "outbound", date: "2026-11-01" }) ] });

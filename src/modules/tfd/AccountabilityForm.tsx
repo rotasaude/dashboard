@@ -11,7 +11,7 @@ import { fmtIsoDay } from "../../lib/transport";
 import { SensitiveAction } from "../../components/SensitiveAction";
 import { buttonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { alert, fieldLabel, form, muted, okText, row } from "../exams/styles";
-import { refusalText } from "./stepUpText";
+import { useTfdRefusalText } from "./stepUpText";
 import { openBlobWindow } from "../transport/openBlobWindow";
 
 export const ACCOUNTABILITY_DONE = "Processo concluído com a prestação de contas.";
@@ -36,6 +36,7 @@ const NO_FILE = "escolha o comprovante de comparecimento";
 const KIND: Record<string, string> = { "application/pdf": "PDF", "image/png": "PNG", "image/jpeg": "JPG" };
 
 export function AccountabilityForm({ tfdCase, onDone, onGoToSecurity }: { tfdCase: TfdCase; onDone(c: TfdCase): void; onGoToSecurity?(): void }) {
+  const refusalText = useTfdRefusalText();
   const fileId = useId();
   const [ finished, setFinished ] = useState<TfdCase | null>(null);
   const [ file, setFile ] = useState<File | null>(null);

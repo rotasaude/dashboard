@@ -174,6 +174,19 @@ describe("meus pedidos de TFD", () => {
     expect(screen.queryByRole("form", { name: "Laudo de TFD" })).toBeNull();
     expect(api.getTfdOptions).not.toHaveBeenCalled();
   });
+  it("salvar recusado por pedido que mudou (invalid_transition) relê a lista (C7)", async () => {
+    vi.mocked(api.fetchCurrentSession).mockResolvedValue(trUser([ "health_professional" ]));
+    vi.mocked(api.listMyTfdCases).mockResolvedValue([ tfdRow({ status: "returned" }) ]);
+    vi.mocked(api.readTfdCase).mockResolvedValue(tfdCase({ status: "returned" }));
+    vi.mocked(api.getTfdOptions).mockResolvedValue(OPTIONS);
+    vi.mocked(api.updateTfdCase).mockRejectedValue(new ApiError(422, { error: "invalid_transition" }, "422"));
+    renderWithProviders(<TfdMyCases />);
+    fireEvent.click(await screen.findByRole("button", { name: "Abrir o pedido de Maria da Silva" }));
+    const form = await screen.findByRole("form", { name: "Laudo de TFD" });
+    fireEvent.click(within(form).getByRole("button", { name: "Salvar rascunho" }));
+    expect(await screen.findByText("o processo mudou de situação — feche e abra de novo")).not.toBeNull();
+    await waitFor(() => expect(api.listMyTfdCases).toHaveBeenCalledTimes(2));
+  });
   it("fechar o pedido tira o laudo lido da memória (read.reset, C1)", async () => {
     vi.mocked(api.fetchCurrentSession).mockResolvedValue(trUser([ "health_professional" ]));
     vi.mocked(api.listMyTfdCases).mockResolvedValue([ tfdRow({ status: "submitted" }) ]);

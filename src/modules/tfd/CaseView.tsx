@@ -17,7 +17,7 @@ import { TfdEvents, TfdReportView } from "./TfdReportView";
 import { DecisionPanel } from "./DecisionPanel";
 import { AppointmentForm } from "./AppointmentForm";
 import { InpatientForm } from "./InpatientForm";
-import { LocalRefusal, refusalText } from "./stepUpText";
+import { LocalRefusal, useTfdRefusalText } from "./stepUpText";
 
 const APPOINTMENT_STATUSES = [ "submitted", "authorized", "scheduled" ];
 const INPATIENT_STATUSES = [ "scheduled", "travelling" ];
@@ -35,6 +35,7 @@ const nameOf = (c: TfdCase) => c.patient.display_name ?? "paciente";
 export function CaseView({ tfdCase: c, now, today, onChanged, onGoToSecurity, children }: {
   tfdCase: TfdCase; now: Date; today: string; onChanged(c: TfdCase, text: string): void; onGoToSecurity?(): void; children?: ReactNode;
 }) {
+  const refusalText = useTfdRefusalText();
   const [ mode, setMode ] = useState<Mode>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const appointmentButton = useRef<HTMLButtonElement>(null);

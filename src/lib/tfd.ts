@@ -21,6 +21,9 @@ export const READ_TRAIL_NOTE = "Abrir o laudo fica registrado na trilha de acess
 
 export const TFD_CASES_KEY = "tfdCases";
 export const TFD_MY_CASES_KEY = "tfdMyCases";
+
+// Recusas de processo que mudou (outra pessoa decidiu, cancelou ou apagou): a fila e os meus pedidos são relidos (C7).
+export const TFD_STALE_CODES: readonly string[] = [ "not_found", "invalid_transition" ];
 export const TFD_OPTIONS_KEY = "tfdOptions";
 
 // ─── Portão e papéis ────────────────────────────────────────────────────────

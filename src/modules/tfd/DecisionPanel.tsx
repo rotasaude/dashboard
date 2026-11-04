@@ -9,7 +9,7 @@ import { decisionLabel, decisionProblems } from "../../lib/tfd";
 import { SensitiveAction } from "../../components/SensitiveAction";
 import { dangerButtonStyle, secondaryButtonStyle, buttonStyle } from "../../components/formStyles";
 import { alert, row } from "../exams/styles";
-import { LocalRefusal, refusalText } from "./stepUpText";
+import { LocalRefusal, useTfdRefusalText } from "./stepUpText";
 
 const DECISIONS: TfdDecision[] = [ "authorize", "return", "deny" ];
 const DESCRIPTION: Record<TfdDecision, string> = {
@@ -22,6 +22,7 @@ const STYLE: Record<TfdDecision, typeof buttonStyle> = { authorize: buttonStyle,
 export function DecisionPanel({ tfdCase, now = new Date(), onDecided, onNeedAppointment, onGoToSecurity }: {
   tfdCase: TfdCase; now?: Date; onDecided(c: TfdCase): void; onNeedAppointment(): void; onGoToSecurity?(): void;
 }) {
+  const refusalText = useTfdRefusalText();
   const [ choice, setChoice ] = useState<TfdDecision | null>(null);
   const [ blocked, setBlocked ] = useState<string | null>(null);
 
