@@ -70,7 +70,7 @@ describe("RegulationOffers", () => {
     fireEvent.click(screen.getByRole("button", { name: "Revisar" }));
     fireEvent.click(await screen.findByRole("button", { name: "Confirmar" }));
     await waitFor(() => expect(mocked(api.createCareProvider)).toHaveBeenCalledWith({ name: "Clínica do Coração", cnes: "7654321",
-      kind: "contracted", active: true }));
+      kind: "contracted", active: true, ibge_code: null }));
     fireEvent.click(await screen.findByRole("button", { name: "Novo prestador" }));
     text("Nome", "Ambulatório de Especialidades"); text("Tipo", "own");
     expect(screen.queryByLabelText("CNES")).toBeNull();
@@ -104,7 +104,7 @@ describe("RegulationOffers", () => {
     fireEvent.click(screen.getByRole("button", { name: "Revisar" }));
     fireEvent.click(await screen.findByRole("button", { name: "Confirmar" }));
     expect(await screen.findByText("já existe prestador com este CNES")).not.toBeNull();
-    expect(mocked(api.updateCareProvider)).toHaveBeenCalledWith("pr2", { name: "Clínica do Coração", cnes: "1111111", kind: "contracted", active: true });
+    expect(mocked(api.updateCareProvider)).toHaveBeenCalledWith("pr2", { name: "Clínica do Coração", cnes: "1111111", kind: "contracted", active: true, ibge_code: null });
     expect((screen.getByLabelText("CNES") as HTMLInputElement).value).toBe("1111111");
   });
 
