@@ -26,8 +26,10 @@ function MyTrips({ today }: { today: string }) {
   const key = [ TR_MY_TRIPS_KEY, today ];
   const trips = useQuery({ queryKey: key, queryFn: () => listMyTrips(today), ...STATIC_QUERY });
 
-  // A resposta da ação já traz a viagem: troca no lugar (sem esperar a releitura).
+  // A resposta da ação já traz a viagem: troca no lugar (sem esperar a releitura). Uma releitura em curso é cancelada antes,
+  // para não chegar depois e voltar a lista para trás (DFW1).
   function changed(t: Trip) {
+    void queryClient.cancelQueries({ queryKey: key });
     queryClient.setQueryData<Trip[]>(key, (old) => old?.map((x) => (x.id === t.id ? t : x)));
     if (t.status === "done") void queryClient.invalidateQueries({ queryKey: [ TR_MY_TRIPS_KEY ] });
   }

@@ -136,6 +136,24 @@ describe("tela do motorista (celular)", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: "Embarcou — Maria da Silva" }).getAttribute("aria-pressed")).toBe("true"));
   });
 
+  it("releitura em curso não volta a lista para trás depois da resposta da ação (DFW1)", async () => {
+    mount();
+    const [ maria, carlos ] = twoPassengers.passengers;
+    await screen.findByRole("button", { name: "Embarcou — Maria da Silva" });
+    // "Atualizar" começa uma releitura que ainda traz a lista velha.
+    let reread!: (t: api.Trip[]) => void;
+    vi.mocked(api.listMyTrips).mockImplementationOnce(() => new Promise((res) => { reread = res; }));
+    fireEvent.click(screen.getByRole("button", { name: "Atualizar" }));
+    await waitFor(() => expect(reread).toBeTypeOf("function"));
+    const newer = { ...twoPassengers, passengers: [ { ...maria, attendance: "boarded" }, carlos ] };
+    vi.mocked(api.recordAttendance).mockResolvedValueOnce(newer);
+    fireEvent.click(screen.getByRole("button", { name: "Embarcou — Maria da Silva" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Embarcou — Maria da Silva" }).getAttribute("aria-pressed")).toBe("true"));
+    reread([ twoPassengers ]);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.getByRole("button", { name: "Embarcou — Maria da Silva" }).getAttribute("aria-pressed")).toBe("true");
+  });
+
   it("fechar barrado com presença pendente; com tudo marcado, envia odômetro e abastecimento", async () => {
     vi.mocked(api.closeMyTrip).mockResolvedValue(driverView(trip({ status: "done" })));
     mount();
