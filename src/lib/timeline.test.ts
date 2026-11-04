@@ -11,10 +11,10 @@ import { APPOINTMENT, CONSULTATION, DOCUMENT, SCREENING, TRIAGE, entry, page } f
 const refusal = (status: number, error: string, extra: object = {}) => new ApiError(status, { error, ...extra }, String(status));
 
 describe("tipos", () => {
-  it("doze tipos do contrato, em português; desconhecido sai cru", () => {
+  it("treze tipos do contrato, em português; desconhecido sai cru", () => {
     expect(TIMELINE_KINDS.map((k) => k.key)).toEqual([
       "triage", "attendance", "screening", "appointment", "consultation", "clinical_document", "controlled_notification", "campaign", "exam",
-      "procedure", "dispensation", "vaccination"
+      "procedure", "dispensation", "vaccination", "transport"
     ]);
     expect(timelineKindLabel("screening")).toBe("Escuta");
     expect(timelineKindLabel("controlled_notification")).toBe("Notificação de receita");
@@ -34,7 +34,7 @@ describe("filtros", () => {
     expect(filtersFrom(EMPTY_DRAFT)).toEqual(ALL_FILTERS);
     const d = toggleKind(toggleKind(EMPTY_DRAFT, "campaign"), "triage");
     expect(filtersFrom({ ...d, from: "2026-09-01", to: "2026-09-30" })).toEqual({
-      kinds: [ "attendance", "screening", "appointment", "consultation", "clinical_document", "controlled_notification", "exam", "procedure", "dispensation", "vaccination" ], // + exame (21a), procedimento (22), dispensação (27a) e vacina (29)
+      kinds: [ "attendance", "screening", "appointment", "consultation", "clinical_document", "controlled_notification", "exam", "procedure", "dispensation", "vaccination", "transport" ], // + exame (21a), procedimento (22), dispensação (27a), vacina (29) e transporte (30)
       from: "2026-09-01", to: "2026-09-30"
     });
     expect(toggleKind(d, "triage").kinds).toContain("triage");

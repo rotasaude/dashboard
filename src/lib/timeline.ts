@@ -24,16 +24,19 @@ export const TIMELINE_KINDS: { key: TimelineKind; label: string }[] = [
   { key: "exam", label: "Exame" },
   { key: "procedure", label: "Procedimento" },
   { key: "dispensation", label: "Dispensação" },
-  { key: "vaccination", label: "Vacina" }
+  { key: "vaccination", label: "Vacina" },
+  { key: "transport", label: "Transporte" }
 ];
 
 // O tipo Exame só existe com o rastreamento de exames ligado (módulo 21a); o
 // Procedimento, com o faturamento de procedimentos (módulo 22); a Dispensação,
 // com a farmácia — módulo 27a; a Vacina, com a sala de vacina — módulo 29. O interruptor só tira o filtro: a entrada que o
 // api devolve continua na lista (registro clínico retido).
-export function timelineKinds(examTracking: boolean, procedureBilling = false, pharmacy = false, vaccination = false): typeof TIMELINE_KINDS {
+// o Transporte, com o transporte sanitário — módulo 30 (a entrada de TFD também é `transport`, com título 'TFD para <cidade>'; nenhuma
+// abre detalhe, D12).
+export function timelineKinds(examTracking: boolean, procedureBilling = false, pharmacy = false, vaccination = false, transport = false): typeof TIMELINE_KINDS {
   return TIMELINE_KINDS.filter((k) =>
-    (k.key !== "exam" || examTracking) && (k.key !== "procedure" || procedureBilling) && (k.key !== "dispensation" || pharmacy) && (k.key !== "vaccination" || vaccination));
+    (k.key !== "exam" || examTracking) && (k.key !== "procedure" || procedureBilling) && (k.key !== "dispensation" || pharmacy) && (k.key !== "vaccination" || vaccination) && (k.key !== "transport" || transport));
 }
 
 export const ALL_FILTERS: TimelineFilters = { kinds: [], from: "", to: "" };
