@@ -58,6 +58,55 @@ describe("frota, motoristas e destinos", () => {
     await waitFor(() => expect(api.createDriver).toHaveBeenCalledWith({ user_id: "u-n", license_number: "01234567890", license_category: "D", license_expires_on: "2029-01-31", active: true }));
     expect(await screen.findByText("Motorista cadastrado.")).not.toBeNull();
     expect(document.body.textContent).not.toContain("01234567890");
+    // O formulário reaberto não guarda a CNH digitada antes (estado zerado após salvar).
+    fireEvent.click(screen.getByRole("button", { name: "Novo motorista" }));
+    const again = await screen.findByRole("form", { name: "Motorista" });
+    expect((within(again).getByLabelText("Número da CNH") as HTMLInputElement).value).toBe("");
+  });
+
+  it("cancelar descarta a CNH digitada", async () => {
+    mount();
+    fireEvent.click(await screen.findByRole("button", { name: "Novo motorista" }));
+    const form = await screen.findByRole("form", { name: "Motorista" });
+    fillDriver(form);
+    fireEvent.click(within(form).getByRole("button", { name: "Cancelar" }));
+    expect(screen.queryByRole("form", { name: "Motorista" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Novo motorista" }));
+    const again = await screen.findByRole("form", { name: "Motorista" });
+    expect((within(again).getByLabelText("Número da CNH") as HTMLInputElement).value).toBe("");
+  });
+
+  it("422 user_not_driver aparece no campo Pessoa", async () => {
+    vi.mocked(api.createDriver).mockRejectedValue(new ApiError(422, { error: "user_not_driver", path: "user_id" }, "422"));
+    mount();
+    fireEvent.click(await screen.findByRole("button", { name: "Novo motorista" }));
+    const form = await screen.findByRole("form", { name: "Motorista" });
+    await within(form).findByRole("option", { name: "Novo Motorista" });
+    fillDriver(form);
+    fireEvent.submit(form);
+    await screen.findByText("esta pessoa não tem o papel de motorista na Equipe");
+    expect(within(form).getByLabelText("Pessoa").getAttribute("aria-invalid")).toBe("true");
+  });
+
+  it("sem candidatos: explica como convidar", async () => {
+    mount();
+    vi.mocked(api.listDriverCandidates).mockResolvedValue([]);
+    fireEvent.click(await screen.findByRole("button", { name: "Novo motorista" }));
+    expect(await screen.findByText(/Ninguém com o papel de motorista na Equipe está sem cadastro/)).not.toBeNull();
+  });
+
+  it("envio duplo manda uma só chamada", async () => {
+    let release: (v: typeof VAN) => void = () => {};
+    vi.mocked(api.createVehicle).mockReturnValue(new Promise((r) => { release = r; }));
+    mount();
+    fireEvent.click(await screen.findByRole("button", { name: "Novo veículo" }));
+    const form = await screen.findByRole("form", { name: "Veículo" });
+    fillVehicle(form);
+    fireEvent.submit(form);
+    fireEvent.submit(form);
+    expect(api.createVehicle).toHaveBeenCalledTimes(1);
+    release(VAN);
+    expect(await screen.findByText("Veículo salvo.")).not.toBeNull();
   });
 
   it("motorista já cadastrado (409 user_already_driver) aparece no campo Pessoa", async () => {

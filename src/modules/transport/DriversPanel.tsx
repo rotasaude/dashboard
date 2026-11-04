@@ -58,7 +58,7 @@ export function DriversPanel(_props: { today?: string }) {
     setErrors({}); setGeneral(null); setBusy(true); msg.start();
     try {
       if (creating) await createDriver(driverCreateBody(draft)); else if (editing) await updateDriver(editing.id, driverUpdateBody(draft));
-      setEditing(null);
+      setEditing(null); setDraft(EMPTY);
       msg.ok(creating ? "Motorista cadastrado." : "Motorista atualizado.");
       await Promise.all([ queryClient.invalidateQueries({ queryKey: [ TR_DRIVERS_KEY ] }), queryClient.invalidateQueries({ queryKey: [ CANDIDATES_KEY ] }) ]);
     } catch (err) {
@@ -84,9 +84,9 @@ export function DriversPanel(_props: { today?: string }) {
     <Panel title="Motoristas" sub="quem tem o papel de motorista na Equipe · CNH e validade"
       right={<button type="button" style={secondaryButtonStyle} onClick={() => open("new")}>Novo motorista</button>}>
       <div style={stack}>
-        {alertText && <p role="status" style={{ ...alert, fontWeight: 600 }}>{alertText}</p>}
+        <p role="status" style={{ ...alert, fontWeight: 600 }}>{alertText}</p>
         {editing && (
-          <FleetForm label="Motorista" busy={busy} general={general} onSubmit={() => { void save(); }} onCancel={() => setEditing(null)}>
+          <FleetForm key={creating ? "new" : typeof editing === "object" && editing ? editing.id : ""} label="Motorista" busy={busy} general={general} onSubmit={() => { void save(); }} onCancel={() => { setEditing(null); setDraft(EMPTY); }}>
             {creating ? (
               <>
                 <SelectField id="drv-user" label="Pessoa" value={draft.userId} error={errors.user_id} blank="escolha…"

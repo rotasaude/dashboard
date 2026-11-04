@@ -67,7 +67,7 @@ export function DestinationsPanel() {
       <div style={stack}>
         <p style={muted}>{DISTANCE_NOTE}</p>
         {editing && (
-          <FleetForm label="Destino" busy={busy} general={general} onSubmit={() => { void save(); }} onCancel={() => setEditing(null)}>
+          <FleetForm key={editing === "new" ? "new" : editing.id} label="Destino" busy={busy} general={general} onSubmit={() => { void save(); }} onCancel={() => setEditing(null)}>
             <TextField id="dst-ibge" label="Código IBGE" value={draft.ibgeCode} error={errors.ibge_code} inputMode="numeric" autoComplete="off" onChange={(v) => set({ ibgeCode: v })} />
             <TextField id="dst-name" label="Nome" value={draft.name} error={errors.name} onChange={(v) => set({ name: v })} />
             <TextField id="dst-km" label="Distância em km a partir da sede" value={draft.distanceKm} error={errors.distance_km} inputMode="numeric"

@@ -67,7 +67,7 @@ export function VehiclesPanel() {
       right={<button type="button" style={secondaryButtonStyle} onClick={() => open("new")}>Novo veículo</button>}>
       <div style={stack}>
         {editing && (
-          <FleetForm label="Veículo" busy={busy} general={general} onSubmit={() => { void save(); }} onCancel={() => setEditing(null)}>
+          <FleetForm key={editing === "new" ? "new" : editing.id} label="Veículo" busy={busy} general={general} onSubmit={() => { void save(); }} onCancel={() => setEditing(null)}>
             <TextField id="veh-plate" label="Placa" value={draft.plate} error={errors.plate} autoComplete="off"
               onChange={(v) => set({ plate: v })} hint={draft.plate !== "" && normalizePlate(draft.plate) !== draft.plate ? `será gravada como ${normalizePlate(draft.plate)}` : undefined} />
             <TextField id="veh-renavam" label="RENAVAM" value={draft.renavam} error={errors.renavam} inputMode="numeric" autoComplete="off" onChange={(v) => set({ renavam: v })} />
