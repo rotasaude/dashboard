@@ -174,6 +174,18 @@ describe("meus pedidos de TFD", () => {
     expect(screen.queryByRole("form", { name: "Laudo de TFD" })).toBeNull();
     expect(api.getTfdOptions).not.toHaveBeenCalled();
   });
+  it("fechar o pedido tira o laudo lido da memória (read.reset, C1)", async () => {
+    vi.mocked(api.fetchCurrentSession).mockResolvedValue(trUser([ "health_professional" ]));
+    vi.mocked(api.listMyTfdCases).mockResolvedValue([ tfdRow({ status: "submitted" }) ]);
+    vi.mocked(api.readTfdCase).mockResolvedValue(tfdCase({ status: "submitted" }));
+    const { client } = renderWithProviders(<TfdMyCases />);
+    fireEvent.click(await screen.findByRole("button", { name: "Abrir o pedido de Maria da Silva" }));
+    await screen.findByRole("region", { name: "Laudo do pedido" });
+    const held = () => client.getMutationCache().getAll().filter((m) => m.state.data !== undefined).length;
+    expect(held()).toBe(1);
+    fireEvent.click(screen.getByRole("button", { name: "Fechar" }));
+    await waitFor(() => expect(held()).toBe(0));
+  });
   it("sem vínculo 225 a lista mostra a frase do cbo_not_allowed", async () => {
     vi.mocked(api.fetchCurrentSession).mockResolvedValue(trUser([ "health_professional" ]));
     vi.mocked(api.listMyTfdCases).mockRejectedValue(new ApiError(403, { error: "cbo_not_allowed" }, "403"));

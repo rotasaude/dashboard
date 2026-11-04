@@ -54,6 +54,8 @@ function MyCases({ searchDelayMs }: { searchDelayMs?: number }) {
 
   function close(text?: string) {
     setOpened(null);
+    // O laudo lido sai também do estado da mutação (como na fila da comissão).
+    read.reset();
     if (text) { setDone(text); void queryClient.invalidateQueries({ queryKey: [ TFD_MY_CASES_KEY ] }); }
   }
 
