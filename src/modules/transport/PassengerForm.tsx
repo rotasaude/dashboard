@@ -11,16 +11,24 @@ import { alert, checkLabel, fieldLabel, fieldset, form, legend, muted, row } fro
 
 const EXCEPTION_REASONS = [ "follow_up_return", "legacy_patient", "scheduling_pending", "other" ];
 export const TFD_COMPANION_TEXT = "o laudo não indica acompanhante — tire o acompanhante";
+export const TFD_DESTINATION_TEXT = "o destino tem de ser o do TFD deste paciente";
+export const ORIGIN_GONE_TEXT = "este atendimento não está mais marcado — busque os atendimentos de novo";
+// Recusas que dizem que a tela está velha: a frase fica e a agenda relê.
+export const STALE_CODES = [ "not_found", "trip_not_open", "passenger_anonymized" ];
 
 // Campo de cada `path` (local ou do api); o resto vai ao topo.
 const FIELD_OF: Record<string, string> = {
   stop_id: "stop_id", destination_id: "destination_id", provider_name: "provider_name", address: "address", appointment_at: "appointment_at",
   takes_seat: "takes_seat", wheelchair: "wheelchair", exception_reason: "exception_reason", exception_note: "exception_note",
-  "companion.name": "companion.name", "companion.document": "companion.document", "companion.reason": "companion.reason", companion: "companion.reason"
+  "companion.name": "companion.name", "companion.document": "companion.document", "companion.reason": "companion.reason", companion: "companion.reason", "companion.toggle": "companion.toggle"
+};
+// Um campo editado perde a marca dele (o acompanhante: qualquer campo do bloco).
+const EDIT_CLEARS: Record<string, string[]> = {
+  companion: [ "companion.toggle", "companion.name", "companion.document", "companion.reason" ], exceptionReason: [ "exception_reason", "exception_note" ]
 };
 
-export function PassengerForm({ trip, initial, patientName, onSaved, onCancel }: {
-  trip: Trip; initial: PassengerDraft; patientName: string; onSaved(p: TripPassenger): void; onCancel(): void;
+export function PassengerForm({ trip, initial, patientName, onSaved, onCancel, onRefused }: {
+  trip: Trip; initial: PassengerDraft; patientName: string; onSaved(p: TripPassenger): void; onCancel(): void; onRefused?(): void;
 }) {
   const [ d, setD ] = useState<PassengerDraft>(initial);
   const [ errors, setErrors ] = useState<Record<string, string>>({});
@@ -44,9 +52,21 @@ export function PassengerForm({ trip, initial, patientName, onSaved, onCancel }:
     first?.focus();
   }, [ errors, general ]);
 
-  const set = (patch: Partial<PassengerDraft>) => setD((x) => ({ ...x, ...patch }));
-  const setCompanion = (patch: Partial<NonNullable<PassengerDraft["companion"]>>) =>
+  const PATH_OF: Record<string, string> = {
+    stopId: "stop_id", destinationId: "destination_id", providerName: "provider_name", address: "address", appointmentAt: "appointment_at",
+    takesSeat: "takes_seat", wheelchair: "wheelchair", exceptionNote: "exception_note"
+  };
+  function clear(keys: string[]) {
+    const fields = keys.flatMap((k) => EDIT_CLEARS[k] ?? (PATH_OF[k] ? [ PATH_OF[k] ] : []));
+    // Lotação: lugar, cadeira e acompanhante mudam a mesma conta.
+    if (keys.some((k) => k === "takesSeat" || k === "companion")) fields.push("takes_seat");
+    setErrors((e) => (fields.some((f) => e[f]) ? Object.fromEntries(Object.entries(e).filter(([ f ]) => !fields.includes(f))) : e));
+  }
+  const set = (patch: Partial<PassengerDraft>) => { clear(Object.keys(patch)); setD((x) => ({ ...x, ...patch })); };
+  const setCompanion = (patch: Partial<NonNullable<PassengerDraft["companion"]>>) => {
+    clear([ "companion" ]);
     setD((x) => ({ ...x, companion: x.companion ? { ...x.companion, ...patch } : x.companion }));
+  };
 
   function show(list: { path: string; text: string }[]) {
     const byField: Record<string, string> = {};
@@ -70,16 +90,22 @@ export function PassengerForm({ trip, initial, patientName, onSaved, onCancel }:
       const p = await addPassenger(trip.id, passengerBody(d));
       onSaved(p);
     } catch (err) {
-      show(transportRefusals(err).map((r) => {
-        if (r.code === "companion_not_allowed") return { path: "companion", text: d.origin === "tfd" ? TFD_COMPANION_TEXT : r.text };
+      const refusals = transportRefusals(err);
+      show(refusals.map((r) => {
+        // TFD: o motivo não resolve — o foco vai a "Com acompanhante".
+        if (r.code === "companion_not_allowed") return d.origin === "tfd" ? { path: "companion.toggle", text: TFD_COMPANION_TEXT } : { path: "companion", text: r.text };
+        if (r.code === "invalid_request" && r.path === "destination_id" && d.origin === "tfd") return { path: r.path, text: TFD_DESTINATION_TEXT };
+        if (r.code === "invalid_request" && r.path === "origin_id") return { path: "", text: ORIGIN_GONE_TEXT };
         return { path: r.path, text: r.text };
       }));
+      if (refusals.some((r) => STALE_CODES.includes(r.code))) onRefused?.();
     } finally { setBusy(false); }
   }
 
   const err = (name: string) => errors[name];
   const aria = (name: string) => (err(name) ? { "aria-invalid": true as const, "aria-describedby": `${id(name)}-err` } : {});
-  const Err = ({ name }: { name: string }) => (err(name) ? <p id={`${id(name)}-err`} role="alert" style={alert}>{err(name)}</p> : null);
+  // Chamada simples (não componente): a frase não é recriada a cada tecla.
+  const errNode = (name: string) => (err(name) ? <p key={name} id={`${id(name)}-err`} role="alert" style={alert}>{err(name)}</p> : null);
 
   return (
     <form ref={ref} aria-label="Passageiro" style={form} onSubmit={(e) => { void submit(e); }} noValidate>
@@ -103,7 +129,7 @@ export function PassengerForm({ trip, initial, patientName, onSaved, onCancel }:
           </select>
         </label>
       </div>
-      <Err name="stop_id" /><Err name="destination_id" />
+      {errNode("stop_id")}{errNode("destination_id")}
 
       <div style={row}>
         <label style={fieldLabel}>
@@ -119,26 +145,26 @@ export function PassengerForm({ trip, initial, patientName, onSaved, onCancel }:
           <input type="datetime-local" value={d.appointmentAt} style={inputStyle} {...aria("appointment_at")} onChange={(e) => set({ appointmentAt: e.target.value })} />
         </label>
       </div>
-      <Err name="provider_name" /><Err name="address" /><Err name="appointment_at" />
+      {errNode("provider_name")}{errNode("address")}{errNode("appointment_at")}
 
       {exception && (
         <fieldset style={fieldset}>
           <legend style={legend}>Sem atendimento marcado</legend>
           <label style={fieldLabel}>
             Motivo da viagem sem atendimento
-            <select value={d.exceptionReason} style={inputStyle} {...aria("exception_reason")} onChange={(e) => set({ exceptionReason: e.target.value })}>
+            <select value={d.exceptionReason} style={inputStyle} {...aria("exception_reason")} onChange={(e) => set(e.target.value === "other" ? { exceptionReason: e.target.value } : { exceptionReason: e.target.value, exceptionNote: "" })}>
               <option value="">Escolha o motivo</option>
               {EXCEPTION_REASONS.map((r) => <option key={r} value={r}>{exceptionReasonLabel(r)}</option>)}
             </select>
           </label>
-          <Err name="exception_reason" />
+          {errNode("exception_reason")}
           {d.exceptionReason === "other" && (
             <label style={fieldLabel}>
               Descreva o motivo
               <textarea value={d.exceptionNote} rows={2} style={inputStyle} {...aria("exception_note")} onChange={(e) => set({ exceptionNote: e.target.value })} />
             </label>
           )}
-          <Err name="exception_note" />
+          {errNode("exception_note")}
         </fieldset>
       )}
 
@@ -150,11 +176,11 @@ export function PassengerForm({ trip, initial, patientName, onSaved, onCancel }:
           <input type="checkbox" checked={d.wheelchair} {...aria("wheelchair")} onChange={(e) => set({ wheelchair: e.target.checked })} />Cadeira de rodas
         </label>
         <label style={checkLabel}>
-          <input type="checkbox" checked={d.companion !== null}
+          <input type="checkbox" checked={d.companion !== null} {...aria("companion.toggle")}
             onChange={(e) => set({ companion: e.target.checked ? { name: "", document: "", reason: "" } : null })} />Com acompanhante
         </label>
       </div>
-      <Err name="takes_seat" /><Err name="wheelchair" />
+      {errNode("takes_seat")}{errNode("wheelchair")}{errNode("companion.toggle")}
 
       {d.companion && (
         <fieldset style={fieldset}>
@@ -169,13 +195,13 @@ export function PassengerForm({ trip, initial, patientName, onSaved, onCancel }:
               <input value={d.companion.document} style={inputStyle} autoComplete="off" {...aria("companion.document")} onChange={(e) => setCompanion({ document: e.target.value })} />
             </label>
           </div>
-          <Err name="companion.name" /><Err name="companion.document" />
+          {errNode("companion.name")}{errNode("companion.document")}
           <label style={fieldLabel}>
             Motivo do acompanhante
             <textarea value={d.companion.reason} rows={2} style={inputStyle} {...aria("companion.reason")} onChange={(e) => setCompanion({ reason: e.target.value })} />
           </label>
           <p style={muted}>Só é preciso quando o paciente não é criança nem idoso pela regra da cidade.</p>
-          <Err name="companion.reason" />
+          {errNode("companion.reason")}
         </fieldset>
       )}
 

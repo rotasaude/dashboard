@@ -52,6 +52,14 @@ describe("cliente do transporte e TFD (módulo 30)", () => {
     expect(bodyOf()).toEqual({ full_name: "Maria da Silva", birth_date: "1958-04-12" });
     expect(c).toEqual([ { patient_id: "pt1", display_name: "Maria", birth_date: "1958-04-12", has_cpf: false, registration_id: null } ]);
   });
+  it("unidades da central: GET /transport/health_units, lista em { units }", async () => {
+    stub({ units: [ { id: "u1", name: "UBS Centro" } ] });
+    expect(await api.listTransportHealthUnits()).toEqual([ { id: "u1", name: "UBS Centro" } ]);
+    expect(last().url).toBe("/transport/health_units");
+    expect(last().init.method ?? "GET").toBe("GET");
+    stub({});
+    expect(await api.listTransportHealthUnits()).toEqual([]);
+  });
   it("atendimentos marcados: POST com tudo no corpo, sem chave vazia", async () => {
     stub({ items: [] });
     await api.findScheduledCare({ date: "2026-11-03", destinationId: null, healthUnitId: "hu1" });

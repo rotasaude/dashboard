@@ -5844,6 +5844,11 @@ export function confirmTrip(id: string): Promise<Trip> {
 export function cancelTrip(id: string, reason: string): Promise<Trip> {
   return jsonFetch<Trip>(trPath("trips", id, "cancel"), trWrite("POST", { reason }));
 }
+// T46: unidades ativas que a central pode escolher para ver a agenda do 17 (papel transport_dispatcher), em ordem de nome.
+export interface TransportHealthUnit { id: string; name: string }
+export async function listTransportHealthUnits(): Promise<TransportHealthUnit[]> {
+  return (await jsonFetch<{ units?: TransportHealthUnit[] }>(trPath("health_units"))).units ?? [];
+}
 // D4: tudo no corpo (o api recusa query). Sem `healthUnitId` não vem a agenda do 17; com `destinationId` ela sai.
 export async function findScheduledCare(q: { date: string; destinationId?: string | null; healthUnitId?: string | null }): Promise<ScheduledCareItem[]> {
   const body: Record<string, string> = { date: q.date };

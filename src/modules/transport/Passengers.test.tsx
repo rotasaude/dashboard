@@ -10,7 +10,7 @@ import { PassengerList } from "./PassengerList";
 
 vi.mock("../../lib/api", async (orig) => ({ ...(await orig<typeof api>()), fetchCurrentSession: vi.fn(), findScheduledCare: vi.fn(),
   addPassenger: vi.fn(), removePassenger: vi.fn(), fetchTripManifest: vi.fn(), lookupTransportPerson: vi.fn(), findTransportDuplicates: vi.fn(),
-  listActiveUnits: vi.fn() }));
+  listTransportHealthUnits: vi.fn() }));
 afterEach(() => { cleanup(); vi.clearAllMocks(); vi.unstubAllGlobals(); });
 
 const SUGGESTION = { patient: { id: "pt7", display_name: "Carlos Souza", has_cpf: true, cns_masked: null, phone_masked: null }, origin: "regulation",
@@ -19,9 +19,10 @@ const TWO_DESTINATIONS = [ { id: "s1", position: 1, kind: "boarding", destinatio
   { id: "s2", position: 2, kind: "destination", destination_id: "t1", label: "Curitiba" },
   { id: "s3", position: 3, kind: "destination", destination_id: "t2", label: "Ponta Grossa" } ];
 
-function mount(t = trip(), roles?: string[], onChanged: (text: string) => void = () => {}) {
-  vi.mocked(api.fetchCurrentSession).mockResolvedValue(trUser(roles));
-  return renderWithProviders(<PassengerList trip={t} onChanged={onChanged} />);
+function mount(t = trip(), onChanged: (text: string) => void = () => {}, onReload: () => void = () => {}, units: api.TransportHealthUnit[] = []) {
+  vi.mocked(api.fetchCurrentSession).mockResolvedValue(trUser());
+  vi.mocked(api.listTransportHealthUnits).mockResolvedValue(units);
+  return renderWithProviders(<PassengerList trip={t} onChanged={onChanged} onReload={onReload} />);
 }
 
 async function pickSuggestion(item: unknown = SUGGESTION) {
@@ -41,10 +42,10 @@ describe("passageiros da viagem", () => {
     expect(screen.queryByText(/H25|FACOEMULSIFICACAO|oftalmo/i)).toBeNull();
   });
 
-  it("atendimentos marcados na data viram passageiro com a origem; CPF nunca na URL", async () => {
+  it("atendimentos marcados na data viram passageiro com a origem e o corpo exato", async () => {
     vi.mocked(api.addPassenger).mockResolvedValue(passenger({ id: "p7", patient: { ...SUGGESTION.patient } }));
     const onChanged = vi.fn();
-    mount(trip(), undefined, onChanged);
+    mount(trip(), onChanged);
     const form = await pickSuggestion();
     expect(api.findScheduledCare).toHaveBeenCalledWith({ date: "2026-11-03", destinationId: null, healthUnitId: null });
     fireEvent.submit(form);
@@ -64,10 +65,9 @@ describe("passageiros da viagem", () => {
     expect(screen.queryByRole("button", { name: "Pôr Maria da Silva na viagem" })).toBeNull();
   });
 
-  it("agenda da unidade: manda health_unit_id; sem destino na sugestão, a central escolhe", async () => {
-    vi.mocked(api.listActiveUnits).mockResolvedValue([ { id: "u1", name: "UBS Centro", kind: "ubs" } ]);
+  it("agenda da unidade (toda central vê): manda health_unit_id; sem destino na sugestão, a central escolhe", async () => {
     const item = { ...SUGGESTION, origin: "appointment", origin_id: "ap7", destination: { destination_id: null, provider_name: "UBS Centro", address: "Rua A, 1" } };
-    mount(trip({ stops: TWO_DESTINATIONS as never }), [ "transport_dispatcher", "municipal_admin" ]);
+    mount(trip({ stops: TWO_DESTINATIONS as never }), () => {}, () => {}, [ { id: "u1", name: "UBS Centro" } ]);
     fireEvent.change(await screen.findByLabelText("Unidade (agenda da cidade)"), { target: { value: "u1" } });
     const form = await pickSuggestion(item);
     expect(api.findScheduledCare).toHaveBeenCalledWith({ date: "2026-11-03", destinationId: null, healthUnitId: "u1" });
@@ -75,16 +75,19 @@ describe("passageiros da viagem", () => {
     fireEvent.submit(form);
     expect(screen.getByText("escolha o destino")).not.toBeNull();
     expect(api.addPassenger).not.toHaveBeenCalled();
+    // Corrigir o campo tira a marca dele.
+    fireEvent.change(within(form).getByLabelText("Destino"), { target: { value: "t2" } });
+    expect(screen.queryByText("escolha o destino")).toBeNull();
+    expect(within(form).getByLabelText("Destino").getAttribute("aria-invalid")).toBeNull();
   });
 
-  it("sem papel que leia as unidades: nenhuma busca de unidade", async () => {
-    mount();
-    await screen.findByRole("button", { name: "Buscar atendimentos marcados na data" });
-    expect(screen.queryByLabelText("Unidade (agenda da cidade)")).toBeNull();
-    expect(api.listActiveUnits).not.toHaveBeenCalled();
+  it("unidades vêm da rota do transporte (nunca /attendance/units)", async () => {
+    mount(trip(), () => {}, () => {}, [ { id: "u1", name: "UBS Centro" } ]);
+    expect(await screen.findByLabelText("Unidade (agenda da cidade)")).not.toBeNull();
+    expect(api.listTransportHealthUnits).toHaveBeenCalledTimes(1);
   });
 
-  it("sem atendimento: busca por CPF e exige o motivo", async () => {
+  it("sem atendimento: busca por CPF (só dígitos, no corpo) e exige o motivo", async () => {
     vi.mocked(api.lookupTransportPerson).mockResolvedValue({ patient_id: "pt9", citizen_id: null, display_name: "Lúcia Lima", registration_id: null, has_cpf: true, cns_masked: null });
     vi.mocked(api.addPassenger).mockResolvedValue(passenger({ id: "p9" }));
     mount();
@@ -135,6 +138,76 @@ describe("passageiros da viagem", () => {
     fireEvent.change(within(form).getByLabelText("Nome do acompanhante"), { target: { value: "Joana Souza" } });
     fireEvent.submit(form);
     expect(await screen.findByText("o laudo não indica acompanhante — tire o acompanhante")).not.toBeNull();
+    expect(document.activeElement).toBe(within(form).getByLabelText("Com acompanhante"));
+  });
+
+  it("TFD com destino diferente do processo: frase própria no Destino", async () => {
+    vi.mocked(api.addPassenger).mockRejectedValue(new ApiError(422, { error: "invalid_request", path: "destination_id" }, "422"));
+    mount();
+    const form = await pickSuggestion({ ...SUGGESTION, origin: "tfd", origin_id: "c1" });
+    fireEvent.submit(form);
+    const msg = await screen.findByText("o destino tem de ser o do TFD deste paciente");
+    expect(within(form).getByLabelText("Destino").getAttribute("aria-describedby")).toBe(msg.id);
+    expect(document.activeElement).toBe(within(form).getByLabelText("Destino"));
+  });
+
+  it("atendimento que deixou de valer: frase própria no topo", async () => {
+    vi.mocked(api.addPassenger).mockRejectedValue(new ApiError(422, { error: "invalid_request", path: "origin_id" }, "422"));
+    mount();
+    const form = await pickSuggestion();
+    fireEvent.submit(form);
+    expect(await within(form).findByText("este atendimento não está mais marcado — busque os atendimentos de novo")).not.toBeNull();
+  });
+
+  it("recusas de lotação e de parada do api vão ao campo", async () => {
+    vi.mocked(api.addPassenger).mockRejectedValue(new ApiError(422, { error: "invalid", problems: [
+      { path: "takes_seat", error: "seats_full" }, { path: "wheelchair", error: "wheelchair_full" }, { path: "stop_id", error: "stop_not_boarding" } ] }, "422"));
+    mount();
+    const form = await pickSuggestion();
+    fireEvent.submit(form);
+    const seat = await within(form).findByText("a viagem está lotada");
+    expect(within(form).getByLabelText("Ocupa lugar").getAttribute("aria-describedby")).toBe(seat.id);
+    const chair = within(form).getByText("não há vaga de cadeirante nesta viagem");
+    expect(within(form).getByLabelText("Cadeira de rodas").getAttribute("aria-describedby")).toBe(chair.id);
+    const stop = within(form).getByText("a parada escolhida não é de embarque");
+    expect(within(form).getByLabelText("Parada de embarque").getAttribute("aria-describedby")).toBe(stop.id);
+    expect(document.activeElement).toBe(within(form).getByLabelText("Parada de embarque"));
+  });
+
+  it("digitar em outro campo não recria a frase de recusa", async () => {
+    mount(trip({ occupancy: { seats_used: 15, seats: 15, wheelchair_used: 0, wheelchair_spots: 1 } }));
+    const form = await pickSuggestion();
+    fireEvent.submit(form);
+    const before = within(form).getByText("a viagem está lotada");
+    fireEvent.change(within(form).getByLabelText("Prestador"), { target: { value: "Hospital Novo" } });
+    expect(within(form).getByText("a viagem está lotada")).toBe(before);
+  });
+
+  it("trocar o motivo de 'outro' descarta a descrição escondida", async () => {
+    vi.mocked(api.lookupTransportPerson).mockResolvedValue({ patient_id: "pt9", citizen_id: null, display_name: "Lúcia Lima", registration_id: null, has_cpf: true, cns_masked: null });
+    vi.mocked(api.addPassenger).mockResolvedValue(passenger({ id: "p9" }));
+    mount();
+    fireEvent.click(await screen.findByRole("button", { name: "Passageiro sem atendimento marcado" }));
+    fireEvent.change(screen.getByLabelText("CPF"), { target: { value: "123.456.789-09" } });
+    fireEvent.click(screen.getByRole("button", { name: "Buscar pelo CPF" }));
+    fireEvent.click(await screen.findByRole("button", { name: /Lúcia Lima/ }));
+    const form = screen.getByRole("form", { name: "Passageiro" });
+    fireEvent.change(within(form).getByLabelText("Motivo da viagem sem atendimento"), { target: { value: "other" } });
+    fireEvent.change(within(form).getByLabelText("Descreva o motivo"), { target: { value: "curto" } });
+    fireEvent.change(within(form).getByLabelText("Motivo da viagem sem atendimento"), { target: { value: "follow_up_return" } });
+    fireEvent.submit(form);
+    await waitFor(() => expect(api.addPassenger).toHaveBeenCalled());
+    expect(vi.mocked(api.addPassenger).mock.calls[0][1].exception_note).toBeUndefined();
+  });
+
+  it("incluir recusado por viagem fechada: a frase fica e a agenda relê", async () => {
+    vi.mocked(api.addPassenger).mockRejectedValue(new ApiError(422, { error: "trip_not_open" }, "422"));
+    const onReload = vi.fn();
+    mount(trip(), () => {}, onReload);
+    const form = await pickSuggestion();
+    fireEvent.submit(form);
+    expect(await within(form).findByText(/a viagem não aceita mais alteração/)).not.toBeNull();
+    expect(onReload).toHaveBeenCalledTimes(1);
   });
 
   it("paciente já na viagem: a frase vai ao topo do formulário", async () => {
@@ -161,7 +234,7 @@ describe("passageiros da viagem", () => {
     vi.stubGlobal("open", vi.fn(() => win));
     vi.stubGlobal("URL", { ...URL, createObjectURL: vi.fn(() => "blob:x"), revokeObjectURL: vi.fn() });
     const onChanged = vi.fn();
-    mount(trip(), undefined, onChanged);
+    mount(trip(), onChanged);
     fireEvent.click(await screen.findByRole("button", { name: "Lista de passageiros (PDF)" }));
     await waitFor(() => expect(win.location.href).toBe("blob:x"));
     expect(window.open).toHaveBeenCalledWith("", "_blank");
@@ -175,6 +248,20 @@ describe("passageiros da viagem", () => {
     fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
     await waitFor(() => expect(api.removePassenger).toHaveBeenCalledWith("tr1", "p1", "consulta remarcada pelo hospital"));
     await waitFor(() => expect(onChanged).toHaveBeenCalledWith("Passageiro retirado."));
+  });
+
+  it.each([ [ "not_found", 404, "não encontrado — a tela foi atualizada" ], [ "trip_not_open", 422, "a viagem não aceita mais alteração (já começou, foi concluída ou cancelada) — recarregue" ],
+    [ "passenger_anonymized", 422, "o cadastro deste passageiro foi anonimizado — não dá para alterar" ] ])("retirar recusado (%s): a frase aparece e a agenda relê", async (code, status, text) => {
+    vi.mocked(api.removePassenger).mockRejectedValue(new ApiError(status, { error: code }, String(status)));
+    const onReload = vi.fn();
+    const onChanged = vi.fn();
+    mount(trip(), onChanged, onReload);
+    fireEvent.click(await screen.findByRole("button", { name: "Retirar Maria da Silva" }));
+    fireEvent.change(screen.getByLabelText("Motivo"), { target: { value: "consulta remarcada pelo hospital" } });
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+    expect(await screen.findByText(text)).not.toBeNull();
+    expect(onReload).toHaveBeenCalledTimes(1);
+    expect(onChanged).not.toHaveBeenCalled();
   });
 
   it("PDF não encontrado: a frase aparece", async () => {

@@ -3,7 +3,7 @@
 // marcados na data ou passageiro sem atendimento (busca por CPF, com motivo), e retirar com motivo (10–500; o passageiro recebe o aviso).
 // O api devolve a viagem ao retirar; a agenda relê (`onChanged`). Sem polling; o CPF só vai no corpo da busca.
 import { useRef, useState } from "react";
-import { removePassenger, type ScheduledCareItem, type Trip, type TripPassenger } from "../../lib/api";
+import { errorCode, removePassenger, type ScheduledCareItem, type Trip, type TripPassenger } from "../../lib/api";
 import { fmtHourMinute } from "../../lib/format";
 import { attendanceLabel, exceptionReasonLabel, originLabel, passengerDraftFrom, transportRefusals, type PassengerDraft } from "../../lib/transport";
 import { NO_NAME } from "../../lib/territoryRegistry";
@@ -13,7 +13,7 @@ import { DataTable, type Column } from "../../components/DataTable";
 import { SensitiveAction } from "../../components/SensitiveAction";
 import { secondaryButtonStyle } from "../../components/formStyles";
 import { box, muted, row, stack } from "../exams/styles";
-import { PassengerForm } from "./PassengerForm";
+import { PassengerForm, STALE_CODES } from "./PassengerForm";
 import { ScheduledCare } from "./ScheduledCare";
 import { TransportPersonPick } from "./TransportPersonPick";
 import { openManifest } from "./openManifest";
@@ -47,7 +47,8 @@ function exceptionDraft(t: Trip, patientId: string): PassengerDraft {
   };
 }
 
-export function PassengerList({ trip, onChanged }: { trip: Trip; onChanged(text: string): void }) {
+// `onReload`: recusa que diz que a tela está velha (não encontrado, viagem fechada, cadastro anonimizado) — a agenda relê.
+export function PassengerList({ trip, onChanged, onReload }: { trip: Trip; onChanged(text: string): void; onReload?(): void }) {
   const [ step, setStep ] = useState<Step>({ kind: "list" });
   const [ pdfBusy, setPdfBusy ] = useState(false);
   const msg = useActionMessage();
@@ -117,7 +118,7 @@ export function PassengerList({ trip, onChanged }: { trip: Trip; onChanged(text:
       {step.kind === "form" && (
         <div style={box}>
           <PassengerForm key={`${step.draft.patientId}:${step.draft.originId}:${step.round}`} trip={trip} initial={step.draft} patientName={step.name}
-            onCancel={() => setStep({ kind: "list" })}
+            onCancel={() => setStep({ kind: "list" })} onRefused={onReload}
             onSaved={() => { setStep({ kind: "list" }); msg.ok("Passageiro incluído."); onChanged("Passageiro incluído."); }} />
         </div>
       )}
@@ -128,7 +129,12 @@ export function PassengerList({ trip, onChanged }: { trip: Trip; onChanged(text:
           run={async (values) => {
             const reason = (values.reason ?? "").trim();
             if (reason.length < 10 || reason.length > 500) throw new LocalRefusal(REASON_TEXT);
-            await removePassenger(trip.id, step.passenger.id, reason);
+            try {
+              await removePassenger(trip.id, step.passenger.id, reason);
+            } catch (err) {
+              if (STALE_CODES.includes(errorCode(err) ?? "")) onReload?.();
+              throw err;
+            }
             msg.ok("Passageiro retirado.");
             onChanged("Passageiro retirado.");
           }}

@@ -8,7 +8,7 @@ import { TransportTrips } from "./TransportTrips";
 
 vi.mock("../lib/api", async (orig) => ({ ...(await orig<typeof api>()), fetchCurrentSession: vi.fn(), listTrips: vi.fn(), createTrip: vi.fn(),
   updateTrip: vi.fn(), confirmTrip: vi.fn(), cancelTrip: vi.fn(), listVehicles: vi.fn(), listDrivers: vi.fn(), listDestinations: vi.fn(),
-  findScheduledCare: vi.fn() }));
+  findScheduledCare: vi.fn(), listTransportHealthUnits: vi.fn() }));
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
 function mount(trips = [ trip({ status: "planned", vehicle: null, driver: null }) ]) {
@@ -17,6 +17,7 @@ function mount(trips = [ trip({ status: "planned", vehicle: null, driver: null }
   vi.mocked(api.listVehicles).mockResolvedValue([ VAN, CAR ]);
   vi.mocked(api.listDrivers).mockResolvedValue([ DRIVER_D, DRIVER_B, DRIVER_EXPIRED, DRIVER_EXPIRING ]);
   vi.mocked(api.listDestinations).mockResolvedValue([ DEST_CURITIBA, DEST_NEAR ]);
+  vi.mocked(api.listTransportHealthUnits).mockResolvedValue([]);
   return renderWithProviders(<TransportTrips today={TODAY30} />);
 }
 
