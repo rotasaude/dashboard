@@ -42,6 +42,8 @@ export function InpatientForm({ tfdCase, today = cityIsoDate(), onSaved, onCance
   function submit(e: FormEvent) {
     e.preventDefault();
     const found = inpatientProblems(from, to, today);
+    // Com estada aberta, o único registro possível é a alta dela (outra abriria `inpatient_open`).
+    if (open && to === "" && !found.some((p) => p.path === "to")) found.push({ path: "to", text: "informe a alta para fechar a internação aberta" });
     if (floor && /^\d{4}-\d{2}-\d{2}$/.test(from) && from < floor && !found.some((p) => p.path === "from")) {
       found.unshift({ path: "from", text: `o início da internação não pode ser antes de ${fmtIsoDay(floor)}` });
     }

@@ -16,9 +16,9 @@ export function TfdReportView({ c }: { c: TfdCase }) {
     [ "Justificativa", dash(r.justification) ],
     [ "Indicação de acompanhante", r.companion_indicated ? `sim${r.companion_reason ? ` — ${r.companion_reason}` : ""}` : "não" ],
     [ "Tipo de transporte", transportModeLabel(r.transport_mode) ],
-    [ "Cidade de destino", `${c.destination.name} — ${c.destination.distance_km} km` ],
+    [ "Cidade de destino", `${c.destination.name} — ${c.destination.distance_km} km${c.destination.metropolitan ? " (mesma região metropolitana)" : ""}` ],
     [ "Prestador", dash(c.provider?.name) ],
-    [ "Atendimento no destino", c.appointment_at ? fmtDateTime(c.appointment_at) : "—" ]
+    [ "Atendimento no destino", c.appointment_at ? fmtDateTime(c.appointment_at) : "não marcado" ]
   ];
   return (
     <section aria-label="Laudo do pedido" style={{ display: "flex", flexDirection: "column", gap: 6 }}>

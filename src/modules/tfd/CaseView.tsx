@@ -41,7 +41,8 @@ export function CaseView({ tfdCase: c, now, today, onChanged, onGoToSecurity, ch
   // Prestadores só quando o formulário do atendimento abre.
   const options = useQuery({ queryKey: [ TFD_OPTIONS_KEY ], queryFn: getTfdOptions, enabled: mode === "appointment", ...STATIC_QUERY });
 
-  useEffect(() => { heading.current?.focus(); setMode(null); }, [ c.id ]);
+  // TfdQueue monta um CaseView por processo (key): todo estado daqui e dos painéis nasce de novo.
+  useEffect(() => { heading.current?.focus(); }, [ c.id ]);
 
   const changed = (next: TfdCase, text: string) => { setMode(null); onChanged(next, text); };
   const canAppointment = APPOINTMENT_STATUSES.includes(c.status);

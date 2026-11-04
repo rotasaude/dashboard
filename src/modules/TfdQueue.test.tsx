@@ -3,7 +3,7 @@ import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import * as api from "../lib/api";
 import { ApiError } from "../lib/api";
 import { renderWithProviders } from "../test/campaignFixtures";
-import { DEST_CURITIBA, NOW30, TODAY30, tfdCase, tfdLeg, tfdRow, trUser } from "../test/transportFixtures";
+import { DEST_CURITIBA, DEST_METRO, NOW30, TODAY30, tfdCase, tfdLeg, tfdRow, trUser } from "../test/transportFixtures";
 import { TfdQueue } from "./TfdQueue";
 
 vi.mock("../lib/api", async (orig) => ({ ...(await orig<typeof api>()), fetchCurrentSession: vi.fn(), listTfdCases: vi.fn(), readTfdCase: vi.fn(),
@@ -22,6 +22,16 @@ async function openCase() {
   await screen.findByText("H25.1");
 }
 
+function deferred<T>() {
+  let resolve!: (v: T) => void;
+  const promise = new Promise<T>((r) => { resolve = r; });
+  return { promise, resolve };
+}
+const twoRows = () => vi.mocked(api.listTfdCases).mockResolvedValue({ items: [ tfdRow(), tfdRow({ id: "c2", patient: { display_name: "José Souza" } }) ], next_before: null });
+const caseB = (o: Parameters<typeof tfdCase>[0] = {}) => tfdCase({ id: "c2", patient: { id: "pt2", display_name: "José Souza", birth_date: "1970-01-01", has_cpf: true, cns_masked: null },
+  report: { sigtap_code: "0405050372", sigtap_name: "FACOEMULSIFICACAO", cid10: "H40.1", justification: "Glaucoma sem cirurgião no município.",
+    companion_indicated: false, companion_reason: null, transport_mode: "fleet" }, ...o });
+
 const mfaRequired = () => new ApiError(401, { error: "mfa_required" }, "401");
 const closedWindow = () => ({ ...trUser([ "tfd_committee" ]), mfa_verified_at: null });
 
@@ -38,6 +48,91 @@ describe("comissão de TFD", () => {
     expect(await screen.findByText("H25.1")).not.toBeNull();
     expect(screen.getByText("Sem oftalmologia cirúrgica no município.")).not.toBeNull();
     expect(api.readTfdCase).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("não marcado")).not.toBeNull();
+  });
+
+  it("destino metropolitano aparece marcado no laudo", async () => {
+    vi.mocked(api.readTfdCase).mockResolvedValue(tfdCase({ destination: DEST_METRO }));
+    mount();
+    await openCase();
+    expect(screen.getByText("Campo Largo — 60 km (mesma região metropolitana)")).not.toBeNull();
+  });
+
+  it("leitura que volta depois de fechar não abre o laudo (seq)", async () => {
+    vi.mocked(api.readTfdCase).mockResolvedValueOnce(tfdCase());
+    mount();
+    twoRows();
+    await openCase();
+    const late = deferred<api.TfdCase>();
+    vi.mocked(api.readTfdCase).mockReturnValueOnce(late.promise);
+    fireEvent.click(await screen.findByRole("button", { name: "Ler o laudo de José Souza" }));
+    fireEvent.click(screen.getByRole("button", { name: "Fechar laudo" }));
+    late.resolve(caseB());
+    await late.promise;
+    await new Promise((r) => setTimeout(r, 0));
+    expect(screen.queryByText("H40.1")).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Laudo de José Souza" })).toBeNull();
+  });
+
+  it("trocar de processo descarta a decisão começada: o motivo de A nunca vai para B", async () => {
+    vi.mocked(api.readTfdCase).mockResolvedValueOnce(tfdCase({ appointment_at: "2026-11-20T08:00:00-03:00" }));
+    mount();
+    twoRows();
+    await openCase();
+    fireEvent.click(screen.getByRole("button", { name: "Autorizar" }));
+    fireEvent.change(screen.getByLabelText("Motivo"), { target: { value: "motivo escrito para o caso A" } });
+    vi.mocked(api.readTfdCase).mockResolvedValueOnce(caseB());
+    fireEvent.click(await screen.findByRole("button", { name: "Ler o laudo de José Souza" }));
+    expect(await screen.findByText("H40.1")).not.toBeNull();
+    expect(screen.queryByLabelText("Motivo")).toBeNull();
+    expect(screen.queryByText("marque o atendimento no destino antes de autorizar")).toBeNull();
+    // B não tem atendimento: um Autorizar novo roda a conferência de B e não envia nada.
+    fireEvent.click(screen.getByRole("button", { name: "Autorizar" }));
+    expect(screen.getByText("marque o atendimento no destino antes de autorizar")).not.toBeNull();
+    expect(api.decideTfdCase).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Marcar atendimento" }));
+  });
+
+  it("janela do segundo fator fechada: decidir pede o código antes e envia uma vez (Review Focus 4)", async () => {
+    vi.mocked(api.readTfdCase).mockResolvedValue(tfdCase({ appointment_at: "2026-11-20T08:00:00-03:00" }));
+    vi.mocked(api.decideTfdCase).mockResolvedValueOnce(tfdCase({ status: "returned", appointment_at: "2026-11-20T08:00:00-03:00" }));
+    vi.mocked(api.stepUpMfa).mockResolvedValue(undefined as never);
+    mount(closedWindow());
+    await openCase();
+    fireEvent.click(screen.getByRole("button", { name: "Devolver para complementar" }));
+    fireEvent.change(screen.getByLabelText("Motivo"), { target: { value: "falta o exame de imagem" } });
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+    expect(await screen.findByText("informe o código do autenticador")).not.toBeNull();
+    expect(api.decideTfdCase).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText(/código/i), { target: { value: "111222" } });
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+    await waitFor(() => expect(api.decideTfdCase).toHaveBeenCalledTimes(1));
+    expect(api.stepUpMfa).toHaveBeenCalledWith("111222");
+    expect(vi.mocked(api.stepUpMfa).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(api.decideTfdCase).mock.invocationCallOrder[0]);
+    expect(api.decideTfdCase).toHaveBeenCalledWith("c1", { decision: "return", reason: "falta o exame de imagem" });
+    expect(await screen.findByText("Pedido devolvido ao médico para complementar.")).not.toBeNull();
+  });
+
+  it("escrita de A que volta com B aberto não troca a tela nem mostra a frase", async () => {
+    vi.mocked(api.readTfdCase).mockResolvedValueOnce(tfdCase());
+    const late = deferred<api.TfdCase>();
+    vi.mocked(api.cancelTfdCase).mockReturnValueOnce(late.promise);
+    mount();
+    twoRows();
+    await openCase();
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar processo" }));
+    fireEvent.change(screen.getByLabelText("Motivo"), { target: { value: "paciente mudou de cidade" } });
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+    await waitFor(() => expect(api.cancelTfdCase).toHaveBeenCalledTimes(1));
+    vi.mocked(api.readTfdCase).mockResolvedValueOnce(caseB());
+    fireEvent.click(await screen.findByRole("button", { name: "Ler o laudo de José Souza" }));
+    expect(await screen.findByText("H40.1")).not.toBeNull();
+    late.resolve(tfdCase({ status: "cancelled" }));
+    await late.promise;
+    await new Promise((r) => setTimeout(r, 0));
+    expect(screen.queryByText("Processo cancelado.")).toBeNull();
+    expect(screen.queryByText("cancelado")).toBeNull();
+    expect(screen.getByRole("heading", { name: "Laudo de José Souza" })).not.toBeNull();
   });
 
   it("abrir põe o foco no título; fechar tira o laudo da tela", async () => {
@@ -50,7 +145,7 @@ describe("comissão de TFD", () => {
     expect(screen.queryByText("Sem oftalmologia cirúrgica no município.")).toBeNull();
   });
 
-  it("autorizar sem atendimento não envia; step-up repete uma vez (Review Focus 4)", async () => {
+  it("autorizar sem atendimento não envia e põe o foco em Marcar atendimento (Review Focus 4)", async () => {
     vi.mocked(api.readTfdCase).mockResolvedValue(tfdCase());
     mount();
     fireEvent.click(await screen.findByRole("button", { name: "Ler o laudo de Maria da Silva" }));
@@ -125,6 +220,8 @@ describe("comissão de TFD", () => {
     fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
     await waitFor(() => expect(api.setTfdAppointment).toHaveBeenCalledWith("c1", { appointment_at: "2026-11-20T08:00:00-03:00", provider_id: "cp1" }));
     expect(await screen.findByText("Atendimento no destino marcado.")).not.toBeNull();
+    expect(screen.queryByText("não marcado")).toBeNull();
+    expect(screen.getByText(/20\/11\/2026/)).not.toBeNull();
   });
 
   it("marcar atendimento sem escolher prestador mantém o do laudo; janela fechada pede o código", async () => {
@@ -181,6 +278,9 @@ describe("comissão de TFD", () => {
     await openCase();
     fireEvent.click(screen.getByRole("button", { name: "Registrar internação" }));
     expect((screen.getByLabelText("Internado desde") as HTMLInputElement).value).toBe("2026-11-02");
+    fireEvent.submit(screen.getByRole("form", { name: "Internação no destino" }));
+    expect(screen.getByText("informe a alta para fechar a internação aberta")).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Confirmar" })).toBeNull();
     fireEvent.change(screen.getByLabelText("Alta em"), { target: { value: "2026-11-03" } });
     fireEvent.submit(screen.getByRole("form", { name: "Internação no destino" }));
     fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
@@ -207,7 +307,7 @@ describe("comissão de TFD", () => {
     vi.mocked(api.readTfdCase).mockRejectedValueOnce(new ApiError(404, { error: "not_found" }, "404"));
     mount();
     fireEvent.click(await screen.findByRole("button", { name: "Ler o laudo de Maria da Silva" }));
-    expect(await screen.findByRole("alert")).not.toBeNull();
+    expect((await screen.findByRole("alert")).textContent).toBe("não encontrado — a tela foi atualizada");
     vi.mocked(api.readTfdCase).mockResolvedValueOnce(tfdCase({ status: "denied" }));
     await openCase();
     for (const name of [ "Autorizar", "Marcar atendimento", "Registrar internação", "Cancelar processo" ]) {

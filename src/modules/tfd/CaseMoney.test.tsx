@@ -125,7 +125,7 @@ describe("trechos", () => {
     expect(screen.queryByRole("button", { name: "Confirmar" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Marcar ida de 02/11/2026 como realizada" }));
     fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
-    expect(await screen.findByText("o processo mudou de situação — recarregue")).not.toBeNull();
+    expect(await screen.findByText("o processo mudou de situação — feche e abra de novo")).not.toBeNull();
   });
 
   it("sem novo trecho fora de autorizado/agendado/em viagem", async () => {

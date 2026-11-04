@@ -289,7 +289,7 @@ const ERRORS: Record<string, string> = {
   justification_required: "explique por que o tratamento não pode ser feito na cidade",
   appointment_required: APPOINTMENT_REQUIRED,
   billing_unit_missing: "falta a unidade de faturamento nos ajustes do transporte — peça ao administrador",
-  invalid_transition: "o processo mudou de situação — recarregue",
+  invalid_transition: "o processo mudou de situação — feche e abra de novo",
   inpatient_open: "já há uma internação aberta — feche-a primeiro",
   inpatient_overlap: "a internação se sobrepõe a outra deste processo",
   no_outbound_leg: "registre a ida antes da volta",

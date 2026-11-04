@@ -45,6 +45,8 @@ function Queue({ today = cityIsoDate(), now = new Date(), onGoToSecurity }: TfdQ
   const [ opened, setOpened ] = useState<TfdCase | null>(null);
   const [ done, setDone ] = useState<string | null>(null);
   const seq = useRef(0);
+  // Id do processo na tela: escrita que volta de outro processo não troca a tela nem mostra frase.
+  const openedId = useRef<string | null>(null);
 
   const page = useQuery({
     queryKey: [ TFD_CASES_KEY, status, before ],
@@ -57,20 +59,22 @@ function Queue({ today = cityIsoDate(), now = new Date(), onGoToSecurity }: TfdQ
   function open(id: string) {
     const mine = ++seq.current;
     setDone(null);
-    read.mutate(id, { onSuccess: (c) => { if (mine === seq.current) setOpened(c); } });
+    read.mutate(id, { onSuccess: (c) => { if (mine === seq.current) { openedId.current = c.id; setOpened(c); } } });
   }
 
   function close() {
     seq.current++;
+    openedId.current = null;
     setOpened(null);
     read.reset();
   }
 
   function changed(next: TfdCase, text: string) {
-    // Resposta de um processo que já não está aberto não troca a tela.
-    setOpened((prev) => (prev && prev.id === next.id ? next : prev));
-    setDone(text);
     void queryClient.invalidateQueries({ queryKey: [ TFD_CASES_KEY ] });
+    // Resposta de um processo que já não está aberto não troca a tela nem mostra a frase.
+    if (openedId.current !== next.id) return;
+    setOpened(next);
+    setDone(text);
   }
 
   const cols: Column<TfdCaseRow>[] = [
