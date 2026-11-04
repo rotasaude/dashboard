@@ -87,6 +87,14 @@ describe("passageiros da viagem", () => {
     expect(api.listTransportHealthUnits).toHaveBeenCalledTimes(1);
   });
 
+  it("falha ao ler as unidades: diz por quê e a busca segue só com regulação e TFD (A4)", async () => {
+    vi.mocked(api.fetchCurrentSession).mockResolvedValue(trUser());
+    vi.mocked(api.listTransportHealthUnits).mockRejectedValue(new TypeError("network"));
+    renderWithProviders(<PassengerList trip={trip()} onChanged={() => {}} onReload={() => {}} />);
+    expect((await screen.findByRole("alert")).textContent).toContain("não foi possível ler as unidades da agenda da cidade");
+    expect(screen.getByRole("button", { name: "Buscar atendimentos marcados na data" })).not.toBeNull();
+  });
+
   it("sem atendimento: busca por CPF (só dígitos, no corpo) e exige o motivo", async () => {
     vi.mocked(api.lookupTransportPerson).mockResolvedValue({ patient_id: "pt9", citizen_id: null, display_name: "Lúcia Lima", registration_id: null, has_cpf: true, cns_masked: null });
     vi.mocked(api.addPassenger).mockResolvedValue(passenger({ id: "p9" }));

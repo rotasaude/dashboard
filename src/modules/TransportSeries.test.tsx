@@ -139,6 +139,17 @@ describe("séries recorrentes", () => {
   });
 });
 
+describe("destinos indisponíveis (A4)", () => {
+  it("falha ao ler os destinos: diz por quê e não oferece criar nem editar", async () => {
+    setup();
+    vi.mocked(api.listDestinations).mockRejectedValue(new TypeError("network"));
+    renderWithProviders(<TransportSeries today={TODAY30} />);
+    expect((await screen.findByRole("alert")).textContent).toContain("Não foi possível carregar os destinos");
+    expect((screen.getByRole("button", { name: "Nova série" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: /^Editar a série de/ }) as HTMLButtonElement).disabled).toBe(true);
+  });
+});
+
 describe("edição de série com acompanhante", () => {
   const withCompanion = () => series({ companion: { name: "Carlos Silva", document_last4: "4321" } });
   async function openEdit() {

@@ -46,6 +46,9 @@ function SeriesBoard({ today, onGoToSecurity }: { today: string; onGoToSecurity?
   const [ suspending, setSuspending ] = useState<Series | null>(null);
   const msg = useActionMessage();
   const reload = () => queryClient.invalidateQueries({ queryKey: [ TR_SERIES_KEY ] });
+  // Sem os destinos o seletor do formulário ficaria vazio: diz por quê e não oferece criar nem editar (A4).
+  const destError = destinations.isError ? transportError(destinations.error) : null;
+  const destBlocked = destError ? { disabled: true, "aria-describedby": "series-dest-error" } : {};
 
   function status(s: Series) {
     if (s.status === "ended") return <Tag>encerrada</Tag>;
@@ -80,7 +83,7 @@ function SeriesBoard({ today, onGoToSecurity }: { today: string; onGoToSecurity?
       const open = s.status !== "ended" && !inEffect(s, today);
       return (
         <>
-          {open && <button type="button" style={secondaryButtonStyle} aria-label={`Editar a série de ${name}`} onClick={() => { msg.start(); setSuspending(null); setEditing(s); }}>Editar</button>}
+          {open && <button type="button" style={secondaryButtonStyle} aria-label={`Editar a série de ${name}`} {...destBlocked} onClick={() => { msg.start(); setSuspending(null); setEditing(s); }}>Editar</button>}
           {open && (
             <button type="button" style={secondaryButtonStyle} aria-label={`${s.suspended_from ? "Antecipar a suspensão da série" : "Suspender a série"} de ${name}`}
               onClick={() => { msg.start(); setEditing(null); setSuspending(s); }}>{s.suspended_from ? "Antecipar suspensão" : "Suspender"}</button>
@@ -103,11 +106,12 @@ function SeriesBoard({ today, onGoToSecurity }: { today: string; onGoToSecurity?
   }
 
   return (
-    <Panel title="Séries" sub="tratamentos que se repetem nos mesmos dias" right={<button type="button" style={secondaryButtonStyle} onClick={() => { msg.start(); setSuspending(null); setEditing("new"); }}>Nova série</button>}>
+    <Panel title="Séries" sub="tratamentos que se repetem nos mesmos dias" right={<button type="button" style={secondaryButtonStyle} {...destBlocked} onClick={() => { msg.start(); setSuspending(null); setEditing("new"); }}>Nova série</button>}>
       <div style={stack}>
+        {destError && <p id="series-dest-error" role="alert" style={alert}>{`Não foi possível carregar os destinos: ${destError}`}</p>}
         <p style={muted}>{SERIES_RULE_NOTE}</p>
         <p style={muted}>{`Suspender é definitivo: ${RESUME_NOTE}.`}</p>
-        {editing && (
+        {editing && !destError && (
           <SeriesForm key={editing === "new" ? "new" : editing.id} series={editing === "new" ? undefined : editing} destinations={destinations.data ?? []} today={today}
             onCancel={() => setEditing(null)} onSaved={() => { setEditing(null); msg.ok("Série salva."); void reload(); }} />
         )}

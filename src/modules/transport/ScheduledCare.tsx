@@ -36,6 +36,7 @@ export function ScheduledCare({ trip, onPick }: { trip: Trip; onPick(item: Sched
           Buscar atendimentos marcados na data
         </button>
       </div>
+      {units.isError && <p role="alert" style={alert}>{`não foi possível ler as unidades da agenda da cidade: ${transportError(units.error)} — a busca segue só com regulação e TFD`}</p>}
       {search.isError && <p role="alert" style={alert}>{transportError(search.error)}</p>}
       {search.isSuccess && (search.data.length === 0 ? <p style={muted}>Nenhum atendimento marcado nesta data.</p> : (
         <ul style={list}>
