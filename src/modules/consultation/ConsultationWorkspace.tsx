@@ -25,6 +25,7 @@ import { ConsultationLoader, ConsultationView } from "./ConsultationView";
 import { ProceduresPanel } from "../billing/ProceduresPanel";
 import { canUseBilling, unitBills } from "../../lib/billing";
 import { allowedTypes, canRequestRegulation } from "../../lib/regulation";
+import { canRequestTfd } from "../../lib/tfd";
 import { DENTAL_DISABLED, canUseDental, dentalError, dentalRole, offeredKinds } from "../../lib/dental";
 
 interface Props {
@@ -84,6 +85,8 @@ export function ConsultationWorkspace(props: Props) {
   const proceduresOn = canUseBilling(user) && unitBills(props.unit) && (consultation ? !isDental : generalOffered);
   // Módulo 26a (F-26.2): "Pedir regulação" no rascunho e os pedidos na consulta finalizada; só quem pode pedir e com CBO que pede.
   const regulationOn = canRequestRegulation(user) && allowedTypes(consultation?.cbo_code).length > 0 && !baseline;
+  // Módulo 30 (F-30.5): "Pedir TFD" na consulta finalizada; TFD usável (tfd + transporte + prontuário) e CBO 225 da consulta.
+  const tfdOn = canRequestTfd(user, consultation?.cbo_code) && !baseline;
   // `regulation_not_sent` da finalização, só na memória (o GET da consulta não o traz).
   const [ notSent, setNotSent ] = useState<RegulationNotSent[]>([]);
   // Aba Documentos: o editor continua montado (escondido) para o autosave não
@@ -230,7 +233,7 @@ export function ConsultationWorkspace(props: Props) {
             {consultation?.status === "finalized" && (
               <ConsultationView consultation={consultation} options={options.data ?? null} patientProblems={record.data.problems}
                 unitId={props.unit.id} signatureSettled={signatureSettled} regulation={regulationOn} notSent={notSent}
-                searchDelayMs={props.searchDelayMs}
+                tfd={tfdOn} searchDelayMs={props.searchDelayMs}
                 onAddendumAdded={(addendum) => {
                   setConsultation((c) => (c ? withAddendum(c, addendum) : c)); restartRereads();
                   void rereadProblems(consultation.id);

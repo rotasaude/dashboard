@@ -55,6 +55,10 @@ export const tfdStatusTone = (code: string): string => (Object.prototype.hasOwnP
 // `scheduled` nasce com o primeiro trecho registrado; `travelling`, com a primeira ida cumprida.
 export const tfdStatusHint = pick({ scheduled: "primeiro trecho registrado", travelling: "primeira ida cumprida" });
 
+// Eventos do processo: os três próprios e as situações (código novo aparece cru).
+const EVENT_LABEL: Record<string, string> = { created: "pedido criado", appointment_set: "atendimento marcado", inpatient_recorded: "internação registrada" };
+export const tfdEventLabel = (kind: string): string => (Object.prototype.hasOwnProperty.call(EVENT_LABEL, kind) ? EVENT_LABEL[kind] : tfdStatusLabel(kind));
+
 export const legModeLabel = pick({ fleet: "frota da cidade", bus_ticket: "passagem de ônibus", air: "passagem aérea", river: "passagem fluvial" });
 export const transportModeLabel = legModeLabel;
 export const directionLabel = pick({ outbound: "ida", return: "volta" });
@@ -104,11 +108,8 @@ export function reportProblems(d: ReportDraft, o: TfdOptions): Problem[] {
   if (d.cid10.trim() === "") out.push({ path: "report.cid10", text: "informe o CID-10" });
   const just = d.justification.trim().length;
   if (just < 20 || just > 2000) out.push({ path: "report.justification", text: "explique por que o tratamento não pode ser feito na cidade (20 a 2000 caracteres)" });
-  // O api não exige o motivo do acompanhante; só confere 10–500 quando há texto.
-  {
-    const n = d.companionReason.trim().length;
-    if (n > 0 && (n < 10 || n > 500)) out.push({ path: "report.companion_reason", text: "explique por que o paciente precisa de acompanhante (10 a 500 caracteres)" });
-  }
+  const companion = companionProblem(d);
+  if (companion) out.push(companion);
   if (d.destinationId === "") {
     out.push({ path: "destination_id", text: "escolha o destino" });
   } else {
@@ -116,6 +117,27 @@ export function reportProblems(d: ReportDraft, o: TfdOptions): Problem[] {
     if (dest && dest.distance_km < o.min_distance_km) out.push({ path: "destination_id", text: `destino a menos de ${o.min_distance_km} km da sede — não cabe TFD` });
     if (dest?.metropolitan) out.push({ path: "destination_id", text: "destino na mesma região metropolitana — não cabe TFD" });
   }
+  return out;
+}
+
+// O api não exige o motivo do acompanhante; só confere 10–500 quando há texto. Sem indicação, o motivo nem vai no corpo (caseBody).
+const COMPANION_REASON = "explique por que o paciente precisa de acompanhante (10 a 500 caracteres)";
+function companionProblem(d: ReportDraft): Problem | null {
+  if (!d.companionIndicated) return null;
+  const n = d.companionReason.trim().length;
+  return n > 0 && (n < 10 || n > 500) ? { path: "report.companion_reason", text: COMPANION_REASON } : null;
+}
+
+// Salvar rascunho: o api aceita laudo incompleto; só recusa o que é inválido ao salvar (formato do SIGTAP, justificativa > 2000,
+// motivo do acompanhante fora de 10–500, destino ausente). O CID é normalizado pelo api (`invalid_cid10` volta do salvar).
+export function draftProblems(d: ReportDraft): Problem[] {
+  const out: Problem[] = [];
+  const sigtap = d.sigtapCode.trim();
+  if (sigtap !== "" && !/^\d{10}$/.test(sigtap)) out.push({ path: "report.sigtap_code", text: "escolha o procedimento (SIGTAP)" });
+  if (d.justification.trim().length > 2000) out.push({ path: "report.justification", text: "a justificativa tem de 20 a 2000 caracteres" });
+  const companion = companionProblem(d);
+  if (companion) out.push(companion);
+  if (d.destinationId === "") out.push({ path: "destination_id", text: "escolha o destino" });
   return out;
 }
 

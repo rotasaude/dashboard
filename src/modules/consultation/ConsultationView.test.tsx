@@ -6,7 +6,8 @@ import type { ReactNode } from "react";
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const real = await importOriginal<typeof import("../../lib/api")>();
-  return { ...real, fetchConsultationPdf: vi.fn(), getConsultation: vi.fn(), addAddendum: vi.fn(), fetchCurrentSession: vi.fn() };
+  return { ...real, fetchConsultationPdf: vi.fn(), getConsultation: vi.fn(), addAddendum: vi.fn(), fetchCurrentSession: vi.fn(),
+    getTfdOptions: vi.fn(), getTfdPrefill: vi.fn() };
 });
 
 import * as api from "../../lib/api";
@@ -170,3 +171,35 @@ describe("ConsultationView — à vista (AT-07)", () => {
   });
 });
 
+describe("ConsultationView — Pedir TFD (módulo 30)", () => {
+  beforeEach(() => {
+    for (const fn of [ api.fetchCurrentSession, api.getTfdOptions, api.getTfdPrefill ]) mocked(fn).mockReset();
+    sessionAs("us1");
+    mocked(api.getTfdOptions).mockResolvedValue({ destinations: [], providers: [], min_distance_km: 50 });
+    mocked(api.getTfdPrefill).mockResolvedValue({ patient_id: "pt1", cid10: null, sigtap_code: null });
+  });
+
+  it("autora da consulta finalizada, com o TFD usável: Pedir TFD abre o laudo", async () => {
+    wrap(<ConsultationView consultation={finalized()} options={options()} patientProblems={[]} tfd onAddendumAdded={vi.fn()} onClose={vi.fn()} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Pedir TFD" }));
+    expect(await screen.findByRole("form", { name: "Laudo de TFD" })).not.toBeNull();
+    expect(api.getTfdPrefill).toHaveBeenCalledWith("cs1");
+  });
+
+  it("sem tfd, com outra pessoa lendo ou em rascunho, não há Pedir TFD", async () => {
+    wrap(<ConsultationView consultation={finalized()} options={options()} patientProblems={[]} onAddendumAdded={vi.fn()} onClose={vi.fn()} />);
+    expect(await screen.findByRole("button", { name: "Imprimir" })).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Pedir TFD" })).toBeNull();
+    cleanup();
+    wrap(<ConsultationView consultation={finalized({ status: "draft" })} options={options()} patientProblems={[]} tfd onAddendumAdded={vi.fn()} onClose={vi.fn()} />);
+    expect(await screen.findByRole("button", { name: "Imprimir" })).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Pedir TFD" })).toBeNull();
+    cleanup();
+    sessionAs("us9");
+    wrap(<ConsultationView consultation={finalized()} options={options()} patientProblems={[]} tfd onAddendumAdded={vi.fn()} onClose={vi.fn()} />);
+    await settled();
+    expect(screen.getByRole("button", { name: "Fechar painel" })).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Pedir TFD" })).toBeNull();
+    expect(api.getTfdOptions).not.toHaveBeenCalled();
+  });
+});

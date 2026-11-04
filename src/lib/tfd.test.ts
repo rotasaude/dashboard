@@ -3,7 +3,7 @@ import { ApiError } from "./api";
 import {
   FILE_EMPTY, FILE_TYPE, TFD_DISABLED, accountabilityFileProblem, allowanceTotal, appointmentProblems, canEditCase, canRequestTfd, canUseTfd, caseBody,
   decisionLabel, decisionProblems, fleetLegDate, inpatientProblems, legBody, legProblems, paidTotal, paymentBody, paymentProblems,
-  reportDraftFrom, reportProblems, tfdError, tfdRefusals, tfdRoles, tfdStatusLabel, tfdStatusTone
+  draftProblems, reportDraftFrom, tfdEventLabel, reportProblems, tfdError, tfdRefusals, tfdRoles, tfdStatusLabel, tfdStatusTone
 } from "./tfd";
 import { DEST_CURITIBA, DEST_METRO, DEST_NEAR, NOW30, TODAY30, tfdCase, tfdLeg, trUser } from "../test/transportFixtures";
 
@@ -45,6 +45,19 @@ describe("laudo", () => {
       .toEqual([ "report.sigtap_code", "report.cid10", "report.justification" ]);
     expect(codes(reportProblems({ ...report, companionIndicated: true, companionReason: "curto" }, OPTIONS))).toEqual([ "report.companion_reason" ]);
     expect(reportProblems({ ...report, companionIndicated: true, companionReason: "paciente idoso, não anda só" }, OPTIONS)).toEqual([]);
+  });
+  it("motivo do acompanhante só é conferido quando há indicação", () => {
+    expect(reportProblems({ ...report, companionIndicated: false, companionReason: "curto" }, OPTIONS)).toEqual([]);
+  });
+  it("rascunho incompleto salva; só o que o api recusa ao salvar", () => {
+    expect(draftProblems({ ...report, sigtapCode: "", cid10: "", justification: "" })).toEqual([]);
+    expect(codes(draftProblems({ ...report, destinationId: "", sigtapCode: "123", justification: "x".repeat(2001), companionIndicated: true, companionReason: "curto" })))
+      .toEqual([ "report.sigtap_code", "report.justification", "report.companion_reason", "destination_id" ]);
+    expect(draftProblems({ ...report, destinationId: "t2" })).toEqual([]);
+  });
+  it("rótulo dos eventos do processo; código novo cru", () => {
+    expect([ "created", "appointment_set", "inpatient_recorded", "returned", "novo_evento" ].map(tfdEventLabel))
+      .toEqual([ "pedido criado", "atendimento marcado", "internação registrada", "devolvido para complementar", "novo_evento" ]);
   });
   it("sem destino escolhido recusa no destino", () => {
     expect(codes(reportProblems({ ...report, destinationId: "" }, OPTIONS))).toEqual([ "destination_id" ]);

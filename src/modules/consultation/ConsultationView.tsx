@@ -23,6 +23,7 @@ import { useReveal } from "../../lib/useReveal";
 import { RegulationRequestsField } from "./RegulationRequestsField";
 import { openGuide } from "../regulation/openGuide";
 import { DentalSummary, dentalChangesLines } from "../dental/DentalSummary";
+import { TfdRequestForm } from "../tfd/TfdRequestForm";
 
 export interface ConsultationViewProps {
   consultation: Consultation;
@@ -41,6 +42,8 @@ export interface ConsultationViewProps {
   regulation?: boolean;
   // `regulation_not_sent` da finalização (só na memória de quem finalizou); depois de um adendo vale o dele.
   notSent?: RegulationNotSent[];
+  // Módulo 30 (F-30.5): "Pedir TFD" na consulta finalizada, só para a autora e com o TFD usável e CBO 225 (decide quem monta).
+  tfd?: boolean;
   // O 201 devolve o adendo: quem mostra a consulta o acrescenta sem reler
   // (o api recusa a releitura da autora depois que o atendimento fechou).
   onAddendumAdded(addendum: Addendum): void;
@@ -68,6 +71,9 @@ export function ConsultationView(props: ConsultationViewProps) {
   const [ notSent, setNotSent ] = useState<RegulationNotSent[]>(props.notSent ?? []);
   const [ regulationKey, setRegulationKey ] = useState(0);
   const showRegulation = !!props.regulation && isAuthor && c.status === "finalized";
+  const showTfd = !!props.tfd && isAuthor && c.status === "finalized";
+  const [ tfdOpen, setTfdOpen ] = useState(false);
+  const [ tfdNote, setTfdNote ] = useState<string | null>(null);
   // Abre à vista, com o foco no título (AT-07).
   const revealRef = useReveal<HTMLElement>(true);
   const conductLabel = (code: string) => codedLabel(options?.conducts, code);
@@ -161,6 +167,7 @@ export function ConsultationView(props: ConsultationViewProps) {
       )}
 
       {printError && <p role="alert" style={alert}>{printError}</p>}
+      {showTfd && tfdNote && <p role="status" style={{ margin: 0, fontSize: 12.5, color: "var(--ok)" }}>{tfdNote}</p>}
       <div style={{ display: "flex", gap: 8 }}>
         {isAuthor && (
           <button type="button" disabled={printing} style={printing ? disabledButtonStyle : buttonStyle} onClick={() => void print()}>
@@ -170,8 +177,16 @@ export function ConsultationView(props: ConsultationViewProps) {
         {isAuthor && !adding && (
           <button type="button" style={secondaryButtonStyle} onClick={() => setAdding(true)}>Adendo</button>
         )}
+        {showTfd && !tfdOpen && (
+          <button type="button" style={secondaryButtonStyle} onClick={() => { setTfdOpen(true); setTfdNote(null); }}>Pedir TFD</button>
+        )}
         <button type="button" style={secondaryButtonStyle} onClick={props.onClose}>Fechar painel</button>
       </div>
+
+      {showTfd && tfdOpen && (
+        <TfdRequestForm source={{ consultationId: c.id }} searchDelayMs={props.searchDelayMs}
+          onDone={(_case, text) => { setTfdOpen(false); setTfdNote(text); }} onCancel={() => setTfdOpen(false)} />
+      )}
 
       {adding && (
         <AddendumForm consultation={c} options={options} unitId={props.unitId} patientProblems={props.patientProblems}
