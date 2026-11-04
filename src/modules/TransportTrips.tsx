@@ -1,6 +1,109 @@
-// Módulo 30: portão da tela "Viagens do dia" (mesmo filtro do menu); o corpo vem numa task seguinte do plano.
+// Módulo 30 (F-30.2): "Viagens do dia" da central de transporte. Agenda por dia (e veículo), criar, editar, confirmar e cancelar viagem.
+// Leitura STATIC_QUERY (ao abrir, ao trocar o dia, depois de uma ação), sem polling. A resposta de uma ação feita antes de trocar o dia é
+// ignorada (`epoch`), como o `seq` do PrescriptionLookup. A central nunca lê o laudo: nenhuma chamada a /tfd/*.
+import { useRef, useState, type FormEvent } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { listDestinations, listDrivers, listTrips, listVehicles, type Trip } from "../lib/api";
+import { todayInCity } from "../lib/campaigns";
+import {
+  NO_CLINICAL_NOTE, STATIC_QUERY, TR_DESTINATIONS_KEY, TR_DRIVERS_KEY, TR_TRIPS_KEY, TR_VEHICLES_KEY, transportError
+} from "../lib/transport";
+import { useActionMessage } from "../lib/useActionMessage";
+import { ActionMessage } from "../components/ActionMessage";
+import { EmptyState } from "../components/EmptyState";
+import { Panel } from "../components/Panel";
+import { buttonStyle, inputStyle, secondaryButtonStyle } from "../components/formStyles";
+import { alert, fieldLabel, muted, row, stack } from "./exams/styles";
 import { TransportGate } from "./transport/TransportGate";
+import { TripCard } from "./transport/TripCard";
+import { TripForm } from "./transport/TripForm";
 
-export function TransportTrips(_props: { today?: string; onGoToSecurity?: () => void }) {
-  return <TransportGate title="Viagens do dia" sub="Agenda por dia e veículo, passageiros e lista impressa" area="transport" allow={(r) => r.dispatcher}>{() => null}</TransportGate>;
+export function TransportTrips({ today, onGoToSecurity }: { today?: string; onGoToSecurity?: () => void }) {
+  return (
+    <TransportGate title="Viagens do dia" sub="Agenda por dia e veículo, passageiros e lista impressa" area="transport" allow={(r) => r.dispatcher}>
+      {() => <TripsAgenda today={today ?? todayInCity()} onGoToSecurity={onGoToSecurity} />}
+    </TransportGate>
+  );
+}
+
+function TripsAgenda({ today, onGoToSecurity }: { today: string; onGoToSecurity?: () => void }) {
+  const queryClient = useQueryClient();
+  const [ dayInput, setDayInput ] = useState(today);
+  const [ vehicleInput, setVehicleInput ] = useState("");
+  const [ filter, setFilter ] = useState<{ date: string; vehicleId: string | null }>({ date: today, vehicleId: null });
+  const [ creating, setCreating ] = useState(false);
+  const epoch = useRef(0);
+  const msg = useActionMessage();
+
+  const trips = useQuery({
+    queryKey: [ TR_TRIPS_KEY, filter.date, filter.vehicleId ], queryFn: () => listTrips({ date: filter.date, vehicleId: filter.vehicleId }), ...STATIC_QUERY
+  });
+  // Lista completa (com inativos): a tela confere CNH e situação antes de confirmar; os seletores mostram só os ativos.
+  const vehicles = useQuery({ queryKey: [ TR_VEHICLES_KEY ], queryFn: () => listVehicles(), ...STATIC_QUERY });
+  const drivers = useQuery({ queryKey: [ TR_DRIVERS_KEY ], queryFn: () => listDrivers(), ...STATIC_QUERY });
+  const destinations = useQuery({ queryKey: [ TR_DESTINATIONS_KEY ], queryFn: () => listDestinations(), ...STATIC_QUERY });
+
+  const reload = () => { void trips.refetch(); };
+
+  function choose(e: FormEvent) {
+    e.preventDefault();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dayInput)) return;
+    epoch.current += 1;
+    msg.start(); setCreating(false);
+    setFilter({ date: dayInput, vehicleId: vehicleInput === "" ? null : vehicleInput });
+  }
+
+  // Resposta de uma ação começada em outra data é ignorada.
+  const at = epoch.current;
+  function changed(_t: Trip | null, text: string) {
+    if (at !== epoch.current) return;
+    if (text) msg.ok(text);
+    void queryClient.invalidateQueries({ queryKey: [ TR_TRIPS_KEY ] });
+  }
+  function refused() {
+    if (at !== epoch.current) return;
+    reload();
+  }
+
+  const vehicleList = vehicles.data ?? [];
+  const driverList = drivers.data ?? [];
+  const destinationList = destinations.data ?? [];
+  const sorted = [ ...(trips.data ?? []) ].sort((a, b) => a.departure_at.localeCompare(b.departure_at));
+
+  return (
+    <Panel title="Agenda" sub="viagens do dia escolhido, em ordem de saída"
+      right={<button type="button" style={secondaryButtonStyle} onClick={() => { msg.start(); setCreating(true); }}>Nova viagem</button>}>
+      <div style={stack}>
+        <form aria-label="Escolher o dia" style={{ ...row, alignItems: "flex-end" }} onSubmit={choose}>
+          <div style={fieldLabel}>
+            <label htmlFor="trips-day">Dia</label>
+            <input id="trips-day" type="date" value={dayInput} style={inputStyle} onChange={(e) => setDayInput(e.target.value)} />
+          </div>
+          <div style={fieldLabel}>
+            <label htmlFor="trips-vehicle">Veículo</label>
+            <select id="trips-vehicle" value={vehicleInput} style={inputStyle} onChange={(e) => setVehicleInput(e.target.value)}>
+              <option value="">Todos os veículos</option>
+              {vehicleList.map((v) => <option key={v.id} value={v.id}>{`${v.plate} · ${v.model}`}</option>)}
+            </select>
+          </div>
+          <button type="submit" style={buttonStyle}>Ver viagens</button>
+        </form>
+
+        {creating && (
+          <TripForm date={filter.date} vehicles={vehicleList} drivers={driverList} destinations={destinationList}
+            onSaved={(t) => { setCreating(false); changed(t, "Viagem criada."); }} onCancel={() => setCreating(false)} onRefused={refused} />
+        )}
+        <ActionMessage message={msg.message} />
+
+        {trips.isError ? <p role="alert" style={alert}>{transportError(trips.error)}</p>
+          : trips.isPending ? <p style={muted}>carregando…</p>
+          : sorted.length === 0 ? <EmptyState title="nenhuma viagem neste dia" />
+          : sorted.map((t) => (
+            <TripCard key={t.id} trip={t} today={today} vehicles={vehicleList} drivers={driverList} destinations={destinationList}
+              onChanged={changed} onReload={refused} onGoToSecurity={onGoToSecurity} />
+          ))}
+        <p style={muted}>{NO_CLINICAL_NOTE}</p>
+      </div>
+    </Panel>
+  );
 }
