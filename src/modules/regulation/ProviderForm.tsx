@@ -6,7 +6,7 @@
 import { useState } from "react";
 import { createCareProvider, updateCareProvider } from "../../lib/api";
 import type { CareProvider, CareProviderInput, HealthUnitRow, ProviderKind } from "../../lib/api";
-import { cnesProblem, providerKindLabel, providerNameProblem, regulationError } from "../../lib/regulation";
+import { cnesProblem, ibgeProblem, providerKindLabel, providerNameProblem, regulationError } from "../../lib/regulation";
 import { SensitiveAction } from "../../components/SensitiveAction";
 import { buttonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { alert, box, checkLabel, fieldLabel, form, row } from "../exams/styles";
@@ -22,6 +22,7 @@ export function ProviderForm({ provider, units, onSaved, onCancel, onGoToSecurit
   const [ name, setName ] = useState(provider?.name ?? "");
   const [ kind, setKind ] = useState<string>(provider?.kind ?? "");
   const [ cnes, setCnes ] = useState(provider && provider.kind !== "own" ? provider.cnes ?? "" : "");
+  const [ ibge, setIbge ] = useState(provider?.ibge_code ?? "");
   const [ unitId, setUnitId ] = useState(provider?.health_unit?.id ?? "");
   const [ active, setActive ] = useState(provider?.active ?? true);
   const [ error, setError ] = useState<string | null>(null);
@@ -34,13 +35,13 @@ export function ProviderForm({ provider, units, onSaved, onCancel, onGoToSecurit
 
   function body(): CareProviderInput {
     const base = { name: name.trim(), kind: kind as ProviderKind, active };
-    return own ? { ...base, health_unit_id: unitId } : { ...base, cnes: cnes.trim() };
+    return own ? { ...base, health_unit_id: unitId } : { ...base, cnes: cnes.trim(), ibge_code: ibge.trim() === "" ? null : ibge.trim() };
   }
 
   function review() {
     const problem = providerNameProblem(name)
       ?? (kind === "" ? "escolha o tipo do prestador" : null)
-      ?? (own ? (unitId === "" ? "escolha a unidade da rede" : null) : cnesProblem(cnes));
+      ?? (own ? (unitId === "" ? "escolha a unidade da rede" : null) : (cnesProblem(cnes) ?? ibgeProblem(ibge)));
     if (problem) { setError(problem); return; }
     setConfirming(true);
   }
@@ -74,6 +75,15 @@ export function ProviderForm({ provider, units, onSaved, onCancel, onGoToSecurit
                 <input value={cnes} inputMode="numeric" style={inputStyle} onChange={(e) => touch(setCnes)(e.target.value)} />
               </label>
               <span style={hintStyle}>7 dígitos</span>
+            </div>
+          )}
+          {kind !== "" && !own && (
+            <div style={fieldBox}>
+              <label style={fieldLabel}>
+                Município (código IBGE)
+                <input value={ibge} inputMode="numeric" style={inputStyle} onChange={(e) => touch(setIbge)(e.target.value)} />
+              </label>
+              <span style={hintStyle}>Usado pelo transporte para saber a cidade do atendimento</span>
             </div>
           )}
           {own && (

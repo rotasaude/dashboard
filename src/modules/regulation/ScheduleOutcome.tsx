@@ -6,9 +6,10 @@
 // própria o horário é do pedido de agendamento do módulo 17 e aqui não há formulário. `stale_version` deixa o formulário como
 // está. Local e observação não vão a log nem a URL.
 import { useState } from "react";
-import { errorCode, recordRegulationOutcome, scheduleRegulationRequest } from "../../lib/api";
+import { useQuery } from "@tanstack/react-query";
+import { errorCode, listCareProviders, recordRegulationOutcome, scheduleRegulationRequest } from "../../lib/api";
 import type { RegulationRequest } from "../../lib/api";
-import { OUTCOME_BEFORE_SCHEDULE_TEXT, actionsFor, notesProblem, placeProblem, regulationError, scheduleAtProblem } from "../../lib/regulation";
+import { OUTCOME_BEFORE_SCHEDULE_TEXT, REG_PROVIDERS_KEY, STATIC_QUERY, actionsFor, notesProblem, placeProblem, regulationError, scheduleAtProblem } from "../../lib/regulation";
 import { cityIsoDate, cityLocalIso } from "../../lib/format";
 import { ConfirmButton } from "../../components/ConfirmButton";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
@@ -110,8 +111,22 @@ function ScheduleForm({ request, onSaved, onRefused, onCancel, onStart }: {
   const [ at, setAt ] = useState("");
   const [ place, setPlace ] = useState(request.schedule?.place ?? "");
   const [ notes, setNotes ] = useState(request.schedule?.notes ?? "");
+  // Remarcar troca o agendamento inteiro: o prestador atual vem preescolhido e é reenviado, ou o api o apaga.
+  const [ providerId, setProviderId ] = useState(request.schedule?.care_provider?.id ?? "");
   const [ problem, setProblem ] = useState<string | null>(null);
   const [ busy, setBusy ] = useState(false);
+
+  const providers = useQuery({ queryKey: [ REG_PROVIDERS_KEY ], queryFn: listCareProviders, ...STATIC_QUERY });
+  const current = request.schedule?.care_provider ?? null;
+  const options = (providers.data ?? []).filter((p) => p.active && p.kind !== "own").map((p) => ({ id: p.id, name: p.name }));
+  // O prestador atual aparece mesmo se deixou de ser elegível (desativado): sem ele o select o perderia em silêncio.
+  if (current && !options.some((o) => o.id === current.id)) options.push({ id: current.id, name: current.name });
+
+  function pick(id: string) {
+    setProviderId(id);
+    const found = options.find((o) => o.id === id);
+    if (found && place.trim() === "") setPlace(found.name);
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -124,7 +139,8 @@ function ScheduleForm({ request, onSaved, onRefused, onCancel, onStart }: {
     setBusy(true);
     try {
       const updated = await scheduleRegulationRequest(request.id, {
-        at: iso, place: place.trim(), notes: notes.trim() === "" ? null : notes.trim(), version: request.version
+        at: iso, place: place.trim(), notes: notes.trim() === "" ? null : notes.trim(), version: request.version,
+        ...(providerId !== "" ? { care_provider_id: providerId } : {})
       });
       onSaved(updated);
     } catch (err) {
@@ -139,6 +155,13 @@ function ScheduleForm({ request, onSaved, onRefused, onCancel, onStart }: {
       <label style={fieldLabel}>
         Data e hora
         <input type="datetime-local" value={at} style={inputStyle} onChange={(e) => setAt(e.target.value)} />
+      </label>
+      <label style={fieldLabel}>
+        Prestador cadastrado
+        <select value={providerId} style={inputStyle} onChange={(e) => pick(e.target.value)}>
+          <option value="">Nenhum (só o local)</option>
+          {options.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+        </select>
       </label>
       <label style={fieldLabel}>
         Local

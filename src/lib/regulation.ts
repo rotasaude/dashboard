@@ -327,6 +327,12 @@ export function cnesProblem(text: string): string | null {
   return /^\d{7}$/.test(text.trim()) ? null : "CNES tem 7 dígitos";
 }
 
+// Município do prestador (módulo 30): vazio vale; senão são 7 dígitos do IBGE.
+export function ibgeProblem(raw: string): string | null {
+  const t = raw.trim();
+  return t === "" || /^\d{7}$/.test(t) ? null : "o código IBGE do município tem 7 dígitos";
+}
+
 export function providerNameProblem(text: string): string | null {
   const n = text.trim().length;
   return n >= 3 && n <= 120 ? null : "o nome tem de 3 a 120 caracteres";
