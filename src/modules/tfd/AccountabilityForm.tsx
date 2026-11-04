@@ -4,7 +4,7 @@
 // corpo (pode trazer o nome do paciente) — o cliente manda só o tipo e o conteúdo em base64. Concluído, o comprovante abre por um
 // endereço curto (5 min) pedido no clique.
 import { useId, useState } from "react";
-import { getTfdAccountabilityUrl, uploadTfdAccountability, type TfdCase } from "../../lib/api";
+import { ApiError, fetchTfdAccountabilityFile, getTfdAccountabilityUrl, uploadTfdAccountability, type TfdCase } from "../../lib/api";
 import { accountabilityFileProblem, tfdError } from "../../lib/tfd";
 import { cityIsoDate } from "../../lib/format";
 import { fmtIsoDay } from "../../lib/transport";
@@ -15,6 +15,34 @@ import { refusalText } from "./stepUpText";
 
 export const ACCOUNTABILITY_DONE = "Processo concluído com a prestação de contas.";
 const LEGS_PENDING = "há trecho sem baixa — dê baixa antes da prestação de contas";
+const FLEET_PENDING = "o trecho da frota fecha com a viagem — peça à central";
+export const PROOF_POPUP_BLOCKED = "o navegador bloqueou a janela nova — permita janelas deste site para ver o comprovante";
+const PROOF_MISSING = "o comprovante não está disponível — feche e abra o processo de novo";
+const BLOB_TTL_MS = 60_000;
+
+// Mesmo caminho do openExamPdf/openLabPdf: a janela abre no clique (depois de um await o navegador a trataria como pop-up), sem
+// `opener`, e recebe o arquivo por um endereço blob:. Recusa (410 link_expired, 404) vira frase na tela, nunca JSON na aba.
+async function openProofWindow(caseId: string): Promise<string | null> {
+  const win = window.open("", "_blank");
+  if (!win) return PROOF_POPUP_BLOCKED;
+  try { win.opener = null; } catch { /* algumas janelas não deixam */ }
+  try {
+    const file = await fetchTfdAccountabilityFile(await getTfdAccountabilityUrl(caseId));
+    const url = URL.createObjectURL(file.blob);
+    win.location.href = url;
+    setTimeout(() => URL.revokeObjectURL(url), BLOB_TTL_MS);
+    return null;
+  } catch (err) {
+    win.close();
+    return err instanceof ApiError && err.status === 404 ? PROOF_MISSING : tfdError(err);
+  }
+}
+
+function pendingLegsProblem(c: TfdCase): string | null {
+  const open = c.legs.filter((l) => !l.voided && !l.done);
+  if (open.length === 0) return null;
+  return open.some((l) => l.mode !== "fleet") ? LEGS_PENDING : FLEET_PENDING;
+}
 const NO_FILE = "escolha o comprovante de comparecimento";
 const KIND: Record<string, string> = { "application/pdf": "PDF", "image/png": "PNG", "image/jpeg": "JPG" };
 
@@ -37,20 +65,17 @@ export function AccountabilityForm({ tfdCase, onDone, onGoToSecurity }: { tfdCas
   function send() {
     if (pending) return;
     // Conferência antes de qualquer leitura do arquivo.
-    const found = !file ? NO_FILE : accountabilityFileProblem(file)
-      ?? (c.legs.some((l) => !l.voided && !l.done) ? LEGS_PENDING : null);
+    const found = !file ? NO_FILE : accountabilityFileProblem(file) ?? pendingLegsProblem(c);
     setProblem(found);
     if (found === null) setPending(true);
   }
 
   async function openProof() {
     if (opening) return;
-    setOpening(true);
     setOpenError(null);
+    setOpening(true);
     try {
-      window.open(await getTfdAccountabilityUrl(c.id), "_blank", "noopener");
-    } catch (err) {
-      setOpenError(tfdError(err));
+      setOpenError(await openProofWindow(c.id));
     } finally {
       setOpening(false);
     }
@@ -88,7 +113,15 @@ export function AccountabilityForm({ tfdCase, onDone, onGoToSecurity }: { tfdCas
           description="O comprovante fica no processo e o processo é concluído; não dá para trocar depois."
           translateError={refusalText}
           run={async () => {
-            const next = await uploadTfdAccountability(c.id, file);
+            let next: TfdCase;
+            try {
+              next = await uploadTfdAccountability(c.id, file);
+            } catch (err) {
+              // Segundo fator e sessão continuam com o SensitiveAction; outra recusa fecha a confirmação e libera o arquivo.
+              if (err instanceof ApiError && err.status === 401) throw err;
+              setProblem(refusalText(err));
+              return;
+            }
             setFinished(next);
             onDone(next);
           }}

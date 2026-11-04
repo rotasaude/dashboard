@@ -11,7 +11,7 @@ import { AccountabilityForm } from "./AccountabilityForm";
 import { TfdQueue } from "../TfdQueue";
 
 vi.mock("../../lib/api", async (orig) => ({ ...(await orig<typeof api>()), fetchCurrentSession: vi.fn(), addTfdLeg: vi.fn(), markTfdLegDone: vi.fn(),
-  recordTfdPayment: vi.fn(), uploadTfdAccountability: vi.fn(), getTfdAccountabilityUrl: vi.fn(), listTfdCases: vi.fn(), readTfdCase: vi.fn(),
+  recordTfdPayment: vi.fn(), uploadTfdAccountability: vi.fn(), getTfdAccountabilityUrl: vi.fn(), fetchTfdAccountabilityFile: vi.fn(), listTfdCases: vi.fn(), readTfdCase: vi.fn(),
   listTfdAllowances: vi.fn() }));
 afterEach(() => { cleanup(); vi.clearAllMocks(); vi.restoreAllMocks(); });
 const authorized = tfdCase({ status: "authorized", appointment_at: "2026-11-20T08:00:00-03:00",
@@ -128,6 +128,20 @@ describe("trechos", () => {
     expect(await screen.findByText("o processo mudou de situação — feche e abra de novo")).not.toBeNull();
   });
 
+  it("sentido padrão: volta com ida em aberto; ida quando todos os pares estão completos", async () => {
+    as();
+    const open = tfdCase({ status: "scheduled", legs: [ tfdLeg({ id: "o1", direction: "outbound", date: "2026-11-01" }) ] });
+    const first = renderWithProviders(<LegsPanel tfdCase={open} today={TODAY30} onChanged={() => {}} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Novo trecho" }));
+    expect((screen.getByLabelText("Sentido") as HTMLSelectElement).value).toBe("return");
+    first.unmount();
+    const paired = tfdCase({ status: "travelling", legs: [ tfdLeg({ id: "o1", direction: "outbound", date: "2026-11-01", done: true }),
+      tfdLeg({ id: "r1", direction: "return", date: "2026-11-02", outbound_leg_id: "o1", done: true }) ] });
+    renderWithProviders(<LegsPanel tfdCase={paired} today={TODAY30} onChanged={() => {}} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Novo trecho" }));
+    expect((screen.getByLabelText("Sentido") as HTMLSelectElement).value).toBe("outbound");
+  });
+
   it("sem novo trecho fora de autorizado/agendado/em viagem", async () => {
     as();
     renderWithProviders(<LegsPanel tfdCase={tfdCase({ status: "completed" })} today={TODAY30} onChanged={() => {}} />);
@@ -213,7 +227,6 @@ describe("ajuda de custo e pagamento", () => {
 describe("prestação de contas (Review Focus 5)", () => {
   it("comprovante grande ou de outro tipo não sai; duplo clique envia uma vez", async () => {
     as();
-    const read = vi.spyOn(FileReader.prototype, "readAsDataURL");
     let finish!: (c: unknown) => void;
     vi.mocked(api.uploadTfdAccountability).mockImplementation(() => new Promise((res) => { finish = res; }) as never);
     renderWithProviders(<AccountabilityForm tfdCase={tfdCase({ status: "travelling" })} onDone={() => {}} />);
@@ -228,8 +241,8 @@ describe("prestação de contas (Review Focus 5)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Enviar e concluir o processo" }));
     expect(screen.getByText("o comprovante precisa ser PDF, JPG ou PNG")).not.toBeNull();
     expect(screen.queryByRole("button", { name: "Confirmar" })).toBeNull();
+    // A guarda é esta: o cliente (único que lê o arquivo em base64) não foi chamado.
     expect(api.uploadTfdAccountability).not.toHaveBeenCalled();
-    expect(read).not.toHaveBeenCalled();
     const png = new File([ new Uint8Array(200 * 1024) ], "comprovante-maria.png", { type: "image/png" });
     fireEvent.change(input, { target: { files: [ png ] } });
     expect(screen.getByText("arquivo escolhido: PNG, 200 KB")).not.toBeNull();
@@ -258,36 +271,94 @@ describe("prestação de contas (Review Focus 5)", () => {
     expect(JSON.parse(String(init.body))).toEqual({ content_type: "application/pdf", data: btoa("%PDF-1") });
   });
 
-  it("trecho sem baixa barra antes de enviar; legs_pending do api também aparece", async () => {
+  it("trecho sem baixa barra antes de enviar (frota: peça à central); recusa do api libera o arquivo", async () => {
     as();
-    const pendingLeg = tfdCase({ status: "travelling", legs: [ tfdLeg({ id: "l1", date: "2026-11-01", done: false }) ] });
-    const { unmount } = renderWithProviders(<AccountabilityForm tfdCase={pendingLeg} onDone={() => {}} />);
-    const input = (await screen.findByLabelText("Comprovante de comparecimento")) as HTMLInputElement;
-    fireEvent.change(input, { target: { files: [ new File([ "%PDF" ], "x.pdf", { type: "application/pdf" }) ] } });
+    const pdf = () => new File([ "%PDF" ], "x.pdf", { type: "application/pdf" });
+    const ticketOpen = tfdCase({ status: "travelling", legs: [ tfdLeg({ id: "l1", date: "2026-11-01", done: false }) ] });
+    const first = renderWithProviders(<AccountabilityForm tfdCase={ticketOpen} onDone={() => {}} />);
+    fireEvent.change(await screen.findByLabelText("Comprovante de comparecimento"), { target: { files: [ pdf() ] } });
     fireEvent.click(screen.getByRole("button", { name: "Enviar e concluir o processo" }));
     expect(screen.getByText("há trecho sem baixa — dê baixa antes da prestação de contas")).not.toBeNull();
+    first.unmount();
+    const fleetOpen = tfdCase({ status: "travelling", legs: [ tfdLeg({ id: "l1", mode: "fleet", ticket: null, trip_passenger_id: "p5", date: "2026-11-01" }) ] });
+    const second = renderWithProviders(<AccountabilityForm tfdCase={fleetOpen} onDone={() => {}} />);
+    fireEvent.change(await screen.findByLabelText("Comprovante de comparecimento"), { target: { files: [ pdf() ] } });
+    fireEvent.click(screen.getByRole("button", { name: "Enviar e concluir o processo" }));
+    expect(screen.getByText("o trecho da frota fecha com a viagem — peça à central")).not.toBeNull();
     expect(api.uploadTfdAccountability).not.toHaveBeenCalled();
-    unmount();
-    vi.mocked(api.uploadTfdAccountability).mockRejectedValue(refusal(422, { error: "legs_pending" }));
+    second.unmount();
+    vi.mocked(api.uploadTfdAccountability).mockRejectedValue(refusal(422, { error: "invalid_file" }));
     renderWithProviders(<AccountabilityForm tfdCase={tfdCase({ status: "travelling", legs: [ tfdLeg({ voided: true }) ] })} onDone={() => {}} />);
     const again = (await screen.findByLabelText("Comprovante de comparecimento")) as HTMLInputElement;
-    fireEvent.change(again, { target: { files: [ new File([ "%PDF" ], "x.pdf", { type: "application/pdf" }) ] } });
+    fireEvent.change(again, { target: { files: [ pdf() ] } });
     fireEvent.click(screen.getByRole("button", { name: "Enviar e concluir o processo" }));
+    expect(again.disabled).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
-    expect(await screen.findByText("há trecho sem baixa — dê baixa antes da prestação de contas")).not.toBeNull();
+    expect(await screen.findByText("o comprovante precisa ser PDF, JPG ou PNG de até 10 MB")).not.toBeNull();
+    expect(again.disabled).toBe(false);
+    expect(screen.queryByRole("button", { name: "Confirmar" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Enviar e concluir o processo" })).not.toBeNull();
   });
 
-  it("processo concluído abre o comprovante por endereço curto", async () => {
-    as();
-    const open = vi.spyOn(window, "open").mockReturnValue(null);
-    vi.mocked(api.getTfdAccountabilityUrl).mockResolvedValue("/tfd/files/tok1");
+  describe("abrir o comprovante", () => {
     const done = tfdCase({ status: "completed", accountability: { closed_at: "2026-11-02T10:00:00-03:00", document: { id: "f1", filename: "comprovante-2026-11-02.pdf" } } });
-    renderWithProviders(<AccountabilityForm tfdCase={done} onDone={() => {}} />);
-    expect(await screen.findByText("comprovante enviado em 02/11/2026")).not.toBeNull();
-    expect(screen.queryByLabelText("Comprovante de comparecimento")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Abrir o comprovante" }));
-    await waitFor(() => expect(open).toHaveBeenCalledWith("/tfd/files/tok1", "_blank", "noopener"));
-    expect(api.getTfdAccountabilityUrl).toHaveBeenCalledWith("c1");
+    const fakeWindow = () => ({ opener: {} as unknown, location: { href: "" }, close: vi.fn() });
+    const origCreate = URL.createObjectURL;
+    const origRevoke = URL.revokeObjectURL;
+    afterEach(() => { URL.createObjectURL = origCreate; URL.revokeObjectURL = origRevoke; });
+
+    it("a janela abre no clique, sem opener, e recebe o arquivo por blob:", async () => {
+      as();
+      const win = fakeWindow();
+      const open = vi.spyOn(window, "open").mockReturnValue(win as unknown as Window);
+      URL.createObjectURL = vi.fn(() => "blob:proof1");
+      URL.revokeObjectURL = vi.fn();
+      const blob = new Blob([ "%PDF" ], { type: "application/pdf" });
+      vi.mocked(api.getTfdAccountabilityUrl).mockResolvedValue("/tfd/files/tok1");
+      vi.mocked(api.fetchTfdAccountabilityFile).mockResolvedValue({ blob, filename: "comprovante-2026-11-02.pdf" });
+      renderWithProviders(<AccountabilityForm tfdCase={done} onDone={() => {}} />);
+      expect(await screen.findByText("comprovante enviado em 02/11/2026")).not.toBeNull();
+      expect(screen.queryByLabelText("Comprovante de comparecimento")).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Abrir o comprovante" }));
+      // Ainda dentro do clique, antes de qualquer resposta.
+      expect(open).toHaveBeenCalledWith("", "_blank");
+      expect(win.opener).toBeNull();
+      await waitFor(() => expect(win.location.href).toBe("blob:proof1"));
+      expect(api.getTfdAccountabilityUrl).toHaveBeenCalledWith("c1");
+      expect(api.fetchTfdAccountabilityFile).toHaveBeenCalledWith("/tfd/files/tok1");
+      expect(URL.createObjectURL).toHaveBeenCalledWith(blob);
+      expect(screen.queryByText(/comprovante-2026-11-02/)).toBeNull();
+    });
+
+    it("410 link_expired e 404 viram frase na tela e fecham a janela; pop-up bloqueado avisa", async () => {
+      as();
+      const win = fakeWindow();
+      const open = vi.spyOn(window, "open").mockReturnValue(win as unknown as Window);
+      vi.mocked(api.getTfdAccountabilityUrl).mockResolvedValue("/tfd/files/tok1");
+      vi.mocked(api.fetchTfdAccountabilityFile).mockRejectedValueOnce(refusal(410, { error: "link_expired" }))
+        .mockRejectedValueOnce(refusal(404, { error: "not_found" }));
+      renderWithProviders(<AccountabilityForm tfdCase={done} onDone={() => {}} />);
+      fireEvent.click(await screen.findByRole("button", { name: "Abrir o comprovante" }));
+      expect(await screen.findByText("o link do comprovante expirou — abra de novo")).not.toBeNull();
+      expect(win.close).toHaveBeenCalledTimes(1);
+      fireEvent.click(screen.getByRole("button", { name: "Abrir o comprovante" }));
+      expect(await screen.findByText("o comprovante não está disponível — feche e abra o processo de novo")).not.toBeNull();
+      open.mockReturnValue(null);
+      fireEvent.click(screen.getByRole("button", { name: "Abrir o comprovante" }));
+      expect(await screen.findByText("o navegador bloqueou a janela nova — permita janelas deste site para ver o comprovante")).not.toBeNull();
+      expect(api.getTfdAccountabilityUrl).toHaveBeenCalledTimes(2);
+    });
+
+    it("o cliente busca o arquivo pelo endereço curto e devolve o blob", async () => {
+      const real = await vi.importActual<typeof api>("../../lib/api");
+      const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("%PDF", { status: 200, headers: { "Content-Type": "application/pdf" } }));
+      const file = await real.fetchTfdAccountabilityFile("/tfd/files/tok1");
+      expect(fetchSpy.mock.calls[0][0]).toBe("/tfd/files/tok1");
+      expect(file.blob.size).toBe(4);
+      expect((fetchSpy.mock.calls[0][1] as RequestInit).credentials).toBe("include");
+      fetchSpy.mockResolvedValue(new Response(JSON.stringify({ error: "link_expired" }), { status: 410 }));
+      await expect(real.fetchTfdAccountabilityFile("/tfd/files/tok1")).rejects.toMatchObject({ status: 410 });
+    });
   });
 });
 

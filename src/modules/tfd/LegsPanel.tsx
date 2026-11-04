@@ -24,9 +24,11 @@ const FUTURE_LEG = "o trecho é de data futura — dê baixa a partir do dia";
 const textsOf = (err: unknown): string[] => [ ...new Set(tfdRefusals(err).map((r) => r.text)) ];
 
 function emptyDraft(c: TfdCase): LegDraft {
-  const hasOutbound = c.legs.some((l) => l.direction === "outbound" && !l.voided);
+  // Volta só quando há ida viva sem a sua volta; com todos os pares completos, o próximo é uma ida.
+  const live = c.legs.filter((l) => !l.voided);
+  const hasOpenOutbound = live.some((l) => l.direction === "outbound" && !live.some((r) => r.direction === "return" && r.outbound_leg_id === l.id));
   const mode = MODES.includes(c.report.transport_mode) ? c.report.transport_mode : "fleet";
-  return { direction: hasOutbound ? "return" : "outbound", mode, date: "", tripPassengerId: "", amount: "", carrier: "", companion: false };
+  return { direction: hasOpenOutbound ? "return" : "outbound", mode, date: "", tripPassengerId: "", amount: "", carrier: "", companion: false };
 }
 
 function legSituation(l: TfdLeg) {

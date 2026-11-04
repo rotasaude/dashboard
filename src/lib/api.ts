@@ -5996,3 +5996,8 @@ export async function uploadTfdAccountability(caseId: string, file: File): Promi
 export async function getTfdAccountabilityUrl(caseId: string): Promise<string> {
   return (await jsonFetch<{ url: string }>(tfdPath("cases", caseId, "accountability", "url"), trWrite("POST"))).url;
 }
+// O arquivo do endereço curto (GET /tfd/files/<token>, trilha no api); 410 `link_expired` depois de 5 min. O nome do arquivo
+// que vier no Content-Disposition não é usado pela tela.
+export function fetchTfdAccountabilityFile(url: string): Promise<SignatureFile> {
+  return binaryFetch(url, "application/pdf,image/jpeg,image/png");
+}
