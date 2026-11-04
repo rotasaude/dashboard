@@ -1,6 +1,19 @@
-// Módulo 30: portão da tela "Frota, motoristas e destinos" (mesmo filtro do menu); o corpo vem numa task seguinte do plano.
+// Módulo 30: "Frota, motoristas e destinos" (central de transporte). Três painéis empilhados; o portão é o mesmo filtro do menu.
 import { TransportGate } from "./transport/TransportGate";
+import { VehiclesPanel } from "./transport/VehiclesPanel";
+import { DriversPanel } from "./transport/DriversPanel";
+import { DestinationsPanel } from "./transport/DestinationsPanel";
 
-export function TransportFleet(_props: { today?: string; onGoToSecurity?: () => void }) {
-  return <TransportGate title="Frota, motoristas e destinos" sub="Veículos, motoristas com CNH e destinos com km" area="transport" allow={(r) => r.dispatcher}>{() => null}</TransportGate>;
+export function TransportFleet({ today }: { today?: string; onGoToSecurity?: () => void }) {
+  return (
+    <TransportGate title="Frota, motoristas e destinos" sub="Veículos, motoristas com CNH e destinos com km" area="transport" allow={(r) => r.dispatcher}>
+      {() => (
+        <>
+          <VehiclesPanel />
+          <DriversPanel today={today} />
+          <DestinationsPanel />
+        </>
+      )}
+    </TransportGate>
+  );
 }
