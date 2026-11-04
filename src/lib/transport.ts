@@ -71,7 +71,8 @@ export const attendanceLabel = pick({ pending: "a marcar", boarded: "embarcou", 
 export const expenseKindLabel = pick({ toll: "pedágio", parking: "estacionamento", meal: "alimentação", other: "outra" });
 // `refused` = qualquer recusa que não seja de capacidade, na rotina das séries.
 export const pendingReasonLabel = pick({
-  no_seat: "sem lugar na viagem", no_wheelchair_spot: "sem vaga de cadeirante", refused: "o sistema não conseguiu incluir (recusado)"
+  no_seat: "sem lugar em viagem confirmada", no_wheelchair_spot: "sem vaga de cadeirante em viagem confirmada",
+  refused: "a série não coube na viagem por outro motivo — ponha o paciente manualmente"
 });
 
 const DAY_NAMES = [ "seg", "ter", "qua", "qui", "sex", "sáb", "dom" ];
@@ -80,7 +81,7 @@ export function weekdaysLabel(days: number[]): string {
   return [ ...days ].sort((a, b) => a - b).map((d) => DAY_NAMES[d - 1] ?? String(d)).join(", ");
 }
 
-const fmtIsoDay = (iso: string): string => {
+export const fmtIsoDay = (iso: string): string => {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
   return m ? `${m[3]}/${m[2]}/${m[1]}` : iso;
 };
