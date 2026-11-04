@@ -16,6 +16,10 @@ import { disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../compon
 import { alert, fieldLabel, muted, okText, row } from "./exams/styles";
 import { TransportGate } from "./transport/TransportGate";
 import { CaseView } from "./tfd/CaseView";
+import { LegsPanel } from "./tfd/LegsPanel";
+import { AllowancesPanel } from "./tfd/AllowancesPanel";
+import { PaymentForm } from "./tfd/PaymentForm";
+import { AccountabilityForm } from "./tfd/AccountabilityForm";
 
 // As situações que a fila aceita (rascunho nunca chega à comissão); "" = todas.
 const STATUSES = [ "submitted", "returned", "authorized", "denied", "scheduled", "travelling", "completed", "cancelled" ];
@@ -94,7 +98,19 @@ function Queue({ today = cityIsoDate(), now = new Date(), onGoToSecurity }: TfdQ
       {opened && (
         <Panel title="Processo de TFD">
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            <CaseView tfdCase={opened} now={now} today={today} onChanged={changed} onGoToSecurity={onGoToSecurity} />
+            <CaseView key={opened.id} tfdCase={opened} now={now} today={today} onChanged={changed} onGoToSecurity={onGoToSecurity}>
+              <Panel title="Trechos"><LegsPanel tfdCase={opened} today={today} onChanged={changed} /></Panel>
+              <Panel title="Ajuda de custo"><AllowancesPanel tfdCase={opened} /></Panel>
+              <Panel title="Pagamentos">
+                <PaymentForm tfdCase={opened} today={today} onGoToSecurity={onGoToSecurity} onSaved={(c) => changed(c, "Pagamento registrado.")} />
+              </Panel>
+              {(opened.status === "travelling" || opened.accountability) && (
+                <Panel title="Prestação de contas">
+                  {/* A própria tela diz "Processo concluído…"; aqui só a fila é relida. */}
+                  <AccountabilityForm tfdCase={opened} onGoToSecurity={onGoToSecurity} onDone={(c) => changed(c, "")} />
+                </Panel>
+              )}
+            </CaseView>
             <div style={row}><button type="button" style={secondaryButtonStyle} onClick={close}>Fechar laudo</button></div>
           </div>
         </Panel>
