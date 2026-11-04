@@ -3,10 +3,16 @@
 // sem CPF, sem dado clínico.
 // Cada toque envia UM item (o api exige `attendance` em todo item: o toque no acompanhante leva a presença atual do paciente) e trava
 // os botões daquele passageiro até a resposta; a tela mostra o valor otimista e, na falha, volta ao anterior com a frase na linha.
-import { useRef, useState, type CSSProperties } from "react";
+// Toques em passageiros diferentes correm juntos e as respostas (a viagem inteira) podem chegar fora de ordem: uma resposta só entra
+// na lista quando nenhuma outra chamada da viagem está em voo; se alguma foi pulada, a lista é relida quando todas terminam. Até lá,
+// o valor que o api confirmou para cada linha (`confirmed`) vale sobre a viagem em cache — inclusive na presença do paciente que o
+// toque no acompanhante leva.
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { errorCode, recordAttendance, startMyTrip, type AttendanceItem, type Trip, type TripAttendance, type TripPassenger } from "../../lib/api";
 import { fmtHourMinute } from "../../lib/format";
-import { attendanceLabel, expenseKindLabel, fmtCents, pendingAttendance, transportError, tripStatusLabel, tripStatusTone } from "../../lib/transport";
+import {
+  TRIP_NOT_TODAY, attendanceLabel, expenseKindLabel, fmtCents, pendingAttendance, transportError, tripStatusLabel, tripStatusTone
+} from "../../lib/transport";
 import { NO_NAME } from "../../lib/territoryRegistry";
 import { useActionMessage } from "../../lib/useActionMessage";
 import { ActionMessage } from "../../components/ActionMessage";
@@ -28,7 +34,11 @@ export function DriverTrip({ trip, today, onChanged, onReload }: { trip: Trip; t
   const [ optimistic, setOptimistic ] = useState<Record<string, string>>({});
   const [ rowError, setRowError ] = useState<Record<string, string>>({});
   const [ busyPassengers, setBusyPassengers ] = useState<Set<string>>(() => new Set());
+  const [ confirmed, setConfirmed ] = useState<Record<string, string>>({});
   const inFlight = useRef<Set<string>>(new Set());
+  const skipped = useRef(false);
+  // Viagem nova (resposta aplicada ou lista relida) sem chamada em voo: o cache já traz o confirmado.
+  useEffect(() => { if (inFlight.current.size === 0) setConfirmed({}); }, [ trip ]);
   const [ starting, setStarting ] = useState(false);
   const [ closing, setClosing ] = useState(false);
   const msg = useActionMessage();
@@ -43,7 +53,7 @@ export function DriverTrip({ trip, today, onChanged, onReload }: { trip: Trip; t
   if (strays.length > 0) groups.push({ id: "_other", label: "outra parada", passengers: strays });
 
   const current = (p: TripPassenger, who: Who): string =>
-    optimistic[rowKey(p, who)] ?? (who === "patient" ? p.attendance : p.companion_attendance ?? "pending");
+    optimistic[rowKey(p, who)] ?? confirmed[rowKey(p, who)] ?? (who === "patient" ? p.attendance : p.companion_attendance ?? "pending");
 
   const setBusy = (id: string, on: boolean) => setBusyPassengers((prev) => {
     const next = new Set(prev);
@@ -66,17 +76,26 @@ export function DriverTrip({ trip, today, onChanged, onReload }: { trip: Trip; t
     setBusy(p.id, true);
     dropKey(setRowError, rowKey(p, "patient")); dropKey(setRowError, rowKey(p, "companion"));
     setOptimistic((prev) => ({ ...prev, [key]: value }));
+    let fresh: Trip | null = null;
+    let stale = false;
     try {
-      const t = await recordAttendance(trip.id, [ item ]);
-      onChanged(t);
+      fresh = await recordAttendance(trip.id, [ item ]);
+      setConfirmed((prev) => ({ ...prev, [key]: value, ...(who === "companion" ? { [rowKey(p, "patient")]: item.attendance } : {}) }));
     } catch (err) {
       setRowError((prev) => ({ ...prev, [key]: transportError(err) }));
-      if (STALE.includes(errorCode(err) ?? "")) onReload?.();
+      stale = STALE.includes(errorCode(err) ?? "");
     } finally {
       dropKey(setOptimistic, key);
       inFlight.current.delete(p.id);
       setBusy(p.id, false);
     }
+    if (inFlight.current.size > 0) {
+      // Outra chamada ainda corre: esta resposta pode ser mais velha que a dela.
+      if (fresh || stale) skipped.current = true;
+      return;
+    }
+    if (skipped.current || stale) { skipped.current = false; onReload?.(); return; }
+    if (fresh) onChanged(fresh);
   }
 
   async function start() {
@@ -150,7 +169,7 @@ export function DriverTrip({ trip, today, onChanged, onReload }: { trip: Trip; t
       {trip.status === "confirmed" && (trip.date === today
         ? <button type="button" disabled={starting} style={{ ...(starting ? disabledButtonStyle : buttonStyle), minHeight: 44 }}
           onClick={() => { void start(); }}>Iniciar viagem</button>
-        : <p style={muted}>A viagem só começa no dia dela.</p>)}
+        : <p style={muted}>{TRIP_NOT_TODAY}</p>)}
       <ActionMessage message={msg.message} />
 
       {groups.length === 0 ? <p style={muted}>nenhum passageiro nesta viagem</p> : groups.map((g) => (

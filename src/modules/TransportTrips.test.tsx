@@ -2,17 +2,17 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import * as api from "../lib/api";
 import { ApiError } from "../lib/api";
-import { renderWithProviders } from "../test/campaignFixtures";
+import { renderWithProviders, sessionWith } from "../test/campaignFixtures";
 import { CAR, DEST_CURITIBA, DEST_NEAR, DRIVER_B, DRIVER_D, DRIVER_EXPIRED, DRIVER_EXPIRING, TODAY30, VAN, passenger, trip, trUser } from "../test/transportFixtures";
 import { TransportTrips } from "./TransportTrips";
 
 vi.mock("../lib/api", async (orig) => ({ ...(await orig<typeof api>()), fetchCurrentSession: vi.fn(), listTrips: vi.fn(), createTrip: vi.fn(),
   updateTrip: vi.fn(), confirmTrip: vi.fn(), cancelTrip: vi.fn(), listVehicles: vi.fn(), listDrivers: vi.fn(), listDestinations: vi.fn(),
-  findScheduledCare: vi.fn(), listTransportHealthUnits: vi.fn(), correctAttendance: vi.fn() }));
+  findScheduledCare: vi.fn(), listTransportHealthUnits: vi.fn(), correctAttendance: vi.fn(), stepUpMfa: vi.fn() }));
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
-function mount(trips = [ trip({ status: "planned", vehicle: null, driver: null }) ]) {
-  vi.mocked(api.fetchCurrentSession).mockResolvedValue(trUser());
+function mount(trips = [ trip({ status: "planned", vehicle: null, driver: null }) ], user = trUser()) {
+  vi.mocked(api.fetchCurrentSession).mockResolvedValue(user);
   vi.mocked(api.listTrips).mockResolvedValue(trips);
   vi.mocked(api.listVehicles).mockResolvedValue([ VAN, CAR ]);
   vi.mocked(api.listDrivers).mockResolvedValue([ DRIVER_D, DRIVER_B, DRIVER_EXPIRED, DRIVER_EXPIRING ]);
@@ -297,6 +297,52 @@ describe("viagens do dia", () => {
     await waitFor(() => expect(api.correctAttendance).toHaveBeenCalledWith("tr1", {
       items: [ { passenger_id: "p1", attendance: "boarded", companion_attendance: "no_show" } ], reason: "motorista marcou errado no celular" }));
     expect(await screen.findByText("o trecho de TFD deste passageiro já foi cumprido — a presença não pode mudar")).not.toBeNull();
+  });
+
+  it("correção com a janela do segundo fator fechada: pede o código antes de enviar", async () => {
+    vi.mocked(api.stepUpMfa).mockResolvedValue(undefined as never);
+    vi.mocked(api.correctAttendance).mockResolvedValue(trip({ status: "done", passengers: [ passenger({ attendance: "boarded" }) ] }));
+    const closed = sessionWith([ "transport_dispatcher" ], { features: [ "sanitary_transport", "tfd", "clinical_record" ], mfa_verified_at: null });
+    mount([ trip({ status: "done", passengers: [ passenger({ attendance: "no_show" }) ] }) ], closed);
+    fireEvent.click(await screen.findByRole("button", { name: "Corrigir presença" }));
+    fireEvent.change(screen.getByLabelText("Presença de Maria da Silva"), { target: { value: "boarded" } });
+    fireEvent.change(screen.getByLabelText("Motivo"), { target: { value: "motorista marcou errado no celular" } });
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+    expect(await screen.findByText("informe o código do autenticador")).not.toBeNull();
+    expect(api.correctAttendance).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText("Código do autenticador"), { target: { value: "123456" } });
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+    await waitFor(() => expect(api.correctAttendance).toHaveBeenCalledTimes(1));
+    expect(api.stepUpMfa).toHaveBeenCalledWith("123456");
+    expect(vi.mocked(api.stepUpMfa).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(api.correctAttendance).mock.invocationCallOrder[0]);
+  });
+
+  it.each([
+    [ "passenger_anonymized", "o cadastro deste passageiro foi anonimizado — não dá para alterar" ],
+    [ "invalid_transition", "a viagem mudou de situação — recarregue" ]
+  ])("correção recusada com %s: frase e agenda relida", async (code, text) => {
+    vi.mocked(api.correctAttendance).mockRejectedValue(new ApiError(422, { error: code }, "422"));
+    mount([ trip({ status: "done", passengers: [ passenger({ attendance: "no_show" }) ] }) ]);
+    fireEvent.click(await screen.findByRole("button", { name: "Corrigir presença" }));
+    fireEvent.change(screen.getByLabelText("Presença de Maria da Silva"), { target: { value: "boarded" } });
+    fireEvent.change(screen.getByLabelText("Motivo"), { target: { value: "motorista marcou errado no celular" } });
+    const reads = vi.mocked(api.listTrips).mock.calls.length;
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+    expect(await screen.findByText(text)).not.toBeNull();
+    await waitFor(() => expect(vi.mocked(api.listTrips).mock.calls.length).toBeGreaterThan(reads));
+  });
+
+  it("correção: seletores travados enquanto envia", async () => {
+    let finish!: (t: api.Trip) => void;
+    vi.mocked(api.correctAttendance).mockImplementation(() => new Promise((res) => { finish = res; }));
+    mount([ trip({ status: "done", passengers: [ passenger({ attendance: "no_show" }) ] }) ]);
+    fireEvent.click(await screen.findByRole("button", { name: "Corrigir presença" }));
+    fireEvent.change(screen.getByLabelText("Presença de Maria da Silva"), { target: { value: "boarded" } });
+    fireEvent.change(screen.getByLabelText("Motivo"), { target: { value: "motorista marcou errado no celular" } });
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+    await waitFor(() => expect((screen.getByLabelText("Presença de Maria da Silva") as HTMLSelectElement).disabled).toBe(true));
+    finish(trip({ status: "done", passengers: [ passenger({ attendance: "boarded" }) ] }));
+    expect(await screen.findByText("Presença corrigida.")).not.toBeNull();
   });
 
   it("correção só em viagem concluída", async () => {

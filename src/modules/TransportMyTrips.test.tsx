@@ -32,6 +32,14 @@ describe("tela do motorista (celular)", () => {
     expect(api.listMyTrips).toHaveBeenCalledWith(TODAY30);
   });
 
+  it("mesmo que o api mandasse CNS e CPF, a tela não mostra", async () => {
+    // trip() é a visão da central: o paciente traz cns_masked e has_cpf.
+    mount(trip({ status: "in_progress" }));
+    expect(await screen.findByText("Maria da Silva")).not.toBeNull();
+    expect(screen.queryByText(/\*\*\* \*\*\*\*/)).toBeNull();
+    expect(screen.queryByText(/CNS|CPF/)).toBeNull();
+  });
+
   it("motorista sem cadastro na frota (403 missing_role): diz que falta o cadastro", async () => {
     vi.mocked(api.fetchCurrentSession).mockResolvedValue(trUser([ "driver" ]));
     vi.mocked(api.listMyTrips).mockRejectedValue(new ApiError(403, { error: "missing_role" }, "403"));
@@ -49,8 +57,10 @@ describe("tela do motorista (celular)", () => {
   it("iniciar só na viagem confirmada do dia", async () => {
     vi.mocked(api.startMyTrip).mockResolvedValue(driverView(trip({ status: "in_progress" })));
     mount(driverView(trip({ status: "confirmed" })));
+    const startButton = await screen.findByRole("button", { name: "Iniciar viagem" });
+    expect(screen.getByText("Maria da Silva")).not.toBeNull();
     expect(screen.queryByRole("button", { name: /^Embarcou/ })).toBeNull();
-    fireEvent.click(await screen.findByRole("button", { name: "Iniciar viagem" }));
+    fireEvent.click(startButton);
     await waitFor(() => expect(api.startMyTrip).toHaveBeenCalledWith("tr1"));
     expect(await screen.findByRole("button", { name: "Embarcou — Maria da Silva" })).not.toBeNull();
   });
@@ -97,6 +107,33 @@ describe("tela do motorista (celular)", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Faltou — acompanhante de Carlos Souza" }));
     await waitFor(() => expect(api.recordAttendance).toHaveBeenCalledWith("tr1", [ { passenger_id: "p2", attendance: "pending", companion_attendance: "no_show" } ]));
     await waitFor(() => expect(screen.getByRole("button", { name: "Faltou — acompanhante de Carlos Souza" }).getAttribute("aria-pressed")).toBe("true"));
+  });
+
+  it("respostas fora de ordem: nenhuma volta a lista para trás; relê no fim e o acompanhante leva a presença certa", async () => {
+    const resolvers: ((t: api.Trip) => void)[] = [];
+    vi.mocked(api.recordAttendance).mockImplementation(() => new Promise((res) => { resolvers.push(res); }));
+    mount();
+    const [ maria, carlos ] = twoPassengers.passengers;
+    fireEvent.click(await screen.findByRole("button", { name: "Embarcou — Carlos Souza" }));
+    fireEvent.click(screen.getByRole("button", { name: "Embarcou — Maria da Silva" }));
+    expect(api.recordAttendance).toHaveBeenCalledTimes(2);
+    // O api processou Carlos primeiro (resposta velha: Maria ainda a marcar) e Maria depois (resposta nova: os dois embarcaram).
+    const older = { ...twoPassengers, passengers: [ maria, { ...carlos, attendance: "boarded" } ] };
+    const newer = { ...twoPassengers, passengers: [ { ...maria, attendance: "boarded" }, { ...carlos, attendance: "boarded" } ] };
+    let reread!: (t: api.Trip[]) => void;
+    vi.mocked(api.listMyTrips).mockImplementationOnce(() => new Promise((res) => { reread = res; }));
+    const reads = vi.mocked(api.listMyTrips).mock.calls.length;
+    resolvers[1](newer);
+    resolvers[0](older);
+    await waitFor(() => expect(vi.mocked(api.listMyTrips).mock.calls.length).toBe(reads + 1));
+    // Durante a releitura, o que o api confirmou vale sobre a resposta velha.
+    expect(screen.getByRole("button", { name: "Embarcou — Maria da Silva" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: "Embarcou — Carlos Souza" }).getAttribute("aria-pressed")).toBe("true");
+    vi.mocked(api.recordAttendance).mockResolvedValueOnce(newer);
+    fireEvent.click(screen.getByRole("button", { name: "Faltou — acompanhante de Carlos Souza" }));
+    expect(vi.mocked(api.recordAttendance).mock.calls[2][1]).toEqual([ { passenger_id: "p2", attendance: "boarded", companion_attendance: "no_show" } ]);
+    reread([ newer ]);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Embarcou — Maria da Silva" }).getAttribute("aria-pressed")).toBe("true"));
   });
 
   it("fechar barrado com presença pendente; com tudo marcado, envia odômetro e abastecimento", async () => {
@@ -166,6 +203,23 @@ describe("tela do motorista (celular)", () => {
     fireEvent.change(within(form).getByLabelText("Odômetro na chegada"), { target: { value: "2" } });
     fireEvent.submit(form);
     expect(await screen.findByText("marque embarcou ou faltou para todos, inclusive acompanhantes")).not.toBeNull();
+  });
+
+  it("recusa do api com caminho pontuado marca o campo certo", async () => {
+    vi.mocked(api.closeMyTrip).mockRejectedValue(new ApiError(422, { error: "invalid_request", problems: [ { path: "fuel.0.liters", error: "invalid_request" } ] }, "422"));
+    mount(driverView(trip({ status: "in_progress", passengers: [ passenger({ attendance: "boarded" }) ] })));
+    fireEvent.click(await screen.findByRole("button", { name: "Fechar viagem" }));
+    const form = screen.getByRole("form", { name: "Fechamento da viagem" });
+    fireEvent.change(within(form).getByLabelText("Odômetro na saída"), { target: { value: "1" } });
+    fireEvent.change(within(form).getByLabelText("Odômetro na chegada"), { target: { value: "2" } });
+    fireEvent.click(within(form).getByRole("button", { name: "Adicionar abastecimento" }));
+    fireEvent.change(within(form).getByLabelText("Litros 1"), { target: { value: "10" } });
+    fireEvent.change(within(form).getByLabelText("Valor 1"), { target: { value: "50" } });
+    fireEvent.change(within(form).getByLabelText("Posto 1"), { target: { value: "Posto" } });
+    fireEvent.submit(form);
+    expect(await screen.findByText("confira o abastecimento destacado")).not.toBeNull();
+    expect(within(form).getByLabelText("Litros 1").getAttribute("aria-invalid")).toBe("true");
+    expect(within(form).getByLabelText("Valor 1").getAttribute("aria-invalid")).toBeNull();
   });
 
   it("viagem concluída: resumo do fechamento, sem botões", async () => {

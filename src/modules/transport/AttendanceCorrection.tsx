@@ -23,12 +23,12 @@ function draftFrom(t: Trip): Draft {
 }
 
 // Opções: as duas aceitas; um valor atual fora delas (código novo ou "pending") aparece cru/rotulado, sem sumir.
-function Choice({ id, label, value, onChange }: { id: string; label: string; value: string; onChange(v: string): void }) {
+function Choice({ id, label, value, disabled, onChange }: { id: string; label: string; value: string; disabled: boolean; onChange(v: string): void }) {
   const options = CHOICES.includes(value as TripAttendance) ? CHOICES : [ value, ...CHOICES ];
   return (
     <div style={fieldLabel}>
       <label htmlFor={id}>{label}</label>
-      <select id={id} value={value} style={inputStyle} onChange={(e) => onChange(e.target.value)}>
+      <select id={id} value={value} disabled={disabled} style={inputStyle} onChange={(e) => onChange(e.target.value)}>
         {options.map((o) => <option key={o} value={o} disabled={!CHOICES.includes(o as TripAttendance)}>{attendanceLabel(o)}</option>)}
       </select>
     </div>
@@ -40,6 +40,8 @@ export function AttendanceCorrection({ trip, onCorrected, onReload, onGoToSecuri
 }) {
   const [ open, setOpen ] = useState(false);
   const [ draft, setDraft ] = useState<Draft>(() => draftFrom(trip));
+  // Enquanto a correção corre, os seletores ficam travados (o que vai é o lido no início do envio).
+  const [ running, setRunning ] = useState(false);
   if (trip.status !== "done" || trip.passengers.length === 0) return null;
 
   function items(): AttendanceItem[] {
@@ -72,9 +74,9 @@ export function AttendanceCorrection({ trip, onCorrected, onReload, onGoToSecuri
           const d = draft[p.id] ?? { attendance: p.attendance, companion: null };
           return (
             <div key={p.id} style={stack}>
-              <Choice id={`fix-${trip.id}-${p.id}`} label={`Presença de ${nameOf(p)}`} value={d.attendance} onChange={(v) => setOne(p.id, { attendance: v })} />
+              <Choice id={`fix-${trip.id}-${p.id}`} label={`Presença de ${nameOf(p)}`} value={d.attendance} disabled={running} onChange={(v) => setOne(p.id, { attendance: v })} />
               {p.companion && (
-                <Choice id={`fix-${trip.id}-${p.id}-companion`} label={`Presença do acompanhante de ${nameOf(p)}`} value={d.companion ?? "pending"}
+                <Choice id={`fix-${trip.id}-${p.id}-companion`} label={`Presença do acompanhante de ${nameOf(p)}`} value={d.companion ?? "pending"} disabled={running}
                   onChange={(v) => setOne(p.id, { companion: v })} />
               )}
             </div>
@@ -90,13 +92,14 @@ export function AttendanceCorrection({ trip, onCorrected, onReload, onGoToSecuri
           if (list.length === 0) throw new LocalRefusal(NOTHING_TEXT);
           const reason = (values.reason ?? "").trim();
           if (reason.length < 10 || reason.length > 500) throw new LocalRefusal(REASON_TEXT);
+          setRunning(true);
           try {
             const t = await correctAttendance(trip.id, { items: list, reason });
             onCorrected(t);
           } catch (err) {
             if (STALE.includes(errorCode(err) ?? "")) onReload?.();
             throw err;
-          }
+          } finally { setRunning(false); }
         }}
         onDone={() => setOpen(false)} onCancel={() => setOpen(false)} />
     </div>

@@ -17,6 +17,7 @@ export { NOMINAL_QUERY, STATIC_QUERY };
 export const TRANSPORT_DISABLED = "o transporte sanitário está desligado nesta cidade";
 export const TRANSPORT_NO_ROLE = "seu papel não permite usar o transporte sanitário";
 export const SMALL_COUNT = "menos de 5";
+export const TRIP_NOT_TODAY = "a viagem só começa no dia dela";
 export const NO_CLINICAL_NOTE = "A lista não leva diagnóstico, procedimento nem especialidade.";
 
 export const TR_VEHICLES_KEY = "transportVehicles";
@@ -485,7 +486,7 @@ const ERRORS: Record<string, string> = {
   stop_in_use: "esta parada tem passageiro — mude o passageiro de parada antes",
   trip_not_open: "a viagem não aceita mais alteração (já começou, foi concluída ou cancelada) — recarregue",
   invalid_transition: "a viagem mudou de situação — recarregue",
-  trip_not_today: "a viagem só começa no dia dela",
+  trip_not_today: TRIP_NOT_TODAY,
   seats_full: "a viagem está lotada",
   wheelchair_full: "não há vaga de cadeirante nesta viagem",
   companion_not_allowed: "acompanhante fora da regra da cidade — informe o motivo",
