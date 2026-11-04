@@ -37,8 +37,10 @@ export const UNIT_KINDS = [
 
 // Módulo 28: o CEO só é oferecido no cadastro com `dental_care` ligado; a unidade já criada continua legível (KIND_LABEL).
 export const CEO_UNIT_KIND = { value: "ceo", label: "CEO (Centro de Especialidades Odontológicas)" };
-export function unitKindOptions(dentalOn: boolean): { value: string; label: string }[] {
-  return dentalOn ? [ ...UNIT_KINDS, CEO_UNIT_KIND ] : UNIT_KINDS;
+// Módulo 30: a unidade de gestão (CNES do BPA do TFD) só é oferecida com o TFD usável; a já criada continua legível (KIND_LABEL).
+export const HEALTH_MANAGEMENT_UNIT_KIND = { value: "health_management", label: "Gestão (secretaria ou central de regulação)" };
+export function unitKindOptions(dentalOn: boolean, tfdOn = false): { value: string; label: string }[] {
+  return [ ...UNIT_KINDS, ...(dentalOn ? [ CEO_UNIT_KIND ] : []), ...(tfdOn ? [ HEALTH_MANAGEMENT_UNIT_KIND ] : []) ];
 }
 
 export function currentUnitKey(userId: string): string {
@@ -157,6 +159,8 @@ const MESSAGES: Record<string, string> = {
   invalid_social_name: "o nome social pode ter até 200 caracteres",
   invalid_mother_name: "o nome da mãe pode ter até 200 caracteres",
   // Módulo 26a, Desvio 2 do plano do api: com a regulação ligada, encaminhar sem unidade de destino exige o pedido de regulação.
+  // Módulo 30 (T44): a exclusão do cadastro recusa quem está numa viagem aberta.
+  patient_on_trip: "o paciente está numa viagem em andamento; tente de novo depois que a viagem for fechada",
   regulation_request_required: "com a regulação ligada, encaminhamento sem unidade de destino é pelo “Pedir regulação” na consulta — escolha a unidade da rede"
 };
 

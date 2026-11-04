@@ -23,13 +23,15 @@ interface Props {
   cepTimeoutMs?: number;
   // Módulo 28: `dental_care` ligado (canUseDental, vindo do Atendimento) — só então o CEO é oferecido.
   dentalOn?: boolean;
+  // Módulo 30: TFD usável (canUseTfd) — só então a unidade de gestão é oferecida.
+  tfdOn?: boolean;
   onSave(value: UnitFormValue): void;
   onCancel(): void;
 }
 
 type CepState = { kind: "idle" } | { kind: "loading" } | { kind: "found"; neighborhood: string } | { kind: "failed" };
 
-export function UnitForm({ initial, neighborhoods, busy, cepTimeoutMs = VIACEP_TIMEOUT_MS, dentalOn = false, onSave, onCancel }: Props) {
+export function UnitForm({ initial, neighborhoods, busy, cepTimeoutMs = VIACEP_TIMEOUT_MS, dentalOn = false, tfdOn = false, onSave, onCancel }: Props) {
   const [ value, setValue ] = useState<UnitFormValue>(initial);
   const [ cep, setCep ] = useState<CepState>({ kind: "idle" });
   const [ error, setError ] = useState<string | null>(null);
@@ -84,7 +86,7 @@ export function UnitForm({ initial, neighborhoods, busy, cepTimeoutMs = VIACEP_T
       <label style={labelStyle}>
         Tipo
         <select value={value.kind} onChange={(e) => set({ kind: e.target.value })} style={inputStyle}>
-          {unitKindOptions(dentalOn || value.kind === "ceo").map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}
+          {unitKindOptions(dentalOn || value.kind === "ceo", tfdOn || value.kind === "health_management").map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}
         </select>
       </label>
       <label style={labelStyle}>

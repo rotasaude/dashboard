@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ApiError } from "./api";
-import { attendanceError, isValidCpf, maskCpf, splitReferenceUnits } from "./attendance";
+import { attendanceError, isValidCpf, maskCpf, splitReferenceUnits, unitKindOptions } from "./attendance";
 
 describe("attendance helpers", () => {
   it("mascara e valida CPF", () => {
@@ -120,5 +120,16 @@ describe("recusas do módulo 17 no balcão", () => {
 describe("módulo 21b", () => {
   it("invalid_collects_samples tem mensagem própria", () => {
     expect(attendanceError(new ApiError(422, { error: "invalid_collects_samples" }, "x"))).toBe("marca de coleta de amostras inválida");
+  });
+});
+
+describe("módulo 30", () => {
+  it("unidade de gestão só com o TFD ligado (módulo 30)", () => {
+    expect(unitKindOptions(false, true).map((k) => k.value)).toContain("health_management");
+    expect(unitKindOptions(false).map((k) => k.value)).not.toContain("health_management");
+  });
+  it("patient_on_trip tem frase", () => {
+    expect(attendanceError(new ApiError(409, { error: "patient_on_trip" }, "x")))
+      .toBe("o paciente está numa viagem em andamento; tente de novo depois que a viagem for fechada");
   });
 });

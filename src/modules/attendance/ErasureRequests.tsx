@@ -15,7 +15,7 @@ import { FrozenTextNotice } from "../../components/FrozenTextNotice";
 // apaga de vez e passa pelo step-up (SensitiveAction); quem registrou o pedido
 // não o confirma (own_request, recusado pela API).
 const KEY = [ "erasureRequests" ];
-const ERRORS = [ "own_request", "not_pending", "try_again" ];
+const ERRORS = [ "own_request", "not_pending", "try_again", "patient_on_trip" ];
 
 export function ErasureRequests({ onGoToSecurity }: { onGoToSecurity?(): void }) {
   const queryClient = useQueryClient();

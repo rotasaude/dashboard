@@ -70,7 +70,8 @@ describe("ErasureRequests", () => {
 
   it.each([
     [ 403, "own_request", "Quem registrou o pedido não pode confirmá-lo." ],
-    [ 409, "try_again", "Outra operação estava em andamento. Tente de novo." ]
+    [ 409, "try_again", "Outra operação estava em andamento. Tente de novo." ],
+    [ 409, "patient_on_trip", "o paciente está numa viagem em andamento; tente de novo depois que a viagem for fechada" ]
   ])("confirmar %i %s", async (status, error, text) => {
     m(api.confirmErasure).mockRejectedValue(new ApiError(status, { error }, String(status)));
     renderIt();

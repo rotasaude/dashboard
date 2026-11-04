@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   createUnit, listAllUnits, listNeighborhoods, setUnitActive, updateUnit, type HealthUnitRow, type ScreeningScope
 } from "../../lib/api";
-import { CEO_UNIT_KIND, UNIT_KINDS, attendanceError } from "../../lib/attendance";
+import { CEO_UNIT_KIND, HEALTH_MANAGEMENT_UNIT_KIND, UNIT_KINDS, attendanceError } from "../../lib/attendance";
 import { NEIGHBORHOODS_KEY } from "../../lib/territory";
 import { EMPTY_ADDRESS_FIELDS, addressFieldsFrom, addressPayload, formatAddress } from "../../lib/unitAddress";
 import { Panel } from "../../components/Panel";
@@ -19,7 +19,7 @@ import { DrainUnitPanel } from "./DrainUnitPanel";
 // Criar ou reativar muda quem entra em "unidades ativas" (UnitPicker,
 // destino de encaminhamento em UnitQueue): invalida a query `activeUnits`
 // para essas telas recarregarem (card dashboard#4, item 1 — Task 7).
-const KIND_LABEL: Record<string, string> = Object.fromEntries([ ...UNIT_KINDS, CEO_UNIT_KIND ].map((k) => [ k.value, k.label ]));
+const KIND_LABEL: Record<string, string> = Object.fromEntries([ ...UNIT_KINDS, CEO_UNIT_KIND, HEALTH_MANAGEMENT_UNIT_KIND ].map((k) => [ k.value, k.label ]));
 // Módulo 18 (contratos §5): quem passa pela escuta inicial nesta unidade.
 const SCOPE_SHORT: Record<ScreeningScope, string> = { walk_in: "sem horário", all: "todos" };
 
@@ -27,8 +27,9 @@ interface Editing { id: string | null; initial: UnitFormValue }
 
 // Módulo 21b: `labOn` = `municipal_lab` ligado (vem do Atendimento, que já lê a sessão).
 // Módulo 25: `surveillanceOn` = `surveillance` ligado; só então a unidade mostra e edita a marca notificadora.
+// Módulo 30: `tfdOn` = canUseTfd; só então o cadastro oferece a unidade de gestão.
 // Módulo 28: `dentalOn` = canUseDental; só então o cadastro oferece a unidade CEO.
-export function Units({ labOn = false, surveillanceOn = false, dentalOn = false }: { labOn?: boolean; surveillanceOn?: boolean; dentalOn?: boolean } = {}) {
+export function Units({ labOn = false, surveillanceOn = false, dentalOn = false, tfdOn = false }: { labOn?: boolean; surveillanceOn?: boolean; dentalOn?: boolean; tfdOn?: boolean } = {}) {
   const queryClient = useQueryClient();
   const neighborhoods = useQuery({ queryKey: NEIGHBORHOODS_KEY, queryFn: listNeighborhoods });
   const [ rows, setRows ] = useState<HealthUnitRow[] | null>(null);
@@ -128,6 +129,7 @@ export function Units({ labOn = false, surveillanceOn = false, dentalOn = false 
             neighborhoods={neighborhoods.data ?? []}
             busy={busy}
             dentalOn={dentalOn}
+            tfdOn={tfdOn}
             onSave={(value) => void save(value)}
             onCancel={() => setEditing(null)}
           />
