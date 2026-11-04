@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  ApiError, createUnit, listNeighborhoods, replaceCoverage, setNeighborhoodActive, type Neighborhood
+  ApiError, createUnit, listNeighborhoods, updateUnit, replaceCoverage, setNeighborhoodActive, type Neighborhood
 } from "./api";
 import { matchNeighborhood, normalizeName, sortByName, territoryError, validateNeighborhoodName } from "./territory";
 
@@ -91,6 +91,17 @@ describe("cliente /territory e endereço da unidade", () => {
     await replaceCoverage("n1", [ "u1", "u2" ]);
     expect(call(fn)[0]).toBe("/territory/neighborhoods/n1/coverage");
     expect(JSON.parse(String(call(fn)[1].body))).toEqual({ health_unit_ids: [ "u1", "u2" ] });
+  });
+
+  it("createUnit e updateUnit mandam o CNES só quando recebem (T47)", async () => {
+    const fn = stub({ unit: { id: "u1", name: "UBS", kind: "ubs", active: true } });
+    const address = { address_street: null, address_number: null, address_complement: null, address_zip: null, neighborhood_id: null };
+    await createUnit("UBS", "ubs", address, "1234567");
+    expect(JSON.parse(String(call(fn)[1].body))).toMatchObject({ cnes: "1234567" });
+    await updateUnit("u1", "UBS", "ubs", address, undefined, undefined, undefined, null);
+    expect(JSON.parse(String(call(fn, 1)[1].body))).toEqual({ name: "UBS", kind: "ubs", ...address, cnes: null });
+    await createUnit("UBS", "ubs", address);
+    expect(JSON.parse(String(call(fn, 2)[1].body))).not.toHaveProperty("cnes");
   });
 
   it("createUnit manda o endereço achatado, com null onde não há valor", async () => {

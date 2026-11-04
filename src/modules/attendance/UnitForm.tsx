@@ -14,7 +14,11 @@ import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } fr
 // Qualquer falha deixa os campos livres.
 // `notifying` (módulo 25) só aparece com o interruptor `surveillance` ligado e na edição.
 // `screeningScope` (módulo 18) só existe na edição: a unidade nova nasce `walk_in` no api.
-export interface UnitFormValue extends AddressFields { name: string; kind: string; screeningScope?: ScreeningScope; collectsSamples?: boolean; notifying?: boolean }
+// `cnes` (T47, módulo 30): opcional em todo tipo; vazio = sem CNES. A unidade Gestão precisa dele para o BPA do TFD.
+export interface UnitFormValue extends AddressFields {
+  name: string; kind: string; cnes?: string; screeningScope?: ScreeningScope; collectsSamples?: boolean; notifying?: boolean;
+}
+export const CNES_TEXT = "o CNES tem 7 dígitos";
 
 interface Props {
   initial: UnitFormValue;
@@ -35,6 +39,7 @@ export function UnitForm({ initial, neighborhoods, busy, cepTimeoutMs = VIACEP_T
   const [ value, setValue ] = useState<UnitFormValue>(initial);
   const [ cep, setCep ] = useState<CepState>({ kind: "idle" });
   const [ error, setError ] = useState<string | null>(null);
+  const [ cnesError, setCnesError ] = useState(false);
   // Cada CEP digitado ganha um número; resposta de número velho é descartada
   // (o admin corrigiu o CEP antes de a primeira consulta voltar).
   const seq = useRef(0);
@@ -69,6 +74,9 @@ export function UnitForm({ initial, neighborhoods, busy, cepTimeoutMs = VIACEP_T
   function save() {
     if (busy || !value.name.trim()) return;
     const invalidZip = zipError(value.zip);
+    const cnes = value.cnes ?? "";
+    if (cnes !== "" && !/^\d{7}$/.test(cnes)) { setError(CNES_TEXT); setCnesError(true); return; }
+    setCnesError(false);
     if (invalidZip) { setError(invalidZip); return; }
     setError(null);
     onSave(value);
@@ -88,6 +96,11 @@ export function UnitForm({ initial, neighborhoods, busy, cepTimeoutMs = VIACEP_T
         <select value={value.kind} onChange={(e) => set({ kind: e.target.value })} style={inputStyle}>
           {unitKindOptions(dentalOn || value.kind === "ceo", tfdOn || value.kind === "health_management").map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}
         </select>
+      </label>
+      <label style={labelStyle}>
+        CNES (opcional)
+        <input value={value.cnes ?? ""} onChange={(e) => { set({ cnes: onlyDigits(e.target.value).slice(0, 7) }); setCnesError(false); }} style={inputStyle}
+          inputMode="numeric" placeholder="7 dígitos" aria-invalid={cnesError ? true : undefined} />
       </label>
       <label style={labelStyle}>
         CEP

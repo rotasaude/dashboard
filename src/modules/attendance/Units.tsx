@@ -68,13 +68,21 @@ export function Units({ labOn = false, surveillanceOn = false, dentalOn = false,
     setBusy(true); setError(null);
     try {
       const address = addressPayload(value);
+      // T47: o CNES só segue quando mudou (vazio apaga: null) — o api só mexe nele quando a chave vem.
+      const cnes = (value.cnes ?? "") === "" ? null : (value.cnes as string);
+      const cnesChanged = cnes !== ((editing.initial.cnes ?? "") === "" ? null : editing.initial.cnes);
       if (editing.id) {
         // O 7º argumento só segue quando a marca existe (interruptor ligado): desligado, o corpo é o de sempre.
-        if (value.notifying !== undefined) {
+        if (cnesChanged) {
+          await updateUnit(editing.id, value.name, value.kind, address, value.screeningScope, value.collectsSamples, value.notifying, cnes);
+        } else if (value.notifying !== undefined) {
           await updateUnit(editing.id, value.name, value.kind, address, value.screeningScope, value.collectsSamples, value.notifying);
         } else {
           await updateUnit(editing.id, value.name, value.kind, address, value.screeningScope, value.collectsSamples);
         }
+      } else if (cnesChanged) {
+        await createUnit(value.name, value.kind, address, cnes);
+        void queryClient.invalidateQueries({ queryKey: [ "activeUnits" ] });
       } else {
         await createUnit(value.name, value.kind, address);
         void queryClient.invalidateQueries({ queryKey: [ "activeUnits" ] });
@@ -140,6 +148,7 @@ export function Units({ labOn = false, surveillanceOn = false, dentalOn = false,
             cols={[
               { label: "Nome", w: "2fr", render: (r) => r.name },
               { label: "Tipo", w: "1fr", render: (r) => KIND_LABEL[r.kind] ?? r.kind },
+              { label: "CNES", w: "0.9fr", render: (r) => r.cnes ?? "—" },
               { label: "Endereço", w: "3fr", render: (r) =>
                 formatAddress(r, r.neighborhood_id ? nameOf.get(r.neighborhood_id) : null) },
               { label: "Acolhimento", w: "1.2fr", render: (r) => SCOPE_SHORT[r.screening_scope ?? "walk_in"] },
@@ -151,7 +160,7 @@ export function Units({ labOn = false, surveillanceOn = false, dentalOn = false,
                   <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
                     <button type="button" style={secondaryButtonStyle}
                       onClick={() => setEditing({ id: r.id, initial: {
-                        name: r.name, kind: r.kind, ...addressFieldsFrom(r), screeningScope: r.screening_scope ?? "walk_in",
+                        name: r.name, kind: r.kind, cnes: r.cnes ?? "", ...addressFieldsFrom(r), screeningScope: r.screening_scope ?? "walk_in",
                         ...(labOn ? { collectsSamples: r.collects_samples === true } : {}),
                         ...(surveillanceOn ? { notifying: r.notifying === true } : {})
                       } })}>

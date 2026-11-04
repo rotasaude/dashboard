@@ -160,6 +160,9 @@ const MESSAGES: Record<string, string> = {
   invalid_mother_name: "o nome da mãe pode ter até 200 caracteres",
   // Módulo 26a, Desvio 2 do plano do api: com a regulação ligada, encaminhar sem unidade de destino exige o pedido de regulação.
   // Módulo 30 (T44): a exclusão do cadastro recusa quem está numa viagem aberta.
+  // T47: CNES da unidade (7 dígitos, único na cidade).
+  invalid_cnes: "o CNES tem 7 dígitos",
+  cnes_taken: "já existe unidade com este CNES",
   patient_on_trip: "o paciente está numa viagem em andamento; tente de novo depois que a viagem for fechada",
   regulation_request_required: "com a regulação ligada, encaminhamento sem unidade de destino é pelo “Pedir regulação” na consulta — escolha a unidade da rede"
 };

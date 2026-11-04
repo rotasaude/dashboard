@@ -55,6 +55,38 @@ describe("Units", () => {
     expect(await screen.findByText("Hospital Sul")).not.toBeNull();
   });
 
+  it("CNES (T47): vai na criação quando preenchido, aparece na lista e a edição que o apaga manda null", async () => {
+    mocked(api.listAllUnits).mockResolvedValue([ { ...rows[0], kind: "health_management", cnes: "1234567" }, rows[1] ]);
+    mocked(api.createUnit).mockResolvedValue({ id: "u3", name: "Secretaria", kind: "ubs", active: true });
+    mocked(api.updateUnit).mockResolvedValue({ id: "u1", name: "UBS Centro", kind: "health_management", active: true });
+    renderUnits();
+    expect(await screen.findByText("1234567")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Nova unidade" }));
+    fireEvent.change(screen.getByLabelText("Nome"), { target: { value: "Secretaria" } });
+    fireEvent.change(screen.getByLabelText("CNES (opcional)"), { target: { value: "7654321" } });
+    fireEvent.click(screen.getByRole("button", { name: "Salvar" }));
+    await waitFor(() => expect(api.createUnit).toHaveBeenCalledWith("Secretaria", "ubs", EMPTY_ADDRESS, "7654321"));
+    fireEvent.click(await screen.findAllByRole("button", { name: "Editar" }).then((btns) => btns[0]));
+    expect((screen.getByLabelText("CNES (opcional)") as HTMLInputElement).value).toBe("1234567");
+    fireEvent.change(screen.getByLabelText("CNES (opcional)"), { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: "Salvar" }));
+    await waitFor(() => expect(api.updateUnit).toHaveBeenCalled());
+    const args = mocked(api.updateUnit).mock.calls[0];
+    expect(args[7]).toBeNull();
+  });
+
+  it.each([
+    [ "cnes_taken", "já existe unidade com este CNES" ], [ "invalid_cnes", "o CNES tem 7 dígitos" ]
+  ])("recusa %s do api vira frase", async (code, text) => {
+    mocked(api.createUnit).mockRejectedValue(new ApiError(422, { error: code }, "x"));
+    renderUnits();
+    fireEvent.click(await screen.findByRole("button", { name: "Nova unidade" }));
+    fireEvent.change(screen.getByLabelText("Nome"), { target: { value: "Secretaria" } });
+    fireEvent.change(screen.getByLabelText("CNES (opcional)"), { target: { value: "7654321" } });
+    fireEvent.click(screen.getByRole("button", { name: "Salvar" }));
+    expect((await screen.findByRole("alert")).textContent).toBe(text);
+  });
+
   it("edita uma unidade", async () => {
     mocked(api.updateUnit).mockResolvedValue({ id: "u1", name: "UBS Centro Novo", kind: "ubs", active: true });
     mocked(api.listAllUnits).mockResolvedValueOnce(rows).mockResolvedValueOnce([

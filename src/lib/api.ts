@@ -509,21 +509,23 @@ export async function listAllUnits(): Promise<HealthUnitRow[]> {
   return payload.units;
 }
 
-export async function createUnit(name: string, kind: string, address: UnitAddress): Promise<HealthUnitRow> {
+// T47: `cnes` (7 dígitos, ou null para apagar) só vai quando recebido — o api só mexe no CNES quando a chave vem.
+export async function createUnit(name: string, kind: string, address: UnitAddress, cnes?: string | null): Promise<HealthUnitRow> {
   const payload = await jsonFetch<{ unit: HealthUnitRow }>(`${ATTENDANCE_BASE}/units`, {
-    method: "POST", body: JSON.stringify({ name, kind, ...address })
+    method: "POST", body: JSON.stringify({ name, kind, ...address, ...(cnes !== undefined ? { cnes } : {}) })
   });
   return payload.unit;
 }
 
 export async function updateUnit(
   id: string, name: string, kind: string, address: UnitAddress, screeningScope?: ScreeningScope, collectsSamples?: boolean,
-  notifying?: boolean
+  notifying?: boolean, cnes?: string | null
 ): Promise<HealthUnitRow> {
   const body: Record<string, unknown> = { name, kind, ...address };
   if (screeningScope) body.screening_scope = screeningScope;
   if (collectsSamples !== undefined) body.collects_samples = collectsSamples;
   if (notifying !== undefined) body.notifying = notifying;
+  if (cnes !== undefined) body.cnes = cnes;
   const payload = await jsonFetch<{ unit: HealthUnitRow }>(`${ATTENDANCE_BASE}/units/${encodeURIComponent(id)}`, {
     method: "POST", body: JSON.stringify(body)
   });
