@@ -32,7 +32,9 @@ describe("modules", () => {
       expect(groups.some((g) => g.label === "Farmácia")).toBe(false);
       expect(groups.some((g) => g.label === "Saúde bucal")).toBe(false);
       expect(groups.some((g) => g.label === "Vacinação")).toBe(false);
-      expect(groups.length).toBe(NAV_GROUPS.length - 17);
+      expect(groups.some((g) => g.label === "Transporte")).toBe(false);
+      expect(groups.some((g) => g.label === "TFD")).toBe(false);
+      expect(groups.length).toBe(NAV_GROUPS.length - 19);
     });
 
     it("sem sessão, esconde Equipe, Atendimento e Cidade", () => {
@@ -53,7 +55,9 @@ describe("modules", () => {
       expect(groups.some((g) => g.label === "Farmácia")).toBe(false);
       expect(groups.some((g) => g.label === "Saúde bucal")).toBe(false);
       expect(groups.some((g) => g.label === "Vacinação")).toBe(false);
-      expect(groups.length).toBe(NAV_GROUPS.length - 16);
+      expect(groups.some((g) => g.label === "Transporte")).toBe(false);
+      expect(groups.some((g) => g.label === "TFD")).toBe(false);
+      expect(groups.length).toBe(NAV_GROUPS.length - 18);
     });
 
     it("Equipe só aparece para municipal_admin", () => {

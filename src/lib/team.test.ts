@@ -56,11 +56,19 @@ describe("reviewerCount", () => {
 const apiError = (status: number, body: unknown) => new ApiError(status, body, String(status));
 
 describe("convite", () => {
-  it("oferece os 18 papéis da cidade que se convidam pela Equipe", () => {
+  it("oferece os 21 papéis da cidade que se convidam pela Equipe", () => {
     expect(INVITE_ROLES.map((r) => r.role).sort()).toEqual([
-      "analyst", "billing_clerk", "campaign_manager", "care_regulator", "citizen_verifier", "exam_regulator", "health_professional", "lab_releaser", "lab_staff",
-      "municipal_admin", "pharmacist", "pharmacy_assistant", "protocol_author", "protocol_publisher", "protocol_reviewer", "stock_keeper", "surveillance", "viewer"
+      "analyst", "billing_clerk", "campaign_manager", "care_regulator", "citizen_verifier", "driver", "exam_regulator", "health_professional", "lab_releaser", "lab_staff",
+      "municipal_admin", "pharmacist", "pharmacy_assistant", "protocol_author", "protocol_publisher", "protocol_reviewer", "stock_keeper", "surveillance",
+      "tfd_committee", "transport_dispatcher", "viewer"
     ]);
+    // Módulo 30 (ADR 0048): central e comissão leem dado nominal — privilegiadas; o motorista não.
+    expect(INVITE_ROLES.find((r) => r.role === "transport_dispatcher")?.label).toBe("Central de transporte");
+    expect(INVITE_ROLES.find((r) => r.role === "tfd_committee")?.label).toBe("Comissão de TFD");
+    expect(INVITE_ROLES.find((r) => r.role === "driver")?.label).toBe("Motorista");
+    expect(isPrivilegedRole("transport_dispatcher")).toBe(true);
+    expect(isPrivilegedRole("tfd_committee")).toBe(true);
+    expect(isPrivilegedRole("driver")).toBe(false);
     expect(INVITE_ROLES.find((r) => r.role === "exam_regulator")?.label).toBe("Regulador de exames");
     expect(isPrivilegedRole("exam_regulator")).toBe(true);
     expect(INVITE_ROLES.find((r) => r.role === "lab_staff")?.label).toBe("Equipe do laboratório");

@@ -71,6 +71,16 @@ import { DentalProsthesis } from "./modules/DentalProsthesis";
 import { DentalCeoGoals } from "./modules/DentalCeoGoals";
 import { DentalIndicators } from "./modules/DentalIndicators";
 import { DentalAdmin } from "./modules/DentalAdmin";
+import { TransportTrips } from "./modules/TransportTrips";
+import { TransportSeries } from "./modules/TransportSeries";
+import { TransportPending } from "./modules/TransportPending";
+import { TransportFleet } from "./modules/TransportFleet";
+import { TransportMyTrips } from "./modules/TransportMyTrips";
+import { TransportPanel } from "./modules/TransportPanel";
+import { TransportSettings } from "./modules/TransportSettings";
+import { TfdQueue } from "./modules/TfdQueue";
+import { TfdMyCases } from "./modules/TfdMyCases";
+import { isDriverOnly } from "./lib/transport";
 import { ProviderPortal } from "./modules/ProviderPortal";
 import { AcknowledgementNotice } from "./modules/exams/AcknowledgementNotice";
 import { Shell } from "./shell/Shell";
@@ -171,7 +181,9 @@ function ShellInner({ initialModule }: { initialModule?: ModuleId }) {
   const auth = useAuth();
   // O prestador de exames só tem o portal: sem alertas de infra nem sino.
   const providerOnly = isExamProvider(auth.user);
-  const alerts = useAlerts(!providerOnly);
+  // Módulo 30: o motorista só com esse papel também não tem alertas de infra nem sino.
+  const driverOnly = isDriverOnly(auth.user);
+  const alerts = useAlerts(!providerOnly && !driverOnly);
   const scope = useScope();
   const pending = usePendingSignatures(canSign(auth.user));
   const examPending = useExamPending(canUseExams(auth.user) && examRoles(auth.user).professional, auth.user?.id ?? null);
@@ -247,7 +259,7 @@ function ShellInner({ initialModule }: { initialModule?: ModuleId }) {
           </>}
         />
       }
-      notifications={providerOnly ? null : <NotificationCenter active={alerts.active} limitations={alerts.limitations} onNavigate={navigate} />}
+      notifications={providerOnly || driverOnly ? null : <NotificationCenter active={alerts.active} limitations={alerts.limitations} onNavigate={navigate} />}
       account={auth.user ? <ContaMenu email={auth.user.email_address} onLogout={() => { void auth.logout(); }} /> : null}
     >
       {content}
@@ -352,6 +364,15 @@ export function renderModule(active: ModuleId, setActive: (id: ModuleId) => void
     case "dental-ceo-goals": return <DentalCeoGoals />;
     case "dental-indicators": return <DentalIndicators />;
     case "dental-admin": return <DentalAdmin onGoToSecurity={() => setActive("security")} />;
+    case "transport-trips": return <TransportTrips onGoToSecurity={() => setActive("security")} />;
+    case "transport-series": return <TransportSeries onGoToSecurity={() => setActive("security")} />;
+    case "transport-pending": return <TransportPending />;
+    case "transport-fleet": return <TransportFleet onGoToSecurity={() => setActive("security")} />;
+    case "transport-my-trips": return <TransportMyTrips />;
+    case "transport-panel": return <TransportPanel />;
+    case "transport-settings": return <TransportSettings onGoToSecurity={() => setActive("security")} />;
+    case "tfd-queue": return <TfdQueue onGoToSecurity={() => setActive("security")} />;
+    case "tfd-my-cases": return <TfdMyCases />;
     default:               return <Placeholder title={labelFor(active)} />;
   }
 }

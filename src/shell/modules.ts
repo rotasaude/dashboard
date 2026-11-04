@@ -11,6 +11,8 @@ import { canUseRegulation } from "../lib/regulation";
 import { canUsePharmacy } from "../lib/pharmacy";
 import { canUseDental, dentalRoles } from "../lib/dental";
 import { canUseVaccination } from "../lib/vaccination";
+import { canUseTransport, isDriverOnly, transportRoles } from "../lib/transport";
+import { canUseTfd } from "../lib/tfd";
 export type ModuleId =
   | "overview" | "ingestion" | "conversations" | "consent"
   | "triages" | "classification" | "reports" | "protocols" | "events"
@@ -31,7 +33,9 @@ export type ModuleId =
   | "pharmacy-alerts" | "pharmacy-admin"
   | "vaccination-room" | "vaccination-pending" | "vaccination-stock" | "vaccination-cold-chain" | "vaccination-summary" | "vaccination-panel"
   | "vaccination-admin"
-  | "dental-prosthesis" | "dental-ceo-goals" | "dental-indicators" | "dental-admin";
+  | "dental-prosthesis" | "dental-ceo-goals" | "dental-indicators" | "dental-admin"
+  | "transport-trips" | "transport-series" | "transport-pending" | "transport-fleet" | "transport-my-trips" | "transport-panel"
+  | "transport-settings" | "tfd-queue" | "tfd-my-cases";
 
 export interface NavItem { id: ModuleId; label: string; icon: string; }
 export interface NavGroupDef { label: string; items: NavItem[]; }
@@ -116,6 +120,19 @@ export const NAV_GROUPS: NavGroupDef[] = [
     { id: "dental-ceo-goals", label: "Metas do CEO", icon: "◎" },
     { id: "dental-indicators", label: "Indicadores B1 e B2", icon: "◑" },
     { id: "dental-admin", label: "CEO e lista do TSB/ASB", icon: "⚙" }
+  ]},
+  { label: "Transporte", items: [
+    { id: "transport-trips", label: "Viagens do dia", icon: "⇶" },
+    { id: "transport-series", label: "Séries recorrentes", icon: "↻" },
+    { id: "transport-pending", label: "Pendências e faltas", icon: "⚠" },
+    { id: "transport-fleet", label: "Frota, motoristas e destinos", icon: "▣" },
+    { id: "transport-my-trips", label: "Minhas viagens", icon: "☰" },
+    { id: "transport-panel", label: "Painel de transporte e TFD", icon: "▦" },
+    { id: "transport-settings", label: "Regras do TFD e do acompanhante", icon: "⚙" }
+  ]},
+  { label: "TFD", items: [
+    { id: "tfd-queue", label: "Comissão de TFD", icon: "⚖" },
+    { id: "tfd-my-cases", label: "Meus pedidos de TFD", icon: "✎" }
   ]},
   { label: "Exames", items: [
     { id: "exam-acknowledgements", label: "Resultados aguardando ciência", icon: "⚑" },
@@ -219,6 +236,15 @@ export function navGroupsFor(
       return items.length > 0 ? [ { ...group, items } ] : [];
     });
   }
+  // Módulo 30 (ADR 0048): quem só tem o papel de motorista vê as próprias viagens e a Segurança — nada de painel nem
+  // de dado de outros. O api isola de novo (403 missing_role); aqui só não se oferece a porta.
+  if (isDriverOnly(user)) {
+    const trOnly = canUseTransport(user);
+    return NAV_GROUPS.flatMap((group) => {
+      const items = group.items.filter((item) => item.id === "security" || (item.id === "transport-my-trips" && trOnly));
+      return items.length > 0 ? [ { ...group, items } ] : [];
+    });
+  }
   const isAdmin = roles.includes("municipal_admin");
   const canAttend = isAdmin || roles.includes("citizen_verifier") || roles.includes("health_professional");
   const isProfessional = roles.includes("health_professional");
@@ -296,6 +322,11 @@ export function navGroupsFor(
   // metas e B1/B2 do admin e do analyst; cadastro do CEO e lista do TSB/ASB do admin.
   const dentalOn = canUseDental(user);
   const dental = dentalRoles(user);
+  // Módulo 30 (ADR 0048): `sanitary_transport` para Transporte; `tfd` (com sanitary_transport e clinical_record) para TFD.
+  // A central nunca vê o TFD; o painel é do admin, da central e da comissão.
+  const trOn = canUseTransport(user);
+  const tfdOn = canUseTfd(user);
+  const tr = transportRoles(user);
   return NAV_GROUPS.filter((group) => {
     if (group.label === "Conta") return !user?.operator;
     if (group.label === "Equipe") return isAdmin;
@@ -383,6 +414,15 @@ export function navGroupsFor(
       if (item.id === "dental-prosthesis") return dentalOn && dental.professional;
       if (item.id === "dental-ceo-goals" || item.id === "dental-indicators") return dentalOn && (dental.admin || dental.analyst);
       if (item.id === "dental-admin") return dentalOn && dental.admin;
+      if (item.id === "transport-trips" || item.id === "transport-series" || item.id === "transport-pending" || item.id === "transport-fleet") {
+        return trOn && tr.dispatcher;
+      }
+      if (item.id === "transport-my-trips") return trOn && tr.driver;
+      if (item.id === "transport-panel") return trOn && (isAdmin || tr.dispatcher || tr.committee);
+      if (item.id === "transport-settings") return trOn && isAdmin;
+      if (item.id === "tfd-queue") return tfdOn && tr.committee;
+      // O api confere o CBO 225 (403 cbo_not_allowed, traduzido na tela): a sessão não traz o CBO.
+      if (item.id === "tfd-my-cases") return tfdOn && isProfessional;
       if (item.id === "integrations" || item.id === "cnes") return canIntegrations;
       if (item.id === "production") return canProduction;
       return true;

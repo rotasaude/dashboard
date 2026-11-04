@@ -13,6 +13,7 @@ import {
   IconArrowsSplit2, IconListNumbers, IconArrowBackUp, IconBuildingStore, IconClockHour4,
   IconBuildingWarehouse, IconPrescription, IconFilePlus, IconTransfer, IconTruckLoading, IconListSearch, IconScale, IconAlertTriangle, IconBuildingCog,
   IconDental, IconDentalBroken,
+  IconBus, IconCalendarRepeat, IconUserX, IconCar, IconSteeringWheel,
   IconVaccine, IconNeedle, IconCloudUpload, IconVaccineBottle, IconTemperatureSnow, IconCalendarMonth, IconReportMedical, IconFridge
 } from "@tabler/icons-react";
 import type { Catalog } from "./types";
@@ -31,6 +32,8 @@ export const CATALOG: Catalog = {
     "Vigilância": { icon: IconVirus, description: "Notificação compulsória, prazos, negativa semanal e painel" },
     "Regulação": { icon: IconArrowsSplit2, description: "Encaminhamentos a especialista e procedimento, fila, cotas e prazos" },
     "Saúde bucal": { icon: IconDental, description: "Prontuário odontológico, CEO e prótese" },
+    "Transporte": { icon: IconBus, description: "Frota, viagens, séries, motorista e lista de passageiros" },
+    "TFD": { icon: IconGavel, description: "Laudo, comissão, ajuda de custo e prestação de contas" },
     "Farmácia": { icon: IconBuildingWarehouse, description: "Almoxarifado, farmácia da unidade, dispensação e alertas" },
     "Vacinação": { icon: IconVaccine, description: "Sala de vacina, caderneta, envio à RNDS, estoque e cadeia de frio" },
     "Exames":      { icon: IconMicroscope, description: "Pedidos, resultados e prestadores" },
@@ -124,6 +127,15 @@ export const CATALOG: Catalog = {
     "dental-ceo-goals": { icon: IconTargetArrow, description: "Meta mensal por especialidade e risco de suspensão" },
     "dental-indicators": { icon: IconChartBar, description: "Primeira consulta e tratamento concluído por equipe" },
     "dental-admin": { icon: IconSettings, description: "Tipo e especialidades do CEO; o que TSB e ASB registram" },
+    "transport-trips": { icon: IconRoute, description: "Agenda por dia e veículo, passageiros e lista impressa" },
+    "transport-series": { icon: IconCalendarRepeat, description: "Hemodiálise, radioterapia e outros tratamentos contínuos" },
+    "transport-pending": { icon: IconUserX, description: "Séries sem vaga e faltas por paciente" },
+    "transport-fleet": { icon: IconCar, description: "Veículos, motoristas com CNH e destinos com km" },
+    "transport-my-trips": { icon: IconSteeringWheel, description: "Viagens do dia, embarque e fechamento" },
+    "transport-panel": { icon: IconChartBar, description: "Viagens, ocupação, faltas, km e TFD do mês" },
+    "transport-settings": { icon: IconSettings, description: "Distância mínima, acompanhante, CNES e complemento" },
+    "tfd-queue": { icon: IconScale, description: "Laudos aguardando, decisão, trechos e pagamento" },
+    "tfd-my-cases": { icon: IconFilePlus, description: "Pedidos de TFD que você fez e os devolvidos" },
     "campaigns": { icon: IconSpeakerphone, description: "Criar e enviar campanhas por SMS" },
     "team": { icon: IconUsers, description: "Usuários, convites e papéis" },
     "professionals": { icon: IconIdBadge2, description: "Vínculos, CBO e turnos" },
