@@ -3,12 +3,12 @@ import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/re
 import * as api from "../lib/api";
 import { ApiError } from "../lib/api";
 import { renderWithProviders } from "../test/campaignFixtures";
-import { CAR, DEST_CURITIBA, DEST_NEAR, DRIVER_B, DRIVER_D, DRIVER_EXPIRED, DRIVER_EXPIRING, TODAY30, VAN, trip, trUser } from "../test/transportFixtures";
+import { CAR, DEST_CURITIBA, DEST_NEAR, DRIVER_B, DRIVER_D, DRIVER_EXPIRED, DRIVER_EXPIRING, TODAY30, VAN, passenger, trip, trUser } from "../test/transportFixtures";
 import { TransportTrips } from "./TransportTrips";
 
 vi.mock("../lib/api", async (orig) => ({ ...(await orig<typeof api>()), fetchCurrentSession: vi.fn(), listTrips: vi.fn(), createTrip: vi.fn(),
   updateTrip: vi.fn(), confirmTrip: vi.fn(), cancelTrip: vi.fn(), listVehicles: vi.fn(), listDrivers: vi.fn(), listDestinations: vi.fn(),
-  findScheduledCare: vi.fn(), listTransportHealthUnits: vi.fn() }));
+  findScheduledCare: vi.fn(), listTransportHealthUnits: vi.fn(), correctAttendance: vi.fn() }));
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
 function mount(trips = [ trip({ status: "planned", vehicle: null, driver: null }) ]) {
@@ -271,5 +271,37 @@ describe("viagens do dia", () => {
     expect(within(articles[1]).getByRole("region", { name: "Passageiros" })).not.toBeNull();
     expect(within(articles[1]).getByText("Maria da Silva")).not.toBeNull();
     expect(screen.getByText("A lista não leva diagnóstico, procedimento nem especialidade.")).not.toBeNull();
+  });
+
+  it("viagem concluída: correção de presença com motivo e step-up", async () => {
+    vi.mocked(api.correctAttendance).mockResolvedValue(trip({ status: "done", passengers: [ passenger({ attendance: "boarded" }) ] }));
+    mount([ trip({ status: "done", passengers: [ passenger({ attendance: "no_show" }) ] }) ]);
+    fireEvent.click(await screen.findByRole("button", { name: "Corrigir presença" }));
+    fireEvent.change(screen.getByLabelText("Presença de Maria da Silva"), { target: { value: "boarded" } });
+    fireEvent.change(screen.getByLabelText("Motivo"), { target: { value: "motorista marcou errado no celular" } });
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+    await waitFor(() => expect(api.correctAttendance).toHaveBeenCalledWith("tr1", { items: [ { passenger_id: "p1", attendance: "boarded" } ], reason: "motorista marcou errado no celular" }));
+    expect(await screen.findByText("Presença corrigida.")).not.toBeNull();
+  });
+
+  it("correção: nada alterado não envia; acompanhante leva a presença do paciente; tfd_leg_done traduzido", async () => {
+    vi.mocked(api.correctAttendance).mockRejectedValue(new ApiError(422, { error: "tfd_leg_done", problems: [ { path: "items.0.companion_attendance", error: "tfd_leg_done" } ] }, "422"));
+    mount([ trip({ status: "done", passengers: [ passenger({ attendance: "boarded", companion: { name: "Joana", document_last4: null }, companion_attendance: "boarded" }) ] }) ]);
+    fireEvent.click(await screen.findByRole("button", { name: "Corrigir presença" }));
+    fireEvent.change(screen.getByLabelText("Motivo"), { target: { value: "motorista marcou errado no celular" } });
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+    expect(await screen.findByText("mude ao menos uma presença")).not.toBeNull();
+    expect(api.correctAttendance).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText("Presença do acompanhante de Maria da Silva"), { target: { value: "no_show" } });
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+    await waitFor(() => expect(api.correctAttendance).toHaveBeenCalledWith("tr1", {
+      items: [ { passenger_id: "p1", attendance: "boarded", companion_attendance: "no_show" } ], reason: "motorista marcou errado no celular" }));
+    expect(await screen.findByText("o trecho de TFD deste passageiro já foi cumprido — a presença não pode mudar")).not.toBeNull();
+  });
+
+  it("correção só em viagem concluída", async () => {
+    mount([ trip({ status: "in_progress" }) ]);
+    await screen.findAllByRole("article");
+    expect(screen.queryByRole("button", { name: "Corrigir presença" })).toBeNull();
   });
 });

@@ -1,5 +1,5 @@
 // Módulo 30 (F-30.2): "Viagens do dia" da central de transporte. Agenda por dia (e veículo), criar, editar, confirmar e cancelar viagem;
-// em cada viagem, os passageiros (PassengerList).
+// em cada viagem, os passageiros (PassengerList) e, concluída, a correção de presença (AttendanceCorrection, com step-up).
 // Leitura STATIC_QUERY (ao abrir, ao trocar o dia, depois de uma ação), sem polling. A resposta de uma ação feita antes de trocar o dia é
 // ignorada (`epoch`), como o `seq` do PrescriptionLookup. A central nunca lê o laudo: nenhuma chamada a /tfd/*.
 import { useRef, useState, type FormEvent } from "react";
@@ -16,6 +16,7 @@ import { Panel } from "../components/Panel";
 import { buttonStyle, inputStyle, secondaryButtonStyle } from "../components/formStyles";
 import { alert, fieldLabel, muted, row, stack } from "./exams/styles";
 import { TransportGate } from "./transport/TransportGate";
+import { AttendanceCorrection } from "./transport/AttendanceCorrection";
 import { PassengerList } from "./transport/PassengerList";
 import { TripCard } from "./transport/TripCard";
 import { TripForm } from "./transport/TripForm";
@@ -113,6 +114,7 @@ function TripsAgenda({ today, onGoToSecurity }: { today: string; onGoToSecurity?
               editBlocked={loadError} onChanged={changed} onReload={refused} onGoToSecurity={onGoToSecurity}>
               {/* A frase da ação fica junto da lista de passageiros; aqui a agenda só relê. */}
               <PassengerList trip={t} onChanged={() => changed(t, "")} onReload={refused} />
+              <AttendanceCorrection trip={t} onCorrected={(c) => changed(c, "Presença corrigida.")} onReload={refused} onGoToSecurity={onGoToSecurity} />
             </TripCard>
           ))}
         <p style={muted}>{NO_CLINICAL_NOTE}</p>
