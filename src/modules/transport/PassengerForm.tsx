@@ -5,7 +5,7 @@
 // origem TFD o motivo não resolve (o laudo não indicou acompanhante). Nenhum dado clínico: o formulário só tem os campos de <passenger>.
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { addPassenger, type TripPassenger, type Trip } from "../../lib/api";
-import { exceptionReasonLabel, originLabel, passengerBody, passengerProblems, transportRefusals, type PassengerDraft } from "../../lib/transport";
+import { STALE_CODES, exceptionReasonLabel, originLabel, passengerBody, passengerProblems, transportRefusals, type PassengerDraft } from "../../lib/transport";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { alert, checkLabel, fieldLabel, fieldset, form, legend, muted, row } from "../exams/styles";
 
@@ -14,7 +14,6 @@ export const TFD_COMPANION_TEXT = "o laudo não indica acompanhante — tire o a
 export const TFD_DESTINATION_TEXT = "o destino tem de ser o do TFD deste paciente";
 export const ORIGIN_GONE_TEXT = "este atendimento não está mais marcado — busque os atendimentos de novo";
 // Recusas que dizem que a tela está velha: a frase fica e a agenda relê.
-export const STALE_CODES = [ "not_found", "trip_not_open", "passenger_anonymized" ];
 
 // Campo de cada `path` (local ou do api); o resto vai ao topo.
 const FIELD_OF: Record<string, string> = {

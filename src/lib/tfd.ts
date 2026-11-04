@@ -8,7 +8,7 @@ import {
 import { featureDisabledKey, featureLabel, hasFeature } from "./features";
 import { cityIsoDate, parseCityLocal } from "./format";
 import type { Problem, Refusal } from "./pharmacy";
-import { MAX_CENTS, canUseTransport, parseReais, transportRefusals, transportRoles } from "./transport";
+import { MAX_CENTS, canUseTransport, parseReais, reasonProblemText, transportRefusals, transportRoles } from "./transport";
 
 // ─── Frases fixas ───────────────────────────────────────────────────────────
 export const TFD_DISABLED = "o TFD está desligado nesta cidade";
@@ -177,8 +177,8 @@ export function appointmentProblems(value: string, now: Date): Problem[] {
 // Motivo 10–500 em toda decisão. Autorizar exige atendimento futuro (o api trata o passado como ausente).
 export function decisionProblems(decision: TfdDecision, reason: string, c: TfdCase, now: Date = new Date()): Problem[] {
   const out: Problem[] = [];
-  const n = reason.trim().length;
-  if (n < 10 || n > 500) out.push({ path: "reason", text: "o motivo tem de 10 a 500 caracteres" });
+  const short = reasonProblemText(reason.trim());
+  if (short) out.push({ path: "reason", text: short });
   if (decision === "authorize") {
     const at = instant(c.appointment_at);
     if (at === null || at <= now.getTime()) out.push({ path: "appointment_at", text: APPOINTMENT_REQUIRED });

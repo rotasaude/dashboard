@@ -1,19 +1,16 @@
 // Correção de presença pela central (módulo 30, F-30.4): só em viagem concluída, com motivo (10–500) e segundo fator. Um seletor por
 // passageiro e por acompanhante (só `boarded`/`no_show`); vão só os itens alterados, e cada item leva `attendance` (o api exige),
 // com `companion_attendance` só quando o acompanhante mudou. Recusas traduzidas: `tfd_leg_done`, `passenger_anonymized`, `invalid_transition`.
-import { useState } from "react";
-import { correctAttendance, errorCode, type AttendanceItem, type Trip, type TripAttendance, type TripPassenger } from "../../lib/api";
-import { attendanceLabel, transportRefusals } from "../../lib/transport";
+import { useRef, useState } from "react";
+import { correctAttendance, type AttendanceItem, type Trip, type TripAttendance, type TripPassenger } from "../../lib/api";
+import { LocalRefusal, attendanceLabel, isStaleRefusal, reasonProblemText, refusalTexts, transportRefusals } from "../../lib/transport";
 import { NO_NAME } from "../../lib/territoryRegistry";
 import { SensitiveAction } from "../../components/SensitiveAction";
 import { inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { fieldLabel, fieldset, legend, stack } from "../exams/styles";
 
-const REASON_TEXT = "o motivo tem de 10 a 500 caracteres";
 const NOTHING_TEXT = "mude ao menos uma presença";
-const STALE = [ "not_found", "invalid_transition", "passenger_anonymized" ];
 const CHOICES: TripAttendance[] = [ "boarded", "no_show" ];
-class LocalRefusal extends Error {}
 
 const nameOf = (p: TripPassenger) => p.patient.display_name ?? NO_NAME;
 type Draft = Record<string, { attendance: string; companion: string | null }>;
@@ -42,6 +39,8 @@ export function AttendanceCorrection({ trip, onCorrected, onReload, onGoToSecuri
   const [ draft, setDraft ] = useState<Draft>(() => draftFrom(trip));
   // Enquanto a correção corre, os seletores ficam travados (o que vai é o lido no início do envio).
   const [ running, setRunning ] = useState(false);
+  // O que foi enviado, na ordem: a recusa `items.N.*` vira a frase com o nome do passageiro (nada é destacado nesta tela; C5).
+  const sent = useRef<AttendanceItem[]>([]);
   if (trip.status !== "done" || trip.passengers.length === 0) return null;
 
   function items(): AttendanceItem[] {
@@ -86,18 +85,24 @@ export function AttendanceCorrection({ trip, onCorrected, onReload, onGoToSecuri
       <SensitiveAction title="Corrigir presença" requiresStepUp onGoToSecurity={onGoToSecurity}
         description="A presença fechada só muda por aqui, com motivo; a mudança fica no histórico."
         fields={[ { name: "reason", label: "Motivo", required: true, multiline: true } ]}
-        translateError={(err) => (err instanceof LocalRefusal ? err.message : [ ...new Set(transportRefusals(err).map((r) => r.text)) ].join("; "))}
+        translateError={(err) => refusalTexts(err, (e) => transportRefusals(e).map((r) => {
+          const m = r.code === "invalid_request" ? /^items\.(\d+)(\.|$)/.exec(r.path) : null;
+          const p = m ? trip.passengers.find((x) => x.id === sent.current[Number(m[1])]?.passenger_id) : undefined;
+          return p ? { ...r, text: `confira a presença de ${nameOf(p)}` } : r;
+        }))}
         run={async (values) => {
           const list = items();
           if (list.length === 0) throw new LocalRefusal(NOTHING_TEXT);
           const reason = (values.reason ?? "").trim();
-          if (reason.length < 10 || reason.length > 500) throw new LocalRefusal(REASON_TEXT);
+          const short = reasonProblemText(reason);
+          if (short) throw new LocalRefusal(short);
+          sent.current = list;
           setRunning(true);
           try {
             const t = await correctAttendance(trip.id, { items: list, reason });
             onCorrected(t);
           } catch (err) {
-            if (STALE.includes(errorCode(err) ?? "")) onReload?.();
+            if (isStaleRefusal(err)) onReload?.();
             throw err;
           } finally { setRunning(false); }
         }}

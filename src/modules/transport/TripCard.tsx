@@ -5,15 +5,12 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { cancelTrip, confirmTrip, type TransportDestination, type TransportDriver, type TransportVehicle, type Trip } from "../../lib/api";
 import { cityIsoDate, fmtHourMinute } from "../../lib/format";
-import { occupancyText, transportRefusals, tripDraftFrom, tripProblems, tripStatusLabel, tripStatusTone } from "../../lib/transport";
+import { LocalRefusal, occupancyText, reasonProblemText, refusalTexts, transportRefusals, tripDraftFrom, tripProblems, tripStatusLabel, tripStatusTone } from "../../lib/transport";
 import { SensitiveAction } from "../../components/SensitiveAction";
 import { Tag } from "../../components/Tag";
 import { buttonStyle, disabledButtonStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { alert, list, muted, panel, row, title } from "../exams/styles";
 import { TripForm } from "./TripForm";
-
-const REASON_TEXT = "o motivo tem de 10 a 500 caracteres";
-class LocalRefusal extends Error {}
 
 const dayOf = (iso: string): string => {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
@@ -103,10 +100,11 @@ export function TripCard({ trip, today: _today, vehicles, drivers, destinations,
       {mode === "cancel" && canEdit && (
         <SensitiveAction title="Cancelar viagem" description={notice} requiresStepUp={false} onGoToSecurity={onGoToSecurity}
           fields={[ { name: "reason", label: "Motivo", required: true, multiline: true } ]}
-          translateError={(err) => (err instanceof LocalRefusal ? err.message : transportRefusals(err)[0].text)}
+          translateError={(err) => refusalTexts(err)}
           run={async (values) => {
             const reason = (values.reason ?? "").trim();
-            if (reason.length < 10 || reason.length > 500) throw new LocalRefusal(REASON_TEXT);
+            const short = reasonProblemText(reason);
+            if (short) throw new LocalRefusal(short);
             try {
               const t = await cancelTrip(trip.id, reason);
               onChanged(t, "Viagem cancelada.");

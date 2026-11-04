@@ -3,9 +3,9 @@
 // marcados na data ou passageiro sem atendimento (busca por CPF, com motivo), e retirar com motivo (10–500; o passageiro recebe o aviso).
 // O api devolve a viagem ao retirar; a agenda relê (`onChanged`). Sem polling; o CPF só vai no corpo da busca.
 import { useRef, useState } from "react";
-import { errorCode, removePassenger, type ScheduledCareItem, type Trip, type TripPassenger } from "../../lib/api";
+import { removePassenger, type ScheduledCareItem, type Trip, type TripPassenger } from "../../lib/api";
 import { fmtHourMinute } from "../../lib/format";
-import { attendanceLabel, exceptionReasonLabel, originLabel, passengerDraftFrom, transportRefusals, type PassengerDraft } from "../../lib/transport";
+import { LocalRefusal, attendanceLabel, exceptionReasonLabel, isStaleRefusal, originLabel, passengerDraftFrom, reasonProblemText, refusalTexts, type PassengerDraft } from "../../lib/transport";
 import { NO_NAME } from "../../lib/territoryRegistry";
 import { useActionMessage } from "../../lib/useActionMessage";
 import { ActionMessage } from "../../components/ActionMessage";
@@ -13,13 +13,10 @@ import { DataTable, type Column } from "../../components/DataTable";
 import { SensitiveAction } from "../../components/SensitiveAction";
 import { secondaryButtonStyle } from "../../components/formStyles";
 import { box, muted, row, stack } from "../exams/styles";
-import { PassengerForm, STALE_CODES } from "./PassengerForm";
+import { PassengerForm } from "./PassengerForm";
 import { ScheduledCare } from "./ScheduledCare";
 import { TransportPersonPick } from "./TransportPersonPick";
 import { openManifest } from "./openManifest";
-
-const REASON_TEXT = "o motivo tem de 10 a 500 caracteres";
-class LocalRefusal extends Error {}
 
 type Step =
   | { kind: "list" }
@@ -125,14 +122,15 @@ export function PassengerList({ trip, onChanged, onReload }: { trip: Trip; onCha
       {step.kind === "remove" && (
         <SensitiveAction title={`Retirar ${nameOf(step.passenger.patient)}`} description="O passageiro sai da viagem e recebe o aviso." requiresStepUp={false}
           fields={[ { name: "reason", label: "Motivo", required: true, multiline: true } ]}
-          translateError={(err) => (err instanceof LocalRefusal ? err.message : transportRefusals(err)[0].text)}
+          translateError={(err) => refusalTexts(err)}
           run={async (values) => {
             const reason = (values.reason ?? "").trim();
-            if (reason.length < 10 || reason.length > 500) throw new LocalRefusal(REASON_TEXT);
+            const short = reasonProblemText(reason);
+            if (short) throw new LocalRefusal(short);
             try {
               await removePassenger(trip.id, step.passenger.id, reason);
             } catch (err) {
-              if (STALE_CODES.includes(errorCode(err) ?? "")) onReload?.();
+              if (isStaleRefusal(err)) onReload?.();
               throw err;
             }
             msg.ok("Passageiro retirado.");

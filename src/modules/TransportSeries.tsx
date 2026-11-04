@@ -7,7 +7,7 @@ import { listDestinations, listSeries, suspendSeries, type TransportSeries as Se
 import { todayInCity } from "../lib/campaigns";
 import { fmtHourMinute } from "../lib/format";
 import { NO_NAME } from "../lib/territoryRegistry";
-import { NOMINAL_QUERY, STATIC_QUERY, TR_DESTINATIONS_KEY, TR_SERIES_KEY, fmtIsoDay, transportError, transportRefusals, weekdaysLabel } from "../lib/transport";
+import { LocalRefusal, NOMINAL_QUERY, STATIC_QUERY, TR_DESTINATIONS_KEY, TR_SERIES_KEY, fmtIsoDay, reasonProblemText, refusalTexts, transportError, weekdaysLabel } from "../lib/transport";
 import { useActionMessage } from "../lib/useActionMessage";
 import { ActionMessage } from "../components/ActionMessage";
 import { DataTable, type Column } from "../components/DataTable";
@@ -22,8 +22,6 @@ import { TransportGate } from "./transport/TransportGate";
 export const SERIES_RULE_NOTE = "As viagens das próximas três semanas são criadas todo dia de manhã; sem vaga em viagem confirmada, a série aparece em Pendências.";
 export const RESUME_NOTE = "para retomar, crie uma série nova";
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
-const REASON_TEXT = "o motivo tem de 10 a 500 caracteres";
-class LocalRefusal extends Error {}
 
 const hhmm = (t: string): string => (/^\d{2}:\d{2}/.test(t) ? t.slice(0, 5) : fmtHourMinute(t));
 
@@ -100,7 +98,8 @@ function SeriesBoard({ today, onGoToSecurity }: { today: string; onGoToSecurity?
       if (!DATE.test(from)) throw new LocalRefusal("informe a data no formato aaaa-mm-dd");
       if (from < today) throw new LocalRefusal("a data não pode ser anterior a hoje");
       if (s.suspended_from && from > s.suspended_from) throw new LocalRefusal(`a nova data tem de ser até ${fmtIsoDay(s.suspended_from)} (só dá para antecipar)`);
-      if (reason.length < 10 || reason.length > 500) throw new LocalRefusal(REASON_TEXT);
+      const short = reasonProblemText(reason);
+      if (short) throw new LocalRefusal(short);
       await suspendSeries(s.id, { from_on: from, reason });
     };
   }
@@ -119,7 +118,7 @@ function SeriesBoard({ today, onGoToSecurity }: { today: string; onGoToSecurity?
           <SensitiveAction title={`Suspender a série de ${suspending.patient.display_name ?? NO_NAME}`} requiresStepUp={false} onGoToSecurity={onGoToSecurity}
             description="A série para de gerar viagens: o paciente sai das viagens a partir desta data; as viagens já feitas ficam como estão. Não dá para desfazer — para retomar, crie uma série nova."
             fields={[ { name: "from_on", label: "A partir de", required: true, placeholder: "aaaa-mm-dd" }, { name: "reason", label: "Motivo", required: true, multiline: true } ]}
-            translateError={(err) => (err instanceof LocalRefusal ? err.message : transportRefusals(err)[0].text)}
+            translateError={(err) => refusalTexts(err)}
             run={run(suspending)} onCancel={() => setSuspending(null)} onDone={() => { setSuspending(null); msg.ok("Série suspensa."); void reload(); }} />
         )}
         <ActionMessage message={msg.message} />

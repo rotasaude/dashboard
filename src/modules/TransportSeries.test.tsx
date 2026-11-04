@@ -62,6 +62,18 @@ describe("séries recorrentes", () => {
     expect(screen.queryByRole("button", { name: "Suspender a série de Ana Radio" })).toBeNull();
   });
 
+  it("suspensão recusada pelo api mostra todas as recusas, não só a primeira (C4)", async () => {
+    setup();
+    vi.mocked(api.suspendSeries).mockRejectedValue(new ApiError(422, { error: "invalid_request", problems: [
+      { path: "from_on", error: "not_found" }, { path: "reason", error: "invalid_request" } ] }, "422"));
+    renderWithProviders(<TransportSeries today={TODAY30} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Suspender a série de José Hemodiálise" }));
+    fireEvent.change(screen.getByLabelText("A partir de"), { target: { value: "2026-11-05" } });
+    fireEvent.change(screen.getByLabelText("Motivo"), { target: { value: "paciente transferido para outra clínica" } });
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+    expect(await screen.findByText(/; o motivo tem de 10 a 500 caracteres$/)).not.toBeNull();
+  });
+
   it("suspender com data passada ou motivo curto é recusado antes de enviar", async () => {
     setup();
     renderWithProviders(<TransportSeries today={TODAY30} />);

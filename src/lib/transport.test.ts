@@ -4,7 +4,7 @@ import {
   canUseTransport, closeBody, closeProblems, destinationProblems, driverCreateBody, driverFitProblems, driverProblems, driverUpdateBody, fmtCents,
   fmtTransportCount, isDriverOnly, licenseText, licenseTone, newTripDraft, normalizePlate, occupancyText, originLabel, parseLiters, parseReais,
   passengerBody, passengerDraftFrom, passengerProblems, pendingAttendance, pendingReasonLabel, seriesBody, seriesProblems, transportError,
-  transportRefusals, transportRoles, tripBody, tripDraftFrom, tripProblems, tripStatusLabel, tripStatusTone, vehicleBody, vehicleProblems,
+  LocalRefusal, REASON_TEXT, isStaleRefusal, reasonProblemText, refusalTexts, transportRefusals, transportRoles, tripBody, tripDraftFrom, tripProblems, tripStatusLabel, tripStatusTone, vehicleBody, vehicleProblems,
   weekdaysLabel
 } from "./transport";
 import { CAR, DRIVER_B, DRIVER_D, DRIVER_EXPIRED, DRIVER_EXPIRING, TODAY30, VAN, passenger, trip, trUser } from "../test/transportFixtures";
@@ -373,6 +373,23 @@ describe("recusas do api", () => {
     expect(t("stops.2.label")).toContain("parada");
     expect(t("reason")).toContain("motivo");
     expect(t("qualquer")).toBe("pedido inválido — recarregue a tela e tente de novo");
+  });
+  it("C5: só `reason` (ou `.reason`) é o motivo; `exception_reason` não; `items.N` não fala em destacado", () => {
+    const t = (path: string) => transportError(refuse(422, { error: "invalid_request", path }));
+    expect(t("reason")).toBe(REASON_TEXT);
+    expect(t("companion.reason")).toContain("acompanhante");
+    expect(t("series.reason")).toBe(REASON_TEXT);
+    expect(t("exception_reason")).not.toBe(REASON_TEXT);
+    expect(t("items.0.attendance")).not.toContain("destacad");
+    expect(t("items.0.attendance")).toContain("presença");
+  });
+  it("C9: refusalTexts junta todas sem repetir; recusa local vai como está; motivo e códigos de releitura num lugar só", () => {
+    const err = refuse(422, { error: "x", problems: [ { path: "a", error: "not_found" }, { path: "b", error: "trip_not_open" }, { path: "c", error: "not_found" } ] });
+    expect(refusalTexts(err)).toBe(`${transportRefusals(err)[0].text}; ${transportRefusals(err)[1].text}`);
+    expect(refusalTexts(new LocalRefusal("frase local"))).toBe("frase local");
+    expect([ reasonProblemText("curto"), reasonProblemText("motivo com tamanho bom"), reasonProblemText("x".repeat(501)) ]).toEqual([ REASON_TEXT, null, REASON_TEXT ]);
+    for (const code of [ "not_found", "trip_not_open", "invalid_transition", "passenger_anonymized" ]) expect(isStaleRefusal(refuse(422, { error: code })), code).toBe(true);
+    expect(isStaleRefusal(refuse(422, { error: "seats_full" }))).toBe(false);
   });
   it("feature_disabled e código desconhecido", () => {
     expect(transportRefusals(refuse(403, { error: "feature_disabled", feature: "sanitary_transport" }))[0].text).toBe("o transporte sanitário está desligado nesta cidade");

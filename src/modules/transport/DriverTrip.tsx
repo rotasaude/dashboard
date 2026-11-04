@@ -8,10 +8,10 @@
 // o valor que o api confirmou para cada linha (`confirmed`) vale sobre a viagem em cache — inclusive na presença do paciente que o
 // toque no acompanhante leva.
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { errorCode, recordAttendance, startMyTrip, type AttendanceItem, type Trip, type TripAttendance, type TripPassenger } from "../../lib/api";
+import { recordAttendance, startMyTrip, type AttendanceItem, type Trip, type TripAttendance, type TripPassenger } from "../../lib/api";
 import { fmtHourMinute } from "../../lib/format";
 import {
-  TRIP_NOT_TODAY, attendanceLabel, expenseKindLabel, fmtCents, pendingAttendance, transportError, tripStatusLabel, tripStatusTone
+  TRIP_NOT_TODAY, attendanceLabel, expenseKindLabel, fmtCents, isStaleRefusal, pendingAttendance, transportError, tripStatusLabel, tripStatusTone
 } from "../../lib/transport";
 import { NO_NAME } from "../../lib/territoryRegistry";
 import { useActionMessage } from "../../lib/useActionMessage";
@@ -21,8 +21,6 @@ import { buttonStyle, disabledButtonStyle, secondaryButtonStyle } from "../../co
 import { alert, box, list, muted, panel, row, stack, title } from "../exams/styles";
 import { CloseTripForm } from "./CloseTripForm";
 
-// Recusas que dizem que a tela está velha: a lista relê.
-const STALE = [ "not_found", "trip_not_open", "invalid_transition", "passenger_anonymized" ];
 const TARGET: CSSProperties = { minHeight: 44, flex: "1 1 0", fontSize: 15 };
 const nameOf = (p: TripPassenger) => p.patient.display_name ?? NO_NAME;
 
@@ -83,7 +81,7 @@ export function DriverTrip({ trip, today, onChanged, onReload }: { trip: Trip; t
       setConfirmed((prev) => ({ ...prev, [key]: value, ...(who === "companion" ? { [rowKey(p, "patient")]: item.attendance } : {}) }));
     } catch (err) {
       setRowError((prev) => ({ ...prev, [key]: transportError(err) }));
-      stale = STALE.includes(errorCode(err) ?? "");
+      stale = isStaleRefusal(err);
     } finally {
       dropKey(setOptimistic, key);
       inFlight.current.delete(p.id);
@@ -107,7 +105,7 @@ export function DriverTrip({ trip, today, onChanged, onReload }: { trip: Trip; t
       onChanged(t);
     } catch (err) {
       msg.fail(transportError(err));
-      if (STALE.includes(errorCode(err) ?? "")) onReload?.();
+      if (isStaleRefusal(err)) onReload?.();
     } finally { setStarting(false); }
   }
 
@@ -186,7 +184,7 @@ export function DriverTrip({ trip, today, onChanged, onReload }: { trip: Trip; t
       {open && closing && (
         <CloseTripForm trip={trip} onCancel={() => setClosing(false)}
           onClosed={(t) => { setClosing(false); msg.ok("Viagem fechada."); onChanged(t); }}
-          onRefused={(err) => { if (STALE.includes(errorCode(err) ?? "")) onReload?.(); }} />
+          onRefused={(err) => { if (isStaleRefusal(err)) onReload?.(); }} />
       )}
 
       {trip.status === "done" && trip.log && <TripLogSummary trip={trip} />}

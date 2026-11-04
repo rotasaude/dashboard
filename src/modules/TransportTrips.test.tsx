@@ -206,6 +206,25 @@ describe("viagens do dia", () => {
     expect(screen.getByText(/ainda não foi confirmada, os passageiros não recebem aviso/)).not.toBeNull();
   });
 
+  it("cancelar recusado pelo api mostra todas as recusas (C4)", async () => {
+    vi.mocked(api.cancelTrip).mockRejectedValue(new ApiError(422, { error: "x", problems: [ { path: "", error: "trip_not_open" }, { path: "reason", error: "invalid_request" } ] }, "422"));
+    mount([ trip({ status: "planned" }) ]);
+    fireEvent.click(await screen.findByRole("button", { name: "Cancelar viagem" }));
+    fireEvent.change(screen.getByLabelText("Motivo"), { target: { value: "veículo quebrado na garagem" } });
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+    expect(await screen.findByText(/; o motivo tem de 10 a 500 caracteres$/)).not.toBeNull();
+  });
+
+  it("correção com caminho items.N: a frase nomeia o passageiro (C5)", async () => {
+    vi.mocked(api.correctAttendance).mockRejectedValue(new ApiError(422, { error: "invalid_request", problems: [ { path: "items.0.attendance", error: "invalid_request" } ] }, "422"));
+    mount([ trip({ status: "done", passengers: [ passenger({ attendance: "no_show" }) ] }) ]);
+    fireEvent.click(await screen.findByRole("button", { name: "Corrigir presença" }));
+    fireEvent.change(screen.getByLabelText("Presença de Maria da Silva"), { target: { value: "boarded" } });
+    fireEvent.change(screen.getByLabelText("Motivo"), { target: { value: "motorista marcou errado no celular" } });
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+    expect(await screen.findByText("confira a presença de Maria da Silva")).not.toBeNull();
+  });
+
   it("cancelada, em andamento e situação nova: sem ações; código novo aparece cru", async () => {
     mount([ trip({ id: "a", status: "cancelled" }), trip({ id: "b", status: "in_progress", departure_at: "2026-11-03T07:00:00-03:00" }),
       trip({ id: "c", status: "parked", departure_at: "2026-11-03T08:00:00-03:00" }) ]);

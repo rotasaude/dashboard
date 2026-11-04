@@ -272,6 +272,17 @@ describe("passageiros da viagem", () => {
     expect(onChanged).not.toHaveBeenCalled();
   });
 
+  it("retirar recusado com várias recusas: mostra todas (C4); invalid_transition também relê (C9)", async () => {
+    vi.mocked(api.removePassenger).mockRejectedValue(new ApiError(422, { error: "invalid_transition", problems: [ { path: "", error: "invalid_transition" }, { path: "reason", error: "invalid_request" } ] }, "422"));
+    const onReload = vi.fn();
+    mount(trip(), () => {}, onReload);
+    fireEvent.click(await screen.findByRole("button", { name: "Retirar Maria da Silva" }));
+    fireEvent.change(screen.getByLabelText("Motivo"), { target: { value: "consulta remarcada pelo hospital" } });
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+    expect(await screen.findByText(/; o motivo tem de 10 a 500 caracteres$/)).not.toBeNull();
+    expect(onReload).toHaveBeenCalledTimes(1);
+  });
+
   it("PDF não encontrado: a frase aparece", async () => {
     vi.mocked(api.fetchTripManifest).mockRejectedValue(new ApiError(404, { error: "not_found" }, "404"));
     const win = { location: { href: "" }, opener: {}, close: vi.fn() };

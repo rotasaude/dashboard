@@ -8,7 +8,7 @@ import { useQuery } from "@tanstack/react-query";
 import { cancelTfdCase, getTfdOptions, type TfdCase } from "../../lib/api";
 import { TFD_OPTIONS_KEY, tfdError, tfdStatusLabel, tfdStatusTone } from "../../lib/tfd";
 import { STATIC_QUERY } from "../../lib/careLines";
-import { fmtIsoDay } from "../../lib/transport";
+import { fmtIsoDay, reasonProblemText } from "../../lib/transport";
 import { Tag } from "../../components/Tag";
 import { SensitiveAction } from "../../components/SensitiveAction";
 import { dangerButtonStyle, secondaryButtonStyle } from "../../components/formStyles";
@@ -114,7 +114,8 @@ export function CaseView({ tfdCase: c, now, today, onChanged, onGoToSecurity, ch
           translateError={refusalText}
           run={async (values) => {
             const reason = (values.reason ?? "").trim();
-            if (reason.length < 10 || reason.length > 500) throw new LocalRefusal("o motivo tem de 10 a 500 caracteres");
+            const short = reasonProblemText(reason);
+            if (short) throw new LocalRefusal(short);
             changed(await cancelTfdCase(c.id, reason), "Processo cancelado.");
           }}
           onDone={() => setMode(null)} onCancel={() => setMode(null)} />

@@ -1,7 +1,7 @@
 // Regras de tela do módulo 30 (transporte sanitário; contrato 2026-11-03 §1–§5, §9) sem React. Sobreposição, lotação, CNH, regra do acompanhante, avisos e imutabilidade são do api; a tela só não envia o que já sabe que será recusado.
 // Formas e códigos conferidos contra o api (api-surface do módulo 30): onde o plano diz outra coisa, vale o api.
 import {
-  ApiError,
+  ApiError, errorCode,
   type DestinationInput, type DriverInput, type DriverUpdate, type ExpenseInput, type FuelInput, type PassengerInput, type PassengerOrigin,
   type ScheduledCareItem, type SeriesInput, type TransportCount, type TransportDriver, type TransportVehicle, type Trip, type TripCloseInput,
   type TripInput, type TripStop, type TripStopInput, type VehicleInput
@@ -519,8 +519,10 @@ const PATH_RULES: [ RegExp, string ][] = [
   [ /^expenses(\.|$)/, "confira a despesa destacada" ],
   [ /^companion(\.|$)/, "confira os dados do acompanhante" ],
   [ /^stops(\.|$)/, "confira as paradas da viagem" ],
-  [ /^items(\.|$)/, "confira o item destacado" ],
-  [ /reason/, "o motivo tem de 10 a 500 caracteres" ]
+  // Nenhuma tela destaca `items.N` (a correção de presença troca a frase pelo nome do passageiro).
+  [ /^items(\.|$)/, "confira as presenças enviadas" ],
+  // Só o campo `reason` (ou `x.reason`): `exception_reason` é um seletor, não o motivo de 10 a 500.
+  [ /(^|\.)reason$/, "o motivo tem de 10 a 500 caracteres" ]
 ];
 
 function invalidRequestText(path: string): string {
@@ -546,3 +548,21 @@ export function transportRefusals(err: unknown): Refusal[] {
 export function transportError(err: unknown): string {
   return transportRefusals(err)[0].text;
 }
+
+// ─── Peças comuns das confirmações (C9) ────────────────────────────────────
+// Motivo de cancelar, retirar, suspender e corrigir: 10 a 500 caracteres, como o api.
+export const REASON_TEXT = "o motivo tem de 10 a 500 caracteres";
+export const reasonProblemText = (reason: string): string | null => (reason.length < 10 || reason.length > 500 ? REASON_TEXT : null);
+
+// Recusa conferida na tela antes de chamar o api: a frase vai como está.
+export class LocalRefusal extends Error {}
+
+// Frase de uma confirmação recusada: a local como está; a do api com TODAS as recusas, sem repetir (C4).
+export function refusalTexts(err: unknown, refusals: (e: unknown) => Refusal[] = transportRefusals): string {
+  if (err instanceof LocalRefusal) return err.message;
+  return [ ...new Set(refusals(err).map((r) => r.text)) ].join("; ");
+}
+
+// A tela está velha (a viagem, o passageiro ou a série mudou no api): quem chama relê.
+export const STALE_CODES: readonly string[] = [ "not_found", "trip_not_open", "invalid_transition", "passenger_anonymized" ];
+export const isStaleRefusal = (err: unknown): boolean => STALE_CODES.includes(errorCode(err) ?? "");
