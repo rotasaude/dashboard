@@ -29,12 +29,13 @@ function draftFrom(s: TransportSeries | undefined, today: string): SeriesDraft {
 }
 
 // PATCH campo a campo: o api recusa chave desconhecida e o paciente da série não muda.
-function updateBody(d: SeriesDraft): SeriesUpdate {
+// `companion` só vai se a pessoa mexeu nele: ausente = o api mantém o atual (o documento e o motivo guardados não voltam ao navegador).
+function updateBody(d: SeriesDraft, companionTouched: boolean): SeriesUpdate {
   const b = seriesBody(d);
   return {
     destination_id: b.destination_id, provider_name: b.provider_name, weekdays: b.weekdays, appointment_time: b.appointment_time,
     departure_time: b.departure_time, return_time: b.return_time, boarding_label: b.boarding_label, starts_on: b.starts_on, ends_on: b.ends_on,
-    wheelchair: b.wheelchair, companion: b.companion
+    wheelchair: b.wheelchair, ...(companionTouched ? { companion: b.companion } : {})
   };
 }
 
@@ -46,8 +47,9 @@ export function SeriesForm({ series, destinations, today, onSaved, onCancel }: {
   const [ errors, setErrors ] = useState<FieldErrors>({});
   const [ general, setGeneral ] = useState<string | null>(null);
   const [ busy, setBusy ] = useState(false);
+  const [ companionTouched, setCompanionTouched ] = useState(false);
   const set = (patch: Partial<SeriesDraft>) => setD((x) => ({ ...x, ...patch }));
-  const setCompanion = (patch: Partial<NonNullable<SeriesDraft["companion"]>>) => setD((x) => ({ ...x, companion: x.companion ? { ...x.companion, ...patch } : x.companion }));
+  const setCompanion = (patch: Partial<NonNullable<SeriesDraft["companion"]>>) => { setCompanionTouched(true); setD((x) => ({ ...x, companion: x.companion ? { ...x.companion, ...patch } : x.companion })); };
 
   // Criar: primeiro a pessoa (a busca fica fora do formulário); editar: o paciente já está fixo.
   if (!series && d.patientId === "") {
@@ -64,7 +66,7 @@ export function SeriesForm({ series, destinations, today, onSaved, onCancel }: {
     if (problems.length > 0) { setErrors(problemsToErrors(problems)); setGeneral(null); return; }
     setErrors({}); setGeneral(null); setBusy(true);
     try {
-      onSaved(series ? await updateSeries(series.id, updateBody(d)) : await createSeries(seriesBody(d)));
+      onSaved(series ? await updateSeries(series.id, updateBody(d, companionTouched)) : await createSeries(seriesBody(d)));
     } catch (err) {
       // Regra de idade do acompanhante: a frase pede o motivo e o foco vai a ele.
       const refusals = transportRefusals(err).map((r) => (r.path === "companion" ? { ...r, path: "companion.reason" } : r));
@@ -102,13 +104,13 @@ export function SeriesForm({ series, destinations, today, onSaved, onCancel }: {
       </div>
       <CheckField id="ser-wheelchair" label="Cadeira de rodas" checked={d.wheelchair} onChange={(v) => set({ wheelchair: v })} />
       <CheckField id="ser-comp" label="Com acompanhante" checked={d.companion !== null}
-        onChange={(v) => set({ companion: v ? { name: "", document: "", reason: "" } : null })} />
+        onChange={(v) => { setCompanionTouched(true); set({ companion: v ? { name: "", document: "", reason: "" } : null }); }} />
       {d.companion && (
         <fieldset style={fieldset}>
           <legend style={legend}>Acompanhante</legend>
           <TextField id="ser-comp-name" label="Nome do acompanhante" value={d.companion.name} error={errors["companion.name"]} autoComplete="off" onChange={(v) => setCompanion({ name: v })} />
           <TextField id="ser-comp-doc" label="Documento do acompanhante" value={d.companion.document} error={errors["companion.document"]} autoComplete="off"
-            hint={series?.companion ? `Ao salvar, o acompanhante é substituído: informe o documento de novo${series.companion.document_last4 ? ` (o atual termina em ${series.companion.document_last4})` : ""}.` : undefined}
+            hint={series?.companion && companionTouched ? "Ao mudar o acompanhante, ele é substituído: informe de novo o documento e o motivo." : undefined}
             onChange={(v) => setCompanion({ document: v })} />
           <TextField id="ser-comp-reason" label="Motivo do acompanhante" value={d.companion.reason} error={errors["companion.reason"]} onChange={(v) => setCompanion({ reason: v })}
             hint="Só é preciso quando o paciente não é criança nem idoso pela regra da cidade." />

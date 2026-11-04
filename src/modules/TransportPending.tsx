@@ -52,6 +52,7 @@ function PendingPanel() {
     <Panel title="Pendências das séries" sub="dias das próximas três semanas sem lugar">
       <div style={stack}>
         <p style={muted}>{PENDING_HOW}</p>
+        {series.isError && <p role="alert" style={alert}>{`Não deu para ler o nome dos pacientes: ${transportError(series.error)}`}</p>}
         {pending.isError ? <p role="alert" style={alert}>{transportError(pending.error)}</p> : (
           <DataTable cols={cols} rows={pending.data ?? []} rowKey={(p, i) => `${p.series_id}-${p.date}-${i}`} empty={pending.isPending ? "carregando…" : "Nenhuma pendência."} />
         )}
@@ -71,7 +72,7 @@ function NoShowsPanel({ today }: { today: string }) {
     e.preventDefault();
     if (!DATE.test(from) || !DATE.test(to)) { setProblem("informe o início e o fim do período"); return; }
     if (to < from) { setProblem("o fim não pode ser antes do início"); return; }
-    if ((utc(to) - utc(from)) / DAY_MS > MAX_SPAN_DAYS - 1) { setProblem("o período tem de ter menos de 366 dias"); return; }
+    if ((utc(to) - utc(from)) / DAY_MS > MAX_SPAN_DAYS) { setProblem("o período tem de ter menos de 366 dias"); return; }
     setProblem(null); setApplied({ from, to });
   }
 

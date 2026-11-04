@@ -139,7 +139,48 @@ describe("séries recorrentes", () => {
   });
 });
 
+describe("edição de série com acompanhante", () => {
+  const withCompanion = () => series({ companion: { name: "Carlos Silva", document_last4: "4321" } });
+  async function openEdit() {
+    setup([ withCompanion() ]);
+    vi.mocked(api.updateSeries).mockResolvedValue(withCompanion());
+    renderWithProviders(<TransportSeries today={TODAY30} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Editar a série de José Hemodiálise" }));
+    return screen.getByRole("form", { name: "Série recorrente" });
+  }
+  it("mudar só o Embarque não manda companion (o api mantém o atual)", async () => {
+    const form = await openEdit();
+    fireEvent.change(within(form).getByLabelText("Embarque"), { target: { value: "Posto central" } });
+    fireEvent.submit(form);
+    await waitFor(() => expect(api.updateSeries).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(api.updateSeries).mock.calls[0][1]).not.toHaveProperty("companion");
+  });
+  it("desmarcar Com acompanhante manda companion: null", async () => {
+    const form = await openEdit();
+    fireEvent.click(within(form).getByLabelText("Com acompanhante"));
+    fireEvent.submit(form);
+    await waitFor(() => expect(api.updateSeries).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(api.updateSeries).mock.calls[0][1]).toHaveProperty("companion", null);
+  });
+  it("mudar o nome do acompanhante manda o objeto completo", async () => {
+    const form = await openEdit();
+    fireEvent.change(within(form).getByLabelText("Nome do acompanhante"), { target: { value: "Carla Souza" } });
+    fireEvent.change(within(form).getByLabelText("Documento do acompanhante"), { target: { value: "123456" } });
+    fireEvent.submit(form);
+    await waitFor(() => expect(api.updateSeries).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(api.updateSeries).mock.calls[0][1]).toHaveProperty("companion", { name: "Carla Souza", document: "123456" });
+  });
+});
+
 describe("pendências e faltas", () => {
+  it("falha ao ler as séries mostra o erro, não só série <id>", async () => {
+    vi.mocked(api.fetchCurrentSession).mockResolvedValue(trUser());
+    vi.mocked(api.listSeries).mockRejectedValue(new ApiError(500, { error: "boom" }, "x"));
+    vi.mocked(api.listTransportPending).mockResolvedValue([ { series_id: "se1", date: "2026-11-05", reason: "no_seat" } ]);
+    vi.mocked(api.listNoShows).mockResolvedValue([]);
+    renderWithProviders(<TransportPending today={TODAY30} />);
+    expect(await screen.findByText(/Não deu para ler o nome dos pacientes/)).not.toBeNull();
+  });
   it("pendência mostra paciente pela série; faltas por período", async () => {
     vi.mocked(api.fetchCurrentSession).mockResolvedValue(trUser());
     vi.mocked(api.listSeries).mockResolvedValue([ series() ]);
@@ -177,10 +218,16 @@ describe("pendências e faltas", () => {
     fireEvent.change(within(form).getByLabelText("De"), { target: { value: "2025-01-01" } });
     fireEvent.submit(form);
     expect(screen.getByText("o período tem de ter menos de 366 dias")).not.toBeNull();
+    // Limite do api: to - from < 366 dias. 365 dias vale; 366 não.
+    fireEvent.change(within(form).getByLabelText("De"), { target: { value: "2025-11-03" } });
+    fireEvent.submit(form);
+    await waitFor(() => expect(api.listNoShows).toHaveBeenLastCalledWith({ from: "2025-11-03", to: TODAY30 }));
+    fireEvent.change(within(form).getByLabelText("De"), { target: { value: "2025-11-02" } });
+    fireEvent.submit(form);
+    expect(screen.getAllByText("o período tem de ter menos de 366 dias").length).toBe(1);
     fireEvent.change(within(form).getByLabelText("De"), { target: { value: "2026-11-04" } });
     fireEvent.submit(form);
     expect(screen.getByText("o fim não pode ser antes do início")).not.toBeNull();
-    expect(api.listNoShows).toHaveBeenCalledTimes(1);
     fireEvent.change(within(form).getByLabelText("De"), { target: { value: "2026-09-01" } });
     fireEvent.submit(form);
     await waitFor(() => expect(api.listNoShows).toHaveBeenLastCalledWith({ from: "2026-09-01", to: TODAY30 }));
