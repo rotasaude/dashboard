@@ -180,6 +180,25 @@ describe("ConsultationView — Pedir TFD (módulo 30)", () => {
     mocked(api.getTfdPrefill).mockResolvedValue({ patient_id: "pt1", cid10: null, sigtap_code: null });
   });
 
+  it("loader com offerTfd (Minhas consultas, T48): o CBO 225 da consulta lida oferece Pedir TFD", async () => {
+    mocked(api.fetchCurrentSession).mockResolvedValue(sessionWith([ "health_professional" ],
+      { id: "us1", features: [ "sanitary_transport", "tfd", "clinical_record" ] }));
+    mocked(api.getConsultation).mockResolvedValue(finalized());
+    wrap(<ConsultationLoader id="cs1" options={options()} patientProblems={[]} offerTfd onClose={vi.fn()} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Pedir TFD" }));
+    expect(await screen.findByRole("form", { name: "Laudo de TFD" })).not.toBeNull();
+  });
+
+  it("loader com offerTfd: consulta de CBO fora do 225 não oferece Pedir TFD", async () => {
+    mocked(api.fetchCurrentSession).mockResolvedValue(sessionWith([ "health_professional" ],
+      { id: "us1", features: [ "sanitary_transport", "tfd", "clinical_record" ] }));
+    mocked(api.getConsultation).mockResolvedValue(finalized({ cbo_code: "223208" }));
+    wrap(<ConsultationLoader id="cs1" options={options()} patientProblems={[]} offerTfd onClose={vi.fn()} />);
+    expect(await screen.findByRole("button", { name: "Adendo" })).not.toBeNull();
+    await settled();
+    expect(screen.queryByRole("button", { name: "Pedir TFD" })).toBeNull();
+  });
+
   it("autora da consulta finalizada, com o TFD usável: Pedir TFD abre o laudo", async () => {
     wrap(<ConsultationView consultation={finalized()} options={options()} patientProblems={[]} tfd onAddendumAdded={vi.fn()} onClose={vi.fn()} />);
     fireEvent.click(await screen.findByRole("button", { name: "Pedir TFD" }));

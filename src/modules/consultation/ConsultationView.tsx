@@ -24,6 +24,7 @@ import { RegulationRequestsField } from "./RegulationRequestsField";
 import { openGuide } from "../regulation/openGuide";
 import { DentalSummary, dentalChangesLines } from "../dental/DentalSummary";
 import { TfdRequestForm } from "../tfd/TfdRequestForm";
+import { canRequestTfd } from "../../lib/tfd";
 
 export interface ConsultationViewProps {
   consultation: Consultation;
@@ -44,6 +45,8 @@ export interface ConsultationViewProps {
   notSent?: RegulationNotSent[];
   // Módulo 30 (F-30.5): "Pedir TFD" na consulta finalizada, só para a autora e com o TFD usável e CBO 225 (decide quem monta).
   tfd?: boolean;
+  // Módulo 30 (T48): em Minhas consultas quem monta não conhece o CBO antes da leitura; a tela decide pelo CBO da consulta.
+  offerTfd?: boolean;
   // O 201 devolve o adendo: quem mostra a consulta o acrescenta sem reler
   // (o api recusa a releitura da autora depois que o atendimento fechou).
   onAddendumAdded(addendum: Addendum): void;
@@ -71,7 +74,8 @@ export function ConsultationView(props: ConsultationViewProps) {
   const [ notSent, setNotSent ] = useState<RegulationNotSent[]>(props.notSent ?? []);
   const [ regulationKey, setRegulationKey ] = useState(0);
   const showRegulation = !!props.regulation && isAuthor && c.status === "finalized";
-  const showTfd = !!props.tfd && isAuthor && c.status === "finalized";
+  const tfdOffered = !!props.tfd || (!!props.offerTfd && canRequestTfd(user, c.cbo_code));
+  const showTfd = tfdOffered && isAuthor && c.status === "finalized";
   const [ tfdOpen, setTfdOpen ] = useState(false);
   const [ tfdNote, setTfdNote ] = useState<string | null>(null);
   // O pedido de TFD gravado a partir desta consulta, enquanto ainda é editável: "Pedir TFD" o reabre (PATCH) em vez de criar outro (A5).

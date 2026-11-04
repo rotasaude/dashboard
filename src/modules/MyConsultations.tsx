@@ -54,7 +54,7 @@ export function MyConsultations({ onGoToSecurity }: { onGoToSecurity?(): void })
       {viewing ? (
         <>
           <ConsultationLoader key={viewing} id={viewing} options={options.data ?? null} patientProblems={[]}
-            loadPatientProblems={() => getConsultationProblems(viewing)}
+            loadPatientProblems={() => getConsultationProblems(viewing)} offerTfd
             onClose={() => setViewing(null)} />
           {/* Módulo 19c: reimprimir e cancelar os documentos desta consulta. */}
           {canUseDocuments(user) && <ConsultationDocuments key={`documents:${viewing}`} consultationId={viewing} onGoToSecurity={onGoToSecurity} />}

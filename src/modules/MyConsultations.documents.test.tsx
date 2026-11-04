@@ -8,7 +8,7 @@ vi.mock("../lib/api", async (importOriginal) => {
   return { ...real, fetchCurrentSession: vi.fn(), listMyConsultations: vi.fn(), getConsultationOptions: vi.fn() };
 });
 vi.mock("./consultation/ConsultationView", () => ({
-  ConsultationLoader: (p: { id: string }) => <span>{`consulta ${p.id}`}</span>
+  ConsultationLoader: (p: { id: string; offerTfd?: boolean }) => <span>{`consulta ${p.id}${p.offerTfd ? " · oferece TFD" : ""}`}</span>
 }));
 vi.mock("./documents/ConsultationDocuments", () => ({
   ConsultationDocuments: (p: { consultationId: string; issue?: unknown; onGoToSecurity?(): void }) => (
@@ -36,10 +36,16 @@ describe("Minhas consultas — documentos (19c)", () => {
     m(api.getConsultationOptions).mockResolvedValue(options());
   });
 
+  it("a consulta aberta oferece Pedir TFD (T48; o CBO decide no loader)", async () => {
+    renderWithProviders(<MyConsultations />);
+    fireEvent.click(await screen.findByRole("button", { name: "Abrir consulta de 06/10/2026, 14:30" }));
+    expect(screen.getByText("consulta c1 · oferece TFD")).not.toBeNull();
+  });
+
   it("abrir a consulta mostra os documentos dela, só a lista", async () => {
     renderWithProviders(<MyConsultations />);
     fireEvent.click(await screen.findByRole("button", { name: "Abrir consulta de 06/10/2026, 14:30" }));
-    expect(screen.getByText("consulta c1")).not.toBeNull();
+    expect(screen.getByText(/^consulta c1/)).not.toBeNull();
     expect(screen.getByText("documentos c1 · só lista")).not.toBeNull();
   });
 
@@ -47,7 +53,7 @@ describe("Minhas consultas — documentos (19c)", () => {
     m(api.fetchCurrentSession).mockResolvedValue(docUser([ "health_professional" ], { features: [ "clinical_record" ] }));
     renderWithProviders(<MyConsultations />);
     fireEvent.click(await screen.findByRole("button", { name: "Abrir consulta de 06/10/2026, 14:30" }));
-    expect(screen.getByText("consulta c1")).not.toBeNull();
+    expect(screen.getByText(/^consulta c1/)).not.toBeNull();
     expect(screen.queryByText(/^documentos /)).toBeNull();
   });
 
