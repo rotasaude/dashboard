@@ -8,7 +8,7 @@ import {
 import { featureDisabledKey, featureLabel, hasFeature } from "./features";
 import { cityIsoDate, parseCityLocal } from "./format";
 import type { Problem, Refusal } from "./pharmacy";
-import { canUseTransport, parseReais, transportRefusals, transportRoles } from "./transport";
+import { MAX_CENTS, canUseTransport, parseReais, transportRefusals, transportRoles } from "./transport";
 
 // ─── Frases fixas ───────────────────────────────────────────────────────────
 export const TFD_DISABLED = "o TFD está desligado nesta cidade";
@@ -16,6 +16,7 @@ export const TFD_NO_ROLE = "seu papel não permite usar o TFD";
 export const APPOINTMENT_REQUIRED = "marque o atendimento no destino antes de autorizar";
 export const FILE_TOO_BIG = "o comprovante passa de 10 MB";
 export const FILE_TYPE = "o comprovante precisa ser PDF, JPG ou PNG";
+export const FILE_EMPTY = "o comprovante está vazio";
 export const READ_TRAIL_NOTE = "Abrir o laudo fica registrado na trilha de acesso.";
 
 export const TFD_CASES_KEY = "tfdCases";
@@ -103,9 +104,10 @@ export function reportProblems(d: ReportDraft, o: TfdOptions): Problem[] {
   if (d.cid10.trim() === "") out.push({ path: "report.cid10", text: "informe o CID-10" });
   const just = d.justification.trim().length;
   if (just < 20 || just > 2000) out.push({ path: "report.justification", text: "explique por que o tratamento não pode ser feito na cidade (20 a 2000 caracteres)" });
-  if (d.companionIndicated) {
+  // O api não exige o motivo do acompanhante; só confere 10–500 quando há texto.
+  {
     const n = d.companionReason.trim().length;
-    if (n < 10 || n > 500) out.push({ path: "report.companion_reason", text: "explique por que o paciente precisa de acompanhante (10 a 500 caracteres)" });
+    if (n > 0 && (n < 10 || n > 500)) out.push({ path: "report.companion_reason", text: "explique por que o paciente precisa de acompanhante (10 a 500 caracteres)" });
   }
   if (d.destinationId === "") {
     out.push({ path: "destination_id", text: "escolha o destino" });
@@ -203,7 +205,7 @@ export function legProblems(d: LegDraft, c: TfdCase): Problem[] {
     if (d.companion) out.push({ path: "companion", text: "na frota o acompanhante vai pelo cadastro da viagem" });
   } else {
     const cents = parseReais(d.amount);
-    if (cents === null || cents < 1 || cents > 10_000_000) out.push({ path: "ticket.amount_cents", text: "informe o valor da passagem (até R$ 100.000,00)" });
+    if (cents === null || cents < 1 || cents > MAX_CENTS) out.push({ path: "ticket.amount_cents", text: "informe o valor da passagem (até R$ 100.000,00)" });
     const carrier = d.carrier.trim().length;
     if (carrier < 1 || carrier > 120) out.push({ path: "ticket.carrier", text: "informe a empresa (até 120 caracteres)" });
     if (d.companion && !c.report.companion_indicated) out.push({ path: "companion", text: "o laudo não indica acompanhante" });
@@ -230,7 +232,7 @@ export function paymentProblems(d: PaymentDraft, today: string): Problem[] {
   else if (d.paidOn > today) out.push({ path: "paid_on", text: "a data do pagamento não pode ser futura" });
   else if (isDay(today) && dayMs(d.paidOn) < dayMs(today) - 365 * DAY_MS) out.push({ path: "paid_on", text: "a data do pagamento não pode ser de mais de 365 dias atrás" });
   const cents = parseReais(d.amount);
-  if (cents === null || cents < 1 || cents > 10_000_000) out.push({ path: "amount_cents", text: "informe um valor maior que zero (até R$ 100.000,00)" });
+  if (cents === null || cents < 1 || cents > MAX_CENTS) out.push({ path: "amount_cents", text: "informe um valor maior que zero (até R$ 100.000,00)" });
   const rec = d.receiptNumber.trim().length;
   if (rec < 1 || rec > 40) out.push({ path: "receipt_number", text: "informe o número do recibo (até 40 caracteres)" });
   if (!METHODS.includes(d.method)) out.push({ path: "method", text: "escolha a forma de pagamento" });
@@ -248,6 +250,7 @@ const FILE_TYPES = [ "application/pdf", "image/jpeg", "image/png" ];
 const MAX_FILE = 10 * 1024 * 1024;
 // O tamanho vem antes do tipo. O api confere de novo (`invalid_file`, incluindo os bytes iniciais).
 export function accountabilityFileProblem(file: File): string | null {
+  if (file.size === 0) return FILE_EMPTY;
   if (file.size > MAX_FILE) return FILE_TOO_BIG;
   if (!FILE_TYPES.includes(file.type)) return FILE_TYPE;
   return null;
@@ -293,6 +296,13 @@ const INVALID_REQUEST_PATHS: [ RegExp, string ][] = [
   [ /^ticket\.carrier$/, "informe a empresa (até 120 caracteres)" ],
   [ /^receipt_number$/, "informe o número do recibo (até 40 caracteres)" ],
   [ /^(from|to)$/, "confira as datas da internação" ],
+  [ /^report\.justification$/, "a justificativa tem de 20 a 2000 caracteres" ],
+  [ /^report\.companion_reason$/, "o motivo do acompanhante tem de 10 a 500 caracteres" ],
+  [ /^report\.transport_mode$/, "escolha o modo de transporte" ],
+  [ /^direction$/, "escolha ida ou volta" ],
+  [ /^mode$/, "escolha o modo do trecho" ],
+  [ /^method$/, "escolha a forma de pagamento" ],
+  [ /^content_type$/, FILE_TYPE ],
   [ /^decision$/, "escolha autorizar, devolver ou recusar" ]
 ];
 

@@ -425,7 +425,7 @@ export function pendingAttendance(t: Trip): number {
 }
 
 const MAX_ODOMETER = 9_999_999;
-const MAX_CENTS = 10_000_000;
+export const MAX_CENTS = 10_000_000;
 const EXPENSE_KINDS = [ "toll", "parking", "meal", "other" ];
 const centsOk = (raw: string): boolean => {
   const c = parseReais(raw);

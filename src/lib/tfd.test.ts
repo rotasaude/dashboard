@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ApiError } from "./api";
 import {
-  FILE_TYPE, TFD_DISABLED, accountabilityFileProblem, allowanceTotal, appointmentProblems, canEditCase, canRequestTfd, canUseTfd, caseBody,
+  FILE_EMPTY, FILE_TYPE, TFD_DISABLED, accountabilityFileProblem, allowanceTotal, appointmentProblems, canEditCase, canRequestTfd, canUseTfd, caseBody,
   decisionLabel, decisionProblems, fleetLegDate, inpatientProblems, legBody, legProblems, paidTotal, paymentBody, paymentProblems,
   reportDraftFrom, reportProblems, tfdError, tfdRefusals, tfdRoles, tfdStatusLabel, tfdStatusTone
 } from "./tfd";
@@ -40,9 +40,11 @@ describe("laudo", () => {
     expect(reportProblems({ ...report, destinationId: "t3" }, OPTIONS).map((p) => p.text)).toEqual([ "destino na mesma região metropolitana — não cabe TFD" ]);
     expect(reportProblems({ ...report, destinationId: "t2" }, { ...OPTIONS, min_distance_km: 25 })).toEqual([]);
   });
-  it("CID, justificativa, procedimento e motivo do acompanhante", () => {
+  it("CID, justificativa, procedimento e motivo do acompanhante (só confere se houver texto)", () => {
     expect(codes(reportProblems({ ...report, cid10: "", justification: "curta", sigtapCode: "", companionIndicated: true }, OPTIONS)))
-      .toEqual([ "report.sigtap_code", "report.cid10", "report.justification", "report.companion_reason" ]);
+      .toEqual([ "report.sigtap_code", "report.cid10", "report.justification" ]);
+    expect(codes(reportProblems({ ...report, companionIndicated: true, companionReason: "curto" }, OPTIONS))).toEqual([ "report.companion_reason" ]);
+    expect(reportProblems({ ...report, companionIndicated: true, companionReason: "paciente idoso, não anda só" }, OPTIONS)).toEqual([]);
   });
   it("sem destino escolhido recusa no destino", () => {
     expect(codes(reportProblems({ ...report, destinationId: "" }, OPTIONS))).toEqual([ "destination_id" ]);
@@ -157,6 +159,8 @@ describe("trechos, pagamento e arquivo", () => {
     expect(accountabilityFileProblem(bigDoc)).toBe("o comprovante passa de 10 MB");
     expect(accountabilityFileProblem(doc)).toBe(FILE_TYPE);
     expect(accountabilityFileProblem(png)).toBeNull();
+    expect(accountabilityFileProblem(new File([], "v.pdf", { type: "application/pdf" }))).toBe(FILE_EMPTY);
+    expect(accountabilityFileProblem(new File([ new Uint8Array(10 * 1024 * 1024) ], "ok.pdf", { type: "application/pdf" }))).toBeNull();
     expect(accountabilityFileProblem(jpeg)).toBeNull();
   });
   it("totais", () => {
@@ -211,6 +215,9 @@ describe("recusas", () => {
     expect(text("appointment_at")).toContain("365");
     expect(text("consultation_id")).toContain("consulta");
     expect(text("reason")).toBe("o motivo tem de 10 a 500 caracteres");
+    expect(text("report.justification")).toContain("20 a 2000");
+    expect(text("report.companion_reason")).toContain("acompanhante");
+    for (const p of [ "report.transport_mode", "direction", "mode", "method", "content_type" ]) expect(text(p), p).not.toContain("pedido inválido");
     expect(text("alguma.coisa")).toContain("pedido inválido");
   });
   it("sem conexão", () => { expect(tfdError(new Error("x"))).toBe("sem conexão com o servidor — tente de novo"); });
