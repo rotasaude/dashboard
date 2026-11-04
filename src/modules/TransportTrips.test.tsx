@@ -58,6 +58,23 @@ describe("viagens do dia", () => {
     expect(api.listTrips).toHaveBeenCalledTimes(2);
   });
 
+  it("nova viagem em outro dia: a agenda vai para o dia da viagem criada (T49)", async () => {
+    vi.mocked(api.createTrip).mockResolvedValue(trip({ id: "tr2", status: "planned", date: "2026-11-05" }));
+    mount([]);
+    fireEvent.click(await screen.findByRole("button", { name: "Nova viagem" }));
+    const form = screen.getByRole("form", { name: "Viagem" });
+    fireEvent.change(within(form).getByLabelText("Dia da viagem"), { target: { value: "2026-11-05" } });
+    fireEvent.change(within(form).getByLabelText("Data do retorno"), { target: { value: "2026-11-05" } });
+    fireEvent.change(within(form).getByLabelText("Saída"), { target: { value: "05:30" } });
+    fireEvent.change(within(form).getByLabelText("Retorno"), { target: { value: "18:00" } });
+    fireEvent.change(within(form).getByLabelText("Embarque 1"), { target: { value: "Praça da Matriz" } });
+    fireEvent.change(within(form).getByLabelText("Destino 1"), { target: { value: "t1" } });
+    fireEvent.submit(form);
+    expect(await screen.findByText("Viagem criada.")).not.toBeNull();
+    await waitFor(() => expect(api.listTrips).toHaveBeenLastCalledWith({ date: "2026-11-05", vehicleId: null }));
+    expect((screen.getByLabelText("Dia") as HTMLInputElement).value).toBe("2026-11-05");
+  });
+
   it("formulário incompleto não envia e diz cada problema", async () => {
     mount([]);
     fireEvent.click(await screen.findByRole("button", { name: "Nova viagem" }));

@@ -66,6 +66,12 @@ function TripsAgenda({ today, onGoToSecurity }: { today: string; onGoToSecurity?
     if (text) msg.ok(text);
     void queryClient.invalidateQueries({ queryKey: [ TR_TRIPS_KEY ] });
   }
+  // T49: viagem criada em outro dia leva a agenda para o dia dela (o veículo escolhido continua).
+  function showDayOf(t: Trip) {
+    if (at !== epoch.current || t.date === filter.date) return;
+    setDayInput(t.date);
+    setFilter({ date: t.date, vehicleId: filter.vehicleId });
+  }
   function refused() {
     if (at !== epoch.current) return;
     reload();
@@ -102,7 +108,7 @@ function TripsAgenda({ today, onGoToSecurity }: { today: string; onGoToSecurity?
 
         {creating && loadError === null && (
           <TripForm date={filter.date} vehicles={vehicleList} drivers={driverList} destinations={destinationList}
-            onSaved={(t) => { setCreating(false); changed(t, "Viagem criada."); }} onCancel={() => setCreating(false)} onRefused={refused} />
+            onSaved={(t) => { setCreating(false); showDayOf(t); changed(t, "Viagem criada."); }} onCancel={() => setCreating(false)} onRefused={refused} />
         )}
         <ActionMessage message={msg.message} />
 
