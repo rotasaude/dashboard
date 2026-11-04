@@ -9,7 +9,8 @@ import { useAuth } from "../lib/auth";
 import { todayInCity } from "../lib/campaigns";
 import { fmtNumber } from "../lib/format";
 import { canUseTfd, tfdStatusLabel } from "../lib/tfd";
-import { STATIC_QUERY, TR_DASHBOARD_KEY, fmtCents, fmtCount } from "../lib/transport";
+import { STATIC_QUERY, TR_DASHBOARD_KEY, fmtCents, fmtTransportCount } from "../lib/transport";
+import { monthLabel } from "../lib/regulation";
 import { currentMonth, monthProblem } from "../lib/vaccination";
 import { DataTable } from "../components/DataTable";
 import { Panel } from "../components/Panel";
@@ -83,14 +84,14 @@ function DashboardView({ data, tfd }: { data: TransportDashboard; tfd: boolean }
   const rows: StatusRow[] = [ ...STATUSES, ...extra ].map((status) => ({ status, count: byStatus[status] ?? 0 }));
   return (
     <div style={stack}>
-      <p className="mono" style={muted}>{`Mês: ${data.month}`}</p>
+      <p className="mono" style={muted}>{`Mês: ${monthLabel(data.month)}`}</p>
       <section aria-label="Indicadores" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 12 }}>
-        <StatTile label="Viagens" value={fmtCount(data.trips)} />
+        <StatTile label="Viagens" value={fmtTransportCount(data.trips)} />
         <StatTile label="Ocupação" value={occupancyText30(data.occupancy_pct)} />
-        <StatTile label="Faltas" value={fmtCount(data.no_shows)} />
-        <StatTile label="Km rodados" value={data.km} />
+        <StatTile label="Faltas" value={fmtTransportCount(data.no_shows)} />
+        <StatTile label="Km rodados" value={fmtNumber(data.km)} />
         <StatTile label="Combustível (R$)" value={fmtCents(data.fuel_cents)} />
-        <StatTile label="Viagens sem atendimento marcado" value={fmtCount(data.exceptions)} />
+        <StatTile label="Viagens sem atendimento marcado" value={fmtTransportCount(data.exceptions)} />
         {tfd && <StatTile label="Pago no TFD (R$)" value={fmtCents(data.tfd_paid_cents)} />}
       </section>
       <p style={muted}>{SMALL_NOTE}</p>
@@ -99,7 +100,7 @@ function DashboardView({ data, tfd }: { data: TransportDashboard; tfd: boolean }
           <DataTable<StatusRow>
             cols={[
               { label: "Situação", w: "1.4fr", card: "title", render: (r) => tfdStatusLabel(r.status) },
-              { label: "Quantidade", w: "0.8fr", align: "right", render: (r) => <span className="mono">{fmtCount(r.count)}</span> }
+              { label: "Quantidade", w: "0.8fr", align: "right", render: (r) => <span className="mono">{fmtTransportCount(r.count)}</span> }
             ]}
             rows={rows} rowKey={(r) => r.status} empty="nenhum processo neste mês" />
         </Panel>

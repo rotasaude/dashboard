@@ -8,7 +8,7 @@ import {
 } from "./api";
 import { NOMINAL_QUERY, STATIC_QUERY } from "./careLines";
 import { featureDisabledKey, featureLabel, hasFeature } from "./features";
-import { cityDateFormat, cityIsoDate, cityLocalIso, parseCityLocal } from "./format";
+import { cityDateFormat, cityIsoDate, cityLocalIso, fmtNumber, parseCityLocal } from "./format";
 import { pharmacyRefusals, type Problem, type Refusal } from "./pharmacy";
 
 export { NOMINAL_QUERY, STATIC_QUERY };
@@ -129,8 +129,8 @@ export function parseLiters(raw: string): number | null {
   return n > 0 && n <= 1000 ? n : null;
 }
 
-// Painel: 1 a 4 chegam como "lt5".
-export const fmtCount = (v: TransportCount): string => (v === "lt5" ? SMALL_COUNT : String(v));
+// Painel: 1 a 4 chegam como "lt5"; o resto com separador de milhar. Nome próprio para não confundir com `smallCount.fmtCount`.
+export const fmtTransportCount = (v: TransportCount): string => (v === "lt5" ? SMALL_COUNT : fmtNumber(v));
 
 const isInt = (raw: string): boolean => /^\d+$/.test(raw.trim());
 const intIn = (raw: string, min: number, max: number): boolean => isInt(raw) && Number(raw) >= min && Number(raw) <= max;

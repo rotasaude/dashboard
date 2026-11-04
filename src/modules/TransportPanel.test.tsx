@@ -24,6 +24,15 @@ describe("painel de transporte e TFD", () => {
     expect(screen.queryByText(/Total de processos/)).toBeNull();
     expect(screen.getByText(/R\$\s4\.123,00/)).not.toBeNull();
   });
+  it("milhar com ponto em contagens e km; mês por extenso (C2)", async () => {
+    vi.mocked(api.fetchCurrentSession).mockResolvedValue(trUser([ "municipal_admin" ]));
+    vi.mocked(api.getTransportDashboard).mockResolvedValue({ ...DASH, trips: 1234 } as never);
+    renderWithProviders(<TransportPanel today={TODAY30} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Ver painel" }));
+    expect(await screen.findByText("1.234")).not.toBeNull();
+    expect(screen.getByText("3.150")).not.toBeNull();
+    expect(screen.getByText("Mês: novembro de 2026")).not.toBeNull();
+  });
   it("sem TFD ligado, o bloco do TFD some", async () => {
     vi.mocked(api.fetchCurrentSession).mockResolvedValue(trUser([ "transport_dispatcher" ], [ "sanitary_transport" ]));
     vi.mocked(api.getTransportDashboard).mockResolvedValue(DASH as never);

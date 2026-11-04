@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { ApiError } from "./api";
 import {
   canUseTransport, closeBody, closeProblems, destinationProblems, driverCreateBody, driverFitProblems, driverProblems, driverUpdateBody, fmtCents,
-  fmtCount, isDriverOnly, licenseText, licenseTone, newTripDraft, normalizePlate, occupancyText, originLabel, parseLiters, parseReais,
+  fmtTransportCount, isDriverOnly, licenseText, licenseTone, newTripDraft, normalizePlate, occupancyText, originLabel, parseLiters, parseReais,
   passengerBody, passengerDraftFrom, passengerProblems, pendingAttendance, pendingReasonLabel, seriesBody, seriesProblems, transportError,
   transportRefusals, transportRoles, tripBody, tripDraftFrom, tripProblems, tripStatusLabel, tripStatusTone, vehicleBody, vehicleProblems,
   weekdaysLabel
@@ -254,9 +254,10 @@ describe("dinheiro e contagens", () => {
   });
   it("fmtCents e lt5", () => {
     expect(fmtCents(123456).replace(/\s/g, " ")).toBe("R$ 1.234,56");
-    expect(fmtCount("lt5")).toBe("menos de 5");
-    expect(fmtCount(12)).toBe("12");
-    expect(fmtCount(0)).toBe("0");
+    expect(fmtTransportCount("lt5")).toBe("menos de 5");
+    expect(fmtTransportCount(12)).toBe("12");
+    expect(fmtTransportCount(0)).toBe("0");
+    expect(fmtTransportCount(1234)).toBe("1.234");
   });
 });
 
