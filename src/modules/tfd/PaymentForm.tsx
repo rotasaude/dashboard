@@ -3,7 +3,7 @@
 // 365 dias atrás e hoje, valor com milhar e duas casas, forma, recibo 1–40) e só então abre a confirmação com o código.
 import { useId, useState, type FormEvent } from "react";
 import { recordTfdPayment, type TfdCase, type TfdPayment } from "../../lib/api";
-import { paymentBody, paymentMethodLabel, paymentProblems, type PaymentDraft } from "../../lib/tfd";
+import { allowanceTotal, paidTotal, paymentBody, paymentMethodLabel, paymentProblems, type PaymentDraft } from "../../lib/tfd";
 import { fmtCents, fmtIsoDay } from "../../lib/transport";
 import type { Problem } from "../../lib/pharmacy";
 import { DataTable, type Column } from "../../components/DataTable";
@@ -34,6 +34,9 @@ export function PaymentForm({ tfdCase: c, today, onSaved, onGoToSecurity }: {
   const [ problems, setProblems ] = useState<Problem[]>([]);
   const [ pending, setPending ] = useState<PaymentDraft | null>(null);
   const open = PAYMENT_STATUSES.includes(c.status);
+  // T49: o api aceita pagar acima do devido; a confirmação avisa com o que ainda falta pagar.
+  const remaining = Math.max(0, allowanceTotal(c.allowances) - paidTotal(c.payments));
+  const over = pending !== null && paymentBody(pending).amount_cents > remaining;
 
   function submit(e: FormEvent) {
     e.preventDefault();
@@ -80,6 +83,7 @@ export function PaymentForm({ tfdCase: c, today, onSaved, onGoToSecurity }: {
             {field("receipt_number")}
             {!pending && <div style={row}><button type="submit" style={buttonStyle}>Registrar pagamento</button></div>}
           </form>
+          {pending && over && <p role="alert" style={alert}>{`valor acima do devido (${fmtCents(remaining)})`}</p>}
           {pending && (
             <SensitiveAction title="Confirmar pagamento" requiresStepUp onGoToSecurity={onGoToSecurity}
               description={`${fmtCents(paymentBody(pending).amount_cents)} em ${paymentMethodLabel(pending.method)}, recibo ${pending.receiptNumber.trim()}, pago em ${fmtIsoDay(pending.paidOn)}. ${PAYMENT_IMMUTABLE}`}

@@ -212,6 +212,29 @@ describe("ajuda de custo e pagamento", () => {
     expect(screen.getByText("O pagamento registrado não se apaga nem se edita.")).not.toBeNull();
   });
 
+  it("pagamento acima do que falta pagar: a confirmação avisa com o valor devido (T49); dentro do devido, sem aviso", async () => {
+    as();
+    const c = tfdCase({ status: "travelling",
+      allowances: [ { id: "a1", person: "patient", kind: "meal_overnight", sigtap_code: "0803010125", quantity: 1, table_cents: 2475, complement_cents: 1000, total_cents: 3475 },
+        { id: "a2", person: "companion", kind: "meal_overnight", sigtap_code: "0803010133", quantity: 1, table_cents: 2475, complement_cents: 0, total_cents: 2475 } ],
+      payments: [ { id: "py1", paid_on: TODAY30, amount_cents: 3000, method: "pix", receipt_number: "R-1", by_name: "Ana" } ] });
+    renderWithProviders(<PaymentForm tfdCase={c} today={TODAY30} onSaved={() => {}} />);
+    const form = await screen.findByRole("form", { name: "Pagamento registrado" });
+    const fill = (amount: string) => {
+      fireEvent.change(within(form).getByLabelText("Valor"), { target: { value: amount } });
+      fireEvent.change(within(form).getByLabelText("Forma"), { target: { value: "pix" } });
+      fireEvent.change(within(form).getByLabelText("Número do recibo"), { target: { value: "R-2" } });
+      fireEvent.submit(form);
+    };
+    fill("40,00");
+    expect(screen.getByText("valor acima do devido (R$ 29,50)")).not.toBeNull();
+    expect(api.recordTfdPayment).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+    fill("29,50");
+    expect(screen.getByRole("button", { name: "Confirmar" })).not.toBeNull();
+    expect(screen.queryByText(/valor acima do devido/)).toBeNull();
+  });
+
   it("pagamento: recibo repetido (409) mostra a frase; fora de agendado/em viagem não há formulário", async () => {
     as();
     const travelling = tfdCase({ status: "travelling",
