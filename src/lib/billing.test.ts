@@ -65,6 +65,8 @@ describe("veredito da crítica", () => {
     expect(reasonLabel("habilitation_missing")).toBe("habilitation_missing");
     expect(sourceLabel("lab_report")).toBe("laboratório municipal");
     expect(sourceLabel("rnds")).toBe("rnds");
+    // Módulo 30: ajuda de custo do TFD na produção BPA.
+    expect(sourceLabel("tfd")).toBe("TFD");
   });
 
   it("SIGTAP de outra competência e a frase depois de registrar", () => {
