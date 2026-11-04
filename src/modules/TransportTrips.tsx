@@ -50,9 +50,12 @@ function TripsAgenda({ today, onGoToSecurity }: { today: string; onGoToSecurity?
   function choose(e: FormEvent) {
     e.preventDefault();
     if (!/^\d{4}-\d{2}-\d{2}$/.test(dayInput)) return;
+    const next = { date: dayInput, vehicleId: vehicleInput === "" ? null : vehicleInput };
+    // Mesmo dia e veículo: só relê; a ação em curso continua valendo.
+    if (next.date === filter.date && next.vehicleId === filter.vehicleId) { reload(); return; }
     epoch.current += 1;
     msg.start(); setCreating(false);
-    setFilter({ date: dayInput, vehicleId: vehicleInput === "" ? null : vehicleInput });
+    setFilter(next);
   }
 
   // Resposta de uma ação começada em outra data é ignorada.
@@ -67,6 +70,9 @@ function TripsAgenda({ today, onGoToSecurity }: { today: string; onGoToSecurity?
     reload();
   }
 
+  // Sem as listas a tela não confere CNH nem lotação e os seletores ficariam vazios: diz por quê e não oferece criar nem editar.
+  const failed = [ vehicles, drivers, destinations ].find((q) => q.isError);
+  const loadError = failed ? transportError(failed.error) : null;
   const vehicleList = vehicles.data ?? [];
   const driverList = drivers.data ?? [];
   const destinationList = destinations.data ?? [];
@@ -74,8 +80,10 @@ function TripsAgenda({ today, onGoToSecurity }: { today: string; onGoToSecurity?
 
   return (
     <Panel title="Agenda" sub="viagens do dia escolhido, em ordem de saída"
-      right={<button type="button" style={secondaryButtonStyle} onClick={() => { msg.start(); setCreating(true); }}>Nova viagem</button>}>
+      right={<button type="button" style={secondaryButtonStyle} disabled={loadError !== null} aria-describedby={loadError ? "trips-load-error" : undefined}
+        onClick={() => { msg.start(); setCreating(true); }}>Nova viagem</button>}>
       <div style={stack}>
+        {loadError && <p id="trips-load-error" role="alert" style={alert}>{`Não foi possível carregar veículos, motoristas ou destinos: ${loadError}`}</p>}
         <form aria-label="Escolher o dia" style={{ ...row, alignItems: "flex-end" }} onSubmit={choose}>
           <div style={fieldLabel}>
             <label htmlFor="trips-day">Dia</label>
@@ -91,7 +99,7 @@ function TripsAgenda({ today, onGoToSecurity }: { today: string; onGoToSecurity?
           <button type="submit" style={buttonStyle}>Ver viagens</button>
         </form>
 
-        {creating && (
+        {creating && loadError === null && (
           <TripForm date={filter.date} vehicles={vehicleList} drivers={driverList} destinations={destinationList}
             onSaved={(t) => { setCreating(false); changed(t, "Viagem criada."); }} onCancel={() => setCreating(false)} onRefused={refused} />
         )}
@@ -102,7 +110,7 @@ function TripsAgenda({ today, onGoToSecurity }: { today: string; onGoToSecurity?
           : sorted.length === 0 ? <EmptyState title="nenhuma viagem neste dia" />
           : sorted.map((t) => (
             <TripCard key={t.id} trip={t} today={today} vehicles={vehicleList} drivers={driverList} destinations={destinationList}
-              onChanged={changed} onReload={refused} onGoToSecurity={onGoToSecurity}>
+              editBlocked={loadError} onChanged={changed} onReload={refused} onGoToSecurity={onGoToSecurity}>
               {/* A frase da ação fica junto da lista de passageiros; aqui a agenda só relê. */}
               <PassengerList trip={t} onChanged={() => changed(t, "")} />
             </TripCard>

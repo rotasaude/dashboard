@@ -104,6 +104,17 @@ describe("viagens do dia", () => {
     expect(api.confirmTrip).toHaveBeenCalledTimes(1);
   });
 
+  it("\"Ver viagens\" no mesmo dia relê sem perder a confirmação em curso", async () => {
+    let resolve: (t: ReturnType<typeof trip>) => void = () => {};
+    vi.mocked(api.confirmTrip).mockReturnValue(new Promise((r) => { resolve = r; }));
+    mount([ trip({ status: "planned" }) ]);
+    fireEvent.click(await screen.findByRole("button", { name: "Confirmar viagem" }));
+    fireEvent.submit(screen.getByRole("form", { name: "Escolher o dia" }));
+    await waitFor(() => expect(api.listTrips).toHaveBeenCalledTimes(2));
+    resolve(trip({ status: "confirmed" }));
+    expect(await screen.findByText("Viagem confirmada.")).not.toBeNull();
+  });
+
   it("sobreposição de veículo e motorista ao salvar: as duas frases, nada muda, agenda relida (Review Focus 2)", async () => {
     vi.mocked(api.updateTrip).mockRejectedValue(refusal({ path: "vehicle_id", error: "vehicle_overlap" }, { path: "driver_id", error: "driver_overlap" }));
     mount([ trip({ status: "planned" }) ]);
@@ -135,7 +146,8 @@ describe("viagens do dia", () => {
     expect(body.vehicle_id).toBeNull();
     expect(body.driver_id).toBe("d1");
     expect(body.stops).toEqual([ { id: "s1", position: 1, kind: "boarding", label: "Praça Central" }, { id: "s2", position: 2, kind: "destination", destination_id: "t1", label: "" } ]);
-    expect(await screen.findByText("Viagem atualizada.")).not.toBeNull();
+    const ok = await screen.findByText("Viagem atualizada.");
+    await waitFor(() => expect(document.activeElement).toBe(ok));
   });
 
   it("trocar o dia de viagem com série ou TFD: a frase aparece no campo do dia", async () => {
@@ -147,9 +159,14 @@ describe("viagens do dia", () => {
     expect((within(form).getByLabelText("Data do retorno") as HTMLInputElement).value).toBe("2026-11-05");
     fireEvent.submit(form);
     await waitFor(() => expect(api.updateTrip).toHaveBeenCalledTimes(1));
-    expect(vi.mocked(api.updateTrip).mock.calls[0][1].date).toBe("2026-11-05");
+    const sent = vi.mocked(api.updateTrip).mock.calls[0][1];
+    expect(sent.date).toBe("2026-11-05");
+    expect(sent.departure_at).toBe("2026-11-05T05:30:00-03:00");
+    expect(sent.return_at).toBe("2026-11-05T18:00:00-03:00");
     const msg = await screen.findByText("a viagem tem passageiro de série ou trecho de TFD — mude só o horário");
-    expect((within(form).getByLabelText("Dia da viagem") as HTMLInputElement).getAttribute("aria-describedby")).toBe(msg.id);
+    const day = within(form).getByLabelText("Dia da viagem") as HTMLInputElement;
+    expect(day.getAttribute("aria-describedby")).toBe(msg.id);
+    await waitFor(() => expect(document.activeElement).toBe(day));
   });
 
   it("parada com passageiro removida: stop_in_use aparece nas paradas", async () => {
@@ -178,7 +195,8 @@ describe("viagens do dia", () => {
     fireEvent.change(screen.getByLabelText("Motivo"), { target: { value: "veículo quebrado na garagem" } });
     fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
     await waitFor(() => expect(api.cancelTrip).toHaveBeenCalledWith("tr1", "veículo quebrado na garagem"));
-    expect(await screen.findByText("Viagem cancelada.")).not.toBeNull();
+    const ok = await screen.findByText("Viagem cancelada.");
+    await waitFor(() => expect(document.activeElement).toBe(ok));
   });
 
   it("viagem planejada: cancelar diz que ninguém recebe aviso", async () => {
@@ -196,6 +214,46 @@ describe("viagens do dia", () => {
     expect(screen.queryByRole("button", { name: "Editar" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Cancelar viagem" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Confirmar viagem" })).toBeNull();
+  });
+
+  it("retorno no dia seguinte: trocar o dia leva o retorno junto, um dia depois", async () => {
+    mount([ trip({ status: "planned", return_at: "2026-11-04T02:00:00-03:00" }) ]);
+    fireEvent.click(await screen.findByRole("button", { name: "Editar" }));
+    const form = screen.getByRole("form", { name: "Viagem" });
+    expect((within(form).getByLabelText("Data do retorno") as HTMLInputElement).value).toBe("2026-11-04");
+    fireEvent.change(within(form).getByLabelText("Dia da viagem"), { target: { value: "2026-11-10" } });
+    expect((within(form).getByLabelText("Data do retorno") as HTMLInputElement).value).toBe("2026-11-11");
+  });
+
+  it("salvar duas vezes seguidas envia uma vez só", async () => {
+    vi.mocked(api.updateTrip).mockReturnValue(new Promise(() => {}));
+    mount([ trip({ status: "planned" }) ]);
+    fireEvent.click(await screen.findByRole("button", { name: "Editar" }));
+    const form = screen.getByRole("form", { name: "Viagem" });
+    fireEvent.submit(form);
+    fireEvent.submit(form);
+    await waitFor(() => expect(api.updateTrip).toHaveBeenCalledTimes(1));
+    expect((within(form).getByRole("button", { name: "Salvar" }) as HTMLButtonElement).disabled).toBe(true);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(api.updateTrip).toHaveBeenCalledTimes(1);
+  });
+
+  it("trip_not_open: a agenda relida traz a viagem em andamento e o formulário fecha", async () => {
+    vi.mocked(api.updateTrip).mockRejectedValue(new ApiError(422, { error: "trip_not_open" }, "422"));
+    mount([ trip({ status: "planned" }) ]);
+    fireEvent.click(await screen.findByRole("button", { name: "Editar" }));
+    vi.mocked(api.listTrips).mockResolvedValue([ trip({ status: "in_progress" }) ]);
+    fireEvent.submit(screen.getByRole("form", { name: "Viagem" }));
+    expect(await screen.findByText("em andamento")).not.toBeNull();
+    await waitFor(() => expect(screen.queryByRole("form", { name: "Viagem" })).toBeNull());
+  });
+
+  it("lista de destinos que não carrega: a frase aparece e criar e editar ficam indisponíveis", async () => {
+    mount([ trip({ status: "planned" }) ]);
+    vi.mocked(api.listDestinations).mockRejectedValue(new ApiError(404, { error: "not_found" }, "404"));
+    expect(await screen.findByText("Não foi possível carregar veículos, motoristas ou destinos: não encontrado — a tela foi atualizada")).not.toBeNull();
+    expect((screen.getByRole("button", { name: "Nova viagem" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "Editar" }) as HTMLButtonElement).disabled).toBe(true);
   });
 
   it("cartão: título, veículo, motorista, lotação e paradas em ordem", async () => {

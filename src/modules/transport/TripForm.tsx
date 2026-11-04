@@ -34,6 +34,14 @@ function driverOption(d: TransportDriver): { text: string; disabled: boolean } {
   return { text: name, disabled: false };
 }
 
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+const utcDay = (iso: string): number => Date.UTC(Number(iso.slice(0, 4)), Number(iso.slice(5, 7)) - 1, Number(iso.slice(8, 10)));
+// Desloca `value` pelos dias entre `from` e `to`; sem datas válidas, o retorno fica como está.
+export function shiftDay(value: string, from: string, to: string): string {
+  if (!DAY.test(value) || !DAY.test(from) || !DAY.test(to)) return value === from ? to : value;
+  return new Date(utcDay(value) + (utcDay(to) - utcDay(from))).toISOString().slice(0, 10);
+}
+
 let rowKey = 0;
 const nextKey = () => ++rowKey;
 
@@ -70,10 +78,12 @@ export function TripForm({ trip, date, vehicles, drivers, destinations, onSaved,
   const id = (name: string) => `trip-${uid}-${name}`;
 
   useEffect(() => { ref.current?.querySelector<HTMLElement>("input:not([disabled]), select:not([disabled])")?.focus(); }, []);
+  // Recusa (da tela ou do api): o foco vai ao primeiro campo marcado.
+  useEffect(() => { ref.current?.querySelector<HTMLElement>("[aria-invalid='true']")?.focus(); }, [ errors ]);
 
   const set = (patch: Partial<typeof head>) => setHead((h) => ({ ...h, ...patch }));
-  // Trocar o dia leva junto o dia do retorno quando ele era o mesmo.
-  const setDay = (day: string) => setHead((h) => ({ ...h, date: day, returnDate: h.returnDate === h.date ? day : h.returnDate }));
+  // Trocar o dia leva junto o dia do retorno, com a mesma distância (retorno no dia seguinte continua no dia seguinte).
+  const setDay = (day: string) => setHead((h) => ({ ...h, date: day, returnDate: shiftDay(h.returnDate, h.date, day) }));
 
   const draft: TripDraft = { ...head, boarding: rows.boarding.map((b) => b.label), destinationIds: rows.destinations.map((d) => d.destinationId) };
 
@@ -179,7 +189,8 @@ export function TripForm({ trip, date, vehicles, drivers, destinations, onSaved,
             <div key={b.key} style={row}>
               <div style={{ ...fieldLabel, flex: 1 }}>
                 <label htmlFor={id(`boarding-${b.key}`)}>{`Embarque ${i + 1}`}</label>
-                <input id={id(`boarding-${b.key}`)} value={b.label} style={inputStyle} aria-invalid={invalid("boarding")}
+                <input id={id(`boarding-${b.key}`)} value={b.label} style={inputStyle} aria-invalid={invalid("boarding") ?? invalid("stops")}
+                  aria-describedby={described("boarding", errors.stops ? id("stops-err") : undefined)}
                   onChange={(e) => { const v = e.target.value; setRows((r) => ({ ...r, boarding: r.boarding.map((x) => (x.key === b.key ? { ...x, label: v } : x)) })); }} />
               </div>
               <button type="button" style={secondaryButtonStyle} disabled={rows.boarding.length === 1} aria-label={`Remover embarque ${i + 1}`}
@@ -199,7 +210,8 @@ export function TripForm({ trip, date, vehicles, drivers, destinations, onSaved,
             <div key={d.key} style={row}>
               <div style={{ ...fieldLabel, flex: 1 }}>
                 <label htmlFor={id(`dest-${d.key}`)}>{`Destino ${i + 1}`}</label>
-                <select id={id(`dest-${d.key}`)} value={d.destinationId} style={inputStyle} aria-invalid={invalid("destinations")}
+                <select id={id(`dest-${d.key}`)} value={d.destinationId} style={inputStyle} aria-invalid={invalid("destinations") ?? invalid("stops")}
+                  aria-describedby={described("destinations", errors.stops ? id("stops-err") : undefined)}
                   onChange={(e) => { const v = e.target.value; setRows((r) => ({ ...r, destinations: r.destinations.map((x) => (x.key === d.key ? { ...x, destinationId: v } : x)) })); }}>
                   <option value="">escolha…</option>
                   {destinationOptions.map((o) => <option key={o.id} value={o.id}>{o.active ? o.name : `${o.name} (inativo)`}</option>)}

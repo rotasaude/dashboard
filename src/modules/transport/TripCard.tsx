@@ -29,25 +29,29 @@ export function tripTitle(t: Trip): string {
   return `${fmtHourMinute(t.departure_at)} → ${backDay === t.date ? back : `${back} de ${dayOf(backDay)}`}${places ? ` · ${places}` : ""}`;
 }
 
-export function TripCard({ trip, today: _today, vehicles, drivers, destinations, children, onChanged, onReload, onGoToSecurity }: {
+// `editBlocked`: frase de por que não dá para editar agora (ex.: a lista de veículos, motoristas ou destinos não carregou).
+export function TripCard({ trip, today: _today, vehicles, drivers, destinations, editBlocked = null, children, onChanged, onReload, onGoToSecurity }: {
   trip: Trip; today: string; vehicles: TransportVehicle[]; drivers: TransportDriver[]; destinations: TransportDestination[];
-  children?: ReactNode; onChanged(t: Trip | null, text: string): void; onReload(): void; onGoToSecurity?(): void;
+  editBlocked?: string | null; children?: ReactNode; onChanged(t: Trip | null, text: string): void; onReload(): void; onGoToSecurity?(): void;
 }) {
   const [ mode, setMode ] = useState<"view" | "edit" | "cancel">("view");
   const [ problems, setProblems ] = useState<string[]>([]);
   const [ busy, setBusy ] = useState(false);
   const titleRef = useRef<HTMLHeadingElement | null>(null);
-  const wasEditing = useRef(false);
+  const focusTitle = useRef(false);
   const titleId = `trip-${trip.id}-title`;
 
-  // Ao fechar o formulário ou o cancelamento, o foco volta ao título da viagem.
+  // Um alvo só para o foco: depois de salvar ou cancelar com sucesso, a frase da agenda (ActionMessage) fica com ele; ao desistir
+  // (botão Cancelar do formulário) ou quando a viagem deixa de aceitar edição, o foco volta ao título.
+  const close = (toTitle: boolean) => { focusTitle.current = toTitle; setMode("view"); };
   useEffect(() => {
-    if (mode === "view" && wasEditing.current) titleRef.current?.focus();
-    wasEditing.current = mode !== "view";
+    if (mode === "view" && focusTitle.current) { focusTitle.current = false; titleRef.current?.focus(); }
   }, [ mode ]);
 
   const stops = [ ...trip.stops ].sort((a, b) => a.position - b.position);
   const canEdit = trip.status === "planned" || trip.status === "confirmed";
+  // Depois de uma recusa (ex.: `trip_not_open`) a agenda relida pode trazer a viagem já em andamento: o formulário fecha.
+  useEffect(() => { if (!canEdit && mode !== "view") close(true); }, [ canEdit, mode ]);
 
   async function confirm() {
     if (busy) return;
@@ -90,13 +94,13 @@ export function TripCard({ trip, today: _today, vehicles, drivers, destinations,
         </ul>
       )}
 
-      {mode === "edit" && (
+      {mode === "edit" && canEdit && (
         <TripForm trip={trip} date={trip.date} vehicles={vehicles} drivers={drivers} destinations={destinations}
-          onSaved={(t) => { setMode("view"); setProblems([]); onChanged(t, "Viagem atualizada."); }}
-          onCancel={() => setMode("view")} onRefused={onReload} />
+          onSaved={(t) => { close(false); setProblems([]); onChanged(t, "Viagem atualizada."); }}
+          onCancel={() => close(true)} onRefused={onReload} />
       )}
 
-      {mode === "cancel" && (
+      {mode === "cancel" && canEdit && (
         <SensitiveAction title="Cancelar viagem" description={notice} requiresStepUp={false} onGoToSecurity={onGoToSecurity}
           fields={[ { name: "reason", label: "Motivo", required: true, multiline: true } ]}
           translateError={(err) => (err instanceof LocalRefusal ? err.message : transportRefusals(err)[0].text)}
@@ -108,18 +112,20 @@ export function TripCard({ trip, today: _today, vehicles, drivers, destinations,
               onChanged(t, "Viagem cancelada.");
             } catch (err) { onReload(); throw err; }
           }}
-          onDone={() => setMode("view")} onCancel={() => setMode("view")} />
+          onDone={() => close(false)} onCancel={() => close(true)} />
       )}
 
       {mode === "view" && canEdit && (
         <div style={row}>
-          <button type="button" style={secondaryButtonStyle} disabled={busy} onClick={() => { setProblems([]); setMode("edit"); }}>Editar</button>
+          <button type="button" style={secondaryButtonStyle} disabled={busy || editBlocked !== null} aria-describedby={editBlocked ? `${titleId}-blocked` : undefined}
+            onClick={() => { setProblems([]); setMode("edit"); }}>Editar</button>
           {trip.status === "planned" && (
             <button type="button" style={busy ? disabledButtonStyle : buttonStyle} disabled={busy} onClick={() => { void confirm(); }}>Confirmar viagem</button>
           )}
           <button type="button" style={secondaryButtonStyle} disabled={busy} onClick={() => { setProblems([]); setMode("cancel"); }}>Cancelar viagem</button>
         </div>
       )}
+      {mode === "view" && canEdit && editBlocked && <p id={`${titleId}-blocked`} style={muted}>{`Editar indisponível: ${editBlocked}`}</p>}
       {children}
     </article>
   );
