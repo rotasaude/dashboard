@@ -34,7 +34,7 @@ export function cnhAlertText(drivers: TransportDriver[]): string | null {
   return parts.length > 0 ? parts.join(" · ") : null;
 }
 
-export function DriversPanel(_props: { today?: string }) {
+export function DriversPanel() {
   const queryClient = useQueryClient();
   const list = useQuery({ queryKey: [ TR_DRIVERS_KEY ], queryFn: () => listDrivers(), ...STATIC_QUERY });
   const [ editing, setEditing ] = useState<TransportDriver | "new" | null>(null);
@@ -83,8 +83,9 @@ export function DriversPanel(_props: { today?: string }) {
   return (
     <Panel title="Motoristas" sub="quem tem o papel de motorista na Equipe · CNH e validade"
       right={<button type="button" style={secondaryButtonStyle} onClick={() => open("new")}>Novo motorista</button>}>
+      {/* A região de status fica fora da pilha: vazia, não abre uma linha em branco (C10). */}
+      <p role="status" style={{ ...alert, fontWeight: 600, marginBottom: alertText ? stack.gap : 0 }}>{alertText}</p>
       <div style={stack}>
-        <p role="status" style={{ ...alert, fontWeight: 600 }}>{alertText}</p>
         {editing && (
           <FleetForm key={creating ? "new" : typeof editing === "object" && editing ? editing.id : ""} label="Motorista" busy={busy} general={general} onSubmit={() => { void save(); }} onCancel={() => { setEditing(null); setDraft(EMPTY); }}>
             {creating ? (

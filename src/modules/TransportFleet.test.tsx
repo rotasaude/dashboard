@@ -3,7 +3,7 @@ import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/re
 import { ApiError } from "../lib/api";
 import * as api from "../lib/api";
 import { renderWithProviders } from "../test/campaignFixtures";
-import { DEST_CURITIBA, DRIVER_D, DRIVER_EXPIRED, DRIVER_EXPIRING, TODAY30, VAN, trUser } from "../test/transportFixtures";
+import { DEST_CURITIBA, DRIVER_D, DRIVER_EXPIRED, DRIVER_EXPIRING, VAN, trUser } from "../test/transportFixtures";
 import { TransportFleet } from "./TransportFleet";
 import { cnhAlertText } from "./transport/DriversPanel";
 
@@ -18,7 +18,7 @@ function mount(roles?: string[]) {
   vi.mocked(api.listDrivers).mockResolvedValue([ DRIVER_D, DRIVER_EXPIRED, DRIVER_EXPIRING ]);
   vi.mocked(api.listDriverCandidates).mockResolvedValue([ { user_id: "u-n", name: "Novo Motorista" } ]);
   vi.mocked(api.listDestinations).mockResolvedValue([ DEST_CURITIBA ]);
-  return renderWithProviders(<TransportFleet today={TODAY30} />);
+  return renderWithProviders(<TransportFleet />);
 }
 
 function fillDriver(form: HTMLElement, number = "01234567890") {
@@ -36,6 +36,19 @@ function fillVehicle(form: HTMLElement) {
 }
 
 describe("frota, motoristas e destinos", () => {
+  it("sem alerta de CNH: a região de status existe, vazia, fora da pilha (sem linha em branco; C10)", async () => {
+    mount();
+    vi.mocked(api.listDrivers).mockResolvedValue([ DRIVER_D ]);
+    cleanup();
+    renderWithProviders(<TransportFleet />);
+    expect(await screen.findByText("final 4321")).not.toBeNull();
+    // O painel dos motoristas: o menor ancestral do título que contém uma região de status.
+    let panel: HTMLElement | null = screen.getByText("Motoristas");
+    while (panel && !panel.querySelector("[role='status']")) panel = panel.parentElement;
+    const status = panel?.querySelector("[role='status']") as HTMLElement;
+    expect(status.textContent).toBe("");
+    expect(status.parentElement?.style.gap).toBe("");
+  });
   it("alerta de CNH no topo e na linha; texto, não só cor", async () => {
     mount();
     expect(await screen.findByText("1 motorista com CNH vencida · 1 vence em até 30 dias")).not.toBeNull();
