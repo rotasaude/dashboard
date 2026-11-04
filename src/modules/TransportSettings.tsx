@@ -1,7 +1,7 @@
 // Módulo 30 (F-30.1): regras do TFD e do acompanhante, só do municipal_admin. A escrita passa pelo step-up e o api substitui o mapa
 // de complementos inteiro: o corpo leva TODOS os códigos preenchidos (`{}` limpa). Limites iguais aos do api (distância 1–1000,
 // criança 0–17, idoso 50–100, complemento até R$ 10.000,00). Nada aqui é dado de cidadão.
-import { useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getTransportSettings, listAllUnits, updateTransportSettings, type TransportSettings as Settings, type TransportSettingsInput } from "../lib/api";
 import { STATIC_QUERY, TR_SETTINGS_KEY, fmtCents, parseReais, transportError, transportRefusals } from "../lib/transport";
@@ -54,6 +54,8 @@ export function TransportSettings({ onGoToSecurity }: { onGoToSecurity?: () => v
 function Body({ onGoToSecurity }: { onGoToSecurity?: () => void }) {
   const settings = useQuery({ queryKey: [ TR_SETTINGS_KEY ], queryFn: getTransportSettings, ...STATIC_QUERY });
   const units = useQuery({ queryKey: [ TR_SETTINGS_KEY, "units" ], queryFn: listAllUnits, ...STATIC_QUERY });
+  // "Regras salvas." mora aqui: a releitura depois de gravar troca a chave do formulário e o remonta (A2).
+  const [ done, setDone ] = useState(false);
   return (
     <Panel title="Regras do TFD" sub="valem para os próximos laudos e viagens">
       <div style={stack}>
@@ -62,14 +64,16 @@ function Body({ onGoToSecurity }: { onGoToSecurity?: () => void }) {
         {units.isError && <p role="alert" style={alert}>{transportError(units.error)}</p>}
         {settings.data && units.data && (
           <SettingsForm key={JSON.stringify(settings.data)} saved={settings.data} gestao={units.data.filter((u) => u.kind === "health_management" && !!u.cnes && (u.active || u.id === settings.data.tfd_billing_health_unit_id))}
-            onGoToSecurity={onGoToSecurity} />
+            done={done} setDone={setDone} onGoToSecurity={onGoToSecurity} />
         )}
       </div>
     </Panel>
   );
 }
 
-function SettingsForm({ saved, gestao, onGoToSecurity }: { saved: Settings; gestao: { id: string; name: string }[]; onGoToSecurity?: () => void }) {
+function SettingsForm({ saved, gestao, done, setDone, onGoToSecurity }: {
+  saved: Settings; gestao: { id: string; name: string }[]; done: boolean; setDone(v: boolean): void; onGoToSecurity?: () => void;
+}) {
   const queryClient = useQueryClient();
   const [ draft, setDraft ] = useState<SettingsDraft>({
     minKm: String(saved.tfd_min_distance_km), maxAgeChild: String(saved.companion_rule.max_age_child), minAgeElderly: String(saved.companion_rule.min_age_elderly),
@@ -78,10 +82,16 @@ function SettingsForm({ saved, gestao, onGoToSecurity }: { saved: Settings; gest
   const [ unitId, setUnitId ] = useState(saved.tfd_billing_health_unit_id ?? "");
   const [ problems, setProblems ] = useState<Problem[]>([]);
   const [ confirming, setConfirming ] = useState(false);
-  const [ done, setDone ] = useState(false);
+  const formRef = useRef<HTMLFormElement | null>(null);
+  useEffect(() => { formRef.current?.querySelector<HTMLElement>("[aria-invalid='true']")?.focus(); }, [ problems ]);
 
   const set = (patch: Partial<SettingsDraft>) => { setDraft((d) => ({ ...d, ...patch })); setDone(false); };
-  const err = (path: string) => problems.filter((p) => p.path === path).map((p) => <span key={p.text} style={alert}>{p.text}</span>);
+  const errId = (path: string) => `ts-err-${path.replace(/\W/g, "-")}`;
+  const err = (path: string) => {
+    const texts = [ ...new Set(problems.filter((p) => p.path === path).map((p) => p.text)) ];
+    return texts.length > 0 ? <span id={errId(path)} style={alert}>{texts.join("; ")}</span> : null;
+  };
+  const aria = (path: string) => (problems.some((p) => p.path === path) ? { "aria-invalid": true as const, "aria-describedby": errId(path) } : {});
   function review() {
     const found = settingsProblems(draft);
     setProblems(found);
@@ -89,32 +99,32 @@ function SettingsForm({ saved, gestao, onGoToSecurity }: { saved: Settings; gest
   }
 
   return (
-    <form style={stack} onSubmit={(e) => { e.preventDefault(); review(); }}>
+    <form ref={formRef} style={stack} onSubmit={(e) => { e.preventDefault(); review(); }}>
       {done && <p role="status" style={okText}>Regras salvas.</p>}
       <label style={fieldLabel}>
         Distância mínima do TFD (km)
-        <input value={draft.minKm} inputMode="numeric" onChange={(e) => set({ minKm: e.target.value })} style={inputStyle} />
-        {err("tfd_min_distance_km")}
+        <input value={draft.minKm} inputMode="numeric" onChange={(e) => set({ minKm: e.target.value })} style={inputStyle} {...aria("tfd_min_distance_km")} />
       </label>
+      {err("tfd_min_distance_km")}
       <label style={fieldLabel}>
         Criança até (anos)
-        <input value={draft.maxAgeChild} inputMode="numeric" onChange={(e) => set({ maxAgeChild: e.target.value })} style={inputStyle} />
-        {err("companion_rule.max_age_child")}
+        <input value={draft.maxAgeChild} inputMode="numeric" onChange={(e) => set({ maxAgeChild: e.target.value })} style={inputStyle} {...aria("companion_rule.max_age_child")} />
       </label>
+      {err("companion_rule.max_age_child")}
       <label style={fieldLabel}>
         Idoso a partir de (anos)
-        <input value={draft.minAgeElderly} inputMode="numeric" onChange={(e) => set({ minAgeElderly: e.target.value })} style={inputStyle} />
-        {err("companion_rule.min_age_elderly")}
+        <input value={draft.minAgeElderly} inputMode="numeric" onChange={(e) => set({ minAgeElderly: e.target.value })} style={inputStyle} {...aria("companion_rule.min_age_elderly")} />
       </label>
+      {err("companion_rule.min_age_elderly")}
       <p style={muted}>{COMPANION_NOTE}</p>
       <label style={fieldLabel}>
         Unidade do BPA do TFD
-        <select value={unitId} onChange={(e) => { setUnitId(e.target.value); setDone(false); }} style={inputStyle}>
+        <select value={unitId} onChange={(e) => { setUnitId(e.target.value); setDone(false); }} style={inputStyle} {...aria("tfd_billing_health_unit_id")}>
           <option value="">Escolha a unidade de gestão</option>
           {gestao.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
         </select>
       </label>
-      {gestao.length === 0 && <p style={muted}>Nenhuma unidade de gestão com CNES cadastrada: crie uma em Unidades.</p>}
+      {gestao.length === 0 && <p style={muted}>Nenhuma unidade de gestão com CNES cadastrada: crie a unidade Gestão em Unidades com o CNES.</p>}
       {err("tfd_billing_health_unit_id")}
       <p style={muted}>Só aparecem unidades de gestão com CNES; a unidade é obrigatória enquanto o faturamento de procedimentos estiver ligado.</p>
       <fieldset style={{ ...stack, border: "1px solid var(--rule)", borderRadius: 8, padding: 12, margin: 0 }}>
@@ -123,7 +133,7 @@ function SettingsForm({ saved, gestao, onGoToSecurity }: { saved: Settings; gest
           <div key={c.code} style={lineStyle}>
             <label htmlFor={`cx-${c.code}`} style={{ fontSize: 12, color: "var(--ink2)" }}>{c.name ? `${c.code} — ${c.name}` : c.code}</label>
             <div style={stack}>
-              <input id={`cx-${c.code}`} value={draft.complements[c.code] ?? ""} inputMode="decimal" placeholder="0,00" style={inputStyle}
+              <input id={`cx-${c.code}`} value={draft.complements[c.code] ?? ""} inputMode="decimal" placeholder="0,00" style={inputStyle} {...aria(`allowance_complements.${c.code}`)}
                 onChange={(e) => set({ complements: { ...draft.complements, [c.code]: e.target.value } })} />
               {err(`allowance_complements.${c.code}`)}
             </div>

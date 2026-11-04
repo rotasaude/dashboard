@@ -87,6 +87,39 @@ describe("regras do TFD e do acompanhante", () => {
     expect(await screen.findByText("seu papel não permite usar o transporte sanitário")).not.toBeNull();
     expect(screen.queryByLabelText("Distância mínima do TFD (km)")).toBeNull();
   });
+  it("\"Regras salvas.\" continua depois da releitura que traz as regras novas (A2)", async () => {
+    vi.mocked(api.updateTransportSettings).mockResolvedValue({ ...SETTINGS, tfd_min_distance_km: 80 });
+    mount();
+    // 1ª leitura: as regras de antes; a releitura depois de gravar traz as novas (a chave do formulário mudaria).
+    vi.mocked(api.getTransportSettings).mockResolvedValue({ ...SETTINGS, tfd_min_distance_km: 80 }).mockResolvedValueOnce(SETTINGS);
+    const min = (await screen.findByLabelText("Distância mínima do TFD (km)")) as HTMLInputElement;
+    expect(min.value).toBe("50");
+    fireEvent.change(min, { target: { value: "80" } });
+    await save();
+    await waitFor(() => expect(api.getTransportSettings).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect((screen.getByLabelText("Distância mínima do TFD (km)") as HTMLInputElement).value).toBe("80"));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.getByRole("status").textContent).toBe("Regras salvas.");
+  });
+  it("campos recusados ficam aria-invalid, com a frase ligada, e o foco vai ao primeiro (C3)", async () => {
+    mount();
+    fireEvent.change(await screen.findByLabelText("Criança até (anos)"), { target: { value: "20" } });
+    fireEvent.change(screen.getByLabelText(/^0803010010 — /), { target: { value: "abc" } });
+    fireEvent.click(screen.getByRole("button", { name: "Salvar regras" }));
+    const child = screen.getByLabelText("Criança até (anos)");
+    expect(child.getAttribute("aria-invalid")).toBe("true");
+    expect(document.getElementById(child.getAttribute("aria-describedby") ?? "")?.textContent).toBe("a idade da criança precisa ser de 0 a 17 anos");
+    expect(screen.getByLabelText(/^0803010010 — /).getAttribute("aria-invalid")).toBe("true");
+    expect(screen.getByLabelText("Distância mínima do TFD (km)").getAttribute("aria-invalid")).toBeNull();
+    await waitFor(() => expect(document.activeElement).toBe(child));
+  });
+  it("sem unidade de gestão com CNES: diz para criar a unidade Gestão com o CNES em Unidades (T47)", async () => {
+    vi.mocked(api.fetchCurrentSession).mockResolvedValue(trUser([ "municipal_admin" ]));
+    vi.mocked(api.getTransportSettings).mockResolvedValue(SETTINGS);
+    vi.mocked(api.listAllUnits).mockResolvedValue([ UNITS[0], UNITS[2] ] as never);
+    renderWithProviders(<TransportSettings />);
+    expect(await screen.findByText(/crie a unidade Gestão em Unidades com o CNES/)).not.toBeNull();
+  });
   it("settingsProblems: limites do api", () => {
     const ok = { minKm: "1000", maxAgeChild: "17", minAgeElderly: "100", complements: {} };
     expect(settingsProblems(ok)).toEqual([]);
