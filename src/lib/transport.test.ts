@@ -79,6 +79,8 @@ describe("CNH e categoria (Review Focus 3)", () => {
     expect(driverFitProblems(DRIVER_EXPIRED, VAN, TODAY30).map((p) => p.text)).toEqual([ "a CNH deste motorista está vencida na data da viagem" ]);
     expect(driverFitProblems(DRIVER_B, VAN, TODAY30).map((p) => p.text)).toEqual([ "veículo com mais de 8 lugares exige CNH D ou E" ]);
     expect(driverFitProblems(DRIVER_B, CAR, TODAY30)).toEqual([]);
+    expect(driverFitProblems(DRIVER_B, { seats: 8 }, TODAY30)).toEqual([]);
+    expect(driverFitProblems({ ...DRIVER_D, license_category: "C" }, { seats: 9 }, TODAY30)).toHaveLength(1);
     expect(driverFitProblems(DRIVER_EXPIRING, VAN, TODAY30)).toEqual([]);
     expect(driverFitProblems(undefined, VAN, TODAY30)).toEqual([]);
     // Vence antes da viagem marcada para depois: conta a data da viagem, não hoje.
@@ -132,6 +134,21 @@ describe("viagem", () => {
     expect("vehicle_id" in body).toBe(false);
     expect("driver_id" in body).toBe(false);
     expect(tripBody({ ...d, vehicleId: "v1", driverId: "d1" })).toMatchObject({ vehicle_id: "v1", driver_id: "d1" });
+  });
+  it("edição manda null para veículo e motorista limpos; criação omite", () => {
+    const d = { ...tripDraftFrom(trip()), vehicleId: "", driverId: "" };
+    expect(tripBody(d, trip().stops, { edit: true })).toMatchObject({ vehicle_id: null, driver_id: null });
+    const create = tripBody(d);
+    expect("vehicle_id" in create || "driver_id" in create).toBe(false);
+    expect(tripBody({ ...d, vehicleId: "v1" }, undefined, { edit: true })).toMatchObject({ vehicle_id: "v1", driver_id: null });
+  });
+  it("trip_not_open cobre viagem já iniciada", () => {
+    expect(transportError(refuse(422, { error: "trip_not_open" }))).toContain("já começou");
+  });
+  it("série: fim no passado não é recusado pela tela (o api só confere fim >= início)", () => {
+    const d = { patientId: "p", destinationId: "t1", providerName: "", weekdays: [ 1 ], appointmentTime: "07:00", departureTime: "05:30", returnTime: "12:00",
+      boardingLabel: "Praça", startsOn: "2026-01-01", endsOn: "2026-02-01", wheelchair: false, companion: null };
+    expect(seriesProblems(d, TODAY30)).toEqual([]);
   });
   it("corpo de viagem existente mantém o id das paradas que continuam (D3)", () => {
     const t = trip();
@@ -220,6 +237,9 @@ describe("dinheiro e contagens", () => {
     expect(parseReais("1234")).toBe(123400);
     expect(parseReais("12,5")).toBe(1250);
     expect(parseReais("12,345")).toBeNull();
+    expect(parseReais("1.234")).toBe(123400);
+    expect(parseReais("0.500")).toBeNull();
+    expect(parseReais("1.234,567")).toBeNull();
     expect(parseReais("-5")).toBeNull();
     expect(parseReais("")).toBeNull();
     expect(parseReais("abc")).toBeNull();
@@ -330,7 +350,7 @@ describe("recusas do api", () => {
       "patient_already_on_trip", "passenger_anonymized", "attendance_pending", "odometer_invalid", "tfd_leg_done", "plate_taken", "renavam_taken",
       "ibge_taken", "user_not_driver", "user_already_driver", "vehicle_overlap", "driver_overlap", "driver_license_expired", "driver_license_category",
       "vehicle_inactive", "return_before_departure", "citizen_not_verified", "person_not_found", "invalid_cpf", "too_many_requests", "not_found",
-      "missing_role", "mfa_required" ];
+      "missing_role", "mfa_required", "billing_unit_invalid", "unauthenticated" ];
     for (const code of sent) {
       const text = transportRefusals(refuse(422, { error: code }))[0].text;
       expect(text, code).not.toContain("recusado pelo servidor");

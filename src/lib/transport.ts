@@ -103,7 +103,7 @@ export function parseReais(raw: string): number | null {
   let intPart: string;
   let frac = "";
   let m: RegExpExecArray | null;
-  if ((m = /^(\d{1,3}(?:\.\d{3})+)(?:,(\d{1,2}))?$/.exec(t))) {
+  if ((m = /^([1-9]\d{0,2}(?:\.\d{3})+)(?:,(\d{1,2}))?$/.exec(t))) {
     intPart = m[1].replace(/\./g, "");
     frac = m[2] ?? "";
   } else if ((m = /^(\d+)(?:,(\d{1,2}))?$/.exec(t)) || (m = /^(\d+)(?:\.(\d{1,2}))?$/.exec(t))) {
@@ -271,9 +271,9 @@ export function tripProblems(d: TripDraft, ctx: { vehicles: TransportVehicle[]; 
   return out;
 }
 
-// `vehicle_id`/`driver_id` só quando escolhidos. Com as paradas da viagem existente, as que continuam mantêm o `id` (D3): embarque pelo
+// `vehicle_id`/`driver_id` só quando escolhidos; na edição (`edit`) o campo vazio manda `null`, que desfaz a escolha (ausente = mantém). Com as paradas da viagem existente, as que continuam mantêm o `id` (D3): embarque pelo
 // rótulo, destino pelo `destination_id`. O rótulo do destino vai vazio: o api põe o nome.
-export function tripBody(d: TripDraft, stops?: TripStop[]): TripInput {
+export function tripBody(d: TripDraft, stops?: TripStop[], opts: { edit?: boolean } = {}): TripInput {
   const free = [ ...(stops ?? []) ];
   const take = (match: (s: TripStop) => boolean): string | undefined => {
     const i = free.findIndex(match);
@@ -290,7 +290,8 @@ export function tripBody(d: TripDraft, stops?: TripStop[]): TripInput {
   });
   return {
     date: d.date, departure_at: cityLocalIso(`${d.date}T${d.departureTime}`) ?? "", return_at: cityLocalIso(`${d.returnDate}T${d.returnTime}`) ?? "",
-    ...(d.vehicleId ? { vehicle_id: d.vehicleId } : {}), ...(d.driverId ? { driver_id: d.driverId } : {}), stops: out
+    ...(d.vehicleId ? { vehicle_id: d.vehicleId } : opts.edit ? { vehicle_id: null } : {}),
+    ...(d.driverId ? { driver_id: d.driverId } : opts.edit ? { driver_id: null } : {}), stops: out
   };
 }
 
@@ -377,7 +378,8 @@ export interface SeriesDraft {
   returnTime: string; boardingLabel: string; startsOn: string; endsOn: string; wheelchair: boolean; companion: CompanionDraft | null;
 }
 
-export function seriesProblems(d: SeriesDraft, today: string): Problem[] {
+// `today` fica na assinatura; o api só confere fim >= início.
+export function seriesProblems(d: SeriesDraft, _today: string): Problem[] {
   const out: Problem[] = [];
   if (d.patientId === "") out.push({ path: "patient_id", text: "escolha o paciente" });
   if (d.destinationId === "") out.push({ path: "destination_id", text: "escolha o destino" });
@@ -395,7 +397,6 @@ export function seriesProblems(d: SeriesDraft, today: string): Problem[] {
   if (!DATE.test(d.startsOn)) out.push({ path: "starts_on", text: "informe o início da série" });
   if (d.endsOn !== "") {
     if (DATE.test(d.startsOn) && d.endsOn < d.startsOn) out.push({ path: "ends_on", text: "o fim precisa ser depois do início" });
-    else if (d.endsOn < today) out.push({ path: "ends_on", text: "o fim da série já passou" });
   }
   if (d.companion && !textIn(d.companion.name, 3, 120)) out.push({ path: "companion.name", text: "o nome do acompanhante tem de 3 a 120 caracteres" });
   return out;
@@ -481,7 +482,7 @@ const ERRORS: Record<string, string> = {
   trip_day_locked: "a viagem tem passageiro de série ou trecho de TFD — mude só o horário",
   stop_not_boarding: "a parada escolhida não é de embarque",
   stop_in_use: "esta parada tem passageiro — mude o passageiro de parada antes",
-  trip_not_open: "a viagem já foi concluída ou cancelada — recarregue",
+  trip_not_open: "a viagem não aceita mais alteração (já começou, foi concluída ou cancelada) — recarregue",
   invalid_transition: "a viagem mudou de situação — recarregue",
   trip_not_today: "a viagem só começa no dia dela",
   seats_full: "a viagem está lotada",
@@ -504,6 +505,8 @@ const ERRORS: Record<string, string> = {
   invalid_cpf: "CPF inválido — confira os 11 dígitos",
   too_many_requests: "muitas buscas em pouco tempo — espere um minuto",
   not_found: "não encontrado — a tela foi atualizada",
+  billing_unit_invalid: "a unidade de faturamento do TFD precisa ser a gestão de saúde, com CNES — e é obrigatória enquanto o faturamento de procedimentos estiver ligado",
+  unauthenticated: "sua sessão terminou — entre de novo",
   mfa_required: "confirme sua identidade com o código do autenticador e tente de novo",
   missing_role: "seu papel não permite esta ação"
 };
