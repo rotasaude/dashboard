@@ -26,9 +26,13 @@ export function DecisionPanel({ tfdCase, now = new Date(), onDecided, onNeedAppo
   const [ choice, setChoice ] = useState<TfdDecision | null>(null);
   const [ blocked, setBlocked ] = useState<string | null>(null);
 
+  const appointmentProblem = (d: TfdDecision) => decisionProblems(d, "", tfdCase, now).find((p) => p.path === "appointment_at");
+  // A frase vale enquanto o processo continua sem atendimento: marcado o atendimento, ela some.
+  const showBlocked = blocked !== null && appointmentProblem("authorize") !== undefined;
+
   function pick(d: TfdDecision) {
     // Aqui só a regra do atendimento; o motivo é conferido na confirmação.
-    const problem = decisionProblems(d, "", tfdCase, now).find((p) => p.path === "appointment_at");
+    const problem = appointmentProblem(d);
     if (problem) { setBlocked(problem.text); setChoice(null); onNeedAppointment(); return; }
     setBlocked(null);
     setChoice(d);
@@ -51,7 +55,7 @@ export function DecisionPanel({ tfdCase, now = new Date(), onDecided, onNeedAppo
 
   return (
     <div role="group" aria-label="Decisão da comissão" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      {blocked && <p role="alert" style={alert}>{blocked}</p>}
+      {showBlocked && <p role="alert" style={alert}>{blocked}</p>}
       <div style={row}>
         {DECISIONS.map((d) => <button key={d} type="button" style={STYLE[d]} onClick={() => pick(d)}>{decisionLabel(d)}</button>)}
       </div>

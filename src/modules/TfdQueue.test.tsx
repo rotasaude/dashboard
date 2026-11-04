@@ -156,6 +156,21 @@ describe("comissão de TFD", () => {
     expect(document.activeElement).toBe(screen.getByRole("button", { name: "Marcar atendimento" }));
   });
 
+  it("a frase de atendimento ausente some depois que o atendimento é marcado", async () => {
+    vi.mocked(api.readTfdCase).mockResolvedValue(tfdCase());
+    vi.mocked(api.setTfdAppointment).mockResolvedValue(tfdCase({ appointment_at: "2026-11-20T08:00:00-03:00" }));
+    mount();
+    await openCase();
+    fireEvent.click(screen.getByRole("button", { name: "Autorizar" }));
+    expect(screen.getByText("marque o atendimento no destino antes de autorizar")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Marcar atendimento" }));
+    fireEvent.change(await screen.findByLabelText("Data e hora do atendimento"), { target: { value: "2026-11-20T08:00" } });
+    fireEvent.submit(screen.getByRole("form", { name: "Atendimento no destino" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+    expect(await screen.findByText("Atendimento no destino marcado.")).not.toBeNull();
+    expect(screen.queryByText("marque o atendimento no destino antes de autorizar")).toBeNull();
+  });
+
   it("atendimento no passado conta como ausente: autorizar não envia", async () => {
     vi.mocked(api.readTfdCase).mockResolvedValue(tfdCase({ appointment_at: "2026-11-02T08:00:00-03:00" }));
     mount();
