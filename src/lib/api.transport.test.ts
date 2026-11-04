@@ -154,6 +154,18 @@ describe("cliente do transporte e TFD (módulo 30)", () => {
     expect(last().url).toBe("/tfd/cases/c1/allowances");
     expect(a).toEqual({ items: [], total_cents: 0 });
   });
+  it("o arquivo da prestação de contas respeita VITE_TFD_BASE (C6)", async () => {
+    stub("%PDF", 200, { "Content-Type": "application/pdf" });
+    await api.fetchTfdAccountabilityFile("/tfd/files/tok1");
+    expect(last().url).toBe("/tfd/files/tok1");
+    vi.stubEnv("VITE_TFD_BASE", "/api/tfd");
+    vi.resetModules();
+    try {
+      const fresh = await import("./api");
+      await fresh.fetchTfdAccountabilityFile("/tfd/files/tok1");
+      expect(last().url).toBe("/api/tfd/files/tok1");
+    } finally { vi.unstubAllEnvs(); vi.resetModules(); }
+  });
   it("prestação de contas em base64, sem o nome do arquivo (D11)", async () => {
     stub(tfdCase({ status: "completed" }));
     const file = new File([ new Uint8Array([ 137, 80, 78, 71 ]) ], "comprovante-maria.png", { type: "image/png" });

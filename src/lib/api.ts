@@ -6000,6 +6000,7 @@ export async function getTfdAccountabilityUrl(caseId: string): Promise<string> {
 }
 // O arquivo do endereço curto (GET /tfd/files/<token>, trilha no api); 410 `link_expired` depois de 5 min. O nome do arquivo
 // que vier no Content-Disposition não é usado pela tela.
+// O api devolve o caminho sob `/tfd`: com VITE_TFD_BASE prefixado (proxy), o arquivo vai pela mesma base das outras chamadas do TFD.
 export function fetchTfdAccountabilityFile(url: string): Promise<SignatureFile> {
-  return binaryFetch(url, "application/pdf,image/jpeg,image/png");
+  return binaryFetch(url.replace(/^\/tfd(?=\/)/, TFD_BASE), "application/pdf,image/jpeg,image/png");
 }
