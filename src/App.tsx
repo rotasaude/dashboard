@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ScopeContext, PERIOD_OPTIONS, useScope, type PeriodKey } from "./lib/scope";
 import { useAuth } from "./lib/auth";
 import { NAV_GROUPS, labelFor, isExamProvider, navGroupsFor, withExamPendingCount, withLabCriticalCount, withPendingCount, withQcBlockCount, withRegulationCount, withSurveillanceCount, type ModuleId, type NavGroupDef } from "./shell/modules";
@@ -233,6 +233,11 @@ function ShellInner({ initialModule }: { initialModule?: ModuleId }) {
   // Fora de uma tela, a sessão de assinatura volta para a Visão geral (o
   // return_to só aceita ids de tela).
   const active: ModuleId = route.kind === "screen" ? route.id : "overview";
+  // Módulo 31: a matrícula aberta no acolhimento vai a "Usuários do CAPS" (sem rota com id: nada de id na URL). Vale só para aquela
+  // ida — saiu da tela, apaga (voltar pelo menu nunca reabre o detalhe sem clique).
+  const [ capsEnrollmentId, setCapsEnrollmentId ] = useState<string | null>(null);
+  useEffect(() => { if (active !== "caps-enrollments") setCapsEnrollmentId(null); }, [ active ]);
+  const caps: CapsHandoff = useMemo(() => ({ enrollmentId: capsEnrollmentId, openEnrollment: setCapsEnrollmentId }), [ capsEnrollmentId ]);
 
   let content;
   if (route.kind === "home") content = (
@@ -246,7 +251,7 @@ function ShellInner({ initialModule }: { initialModule?: ModuleId }) {
   else if (route.kind === "group") {
     const group = groups.find((g) => g.slug === route.slug);
     content = group ? <GroupCards group={group} catalog={CATALOG} go={goShell} /> : null;
-  } else content = renderModule(route.id, navigate);
+  } else content = renderModule(route.id, navigate, caps);
 
   return (
     <Shell
@@ -276,7 +281,11 @@ function ShellInner({ initialModule }: { initialModule?: ModuleId }) {
   );
 }
 
-export function renderModule(active: ModuleId, setActive: (id: ModuleId) => void) {
+// A matrícula que o acolhimento abriu e "Usuários do CAPS" mostra ao entrar (módulo 31).
+export type CapsHandoff = { enrollmentId: string | null; openEnrollment(id: string): void };
+const NO_CAPS_HANDOFF: CapsHandoff = { enrollmentId: null, openEnrollment: () => {} };
+
+export function renderModule(active: ModuleId, setActive: (id: ModuleId) => void, caps: CapsHandoff = NO_CAPS_HANDOFF) {
   switch (active) {
     case "overview":       return <Overview onNavigate={setActive} />;
     case "ingestion":      return <Ingestion />;
@@ -382,9 +391,10 @@ export function renderModule(active: ModuleId, setActive: (id: ModuleId) => void
     case "transport-settings": return <TransportSettings onGoToSecurity={() => setActive("security")} />;
     case "tfd-queue": return <TfdQueue onGoToSecurity={() => setActive("security")} />;
     case "tfd-my-cases": return <TfdMyCases />;
-    case "caps-reception": return <CapsReception onGoToSecurity={() => setActive("security")} />;
+    case "caps-reception": return <CapsReception onGoToSecurity={() => setActive("security")}
+      onOpenEnrollment={(id) => { caps.openEnrollment(id); setActive("caps-enrollments"); }} />;
     case "caps-today": return <CapsToday />;
-    case "caps-enrollments": return <CapsEnrollments onGoToSecurity={() => setActive("security")} />;
+    case "caps-enrollments": return <CapsEnrollments onGoToSecurity={() => setActive("security")} initialEnrollmentId={caps.enrollmentId} />;
     case "caps-groups": return <CapsGroups />;
     case "caps-beds": return <CapsBeds />;
     case "caps-matrix": return <CapsMatrix />;

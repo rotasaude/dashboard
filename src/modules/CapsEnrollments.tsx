@@ -2,7 +2,8 @@
 // Nesta etapa, só o portão (interruptor, papel e CAPS); o corpo chega na task indicada.
 import { PsychosocialGate } from "./psychosocial/PsychosocialGate";
 
-export type CapsEnrollmentsProps = { today?: string; now?: Date; onGoToSecurity?: () => void };
+// `initialEnrollmentId`: a matrícula aberta no acolhimento (Task 5), mostrada ao entrar (Task 6).
+export type CapsEnrollmentsProps = { today?: string; now?: Date; onGoToSecurity?: () => void; initialEnrollmentId?: string | null };
 
 export function CapsEnrollments(_props: CapsEnrollmentsProps) {
   return (

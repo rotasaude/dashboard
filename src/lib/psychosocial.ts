@@ -5,7 +5,7 @@
 import {
   ApiError, errorCode,
   type CareIntensity, type PsyActionInput, type PsyCarePlanInput, type PsyCode, type PsyCount, type PsyEnrollmentInput,
-  type PsyPlace, type PsyProcedure, type PsySettings
+  type PsyOptions, type PsyPlace, type PsyProcedure, type PsyReceptionInput, type PsySettings, type ReceptionOutcome
 } from "./api";
 import { NOMINAL_QUERY, STATIC_QUERY, fmtDay } from "./careLines";
 import { addDays } from "./campaigns";
@@ -200,6 +200,57 @@ export function enrollmentInput(d: EnrollmentDraft, unitId: string, patientId: s
     substances: d.substances, esf_covered: d.esfCovered, ...(d.esfCovered ? { esf_cnes: d.esfCnes.trim() } : {}),
     reference_user_id: d.referenceUserId
   };
+}
+
+// ─── Acolhimento (F-31.2; §4, P7, P40) ──────────────────────────────────────
+export const RECEPTION_DONE = "Acolhimento registrado.";
+export const RECEPTION_ENROLLED = "Acolhimento registrado. Matrícula aberta.";
+export const NO_RECEPTION_PROCEDURE = "nenhum procedimento de acolhimento do SIGTAP serve para o seu CBO neste CAPS";
+export const NO_REGISTRATION_TEXT = "esta pessoa não tem cadastro — cadastre no balcão de atendimento antes do acolhimento";
+export const ESF_CNES_MISSING = "a equipe de ESF que cobre o usuário não tem CNES cadastrado — digite o CNES da USF (7 dígitos)";
+// A mesma frase do `enrollment_required` em `at` que o api devolve (P40).
+export const RECEPTION_BEFORE_START = "o acolhimento é anterior ao início da matrícula";
+
+// Código do acolhimento: nome com "ACOLHIMENTO" e instrumento RAAS-PSI (09) ou BPA-I (02); `options` já vem filtrado pelo CBO.
+export const receptionProcedures = (o: PsyOptions): PsyProcedure[] =>
+  o.procedures.filter((p) => /ACOLHIMENTO/i.test(p.name) && (p.instrument_codes.includes("09") || p.instrument_codes.includes("02")));
+
+export type ReceptionDraft = {
+  at: string /* "YYYY-MM-DDTHH:MM", hora de parede da cidade */; sigtapCode: string; notes: string; outcome: ReceptionOutcome | "";
+  enrollment: EnrollmentDraft;
+};
+
+export function emptyReceptionDraft(now: Date, today: string, meId: string, procs: PsyProcedure[]): ReceptionDraft {
+  return { at: cityLocalInput(now), sigtapCode: procs[0]?.code ?? "", notes: "", outcome: "", enrollment: emptyEnrollmentDraft(today, meId) };
+}
+
+// Tudo de uma vez; o bloco de matrícula só com `enrolled`, com os paths do api (`enrollment.<campo>`).
+export function receptionProblems(d: ReceptionDraft, today: string, now: Date): Problem[] {
+  const out: Problem[] = [];
+  const at = parseCityLocal(d.at);
+  if (!at || at.getTime() > now.getTime()) out.push({ path: "at", text: "a data não pode ser futura" });
+  else if (d.outcome === "enrolled" && d.at.slice(0, 10) < d.enrollment.startedOn) out.push({ path: "at", text: RECEPTION_BEFORE_START });
+  if (!d.sigtapCode) out.push({ path: "sigtap_code", text: "escolha o procedimento do acolhimento" });
+  if (trimmedLength(d.notes) > 4000) out.push({ path: "notes", text: "as anotações do acolhimento têm até 4000 caracteres" });
+  if (!d.outcome) out.push({ path: "outcome", text: "escolha o desfecho" });
+  if (d.outcome === "enrolled") {
+    for (const p of enrollmentProblems(d.enrollment, today)) out.push({ path: `enrollment.${p.path}`, text: p.text });
+  }
+  return out;
+}
+
+// Opcionais vazios não vão (o api recusa `""`); a matrícula vai sem `health_unit_id`/`patient_id` (são os da recepção).
+export function receptionInput(d: ReceptionDraft, unitId: string, patientId: string, referralId: string | null): PsyReceptionInput {
+  const notes = d.notes.trim();
+  const out: PsyReceptionInput = {
+    health_unit_id: unitId, patient_id: patientId, ...(referralId ? { referral_id: referralId } : {}),
+    at: cityLocalIso(d.at) ?? d.at, sigtap_code: d.sigtapCode, ...(notes ? { notes } : {}), outcome: d.outcome as ReceptionOutcome
+  };
+  if (d.outcome === "enrolled") {
+    const { health_unit_id: _u, patient_id: _p, ...enrollment } = enrollmentInput(d.enrollment, unitId, patientId);
+    out.enrollment = enrollment;
+  }
+  return out;
 }
 
 export type ParticipantDraft =
@@ -413,7 +464,7 @@ const PATH_TEXT: Record<string, [ RegExp, string ][]> = {
   enrollment_required: [
     [ /^participants\[\d+\]$/, "este participante não tem matrícula aberta neste CAPS na data da ação" ],
     [ /^enrollment_id$/, "a matrícula não está aberta, ou começa depois da entrada no leito" ],
-    [ /^at$/, "o acolhimento é anterior ao início da matrícula" ]
+    [ /^at$/, RECEPTION_BEFORE_START ]
   ],
   performed_in_future: [ [ /^(at|held_on)$/, "a data não pode ser futura" ] ]
 };

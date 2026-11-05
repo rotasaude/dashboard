@@ -11,6 +11,7 @@ import { SurveillanceNegatives } from "./modules/SurveillanceNegatives";
 import { SurveillanceReports } from "./modules/SurveillanceReports";
 import { SurveillancePanel } from "./modules/SurveillancePanel";
 import { SurveillanceDiseases } from "./modules/SurveillanceDiseases";
+import { CapsEnrollments } from "./modules/CapsEnrollments";
 
 type El = ReactElement<Record<string, (id?: string) => void>>;
 
@@ -61,6 +62,18 @@ describe("atalhos entre telas", () => {
 
   it("registry-status abre a validade dos cadastros", () => {
     expect((renderModule("registry-status", vi.fn()) as ReactElement).type).toBe(RegistryStatus);
+  });
+
+  it("caps-reception: Abrir matrícula guarda o id e vai a Usuários do CAPS, que o recebe", () => {
+    const navigate = vi.fn();
+    const caps = { enrollmentId: null, openEnrollment: vi.fn() };
+    (renderModule("caps-reception", navigate, caps) as El).props.onOpenEnrollment("en9");
+    expect(caps.openEnrollment).toHaveBeenCalledWith("en9");
+    expect(navigate).toHaveBeenCalledWith("caps-enrollments");
+    const el = renderModule("caps-enrollments", navigate, { enrollmentId: "en9", openEnrollment: vi.fn() }) as ReactElement<{ initialEnrollmentId?: string | null }>;
+    expect(el.type).toBe(CapsEnrollments);
+    expect(el.props.initialEnrollmentId).toBe("en9");
+    expect((renderModule("caps-enrollments", navigate) as ReactElement<{ initialEnrollmentId?: string | null }>).props.initialEnrollmentId).toBeNull();
   });
 });
 
