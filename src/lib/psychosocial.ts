@@ -5,7 +5,7 @@
 import {
   ApiError, errorCode,
   type CareIntensity, type ClinicalDocument, type PsyAction, type PsyActionInput, type PsyCarePlanInput, type PsyCode, type PsyCount, type PsyEnrollment, type PsyEnrollmentInput,
-  type PsyEnrollmentPatch, type PsyOptions, type PsyPlace, type PsyProcedure, type PsyReceptionInput, type PsySettings, type ReceptionOutcome
+  type PsyEnrollmentPatch, type PsyGroup, type PsyGroupInput, type PsyGroupKind, type PsyGroupPatch, type PsyOptions, type PsyPlace, type PsyProcedure, type PsyReceptionInput, type PsySettings, type ReceptionOutcome
 } from "./api";
 import { NOMINAL_QUERY, STATIC_QUERY, fmtDay } from "./careLines";
 import { addDays } from "./campaigns";
@@ -369,6 +369,93 @@ export function actionInput(d: ActionDraft, unitId: string): PsyActionInput {
   };
 }
 
+// ─── Grupos e oficinas, presença e Hoje (F-31.4) ────────────────────────────
+// Limites do api (`SaveGroup`): nome 1–120, dia ISO 1–7, "HH:MM" de parede da cidade com o fim depois do início, vagas 1–100, código
+// SIGTAP de instrumento 09 ou 01. O api confere SIGTAP e responsável quando mudam ou na reativação (a tela não repete a conferência).
+export const GROUP_NAME_TEXT = "o nome tem de 1 a 120 caracteres";
+export const GROUP_TIME_TEXT = "confira o dia e o horário do grupo";
+export const GROUP_ENDS_TEXT = "o fim precisa ser depois do início";
+export const GROUP_CAPACITY_TEXT = "as vagas vão de 1 a 100";
+export const GROUP_RESPONSIBLE_TEXT = "escolha um responsável lotado neste CAPS";
+export const GROUP_PROCEDURE_TEXT = "escolha o procedimento do grupo";
+export const GROUP_SAVED = "Grupo salvo.";
+export const NO_GROUPS = "nenhum grupo ou oficina cadastrado neste CAPS";
+export const NO_GROUP_PROCEDURES = "nenhum procedimento coletivo do SIGTAP serve para o seu CBO neste CAPS";
+export const PRESENCE_NONE = "marque ao menos uma pessoa presente";
+export const PRESENCE_SAVED = "Presença registrada.";
+export const PRESENCE_DONE_TAG = "presença registrada";
+export const PRESENCE_NOTE = "A presença vira uma ação do grupo, no horário dele, com um participante por pessoa marcada.";
+export const TODAY_NO_NOTICE = "Nada daqui gera aviso ou SMS ao usuário.";
+export const NO_GROUPS_TODAY = "nenhum grupo hoje";
+export const NO_VISITS_TODAY = "nenhum atendimento marcado para hoje";
+
+const HOUR_FORMAT = /^([01]\d|2[0-3]):[0-5]\d$/;
+const GROUP_INSTRUMENTS = [ "09", "01" ];
+const GROUP_KINDS = [ "group", "workshop", "assembly" ];
+
+export const groupSchedule = (g: { weekday: number; starts_at: string; ends_at: string }): string =>
+  `${weekdayLabel(g.weekday)} · ${g.starts_at}–${g.ends_at}`;
+export const presenceCount = (n: number, capacity: number): string =>
+  `${n} ${n === 1 ? "presente" : "presentes"}${n > capacity ? ` · acima das ${capacity} vagas` : ""}`;
+// Dia ISO (1 = segunda … 7 = domingo) de uma data "AAAA-MM-DD".
+export const isoWeekday = (date: string): number => new Date(`${date}T12:00:00Z`).getUTCDay() || 7;
+// O último dia da semana do grupo até hoje (inclusive): a data padrão da presença na grade.
+export const lastWeekday = (today: string, weekday: number): string => addDays(today, -((isoWeekday(today) - weekday + 7) % 7));
+// Os procedimentos que o api aceita no grupo (instrumento 09 ou 01), coletivos primeiro.
+export const groupProcedures = (o: PsyOptions): PsyProcedure[] => o.procedures
+  .filter((p) => p.instrument_codes.some((c) => GROUP_INSTRUMENTS.includes(c)))
+  .sort((a, b) => Number(b.collective) - Number(a.collective));
+
+export type GroupDraft = {
+  name: string; kind: string; weekday: string; startsAt: string; endsAt: string; responsibleUserId: string; capacity: string; sigtapCode: string;
+  active: boolean;
+};
+export function emptyGroupDraft(today: string, meId: string, o: Pick<PsyOptions, "team">): GroupDraft {
+  return { name: "", kind: "group", weekday: String(isoWeekday(today)), startsAt: "", endsAt: "",
+    responsibleUserId: o.team.some((t) => t.user_id === meId) ? meId : "", capacity: "", sigtapCode: "", active: true };
+}
+export function groupDraftOf(g: PsyGroup): GroupDraft {
+  return { name: g.name, kind: g.kind, weekday: String(g.weekday), startsAt: g.starts_at, endsAt: g.ends_at, responsibleUserId: g.responsible.user_id,
+    capacity: String(g.capacity), sigtapCode: g.sigtap_code, active: g.active };
+}
+// Todas as recusas de uma vez, nos paths do api.
+export function groupProblems(d: GroupDraft): Problem[] {
+  const out: Problem[] = [];
+  const n = trimmedLength(d.name);
+  if (n < 1 || n > 120) out.push({ path: "name", text: GROUP_NAME_TEXT });
+  if (!GROUP_KINDS.includes(d.kind)) out.push({ path: "kind", text: "escolha o tipo" });
+  if (!/^[1-7]$/.test(d.weekday)) out.push({ path: "weekday", text: GROUP_TIME_TEXT });
+  const starts = HOUR_FORMAT.test(d.startsAt);
+  const ends = HOUR_FORMAT.test(d.endsAt);
+  if (!starts) out.push({ path: "starts_at", text: GROUP_TIME_TEXT });
+  if (!ends) out.push({ path: "ends_at", text: GROUP_TIME_TEXT });
+  else if (starts && d.endsAt <= d.startsAt) out.push({ path: "ends_at", text: GROUP_ENDS_TEXT });
+  if (!d.responsibleUserId) out.push({ path: "responsible_user_id", text: GROUP_RESPONSIBLE_TEXT });
+  const cap = d.capacity.trim();
+  if (!/^\d+$/.test(cap) || Number(cap) < 1 || Number(cap) > 100) out.push({ path: "capacity", text: GROUP_CAPACITY_TEXT });
+  if (!d.sigtapCode) out.push({ path: "sigtap_code", text: GROUP_PROCEDURE_TEXT });
+  return out;
+}
+export function groupInput(d: GroupDraft, unitId: string): PsyGroupInput {
+  return { health_unit_id: unitId, name: d.name.trim(), kind: d.kind as PsyGroupKind, weekday: Number(d.weekday), starts_at: d.startsAt,
+    ends_at: d.endsAt, responsible_user_id: d.responsibleUserId, capacity: Number(d.capacity.trim()), sigtap_code: d.sigtapCode };
+}
+// Só o que mudou (sem mudança, `{}`: o api devolve o grupo igual).
+export function groupPatch(d: GroupDraft, g: PsyGroup): PsyGroupPatch {
+  const full = groupInput(d, g.health_unit_id);
+  const out: PsyGroupPatch = {};
+  if (full.name !== g.name) out.name = full.name;
+  if (full.kind !== g.kind) out.kind = full.kind;
+  if (full.weekday !== g.weekday) out.weekday = full.weekday;
+  if (full.starts_at !== g.starts_at) out.starts_at = full.starts_at;
+  if (full.ends_at !== g.ends_at) out.ends_at = full.ends_at;
+  if (full.responsible_user_id !== g.responsible.user_id) out.responsible_user_id = full.responsible_user_id;
+  if (full.capacity !== g.capacity) out.capacity = full.capacity;
+  if (full.sigtap_code !== g.sigtap_code) out.sigtap_code = full.sigtap_code;
+  if (d.active !== g.active) out.active = d.active;
+  return out;
+}
+
 export type CarePlanDraft = {
   needs: string; goals: { text: string; responsibleUserId: string; dueOn: string }[]; intensity: CareIntensity | ""; reviewOn: string;
 };
@@ -610,9 +697,9 @@ const FIELD_TEXT: [ RegExp, string ][] = [
   [ /^participants\[\d+\]$/, "este participante está repetido ou não existe" ],
   [ /^participants$/, `no máximo ${MAX_PARTICIPANTS} participantes por ação` ],
   [ /^participants_user_ids$/, "escolha de 1 a 20 participantes lotados neste CAPS" ],
-  [ /^name$/, "o nome tem de 1 a 120 caracteres" ],
+  [ /^name$/, GROUP_NAME_TEXT ],
   [ /^label$/, "o nome do leito tem de 1 a 20 caracteres" ],
-  [ /^capacity$/, "as vagas vão de 1 a 100" ],
+  [ /^capacity$/, GROUP_CAPACITY_TEXT ],
   [ /^quantity$/, "a quantidade é um número inteiro de 1 a 999" ],
   [ /^authorization_number$/, AUTHORIZATION_TEXT ],
   [ /^care_plan_review_days$/, "o prazo de revisão do PTS vai de 30 a 365 dias" ],
@@ -628,11 +715,11 @@ const FIELD_TEXT: [ RegExp, string ][] = [
   [ /(^|\.)substances$/, "marque as substâncias ou nenhuma (nenhuma não combina com outra)" ],
   [ /(^|\.)esf_cnes$/, "o CNES da USF tem 7 dígitos e só vai com cobertura de ESF" ],
   [ /(^|\.)reference_user_id$/, "escolha um técnico de referência lotado neste CAPS" ],
-  [ /^responsible_user_id$/, "escolha um responsável lotado neste CAPS" ],
+  [ /^responsible_user_id$/, GROUP_RESPONSIBLE_TEXT ],
   [ /^review_on$/, "a revisão precisa ser depois de hoje e em até 365 dias" ],
   [ /^intensity$/, "escolha a frequência proposta" ],
-  [ /^ends_at$/, "o fim precisa ser depois do início" ],
-  [ /^(starts_at|weekday)$/, "confira o dia e o horário do grupo" ],
+  [ /^ends_at$/, GROUP_ENDS_TEXT ],
+  [ /^(starts_at|weekday)$/, GROUP_TIME_TEXT ],
   [ /^started_at$/, "a entrada vai até 12 horas a partir de agora" ],
   [ /^expected_end_at$/, "a saída prevista é depois da entrada, em até 30 dias" ],
   [ /^ended_at$/, "a saída é depois da entrada e nunca futura" ],

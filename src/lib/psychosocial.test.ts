@@ -6,7 +6,9 @@ import {
   canUsePsychosocial, carePlanInput, carePlanProblems, cidLabel, codeLabel, countLabel, destinationLabel, emptyActionDraft, emptyEnrollmentDraft,
   enrollmentInput, enrollmentProblems, hasBeds, indexFromPath, isPrescriber, isStale, modalityLabel, monthProblemLabel, monthWarningLabel, nightLimitText,
   phoneProblem, psyError, psyRefusals, psychosocialRoles, reasonProblem, settingsProblems, textProblem, unitCapsProblems, weekdayLabel,
-  type ActionDraft, type CarePlanDraft
+  GROUP_CAPACITY_TEXT, GROUP_ENDS_TEXT, GROUP_NAME_TEXT, GROUP_PROCEDURE_TEXT, GROUP_RESPONSIBLE_TEXT, emptyGroupDraft, groupDraftOf, groupInput, groupPatch,
+  groupProblems, groupProcedures, groupSchedule, lastWeekday, presenceCount,
+  type ActionDraft, type CarePlanDraft, type GroupDraft
 } from "./psychosocial";
 import { NOW31, OPTIONS, TODAY31, enrollment, psySettings, psyUser } from "../test/psychosocialFixtures";
 
@@ -516,5 +518,59 @@ describe("usuários do CAPS: edição, encerramento e PTS (Task 6)", () => {
     expect(reviewDaysOf(undefined)).toBe(DEFAULT_CARE_PLAN_REVIEW_DAYS);
     expect(firstCarePlanLate("2026-10-04", TODAY31, 30)).toBe(true);
     expect(firstCarePlanLate("2026-10-05", TODAY31, 30)).toBe(false);
+  });
+});
+
+// Grade de grupos, presença e Hoje (Task 9; F-31.4). Limites do api (`SaveGroup`): nome 1–120, vagas 1–100, dia ISO 1–7, "HH:MM".
+describe("grupos e presença do CAPS", () => {
+  const draft = (o: Partial<GroupDraft> = {}): GroupDraft => ({
+    ...emptyGroupDraft(TODAY31, "u-1", OPTIONS), name: "Assembleia", startsAt: "14:00", endsAt: "16:00", capacity: "20", sigtapCode: "0301080216", ...o
+  });
+
+  it("grupo novo: todas as recusas de uma vez, com os paths do api", () => {
+    expect(emptyGroupDraft(TODAY31, "u-1", OPTIONS)).toMatchObject({ weekday: "3", responsibleUserId: "u-1", kind: "group", active: true });
+    expect(emptyGroupDraft(TODAY31, "u-9", OPTIONS).responsibleUserId).toBe("");
+    expect(groupProblems(draft())).toEqual([]);
+    expect(groupProblems(draft({ name: " ", startsAt: "14:00", endsAt: "13:00", capacity: "101", responsibleUserId: "", sigtapCode: "" })))
+      .toEqual([
+        { path: "name", text: GROUP_NAME_TEXT }, { path: "ends_at", text: GROUP_ENDS_TEXT }, { path: "responsible_user_id", text: GROUP_RESPONSIBLE_TEXT },
+        { path: "capacity", text: GROUP_CAPACITY_TEXT }, { path: "sigtap_code", text: GROUP_PROCEDURE_TEXT }
+      ]);
+    expect(groupProblems(draft({ endsAt: "14:00" })).map((p) => p.text)).toEqual([ GROUP_ENDS_TEXT ]);
+    expect(groupProblems(draft({ startsAt: "", weekday: "8" })).map((p) => p.path)).toEqual([ "weekday", "starts_at" ]);
+    expect(groupProblems(draft({ name: "x".repeat(121), capacity: "1.5" })).map((p) => p.path)).toEqual([ "name", "capacity" ]);
+    // A frase do api para os mesmos paths é a mesma da tela.
+    expect(psyCodeText("invalid_request", "ends_at")).toBe(GROUP_ENDS_TEXT);
+    expect(psyCodeText("invalid_request", "capacity")).toBe(GROUP_CAPACITY_TEXT);
+    expect(psyCodeText("too_long", "name")).toBe(GROUP_NAME_TEXT);
+    expect(groupInput(draft({ name: "  Assembleia  " }), "caps2")).toEqual({
+      health_unit_id: "caps2", name: "Assembleia", kind: "group", weekday: 3, starts_at: "14:00", ends_at: "16:00", responsible_user_id: "u-1",
+      capacity: 20, sigtap_code: "0301080216"
+    });
+  });
+
+  it("edição manda só o que mudou; reativar manda active", () => {
+    const g = { id: "g1", health_unit_id: "caps2", name: "Oficina de artes", kind: "workshop", weekday: 3, starts_at: "14:00", ends_at: "16:00",
+      responsible: { user_id: "u-1", name: "Lia", cbo_code: null }, capacity: 25, sigtap_code: "0301080216", active: false };
+    const d = groupDraftOf(g);
+    expect(groupPatch(d, g)).toEqual({});
+    expect(groupPatch({ ...d, name: " Oficina de pintura ", capacity: "30", active: true }, g)).toEqual({ name: "Oficina de pintura", capacity: 30, active: true });
+  });
+
+  it("procedimentos do grupo: instrumento 09 ou 01, coletivos primeiro", () => {
+    const codes = groupProcedures(OPTIONS).map((p) => p.code);
+    expect(codes[0]).toBe("0301080216");
+    expect(codes).toContain("0301080305");
+    expect(groupProcedures({ ...OPTIONS, procedures: [ { ...OPTIONS.procedures[0], code: "x", instrument_codes: [ "02" ] } ] })).toEqual([]);
+  });
+
+  it("dia do grupo, horário e contador", () => {
+    expect(lastWeekday(TODAY31, 3)).toBe(TODAY31);
+    expect(lastWeekday(TODAY31, 4)).toBe("2026-10-29");
+    expect(lastWeekday(TODAY31, 1)).toBe("2026-11-02");
+    expect(groupSchedule({ weekday: 3, starts_at: "14:00", ends_at: "16:00" })).toBe("quarta · 14:00–16:00");
+    expect(presenceCount(1, 25)).toBe("1 presente");
+    expect(presenceCount(0, 25)).toBe("0 presentes");
+    expect(presenceCount(26, 25)).toBe("26 presentes · acima das 25 vagas");
   });
 });

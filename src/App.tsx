@@ -278,7 +278,7 @@ function ShellInner({ initialModule }: { initialModule?: ModuleId }) {
   );
 }
 
-// A matrícula que o acolhimento abriu, com o CAPS dela, que "Usuários do CAPS" mostra ao entrar (módulo 31).
+// A matrícula aberta no acolhimento ou no Hoje, com o CAPS dela, que "Usuários do CAPS" mostra ao entrar (módulo 31).
 export type CapsHandoff = { enrollment: PsyEnrollmentHandoff | null; openEnrollment(h: PsyEnrollmentHandoff): void };
 const NO_CAPS_HANDOFF: CapsHandoff = { enrollment: null, openEnrollment: () => {} };
 
@@ -398,7 +398,7 @@ export function renderModule(active: ModuleId, setActive: (id: ModuleId) => void
     case "tfd-my-cases": return <TfdMyCases />;
     case "caps-reception": return <CapsReception onGoToSecurity={() => setActive("security")}
       onOpenEnrollment={(h) => { caps.openEnrollment(h); setActive("caps-enrollments"); }} />;
-    case "caps-today": return <CapsToday />;
+    case "caps-today": return <CapsToday onOpenEnrollment={(h) => { caps.openEnrollment(h); setActive("caps-enrollments"); }} />;
     case "caps-enrollments": return <CapsEnrollments onGoToSecurity={() => setActive("security")} initialEnrollment={caps.enrollment} />;
     case "caps-groups": return <CapsGroups />;
     case "caps-beds": return <CapsBeds />;
