@@ -7,7 +7,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getPsyOptions, listPsyGroups, type PsyGroup, type PsyOptions, type PsyUnit } from "../lib/api";
 import { todayInCity } from "../lib/campaigns";
 import {
-  GROUP_SAVED, NO_GROUPS, PRESENCE_SAVED, PSY_GROUPS_KEY, PSY_OPTIONS_KEY, PSY_TODAY_KEY, STATIC_QUERY, groupKindLabel, groupSchedule, lastWeekday,
+  GROUP_SAVED, NO_GROUPS, PRESENCE_SAVED, PRESENCE_TODAY_NOTE, PSY_GROUPS_KEY, PSY_OPTIONS_KEY, PSY_TODAY_KEY, STATIC_QUERY, groupKindLabel, groupSchedule, lastWeekday,
   psyError, weekdayLabel
 } from "../lib/psychosocial";
 import { DataTable, type Column } from "../components/DataTable";
@@ -43,7 +43,16 @@ function Groups({ unit, today, now }: CapsGroupsProps & { unit: PsyUnit }) {
   const groups = useQuery({ queryKey: [ PSY_GROUPS_KEY, unit.id ], queryFn: () => listPsyGroups(unit.id), ...STATIC_QUERY });
   const options = useQuery({ queryKey: [ PSY_OPTIONS_KEY, unit.id ], queryFn: () => getPsyOptions(unit.id), ...STATIC_QUERY });
 
-  const open = (m: Mode) => { setDone(null); setMode(m); };
+  // Cancelar devolve o foco ao botão que abriu (a grade remonta: ele é achado pelo `data-opener`).
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const opener = useRef<string | null>(null);
+  const [ refocus, setRefocus ] = useState(0);
+  useEffect(() => {
+    if (refocus === 0 || !opener.current) return;
+    rootRef.current?.querySelector<HTMLElement>(`[data-opener="${opener.current}"]`)?.focus();
+  }, [ refocus ]);
+  const open = (m: Mode, from: string) => { setDone(null); opener.current = from; setMode(m); };
+  const cancel = () => { setMode(null); setRefocus((n) => n + 1); };
   const finish = (text: string) => {
     setMode(null);
     setDone(text);
@@ -56,7 +65,7 @@ function Groups({ unit, today, now }: CapsGroupsProps & { unit: PsyUnit }) {
     return options.isError ? (
       <div style={stack}>
         <p role="alert" style={alert}>{psyError(options.error)}</p>
-        <div style={row}><button type="button" style={secondaryButtonStyle} onClick={() => setMode(null)}>Voltar</button></div>
+        <div style={row}><button type="button" style={secondaryButtonStyle} onClick={cancel}>Voltar</button></div>
       </div>
     ) : <p className="mono" style={muted}>carregando…</p>;
   }
@@ -64,7 +73,7 @@ function Groups({ unit, today, now }: CapsGroupsProps & { unit: PsyUnit }) {
     const g = mode.group;
     return (
       <PresenceList unit={unit} group={g} options={options.data} date={lastWeekday(today ?? todayInCity(now ?? new Date()), g.weekday)} now={now}
-        onSaved={() => finish(PRESENCE_SAVED)} onCancel={() => setMode(null)} />
+        onSaved={() => finish(PRESENCE_SAVED)} onCancel={cancel} />
     );
   }
 
@@ -84,10 +93,11 @@ function Groups({ unit, today, now }: CapsGroupsProps & { unit: PsyUnit }) {
       label: "Ações", w: "auto", card: "actions", render: (g) => (
         <div style={row}>
           {g.active && (
-            <button type="button" style={buttonStyle} aria-label={`Registrar presença de ${g.name}`}
-              onClick={() => open({ kind: "presence", group: g })}>Registrar presença</button>
+            <button type="button" style={buttonStyle} aria-label={`Registrar presença de ${g.name}`} data-opener={`presence-${g.id}`}
+              onClick={() => open({ kind: "presence", group: g }, `presence-${g.id}`)}>Registrar presença</button>
           )}
-          <button type="button" style={secondaryButtonStyle} aria-label={`Editar ${g.name}`} onClick={() => open({ kind: "edit", group: g })}>Editar</button>
+          <button type="button" style={secondaryButtonStyle} aria-label={`Editar ${g.name}`} data-opener={`edit-${g.id}`}
+            onClick={() => open({ kind: "edit", group: g }, `edit-${g.id}`)}>Editar</button>
         </div>
       )
     }
@@ -98,29 +108,29 @@ function Groups({ unit, today, now }: CapsGroupsProps & { unit: PsyUnit }) {
   const days = [ ...new Set(list.map((g) => g.weekday)) ].sort((a, b) => a - b);
 
   return (
-    <div style={stack}>
+    <div ref={rootRef} style={stack}>
       {done && <p ref={doneRef} tabIndex={-1} role="status" style={okText}>{done}</p>}
       {options.isError && <p role="alert" style={alert}>{psyError(options.error)}</p>}
 
       {mode && mode.kind !== "presence" && options.data ? (
         <Panel title={mode.kind === "new" ? "Novo grupo ou oficina" : "Editar grupo"}>
           <GroupForm key={mode.kind === "edit" ? mode.group.id : "new"} unit={unit} options={options.data} initial={mode.kind === "edit" ? mode.group : undefined}
-            today={today} onSaved={() => finish(GROUP_SAVED)} onCancel={() => setMode(null)} />
+            today={today} onSaved={() => finish(GROUP_SAVED)} onCancel={cancel} />
         </Panel>
       ) : (
         <div style={row}>
-          <button type="button" style={buttonStyle} onClick={() => open({ kind: "new" })}>Novo grupo ou oficina</button>
+          <button type="button" style={buttonStyle} data-opener="new" onClick={() => open({ kind: "new" }, "new")}>Novo grupo ou oficina</button>
         </div>
       )}
 
       {groups.isPending ? <p className="mono" style={muted}>carregando…</p>
         : groups.isError ? <p role="alert" style={alert}>{psyError(groups.error)}</p>
         : list.length === 0 ? <p style={muted}>{NO_GROUPS}</p>
-        : days.map((day) => (
+        : [ <p key="today-note" style={muted}>{PRESENCE_TODAY_NOTE}</p>, ...days.map((day) => (
           <Panel key={day} title={capitalize(weekdayLabel(day))}>
             <DataTable<PsyGroup> cols={cols} rows={list.filter((g) => g.weekday === day)} rowKey={(g) => g.id} />
           </Panel>
-        ))}
+        )) ]}
     </div>
   );
 }

@@ -37,6 +37,15 @@ function Today({ unit, today, now, onOpenEnrollment }: CapsTodayProps & { unit: 
   const [ done, setDone ] = useState<string | null>(null);
   const doneRef = useRef<HTMLParagraphElement | null>(null);
   useEffect(() => { if (done) doneRef.current?.focus(); }, [ done ]);
+  // Cancelar a presença devolve o foco ao botão do grupo (o painel remonta: ele é achado pelo `data-opener`).
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const opener = useRef<string | null>(null);
+  const [ refocus, setRefocus ] = useState(0);
+  useEffect(() => {
+    if (refocus === 0 || !opener.current) return;
+    rootRef.current?.querySelector<HTMLElement>(`[data-opener="${opener.current}"]`)?.focus();
+  }, [ refocus ]);
+  const cancel = () => { setPresence(null); setRefocus((n) => n + 1); };
 
   // Os atendimentos trazem o nome do usuário: sem cache.
   const day = useQuery({ queryKey: [ PSY_TODAY_KEY, unit.id, date ], queryFn: () => getPsyToday(unit.id, date), ...NOMINAL_QUERY });
@@ -46,7 +55,7 @@ function Today({ unit, today, now, onOpenEnrollment }: CapsTodayProps & { unit: 
     return options.isError ? (
       <div style={stack}>
         <p role="alert" style={alert}>{psyError(options.error)}</p>
-        <div style={row}><button type="button" style={secondaryButtonStyle} onClick={() => setPresence(null)}>Voltar</button></div>
+        <div style={row}><button type="button" style={secondaryButtonStyle} onClick={cancel}>Voltar</button></div>
       </div>
     ) : <p className="mono" style={muted}>carregando…</p>;
   }
@@ -58,7 +67,7 @@ function Today({ unit, today, now, onOpenEnrollment }: CapsTodayProps & { unit: 
           setDone(PRESENCE_SAVED);
           void queryClient.invalidateQueries({ queryKey: [ PSY_TODAY_KEY, unit.id ] });
         }}
-        onCancel={() => setPresence(null)} />
+        onCancel={cancel} />
     );
   }
 
@@ -69,8 +78,8 @@ function Today({ unit, today, now, onOpenEnrollment }: CapsTodayProps & { unit: 
     { label: "Responsável", w: "1fr", render: (g) => g.responsible.name },
     {
       label: "Presença", w: "auto", card: "actions", render: (g) => (g.action_id != null ? <Tag tone="ok">{PRESENCE_DONE_TAG}</Tag> : (
-        <button type="button" style={buttonStyle} aria-label={`Registrar presença de ${g.name}`}
-          onClick={() => { setDone(null); setPresence(g); }}>Registrar presença</button>
+        <button type="button" style={buttonStyle} aria-label={`Registrar presença de ${g.name}`} data-opener={`presence-${g.id}`}
+          onClick={() => { setDone(null); opener.current = `presence-${g.id}`; setPresence(g); }}>Registrar presença</button>
       ))
     }
   ];
@@ -86,7 +95,7 @@ function Today({ unit, today, now, onOpenEnrollment }: CapsTodayProps & { unit: 
   ];
 
   return (
-    <div style={stack}>
+    <div ref={rootRef} style={stack}>
       {done && <p ref={doneRef} tabIndex={-1} role="status" style={okText}>{done}</p>}
       <p style={muted}>{TODAY_NO_NOTICE}</p>
       {options.isError && <p role="alert" style={alert}>{psyError(options.error)}</p>}

@@ -81,4 +81,12 @@ describe("Hoje no CAPS", () => {
     expect(await screen.findByText(PRESENCE_SAVED)).not.toBeNull();
     await waitFor(() => expect(api.getPsyToday).toHaveBeenCalledTimes(2));
   });
+
+  it("Cancelar a presença devolve o foco ao botão do grupo", async () => {
+    mount();
+    fireEvent.click(await screen.findByRole("button", { name: "Registrar presença de Oficina de artes" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Cancelar" }));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: "Registrar presença de Oficina de artes" })));
+    expect(api.createPsyAction).not.toHaveBeenCalled();
+  });
 });

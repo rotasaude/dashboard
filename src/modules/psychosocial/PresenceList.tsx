@@ -6,7 +6,7 @@
 // máximo e autorização só na competência corrente); a do api chega toda de uma vez e o problema de cada participante vai para a linha
 // dele (`participant_index`, ou o índice de `participants[i]`, ligado de volta à matrícula pela lista enviada). As marcações ficam como
 // estavam. Sem duplo envio (`useFormProblems`). "Agora" é lido na hora (`now` só nos testes). Nada clínico: só nome e CNS mascarado.
-import { useRef, useState } from "react";
+import { useRef, useState, type KeyboardEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { createPsyAction, listPsyEnrollments, type PsyAction, type PsyEnrollmentRow, type PsyGroup, type PsyOptions, type PsyUnit } from "../../lib/api";
 import { todayInCity } from "../../lib/campaigns";
@@ -27,6 +27,11 @@ export type PresenceListProps = {
 };
 
 const rowPath = (enrollmentId: string) => `en:${enrollmentId}`;
+// Enter num campo do <form> faria a submissão implícita: a presença sairia pela metade, e ela é imutável.
+// A linha da pessoa: o botão secundário com a borda em longhands, sempre de 2 px (só a cor muda ao marcar).
+const { border: _border, ...SECONDARY_NO_BORDER } = secondaryButtonStyle;
+const ROW_BUTTON = { ...SECONDARY_NO_BORDER, borderWidth: 2, borderStyle: "solid" } as const;
+const blockEnter = (ev: KeyboardEvent<HTMLInputElement>) => { if (ev.key === "Enter") ev.preventDefault(); };
 const OWN = (path: string) => path.startsWith("en:") || path === "performed_at" || path === "notes";
 
 export function PresenceList({ unit, group, options, date: initialDate, now, onSaved, onCancel }: PresenceListProps) {
@@ -103,14 +108,14 @@ export function PresenceList({ unit, group, options, date: initialDate, now, onS
 
       <label style={fieldLabel}>
         Data
-        <input type="date" value={date} max={todayInCity(clock())} style={inputStyle} {...aria("performed_at")}
+        <input type="date" value={date} max={todayInCity(clock())} style={inputStyle} {...aria("performed_at")} onKeyDown={blockEnter}
           onChange={(ev) => { f.clear("performed_at"); setDate(ev.target.value); }} />
       </label>
       {errNode("performed_at")}
 
       <label style={fieldLabel}>
         Filtrar por nome
-        <input type="search" value={filter} autoComplete="off" style={inputStyle} onChange={(ev) => setFilter(ev.target.value)} />
+        <input type="search" value={filter} autoComplete="off" style={inputStyle} onKeyDown={blockEnter} onChange={(ev) => setFilter(ev.target.value)} />
       </label>
 
       {people.isPending ? <p className="mono" style={muted}>carregando…</p>
@@ -123,18 +128,21 @@ export function PresenceList({ unit, group, options, date: initialDate, now, onS
                 const on = marked.has(r.id);
                 const texts = rowTexts(r.id);
                 const errId = `${f.fid(rowPath(r.id))}-err`;
+                const cnsId = `${f.fid(rowPath(r.id))}-cns`;
+                // O CNS mascarado distingue homônimos; a frase da recusa vem junto.
+                const describedBy = [ r.patient.cns_masked ? cnsId : "", texts.length > 0 ? errId : "" ].filter(Boolean).join(" ");
                 return (
                   <div key={r.id} data-testid={`presence-${r.id}`} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                     <button type="button" aria-pressed={on} aria-label={r.patient.name} disabled={busy}
-                      {...(texts.length > 0 ? { "aria-describedby": errId } : {})}
+                      {...(describedBy ? { "aria-describedby": describedBy } : {})}
                       onClick={() => toggle(r.id)}
                       style={{
-                        ...secondaryButtonStyle, minHeight: 44, width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
-                        gap: 8, textAlign: "left", ...(on ? { background: "var(--sunken)", border: "2px solid var(--ok)" } : {})
+                        ...ROW_BUTTON, minHeight: 44, width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
+                        gap: 8, textAlign: "left", borderColor: on ? "var(--ok)" : "var(--rule2)", ...(on ? { background: "var(--sunken)" } : {})
                       }}>
                       <span style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0, overflowWrap: "anywhere" }}>
                         <span>{r.patient.name}</span>
-                        {r.patient.cns_masked && <span className="mono" style={muted}>{`CNS ${r.patient.cns_masked}`}</span>}
+                        {r.patient.cns_masked && <span id={cnsId} className="mono" style={muted}>{`CNS ${r.patient.cns_masked}`}</span>}
                       </span>
                       <span style={{ flexShrink: 0, fontWeight: on ? 600 : 400, color: on ? "var(--ok)" : "var(--ink3)" }}>{on ? "✓ presente" : "marcar"}</span>
                     </button>

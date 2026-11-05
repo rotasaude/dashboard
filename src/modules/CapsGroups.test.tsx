@@ -7,7 +7,7 @@ import { CAPS_II, NOW31, OPTIONS, TODAY31, action, enrollmentRow, group, psyUser
 import * as api from "../lib/api";
 import { ApiError } from "../lib/api";
 import {
-  GROUP_ENDS_TEXT, GROUP_SAVED, NO_GROUPS, PARTICIPANT_NOT_ENROLLED, PRESENCE_NONE, PRESENCE_SAVED, PSY_ERRORS, presenceCount
+  GROUP_ENDS_TEXT, GROUP_SAVED, NO_GROUPS, PARTICIPANT_NOT_ENROLLED, PRESENCE_NONE, PRESENCE_SAVED, PRESENCE_TODAY_NOTE, PSY_ERRORS, presenceCount
 } from "../lib/psychosocial";
 import { CapsGroups } from "./CapsGroups";
 
@@ -18,8 +18,9 @@ afterEach(() => { cleanup(); vi.clearAllMocks(); });
 // Depois do horário do grupo (quarta, 14h–16h): a presença do dia já pode ser registrada.
 const LATE = new Date("2026-11-04T17:00:00-03:00");
 const two = (n: number) => String(n).padStart(2, "0");
+// Dois homônimos distinguidos pelo CNS mascarado (Pessoa 01 tem CNS; as outras, não).
 const PEOPLE = Array.from({ length: 25 }, (_, i) => enrollmentRow({
-  id: `en${i + 1}`, patient: { patient_id: `pt${i + 1}`, name: `Pessoa ${two(i + 1)}`, cns_masked: null }
+  id: `en${i + 1}`, patient: { patient_id: `pt${i + 1}`, name: `Pessoa ${two(i + 1)}`, cns_masked: i === 0 ? "*** **** **** 0001" : null }
 }));
 
 beforeEach(() => {
@@ -48,6 +49,8 @@ describe("Grupos e oficinas", () => {
     expect(screen.getByText("quarta · 14:00–16:00")).not.toBeNull();
     expect(screen.getByText("oficina")).not.toBeNull();
     expect(screen.getByRole("region", { name: "Quarta" })).not.toBeNull();
+    // O Hoje também registra presença: a grade avisa.
+    expect(screen.getByText(PRESENCE_TODAY_NOTE)).not.toBeNull();
     // O nome do procedimento vem de `options` (o grupo só traz o código).
     expect(screen.getByText(/0301080216 · ATENDIMENTO EM GRUPO/)).not.toBeNull();
     expect(vi.mocked(api.listPsyGroups).mock.calls[0][0]).toBe(CAPS_II.id);
@@ -182,5 +185,40 @@ describe("Grupos e oficinas", () => {
     expect(await screen.findByText(PSY_ERRORS.instrument_mismatch)).not.toBeNull();
     expect(field.getAttribute("aria-invalid")).toBe("true");
     expect((screen.getByLabelText("Nome") as HTMLInputElement).value).toBe("Oficina de artes");
+  });
+
+  it("Enter no filtro ou na data não envia a presença (imutável)", async () => {
+    mount();
+    await openPresence();
+    fireEvent.click(screen.getByRole("button", { name: "Pessoa 01" }));
+    for (const label of [ "Filtrar por nome", "Data" ]) {
+      // O Enter foi barrado (preventDefault): o <form> não faz a submissão implícita.
+      expect(fireEvent.keyDown(screen.getByLabelText(label), { key: "Enter" })).toBe(false);
+    }
+    // Outra tecla segue normal.
+    expect(fireEvent.keyDown(screen.getByLabelText("Filtrar por nome"), { key: "a" })).toBe(true);
+    expect(api.createPsyAction).not.toHaveBeenCalled();
+  });
+
+  it("botão da pessoa: CNS ligado ao nome; borda fixa ao marcar", async () => {
+    mount();
+    const row = await openPresence();
+    const described = (row.getAttribute("aria-describedby") ?? "").split(" ").map((id) => document.getElementById(id)?.textContent ?? "");
+    expect(described).toContain("CNS *** **** **** 0001");
+    expect(screen.getByRole("button", { name: "Pessoa 02" }).getAttribute("aria-describedby")).toBeNull();
+    const before = row.style.borderWidth;
+    fireEvent.click(row);
+    expect(row.getAttribute("aria-pressed")).toBe("true");
+    expect(row.style.borderWidth).toBe(before);
+    expect(before).toBe("2px");
+  });
+
+  it("Cancelar devolve o foco ao botão de origem", async () => {
+    mount();
+    for (const name of [ "Registrar presença de Oficina de artes", "Editar Oficina de artes", "Novo grupo ou oficina" ]) {
+      fireEvent.click(await screen.findByRole("button", { name }));
+      fireEvent.click(await screen.findByRole("button", { name: "Cancelar" }));
+      await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name })));
+    }
   });
 });

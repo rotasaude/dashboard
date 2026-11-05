@@ -6,7 +6,7 @@ import {
   canUsePsychosocial, carePlanInput, carePlanProblems, cidLabel, codeLabel, countLabel, destinationLabel, emptyActionDraft, emptyEnrollmentDraft,
   enrollmentInput, enrollmentProblems, hasBeds, indexFromPath, isPrescriber, isStale, modalityLabel, monthProblemLabel, monthWarningLabel, nightLimitText,
   phoneProblem, psyError, psyRefusals, psychosocialRoles, reasonProblem, settingsProblems, textProblem, unitCapsProblems, weekdayLabel,
-  GROUP_CAPACITY_TEXT, GROUP_ENDS_TEXT, GROUP_NAME_TEXT, GROUP_PROCEDURE_TEXT, GROUP_RESPONSIBLE_TEXT, emptyGroupDraft, groupDraftOf, groupInput, groupPatch,
+  GROUP_CAPACITY_TEXT, GROUP_ENDS_TEXT, GROUP_NAME_TEXT, GROUP_PROCEDURE_TEXT, GROUP_RESPONSIBLE_TEXT, NO_GROUP_PROCEDURES, emptyGroupDraft, groupDraftOf, groupInput, groupPatch,
   groupProblems, groupProcedures, groupSchedule, lastWeekday, presenceCount,
   type ActionDraft, type CarePlanDraft, type GroupDraft
 } from "./psychosocial";
@@ -562,6 +562,8 @@ describe("grupos e presença do CAPS", () => {
     expect(codes[0]).toBe("0301080216");
     expect(codes).toContain("0301080305");
     expect(groupProcedures({ ...OPTIONS, procedures: [ { ...OPTIONS.procedures[0], code: "x", instrument_codes: [ "02" ] } ] })).toEqual([]);
+    // A lista leva também os não coletivos de 09/01 (ruling): a frase de vazio não fala em "coletivo".
+    expect(NO_GROUP_PROCEDURES).not.toMatch(/coletiv/);
   });
 
   it("dia do grupo, horário e contador", () => {
