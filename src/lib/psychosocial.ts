@@ -5,7 +5,7 @@
 import {
   ApiError, errorCode,
   type CareIntensity, type ClinicalDocument, type PsyAction, type PsyActionInput, type PsyCarePlanInput, type PsyCode, type PsyCount, type PsyEnrollment, type PsyEnrollmentInput,
-  type PsyEnrollmentPatch, type PsyGroup, type PsyGroupInput, type PsyGroupKind, type PsyGroupPatch, type PsyOptions, type PsyPlace, type PsyProcedure, type PsyReceptionInput, type PsySettings, type ReceptionOutcome
+  type PsyEnrollmentPatch, type PsyGroup, type PsyGroupInput, type PsyGroupKind, type PsyGroupPatch, type PsyNightStayClose, type PsyNightStayInput, type PsyOptions, type PsyPlace, type PsyProcedure, type PsyReceptionInput, type PsySettings, type ReceptionOutcome
 } from "./api";
 import { NOMINAL_QUERY, STATIC_QUERY, fmtDay } from "./careLines";
 import { addDays } from "./campaigns";
@@ -922,7 +922,7 @@ export function reassessmentProblems(reason: string): Problem[] {
   return t ? [ { path: "reassessment.reason", text: t } ] : [];
 }
 
-export function nightStayInput(d: NightStayDraft, bedId: string, reassessment?: string | null): import("./api").PsyNightStayInput {
+export function nightStayInput(d: NightStayDraft, bedId: string, reassessment?: string | null): PsyNightStayInput {
   const reason = reassessment?.trim() ?? "";
   return {
     bed_id: bedId, enrollment_id: d.enrollmentId, started_at: cityLocalIso(d.startedAt) ?? d.startedAt,
@@ -946,7 +946,7 @@ export function closeStayProblems(d: CloseStayDraft, startedAt: string, now: Dat
   return out;
 }
 
-export function closeStayInput(d: CloseStayDraft, reassessment?: string | null): import("./api").PsyNightStayClose {
+export function closeStayInput(d: CloseStayDraft, reassessment?: string | null): PsyNightStayClose {
   const reason = reassessment?.trim() ?? "";
   return { ended_at: cityLocalIso(d.endedAt) ?? d.endedAt, reason: d.reason.trim(), ...(reason ? { reassessment: { reason } } : {}) };
 }

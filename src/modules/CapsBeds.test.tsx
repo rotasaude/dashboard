@@ -248,4 +248,95 @@ describe("Leitos do CAPS", () => {
     fireEvent.click(screen.getByRole("button", { name: "Fechar detalhe" }));
     expect(screen.queryByText(REASON)).toBeNull();
   });
+
+  describe("fix round 1", () => {
+    const ANA = { patient_id: "pt3", name: "Ana Souza", cns_masked: null };
+    // Quatro leitos: 1 e 4 livres, 2 (José) e 3 (Ana) ocupados.
+    function twoOccupied() {
+      const b = bedBoard();
+      const bed = (id: string, label: string) => ({ id, health_unit_id: CAPS_AD_III.id, label, active: true });
+      return bedBoard({ items: [ ...b.items,
+        { bed: bed("b3", "Leito 3"), stay: { id: "ns3", patient: ANA, started_at: "2026-11-03T19:00:00-03:00", expected_end_at: "2026-11-07T08:00:00-03:00" },
+          nights_used: 2, limit: 14 },
+        { bed: bed("b4", "Leito 4"), stay: null, nights_used: null, limit: null } ] });
+    }
+
+    it("cada formulário nasce limpo: o rascunho e o limite de um não passam ao outro", async () => {
+      vi.mocked(api.getPsyBedBoard).mockResolvedValue(twoOccupied());
+      vi.mocked(api.closePsyNightStay).mockRejectedValueOnce(new ApiError(422, LIMIT, "x"));
+      mount();
+      fireEvent.click(await screen.findByRole("button", { name: "Registrar saída de José Pereira" }));
+      fireEvent.change(screen.getByLabelText("Saída"), { target: { value: "2026-11-04T09:00" } });
+      fireEvent.change(screen.getByLabelText("Motivo da saída"), { target: { value: EXIT_REASON } });
+      fireEvent.click(screen.getByRole("button", { name: "Confirmar saída" }));
+      expect(await screen.findByText(LIMIT_TEXT)).not.toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Registrar saída de Ana Souza" }));
+      expect((screen.getByLabelText("Motivo da saída") as HTMLTextAreaElement).value).toBe("");
+      expect(screen.queryByText(LIMIT_TEXT)).toBeNull();
+      // Entrada: o usuário escolhido num leito não vai para o outro.
+      await enterStay("Leito 1", "en1");
+      fireEvent.click(screen.getByRole("button", { name: "Registrar entrada no Leito 4" }));
+      expect((screen.getByLabelText("Usuário") as HTMLSelectElement).value).toBe("");
+    });
+
+    it("mapa de outro dia é só leitura; ver a permanência continua", async () => {
+      mount();
+      expect(await screen.findByRole("button", { name: "Registrar entrada no Leito 1" })).not.toBeNull();
+      fireEvent.change(screen.getByLabelText("Data do mapa"), { target: { value: "2026-11-03" } });
+      await waitFor(() => expect(api.getPsyBedBoard).toHaveBeenLastCalledWith(CAPS_AD_III.id, "2026-11-03"));
+      expect(await screen.findByRole("button", { name: "Ver permanência de José Pereira" })).not.toBeNull();
+      expect(screen.queryByRole("button", { name: "Registrar entrada no Leito 1" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Registrar saída de José Pereira" })).toBeNull();
+    });
+
+    it("cancelar e fechar devolvem o foco ao botão do cartão", async () => {
+      mount();
+      const exit = await screen.findByRole("button", { name: "Registrar saída de José Pereira" });
+      fireEvent.click(exit);
+      fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+      await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: "Registrar saída de José Pereira" })));
+      fireEvent.click(screen.getByRole("button", { name: "Ver permanência de José Pereira" }));
+      await screen.findByText(TRAIL_NOTE);
+      fireEvent.click(screen.getByRole("button", { name: "Fechar detalhe" }));
+      await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: "Ver permanência de José Pereira" })));
+    });
+
+    it("enquanto a saída corre, os botões dos cartões e a data ficam desabilitados", async () => {
+      let resolve: (s: api.PsyNightStay) => void = () => {};
+      vi.mocked(api.closePsyNightStay).mockReturnValueOnce(new Promise((r) => { resolve = r; }));
+      mount();
+      fireEvent.click(await screen.findByRole("button", { name: "Registrar saída de José Pereira" }));
+      fireEvent.change(screen.getByLabelText("Saída"), { target: { value: "2026-11-04T09:00" } });
+      fireEvent.change(screen.getByLabelText("Motivo da saída"), { target: { value: EXIT_REASON } });
+      fireEvent.click(screen.getByRole("button", { name: "Confirmar saída" }));
+      await waitFor(() => expect((screen.getByRole("button", { name: "Registrar entrada no Leito 1" }) as HTMLButtonElement).disabled).toBe(true));
+      expect((screen.getByRole("button", { name: "Ver permanência de José Pereira" }) as HTMLButtonElement).disabled).toBe(true);
+      expect((screen.getByLabelText("Data do mapa") as HTMLInputElement).disabled).toBe(true);
+      resolve(nightStay({ ended_at: "2026-11-04T09:00:00-03:00" }));
+      expect(await screen.findByText(NIGHT_STAY_CLOSED)).not.toBeNull();
+      expect((screen.getByLabelText("Data do mapa") as HTMLInputElement).disabled).toBe(false);
+    });
+
+    it("o mesmo limite duas vezes leva o foco à frase de novo", async () => {
+      vi.mocked(api.startPsyNightStay).mockRejectedValue(new ApiError(422, LIMIT, "x"));
+      mount();
+      await enterStay("Leito 1", "en1");
+      fireEvent.click(screen.getByRole("button", { name: "Registrar entrada" }));
+      const text = await screen.findByText(LIMIT_TEXT);
+      await waitFor(() => expect(document.activeElement).toBe(text));
+      const submit = screen.getByRole("button", { name: "Registrar entrada" });
+      submit.focus();
+      fireEvent.click(submit);
+      await waitFor(() => expect(api.startPsyNightStay).toHaveBeenCalledTimes(2));
+      await waitFor(() => expect(document.activeElement).toBe(screen.getByText(LIMIT_TEXT)));
+    });
+
+    it("detalhe de permanência encerrada mostra quem fechou e o motivo da saída", async () => {
+      vi.mocked(api.getPsyNightStay).mockResolvedValue(nightStay({ ended_at: "2026-11-04T08:00:00-03:00", end_reason: EXIT_REASON, closed_by: LEAD }));
+      mount();
+      fireEvent.click(await screen.findByRole("button", { name: "Ver permanência de José Pereira" }));
+      expect(await screen.findByText(EXIT_REASON)).not.toBeNull();
+      expect(screen.getByText("Ana Coordenadora")).not.toBeNull();
+    });
+  });
 });

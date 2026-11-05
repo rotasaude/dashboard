@@ -25,22 +25,29 @@ export type NightStayFormProps = {
   // Pacientes que o mapa já mostra num leito (não são oferecidos).
   staying?: ReadonlySet<string>;
   // `ignored`: a reavaliação foi enviada e o api a ignorou (`reassessment: null`).
-  onSaved(stay: PsyNightStay, ignored: boolean): void; onCancel(): void; onConflict?(): void;
+  onSaved(stay: PsyNightStay, ignored: boolean): void; onCancel(): void; onConflict?(): void; onBusy?(busy: boolean): void;
 };
 
-export function NightStayForm({ unit, bed, roles, now, staying, onSaved, onCancel, onConflict }: NightStayFormProps) {
+export function NightStayForm({ unit, bed, roles, now, staying, onSaved, onCancel, onConflict, onBusy }: NightStayFormProps) {
   const f = useFormProblems();
   const { aria, errNode, busy } = f;
   const clock = () => now ?? new Date();
   const [ d, setD ] = useState<NightStayDraft>(() => emptyNightStayDraft(clock()));
   const [ limit, setLimit ] = useState<string | null>(null);
+  // A mesma frase duas vezes também leva o foco: conta as recusas, não o texto.
+  const [ limitTick, setLimitTick ] = useState(0);
   const [ reason, setReason ] = useState("");
   const limitRef = useRef<HTMLParagraphElement | null>(null);
   const reasonRef = useRef<HTMLTextAreaElement | null>(null);
   useEffect(() => {
-    if (!limit) return;
+    if (limitTick === 0) return;
     if (roles.lead) reasonRef.current?.focus(); else limitRef.current?.focus();
-  }, [ limit, roles.lead ]);
+  }, [ limitTick, roles.lead ]);
+  // Quem abriu sabe que há envio em curso (desabilita os botões do mapa); ao desmontar, deixa de haver.
+  useEffect(() => {
+    onBusy?.(busy);
+    return () => onBusy?.(false);
+  }, [ busy, onBusy ]);
 
   // Só nome e CNS mascarado, sem repetir; quem já está num leito fica de fora (o api recusaria com `already_staying`).
   const people = useQuery({
@@ -58,7 +65,7 @@ export function NightStayForm({ unit, bed, roles, now, staying, onSaved, onCance
   };
   const refused = (rs: PsyRefusal[]): Problem[] => {
     const hit = rs.find((r) => r.code === "night_limit_reached");
-    if (hit) { setLimit(hit.text); return []; }
+    if (hit) { setLimit(hit.text); setLimitTick((t) => t + 1); return []; }
     setLimit(null);
     if (rs.some((r) => CONFLICT.includes(r.code) || r.path === "bed_id")) onConflict?.();
     return rs.map((r) => ({ path: r.path, text: r.text }));

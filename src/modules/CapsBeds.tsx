@@ -18,7 +18,7 @@ import { EmptyState } from "../components/EmptyState";
 import { KeyValue } from "../components/KeyValue";
 import { Panel } from "../components/Panel";
 import { Tag } from "../components/Tag";
-import { buttonStyle, inputStyle, secondaryButtonStyle } from "../components/formStyles";
+import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../components/formStyles";
 import { alert, box, fieldLabel, muted, okText, row, stack, title } from "./exams/styles";
 import { PsychosocialGate } from "./psychosocial/PsychosocialGate";
 import { NightStayForm } from "./psychosocial/NightStayForm";
@@ -43,16 +43,30 @@ const card = { ...box, flex: "1 1 240px", minWidth: 0 } as const;
 
 function Beds({ unit, roles, today, now }: CapsBedsProps & { unit: PsyUnit; roles: PsyRoles }) {
   const queryClient = useQueryClient();
-  const [ date, setDate ] = useState(() => today ?? todayInCity(now ?? new Date()));
+  // O dia da cidade, lido na montagem: só o mapa de hoje aceita entrada e saída; os outros dias são só leitura.
+  const [ cityToday ] = useState(() => today ?? todayInCity(now ?? new Date()));
+  const [ date, setDate ] = useState(cityToday);
+  const writable = date === cityToday;
   const [ open, setOpen ] = useState<Open | null>(null);
   const [ notice, setNotice ] = useState<Notice | null>(null);
+  // Envio em curso num formulário: nada no mapa troca o formulário nem a data até a resposta.
+  const [ busy, setBusy ] = useState(false);
   const noticeRef = useRef<HTMLParagraphElement | null>(null);
   useEffect(() => { if (notice) noticeRef.current?.focus(); }, [ notice ]);
+  // Cancelar ou fechar devolve o foco ao botão do cartão que abriu.
+  const opener = useRef<HTMLElement | null>(null);
+  const restore = useRef(false);
+  useEffect(() => {
+    if (open !== null || !restore.current) return;
+    restore.current = false;
+    if (opener.current?.isConnected) opener.current.focus();
+  }, [ open ]);
 
   const board = useQuery({ queryKey: [ PSY_BEDS_KEY, unit.id, date ], queryFn: () => getPsyBedBoard(unit.id, date), ...NOMINAL_QUERY });
   const reload = () => { void queryClient.invalidateQueries({ queryKey: [ PSY_BEDS_KEY, unit.id ] }); };
   const finish = (text: string, ok: boolean) => { setOpen(null); setNotice({ text, ok }); reload(); };
-  const start = (o: Open) => { setNotice(null); setOpen(o); };
+  const start = (o: Open, from: HTMLElement) => { opener.current = from; setNotice(null); setOpen(o); };
+  const back = () => { restore.current = true; setOpen(null); };
 
   const items = board.data?.items ?? [];
   const active = items.filter((i) => i.bed.active);
@@ -66,24 +80,29 @@ function Beds({ unit, roles, today, now }: CapsBedsProps & { unit: PsyUnit; role
       <div style={row}>
         <label style={fieldLabel}>
           Data do mapa
-          <input type="date" value={date} style={inputStyle} onChange={(ev) => { if (ev.target.value) setDate(ev.target.value); }} />
+          <input type="date" value={date} style={inputStyle} disabled={busy} onChange={(ev) => {
+            if (!ev.target.value) return;
+            setDate(ev.target.value);
+            // Entrada e saída são só do mapa de hoje; o detalhe fica.
+            if (ev.target.value !== cityToday) setOpen((o) => (o?.kind === "detail" ? o : null));
+          }} />
         </label>
       </div>
       {open?.kind === "enter" && (
         <div style={box}>
-          <NightStayForm unit={unit} bed={open.item.bed} roles={roles} now={now} staying={staying} onConflict={reload}
-            onSaved={(_s, ignored) => finish(ignored ? `${NIGHT_STAY_STARTED} ${REASSESSMENT_NOT_NEEDED}` : NIGHT_STAY_STARTED, true)}
-            onCancel={() => setOpen(null)} />
+          <NightStayForm key={open.item.bed.id} unit={unit} bed={open.item.bed} roles={roles} now={now} staying={staying} onConflict={reload}
+            onBusy={setBusy} onSaved={(_s, ignored) => finish(ignored ? `${NIGHT_STAY_STARTED} ${REASSESSMENT_NOT_NEEDED}` : NIGHT_STAY_STARTED, true)}
+            onCancel={back} />
         </div>
       )}
       {open?.kind === "close" && (
         <div style={box}>
-          <CloseNightStay stay={open.item.stay} bedLabel={open.item.bed.label} roles={roles} now={now}
+          <CloseNightStay key={open.item.stay.id} stay={open.item.stay} bedLabel={open.item.bed.label} roles={roles} now={now} onBusy={setBusy}
             onSaved={(_s, ignored) => finish(ignored ? `${NIGHT_STAY_CLOSED} ${REASSESSMENT_NOT_NEEDED}` : NIGHT_STAY_CLOSED, true)}
-            onStale={(text) => finish(text, false)} onCancel={() => setOpen(null)} />
+            onStale={(text) => finish(text, false)} onCancel={back} />
         </div>
       )}
-      {open?.kind === "detail" && <StayDetail unit={unit} item={open.item} onClose={() => setOpen(null)} />}
+      {open?.kind === "detail" && <StayDetail key={open.item.stay.id} unit={unit} item={open.item} onClose={back} />}
       {board.isPending ? <p className="mono" style={muted}>carregando…</p>
         : board.isError ? <p role="alert" style={alert}>{psyError(board.error)}</p>
         : (
@@ -94,10 +113,10 @@ function Beds({ unit, roles, today, now }: CapsBedsProps & { unit: PsyUnit; role
                 {active.length === 0 ? <EmptyState title={NO_ACTIVE_BEDS} /> : (
                   <div style={cards}>
                     {active.map((item) => (
-                      <BedCard key={item.bed.id} item={item} unit={unit} windowDays={windowDays}
-                        onEnter={() => start({ kind: "enter", item })}
-                        onClose={(o) => start({ kind: "close", item: o })}
-                        onDetail={(o) => start({ kind: "detail", item: o })} />
+                      <BedCard key={item.bed.id} item={item} unit={unit} windowDays={windowDays} writable={writable} disabled={busy}
+                        onEnter={(from) => start({ kind: "enter", item }, from)}
+                        onClose={(o, from) => start({ kind: "close", item: o }, from)}
+                        onDetail={(o, from) => start({ kind: "detail", item: o }, from)} />
                     ))}
                   </div>
                 )}
@@ -124,9 +143,13 @@ function Beds({ unit, roles, today, now }: CapsBedsProps & { unit: PsyUnit; role
   );
 }
 
-function BedCard({ item, unit, windowDays, onEnter, onClose, onDetail }: {
-  item: PsyBoardItem; unit: PsyUnit; windowDays: number; onEnter(): void; onClose(o: Occupied): void; onDetail(o: Occupied): void;
+// `writable`: o mapa é o de hoje (entrada e saída); `disabled`: há envio em curso num formulário aberto.
+function BedCard({ item, unit, windowDays, writable, disabled, onEnter, onClose, onDetail }: {
+  item: PsyBoardItem; unit: PsyUnit; windowDays: number; writable: boolean; disabled: boolean;
+  onEnter(from: HTMLElement): void; onClose(o: Occupied, from: HTMLElement): void; onDetail(o: Occupied, from: HTMLElement): void;
 }) {
+  const primary = disabled ? disabledButtonStyle : buttonStyle;
+  const secondary = disabled ? disabledButtonStyle : secondaryButtonStyle;
   const { bed, stay } = item;
   return (
     <section aria-label={bed.label} style={card}>
@@ -134,9 +157,12 @@ function BedCard({ item, unit, windowDays, onEnter, onClose, onDetail }: {
       {!stay ? (
         <>
           <div style={row}><Tag tone="ok">{BED_FREE}</Tag></div>
-          <div style={row}>
-            <button type="button" style={buttonStyle} aria-label={`Registrar entrada no ${bed.label}`} onClick={onEnter}>Registrar entrada</button>
-          </div>
+          {writable && (
+            <div style={row}>
+              <button type="button" style={primary} disabled={disabled} aria-label={`Registrar entrada no ${bed.label}`}
+                onClick={(ev) => onEnter(ev.currentTarget)}>Registrar entrada</button>
+            </div>
+          )}
         </>
       ) : (
         <>
@@ -147,10 +173,12 @@ function BedCard({ item, unit, windowDays, onEnter, onClose, onDetail }: {
           </div>
           <p style={muted}>{`Entrada ${fmtDateTime(stay.started_at)} · saída prevista ${fmtDateTime(stay.expected_end_at)}`}</p>
           <div style={row}>
-            <button type="button" style={buttonStyle} aria-label={`Registrar saída de ${stay.patient.name}`}
-              onClick={() => onClose({ ...item, stay })}>Registrar saída</button>
-            <button type="button" style={secondaryButtonStyle} aria-label={`Ver permanência de ${stay.patient.name}`}
-              onClick={() => onDetail({ ...item, stay })}>Ver permanência</button>
+            {writable && (
+              <button type="button" style={primary} disabled={disabled} aria-label={`Registrar saída de ${stay.patient.name}`}
+                onClick={(ev) => onClose({ ...item, stay }, ev.currentTarget)}>Registrar saída</button>
+            )}
+            <button type="button" style={secondary} disabled={disabled} aria-label={`Ver permanência de ${stay.patient.name}`}
+              onClick={(ev) => onDetail({ ...item, stay }, ev.currentTarget)}>Ver permanência</button>
           </div>
         </>
       )}
@@ -189,6 +217,13 @@ function StayDetail({ unit, item, onClose }: { unit: PsyUnit; item: Occupied; on
               <p style={muted}>{nights}</p>
               {s.nights.length > 0 && <p style={muted}>{s.nights.map((n) => fmtDay(n)).join(" · ")}</p>}
             </div>
+            {s.ended_at && (
+              <div style={stack}>
+                <p style={{ margin: 0, fontSize: 12.5, fontWeight: 600 }}>Motivo da saída</p>
+                {s.end_reason && <p style={{ margin: 0, fontSize: 12.5, whiteSpace: "pre-wrap" }}>{s.end_reason}</p>}
+                {s.closed_by && <p style={muted}>{s.closed_by.name}</p>}
+              </div>
+            )}
             <div style={stack}>
               <p style={{ margin: 0, fontSize: 12.5, fontWeight: 600 }}>Reavaliação do limite</p>
               {s.reassessment ? (

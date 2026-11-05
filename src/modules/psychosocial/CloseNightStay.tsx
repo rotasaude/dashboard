@@ -22,22 +22,29 @@ export type ClosableStay = Pick<PsyNightStay, "id" | "patient" | "started_at" | 
 
 export type CloseNightStayProps = {
   stay: ClosableStay; bedLabel: string; roles: PsyRoles; now?: Date;
-  onSaved(stay: PsyNightStay, ignored: boolean): void; onCancel(): void; onStale(text: string): void;
+  onSaved(stay: PsyNightStay, ignored: boolean): void; onCancel(): void; onStale(text: string): void; onBusy?(busy: boolean): void;
 };
 
-export function CloseNightStay({ stay, bedLabel, roles, now, onSaved, onCancel, onStale }: CloseNightStayProps) {
+export function CloseNightStay({ stay, bedLabel, roles, now, onSaved, onCancel, onStale, onBusy }: CloseNightStayProps) {
   const f = useFormProblems();
   const { aria, errNode, busy } = f;
   const clock = () => now ?? new Date();
   const [ d, setD ] = useState<CloseStayDraft>(() => emptyCloseStayDraft(clock()));
   const [ limit, setLimit ] = useState<string | null>(null);
+  // A mesma frase duas vezes também leva o foco: conta as recusas, não o texto.
+  const [ limitTick, setLimitTick ] = useState(0);
   const [ reassessment, setReassessment ] = useState("");
   const limitRef = useRef<HTMLParagraphElement | null>(null);
   const reasonRef = useRef<HTMLTextAreaElement | null>(null);
   useEffect(() => {
-    if (!limit) return;
+    if (limitTick === 0) return;
     if (roles.lead) reasonRef.current?.focus(); else limitRef.current?.focus();
-  }, [ limit, roles.lead ]);
+  }, [ limitTick, roles.lead ]);
+  // Quem abriu sabe que há envio em curso (desabilita os botões do mapa); ao desmontar, deixa de haver.
+  useEffect(() => {
+    onBusy?.(busy);
+    return () => onBusy?.(false);
+  }, [ busy, onBusy ]);
 
   const set = (patch: Partial<CloseStayDraft>, path: string) => {
     f.clear(path);
@@ -46,7 +53,7 @@ export function CloseNightStay({ stay, bedLabel, roles, now, onSaved, onCancel, 
   };
   const refused = (rs: PsyRefusal[]): Problem[] => {
     const hit = rs.find((r) => r.code === "night_limit_reached");
-    if (hit) { setLimit(hit.text); return []; }
+    if (hit) { setLimit(hit.text); setLimitTick((t) => t + 1); return []; }
     setLimit(null);
     return rs.map((r) => ({ path: r.path, text: r.text }));
   };
