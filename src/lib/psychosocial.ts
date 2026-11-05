@@ -117,10 +117,12 @@ export const MONTH_PROBLEM_TEXT: Record<string, string> = {
 // Não bloqueiam. `phone_missing` é aviso para quem está em situação de rua num CAPS com telefone (P57).
 export const MONTH_WARNING_TEXT: Record<string, string> = {
   no_actions: "nenhuma ação de RAAS no mês — fica fora da remessa e das fichas",
-  phone_missing: "sem telefone do usuário — a remessa usa o telefone do CAPS"
+  // Neutra: o api rebaixa a pendência a aviso por situação de rua (P57) ou quando o registro não tem ação RAAS.
+  phone_missing: "telefone do usuário ausente — não bloqueia o fechamento"
 };
 export const monthProblemLabel = pick(MONTH_PROBLEM_TEXT);
-export const monthWarningLabel = pick(MONTH_WARNING_TEXT);
+// Pendência que o api rebaixe a aviso usa a frase da pendência; código novo aparece cru.
+export const monthWarningLabel = (code: string): string => MONTH_WARNING_TEXT[code] ?? monthProblemLabel(code);
 
 // ─── Validações locais (os `path` são os do api) ────────────────────────────
 const trimmedLength = (v: string): number => v.trim().length;
@@ -332,7 +334,7 @@ export const PSY_ERRORS: Record<string, string> = {
   // Portão, papel e lotação
   not_on_caps_team: "você não está lotado neste CAPS — o vínculo CNES ativo na unidade é que dá acesso",
   missing_role: "seu papel não permite esta ação",
-  lead_required: "só a coordenação do CAPS faz isso (com o mês fechado, só ela corrige)",
+  lead_required: "só a coordenação do CAPS pode fazer isso",
   not_author: "só quem registrou a ação emite documentos dela",
   out_of_context: "fora do atendimento, abra o prontuário com motivo para ver isto",
   unauthenticated: "sua sessão terminou — entre de novo",
@@ -423,6 +425,7 @@ const FIELD_TEXT: [ RegExp, string ][] = [
   [ /^needs$/, "problemas e necessidades: de 1 a 4000 caracteres" ],
   [ /^goals\[\d+\]\.text$/, "objetivo: de 1 a 500 caracteres" ],
   [ /^goals\[\d+\]\.responsible_user_id$/, "escolha um responsável lotado neste CAPS" ],
+  [ /^goals\[\d+\]\.due_on$/, "o prazo do objetivo precisa ser uma data válida" ],
   [ /^goals$/, "o PTS tem de 1 a 20 objetivos" ],
   [ /^topic$/, "o tema tem de 1 a 200 caracteres" ],
   [ /^shared_text$/, "o texto compartilhado tem de 10 a 2000 caracteres" ],
@@ -465,10 +468,10 @@ const FIELD_TEXT: [ RegExp, string ][] = [
   [ /^(cpf|cns)$/, "informe o CPF ou o CNS" ]
 ];
 
-// R20: no CAPS III, "seguidas" ou "intercaladas"; janela de `window_days` (30 sem ela).
+// Texto base do brief; R20 só acrescenta o tipo do CAPS III ("seguidas" ou "intercaladas"). Janela de `window_days` (30 sem ela).
 export function nightLimitText(d: { used: number; limit: number; window_days?: number | null; rule?: string | null }): string {
-  const kind = d.rule === "consecutive" ? " seguidas" : d.rule === "alternate" ? " intercaladas" : "";
-  return `limite de noites atingido: ${d.used} de ${d.limit} noites${kind} em ${d.window_days ?? 30} dias — só a coordenação passa, com reavaliação`;
+  const kind = d.rule === "consecutive" ? "seguidas " : d.rule === "alternate" ? "intercaladas " : "";
+  return `limite de noites atingido: ${d.used} de ${d.limit} ${kind}na janela de ${d.window_days ?? 30} dias — só a coordenação passa, com reavaliação`;
 }
 
 export type PsyRefusal = Refusal & { participantIndex: number | null };
@@ -479,6 +482,11 @@ function bodyOf(err: unknown): Record<string, unknown> | null {
   return b && typeof b === "object" ? (b as Record<string, unknown>) : null;
 }
 const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
+// Só código e path no formato do api saem do corpo; qualquer outra coisa (nome, texto, mensagem) fica fora da tela.
+const CODE_FORMAT = /^[a-z0-9_]{1,64}$/;
+const PATH_FORMAT = /^[a-z0-9_.[\]]{1,64}$/;
+const safeCode = (v: unknown): string => (typeof v === "string" && CODE_FORMAT.test(v) ? v : "");
+const safePath = (v: unknown): string => (typeof v === "string" && PATH_FORMAT.test(v) ? v : "");
 
 // Frase de um código num path. `MONTH_PROBLEM_TEXT` cobre a lista do `month_has_problems` (path `records.<id>`).
 function codeText(code: string, path: string, status: number): string {
@@ -493,7 +501,7 @@ function codeText(code: string, path: string, status: number): string {
 }
 
 // "participants[2]" ou "participants[2].family_name" → 2.
-const indexFromPath = (path: string): number | null => {
+export const indexFromPath = (path: string): number | null => {
   const m = /^participants\[(\d+)\]/.exec(path);
   return m ? Number(m[1]) : null;
 };
@@ -508,7 +516,10 @@ export function psyRefusals(err: unknown): PsyRefusal[] {
   }
   if (!(err instanceof ApiError)) return [ { path: "", code: "", text: OFFLINE_TEXT, participantIndex: null } ];
   const body = bodyOf(err);
-  const code = errorCode(err) ?? "";
+  const raw = errorCode(err);
+  const code = safeCode(raw);
+  // Código fora do formato: frase genérica, sem eco.
+  if (raw && !code) return [ { path: "", code: "", text: "recusado pelo servidor", participantIndex: null } ];
   if (code === "night_limit_reached") {
     const used = num(body?.used);
     const limit = num(body?.limit);
@@ -521,14 +532,16 @@ export function psyRefusals(err: unknown): PsyRefusal[] {
   const mapped = list.flatMap((raw): PsyRefusal[] => {
     if (!raw || typeof raw !== "object") return [];
     const row = raw as Record<string, unknown>;
-    const c = typeof row.error === "string" ? row.error : typeof row.code === "string" ? row.code : "";
-    if (!c) return [];
-    const path = typeof row.path === "string" ? row.path : "";
+    const given = typeof row.error === "string" ? row.error : typeof row.code === "string" ? row.code : "";
+    if (!given) return [];
+    const c = safeCode(given);
+    const path = safePath(row.path);
+    if (!c) return [ { path, code: "", text: "recusado pelo servidor", participantIndex: null } ];
     const index = num(row.participant_index);
     return [ { path, code: c, text: codeText(c, path, err.status), participantIndex: index !== null ? index : indexFromPath(path) } ];
   });
   if (mapped.length > 0) return mapped;
-  const path = typeof body?.path === "string" ? body.path : "";
+  const path = safePath(body?.path);
   return [ { path, code, text: codeText(code, path, err.status), participantIndex: indexFromPath(path) } ];
 }
 

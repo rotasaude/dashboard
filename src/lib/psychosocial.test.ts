@@ -3,7 +3,7 @@ import { ApiError } from "./api";
 import {
   CAPS_MODALITIES, DESTINATION_LABEL, MONTH_PROBLEM_TEXT, MONTH_WARNING_TEXT, PSY_DISABLED, PSY_ERRORS, REASON_TEXT, actionInput, actionProblems,
   canUsePsychosocial, carePlanInput, carePlanProblems, cidLabel, codeLabel, countLabel, destinationLabel, emptyActionDraft, emptyEnrollmentDraft,
-  enrollmentInput, enrollmentProblems, hasBeds, isPrescriber, isStale, modalityLabel, monthProblemLabel, monthWarningLabel, nightLimitText,
+  enrollmentInput, enrollmentProblems, hasBeds, indexFromPath, isPrescriber, isStale, modalityLabel, monthProblemLabel, monthWarningLabel, nightLimitText,
   phoneProblem, psyError, psyRefusals, psychosocialRoles, reasonProblem, settingsProblems, textProblem, unitCapsProblems, weekdayLabel,
   type ActionDraft, type CarePlanDraft
 } from "./psychosocial";
@@ -15,25 +15,22 @@ const refusal = (status: number, body: unknown) => new ApiError(status, body, "r
 // Todo código que o api do 31 pode devolver, com o status real: `Psychosocial::BaseController::FAILURE_STATUS`, os comandos e
 // controladores de app/{commands,controllers,services}/psychosocial, o /attendance/units (P34, P53) e os guardas de outros módulos
 // (P32, P51), mais o §15 (P13, P23–P25, P37, P40–P44, P47, P54, P57).
-const API_CODES: [ string, number ][] = [
+// O status real fica nos comentários: a frase depende só do código (e do path), nunca do status.
+const API_CODES: string[] = [
   // 409
-  [ "enrollment_open", 409 ], [ "bed_taken", 409 ], [ "already_staying", 409 ], [ "already_exported", 409 ], [ "bed_label_taken", 409 ],
-  [ "already_closed", 409 ], [ "already_cancelled", 409 ], [ "month_open", 409 ], [ "record_not_open", 409 ], [ "referral_not_pending", 409 ],
-  [ "night_stay_open", 409 ], [ "integrity_mismatch", 409 ], [ "citizen_not_verified", 409 ],
-  [ "unit_has_caps_records", 409 ], [ "caps_has_beds", 409 ], [ "unit_has_attendances", 409 ],
+  "enrollment_open", "bed_taken", "already_staying", "already_exported", "bed_label_taken", "already_closed", "already_cancelled", "month_open",
+  "record_not_open", "referral_not_pending", "night_stay_open", "integrity_mismatch", "citizen_not_verified", "unit_has_caps_records",
+  "caps_has_beds", "unit_has_attendances",
   // 403, 401, 404, 429
-  [ "not_on_caps_team", 403 ], [ "missing_role", 403 ], [ "lead_required", 403 ], [ "not_author", 403 ], [ "out_of_context", 403 ],
-  [ "unauthenticated", 401 ], [ "mfa_required", 401 ], [ "not_found", 404 ], [ "person_not_found", 404 ], [ "too_many_requests", 429 ],
+  "not_on_caps_team", "missing_role", "lead_required", "not_author", "out_of_context", "unauthenticated", "mfa_required", "not_found",
+  "person_not_found", "too_many_requests",
   // 422
-  [ "action_rejected", 422 ], [ "invalid_request", 422 ], [ "too_long", 422 ], [ "month_closed", 422 ], [ "month_has_problems", 422 ],
-  [ "raas_layout_unavailable", 422 ], [ "nothing_to_export", 422 ], [ "caps_without_beds", 422 ], [ "instrument_mismatch", 422 ],
-  [ "esf_cnes_required", 422 ], [ "closed_on_in_future", 422 ], [ "origin_locked", 422 ], [ "destination_is_permanence", 422 ],
-  [ "invalid_cursor", 422 ], [ "started_after_actions", 422 ], [ "invalid_cpf", 422 ], [ "invalid_cns", 422 ], [ "prescriber_required", 422 ],
-  [ "invalid_content", 422 ], [ "enrollment_required", 422 ], [ "caps_modality_mismatch", 422 ], [ "invalid_service_classification", 422 ],
-  [ "invalid_phone", 422 ], [ "caps_unit_not_allowed", 422 ], [ "invalid_kinds", 422 ],
-  // Crítica da ação (P23), dentro de `action_rejected`, e também sozinhos
-  [ "cbo_incompatible", 422 ], [ "quantity_exceeded", 422 ], [ "performed_in_future", 422 ], [ "authorization_required", 422 ],
-  [ "family_only_for_family_care", 422 ], [ "bpa_i_single_patient", 422 ]
+  "action_rejected", "invalid_request", "too_long", "month_closed", "month_has_problems", "raas_layout_unavailable", "nothing_to_export",
+  "caps_without_beds", "instrument_mismatch", "esf_cnes_required", "closed_on_in_future", "origin_locked", "destination_is_permanence",
+  "invalid_cursor", "started_after_actions", "invalid_cpf", "invalid_cns", "prescriber_required", "invalid_content", "enrollment_required",
+  "caps_modality_mismatch", "invalid_service_classification", "invalid_phone", "caps_unit_not_allowed", "invalid_kinds",
+  // Crítica da ação (P23), dentro de `action_rejected`, e também sozinhos (422)
+  "cbo_incompatible", "quantity_exceeded", "performed_in_future", "authorization_required", "family_only_for_family_care", "bpa_i_single_patient"
 ];
 const PENDING_CODES = [ "patient_cns_missing", "phone_missing", "homeless_missing", "professional_cns_missing", "professional_not_in_cnes",
   "cid_missing", "action_out_of_rule", "night_stay_open" ];
@@ -59,8 +56,12 @@ describe("regras do CAPS (módulo 31)", () => {
       .toMatchObject({ admin: true, analyst: true, professional: true, staff: false });
   });
 
-  it.each(API_CODES)("código do api %s (%i) tem frase própria, nunca o código cru", (code, status) => {
-    const text = psyError(refusal(status, { error: code }));
+  it("a tabela tem os 57 códigos do api (mais feature_disabled e night_limit_reached à parte)", () => {
+    expect(new Set(API_CODES).size).toBe(57);
+  });
+
+  it.each(API_CODES)("código do api %s tem frase própria, nunca o código cru", (code) => {
+    const text = psyError(refusal(422, { error: code }));
     expect(text, code).toBeTruthy();
     expect(text, code).not.toContain(code);
     expect(text, code).not.toMatch(/recusado pelo servidor/);
@@ -73,6 +74,7 @@ describe("regras do CAPS (módulo 31)", () => {
     expect(psyError(refusal(422, { error: "night_limit_reached", used: 14, limit: 14, window_days: 30, rule: "total" })))
       .toBe(nightLimitText({ used: 14, limit: 14, window_days: 30, rule: "total" }));
     expect(psyError(refusal(422, { error: "night_limit_reached" }))).not.toContain("night_limit_reached");
+    expect(PSY_ERRORS.lead_required).toBe("só a coordenação do CAPS pode fazer isso");
   });
 
   it("pendências e avisos da RAAS: todo código tem frase; no_actions é só aviso; phone_missing nas duas listas (P57)", () => {
@@ -81,21 +83,32 @@ describe("regras do CAPS (módulo 31)", () => {
     expect(MONTH_PROBLEM_TEXT.no_actions).toBeUndefined();
     expect(monthProblemLabel("homeless_missing")).toBe("situação de rua do mês não informada");
     expect(monthWarningLabel("no_actions")).toMatch(/fora da remessa/);
+    // phone_missing como aviso: frase neutra (rebaixado por situação de rua ou por falta de ação RAAS).
+    expect(monthWarningLabel("phone_missing")).toBe("telefone do usuário ausente — não bloqueia o fechamento");
+    // Pendência que o api mande no papel de aviso cai na frase da pendência, nunca crua.
+    expect(monthWarningLabel("homeless_missing")).toBe("situação de rua do mês não informada");
+    expect(monthWarningLabel("cid_missing")).toBe("CID ausente");
+    expect(monthWarningLabel("aviso_novo")).toBe("aviso_novo");
     expect(monthProblemLabel("nova_pendencia")).toBe("nova_pendencia");
   });
 
   it("limite de noites: os números, a janela e a regra do CAPS III (R20)", () => {
+    // Texto base do brief; R20 só acrescenta o tipo no CAPS III.
+    expect(nightLimitText({ used: 14, limit: 14 }))
+      .toBe("limite de noites atingido: 14 de 14 na janela de 30 dias — só a coordenação passa, com reavaliação");
     expect(nightLimitText({ used: 14, limit: 14, window_days: 30, rule: "total" }))
-      .toBe("limite de noites atingido: 14 de 14 noites em 30 dias — só a coordenação passa, com reavaliação");
-    expect(nightLimitText({ used: 7, limit: 7, window_days: 30, rule: "consecutive" })).toContain("7 de 7 noites seguidas em 30 dias");
-    expect(nightLimitText({ used: 10, limit: 10, window_days: 45, rule: "alternate" })).toContain("10 de 10 noites intercaladas em 45 dias");
-    expect(nightLimitText({ used: 3, limit: 2 })).toContain("3 de 2 noites em 30 dias");
+      .toBe("limite de noites atingido: 14 de 14 na janela de 30 dias — só a coordenação passa, com reavaliação");
+    expect(nightLimitText({ used: 7, limit: 7, window_days: 30, rule: "consecutive" }))
+      .toBe("limite de noites atingido: 7 de 7 seguidas na janela de 30 dias — só a coordenação passa, com reavaliação");
+    expect(nightLimitText({ used: 10, limit: 10, window_days: 45, rule: "alternate" }))
+      .toBe("limite de noites atingido: 10 de 10 intercaladas na janela de 45 dias — só a coordenação passa, com reavaliação");
     expect(psyError(refusal(422, { error: "night_limit_reached", used: 7, limit: 7, window_days: 30, rule: "consecutive" })))
-      .toContain("noites seguidas");
+      .toContain("7 de 7 seguidas na janela de 30 dias");
   });
 
   it("código desconhecido aparece cru; erro de rede tem frase; 404 sem código é não encontrado", () => {
     expect(psyError(refusal(422, { error: "something_new" }))).toBe("recusado pelo servidor (something_new)");
+    expect(psyError(refusal(422, { error: "x".repeat(65) }))).toBe("recusado pelo servidor");
     expect(psyError(new TypeError("Failed to fetch"))).toBe("não foi possível falar com o servidor — tente de novo");
     expect(psyError(refusal(404, null))).toBe(PSY_ERRORS.not_found);
     expect(psyError(refusal(500, null))).toBe("recusado pelo servidor (500)");
@@ -131,6 +144,33 @@ describe("regras do CAPS (módulo 31)", () => {
       participantIndex: 0 } ]);
   });
 
+  it("o corpo nunca vaza: só código no formato do api é ecoado; campos extras ficam fora", () => {
+    const leak = /Maria|12345678909|Ideação|segredo|F32/;
+    const bodies = [
+      { error: "something_new", patient_name: "Maria da Silva", message: "Ideação suicida", cpf: "12345678909" },
+      { error: "Maria da Silva CPF 12345678909", message: "segredo" },
+      { error: "action_rejected", message: "segredo", problems: [ { error: "Ideação F32", path: "notes", message: "segredo" },
+        { error: "cbo_incompatible", path: "sigtap_code", patient_name: "Maria" } ] },
+      { error: "invalid_request", path: "Maria da Silva", patient_name: "Maria" }
+    ];
+    for (const body of bodies) {
+      for (const r of psyRefusals(refusal(422, body))) {
+        expect(r.text).not.toMatch(leak);
+        expect(r.code).not.toMatch(leak);
+        expect(r.path).not.toMatch(leak);
+      }
+    }
+    expect(psyError(refusal(422, bodies[1]))).toBe("recusado pelo servidor");
+    expect(psyRefusals(refusal(422, bodies[2])).map((r) => r.text)).toEqual([ "recusado pelo servidor", PSY_ERRORS.cbo_incompatible ]);
+  });
+
+  it("indexFromPath: índice do participante pelo path do api", () => {
+    expect(indexFromPath("participants[2]")).toBe(2);
+    expect(indexFromPath("participants[10].family_name")).toBe(10);
+    expect(indexFromPath("participants")).toBeNull();
+    expect(indexFromPath("goals[1].text")).toBeNull();
+  });
+
   it("month_closed e enrollment_required mudam a frase pelo path (P37, P40, P41)", () => {
     const text = (code: string, path: string) => psyError(refusal(422, { error: code, path, problems: [ { error: code, path } ] }));
     expect(text("month_closed", "started_on")).toMatch(/início da matrícula cai num mês já fechado/);
@@ -151,6 +191,7 @@ describe("regras do CAPS (módulo 31)", () => {
     [ "needs", "problemas e necessidades: de 1 a 4000 caracteres" ],
     [ "goals[0].text", "objetivo: de 1 a 500 caracteres" ],
     [ "goals[0].responsible_user_id", "escolha um responsável lotado neste CAPS" ],
+    [ "goals[2].due_on", "o prazo do objetivo precisa ser uma data válida" ],
     [ "topic", "o tema tem de 1 a 200 caracteres" ],
     [ "shared_text", "o texto compartilhado tem de 10 a 2000 caracteres" ],
     [ "participants[1].family_name", "nome do familiar: de 3 a 120 caracteres" ],
