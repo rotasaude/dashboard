@@ -481,7 +481,16 @@ export interface HealthUnit extends Partial<UnitAddress> {
   collects_samples?: boolean;
   // Módulo 25 (D15): unidade notificadora (notificação negativa semanal).
   notifying?: boolean;
+  // Módulo 31 (contrato §3, P9/P26/P27): modalidade só no CAPS; classificação 115 com 3 dígitos ou nula; telefone de
+  // 10 ou 11 dígitos (com DDD) ou nulo, em qualquer tipo de unidade. Ausentes em api anterior.
+  caps_modality?: CapsModality | string | null;
+  service_classification?: string | null;
+  phone?: string | null;
 }
+// Campos do módulo 31 na escrita da unidade: cada chave só vai no corpo quando recebida (null apaga).
+export interface UnitCapsInput { caps_modality?: string | null; service_classification?: string | null; phone?: string | null }
+const unitCapsBody = (caps?: UnitCapsInput): Record<string, string | null> =>
+  Object.fromEntries(Object.entries(caps ?? {}).filter(([ , v ]) => v !== undefined)) as Record<string, string | null>;
 export interface HealthUnitRow extends HealthUnit {
   active: boolean;
   // O que ainda prende a unidade (api#29): pedidos vivos e horários marcados.
@@ -510,22 +519,25 @@ export async function listAllUnits(): Promise<HealthUnitRow[]> {
 }
 
 // T47: `cnes` (7 dígitos, ou null para apagar) só vai quando recebido — o api só mexe no CNES quando a chave vem.
-export async function createUnit(name: string, kind: string, address: UnitAddress, cnes?: string | null): Promise<HealthUnitRow> {
+export async function createUnit(
+  name: string, kind: string, address: UnitAddress, cnes?: string | null, caps?: UnitCapsInput
+): Promise<HealthUnitRow> {
   const payload = await jsonFetch<{ unit: HealthUnitRow }>(`${ATTENDANCE_BASE}/units`, {
-    method: "POST", body: JSON.stringify({ name, kind, ...address, ...(cnes !== undefined ? { cnes } : {}) })
+    method: "POST", body: JSON.stringify({ name, kind, ...address, ...(cnes !== undefined ? { cnes } : {}), ...unitCapsBody(caps) })
   });
   return payload.unit;
 }
 
 export async function updateUnit(
   id: string, name: string, kind: string, address: UnitAddress, screeningScope?: ScreeningScope, collectsSamples?: boolean,
-  notifying?: boolean, cnes?: string | null
+  notifying?: boolean, cnes?: string | null, caps?: UnitCapsInput
 ): Promise<HealthUnitRow> {
   const body: Record<string, unknown> = { name, kind, ...address };
   if (screeningScope) body.screening_scope = screeningScope;
   if (collectsSamples !== undefined) body.collects_samples = collectsSamples;
   if (notifying !== undefined) body.notifying = notifying;
   if (cnes !== undefined) body.cnes = cnes;
+  Object.assign(body, unitCapsBody(caps));
   const payload = await jsonFetch<{ unit: HealthUnitRow }>(`${ATTENDANCE_BASE}/units/${encodeURIComponent(id)}`, {
     method: "POST", body: JSON.stringify(body)
   });
@@ -5998,4 +6010,451 @@ export async function getTfdAccountabilityUrl(caseId: string): Promise<string> {
 // O api devolve o caminho sob `/tfd`: com VITE_TFD_BASE prefixado (proxy), o arquivo vai pela mesma base das outras chamadas do TFD.
 export function fetchTfdAccountabilityFile(url: string): Promise<SignatureFile> {
   return binaryFetch(url.replace(/^\/tfd(?=\/)/, TFD_BASE), "application/pdf,image/jpeg,image/png");
+}
+
+// ─── Atenção psicossocial (módulo 31; ADR 0049; contrato 2026-11-04 §2–§11) ───
+// Na URL só ids, unidade, situação, data, mês e cursor; CPF, CNS, nome, CID, substância, motivo, evolução, PTS e texto
+// compartilhado vão no corpo (busca de pessoa e duplicados por POST, P30). Lista nunca traz texto clínico; o detalhe grava a
+// trilha no api. Formas do api real (api-truth.md, ruling R1), não as do plano: listas em `{ items }` (paginadas com
+// `next_before` na fila, nas ações, no matriciamento e na linha do tempo); unidade com `night_capable`; `options` com `team`,
+// `instrument_codes`, `max_quantity` e `requires_authorization` (R2); `today.groups` com `sigtap_code` e `action_id` (R3);
+// matrícula com `cid_main` sem ponto e sem rótulo; pendências do mês como códigos; vínculo sem o nome do CAPS (P46). O api
+// recusa chave desconhecida e texto opcional vazio (`notes: ""` → 422): campo opcional vazio não vai. Toda escrita leva corpo.
+
+const PSY_BASE = import.meta.env.VITE_PSYCHOSOCIAL_BASE || "/psychosocial";
+const psyPath = (...parts: string[]) => [ PSY_BASE, ...parts.map(encodeURIComponent) ].join("/");
+const psyWrite = (method: "POST" | "PATCH", body: unknown = {}): RequestInit => ({ method, body: JSON.stringify(body) });
+// Query só com os valores preenchidos, na ordem dada.
+const psyQuery = (params: Record<string, string | null | undefined>) =>
+  new URLSearchParams(Object.entries(params).filter((e): e is [string, string] => typeof e[1] === "string" && e[1] !== ""));
+// Tira as chaves opcionais vazias (undefined, null ou "") do corpo.
+function psyCompact<T extends object>(body: T, keys: (keyof T)[]): T {
+  const out = { ...body };
+  for (const key of keys) {
+    const v = out[key] as unknown;
+    if (v === undefined || v === null || v === "") delete out[key];
+  }
+  return out;
+}
+
+export type CapsModality = "caps_i" | "caps_ii" | "caps_iii" | "caps_i_child" | "caps_ad" | "caps_ad_iii" | "caps_ad_iv";
+export type PsyInstrument = "raas_psi" | "bpa_c" | "bpa_i";
+export type CareIntensity = "intensive" | "semi_intensive" | "non_intensive";
+export type ReceptionOutcome = "enrolled" | "referred_elsewhere" | "no_follow_up";
+export type ReferralPriority = "routine" | "priority";
+export type ReferralStatus = "pending" | "received";
+export type PsyGroupKind = "group" | "workshop" | "assembly";
+export type PsyPlace = "caps" | "territory";
+export type MonthStatus = "open" | "closed" | "exported";
+export type PsyEnrollmentStatus = "open" | "closed";
+export type PsyActionOrigin = "manual" | "reception" | "night_stay" | "matrix_support";
+// Regra do limite de noites (`night_limit_reached`): total no AD III/IV; seguidas ou intercaladas no CAPS III.
+export type NightLimitRule = "total" | "consecutive" | "alternate";
+// Painel: 1 a 4 chegam como "lt5" (0 fica 0).
+export type PsyCount = number | "lt5";
+export interface PsyPage<T> { items: T[]; next_before: string | null }
+
+// ── Formas comuns ──
+// `name` é o nome de exibição; nunca CPF.
+export interface PsyPatientRef { patient_id: string; name: string; cns_masked: string | null }
+// `cbo_code` é o do vínculo no CAPS; null para quem não tem vínculo (ex.: faturista).
+export interface PsyPro { user_id: string; name: string; cbo_code: string | null }
+// `name` da SIGTAP da competência ("" sem release).
+export interface PsySigtap { code: string; name: string; instrument: PsyInstrument | string }
+export interface PsyUnit { id: string; name: string; caps_modality: CapsModality | string; night_capable: boolean }
+export interface PsyBed { id: string; health_unit_id: string; label: string; active: boolean }
+export interface PsyCode { code: string; label: string }
+// `instrument_codes` cru da SIGTAP ("09" RAAS-PSI, "02" BPA-I, "01" BPA-C); o instrumento da ação é decidido pelo api (P3).
+export interface PsyProcedure {
+  code: string; name: string; instrument_codes: string[]; family_care: boolean; collective: boolean;
+  max_quantity: number | null; requires_authorization: boolean;
+}
+export interface PsyHealthTeam { id: string; name: string; ine: string | null; health_unit: { id: string; name: string } }
+// Só a equipe lotada lê (P35).
+export interface PsyOptions {
+  origins: PsyCode[]; destinations: PsyCode[]; substances: PsyCode[];
+  intensities: (CareIntensity | string)[]; places: (PsyPlace | string)[]; group_kinds: (PsyGroupKind | string)[];
+  reception_outcomes: (ReceptionOutcome | string)[]; referral_priorities: (ReferralPriority | string)[];
+  night_sigtap_code: string; competence: string; procedures: PsyProcedure[]; team: PsyPro[]; health_teams: PsyHealthTeam[];
+}
+// eSF tipo 70; eSF sem CNES → `esf_covered: true, esf_cnes: null` (P38).
+export interface PsyPrefill {
+  esf_covered: boolean; esf_cnes: string | null; usf: { id: string; name: string } | null; team: { id: string; name: string } | null;
+}
+
+// ── Encaminhamento, acolhimento e matrícula ──
+export interface PsyReferralInput { patient_id: string; health_unit_id: string; reason: string; priority: ReferralPriority }
+export interface PsyReferralCreated {
+  id: string; health_unit_id: string; priority: ReferralPriority | string; status: ReferralStatus | string; created_at: string;
+}
+// Sem `reason` na lista.
+export interface PsyReferralRow {
+  id: string; patient: PsyPatientRef; priority: ReferralPriority | string; status: ReferralStatus | string;
+  from_unit: { id: string; name: string }; created_at: string;
+}
+export interface PsyReferral extends PsyReferralRow { reason: string; received_at: string | null; referred_by: { user_id: string; name: string } }
+// `cid_main` com ou sem ponto; `substances` códigos "01"…"06", "99" (nenhuma) sozinho; `esf_cnes` só com cobertura.
+export interface PsyEnrollmentFields {
+  started_on: string; origin: string; cid_main: string; cid_secondary?: string[]; substances: string[];
+  esf_covered: boolean; esf_cnes?: string | null; reference_user_id: string;
+}
+export interface PsyEnrollmentInput extends PsyEnrollmentFields { health_unit_id: string; patient_id: string }
+export interface PsyReceptionInput {
+  health_unit_id: string; patient_id: string; referral_id?: string | null; at: string; sigtap_code: string; notes?: string | null;
+  outcome: ReceptionOutcome; enrollment?: PsyEnrollmentFields;
+}
+export interface PsyReceptionResult { reception_id: string; enrollment_id: string | null }
+export interface PsyEnrollmentRow {
+  id: string; patient: PsyPatientRef; started_on: string; reference: PsyPro; next_visit_at: string | null;
+  status: PsyEnrollmentStatus | string; care_plan_review_on: string | null;
+}
+// `cid_main` é o código sem ponto ("F322"), sem rótulo.
+export interface PsyEnrollment extends PsyEnrollmentRow {
+  health_unit_id: string; origin: string; cid_main: string; cid_secondary: string[]; substances: string[]; esf_covered: boolean;
+  esf_cnes: string | null; closed_on: string | null; destination: string | null; reception_id: string | null; created_at: string;
+}
+export type PsyEnrollmentPatch = Partial<PsyEnrollmentFields> & { next_visit_at?: string | null };
+export interface PsyEnrollmentClose { destination: string; closed_on: string }
+
+// ── PTS ──
+export interface PsyCareGoal { text: string; responsible_user_id: string; due_on: string | null }
+export interface PsyCarePlan {
+  id: string; version: number; needs: string; goals: PsyCareGoal[]; intensity: CareIntensity | string; review_on: string;
+  created_by: PsyPro; created_at: string;
+}
+export interface PsyCarePlanInput {
+  needs: string; goals: { text: string; responsible_user_id: string; due_on?: string | null }[]; intensity: CareIntensity; review_on: string;
+}
+
+// ── Grupos e Hoje ──
+// `weekday` 1–7.
+export interface PsyGroup {
+  id: string; health_unit_id: string; name: string; kind: PsyGroupKind | string; weekday: number; starts_at: string; ends_at: string;
+  responsible: PsyPro; capacity: number; sigtap_code: string; active: boolean;
+}
+export interface PsyGroupInput {
+  health_unit_id: string; name: string; kind: PsyGroupKind; weekday: number; starts_at: string; ends_at: string;
+  responsible_user_id: string; capacity: number; sigtap_code: string; active?: boolean;
+}
+export type PsyGroupPatch = Partial<Omit<PsyGroupInput, "health_unit_id">>;
+// `action_id`: a ação não cancelada do grupo no dia (presença registrada).
+export interface PsyTodayGroup {
+  id: string; name: string; kind: PsyGroupKind | string; starts_at: string; ends_at: string; responsible: PsyPro; capacity: number;
+  sigtap_code: string; action_id: string | null;
+}
+export interface PsyTodayVisit { enrollment_id: string; patient: PsyPatientRef; next_visit_at: string; reference: PsyPro }
+export interface PsyToday { date: string; groups: PsyTodayGroup[]; visits: PsyTodayVisit[] }
+
+// ── Ações e documentos ──
+// Matriculado vai sempre por `enrollment_id` (só `patient_id` não liga à RAAS, P40); familiar sem cadastro por `family_name`.
+export type PsyParticipantInput = { enrollment_id: string } | { patient_id: string } | { family_name: string };
+// `authorization_number` com 13 dígitos; `quantity` 1–999 (padrão 1).
+export interface PsyActionInput {
+  health_unit_id: string; sigtap_code: string; performed_at: string; place: PsyPlace; quantity?: number; notes?: string | null;
+  authorization_number?: string | null; group_id?: string | null; participants: PsyParticipantInput[];
+}
+export interface PsyActionRow {
+  id: string; sigtap: PsySigtap; instrument: PsyInstrument | string; performed_at: string; place: PsyPlace | string; quantity: number;
+  professional: PsyPro; group_id: string | null; participants_count: number; cancelled: boolean;
+}
+export type PsyActionParticipant = { enrollment_id: string | null; patient: PsyPatientRef } | { family_name: string };
+export interface PsyAction extends PsyActionRow {
+  health_unit_id: string; month: string; origin: PsyActionOrigin | string; notes: string | null; authorization_number: string | null;
+  participants: PsyActionParticipant[]; cancelled_at: string | null; cancel_reason: string | null; created_at: string;
+}
+// R9: receita e atestado pela ação (a notificação de controlado fica para o ciclo).
+export type PsyDocumentInput = { kind: "prescription"; content: PrescriptionInput } | { kind: "sick_note"; content: SickNoteInput };
+
+// ── Leitos e acolhimento noturno ──
+export interface PsyBedInput { health_unit_id: string; label: string; active?: boolean }
+export interface PsyBedPatch { label?: string; active?: boolean }
+export interface PsyBoardItem {
+  bed: PsyBed; stay: { id: string; patient: PsyPatientRef; started_at: string; expected_end_at: string } | null;
+  // Noites usadas na janela e o limite (no CAPS III, o de intercaladas); nulos sem permanência.
+  nights_used: number | null; limit: number | null;
+}
+export interface PsyBedBoard { date: string; window_days: number; items: PsyBoardItem[] }
+export interface PsyReassessment { reason: string }
+export interface PsyNightStayInput {
+  bed_id: string; enrollment_id: string; started_at: string; expected_end_at: string; reassessment?: PsyReassessment;
+}
+export interface PsyNightStayClose { ended_at: string; reason: string; reassessment?: PsyReassessment }
+export interface PsyNightStay {
+  id: string; patient: PsyPatientRef; started_at: string; expected_end_at: string; health_unit_id: string; bed: PsyBed;
+  enrollment_id: string; ended_at: string | null; end_reason: string | null; nights: string[];
+  reassessment: { reason: string; by: PsyPro } | null; started_by: PsyPro; closed_by: PsyPro | null; created_at: string;
+}
+
+// ── Regras da cidade (admin escreve com step-up; admin e lead leem) ──
+export interface PsyNightLimits {
+  caps_iii: { consecutive: number; alternate: number; window_days: number };
+  caps_ad_iii: { total: number; window_days: number };
+  caps_ad_iv: { total: number; window_days: number };
+}
+export interface PsySettings { night_limits: PsyNightLimits; care_plan_review_days: number }
+// Parcial; cada modalidade vai com a forma inteira.
+export interface PsySettingsPatch { night_limits?: Partial<PsyNightLimits>; care_plan_review_days?: number }
+
+// ── RAAS do mês, remessa e fichas ──
+// `problems` bloqueiam o fechamento; `warnings` (ex.: `no_actions`, `phone_missing`) não (P24, P57).
+export interface PsyMonthRecord {
+  id: string; enrollment_id: string; patient: PsyPatientRef; status: MonthStatus | string; homeless: boolean | null;
+  actions_count: number; problems: string[]; warnings: string[];
+}
+export interface PsyMonthCounts {
+  records: number; open: number; closed: number; exported: number; with_problems: number; with_warnings: number; actions: number;
+}
+export interface PsyMonth {
+  month: string; health_unit_id: string; status: MonthStatus | string; closure: { closed_at: string; closed_by: PsyPro } | null;
+  counts: PsyMonthCounts; records: PsyMonthRecord[];
+}
+export interface PsyHomelessResult {
+  id: string; enrollment_id: string; health_unit_id: string; month: string; status: MonthStatus | string; homeless: boolean | null;
+}
+export interface PsyRaasExport {
+  id: string; health_unit_id: string; month: string; competence: string; layout_version: string | null; records_count: number;
+  sha256: string; created_at: string; created_by: PsyPro;
+}
+
+// ── Matriciamento e vínculo ──
+// Sem `topic` na lista (P4).
+export interface PsyMatrixSupportRow {
+  id: string; health_unit_id: string; health_team: { id: string; name: string; ine: string | null; health_unit_id: string };
+  held_on: string; participants: PsyPro[]; sigtap: PsySigtap; action_id: string | null; action_cancelled_at: string | null;
+  cases_count: number; created_at: string;
+}
+export interface PsyMatrixCase { id: string; patient: PsyPatientRef; shared_text: string; created_at: string }
+export interface PsyMatrixSupport extends PsyMatrixSupportRow { topic: string; cases: PsyMatrixCase[] }
+export interface PsyMatrixSupportInput {
+  health_unit_id: string; health_team_id: string; held_on: string; topic: string; participants_user_ids: string[]; sigtap_code: string;
+}
+export interface PsySharedCase { held_on: string; shared_text: string }
+// Visto pela UBS: sem nome nem modalidade do CAPS (P46/P48); `caps.phone` pode ser nulo; casos também depois da alta (P44).
+export type PsyLink =
+  | { enrolled: false; shared_cases?: PsySharedCase[] }
+  | { enrolled: true; caps: { phone: string | null }; since: string; reference: { name: string }; shared_cases: PsySharedCase[] };
+
+// ── Painel (P52); sem rótulo de destino ──
+export interface PsyDashboard {
+  month: string;
+  enrollments_active: { health_unit_id: string; name: string; caps_modality: CapsModality | string; count: PsyCount }[];
+  new_in_month: PsyCount; closed_by_destination: Record<string, PsyCount>; care_plans_overdue: PsyCount;
+  actions_by_instrument: { raas_psi: PsyCount; bpa_c: PsyCount; bpa_i: PsyCount };
+  bed_occupancy: { nights: PsyCount; bed_days: PsyCount };
+  raas_month: { open: PsyCount; closed: PsyCount; exported: PsyCount; no_actions: PsyCount };
+}
+
+async function psyItems<T>(url: string): Promise<T[]> {
+  return (await jsonFetch<{ items?: T[] }>(url)).items ?? [];
+}
+async function psyPage<T>(url: string): Promise<PsyPage<T>> {
+  const b = await jsonFetch<{ items?: T[]; next_before?: string | null }>(url);
+  return { items: b.items ?? [], next_before: b.next_before ?? null };
+}
+
+// ── Unidades, opções e busca de pessoa ──
+export function listPsyUnits(): Promise<PsyUnit[]> {
+  return psyItems<PsyUnit>(psyPath("units"));
+}
+export function getPsyOptions(unitId: string): Promise<PsyOptions> {
+  return jsonFetch<PsyOptions>(withQuery(psyPath("options"), psyQuery({ health_unit_id: unitId })));
+}
+async function psyLookup(body: { cpf: string } | { cns: string }): Promise<PharmacyPerson> {
+  const b = await jsonFetch<Omit<PharmacyPerson, "citizen_id" | "registration_id">>(psyPath("person_lookup"), psyWrite("POST", body));
+  return { ...b, citizen_id: null, registration_id: null };
+}
+export function lookupPsyPerson(cpf: string): Promise<PharmacyPerson> {
+  return psyLookup({ cpf });
+}
+// R16: usuário sem CPF (ex.: em situação de rua) pelo CNS.
+export function lookupPsyPersonByCns(cns: string): Promise<PharmacyPerson> {
+  return psyLookup({ cns });
+}
+export async function findPsyDuplicates(q: DuplicateQuery): Promise<DuplicateCandidate[]> {
+  const b = await jsonFetch<{ candidates?: Omit<DuplicateCandidate, "registration_id">[] }>(
+    psyPath("patients", "duplicates"), psyWrite("POST", psyCompact(q, [ "mother_name" ])));
+  return (b.candidates ?? []).map((c) => ({ ...c, registration_id: null }));
+}
+export function getPsyPrefill(unitId: string, patientId: string): Promise<PsyPrefill> {
+  return jsonFetch<PsyPrefill>(withQuery(psyPath("prefill"), psyQuery({ patient_id: patientId, health_unit_id: unitId })));
+}
+
+// ── Encaminhamento, acolhimento e matrícula ──
+// Da UBS (health_professional em contexto).
+export function createPsyReferral(i: PsyReferralInput): Promise<PsyReferralCreated> {
+  return jsonFetch<PsyReferralCreated>(psyPath("referrals"), psyWrite("POST", i));
+}
+export function listPsyReferrals(unitId: string, q: { status?: ReferralStatus; before?: string | null } = {}): Promise<PsyPage<PsyReferralRow>> {
+  return psyPage(withQuery(psyPath("referrals"), psyQuery({ health_unit_id: unitId, status: q.status ?? "pending", before: q.before })));
+}
+export function getPsyReferral(id: string): Promise<PsyReferral> {
+  return jsonFetch<PsyReferral>(psyPath("referrals", id));
+}
+export function recordPsyReception(i: PsyReceptionInput): Promise<PsyReceptionResult> {
+  return jsonFetch<PsyReceptionResult>(psyPath("receptions"), psyWrite("POST", psyCompact(i, [ "referral_id", "notes", "enrollment" ])));
+}
+export function createPsyEnrollment(i: PsyEnrollmentInput): Promise<PsyEnrollment> {
+  return jsonFetch<PsyEnrollment>(psyPath("enrollments"), psyWrite("POST", i));
+}
+// R13: o filtro por nome é local e precisa da lista inteira — lê todas as páginas (500 por página).
+export async function listPsyEnrollments(q: { unitId: string; status: PsyEnrollmentStatus }): Promise<PsyEnrollmentRow[]> {
+  const rows: PsyEnrollmentRow[] = [];
+  let before: string | null = null;
+  do {
+    const page: PsyPage<PsyEnrollmentRow> = await psyPage(withQuery(psyPath("enrollments"),
+      psyQuery({ health_unit_id: q.unitId, status: q.status, before })));
+    rows.push(...page.items);
+    // Cursor repetido encerraria nunca: para na página que não avança.
+    before = page.next_before !== before ? page.next_before : null;
+  } while (before);
+  return rows;
+}
+export function getPsyEnrollment(id: string): Promise<PsyEnrollment> {
+  return jsonFetch<PsyEnrollment>(psyPath("enrollments", id));
+}
+export function updatePsyEnrollment(id: string, p: PsyEnrollmentPatch): Promise<PsyEnrollment> {
+  return jsonFetch<PsyEnrollment>(psyPath("enrollments", id), psyWrite("PATCH", p));
+}
+export function closePsyEnrollment(id: string, i: PsyEnrollmentClose): Promise<PsyEnrollment> {
+  return jsonFetch<PsyEnrollment>(psyPath("enrollments", id, "close"), psyWrite("POST", i));
+}
+
+// ── PTS (o GET grava a trilha `care_plans`) ──
+export function listPsyCarePlans(enrollmentId: string): Promise<PsyCarePlan[]> {
+  return psyItems<PsyCarePlan>(psyPath("enrollments", enrollmentId, "care_plans"));
+}
+export function createPsyCarePlan(enrollmentId: string, i: PsyCarePlanInput): Promise<PsyCarePlan> {
+  return jsonFetch<PsyCarePlan>(psyPath("enrollments", enrollmentId, "care_plans"), psyWrite("POST", i));
+}
+
+// ── Grupos e Hoje ──
+export function listPsyGroups(unitId: string, q: { active?: boolean } = {}): Promise<PsyGroup[]> {
+  const active = q.active === undefined ? null : String(q.active);
+  return psyItems<PsyGroup>(withQuery(psyPath("groups"), psyQuery({ health_unit_id: unitId, active })));
+}
+export function createPsyGroup(i: PsyGroupInput): Promise<PsyGroup> {
+  return jsonFetch<PsyGroup>(psyPath("groups"), psyWrite("POST", i));
+}
+export function updatePsyGroup(id: string, i: PsyGroupPatch): Promise<PsyGroup> {
+  return jsonFetch<PsyGroup>(psyPath("groups", id), psyWrite("PATCH", i));
+}
+// Sem data, o api usa hoje na cidade.
+export function getPsyToday(unitId: string, date?: string | null): Promise<PsyToday> {
+  return jsonFetch<PsyToday>(withQuery(psyPath("today"), psyQuery({ health_unit_id: unitId, date })));
+}
+
+// ── Ações e documentos ──
+export function createPsyAction(i: PsyActionInput): Promise<PsyAction> {
+  return jsonFetch<PsyAction>(psyPath("actions"), psyWrite("POST", psyCompact(i, [ "notes", "authorization_number", "group_id" ])));
+}
+export function listPsyActions(enrollmentId: string, before?: string | null): Promise<PsyPage<PsyActionRow>> {
+  return psyPage(withQuery(psyPath("actions"), psyQuery({ enrollment_id: enrollmentId, before })));
+}
+export function getPsyAction(id: string): Promise<PsyAction> {
+  return jsonFetch<PsyAction>(psyPath("actions", id));
+}
+// Devolve o item da lista (sem evolução). Mês fechado: só a coordenação (403 `lead_required`).
+export function cancelPsyAction(id: string, reason: string): Promise<PsyActionRow> {
+  return jsonFetch<PsyActionRow>(psyPath("actions", id, "cancel"), psyWrite("POST", { reason }));
+}
+export function listPsyActionDocuments(actionId: string): Promise<ClinicalDocument[]> {
+  return psyItems<ClinicalDocument>(psyPath("actions", actionId, "documents"));
+}
+export function issuePsyDocument(actionId: string, input: PsyDocumentInput, replacesDocumentId?: string | null): Promise<ClinicalDocument> {
+  return jsonFetch<ClinicalDocument>(psyPath("actions", actionId, "documents"), psyWrite("POST", {
+    kind: input.kind, content: input.content, ...(replacesDocumentId ? { replaces_document_id: replacesDocumentId } : {})
+  }));
+}
+export function issuePsyPrescription(actionId: string, content: PrescriptionInput, replacesDocumentId?: string | null): Promise<ClinicalDocument> {
+  return issuePsyDocument(actionId, { kind: "prescription", content }, replacesDocumentId);
+}
+
+// ── Leitos (admin; escrita com step-up) e acolhimento noturno ──
+export function listPsyBeds(unitId: string): Promise<PsyBed[]> {
+  return psyItems<PsyBed>(withQuery(psyPath("beds"), psyQuery({ health_unit_id: unitId })));
+}
+export function createPsyBed(i: PsyBedInput): Promise<PsyBed> {
+  return jsonFetch<PsyBed>(psyPath("beds"), psyWrite("POST", i));
+}
+export function updatePsyBed(id: string, i: PsyBedPatch): Promise<PsyBed> {
+  return jsonFetch<PsyBed>(psyPath("beds", id), psyWrite("PATCH", i));
+}
+export function getPsyBedBoard(unitId: string, date?: string | null): Promise<PsyBedBoard> {
+  return jsonFetch<PsyBedBoard>(withQuery(psyPath("beds", "board"), psyQuery({ health_unit_id: unitId, date })));
+}
+// `reassessment` só quando a coordenação passa do limite de noites.
+export function startPsyNightStay(i: PsyNightStayInput): Promise<PsyNightStay> {
+  return jsonFetch<PsyNightStay>(psyPath("night_stays"), psyWrite("POST", psyCompact(i, [ "reassessment" ])));
+}
+export function getPsyNightStay(id: string): Promise<PsyNightStay> {
+  return jsonFetch<PsyNightStay>(psyPath("night_stays", id));
+}
+export function closePsyNightStay(id: string, i: PsyNightStayClose): Promise<PsyNightStay> {
+  return jsonFetch<PsyNightStay>(psyPath("night_stays", id, "close"), psyWrite("POST", psyCompact(i, [ "reassessment" ])));
+}
+
+// ── Regras da cidade ──
+export function getPsySettings(): Promise<PsySettings> {
+  return jsonFetch<PsySettings>(psyPath("settings"));
+}
+export function updatePsySettings(s: PsySettingsPatch): Promise<PsySettings> {
+  return jsonFetch<PsySettings>(psyPath("settings"), psyWrite("PATCH", s));
+}
+
+// ── RAAS do mês, remessa e fichas ──
+export function getPsyMonth(month: string, unitId: string): Promise<PsyMonth> {
+  return jsonFetch<PsyMonth>(withQuery(psyPath("months", month), psyQuery({ health_unit_id: unitId })));
+}
+export function setPsyHomeless(recordId: string, homeless: boolean): Promise<PsyHomelessResult> {
+  return jsonFetch<PsyHomelessResult>(psyPath("monthly_records", recordId), psyWrite("PATCH", { homeless }));
+}
+// Fechar e reabrir: coordenação, com step-up.
+export function closePsyMonth(month: string, unitId: string): Promise<PsyMonth> {
+  return jsonFetch<PsyMonth>(psyPath("months", month, "close"), psyWrite("POST", { health_unit_id: unitId }));
+}
+export function reopenPsyMonth(month: string, unitId: string, reason: string): Promise<PsyMonth> {
+  return jsonFetch<PsyMonth>(psyPath("months", month, "reopen"), psyWrite("POST", { health_unit_id: unitId, reason }));
+}
+export function listPsyRaasExports(unitId: string, month?: string | null): Promise<PsyRaasExport[]> {
+  return psyItems<PsyRaasExport>(withQuery(psyPath("raas_exports"), psyQuery({ health_unit_id: unitId, month })));
+}
+// Coordenação e faturista, com step-up (P15); sem layout homologado → 422 `raas_layout_unavailable`.
+export function createPsyRaasExport(unitId: string, month: string): Promise<PsyRaasExport> {
+  return jsonFetch<PsyRaasExport>(psyPath("raas_exports"), psyWrite("POST", { health_unit_id: unitId, month }));
+}
+// Arquivo e fichas por fetch (e não por navegação) para a tela mostrar a recusa.
+export function fetchPsyRaasFile(id: string): Promise<SignatureFile> {
+  return binaryFetch(psyPath("raas_exports", id, "file"), "application/octet-stream, */*");
+}
+export function fetchPsySheets(month: string, q: { unitId: string; enrollmentId?: string | null }): Promise<SignatureFile> {
+  return binaryFetch(withQuery(psyPath("months", month, "sheets.pdf"), psyQuery({ health_unit_id: q.unitId, enrollment_id: q.enrollmentId })),
+    "application/pdf");
+}
+
+// ── Matriciamento e vínculo ──
+export function listPsyMatrixSupports(unitId: string, before?: string | null): Promise<PsyPage<PsyMatrixSupportRow>> {
+  return psyPage(withQuery(psyPath("matrix_supports"), psyQuery({ health_unit_id: unitId, before })));
+}
+export function getPsyMatrixSupport(id: string): Promise<PsyMatrixSupport> {
+  return jsonFetch<PsyMatrixSupport>(psyPath("matrix_supports", id));
+}
+export function createPsyMatrixSupport(i: PsyMatrixSupportInput): Promise<PsyMatrixSupport> {
+  return jsonFetch<PsyMatrixSupport>(psyPath("matrix_supports"), psyWrite("POST", i));
+}
+// Devolve só o caso (201): releia o matriciamento para a lista.
+export function addPsyMatrixCase(supportId: string, i: { patient_id: string; shared_text: string }): Promise<PsyMatrixCase> {
+  return jsonFetch<PsyMatrixCase>(psyPath("matrix_supports", supportId, "cases"), psyWrite("POST", i));
+}
+// Da UBS (health_professional em contexto).
+export function getPsyLink(patientId: string): Promise<PsyLink> {
+  return jsonFetch<PsyLink>(psyPath("patients", patientId, "link"));
+}
+
+// ── Linha do tempo do CAPS e painel ──
+export function getPsyEnrollmentTimeline(enrollmentId: string, before?: string | null): Promise<PsyPage<TimelineEntry>> {
+  return psyPage(withQuery(psyPath("enrollments", enrollmentId, "timeline"), psyQuery({ before })));
+}
+// Sem `unitId`, todos os CAPS que o papel alcança.
+export function getPsyDashboard(q: { month?: string | null; unitId?: string | null }): Promise<PsyDashboard> {
+  return jsonFetch<PsyDashboard>(withQuery(psyPath("dashboard"), psyQuery({ month: q.month, health_unit_id: q.unitId })));
 }

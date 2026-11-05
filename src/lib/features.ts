@@ -11,7 +11,7 @@ export type FeatureKey =
   | "municipal_lab" | "lab_hl7_inbound" | "fake_middleware" | "lab_quality_control" | "lab_inventory"
   | "procedure_billing" | "care_lines" | "territory_registry" | "surveillance" | "care_regulation"
   | "pharmacy" | "dental_care" | "vaccination" | "rnds_immunization" | "rnds_mock"
-  | "sanitary_transport" | "tfd";
+  | "sanitary_transport" | "tfd" | "psychosocial_care";
 
 export const FEATURE_DISABLED_MESSAGE = "esta funcionalidade está desligada para a cidade";
 
@@ -52,7 +52,9 @@ const FEATURE_LABEL: Record<string, string> = {
   rnds_mock: "RNDS simulada (fora de produção)",
   // Módulo 30 (ADR 0048): tfd exige sanitary_transport e clinical_record
   sanitary_transport: "Transporte sanitário",
-  tfd: "Tratamento Fora de Domicílio (TFD)"
+  tfd: "Tratamento Fora de Domicílio (TFD)",
+  // Módulo 31 (ADR 0049): exige clinical_record
+  psychosocial_care: "Atenção psicossocial (CAPS)"
 };
 
 export function sessionFeatures(user: { features?: unknown } | null | undefined): string[] {

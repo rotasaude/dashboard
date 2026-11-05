@@ -40,6 +40,8 @@ describe("features da sessão (contratos §1)", () => {
     expect(hasFeature({ features: [ "controlled_prescriptions" ] }, "controlled_prescriptions")).toBe(true);
     expect(featureLabel("sanitary_transport")).toBe("Transporte sanitário");
     expect(featureLabel("tfd")).toBe("Tratamento Fora de Domicílio (TFD)");
+    expect(featureLabel("psychosocial_care")).toBe("Atenção psicossocial (CAPS)");
+    expect(hasFeature({ features: [ "psychosocial_care" ] }, "psychosocial_care")).toBe(true);
     expect(featureLabel("rnds_sync")).toBe("rnds_sync");
   });
   it("patient_timeline (módulo 20) tem rótulo e é lida da sessão", () => {

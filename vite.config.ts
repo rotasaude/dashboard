@@ -25,6 +25,7 @@ import react from "@vitejs/plugin-react";
 //   /vaccination → sala de vacina (módulo 29: caderneta, dose, frascos, cadeia de frio, resumo e painel).
 //   /transport → transporte sanitário (módulo 30: frota, viagens, séries, motorista, painel)
 //   /tfd → TFD (módulo 30: laudo, comissão, trechos, ajuda de custo, pagamento)
+//   /psychosocial → CAPS (módulo 31: acolhimento, matrícula, PTS, ações, leitos, RAAS, matriciamento, painel)
 //   /signature  → assinatura digital (módulo 19b). O prestador devolve a pessoa a
 //                 /dashboard/signature/callback (base do Vite), que NÃO casa com este
 //                 prefixo: o retorno é do dashboard, e só o POST /signature/oauth/callback vai ao api.
@@ -97,7 +98,9 @@ export default defineConfig({
       "^/vaccination(/|$)": proxy(TARGET),
       // Módulo 30: transporte sanitário e TFD (inclui /tfd/files/:token). Regex: não casa outro caminho que só comece com as letras.
       "^/transport(/|$)": proxy(TARGET),
-      "^/tfd(/|$)": proxy(TARGET)
+      "^/tfd(/|$)": proxy(TARGET),
+      // Módulo 31: atenção psicossocial (CAPS). Regex como os vizinhos.
+      "^/psychosocial(/|$)": proxy(TARGET)
     }
   }
 });
