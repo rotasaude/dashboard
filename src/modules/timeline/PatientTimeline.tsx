@@ -14,6 +14,7 @@ import {
   timelineKinds, toggleKind, type DetailTarget, type FilterDraft
 } from "../../lib/timeline";
 import { hasFeature } from "../../lib/features";
+import { canUsePsychosocial } from "../../lib/psychosocial";
 import { useAuth } from "../../lib/auth";
 import { OPENING_ENDED } from "../../lib/clinicalRecord";
 import { VERIFIER_ROLE } from "../../lib/team";
@@ -45,7 +46,8 @@ export function PatientTimeline({
   // O pedido de agendamento só abre para quem tem citizen_verifier (a rota exige o papel).
   const { user } = useAuth();
   const canOpenRequests = !!user?.memberships.some((m) => m.role === VERIFIER_ROLE);
-  const kinds = timelineKinds(hasFeature(user, "exam_tracking"), hasFeature(user, "procedure_billing"), hasFeature(user, "pharmacy"), hasFeature(user, "vaccination"), hasFeature(user, "sanitary_transport"));
+  const kinds = timelineKinds(hasFeature(user, "exam_tracking"), hasFeature(user, "procedure_billing"), hasFeature(user, "pharmacy"), hasFeature(user, "vaccination"), hasFeature(user, "sanitary_transport"),
+    canUsePsychosocial(user));
   const key = subjectKey(subject);
   const queryClient = useQueryClient();
   // Fim da abertura (403 opening_required, ou out_of_context pela abertura):

@@ -25,8 +25,12 @@ export const TIMELINE_KINDS: { key: TimelineKind; label: string }[] = [
   { key: "procedure", label: "Procedimento" },
   { key: "dispensation", label: "Dispensação" },
   { key: "vaccination", label: "Vacina" },
-  { key: "transport", label: "Transporte" }
+  { key: "transport", label: "Transporte" },
+  { key: "psychosocial_link", label: "CAPS" }
 ];
+// Módulo 31 (P18): `psychosocial` é o kind da linha do tempo só do CAPS (GET /psychosocial/enrollments/:id/timeline); nunca entra no
+// filtro da geral (o api recusa com 422 invalid_kinds), mas ganha rótulo.
+const EXTRA_KIND_LABEL: Record<string, string> = { psychosocial: "CAPS" };
 
 // O tipo Exame só existe com o rastreamento de exames ligado (módulo 21a); o
 // Procedimento, com o faturamento de procedimentos (módulo 22); a Dispensação,
@@ -34,9 +38,14 @@ export const TIMELINE_KINDS: { key: TimelineKind; label: string }[] = [
 // api devolve continua na lista (registro clínico retido).
 // o Transporte, com o transporte sanitário — módulo 30 (a entrada de TFD também é `transport`, com título 'TFD para <cidade>'; nenhuma
 // abre detalhe, D12).
-export function timelineKinds(examTracking: boolean, procedureBilling = false, pharmacy = false, vaccination = false, transport = false): typeof TIMELINE_KINDS {
+// Módulo 31 (D18): marcador sem texto 'Acompanhamento no CAPS <nome>', detail_ref nulo; o resto do CAPS nunca entra na geral. O filtro
+// "CAPS" só existe com `canUsePsychosocial`; o marcador continua na lista com o interruptor desligado (P51: registro retido).
+export function timelineKinds(
+  examTracking: boolean, procedureBilling = false, pharmacy = false, vaccination = false, transport = false, psychosocial = false
+): typeof TIMELINE_KINDS {
   return TIMELINE_KINDS.filter((k) =>
-    (k.key !== "exam" || examTracking) && (k.key !== "procedure" || procedureBilling) && (k.key !== "dispensation" || pharmacy) && (k.key !== "vaccination" || vaccination) && (k.key !== "transport" || transport));
+    (k.key !== "exam" || examTracking) && (k.key !== "procedure" || procedureBilling) && (k.key !== "dispensation" || pharmacy) && (k.key !== "vaccination" || vaccination) && (k.key !== "transport" || transport)
+    && (k.key !== "psychosocial_link" || psychosocial));
 }
 
 export const ALL_FILTERS: TimelineFilters = { kinds: [], from: "", to: "" };
@@ -46,7 +55,7 @@ export const TIMELINE_EMPTY = "nenhum registro neste período";
 export const TIMELINE_DISABLED = "a linha do tempo está desligada nesta cidade";
 
 export function timelineKindLabel(kind: string): string {
-  return TIMELINE_KINDS.find((k) => k.key === kind)?.label ?? kind;
+  return TIMELINE_KINDS.find((k) => k.key === kind)?.label ?? EXTRA_KIND_LABEL[kind] ?? kind;
 }
 
 export function subjectKey(subject: TimelineSubject): string {
@@ -80,8 +89,8 @@ export function filtersFrom(d: FilterDraft, kinds = TIMELINE_KINDS): TimelineFil
 }
 
 // O cursor composto não repete, mas uma entrada que muda entre duas leituras
-// (ex.: documento cancelado) não pode aparecer duas vezes: vale a primeira.
-export function mergePages(pages: TimelinePage[]): TimelineEntry[] {
+// (ex.: documento cancelado) não pode aparecer duas vezes: vale a primeira. Serve também à linha do tempo do CAPS (só `entries`).
+export function mergePages(pages: Pick<TimelinePage, "entries">[]): TimelineEntry[] {
   const seen = new Set<string>();
   const out: TimelineEntry[] = [];
   for (const p of pages) {

@@ -1,7 +1,7 @@
 // Detalhe da matrícula no CAPS (F-31.2, F-31.3): lido só depois do clique (`GET /psychosocial/enrollments/:id`, o api grava a trilha),
 // com `NOMINAL_QUERY` e o id do CAPS na chave; ao desmontar, a chave sai do cache. Abas "Matrícula" (dados, edição e encerramento),
 // "PTS" (versões; o GET grava a trilha `care_plans` e só corre ao abrir a aba), "Ações" (a lista só corre ao abrir a aba) e "Linha do
-// tempo" (Task 14).
+// tempo" (`CapsTimeline`; só corre ao abrir a aba).
 // O CID vem sem ponto e aparece com ponto (R5); destino, origem e substância pelos rótulos de `options` (código novo aparece cru).
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -19,6 +19,7 @@ import { buttonStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { SegmentedControl } from "../../shell/SegmentedControl";
 import { alert, grid, muted, okText, row } from "../exams/styles";
 import { ActionsPanel } from "./ActionsPanel";
+import { CapsTimeline } from "./CapsTimeline";
 import { CarePlans } from "./CarePlans";
 import { CloseEnrollment } from "./CloseEnrollment";
 import { EnrollmentEdit } from "./EnrollmentEdit";
@@ -115,7 +116,7 @@ export function EnrollmentView({ enrollmentId, unit, options, roles, today, now,
             {tab === "actions" && (
               <ActionsPanel enrollment={e} unit={unit} options={options} roles={roles} today={today} now={now} onGoToSecurity={onGoToSecurity} />
             )}
-            {/* "Linha do tempo" (Task 14) encaixa aqui. */}
+            {tab === "timeline" && <CapsTimeline enrollmentId={e.id} unitId={unit.id} />}
           </>
         )}
       </div>

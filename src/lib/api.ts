@@ -2368,7 +2368,9 @@ export type TimelineKind =
   // Módulo 29 (D11; V10): dose de vacina, com detail_ref { type: "immunization", id }.
   | "vaccination"
   // Módulo 30 (D12): viagem e TFD, detail_ref nulo.
-  | "transport";
+  | "transport"
+  // Módulo 31 (D18; P18, P46, P51): marcador "Acompanhamento no CAPS", sem nome do CAPS, unit e detail_ref nulos.
+  | "psychosocial_link";
 
 export interface TimelineDetailRef { type: string; id: string }
 export interface TimelineEntry {
