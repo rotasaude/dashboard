@@ -11,12 +11,12 @@ import * as api from "../../lib/api";
 import { ApiError } from "../../lib/api";
 import {
   LINK_CASES_TITLE, LINK_TITLE, NO_ACTIVE_CAPS, PSY_DISABLED, PSY_ERRORS, REFERRAL_CAPS_TEXT, REFERRAL_NOTE, REFERRAL_REASON_TEXT, REFERRAL_SENT,
-  REFER_BUTTON, canSeePsychosocialLink, linkReferenceText, linkSinceText
+  PSY_DETAIL_KEY, REFER_BUTTON, canSeePsychosocialLink, linkHidden, linkReferenceText, linkSinceText
 } from "../../lib/psychosocial";
 import { PatientPanel } from "../consultation/PatientPanel";
 import { ConsultationWorkspace } from "../consultation/ConsultationWorkspace";
 import { JustifiedRecord } from "../clinicalRecord/JustifiedRecord";
-import { PsychosocialLinkCard } from "./PsychosocialLinkCard";
+import { PsychosocialLinkCard, capsPhoneText } from "./PsychosocialLinkCard";
 
 vi.mock("../../lib/api", async (orig) => ({ ...(await orig<typeof api>()), fetchCurrentSession: vi.fn(), getPsyLink: vi.fn(),
   createPsyReferral: vi.fn(), listActiveUnits: vi.fn(), getJustifiedRecord: vi.fn(), getAttendanceRecord: vi.fn(),
@@ -60,8 +60,12 @@ describe("cartão do vínculo com o CAPS", () => {
     mount({ patientId: "pt1", canRefer: true });
     expect(await screen.findByText(linkSinceText("2026-09-10"))).not.toBeNull();
     expect(linkSinceText("2026-09-10")).toBe("Em acompanhamento no CAPS desde 10/09/2026");
-    expect(screen.getByText(linkReferenceText(ME_PSY.name, "4133334444"))).not.toBeNull();
-    expect(linkReferenceText(ME_PSY.name, "4133334444")).toBe("Técnico de referência: Lia Psicóloga · (41) 3333-4444");
+    // Duas linhas (P48): o telefone é do CAPS, não do técnico.
+    expect(screen.getByText(linkReferenceText(ME_PSY.name, null))).not.toBeNull();
+    expect(linkReferenceText(ME_PSY.name, null)).toBe("Técnico de referência: Lia Psicóloga");
+    expect(screen.getByText(capsPhoneText("4133334444"))).not.toBeNull();
+    expect(capsPhoneText("4133334444")).toBe("Telefone do CAPS: (41) 3333-4444");
+    expect(screen.queryByText(/Técnico de referência:.*3333/)).toBeNull();
     expect(screen.getByText(LINK_CASES_TITLE)).not.toBeNull();
     expect(screen.getByText("03/11/2026")).not.toBeNull();
     expect(screen.getByText("Combinar visita domiciliar com a ACS.")).not.toBeNull();
@@ -69,11 +73,19 @@ describe("cartão do vínculo com o CAPS", () => {
     expect(screen.queryByRole("button", { name: REFER_BUTTON })).toBeNull();
   });
 
-  it("com matrícula e sem telefone: só o técnico de referência", async () => {
+  it("com matrícula e sem telefone: só o técnico de referência, sem a linha do telefone", async () => {
     vi.mocked(api.getPsyLink).mockResolvedValue(psyLink({ caps: { phone: null }, shared_cases: [] }));
     mount({ patientId: "pt1", canRefer: true });
     expect(await screen.findByText(`Técnico de referência: ${ME_PSY.name}`)).not.toBeNull();
+    expect(screen.queryByText(/Telefone do CAPS/)).toBeNull();
     expect(screen.queryByText(LINK_CASES_TITLE)).toBeNull();
+  });
+
+  it("com matrícula e sem técnico de referência: só a linha do telefone", async () => {
+    vi.mocked(api.getPsyLink).mockResolvedValue({ ...psyLink({ shared_cases: [] }), reference: null } as never);
+    mount({ patientId: "pt1", canRefer: true });
+    expect(await screen.findByText(capsPhoneText("4133334444"))).not.toBeNull();
+    expect(screen.queryByText(/Técnico de referência/)).toBeNull();
   });
 
   it("sem matrícula e com caso compartilhado (depois da alta): os casos e o botão", async () => {
@@ -98,14 +110,26 @@ describe("cartão do vínculo com o CAPS", () => {
     [ "feature_disabled", new ApiError(403, { error: "feature_disabled", feature: "psychosocial_care" }, "x") ]
   ])("403 %s: o cartão some, sem frase e sem botão", async (_code, err) => {
     vi.mocked(api.getPsyLink).mockRejectedValue(err);
-    const { container } = mount({ patientId: "pt1", canRefer: true });
-    await waitFor(() => expect(api.getPsyLink).toHaveBeenCalledTimes(1));
-    await new Promise((r) => setTimeout(r, 0));
+    const { container, client } = mount({ patientId: "pt1", canRefer: true });
+    // Sinal positivo: a leitura terminou em erro (não basta o cartão vazio do carregamento).
+    await waitFor(() => expect(client.getQueryState([ PSY_DETAIL_KEY, "link", "pt1" ])?.status).toBe("error"));
     expect(container.textContent).toBe("");
     expect(screen.queryByText(LINK_TITLE)).toBeNull();
     expect(screen.queryByText(PSY_ERRORS.out_of_context)).toBeNull();
     expect(screen.queryByText(PSY_DISABLED)).toBeNull();
     expect(screen.queryByRole("button", { name: REFER_BUTTON })).toBeNull();
+  });
+
+  it.each([
+    [ "out_of_context", new ApiError(403, { error: "out_of_context" }, "x"), true ],
+    [ "missing_role", new ApiError(403, { error: "missing_role" }, "x"), true ],
+    [ "feature_disabled", new ApiError(403, { error: "feature_disabled", feature: "psychosocial_care" }, "x"), true ],
+    [ "feature_disabled sem chave", new ApiError(403, { error: "feature_disabled" }, "x"), true ],
+    [ "not_found", new ApiError(404, { error: "not_found" }, "x"), false ],
+    [ "erro do servidor", new ApiError(500, { error: "internal" }, "x"), false ],
+    [ "sem rede", new TypeError("failed to fetch"), false ]
+  ])("linkHidden(%s) = %s", (_name, err, hidden) => {
+    expect(linkHidden(err)).toBe(hidden);
   });
 
   it("outra recusa: frase discreta, sem botão", async () => {

@@ -8,6 +8,7 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getPsyLink, type PsySharedCase } from "../../lib/api";
 import { fmtDay } from "../../lib/careLines";
+import { formatPhone } from "../../lib/controlled";
 import {
   LINK_CASES_TITLE, LINK_TITLE, NOMINAL_QUERY, PSY_DETAIL_KEY, REFERRAL_SENT, REFER_BUTTON, linkHidden, linkReferenceText, linkSinceText, psyError
 } from "../../lib/psychosocial";
@@ -15,7 +16,10 @@ import { secondaryButtonStyle } from "../../components/formStyles";
 import { list, muted, okText } from "../exams/styles";
 import { ReferralForm } from "./ReferralForm";
 
-type LinkView = { since: string | null; reference: string | null; phone: string | null; cases: PsySharedCase[] };
+type LinkView = { enrolled: boolean; since: string | null; reference: string | null; phone: string | null; cases: PsySharedCase[] };
+
+// O telefone é do CAPS (P48), em linha própria — não do técnico de referência.
+export const capsPhoneText = (phone: string): string => `Telefone do CAPS: ${formatPhone(phone)}`;
 
 // Só os campos do contrato; qualquer outro (nome do CAPS, CID, PTS) fica fora, mesmo que o api mande por engano.
 function viewOf(data: unknown): LinkView {
@@ -29,7 +33,7 @@ function viewOf(data: unknown): LinkView {
   });
   const enrolled = d.enrolled === true;
   return {
-    since: enrolled ? str(d.since) : null, reference: enrolled ? str(field(d.reference, "name")) : null,
+    enrolled, since: enrolled ? str(d.since) : null, reference: enrolled ? str(field(d.reference, "name")) : null,
     phone: enrolled ? str(field(d.caps, "phone")) : null, cases
   };
 }
@@ -59,15 +63,15 @@ export function PsychosocialLinkCard({ patientId, canRefer }: { patientId: strin
     );
   }
   const v = viewOf(link.data);
-  const enrolled = link.data.enrolled === true;
-  const offerReferral = canRefer && !enrolled;
-  if (!enrolled && v.cases.length === 0 && !offerReferral) return null;
+  const offerReferral = canRefer && !v.enrolled;
+  if (!v.enrolled && v.cases.length === 0 && !offerReferral) return null;
 
   return (
     <div style={block}>
       <strong style={sub}>{LINK_TITLE}</strong>
-      {enrolled && v.since && <p style={text}>{linkSinceText(v.since)}</p>}
-      {enrolled && v.reference && <p style={text}>{linkReferenceText(v.reference, v.phone)}</p>}
+      {v.since && <p style={text}>{linkSinceText(v.since)}</p>}
+      {v.reference && <p style={text}>{linkReferenceText(v.reference, null)}</p>}
+      {v.phone && <p style={text}>{capsPhoneText(v.phone)}</p>}
       {v.cases.length > 0 && (
         <>
           <span style={sub}>{LINK_CASES_TITLE}</span>
