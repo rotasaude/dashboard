@@ -42,9 +42,11 @@ const GENERIC = "não foi possível concluir — tente de novo";
 type SessionLike = { operator?: boolean; memberships?: { role: string }[]; features?: unknown } | null | undefined;
 const rolesOf = (user: SessionLike) => user?.memberships?.map((m) => m.role) ?? [];
 
+// Módulo 31 (R10/P47): a equipe do CAPS assina o documento da ação de que é autora — o api limita a fila a esses documentos.
+const SIGNER_ROLES = [ "health_professional", "lab_releaser", "psychosocial_staff", "psychosocial_lead" ];
 export function canSign(user: SessionLike): boolean {
   const roles = rolesOf(user);
-  return !!user && !user.operator && (roles.includes("health_professional") || roles.includes("lab_releaser")) && hasFeature(user, "digital_signature");
+  return !!user && !user.operator && roles.some((r) => SIGNER_ROLES.includes(r)) && hasFeature(user, "digital_signature");
 }
 
 export function canSeeSignatureOverview(user: SessionLike): boolean {

@@ -76,8 +76,10 @@ export function controlledOn(user: SessionLike): boolean {
   return !!user && !user.operator && hasFeature(user, "clinical_documents") && hasFeature(user, "controlled_prescriptions");
 }
 
+// Módulo 31 (R10, P56): a equipe do CAPS pede o próprio estoque; o número só sai na receita da ação de que ela é autora (api).
+const SNCR_ROLES = [ "health_professional", "psychosocial_staff", "psychosocial_lead" ];
 export function canRequestSncr(user: SessionLike): boolean {
-  return controlledOn(user) && rolesOf(user).includes("health_professional");
+  return controlledOn(user) && rolesOf(user).some((r) => SNCR_ROLES.includes(r));
 }
 
 export function canSeeSncrOverview(user: SessionLike): boolean {

@@ -47,6 +47,10 @@ describe("quem pode", () => {
   it("SNCR do profissional; painel do admin; simulado com sncr_mock", () => {
     expect(canRequestSncr(controlledUser())).toBe(true);
     expect(canRequestSncr(controlledUser([ "municipal_admin" ]))).toBe(false);
+    // R10 (P56): a equipe do CAPS pede o próprio estoque; o número só sai na receita de que ela é autora (api).
+    expect(canRequestSncr(controlledUser([ "psychosocial_staff" ]))).toBe(true);
+    expect(canRequestSncr(controlledUser([ "psychosocial_lead" ]))).toBe(true);
+    expect(canRequestSncr(controlledUser([ "psychosocial_staff" ], { features: [ "clinical_documents" ] }))).toBe(false);
     expect(canSeeSncrOverview(controlledUser([ "municipal_admin" ]))).toBe(true);
     expect(canSeeSncrOverview(controlledUser())).toBe(false);
     expect(usesSimulatedSncr(controlledUser())).toBe(false);

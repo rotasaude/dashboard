@@ -23,6 +23,13 @@ describe("quem pode", () => {
     expect(canSign(null)).toBe(false);
   });
 
+  it("assinar: a equipe do CAPS também (R10/P47; o api limita aos documentos de que ela é autora)", () => {
+    expect(canSign(user([ "psychosocial_staff" ]))).toBe(true);
+    expect(canSign(user([ "psychosocial_lead" ]))).toBe(true);
+    expect(canSign(user([ "psychosocial_staff" ], [ "psychosocial_care" ]))).toBe(false);
+    expect(canSign(user([ "psychosocial_lead" ], [ "digital_signature" ], true))).toBe(false);
+  });
+
   it("painel: municipal_admin com digital_signature, nunca operador", () => {
     expect(canSeeSignatureOverview(user([ "municipal_admin" ]))).toBe(true);
     expect(canSeeSignatureOverview(user([ "municipal_admin" ], []))).toBe(false);

@@ -352,8 +352,9 @@ export function navGroupsFor(
     if (group.label === "Cidade") return isAdmin;
     if (group.label === "Comunicação") return canCampaigns;
     if (group.label === "Análise") return canAnalytics;
-    // 21b: o liberador só do laboratório (patologista, CRM) assina laudo ICP em Pendentes.
-    if (group.label === "Atendimento") return canAttend || (isReleaser && canSign(user));
+    // 21b: o liberador só do laboratório (patologista, CRM) assina laudo ICP em Pendentes; módulo 31 (R10): a equipe do CAPS
+    // assina ali o documento da ação de que é autora.
+    if (group.label === "Atendimento") return canAttend || ((isReleaser || psy.staff) && canSign(user));
     return true;
   }).map((group) => ({
     ...group,
