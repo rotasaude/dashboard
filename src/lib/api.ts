@@ -6081,6 +6081,8 @@ export interface PsyOptions {
   intensities: (CareIntensity | string)[]; places: (PsyPlace | string)[]; group_kinds: (PsyGroupKind | string)[];
   reception_outcomes: (ReceptionOutcome | string)[]; referral_priorities: (ReferralPriority | string)[];
   night_sigtap_code: string; competence: string; procedures: PsyProcedure[]; team: PsyPro[]; health_teams: PsyHealthTeam[];
+  // Prazo do PTS do CAPS (dias): a revisão sugerida e o prazo do primeiro PTS. Pode faltar num api antigo (a tela usa a reserva).
+  care_plan_review_days: number;
 }
 // eSF tipo 70; eSF sem CNES → `esf_covered: true, esf_cnes: null` (P38).
 export interface PsyPrefill {
@@ -6305,6 +6307,13 @@ export function createPsyEnrollment(i: PsyEnrollmentInput): Promise<PsyEnrollmen
 }
 // R13: o filtro por nome é local e precisa da lista inteira — lê todas as páginas (500 por página).
 const PSY_MAX_PAGES = 50;
+// Defesa em profundidade: a lista (que vai ao cache) leva só estes campos, mesmo que o api mande outro por engano.
+const psyPatientRef = (p: PsyPatientRef): PsyPatientRef => ({ patient_id: p.patient_id, name: p.name, cns_masked: p.cns_masked ?? null });
+const psyPro = (p: PsyPro): PsyPro => ({ user_id: p.user_id, name: p.name, cbo_code: p.cbo_code ?? null });
+const psyEnrollmentRow = (r: PsyEnrollmentRow): PsyEnrollmentRow => ({
+  id: r.id, patient: psyPatientRef(r.patient), started_on: r.started_on, reference: psyPro(r.reference), next_visit_at: r.next_visit_at ?? null,
+  status: r.status, care_plan_review_on: r.care_plan_review_on ?? null
+});
 export async function listPsyEnrollments(q: { unitId: string; status: PsyEnrollmentStatus }): Promise<PsyEnrollmentRow[]> {
   const rows: PsyEnrollmentRow[] = [];
   const seen = new Set<string>();
@@ -6312,7 +6321,7 @@ export async function listPsyEnrollments(q: { unitId: string; status: PsyEnrollm
   for (let n = 0; n < PSY_MAX_PAGES; n++) {
     const page: PsyPage<PsyEnrollmentRow> = await psyPage(withQuery(psyPath("enrollments"),
       psyQuery({ health_unit_id: q.unitId, status: q.status, before })));
-    rows.push(...page.items);
+    rows.push(...page.items.map(psyEnrollmentRow));
     // Cursor que já passou (ou que não acaba) prenderia o laço: para ali.
     if (!page.next_before || seen.has(page.next_before)) break;
     seen.add(page.next_before);
@@ -6337,8 +6346,9 @@ export function listPsyCarePlans(enrollmentId: string): Promise<PsyCarePlan[]> {
 export function createPsyCarePlan(enrollmentId: string, i: PsyCarePlanInput): Promise<PsyCarePlan> {
   return jsonFetch<PsyCarePlan>(psyPath("enrollments", enrollmentId, "care_plans"), psyWrite("POST", i));
 }
-export function listPsyCarePlansDue(unitId: string): Promise<PsyCarePlanDue[]> {
-  return psyItems<PsyCarePlanDue>(withQuery(psyPath("care_plans", "due"), psyQuery({ health_unit_id: unitId })));
+export async function listPsyCarePlansDue(unitId: string): Promise<PsyCarePlanDue[]> {
+  const items = await psyItems<PsyCarePlanDue>(withQuery(psyPath("care_plans", "due"), psyQuery({ health_unit_id: unitId })));
+  return items.map((r) => ({ enrollment_id: r.enrollment_id, patient: psyPatientRef(r.patient), review_on: r.review_on ?? null }));
 }
 
 // ── Grupos e Hoje ──

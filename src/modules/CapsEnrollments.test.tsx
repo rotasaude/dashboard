@@ -1,5 +1,6 @@
 // Usuários do CAPS (F-31.2, F-31.3): lista sem dado clínico, filtro por nome local, detalhe só no clique (com o id do CAPS na
 // chave), edição só do que mudou, encerramento com destino e PTS com versões. As frases vêm da lib.
+import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import { renderWithProviders } from "../test/campaignFixtures";
@@ -8,8 +9,8 @@ import * as api from "../lib/api";
 import { ApiError } from "../lib/api";
 import { addDays } from "../lib/campaigns";
 import {
-  CARE_PLAN_OVERDUE_TAG, CARE_PLAN_SAVED, CLOSE_NOTE, DEFAULT_CARE_PLAN_REVIEW_DAYS, DUE_LEAD_NOTE, DUE_STAFF_NOTE, ENROLLMENT_CLOSED, ENROLLMENT_UPDATED,
-  NOTHING_CHANGED, NO_CARE_PLAN, NO_CLINICAL_IN_LIST, PSY_DETAIL_KEY, PSY_ERRORS, RESPONSIBLE_OUT, TRAIL_NOTE, carePlanProblems, closeProblems,
+  CARE_PLAN_OVERDUE_TAG, CARE_PLAN_SAVED, CLOSE_NOTE, DEFAULT_CARE_PLAN_REVIEW_DAYS, DUE_LEAD_NOTE, DUE_STAFF_NOTE, ENROLLMENT_CLOSED, ENROLLMENT_OTHER_CAPS,
+  ENROLLMENT_UPDATED, NOTHING_CHANGED, NO_CARE_PLAN, NO_CARE_PLAN_DUE, NO_CLINICAL_IN_LIST, PSY_DETAIL_KEY, PSY_ERRORS, RESPONSIBLE_OUT, TRAIL_NOTE, carePlanProblems, closeProblems,
   enrollmentProblems, emptyEnrollmentDraft, psyError
 } from "../lib/psychosocial";
 import { CapsEnrollments } from "./CapsEnrollments";
@@ -30,11 +31,14 @@ beforeEach(() => {
   vi.mocked(api.listPsyCarePlans).mockResolvedValue([ carePlan() ]);
 });
 
-function mount(o: { roles?: string[]; units?: api.PsyUnit[]; initialEnrollmentId?: string | null } = {}) {
+function mount(o: {
+  roles?: string[]; units?: api.PsyUnit[]; initialEnrollment?: { enrollmentId: string; unitId: string } | null; strict?: boolean; options?: api.PsyOptions;
+} = {}) {
   vi.mocked(api.fetchCurrentSession).mockResolvedValue(psyUser(o.roles));
   vi.mocked(api.listPsyUnits).mockResolvedValue(o.units ?? [ CAPS_II, CAPS_AD_III ]);
-  vi.mocked(api.getPsyOptions).mockResolvedValue(OPTIONS);
-  return renderWithProviders(<CapsEnrollments today={TODAY31} now={NOW31} initialEnrollmentId={o.initialEnrollmentId} />);
+  vi.mocked(api.getPsyOptions).mockResolvedValue(o.options ?? OPTIONS);
+  const ui = <CapsEnrollments today={TODAY31} now={NOW31} initialEnrollment={o.initialEnrollment} />;
+  return renderWithProviders(o.strict ? <StrictMode>{ui}</StrictMode> : ui);
 }
 
 async function openDetail(o: Parameters<typeof mount>[0] = {}) {
@@ -116,15 +120,42 @@ describe("Usuários do CAPS", () => {
     expect(await screen.findByText(DUE_LEAD_NOTE)).not.toBeNull();
   });
 
-  it("matrícula vinda do acolhimento abre uma vez; trocar de CAPS não reabre sem clique", async () => {
-    mount({ initialEnrollmentId: "en1" });
+  it("matrícula vinda do acolhimento (StrictMode) abre direto no CAPS dela, uma vez; trocar de CAPS não reabre sem clique", async () => {
+    vi.mocked(api.getPsyEnrollment).mockResolvedValue(enrollment({ health_unit_id: CAPS_AD_III.id }));
+    mount({ strict: true, initialEnrollment: { enrollmentId: "en1", unitId: CAPS_AD_III.id } });
     expect(await screen.findByText(/F32\.2/)).not.toBeNull();
-    fireEvent.change(screen.getByLabelText("CAPS"), { target: { value: CAPS_AD_III.id } });
-    await waitFor(() => expect(screen.queryByText(/F32\.2/)).toBeNull());
+    expect((screen.getByLabelText("CAPS") as HTMLSelectElement).value).toBe(CAPS_AD_III.id);
+    expect(api.getPsyEnrollment).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(api.listPsyEnrollments).mock.calls[0]).toEqual([ { unitId: CAPS_AD_III.id, status: "open" } ]);
     fireEvent.change(screen.getByLabelText("CAPS"), { target: { value: CAPS_II.id } });
+    await waitFor(() => expect(screen.queryByText(/F32\.2/)).toBeNull());
+    fireEvent.change(screen.getByLabelText("CAPS"), { target: { value: CAPS_AD_III.id } });
     await screen.findByText("Maria da Silva");
     expect(screen.queryByText(/F32\.2/)).toBeNull();
     expect(api.getPsyEnrollment).toHaveBeenCalledTimes(1);
+  });
+
+  it("matrícula de um CAPS que não é do usuário: a frase, nada é lido (sem trilha)", async () => {
+    mount({ initialEnrollment: { enrollmentId: "en1", unitId: "caps-de-fora" } });
+    expect(await screen.findByText(ENROLLMENT_OTHER_CAPS)).not.toBeNull();
+    await screen.findByText("Maria da Silva");
+    expect(api.getPsyEnrollment).not.toHaveBeenCalled();
+  });
+
+  it("Fechar devolve o foco ao botão Abrir de origem", async () => {
+    await openDetail();
+    fireEvent.click(screen.getByRole("button", { name: "Fechar" }));
+    await waitFor(() => expect(document.activeElement?.getAttribute("aria-label")).toBe("Abrir Maria da Silva"));
+  });
+
+  it("sem PTS: prazo do primeiro PTS pelo care_plan_review_days de options (início + dias < hoje)", async () => {
+    vi.mocked(api.listPsyEnrollments).mockResolvedValue([ enrollmentRow({ care_plan_review_on: null }) ]);
+    mount({ options: { ...OPTIONS, care_plan_review_days: 30 } });
+    expect(await screen.findByText(NO_CARE_PLAN_DUE)).not.toBeNull();
+    cleanup();
+    mount({ options: { ...OPTIONS, care_plan_review_days: 90 } });
+    expect(await screen.findByText(NO_CARE_PLAN)).not.toBeNull();
+    expect(screen.queryByText(NO_CARE_PLAN_DUE)).toBeNull();
   });
 
   it("detalhe que sumiu (404) fecha e relê a lista", async () => {
@@ -315,6 +346,29 @@ describe("PTS", () => {
     const after = screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent).filter((t) => t?.startsWith("Versão"));
     expect(after[0]).toBe("Versão 3");
     expect(api.listPsyCarePlans).toHaveBeenCalledTimes(1);
+  });
+
+  it("revisão sugerida: hoje + care_plan_review_days de options; sem o campo, a reserva da lib", async () => {
+    await openDetail({ options: { ...OPTIONS, care_plan_review_days: 60 } });
+    fireEvent.click(screen.getByRole("tab", { name: "PTS" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Revisar PTS (nova versão)" }));
+    expect((screen.getByLabelText("Próxima revisão") as HTMLInputElement).value).toBe(addDays(TODAY31, 60));
+    cleanup();
+    await openDetail({ options: { ...OPTIONS, care_plan_review_days: undefined as unknown as number } });
+    fireEvent.click(screen.getByRole("tab", { name: "PTS" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Revisar PTS (nova versão)" }));
+    expect((screen.getByLabelText("Próxima revisão") as HTMLInputElement).value).toBe(addDays(TODAY31, DEFAULT_CARE_PLAN_REVIEW_DAYS));
+  });
+
+  it("matrícula encerrada por outra pessoa (409 already_closed) fecha o formulário do PTS", async () => {
+    await openDetail();
+    fireEvent.click(screen.getByRole("tab", { name: "PTS" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Revisar PTS (nova versão)" }));
+    vi.mocked(api.createPsyCarePlan).mockRejectedValueOnce(new ApiError(409, { error: "already_closed" }, "x"));
+    vi.mocked(api.getPsyEnrollment).mockResolvedValue(enrollment({ status: "closed", destination: "01", closed_on: TODAY31 }));
+    fireEvent.click(screen.getByRole("button", { name: "Salvar nova versão" }));
+    expect(await screen.findByText(PSY_ERRORS.already_closed)).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Salvar nova versão" })).toBeNull();
   });
 
   it("recusa do api no objetivo vai à linha dele; matrícula encerrada não oferece nova versão", async () => {

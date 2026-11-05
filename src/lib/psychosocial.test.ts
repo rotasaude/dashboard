@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ApiError } from "./api";
 import {
-  CAPS_MODALITIES, CLOSE_BEFORE_START, CLOSE_DESTINATION_TEXT, DESTINATION_LABEL, NEXT_VISIT_TEXT, carePlanOverdue, carePlanTitle, cidKey, closeProblems,
+  CAPS_MODALITIES, CLOSE_BEFORE_START, DEFAULT_CARE_PLAN_REVIEW_DAYS, firstCarePlanLate, reviewDaysOf, CLOSE_DESTINATION_TEXT, DESTINATION_LABEL, NEXT_VISIT_TEXT, carePlanOverdue, carePlanTitle, cidKey, closeProblems,
   enrollmentDraftOf, enrollmentEditProblems, enrollmentPatch, foldName, nextVisitInput, MONTH_PROBLEM_TEXT, NO_ACTIVE_CAPS, NO_CAPS_BEDS, MONTH_WARNING_TEXT, PSY_DISABLED, PSY_ERRORS, REASON_TEXT, actionInput, actionProblems,
   canUsePsychosocial, carePlanInput, carePlanProblems, cidLabel, codeLabel, countLabel, destinationLabel, emptyActionDraft, emptyEnrollmentDraft,
   enrollmentInput, enrollmentProblems, hasBeds, indexFromPath, isPrescriber, isStale, modalityLabel, monthProblemLabel, monthWarningLabel, nightLimitText,
@@ -468,5 +468,13 @@ describe("usuários do CAPS: edição, encerramento e PTS (Task 6)", () => {
     expect(carePlanTitle(1, "2026-12-01", false)).toBe("Versão 1");
     expect(foldName(" JOSÉ ")).toBe("jose");
     expect(cidKey("f32.2")).toBe("F322");
+  });
+
+  it("prazo do PTS: options.care_plan_review_days com reserva; primeiro PTS vence quando início + dias < hoje", () => {
+    expect(reviewDaysOf({ care_plan_review_days: 60 })).toBe(60);
+    expect(reviewDaysOf({})).toBe(DEFAULT_CARE_PLAN_REVIEW_DAYS);
+    expect(reviewDaysOf(undefined)).toBe(DEFAULT_CARE_PLAN_REVIEW_DAYS);
+    expect(firstCarePlanLate("2026-10-04", TODAY31, 30)).toBe(true);
+    expect(firstCarePlanLate("2026-10-05", TODAY31, 30)).toBe(false);
   });
 });

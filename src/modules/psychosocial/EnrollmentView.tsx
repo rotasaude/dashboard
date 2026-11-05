@@ -8,8 +8,8 @@ import { getPsyEnrollment, type PsyEnrollment, type PsyOptions, type PsyUnit } f
 import { fmtDay } from "../../lib/careLines";
 import { fmtDateTime } from "../../lib/format";
 import {
-  CARE_PLAN_OVERDUE_TAG, ENROLLMENT_CLOSED, ENROLLMENT_OTHER_CAPS, ENROLLMENT_UPDATED, NOMINAL_QUERY, NO_CARE_PLAN, PSY_DETAIL_KEY, carePlanOverdue,
-  cidLabel, codeLabel, destinationLabel, isStale, psyError, type PsyRoles
+  CARE_PLAN_OVERDUE_TAG, ENROLLMENT_CLOSED, ENROLLMENT_OTHER_CAPS, ENROLLMENT_UPDATED, NOMINAL_QUERY, NO_CARE_PLAN, NO_CARE_PLAN_DUE, PSY_DETAIL_KEY,
+  carePlanOverdue, cidLabel, codeLabel, destinationLabel, firstCarePlanLate, isStale, psyError, reviewDaysOf, type PsyRoles
 } from "../../lib/psychosocial";
 import { KeyValue } from "../../components/KeyValue";
 import { Panel } from "../../components/Panel";
@@ -57,11 +57,9 @@ export function EnrollmentView({ enrollmentId, unit, options, today, onClose, on
     if (detail.isError && isStale(detail.error) && onStale) onStale(psyError(detail.error));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ detail.isError, detail.error ]);
-  // Fechar, trocar de matrícula ou de CAPS: nada nominal fica no cache.
-  useEffect(() => () => {
-    queryClient.removeQueries({ queryKey: [ PSY_DETAIL_KEY, unit.id, "enrollment", enrollmentId ] });
-    queryClient.removeQueries({ queryKey: [ PSY_DETAIL_KEY, unit.id, "care_plans", enrollmentId ] });
-  }, [ queryClient, unit.id, enrollmentId ]);
+  // Nada nominal fica no cache: quem abre apaga `[PSY_DETAIL_KEY, <caps>]` ao fechar ou abrir outra matrícula, o portão apaga na troca
+  // de CAPS, e `gcTime: 0` tira o resto ao desmontar. (Um `removeQueries` na limpeza deste efeito releria o detalhe — e gravaria a
+  // trilha de novo — no remonte do StrictMode.)
 
   const update = (next: PsyEnrollment) => queryClient.setQueryData(key, next);
   const saved = (next: PsyEnrollment, text: string) => { update(next); setMode("view"); setNotice(null); setDone(text); onChanged?.(); };
@@ -133,7 +131,8 @@ function Record({ e, options, today }: { e: PsyEnrollment; options: PsyOptions; 
       <KeyValue k="ESF" v={e.esf_covered ? `coberto · CNES da USF ${e.esf_cnes ?? "—"}` : "sem cobertura"} mono={false} />
       <KeyValue k="Técnico de referência" v={e.reference.name} mono={false} />
       <KeyValue k="Próximo atendimento" v={fmtDateTime(e.next_visit_at)} />
-      <KeyValue k="Revisão do PTS" v={!e.care_plan_review_on ? NO_CARE_PLAN
+      <KeyValue k="Revisão do PTS" v={!e.care_plan_review_on
+        ? (e.status === "open" && firstCarePlanLate(e.started_on, today, reviewDaysOf(options)) ? NO_CARE_PLAN_DUE : NO_CARE_PLAN)
         : overdue ? <span style={row}>{fmtDay(e.care_plan_review_on)}<Tag tone="warn">{CARE_PLAN_OVERDUE_TAG}</Tag></span> : fmtDay(e.care_plan_review_on)} />
       {e.status !== "open" && <KeyValue k="Destino" v={destination} mono={false} />}
       {e.status !== "open" && <KeyValue k="Conclusão" v={fmtDay(e.closed_on)} />}

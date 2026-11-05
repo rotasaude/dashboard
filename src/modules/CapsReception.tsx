@@ -11,7 +11,7 @@ import { todayInCity } from "../lib/campaigns";
 import { fmtDateTime } from "../lib/format";
 import {
   DISCARD_RECEPTION_TEXT, NOMINAL_QUERY, NO_CLINICAL_IN_LIST, NO_PENDING_REFERRALS, PSY_DETAIL_KEY, PSY_OPTIONS_KEY, PSY_REFERRALS_KEY, RECEPTION_DONE, RECEPTION_ENROLLED, STATIC_QUERY,
-  TRAIL_NOTE, isStale, priorityLabel, psyError
+  TRAIL_NOTE, isStale, priorityLabel, psyError, type PsyEnrollmentHandoff
 } from "../lib/psychosocial";
 import { DataTable, type Column } from "../components/DataTable";
 import { KeyValue } from "../components/KeyValue";
@@ -23,7 +23,8 @@ import { PsychosocialGate } from "./psychosocial/PsychosocialGate";
 import { PsyPersonPick } from "./psychosocial/PsyPersonPick";
 import { ReceptionForm } from "./psychosocial/ReceptionForm";
 
-export type CapsReceptionProps = { today?: string; now?: Date; onGoToSecurity?: () => void; onOpenEnrollment?(id: string): void };
+// `onOpenEnrollment` leva a matrícula com o CAPS dela: "Usuários do CAPS" abre direto nesse CAPS.
+export type CapsReceptionProps = { today?: string; now?: Date; onGoToSecurity?: () => void; onOpenEnrollment?(h: PsyEnrollmentHandoff): void };
 
 export function CapsReception(props: CapsReceptionProps) {
   return (
@@ -114,7 +115,7 @@ function Reception({ unit, today = todayInCity(), now = new Date(), onOpenEnroll
         <div style={row}>
           <p ref={doneRef} tabIndex={-1} role="status" style={okText}>{done.text}</p>
           {done.enrollmentId && onOpenEnrollment && (
-            <button type="button" style={secondaryButtonStyle} onClick={() => onOpenEnrollment(done.enrollmentId as string)}>Abrir matrícula</button>
+            <button type="button" style={secondaryButtonStyle} onClick={() => onOpenEnrollment({ enrollmentId: done.enrollmentId as string, unitId: unit.id })}>Abrir matrícula</button>
           )}
         </div>
       )}

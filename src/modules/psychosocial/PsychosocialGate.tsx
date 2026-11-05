@@ -20,8 +20,9 @@ import { alert, fieldLabel, muted, stack } from "../exams/styles";
 // acolhimento noturno; "none": não lê (a tela escolhe sozinha, ou não depende de CAPS).
 export type PsyUnitMode = "team" | "any" | "beds" | "none";
 
-export function PsychosocialGate({ title, sub, allow, unit = "team", children }: {
-  title: string; sub: string; allow(roles: PsyRoles): boolean; unit?: PsyUnitMode;
+// `initialUnitId`: o CAPS em que a tela abre (o handoff do acolhimento), lido uma vez na montagem; fora da lista, vale o primeiro.
+export function PsychosocialGate({ title, sub, allow, unit = "team", initialUnitId = null, children }: {
+  title: string; sub: string; allow(roles: PsyRoles): boolean; unit?: PsyUnitMode; initialUnitId?: string | null;
   children(ctx: { roles: PsyRoles; unit: PsyUnit | null }): ReactNode;
 }) {
   const { user } = useAuth();
@@ -31,7 +32,7 @@ export function PsychosocialGate({ title, sub, allow, unit = "team", children }:
   if (!canUsePsychosocial(user)) body = <EmptyState title={PSY_DISABLED} />;
   else if (!allow(roles)) body = <EmptyState title={PSY_NO_ROLE} />;
   else if (unit === "none") body = children({ roles, unit: null });
-  else body = <UnitPick mode={unit} userId={user.id} roles={roles}>{(u) => children({ roles, unit: u })}</UnitPick>;
+  else body = <UnitPick mode={unit} userId={user.id} roles={roles} initialUnitId={initialUnitId}>{(u) => children({ roles, unit: u })}</UnitPick>;
   return (
     <div style={stack}>
       <PageHeader title={title} sub={sub} />
@@ -40,12 +41,12 @@ export function PsychosocialGate({ title, sub, allow, unit = "team", children }:
   );
 }
 
-function UnitPick({ mode, userId, roles, children }: {
-  mode: Exclude<PsyUnitMode, "none">; userId: string; roles: PsyRoles; children(unit: PsyUnit): ReactNode;
+function UnitPick({ mode, userId, roles, initialUnitId, children }: {
+  mode: Exclude<PsyUnitMode, "none">; userId: string; roles: PsyRoles; initialUnitId: string | null; children(unit: PsyUnit): ReactNode;
 }) {
   const queryClient = useQueryClient();
   const units = useQuery({ queryKey: [ PSY_UNITS_KEY, userId ], queryFn: listPsyUnits, ...STATIC_QUERY });
-  const [ unitId, setUnitId ] = useState("");
+  const [ unitId, setUnitId ] = useState(() => initialUnitId ?? "");
   if (units.isPending) return <p className="mono" style={muted}>carregando…</p>;
   if (units.isError && !units.data) return <p role="alert" style={alert}>{psyError(units.error)}</p>;
   const options = (units.data ?? []).filter((u) => mode !== "beds" || u.night_capable);

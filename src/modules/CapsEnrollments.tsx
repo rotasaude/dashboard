@@ -3,7 +3,7 @@
 // nunca é espalhado). O filtro por nome é local (P5: nada de `q=` na URL). O detalhe só é lido no clique, com `NOMINAL_QUERY` e o id do
 // CAPS na chave; o api grava a trilha. "PTS a revisar" lê `GET /psychosocial/care_plans/due` (a coordenação vê o CAPS inteiro; os
 // demais, só onde são referência). "PTS vencido" é calculado na tela (R4).
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type MutableRefObject } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   getPsyOptions, listPsyCarePlansDue, listPsyEnrollments, type PsyCarePlanDue, type PsyEnrollmentRow, type PsyEnrollmentStatus, type PsyUnit
@@ -11,9 +11,9 @@ import {
 import { todayInCity } from "../lib/campaigns";
 import { fmtDateTime } from "../lib/format";
 import {
-  CARE_PLAN_OVERDUE_TAG, DUE_LEAD_NOTE, DUE_STAFF_NOTE, NOMINAL_QUERY, NO_CARE_PLAN, NO_CLINICAL_IN_LIST, NO_CLOSED_ENROLLMENTS, NO_NAME_MATCH,
-  NO_OPEN_ENROLLMENTS, PSY_DETAIL_KEY, PSY_ENROLLMENTS_KEY, PSY_OPTIONS_KEY, STATIC_QUERY, TRAIL_NOTE, carePlanOverdue, dueText, foldName, psyError,
-  type PsyRoles
+  CARE_PLAN_OVERDUE_TAG, DUE_LEAD_NOTE, DUE_STAFF_NOTE, ENROLLMENT_OTHER_CAPS, NOMINAL_QUERY, NO_CARE_PLAN, NO_CARE_PLAN_DUE, NO_CLINICAL_IN_LIST,
+  NO_CLOSED_ENROLLMENTS, NO_NAME_MATCH, NO_OPEN_ENROLLMENTS, PSY_DETAIL_KEY, PSY_ENROLLMENTS_KEY, PSY_OPTIONS_KEY, STATIC_QUERY, TRAIL_NOTE, carePlanOverdue,
+  dueText, firstCarePlanLate, foldName, psyError, reviewDaysOf, type PsyEnrollmentHandoff, type PsyRoles
 } from "../lib/psychosocial";
 import { fmtDay } from "../lib/careLines";
 import { DataTable, type Column } from "../components/DataTable";
@@ -25,36 +25,44 @@ import { alert, fieldLabel, muted, row, stack } from "./exams/styles";
 import { PsychosocialGate } from "./psychosocial/PsychosocialGate";
 import { EnrollmentView } from "./psychosocial/EnrollmentView";
 
-// `initialEnrollmentId`: a matrícula aberta no acolhimento (Task 5).
-export type CapsEnrollmentsProps = { today?: string; now?: Date; onGoToSecurity?: () => void; initialEnrollmentId?: string | null };
+// `initialEnrollment`: a matrícula aberta no acolhimento (Task 5), com o CAPS dela.
+export type CapsEnrollmentsProps = { today?: string; now?: Date; onGoToSecurity?: () => void; initialEnrollment?: PsyEnrollmentHandoff | null };
 
-export function CapsEnrollments({ initialEnrollmentId = null, ...props }: CapsEnrollmentsProps) {
-  // A matrícula vinda do acolhimento abre uma vez só. O ref fica fora do portão: trocar de CAPS remonta o corpo e não reabre nada.
-  const pending = useRef<string | null>(initialEnrollmentId);
-  const takeInitial = () => {
-    const id = pending.current;
-    pending.current = null;
-    return id;
-  };
+export function CapsEnrollments({ initialEnrollment = null, ...props }: CapsEnrollmentsProps) {
+  // A matrícula vinda do acolhimento abre uma vez só. O ref fica fora do portão (que abre direto no CAPS dela): o corpo o lê num
+  // inicializador puro e o zera num efeito, então trocar de CAPS remonta o corpo e não reabre nada (nem sob o StrictMode).
+  const initial = useRef<PsyEnrollmentHandoff | null>(initialEnrollment);
   return (
-    <PsychosocialGate title="Usuários do CAPS" sub="Matrícula, PTS, ações, receitas e encerramento" allow={(r) => r.staff}>
-      {({ unit, roles }) => (unit ? <Enrollments unit={unit} roles={roles} takeInitial={takeInitial} {...props} /> : null)}
+    <PsychosocialGate title="Usuários do CAPS" sub="Matrícula, PTS, ações, receitas e encerramento" allow={(r) => r.staff}
+      initialUnitId={initialEnrollment?.unitId ?? null}>
+      {({ unit, roles }) => (unit ? <Enrollments unit={unit} roles={roles} initial={initial} {...props} /> : null)}
     </PsychosocialGate>
   );
 }
 
 const STATUS_TABS: { key: PsyEnrollmentStatus; label: string }[] = [ { key: "open", label: "Em acompanhamento" }, { key: "closed", label: "Encerradas" } ];
 
-function Enrollments({ unit, roles, takeInitial, today = todayInCity(), now = new Date(), onGoToSecurity }: Omit<CapsEnrollmentsProps, "initialEnrollmentId"> & {
-  unit: PsyUnit; roles: PsyRoles; takeInitial(): string | null;
+function Enrollments({ unit, roles, initial, today = todayInCity(), now = new Date(), onGoToSecurity }: Omit<CapsEnrollmentsProps, "initialEnrollment"> & {
+  unit: PsyUnit; roles: PsyRoles; initial: MutableRefObject<PsyEnrollmentHandoff | null>;
 }) {
   const queryClient = useQueryClient();
   const [ status, setStatus ] = useState<PsyEnrollmentStatus>("open");
   const [ filter, setFilter ] = useState("");
-  const [ openId, setOpenId ] = useState<string | null>(takeInitial);
-  const [ notice, setNotice ] = useState<string | null>(null);
+  // Matrícula de um CAPS que não é do usuário: a frase, e nada é lido (sem trilha).
+  const [ openId, setOpenId ] = useState<string | null>(() => (initial.current?.unitId === unit.id ? initial.current.enrollmentId : null));
+  const [ notice, setNotice ] = useState<string | null>(() => (initial.current && initial.current.unitId !== unit.id ? ENROLLMENT_OTHER_CAPS : null));
+  useEffect(() => { initial.current = null; }, [ initial ]);
   const noticeRef = useRef<HTMLParagraphElement | null>(null);
   useEffect(() => { if (notice) noticeRef.current?.focus(); }, [ notice ]);
+  // "Fechar" devolve o foco ao "Abrir" de origem; sem ele (o handoff, ou a linha sumiu), à lista.
+  const opener = useRef<HTMLElement | null>(null);
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const [ refocus, setRefocus ] = useState(0);
+  useEffect(() => {
+    if (refocus === 0) return;
+    const el = opener.current;
+    (el && el.isConnected ? el : listRef.current)?.focus();
+  }, [ refocus ]);
 
   const list = useQuery({
     queryKey: [ PSY_ENROLLMENTS_KEY, unit.id, status ], queryFn: () => listPsyEnrollments({ unitId: unit.id, status }), ...NOMINAL_QUERY
@@ -67,12 +75,14 @@ function Enrollments({ unit, roles, takeInitial, today = todayInCity(), now = ne
     setOpenId(null);
     queryClient.removeQueries({ queryKey: [ PSY_DETAIL_KEY, unit.id ] });
   };
-  const open = (id: string) => { setNotice(null); closeDetail(); setOpenId(id); };
+  const open = (id: string, from: HTMLElement | null) => { setNotice(null); closeDetail(); opener.current = from; setOpenId(id); };
+  const close = () => { closeDetail(); setRefocus((n) => n + 1); };
   const stale = (text: string) => { closeDetail(); setNotice(text); reload(); };
 
+  const reviewDays = reviewDaysOf(options.data);
   const nameOf = (r: { patient: { name: string } }) => r.patient.name;
   const openButton = (id: string, name: string) => (
-    <button type="button" style={secondaryButtonStyle} aria-label={`Abrir ${name}`} onClick={() => open(id)}>Abrir</button>
+    <button type="button" style={secondaryButtonStyle} aria-label={`Abrir ${name}`} onClick={(e) => open(id, e.currentTarget)}>Abrir</button>
   );
   // Só campos da linha, um a um; nada clínico (CID, substância, evolução, PTS) mesmo que o api mande por engano.
   const cols: Column<PsyEnrollmentRow>[] = [
@@ -84,7 +94,8 @@ function Enrollments({ unit, roles, takeInitial, today = todayInCity(), now = ne
     {
       label: "PTS", w: "auto", render: (r) => r.status !== "open" ? "—"
         : carePlanOverdue(r.care_plan_review_on, today) ? <Tag tone="warn">{CARE_PLAN_OVERDUE_TAG}</Tag>
-        : r.care_plan_review_on ? `revisão em ${fmtDay(r.care_plan_review_on)}` : <Tag tone="neutral">{NO_CARE_PLAN}</Tag>
+        : r.care_plan_review_on ? `revisão em ${fmtDay(r.care_plan_review_on)}`
+        : firstCarePlanLate(r.started_on, today, reviewDays) ? <Tag tone="warn">{NO_CARE_PLAN_DUE}</Tag> : <Tag tone="neutral">{NO_CARE_PLAN}</Tag>
     },
     { label: "Ações", w: "auto", card: "actions", render: (r) => openButton(r.id, nameOf(r)) }
   ];
@@ -108,7 +119,7 @@ function Enrollments({ unit, roles, takeInitial, today = todayInCity(), now = ne
 
       {openId && options.data && (
         <EnrollmentView key={openId} enrollmentId={openId} unit={unit} options={options.data} roles={roles} today={today} now={now}
-          onClose={closeDetail} onChanged={reload} onStale={stale} onGoToSecurity={onGoToSecurity} />
+          onClose={close} onChanged={reload} onStale={stale} onGoToSecurity={onGoToSecurity} />
       )}
       {openId && options.isPending && <p className="mono" style={muted}>carregando…</p>}
 
@@ -134,7 +145,9 @@ function Enrollments({ unit, roles, takeInitial, today = todayInCity(), now = ne
           <p style={muted}>{NO_CLINICAL_IN_LIST}</p>
           <p style={muted}>{TRAIL_NOTE}</p>
           {list.isError ? <p role="alert" style={alert}>{psyError(list.error)}</p> : (
-            <DataTable<PsyEnrollmentRow> cols={cols} rows={rows} rowKey={(r) => r.id} empty={emptyText} />
+            <div ref={listRef} tabIndex={-1} aria-label="Lista de usuários do CAPS">
+              <DataTable<PsyEnrollmentRow> cols={cols} rows={rows} rowKey={(r) => r.id} empty={emptyText} />
+            </div>
           )}
         </div>
       </Panel>

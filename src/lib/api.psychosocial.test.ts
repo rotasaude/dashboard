@@ -48,6 +48,18 @@ describe("cliente do CAPS (módulo 31)", () => {
     expect(calls.some((c) => /[?&]q=/.test(c.url))).toBe(false);
   });
 
+  it("lista de usuários e PTS a revisar: o cliente escolhe os campos — campo clínico injetado não chega ao cache", async () => {
+    stub({ items: [ { ...enrollmentRow(), cid_main: "F322", substances: [ "01" ], notes: "segredo",
+      patient: { ...enrollmentRow().patient, cpf: "12345678909" }, reference: { ...enrollmentRow().reference, email: "x@y" } } ], next_before: null });
+    const [ row ] = await api.listPsyEnrollments({ unitId: "caps2", status: "open" });
+    expect(row).toEqual(enrollmentRow());
+    expect(JSON.stringify(row)).not.toMatch(/F322|segredo|12345678909|x@y/);
+    stub({ items: [ { enrollment_id: "en1", patient: { patient_id: "pt1", name: "Maria", cns_masked: null, cpf: "12345678909" }, review_on: null,
+      cid_main: "F322" } ] });
+    expect(await api.listPsyCarePlansDue("caps2")).toEqual([ { enrollment_id: "en1", patient: { patient_id: "pt1", name: "Maria", cns_masked: null },
+      review_on: null } ]);
+  });
+
   it("lista de usuários: cursor que volta ou não acaba não prende o laço (Set de cursores, teto de 50 páginas)", async () => {
     // Freio do teste: o laço antigo nunca pararia.
     const runaway = (body: (i: number) => unknown) => {

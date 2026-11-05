@@ -21,7 +21,7 @@ afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
 const PREFILL = { esf_covered: true, esf_cnes: "2384299", usf: { id: "ubs1", name: "UBS Vila Verde" }, team: { id: "ht1", name: "ESF Vila Verde" } };
 
-function mount(o: { onOpenEnrollment?: (id: string) => void; prefill?: api.PsyPrefill } = {}) {
+function mount(o: { onOpenEnrollment?: (h: { enrollmentId: string; unitId: string }) => void; prefill?: api.PsyPrefill } = {}) {
   vi.mocked(api.fetchCurrentSession).mockResolvedValue(psyUser());
   vi.mocked(api.listPsyUnits).mockResolvedValue([ CAPS_II ]);
   vi.mocked(api.getPsyOptions).mockResolvedValue(OPTIONS);
@@ -173,7 +173,7 @@ describe("acolhimento do CAPS", () => {
     await waitFor(() => expect(api.listPsyReferrals).toHaveBeenCalledTimes(2));
     expect(screen.queryByRole("button", { name: "Registrar acolhimento" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Abrir matrícula" }));
-    expect(onOpenEnrollment).toHaveBeenCalledWith("en9");
+    expect(onOpenEnrollment).toHaveBeenCalledWith({ enrollmentId: "en9", unitId: "caps2" });
   });
 
   it("substância: nenhuma desmarca as outras, e outra desmarca nenhuma", async () => {

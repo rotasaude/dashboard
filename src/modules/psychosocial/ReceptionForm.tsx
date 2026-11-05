@@ -4,17 +4,17 @@
 // vez (`action_rejected` com `at`/`sigtap_code`, `enrollment.*`, `month_closed` em `enrollment.started_on`) e vai ao campo do path.
 // `referral_not_pending`/`not_found` dizem que a fila está velha: quem usa relê e fecha (`onStale`). Sem duplo envio (`busy` + ref);
 // a resposta depois de desmontar é ignorada. Anotações nunca vão para mensagem, console ou URL.
-import { useEffect, useId, useRef, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { recordPsyReception, type PsyOptions, type PsyReceptionResult, type PsyUnit } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import {
-  NO_PROCEDURE_OPTION, NO_RECEPTION_PROCEDURE, RECEPTION_NOTES_TEXT, emptyReceptionDraft, isStale, outcomeLabel, psyRefusals, receptionInput, receptionProblems, receptionProcedures,
+  NO_PROCEDURE_OPTION, NO_RECEPTION_PROCEDURE, RECEPTION_NOTES_TEXT, emptyReceptionDraft, outcomeLabel, receptionInput, receptionProblems, receptionProcedures,
   type EnrollmentDraft, type ReceptionDraft
 } from "../../lib/psychosocial";
-import type { Problem } from "../../lib/pharmacy";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
-import { alert, fieldLabel, form, muted, row } from "../exams/styles";
+import { fieldLabel, form, muted, row } from "../exams/styles";
 import { EnrollmentFields } from "./EnrollmentFields";
+import { useFormProblems } from "./useFormProblems";
 
 const ENROLLMENT = "enrollment.";
 // Campos do acolhimento; o que não for daqui nem do bloco da matrícula vai ao topo.
@@ -29,30 +29,11 @@ export function ReceptionForm({ unit, patient, referralId, options, today, now, 
   onDone(r: PsyReceptionResult): void; onCancel(): void; onStale?(text: string): void;
 }) {
   const { user } = useAuth();
-  const uid = useId();
+  const f = useFormProblems();
   const procs = receptionProcedures(options);
   const meId = user && options.team.some((p) => p.user_id === user.id) ? user.id : "";
   const [ d, setD ] = useState<ReceptionDraft>(() => emptyReceptionDraft(now, today, meId, procs));
-  const [ problems, setProblems ] = useState<Problem[]>([]);
-  const [ busy, setBusy ] = useState(false);
-  const sending = useRef(false);
-  const alive = useRef(true);
-  const focusNext = useRef(false);
-  const ref = useRef<HTMLFormElement | null>(null);
-  const title = useRef<HTMLParagraphElement | null>(null);
-  useEffect(() => {
-    // Ao abrir, o foco vai ao nome de quem é acolhido. (`alive` volta a true no remonte do StrictMode.)
-    alive.current = true;
-    title.current?.focus();
-    return () => { alive.current = false; };
-  }, []);
-  useEffect(() => {
-    if (!focusNext.current) return;
-    focusNext.current = false;
-    const first = ref.current?.querySelector<HTMLElement>("[aria-invalid='true'], [data-general='true']");
-    // Um grupo de caixas inválido não recebe foco: vai à primeira caixa dele.
-    (first instanceof HTMLFieldSetElement ? first.querySelector<HTMLElement>("input") : first)?.focus();
-  }, [ problems ]);
+  const { problems, setProblems, aria, errNode, busy } = f;
 
   const set = (patch: Partial<ReceptionDraft>) => {
     const keys = Object.keys(patch).map((k) => (k === "sigtapCode" ? "sigtap_code" : k));
@@ -65,47 +46,24 @@ export function ReceptionForm({ unit, patient, referralId, options, today, now, 
     if (changed.length > 0) setProblems((ps) => ps.filter((p) => !changed.includes(p.path)));
     setD((x) => ({ ...x, enrollment: e }));
   };
-  const show = (list: Problem[]) => { focusNext.current = true; setProblems(list); };
 
-  async function submit(e: FormEvent) {
-    e.preventDefault();
-    if (sending.current) return;
-    const local = receptionProblems(d, today, now);
-    if (local.length > 0) { show(local); return; }
-    sending.current = true;
-    setBusy(true);
-    setProblems([]);
-    try {
-      const r = await recordPsyReception(receptionInput(d, unit.id, patient.patientId, referralId));
-      if (alive.current) onDone(r);
-    } catch (err) {
-      if (!alive.current) return;
-      const refusals = psyRefusals(err);
-      if (isStale(err) && onStale) { onStale(refusals[0].text); return; }
-      // A evolução da ação e as anotações do acolhimento usam o mesmo path; aqui, a frase do acolhimento.
-      show(refusals.map((r) => ({ path: r.path, text: r.path === "notes" && [ "too_long", "invalid_request" ].includes(r.code) ? RECEPTION_NOTES_TEXT : r.text })));
-    } finally {
-      sending.current = false;
-      if (alive.current) setBusy(false);
-    }
-  }
+  const submit = (ev: FormEvent) => f.submit(ev, {
+    check: () => receptionProblems(d, today, now),
+    call: () => recordPsyReception(receptionInput(d, unit.id, patient.patientId, referralId)),
+    ok: onDone,
+    stale: onStale,
+    // A evolução da ação e as anotações do acolhimento usam o mesmo path; aqui, a frase do acolhimento.
+    refused: (refusals) => refusals.map((r) => ({ path: r.path, text: r.path === "notes" && [ "too_long", "invalid_request" ].includes(r.code) ? RECEPTION_NOTES_TEXT : r.text }))
+  });
 
-  const textOf = (path: string) => problems.find((p) => p.path === path)?.text ?? null;
-  const fid = (path: string) => `${uid}-${path}`;
-  const aria = (path: string) => (textOf(path) ? { "aria-invalid": true as const, "aria-describedby": `${fid(path)}-err` } : {});
-  const errNode = (path: string) => {
-    const t = textOf(path);
-    return t ? <p id={`${fid(path)}-err`} role="alert" style={alert}>{t}</p> : null;
-  };
   const enrolled = d.outcome === "enrolled";
   const enrollmentProblems = problems.filter((p) => p.path.startsWith(ENROLLMENT)).map((p) => ({ ...p, path: p.path.slice(ENROLLMENT.length) }));
-  const top = [ ...new Set(problems.filter((p) => !OWN_FIELDS.includes(p.path) && !(enrolled && p.path.startsWith(ENROLLMENT))).map((p) => p.text)) ];
 
   return (
-    <form ref={ref} aria-label="Acolhimento" style={form} onSubmit={(e) => { void submit(e); }} noValidate>
-      <p ref={title} tabIndex={-1} style={{ margin: 0, fontSize: 13, fontWeight: 600 }}>{patient.name}</p>
+    <form ref={f.formRef} aria-label="Acolhimento" style={form} onSubmit={(e) => { void submit(e); }} noValidate>
+      <p ref={f.titleRef} tabIndex={-1} style={{ margin: 0, fontSize: 13, fontWeight: 600 }}>{patient.name}</p>
       <p style={muted}>{referralId ? "Encaminhamento da atenção básica" : "Demanda espontânea"}</p>
-      {top.map((t) => <p key={t} role="alert" tabIndex={-1} data-general="true" style={alert}>{t}</p>)}
+      {f.top((path) => OWN_FIELDS.includes(path) || (enrolled && path.startsWith(ENROLLMENT)))}
 
       <div style={row}>
         <label style={fieldLabel}>

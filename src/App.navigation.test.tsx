@@ -65,29 +65,31 @@ describe("atalhos entre telas", () => {
     expect((renderModule("registry-status", vi.fn()) as ReactElement).type).toBe(RegistryStatus);
   });
 
-  it("caps-reception: Abrir matrícula guarda o id e vai a Usuários do CAPS, que o recebe", () => {
+  it("caps-reception: Abrir matrícula guarda o id e o CAPS e vai a Usuários do CAPS, que os recebe", () => {
     const navigate = vi.fn();
-    const caps = { enrollmentId: null, openEnrollment: vi.fn() };
-    (renderModule("caps-reception", navigate, caps) as El).props.onOpenEnrollment("en9");
-    expect(caps.openEnrollment).toHaveBeenCalledWith("en9");
+    const caps = { enrollment: null, openEnrollment: vi.fn() };
+    const h = { enrollmentId: "en9", unitId: "capsad3" };
+    (renderModule("caps-reception", navigate, caps) as ReactElement<{ onOpenEnrollment(x: typeof h): void }>).props.onOpenEnrollment(h);
+    expect(caps.openEnrollment).toHaveBeenCalledWith(h);
     expect(navigate).toHaveBeenCalledWith("caps-enrollments");
-    const el = renderModule("caps-enrollments", navigate, { enrollmentId: "en9", openEnrollment: vi.fn() }) as ReactElement<{ initialEnrollmentId?: string | null }>;
+    type Props = { initialEnrollment?: { enrollmentId: string; unitId: string } | null };
+    const el = renderModule("caps-enrollments", navigate, { enrollment: h, openEnrollment: vi.fn() }) as ReactElement<Props>;
     expect(el.type).toBe(CapsEnrollments);
-    expect(el.props.initialEnrollmentId).toBe("en9");
-    expect((renderModule("caps-enrollments", navigate) as ReactElement<{ initialEnrollmentId?: string | null }>).props.initialEnrollmentId).toBeNull();
+    expect(el.props.initialEnrollment).toEqual(h);
+    expect((renderModule("caps-enrollments", navigate) as ReactElement<Props>).props.initialEnrollment).toBeNull();
   });
 
-  it("o id da matrícula vale só para a ida a Usuários do CAPS: sair da tela o apaga", () => {
+  it("a matrícula vale só para a ida a Usuários do CAPS: sair da tela a apaga", () => {
     const { result, rerender, unmount } = renderHook(({ active }: { active: ModuleId }) => useCapsHandoff(active),
       { initialProps: { active: "caps-reception" as ModuleId } });
-    expect(result.current.enrollmentId).toBeNull();
-    act(() => result.current.openEnrollment("en9"));
+    expect(result.current.enrollment).toBeNull();
+    act(() => result.current.openEnrollment({ enrollmentId: "en9", unitId: "caps2" }));
     rerender({ active: "caps-enrollments" });
-    expect(result.current.enrollmentId).toBe("en9");
+    expect(result.current.enrollment).toEqual({ enrollmentId: "en9", unitId: "caps2" });
     rerender({ active: "caps-today" });
-    expect(result.current.enrollmentId).toBeNull();
+    expect(result.current.enrollment).toBeNull();
     rerender({ active: "caps-enrollments" });
-    expect(result.current.enrollmentId).toBeNull();
+    expect(result.current.enrollment).toBeNull();
     unmount();
   });
 });

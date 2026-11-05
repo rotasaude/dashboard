@@ -34,6 +34,7 @@ export const OPTIONS: PsyOptions = {
   referral_priorities: [ "routine", "priority" ],
   night_sigtap_code: "0301080020",
   competence: "202611",
+  care_plan_review_days: 90,
   procedures: [
     proc("0301080232", "ACOLHIMENTO INICIAL POR CENTRO DE ATENCAO PSICOSSOCIAL", [ "02", "09" ], { max_quantity: 1 }),
     proc("0301080208", "ATENDIMENTO INDIVIDUAL DE PACIENTE EM CENTRO DE ATENCAO PSICOSSOCIAL", [ "09" ], { max_quantity: 31 }),

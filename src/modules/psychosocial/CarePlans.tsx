@@ -1,26 +1,26 @@
 // PTS da matrícula (F-31.3; §4, P12, P16, P33): as versões, da mais nova para a mais antiga (`GET …/care_plans` grava a trilha
 // `care_plans`: só corre com a aba aberta, `NOMINAL_QUERY`, com o id do CAPS na chave). Versão gravada não se edita: "Revisar PTS"
 // cria a versão seguinte, pré-preenchida com a última. A revisão vencida (`review_on < hoje`, só na versão vigente) é calculada na
-// tela (R4). A revisão sugerida é hoje + `DEFAULT_CARE_PLAN_REVIEW_DAYS`: a equipe não lê `GET /settings` (P33), e o api confere a
-// data (depois de hoje e até hoje + 365). Responsável só da equipe lotada (`options.team`); o de fora não é reaproveitado.
-import { useEffect, useId, useRef, useState, type FormEvent } from "react";
+// tela (R4). A revisão sugerida é hoje + `options.care_plan_review_days` (reserva `DEFAULT_CARE_PLAN_REVIEW_DAYS`): a equipe não lê
+// `GET /settings` (P33), e o api confere a data (depois de hoje e até hoje + 365). Responsável só da equipe lotada (`options.team`); o de fora não é reaproveitado.
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  createPsyCarePlan, errorCode, listPsyCarePlans, type CareIntensity, type PsyCarePlan, type PsyEnrollment, type PsyOptions, type PsyUnit
+  createPsyCarePlan, listPsyCarePlans, type CareIntensity, type PsyCarePlan, type PsyEnrollment, type PsyOptions, type PsyUnit
 } from "../../lib/api";
 import { addDays } from "../../lib/campaigns";
 import { fmtDay } from "../../lib/careLines";
 import { fmtDateTime } from "../../lib/format";
 import {
-  CARE_PLAN_OVERDUE_TAG, CARE_PLAN_SAVED, DEFAULT_CARE_PLAN_REVIEW_DAYS, NOMINAL_QUERY, NO_CARE_PLAN_YET, PSY_DETAIL_KEY, RESPONSIBLE_OUT,
-  carePlanInput, carePlanOverdue, carePlanProblems, carePlanTitle, intensityLabel, isStale, psyError, psyRefusals, type CarePlanDraft
+  CARE_PLAN_OVERDUE_TAG, CARE_PLAN_SAVED, NOMINAL_QUERY, NO_CARE_PLAN_YET, PSY_DETAIL_KEY, RESPONSIBLE_OUT, carePlanInput, carePlanOverdue,
+  carePlanProblems, carePlanTitle, intensityLabel, psyError, reviewDaysOf, type CarePlanDraft
 } from "../../lib/psychosocial";
-import type { Problem } from "../../lib/pharmacy";
 import { Panel } from "../../components/Panel";
 import { Tag } from "../../components/Tag";
 import { KeyValue } from "../../components/KeyValue";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { alert, fieldLabel, fieldset, form, grid, legend, list, muted, okText, row } from "../exams/styles";
+import { useFormProblems } from "./useFormProblems";
 
 const MAX_GOALS = 20;
 
@@ -60,7 +60,7 @@ export function CarePlans({ enrollment: e, unit, options, today, onSaved, onStal
       )}
       {editing && (
         <CarePlanForm enrollmentId={e.id} latest={latest} options={options} today={today} onSaved={saved} onCancel={() => setEditing(false)}
-          onStale={onStale} />
+          onStale={(text) => { setEditing(false); onStale(text); }} />
       )}
       {versions.length === 0 && <p style={muted}>{NO_CARE_PLAN_YET}</p>}
       {versions.map((p, i) => {
@@ -96,15 +96,21 @@ export function CarePlans({ enrollment: e, unit, options, today, onSaved, onStal
   );
 }
 
-function draftFrom(latest: PsyCarePlan | null, options: PsyOptions, today: string): CarePlanDraft {
+// Os objetivos levam um id local (a chave da linha), que nunca vai ao api (`carePlanInput` escolhe os campos).
+type GoalRow = CarePlanDraft["goals"][number] & { id: string };
+type FormDraft = Omit<CarePlanDraft, "goals"> & { goals: GoalRow[] };
+let goalSeq = 0;
+const goalRow = (g: CarePlanDraft["goals"][number] = { text: "", responsibleUserId: "", dueOn: "" }): GoalRow => ({ ...g, id: `goal-${++goalSeq}` });
+
+function draftFrom(latest: PsyCarePlan | null, options: PsyOptions, today: string): FormDraft {
   const team = new Set(options.team.map((p) => p.user_id));
   const intensity = latest && (options.intensities as string[]).includes(latest.intensity) ? latest.intensity as CareIntensity : "";
   return {
     needs: latest?.needs ?? "",
     goals: latest && latest.goals.length > 0
-      ? latest.goals.map((g) => ({ text: g.text, responsibleUserId: team.has(g.responsible_user_id) ? g.responsible_user_id : "", dueOn: g.due_on ?? "" }))
-      : [ { text: "", responsibleUserId: "", dueOn: "" } ],
-    intensity, reviewOn: addDays(today, DEFAULT_CARE_PLAN_REVIEW_DAYS)
+      ? latest.goals.map((g) => goalRow({ text: g.text, responsibleUserId: team.has(g.responsible_user_id) ? g.responsible_user_id : "", dueOn: g.due_on ?? "" }))
+      : [ goalRow() ],
+    intensity, reviewOn: addDays(today, reviewDaysOf(options))
   };
 }
 
@@ -112,88 +118,43 @@ function CarePlanForm({ enrollmentId, latest, options, today, onSaved, onCancel,
   enrollmentId: string; latest: PsyCarePlan | null; options: PsyOptions; today: string; onSaved(plan: PsyCarePlan): void; onCancel(): void;
   onStale(text: string): void;
 }) {
-  const uid = useId();
-  const [ d, setD ] = useState<CarePlanDraft>(() => draftFrom(latest, options, today));
-  const [ problems, setProblems ] = useState<Problem[]>([]);
-  const [ busy, setBusy ] = useState(false);
-  const sending = useRef(false);
-  const alive = useRef(true);
-  const focusNext = useRef(false);
-  const ref = useRef<HTMLFormElement | null>(null);
-  const title = useRef<HTMLParagraphElement | null>(null);
-  useEffect(() => {
-    alive.current = true;
-    title.current?.focus();
-    return () => { alive.current = false; };
-  }, []);
-  useEffect(() => {
-    if (!focusNext.current) return;
-    focusNext.current = false;
-    ref.current?.querySelector<HTMLElement>("[aria-invalid='true'], [data-general='true']")?.focus();
-  }, [ problems ]);
+  const f = useFormProblems();
+  const { aria, errNode, busy } = f;
+  const [ d, setD ] = useState<FormDraft>(() => draftFrom(latest, options, today));
 
-  const show = (list: Problem[]) => { focusNext.current = true; setProblems(list); };
-  const clear = (...paths: string[]) => setProblems((ps) => ps.filter((p) => !paths.includes(p.path)));
   const setGoal = (i: number, patch: Partial<CarePlanDraft["goals"][number]>, path: string) => {
-    clear(`goals[${i}].${path}`, "goals");
+    f.clear(`goals[${i}].${path}`, "goals");
     setD((x) => ({ ...x, goals: x.goals.map((g, gi) => (gi === i ? { ...g, ...patch } : g)) }));
   };
   // Tirar ou acrescentar objetivo muda os índices: as marcas dos objetivos saem.
-  const setGoals = (goals: CarePlanDraft["goals"]) => {
-    setProblems((ps) => ps.filter((p) => !p.path.startsWith("goals")));
+  const setGoals = (goals: GoalRow[]) => {
+    f.setProblems((ps) => ps.filter((p) => !p.path.startsWith("goals")));
     setD((x) => ({ ...x, goals }));
   };
-
-  async function submit(ev: FormEvent) {
-    ev.preventDefault();
-    if (sending.current) return;
-    const local = carePlanProblems(d, today);
-    if (local.length > 0) { show(local); return; }
-    sending.current = true;
-    setBusy(true);
-    setProblems([]);
-    try {
-      const plan = await createPsyCarePlan(enrollmentId, carePlanInput(d));
-      if (alive.current) onSaved(plan);
-    } catch (err) {
-      if (!alive.current) return;
-      const refusals = psyRefusals(err);
-      if (isStale(err) || errorCode(err) === "already_closed") { onStale(refusals[0].text); return; }
-      show(refusals.map((r) => ({ path: r.path, text: r.text })));
-    } finally {
-      sending.current = false;
-      if (alive.current) setBusy(false);
-    }
-  }
-
-  const textOf = (path: string) => problems.find((p) => p.path === path)?.text ?? null;
-  const fid = (path: string) => `${uid}-${path}`;
-  const aria = (path: string) => (textOf(path) ? { "aria-invalid": true as const, "aria-describedby": `${fid(path)}-err` } : {});
-  const errNode = (path: string) => {
-    const t = textOf(path);
-    return t ? <p id={`${fid(path)}-err`} role="alert" style={alert}>{t}</p> : null;
-  };
   const own = (path: string) => [ "needs", "goals", "intensity", "review_on" ].includes(path) || /^goals\[\d+\]\./.test(path);
-  const top = [ ...new Set(problems.filter((p) => !own(p.path)).map((p) => p.text)) ];
 
   return (
-    <form ref={ref} aria-label="Nova versão do PTS" style={form} onSubmit={(ev) => { void submit(ev); }} noValidate>
-      <p ref={title} tabIndex={-1} style={{ margin: 0, fontSize: 13, fontWeight: 600 }}>
+    <form ref={f.formRef} aria-label="Nova versão do PTS" style={form} noValidate onSubmit={(ev) => {
+      void f.submit(ev, {
+        check: () => carePlanProblems(d, today), call: () => createPsyCarePlan(enrollmentId, carePlanInput(d)), ok: onSaved, stale: onStale
+      });
+    }}>
+      <p ref={f.titleRef} tabIndex={-1} style={{ margin: 0, fontSize: 13, fontWeight: 600 }}>
         {latest ? `Nova versão do PTS (versão ${latest.version + 1})` : "Primeiro PTS"}
       </p>
-      {top.map((t) => <p key={t} role="alert" tabIndex={-1} data-general="true" style={alert}>{t}</p>)}
+      {f.top(own)}
 
       <label style={fieldLabel}>
         Problemas e necessidades
         <textarea value={d.needs} rows={4} style={inputStyle} {...aria("needs")}
-          onChange={(ev) => { clear("needs"); setD((x) => ({ ...x, needs: ev.target.value })); }} />
+          onChange={(ev) => { f.clear("needs"); setD((x) => ({ ...x, needs: ev.target.value })); }} />
       </label>
       {errNode("needs")}
 
       <fieldset style={fieldset}>
         <legend style={legend}>Objetivos</legend>
         {d.goals.map((g, i) => (
-          <div key={i} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <div key={g.id} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             <label style={fieldLabel}>
               {`Objetivo ${i + 1}`}
               <input value={g.text} style={inputStyle} autoComplete="off" {...aria(`goals[${i}].text`)}
@@ -216,7 +177,7 @@ function CarePlanForm({ enrollmentId, latest, options, today, onSaved, onCancel,
               </label>
               {d.goals.length > 1 && (
                 <button type="button" style={secondaryButtonStyle} aria-label={`Tirar o objetivo ${i + 1}`}
-                  onClick={() => setGoals(d.goals.filter((_, gi) => gi !== i))}>Tirar</button>
+                  onClick={() => setGoals(d.goals.filter((x) => x.id !== g.id))}>Tirar</button>
               )}
             </div>
             {errNode(`goals[${i}].responsible_user_id`)}{errNode(`goals[${i}].due_on`)}
@@ -224,8 +185,7 @@ function CarePlanForm({ enrollmentId, latest, options, today, onSaved, onCancel,
         ))}
         {d.goals.length < MAX_GOALS && (
           <div style={row}>
-            <button type="button" style={secondaryButtonStyle}
-              onClick={() => setGoals([ ...d.goals, { text: "", responsibleUserId: "", dueOn: "" } ])}>Acrescentar objetivo</button>
+            <button type="button" style={secondaryButtonStyle} onClick={() => setGoals([ ...d.goals, goalRow() ])}>Acrescentar objetivo</button>
           </div>
         )}
       </fieldset>
@@ -235,7 +195,7 @@ function CarePlanForm({ enrollmentId, latest, options, today, onSaved, onCancel,
         <label style={fieldLabel}>
           Frequência proposta
           <select value={d.intensity} style={inputStyle} {...aria("intensity")}
-            onChange={(ev) => { clear("intensity"); setD((x) => ({ ...x, intensity: ev.target.value as CarePlanDraft["intensity"] })); }}>
+            onChange={(ev) => { f.clear("intensity"); setD((x) => ({ ...x, intensity: ev.target.value as CarePlanDraft["intensity"] })); }}>
             <option value="">Escolha a frequência</option>
             {options.intensities.map((v) => <option key={v} value={v}>{intensityLabel(v)}</option>)}
           </select>
@@ -243,7 +203,7 @@ function CarePlanForm({ enrollmentId, latest, options, today, onSaved, onCancel,
         <label style={fieldLabel}>
           Próxima revisão
           <input type="date" value={d.reviewOn} min={addDays(today, 1)} max={addDays(today, 365)} style={inputStyle} {...aria("review_on")}
-            onChange={(ev) => { clear("review_on"); setD((x) => ({ ...x, reviewOn: ev.target.value })); }} />
+            onChange={(ev) => { f.clear("review_on"); setD((x) => ({ ...x, reviewOn: ev.target.value })); }} />
         </label>
       </div>
       {errNode("intensity")}{errNode("review_on")}

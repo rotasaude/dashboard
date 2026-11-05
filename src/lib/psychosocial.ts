@@ -377,8 +377,15 @@ export function carePlanInput(d: CarePlanDraft): PsyCarePlanInput {
 }
 
 // ─── Usuários do CAPS: lista, matrícula, encerramento e PTS (F-31.2, F-31.3) ───
-// P33: a equipe não lê `GET /settings`; a revisão sugerida usa este prazo e o api confere a data (depois de hoje, até hoje + 365).
+// Prazo do PTS: `options.care_plan_review_days` (a equipe não lê `GET /settings`, P33); esta é a reserva quando o campo falta.
+// O api confere a data da revisão (depois de hoje, até hoje + 365).
 export const DEFAULT_CARE_PLAN_REVIEW_DAYS = 90;
+export const reviewDaysOf = (o: { care_plan_review_days?: number | null } | null | undefined): number => {
+  const d = o?.care_plan_review_days;
+  return typeof d === "number" && Number.isInteger(d) && d > 0 ? d : DEFAULT_CARE_PLAN_REVIEW_DAYS;
+};
+// A matrícula aberta no acolhimento e o CAPS dela, levados a "Usuários do CAPS" (só no estado do shell, nunca na URL).
+export type PsyEnrollmentHandoff = { enrollmentId: string; unitId: string };
 export const ENROLLMENT_UPDATED = "Matrícula atualizada.";
 export const ENROLLMENT_CLOSED = "Matrícula encerrada.";
 export const CARE_PLAN_SAVED = "Nova versão do PTS salva.";
@@ -404,6 +411,8 @@ export const DUE_STAFF_NOTE = "Revisões vencidas das matrículas em que você �
 
 // R4: o api não manda `care_plan_overdue`; vencido = revisão antes de hoje.
 export const carePlanOverdue = (reviewOn: string | null | undefined, today: string): boolean => !!reviewOn && reviewOn < today;
+// Sem PTS, o primeiro vence quando a matrícula começou há mais do prazo (`care_plan_review.rb`: início < hoje − dias).
+export const firstCarePlanLate = (startedOn: string, today: string, days: number): boolean => addDays(startedOn, days) < today;
 export const dueText = (reviewOn: string | null): string => (reviewOn ? `revisão vencida em ${fmtDay(reviewOn)}` : NO_CARE_PLAN_DUE);
 export const carePlanTitle = (version: number, reviewOn: string, overdue: boolean): string =>
   overdue ? `Versão ${version} · revisão vencida em ${fmtDay(reviewOn)}` : `Versão ${version}`;

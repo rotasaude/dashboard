@@ -83,6 +83,7 @@ import { TfdMyCases } from "./modules/TfdMyCases";
 import { CapsReception } from "./modules/CapsReception";
 import { CapsToday } from "./modules/CapsToday";
 import { CapsEnrollments } from "./modules/CapsEnrollments";
+import type { PsyEnrollmentHandoff } from "./lib/psychosocial";
 import { CapsGroups } from "./modules/CapsGroups";
 import { CapsBeds } from "./modules/CapsBeds";
 import { CapsMatrix } from "./modules/CapsMatrix";
@@ -277,16 +278,16 @@ function ShellInner({ initialModule }: { initialModule?: ModuleId }) {
   );
 }
 
-// A matrícula que o acolhimento abriu e "Usuários do CAPS" mostra ao entrar (módulo 31).
-export type CapsHandoff = { enrollmentId: string | null; openEnrollment(id: string): void };
-const NO_CAPS_HANDOFF: CapsHandoff = { enrollmentId: null, openEnrollment: () => {} };
+// A matrícula que o acolhimento abriu, com o CAPS dela, que "Usuários do CAPS" mostra ao entrar (módulo 31).
+export type CapsHandoff = { enrollment: PsyEnrollmentHandoff | null; openEnrollment(h: PsyEnrollmentHandoff): void };
+const NO_CAPS_HANDOFF: CapsHandoff = { enrollment: null, openEnrollment: () => {} };
 
 // Sem rota com id (nada de id na URL): o id fica no estado do shell e vale só para aquela ida — a tela ativa deixou de ser
 // "Usuários do CAPS", apaga (voltar pelo menu nunca reabre o detalhe sem clique).
 export function useCapsHandoff(active: ModuleId): CapsHandoff {
-  const [ enrollmentId, setEnrollmentId ] = useState<string | null>(null);
-  useEffect(() => { if (active !== "caps-enrollments") setEnrollmentId(null); }, [ active ]);
-  return useMemo(() => ({ enrollmentId, openEnrollment: setEnrollmentId }), [ enrollmentId ]);
+  const [ enrollment, setEnrollment ] = useState<PsyEnrollmentHandoff | null>(null);
+  useEffect(() => { if (active !== "caps-enrollments") setEnrollment(null); }, [ active ]);
+  return useMemo(() => ({ enrollment, openEnrollment: setEnrollment }), [ enrollment ]);
 }
 
 export function renderModule(active: ModuleId, setActive: (id: ModuleId) => void, caps: CapsHandoff = NO_CAPS_HANDOFF) {
@@ -396,9 +397,9 @@ export function renderModule(active: ModuleId, setActive: (id: ModuleId) => void
     case "tfd-queue": return <TfdQueue onGoToSecurity={() => setActive("security")} />;
     case "tfd-my-cases": return <TfdMyCases />;
     case "caps-reception": return <CapsReception onGoToSecurity={() => setActive("security")}
-      onOpenEnrollment={(id) => { caps.openEnrollment(id); setActive("caps-enrollments"); }} />;
+      onOpenEnrollment={(h) => { caps.openEnrollment(h); setActive("caps-enrollments"); }} />;
     case "caps-today": return <CapsToday />;
-    case "caps-enrollments": return <CapsEnrollments onGoToSecurity={() => setActive("security")} initialEnrollmentId={caps.enrollmentId} />;
+    case "caps-enrollments": return <CapsEnrollments onGoToSecurity={() => setActive("security")} initialEnrollment={caps.enrollment} />;
     case "caps-groups": return <CapsGroups />;
     case "caps-beds": return <CapsBeds />;
     case "caps-matrix": return <CapsMatrix />;
