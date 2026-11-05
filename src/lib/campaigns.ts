@@ -301,9 +301,11 @@ export function capsUnitRefusal(err: unknown): UnitRefusal | null {
   if (!(err instanceof ApiError)) return null;
   const body = errorBody(err) as CampaignErrorBody & { path?: unknown };
   if (body.error !== "caps_unit_not_allowed") return null;
-  const paths = Array.isArray(body.details)
+  // `details` com o código vale; sem `details`, ou com `details` sem ele, vale o `path` do corpo.
+  const detailed = Array.isArray(body.details)
     ? body.details.filter((d) => d?.message === "caps_unit_not_allowed").map((d) => d.path)
-    : typeof body.path === "string" ? [ body.path ] : [];
+    : [];
+  const paths = detailed.length > 0 ? detailed : typeof body.path === "string" ? [ body.path ] : [];
   const refusal: UnitRefusal = { geo: false, criteria: [] };
   for (const path of paths) {
     if (path === "/geo/health_unit_id") { refusal.geo = true; continue; }

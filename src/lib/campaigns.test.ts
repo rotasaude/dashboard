@@ -210,6 +210,10 @@ describe("recusas", () => {
     ])).toEqual({ geo: false, criteria: [ 0, 2 ] });
     // Sem `details`, vale o `path` do corpo.
     expect(refusal(undefined, "/clinical/all/1/target_unit_id")).toEqual({ geo: false, criteria: [ 1 ] });
+    // `details` sem o código da unidade: vale o `path` do corpo, como quando `details` falta.
+    expect(refusal([ { path: "/geo/health_unit_id", message: "outro" } ], "/clinical/all/3/health_unit_id")).toEqual({ geo: false, criteria: [ 3 ] });
+    expect(refusal([], "/geo/health_unit_id")).toEqual({ geo: true, criteria: [] });
+    expect(refusal([ { path: "/geo/health_unit_id", message: "outro" } ])).toBeNull();
     // Caminho desconhecido ou outro código: não aponta campo nenhum.
     expect(refusal([ { path: "/algo/novo", message: "caps_unit_not_allowed" } ])).toBeNull();
     expect(capsUnitRefusal(err(422, { error: "invalid_audience", details: [ { path: "/geo/health_unit_id", message: "caps_unit_not_allowed" } ] }))).toBeNull();
