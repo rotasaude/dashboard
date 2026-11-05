@@ -38,10 +38,11 @@ export function AudienceBuilder({ draft, options, today, unitRefusal, onChange }
   const geo = draft.geo;
   const geoProblem = validateGeo(geo);
   const full = draft.criteria.length >= MAX_CRITERIA;
+  // O api recusou a unidade do recorte por ser um CAPS (módulo 31).
+  const capsGeo = geo.scope === "unit" && unitRefusal?.geo === true;
   // Mesma regra do bairro inativo: a unidade do rascunho que saiu de `options`
   // continua selecionada e nomeada, em vez de o select mostrar "escolha…" e o
   // público seguir com um id que a pessoa não vê.
-  const capsGeo = geo.scope === "unit" && unitRefusal?.geo === true;
   const inactiveUnit = geo.scope === "unit" && geo.health_unit_id !== "" &&
     !options.units.some((u) => u.id === geo.health_unit_id);
 

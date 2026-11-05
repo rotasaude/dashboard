@@ -1,7 +1,8 @@
 // RAAS do mês de um CAPS (módulo 31, F-31.6; P14, P24, P42, P57, P58): situação, contadores e a lista dos registros, só com
 // `<patient-ref>`, contagem de ações e os códigos de pendência (bloqueiam o fechamento) e de aviso (não bloqueiam; `no_actions`,
 // `phone_missing` de quem está em situação de rua, ou outro código que o api rebaixe — todos por `monthWarningLabel`). Nada clínico:
-// a linha é montada campo a campo e o que o api mandar além disso fica fora. Situação de rua por registro, só com o mês e o registro
+// a tela renderiza campo a campo, só os previstos: o que o api mandar além disso não é lido, mas a projeção é na renderização, não no
+// cache. Situação de rua por registro, só com o mês e o registro
 // abertos (409 `record_not_open` relê). A coordenação fecha e reabre com step-up (`SensitiveAction`): `month_has_problems` relê o mês
 // e põe cada pendência da recusa na linha do registro (`records.<uuid>`); reabrir pede o motivo (10–500) antes do código. A ficha de
 // cada registro (PRÉVIA com o mês aberto) é da coordenação.

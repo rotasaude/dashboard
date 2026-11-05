@@ -38,7 +38,7 @@ const EXTRA_KIND_LABEL: Record<string, string> = { psychosocial: "CAPS" };
 // api devolve continua na lista (registro clínico retido).
 // o Transporte, com o transporte sanitário — módulo 30 (a entrada de TFD também é `transport`, com título 'TFD para <cidade>'; nenhuma
 // abre detalhe, D12).
-// Módulo 31 (D18): marcador sem texto 'Acompanhamento no CAPS <nome>', detail_ref nulo; o resto do CAPS nunca entra na geral. O filtro
+// Módulo 31 (D18): marcador 'Acompanhamento no CAPS', sem o nome do CAPS (P46/P51), detail_ref nulo; o resto do CAPS nunca entra na geral. O filtro
 // "CAPS" só existe com `canUsePsychosocial`; o marcador continua na lista com o interruptor desligado (P51: registro retido).
 export function timelineKinds(
   examTracking: boolean, procedureBilling = false, pharmacy = false, vaccination = false, transport = false, psychosocial = false

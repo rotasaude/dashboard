@@ -62,7 +62,6 @@ export function CriterionCard({ criterion: c, options, today, unitRefused = fals
             onToggle={(o) => onChange({ ...c, outcomes: toggleValue(c.outcomes, o as AttendanceOutcome) })} />
           <UnitSelect label="Unidade do atendimento (opcional)" value={c.health_unit_id} units={options.units}
             onChange={(id) => onChange({ ...c, health_unit_id: id })} />
-          {unitRefused && <p role="alert" style={alertStyle}>{CAPS_UNIT_TEXT}</p>}
         </>
       )}
 
@@ -73,8 +72,11 @@ export function CriterionCard({ criterion: c, options, today, unitRefused = fals
             onToggle={(k) => onChange({ ...c, kinds: toggleValue<RequestKind>(c.kinds ?? [], k as RequestKind) })} />
           <UnitSelect label="Unidade de destino (opcional)" value={c.target_unit_id} units={options.units}
             onChange={(id) => onChange({ ...c, target_unit_id: id })} />
-          {unitRefused && <p role="alert" style={alertStyle}>{CAPS_UNIT_TEXT}</p>}
         </>
+      )}
+
+      {unitRefused && (c.kind === "attendance_outcome" || c.kind === "appointment_request_open") && (
+        <p role="alert" style={alertStyle}>{CAPS_UNIT_TEXT}</p>
       )}
 
       {c.kind === "vaccine_overdue" && (
