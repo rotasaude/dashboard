@@ -1,6 +1,6 @@
 // src/modules/campaigns/CriterionCard.tsx
 import type { AttendanceOutcome, CampaignOptions, Criterion, CriterionPeriod, NamedRef, RequestKind } from "../../lib/api";
-import { CRITERION_LABEL, OUTCOME_LABEL, REQUEST_KIND_LABEL, VACCINE_OVERDUE_NOTE, validateCriterion } from "../../lib/campaigns";
+import { CAPS_UNIT_TEXT, CRITERION_LABEL, OUTCOME_LABEL, REQUEST_KIND_LABEL, VACCINE_OVERDUE_NOTE, validateCriterion } from "../../lib/campaigns";
 import { sortByName } from "../../lib/territory";
 import { inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { alertStyle, cardStyle, checkStyle, fieldsetStyle, labelStyle, legendStyle, noteStyle, rowStyle } from "./styles";
@@ -12,6 +12,8 @@ export interface CriterionCardProps {
   criterion: Criterion;
   options: CampaignOptions;
   today: string;
+  // P59: o api recusou a unidade deste critério por ser um CAPS.
+  unitRefused?: boolean;
   onChange(next: Criterion): void;
   onRemove(): void;
 }
@@ -22,7 +24,7 @@ export function toggleValue<T>(list: T[], value: T): T[] {
   return list.includes(value) ? list.filter((v) => v !== value) : [ ...list, value ];
 }
 
-export function CriterionCard({ criterion: c, options, today, onChange, onRemove }: CriterionCardProps) {
+export function CriterionCard({ criterion: c, options, today, unitRefused = false, onChange, onRemove }: CriterionCardProps) {
   const title = CRITERION_LABEL[c.kind];
   const problem = validateCriterion(c, today);
 
@@ -60,6 +62,7 @@ export function CriterionCard({ criterion: c, options, today, onChange, onRemove
             onToggle={(o) => onChange({ ...c, outcomes: toggleValue(c.outcomes, o as AttendanceOutcome) })} />
           <UnitSelect label="Unidade do atendimento (opcional)" value={c.health_unit_id} units={options.units}
             onChange={(id) => onChange({ ...c, health_unit_id: id })} />
+          {unitRefused && <p role="alert" style={alertStyle}>{CAPS_UNIT_TEXT}</p>}
         </>
       )}
 
@@ -70,6 +73,7 @@ export function CriterionCard({ criterion: c, options, today, onChange, onRemove
             onToggle={(k) => onChange({ ...c, kinds: toggleValue<RequestKind>(c.kinds ?? [], k as RequestKind) })} />
           <UnitSelect label="Unidade de destino (opcional)" value={c.target_unit_id} units={options.units}
             onChange={(id) => onChange({ ...c, target_unit_id: id })} />
+          {unitRefused && <p role="alert" style={alertStyle}>{CAPS_UNIT_TEXT}</p>}
         </>
       )}
 

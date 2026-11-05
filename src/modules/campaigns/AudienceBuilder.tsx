@@ -2,8 +2,8 @@
 import { Fragment, useState } from "react";
 import type { AudienceGeo, CampaignOptions, Criterion, CriterionKind, NamedRef } from "../../lib/api";
 import {
-  CRITERION_LABEL, MAX_CRITERIA, criterionKindsFor, MAX_NEIGHBORHOODS, newCriterion, nextCriterionKey, validateGeo,
-  type AudienceDraft
+  CAPS_UNIT_TEXT, CRITERION_LABEL, MAX_CRITERIA, criterionKindsFor, MAX_NEIGHBORHOODS, newCriterion, nextCriterionKey, validateGeo,
+  type AudienceDraft, type UnitRefusal
 } from "../../lib/campaigns";
 import { normalizeName, sortByName } from "../../lib/territory";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
@@ -16,6 +16,8 @@ export interface AudienceBuilderProps {
   draft: AudienceDraft;
   options: CampaignOptions;
   today: string;
+  // P59: onde o api recusou uma unidade CAPS (pelo caminho do campo); a frase vai para esse campo.
+  unitRefusal?: UnitRefusal | null;
   onChange(next: AudienceDraft): void;
 }
 
@@ -31,7 +33,7 @@ function geoFor(scope: AudienceGeo["scope"]): AudienceGeo {
   return { scope: "city" };
 }
 
-export function AudienceBuilder({ draft, options, today, onChange }: AudienceBuilderProps) {
+export function AudienceBuilder({ draft, options, today, unitRefusal, onChange }: AudienceBuilderProps) {
   const [ adding, setAdding ] = useState(false);
   const geo = draft.geo;
   const geoProblem = validateGeo(geo);
@@ -39,6 +41,7 @@ export function AudienceBuilder({ draft, options, today, onChange }: AudienceBui
   // Mesma regra do bairro inativo: a unidade do rascunho que saiu de `options`
   // continua selecionada e nomeada, em vez de o select mostrar "escolha…" e o
   // público seguir com um id que a pessoa não vê.
+  const capsGeo = geo.scope === "unit" && unitRefusal?.geo === true;
   const inactiveUnit = geo.scope === "unit" && geo.health_unit_id !== "" &&
     !options.units.some((u) => u.id === geo.health_unit_id);
 
@@ -79,7 +82,8 @@ export function AudienceBuilder({ draft, options, today, onChange }: AudienceBui
             </select>
           </label>
         )}
-        {inactiveUnit && <p role="alert" style={alertStyle}>a unidade deste rascunho não está mais ativa — escolha outra</p>}
+        {capsGeo && <p role="alert" style={alertStyle}>{CAPS_UNIT_TEXT}</p>}
+        {inactiveUnit && !capsGeo && <p role="alert" style={alertStyle}>a unidade deste rascunho não está mais ativa — escolha outra</p>}
         {geo.scope === "neighborhoods" && (
           <NeighborhoodChecklist selected={geo.neighborhood_ids} neighborhoods={options.neighborhoods}
             onChange={(ids) => setGeo({ scope: "neighborhoods", neighborhood_ids: ids })} />
@@ -93,7 +97,7 @@ export function AudienceBuilder({ draft, options, today, onChange }: AudienceBui
         {draft.criteria.map((d, i) => (
           <Fragment key={d.key}>
             {i > 0 && <p className="mono" style={{ margin: 0, fontSize: 11, color: "var(--ink3)", textAlign: "center" }}>e também</p>}
-            <CriterionCard criterion={d.criterion} options={options} today={today}
+            <CriterionCard criterion={d.criterion} options={options} today={today} unitRefused={unitRefusal?.criteria.includes(i) === true}
               onChange={(c) => replace(d.key, c)} onRemove={() => remove(d.key)} />
           </Fragment>
         ))}

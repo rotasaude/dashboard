@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError, type Criterion } from "./api";
 import {
-  CRITERION_KINDS, addDays, audienceProblem, buildAudience, campaignError, campaignErrorCode, campaignErrorOrNull,
+  CRITERION_KINDS, addDays, audienceProblem, buildAudience, campaignError, campaignErrorCode, campaignErrorOrNull, capsUnitRefusal, CAPS_UNIT_TEXT,
   draftFromAudience, emptyAudienceDraft, isEditable, newCriterion, todayInCity, validateCampaignFields,
   validateCriterion, validateGeo, validateSendAt, type AudienceDraft
 } from "./campaigns";
@@ -187,6 +187,33 @@ describe("recusas", () => {
     expect(text).toBe("público inválido — confira o recorte e os critérios");
     expect(text).not.toContain("/clinical");
     expect(campaignError(err(422, { error: "invalid_audience" }))).toBe("público inválido — confira o recorte e os critérios");
+  });
+
+  // Módulo 31 (P59): o CAPS nunca é público de campanha; o api recusa com o caminho do campo.
+  it("caps_unit_not_allowed: frase sem unidade, sem id e sem ponteiro", () => {
+    const body = { error: "caps_unit_not_allowed", path: "/geo/health_unit_id",
+      details: [ { path: "/geo/health_unit_id", message: "caps_unit_not_allowed" } ] };
+    const text = campaignError(err(422, body));
+    expect(text).toBe(CAPS_UNIT_TEXT);
+    expect(text).toContain("CAPS");
+    expect(text).not.toContain("/geo");
+    expect(campaignErrorOrNull(err(422, body))).toBe(CAPS_UNIT_TEXT);
+  });
+
+  it("capsUnitRefusal: aponta o recorte e o critério pelo caminho do api", () => {
+    const refusal = (details: unknown, path?: string) =>
+      capsUnitRefusal(err(422, { error: "caps_unit_not_allowed", path, details }));
+    expect(refusal([ { path: "/geo/health_unit_id", message: "caps_unit_not_allowed" } ])).toEqual({ geo: true, criteria: [] });
+    expect(refusal([
+      { path: "/clinical/all/0/health_unit_id", message: "caps_unit_not_allowed" },
+      { path: "/clinical/all/2/target_unit_id", message: "caps_unit_not_allowed" }
+    ])).toEqual({ geo: false, criteria: [ 0, 2 ] });
+    // Sem `details`, vale o `path` do corpo.
+    expect(refusal(undefined, "/clinical/all/1/target_unit_id")).toEqual({ geo: false, criteria: [ 1 ] });
+    // Caminho desconhecido ou outro código: não aponta campo nenhum.
+    expect(refusal([ { path: "/algo/novo", message: "caps_unit_not_allowed" } ])).toBeNull();
+    expect(capsUnitRefusal(err(422, { error: "invalid_audience", details: [ { path: "/geo/health_unit_id", message: "caps_unit_not_allowed" } ] }))).toBeNull();
+    expect(capsUnitRefusal(new Error("rede"))).toBeNull();
   });
 
   it("HTML: validação local e recusa html_not_allowed do api", () => {

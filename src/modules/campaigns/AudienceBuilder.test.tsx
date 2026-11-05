@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { useState } from "react";
 import type { CampaignOptions, Criterion } from "../../lib/api";
-import { emptyAudienceDraft, type AudienceDraft } from "../../lib/campaigns";
+import { CAPS_UNIT_TEXT, emptyAudienceDraft, type AudienceDraft, type UnitRefusal } from "../../lib/campaigns";
 import { AudienceBuilder } from "./AudienceBuilder";
 import { OPTIONS } from "../../test/campaignFixtures";
 
@@ -11,10 +11,10 @@ afterEach(cleanup);
 const TODAY = "2026-09-29";
 let last: AudienceDraft;
 
-function Harness({ initial, options = OPTIONS }: { initial: AudienceDraft; options?: CampaignOptions }) {
+function Harness({ initial, options = OPTIONS, unitRefusal }: { initial: AudienceDraft; options?: CampaignOptions; unitRefusal?: UnitRefusal | null }) {
   const [ draft, setDraft ] = useState(initial);
   last = draft;
-  return <AudienceBuilder draft={draft} options={options} today={TODAY} onChange={(d) => { last = d; setDraft(d); }} />;
+  return <AudienceBuilder draft={draft} options={options} today={TODAY} unitRefusal={unitRefusal} onChange={(d) => { last = d; setDraft(d); }} />;
 }
 const withCriteria = (criteria: Criterion[], geo: AudienceDraft["geo"] = { scope: "city" }): AudienceDraft =>
   ({ geo, criteria: criteria.map((criterion, i) => ({ key: `k${i}`, criterion })) });
@@ -128,5 +128,29 @@ describe("AudienceBuilder — critérios", () => {
     render(<Harness initial={withCriteria(Array.from({ length: 7 }, () => ({ kind: "appointment_no_show" as const, ...P })))} />);
     expect((screen.getByRole("button", { name: "Adicionar critério clínico" }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByText("no máximo 7 critérios")).toBeTruthy();
+  });
+});
+
+describe("AudienceBuilder — unidade CAPS recusada pelo api (P59)", () => {
+  it("recorte: a frase fica no campo da unidade e no lugar do aviso de unidade inativa", () => {
+    render(<Harness initial={withCriteria([], { scope: "unit", health_unit_id: "caps-1" })} unitRefusal={{ geo: true, criteria: [] }} />);
+    expect(screen.getByText(CAPS_UNIT_TEXT).getAttribute("role")).toBe("alert");
+    expect(screen.queryByText(/não está mais ativa/)).toBeNull();
+  });
+
+  it("critério: a frase fica só no cartão do índice recusado", () => {
+    const criteria: Criterion[] = [
+      { kind: "attendance_outcome", outcomes: [ "discharged" ], health_unit_id: "u1", ...P },
+      { kind: "appointment_request_open", target_unit_id: "caps-1" }
+    ];
+    render(<Harness initial={withCriteria(criteria)} unitRefusal={{ geo: false, criteria: [ 1 ] }} />);
+    expect(screen.queryAllByText(CAPS_UNIT_TEXT)).toHaveLength(1);
+    const second = screen.getByRole("region", { name: "Pedido de agendamento aberto" });
+    expect(within(second).getByText(CAPS_UNIT_TEXT)).toBeTruthy();
+  });
+
+  it("sem recusa, nenhuma frase", () => {
+    render(<Harness initial={withCriteria([], { scope: "unit", health_unit_id: "u1" })} />);
+    expect(screen.queryByText(CAPS_UNIT_TEXT)).toBeNull();
   });
 });

@@ -83,7 +83,8 @@ export function SendDialog({
           } catch (err) {
             const code = campaignErrorCode(err);
             if (code === "below_minimum") { backToEditor.current = { kind: "below" }; return; }
-            if (code === "invalid_audience") { backToEditor.current = { kind: "invalid", message: campaignError(err) }; return; }
+            // P59: CAPS no público volta ao editor, onde a prévia aponta o campo (como o público inválido).
+            if (code === "invalid_audience" || code === "caps_unit_not_allowed") { backToEditor.current = { kind: "invalid", message: campaignError(err) }; return; }
             if (code === "invalid_send_at") setSendAtRefused(true);
             throw err;
           }

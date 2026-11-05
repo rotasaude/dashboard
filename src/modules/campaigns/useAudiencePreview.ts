@@ -1,12 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
 import { previewAudience, type Audience } from "../../lib/api";
-import { PREVIEW_DEBOUNCE_MS, PREVIEW_KEY, campaignError } from "../../lib/campaigns";
+import { PREVIEW_DEBOUNCE_MS, PREVIEW_KEY, campaignError, capsUnitRefusal, type UnitRefusal } from "../../lib/campaigns";
 import { useDebouncedValue } from "../../lib/useDebouncedValue";
 
 export type PreviewState =
   | { kind: "incomplete" }
   | { kind: "loading" }
-  | { kind: "error"; message: string }
+  | { kind: "error"; message: string; unitRefusal?: UnitRefusal }
   | { kind: "below_minimum" }
   | { kind: "ok"; citizens: number; phones: number };
 
@@ -27,7 +27,10 @@ export function useAudiencePreview(audience: Audience | null, delayMs: number = 
   if (key === null) return { kind: "incomplete" };
   if (settledKey !== key) return { kind: "loading" };
   if (query.isPending) return { kind: "loading" };
-  if (query.isError) return { kind: "error", message: campaignError(query.error) };
+  if (query.isError) {
+    const unitRefusal = capsUnitRefusal(query.error);
+    return { kind: "error", message: campaignError(query.error), ...(unitRefusal ? { unitRefusal } : {}) };
+  }
   if ("below_minimum" in query.data) return { kind: "below_minimum" };
   return { kind: "ok", citizens: query.data.citizens, phones: query.data.phones };
 }

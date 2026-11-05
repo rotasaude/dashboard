@@ -305,6 +305,57 @@ describe("CampaignEditor", () => {
     });
   });
 
+  describe("unidade CAPS no público (P59)", () => {
+    const sendButton = () => screen.getByRole("button", { name: "Revisar e enviar…" }) as HTMLButtonElement;
+    const CAPS_REFUSAL = {
+      error: "caps_unit_not_allowed", path: "/geo/health_unit_id",
+      details: [ { path: "/geo/health_unit_id", message: "caps_unit_not_allowed" } ]
+    };
+    const CAPS_TEXT = "unidade CAPS não pode ser usada em público de campanha — troque a unidade";
+    const UNIT_CAMPAIGN: Audience = { version: 1, geo: { scope: "unit", health_unit_id: "caps-1" }, clinical: { all: [] } };
+
+    it("a contagem recusada põe a frase no campo da unidade e trava o envio", async () => {
+      mocked(api.getCampaign).mockResolvedValue(campaign({ audience: UNIT_CAMPAIGN }));
+      mocked(api.previewAudience).mockRejectedValue(new ApiError(422, CAPS_REFUSAL, "422"));
+      renderEditor("c1");
+
+      const counter = await screen.findByRole("status", { name: "Contagem do público" });
+      await waitFor(() => expect(counter.textContent).toBe(CAPS_TEXT));
+      const field = screen.getByLabelText("Unidade").closest("label") as HTMLElement;
+      expect(within(field.parentElement as HTMLElement).getByText(CAPS_TEXT).getAttribute("role")).toBe("alert");
+      expect(sendButton().disabled).toBe(true);
+    });
+
+    it("trocar a unidade tira a frase do campo", async () => {
+      mocked(api.getCampaign).mockResolvedValue(campaign({ audience: UNIT_CAMPAIGN }));
+      mocked(api.previewAudience).mockRejectedValueOnce(new ApiError(422, CAPS_REFUSAL, "422"))
+        .mockResolvedValue({ citizens: 12, phones: 9 });
+      renderEditor("c1");
+      await waitFor(() => expect(screen.getAllByText(CAPS_TEXT).length).toBe(2));
+
+      fireEvent.change(screen.getByLabelText("Unidade"), { target: { value: "u1" } });
+      await screen.findByText("≈ 12 pessoas (9 telefones)");
+      expect(screen.queryByText(CAPS_TEXT)).toBeNull();
+    });
+
+    it("caps_unit_not_allowed no envio: volta ao editor com a frase, como o público inválido", async () => {
+      mocked(api.getCampaign).mockResolvedValue(campaign({ audience: BOQUEIRAO }));
+      mocked(api.updateCampaign).mockResolvedValue(campaign({ audience: BOQUEIRAO }));
+      mocked(api.sendCampaign).mockRejectedValue(new ApiError(422, CAPS_REFUSAL, "422"));
+      const { onLeftDraft } = renderEditor("c1");
+      await screen.findByText("≈ 12 pessoas (9 telefones)");
+
+      fireEvent.click(sendButton());
+      fireEvent.click(await screen.findByRole("button", { name: "Continuar" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Enviar agora" }));
+
+      const message = await screen.findByText(CAPS_TEXT);
+      expect(message.getAttribute("role")).toBe("alert");
+      expect(screen.queryByRole("region", { name: "Enviar campanha" })).toBeNull();
+      expect(onLeftDraft).not.toHaveBeenCalled();
+    });
+  });
+
   it("voltar à lista", async () => {
     const { onBack } = renderEditor();
     fireEvent.click(await screen.findByRole("button", { name: "Voltar à lista" }));

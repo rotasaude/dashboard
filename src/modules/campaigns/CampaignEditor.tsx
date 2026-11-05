@@ -172,7 +172,8 @@ function EditorForm({ initial, options, onBack, onLeftDraft, onGoToSecurity, pre
       <Panel title="Público" sub="recorte · critérios clínicos">
         <div style={columnStyle}>
           <fieldset disabled={locked} style={lockStyle}>
-            <AudienceBuilder draft={draft} options={options} today={today} onChange={setDraft} />
+            <AudienceBuilder draft={draft} options={options} today={today} onChange={setDraft}
+              unitRefusal={preview.kind === "error" ? preview.unitRefusal : null} />
           </fieldset>
           <AudienceCounter state={preview} problem={problem} />
           <p style={noteStyle}>{smsLine}</p>

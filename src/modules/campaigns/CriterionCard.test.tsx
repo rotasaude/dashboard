@@ -4,15 +4,16 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { Criterion } from "../../lib/api";
 import { CriterionCard } from "./CriterionCard";
 import { OPTIONS } from "../../test/campaignFixtures";
+import { CAPS_UNIT_TEXT } from "../../lib/campaigns";
 
 afterEach(cleanup);
 const TODAY = "2026-09-29";
 const P = { from: "2026-09-01", to: "2026-09-29" };
 
-function renderCard(criterion: Criterion, options = OPTIONS) {
+function renderCard(criterion: Criterion, options = OPTIONS, unitRefused = false) {
   const onChange = vi.fn();
   const onRemove = vi.fn();
-  render(<CriterionCard criterion={criterion} options={options} today={TODAY} onChange={onChange} onRemove={onRemove} />);
+  render(<CriterionCard criterion={criterion} options={options} today={TODAY} unitRefused={unitRefused} onChange={onChange} onRemove={onRemove} />);
   return { onChange, onRemove };
 }
 
@@ -93,5 +94,30 @@ describe("CriterionCard", () => {
     const { onRemove } = renderCard({ kind: "appointment_no_show", ...P });
     fireEvent.click(screen.getByRole("button", { name: "Remover Falta em agendamento" }));
     expect(onRemove).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("CriterionCard — unidade CAPS recusada (P59)", () => {
+  const outcome: Criterion = { kind: "attendance_outcome", outcomes: [ "discharged" ], health_unit_id: "caps-1", ...P };
+  const request: Criterion = { kind: "appointment_request_open", target_unit_id: "caps-1" };
+
+  it("mostra a frase junto da unidade, sem nome nem id", () => {
+    for (const c of [ outcome, request ]) {
+      cleanup();
+      renderCard(c, OPTIONS, true);
+      const alert = screen.getByText(CAPS_UNIT_TEXT);
+      expect(alert.getAttribute("role")).toBe("alert");
+      expect(alert.textContent).not.toContain("caps-1");
+    }
+  });
+
+  it("sem recusa, a frase não aparece", () => {
+    renderCard(outcome);
+    expect(screen.queryByText(CAPS_UNIT_TEXT)).toBeNull();
+  });
+
+  it("critério sem unidade ignora a recusa", () => {
+    renderCard({ kind: "protocol_period", protocol_name: "Febre", ...P }, OPTIONS, true);
+    expect(screen.queryByText(CAPS_UNIT_TEXT)).toBeNull();
   });
 });

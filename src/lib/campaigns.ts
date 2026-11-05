@@ -252,7 +252,12 @@ export function validateSendAt(value: string, now: Date = new Date()): SendAtChe
 }
 
 // ─── Recusas ────────────────────────────────────────────────────────────────
+// Módulo 31 (P59): o CAPS nunca é público de campanha (avisar "quem é do CAPS X" revelaria o vínculo).
+// A frase não leva nome nem id de unidade.
+export const CAPS_UNIT_TEXT = "unidade CAPS não pode ser usada em público de campanha — troque a unidade";
+
 const MESSAGES: Record<string, string> = {
+  caps_unit_not_allowed: CAPS_UNIT_TEXT,
   missing_role: "seu papel não permite esta ação",
   invalid_campaign: `confira o título (${TITLE_MIN} a ${TITLE_MAX} caracteres) e o texto (${BODY_MIN} a ${BODY_MAX})`,
   below_minimum: "o público tem menos de 5 telefones — ajuste o público",
@@ -284,6 +289,28 @@ function translate(body: CampaignErrorBody): string | null {
     return HTML_MESSAGE;
   }
   return (body.error && MESSAGES[body.error]) || null;
+}
+
+// Onde o api achou a unidade CAPS: o recorte (`/geo/health_unit_id`) e/ou os critérios
+// (`/clinical/all/N/health_unit_id` ou `.../target_unit_id`, N = posição no público).
+export interface UnitRefusal { geo: boolean; criteria: number[] }
+
+const CRITERION_UNIT_PATH = /^\/clinical\/all\/(\d+)\/(?:health_unit_id|target_unit_id)$/;
+
+export function capsUnitRefusal(err: unknown): UnitRefusal | null {
+  if (!(err instanceof ApiError)) return null;
+  const body = errorBody(err) as CampaignErrorBody & { path?: unknown };
+  if (body.error !== "caps_unit_not_allowed") return null;
+  const paths = Array.isArray(body.details)
+    ? body.details.filter((d) => d?.message === "caps_unit_not_allowed").map((d) => d.path)
+    : typeof body.path === "string" ? [ body.path ] : [];
+  const refusal: UnitRefusal = { geo: false, criteria: [] };
+  for (const path of paths) {
+    if (path === "/geo/health_unit_id") { refusal.geo = true; continue; }
+    const match = typeof path === "string" ? CRITERION_UNIT_PATH.exec(path) : null;
+    if (match && !refusal.criteria.includes(Number(match[1]))) refusal.criteria.push(Number(match[1]));
+  }
+  return refusal.geo || refusal.criteria.length > 0 ? refusal : null;
 }
 
 export function campaignErrorCode(err: unknown): string | null {
