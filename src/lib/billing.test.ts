@@ -67,6 +67,8 @@ describe("veredito da crítica", () => {
     expect(sourceLabel("rnds")).toBe("rnds");
     // Módulo 30: ajuda de custo do TFD na produção BPA.
     expect(sourceLabel("tfd")).toBe("TFD");
+    // Módulo 31: produção do CAPS (fonte `psychosocial`).
+    expect(sourceLabel("psychosocial")).toBe("atenção psicossocial (CAPS)");
   });
 
   it("SIGTAP de outra competência e a frase depois de registrar", () => {

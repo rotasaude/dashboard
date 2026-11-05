@@ -86,7 +86,9 @@ export function reasonLabel(code: string): string {
 const SOURCE_LABEL: Record<string, string> = {
   attendance: "atendimento", consultation: "consulta", lab_report: "laboratório municipal", manual: "lançamento manual",
   // Módulo 30: ajuda de custo do TFD (source_ref { type: "tfd_allowance", id }).
-  tfd: "TFD"
+  tfd: "TFD",
+  // Módulo 31: produção do CAPS (atendimento no CAPS que entra no BPA).
+  psychosocial: "atenção psicossocial (CAPS)"
 };
 export function sourceLabel(code: string): string {
   return SOURCE_LABEL[code] ?? code;

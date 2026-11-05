@@ -3665,7 +3665,8 @@ export interface PendingItem {
   procedure_id: string; reasons: string[]; fix: PendingFix | string;
   performed_on?: string; sigtap_code?: string; label?: string; late?: boolean;
   // Módulo 24a: L8 (`has_cpf`, CNS mascarado) e L6 (`address_from_household`: endereço do cadastro domiciliar).
-  patient?: { id: string; display_name: string | null; has_cpf?: boolean; cns_masked?: string | null; address_from_household?: boolean };
+  // Módulo 31 (B7): a produção do CAPS chega com `patient: null` e `fix: "patient"` (sem nome na tela).
+  patient?: { id: string; display_name: string | null; has_cpf?: boolean; cns_masked?: string | null; address_from_household?: boolean } | null;
   professional?: { user_id: string; name: string };
 }
 export interface BillingExport {
