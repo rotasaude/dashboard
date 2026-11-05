@@ -7,8 +7,11 @@ import { CAPS_II, NOW31, OPTIONS, TODAY31, psyUser, referralRow } from "../test/
 import * as api from "../lib/api";
 import { ApiError } from "../lib/api";
 import {
-  ESF_CNES_MISSING, NO_REGISTRATION_TEXT, PSY_DETAIL_KEY, PSY_ERRORS, RECEPTION_DONE, RECEPTION_ENROLLED, TRAIL_NOTE, psyError, psyRefusals
+  CID_REPEATED_TEXT, DISCARD_RECEPTION_TEXT, ESF_CNES_MISSING, NO_CLINICAL_IN_LIST, NO_RECEPTION_PROCEDURE, NO_REGISTRATION_TEXT, PSY_DETAIL_KEY,
+  PSY_ERRORS, RECEPTION_BEFORE_START, RECEPTION_DONE, RECEPTION_ENROLLED, RECEPTION_PROCEDURE_TEXT, TRAIL_NOTE, emptyReceptionDraft, enrollmentFloor,
+  priorityLabel, psyError, psyRefusals, receptionProblems
 } from "../lib/psychosocial";
+import { EnrollmentFields } from "./psychosocial/EnrollmentFields";
 import { CapsReception } from "./CapsReception";
 
 vi.mock("../lib/api", async (orig) => ({ ...(await orig<typeof api>()), fetchCurrentSession: vi.fn(), listPsyUnits: vi.fn(), getPsyOptions: vi.fn(),
@@ -28,6 +31,13 @@ function mount(o: { onOpenEnrollment?: (id: string) => void; prefill?: api.PsyPr
   vi.mocked(api.recordPsyReception).mockResolvedValue({ reception_id: "re9", enrollment_id: null });
   return renderWithProviders(<CapsReception today={TODAY31} now={NOW31} onOpenEnrollment={o.onOpenEnrollment} />);
 }
+// As frases do bloco de matrícula vazio, vindas da lib (nunca repetidas aqui).
+const EMPTY_ENROLLMENT = receptionProblems({ ...emptyReceptionDraft(NOW31, TODAY31, "u-1", []), sigtapCode: "x", outcome: "enrolled" }, TODAY31, NOW31);
+const textAt = (path: string) => EMPTY_ENROLLMENT.find((p) => p.path === path)?.text as string;
+const startedOnText = () => receptionProblems({ ...emptyReceptionDraft(NOW31, TODAY31, "u-1", []), sigtapCode: "x", outcome: "enrolled",
+  enrollment: { ...emptyReceptionDraft(NOW31, TODAY31, "u-1", []).enrollment, startedOn: "2025-10-31" } }, TODAY31, NOW31)
+  .find((p) => p.path === "enrollment.started_on")?.text as string;
+const deferred = <T,>() => { let resolve!: (v: T) => void; const promise = new Promise<T>((r) => { resolve = r; }); return { promise, resolve }; };
 const submit = () => fireEvent.click(screen.getByRole("button", { name: "Registrar acolhimento" }));
 const sent = (i = 0) => vi.mocked(api.recordPsyReception).mock.calls[i][0];
 
@@ -43,9 +53,12 @@ describe("acolhimento do CAPS", () => {
   it("fila sem motivo; motivo só ao abrir, e sai do cache ao fechar", async () => {
     const { client } = mount();
     expect(await screen.findByText("Maria da Silva")).not.toBeNull();
-    expect(screen.getByText("prioritário")).not.toBeNull();
+    expect(screen.getByText(priorityLabel("priority"))).not.toBeNull();
     expect(screen.getByText("UBS Vila Verde")).not.toBeNull();
     expect(screen.queryByText("NÃO DEVE APARECER")).toBeNull();
+    // A fila avisa que não traz o motivo e que abrir grava a leitura; nada foi lido ainda.
+    expect(screen.getByText(NO_CLINICAL_IN_LIST)).not.toBeNull();
+    expect(screen.getByText(TRAIL_NOTE)).not.toBeNull();
     expect(api.getPsyReferral).not.toHaveBeenCalled();
     expect(vi.mocked(api.listPsyReferrals).mock.calls[0]).toEqual([ "caps2", { before: null } ]);
     vi.mocked(api.getPsyReferral).mockResolvedValue({ ...referralRow(), reason: "Ideação suicida relatada", received_at: null,
@@ -53,7 +66,7 @@ describe("acolhimento do CAPS", () => {
     fireEvent.click(screen.getByRole("button", { name: "Abrir encaminhamento de Maria da Silva" }));
     expect(await screen.findByText("Ideação suicida relatada")).not.toBeNull();
     expect(screen.getByText("Dra. Ana")).not.toBeNull();
-    expect(screen.getByText(TRAIL_NOTE)).not.toBeNull();
+    expect(document.activeElement?.textContent).toBe("Maria da Silva");
     expect(vi.mocked(api.getPsyReferral).mock.calls[0][0]).toBe("rf1");
     expect(client.getQueryCache().findAll({ queryKey: [ PSY_DETAIL_KEY, "caps2", "referral", "rf1" ] }).length).toBe(1);
     fireEvent.click(screen.getByRole("button", { name: "Fechar" }));
@@ -68,6 +81,55 @@ describe("acolhimento do CAPS", () => {
     expect(await screen.findByText(PSY_ERRORS.not_found)).not.toBeNull();
     await waitFor(() => expect(api.listPsyReferrals).toHaveBeenCalledTimes(2));
     expect(screen.queryByRole("button", { name: "Fechar" })).toBeNull();
+    expect(document.activeElement?.textContent).toBe(PSY_ERRORS.not_found);
+  });
+
+  it("404 no POST do acolhimento (encaminhamento anonimizado): fecha o formulário, frase com foco e relê a fila", async () => {
+    mount();
+    fireEvent.click(await screen.findByRole("button", { name: "Acolher Maria da Silva" }));
+    fireEvent.change(screen.getByLabelText("Desfecho"), { target: { value: "referred_elsewhere" } });
+    vi.mocked(api.recordPsyReception).mockRejectedValueOnce(new ApiError(404, { error: "not_found" }, "x"));
+    submit();
+    expect(await screen.findByText(PSY_ERRORS.not_found)).not.toBeNull();
+    await waitFor(() => expect(api.listPsyReferrals).toHaveBeenCalledTimes(2));
+    expect(screen.queryByRole("button", { name: "Registrar acolhimento" })).toBeNull();
+    expect(document.activeElement?.textContent).toBe(PSY_ERRORS.not_found);
+  });
+
+  it("sem procedimento de acolhimento para o CBO: a frase, e o envio é recusado na tela", async () => {
+    mount();
+    vi.mocked(api.getPsyOptions).mockResolvedValue({ ...OPTIONS, procedures: OPTIONS.procedures.filter((p) => !/ACOLHIMENTO/.test(p.name)) });
+    fireEvent.click(await screen.findByRole("button", { name: "Acolher Maria da Silva" }));
+    expect(await screen.findByText(NO_RECEPTION_PROCEDURE)).not.toBeNull();
+    fireEvent.change(screen.getByLabelText("Desfecho"), { target: { value: "no_follow_up" } });
+    submit();
+    expect(screen.getByText(RECEPTION_PROCEDURE_TEXT)).not.toBeNull();
+    expect(api.recordPsyReception).not.toHaveBeenCalled();
+  });
+
+  it("Acolher leva o foco ao nome; outra linha com acolhimento aberto pergunta antes de descartar", async () => {
+    mount();
+    vi.mocked(api.listPsyReferrals).mockResolvedValue({ items: [ referralRow(),
+      referralRow({ id: "rf2", patient: { patient_id: "pt2", name: "José Pereira", cns_masked: null } }) ], next_before: null });
+    fireEvent.click(await screen.findByRole("button", { name: "Acolher Maria da Silva" }));
+    await waitFor(() => expect(document.activeElement?.textContent).toBe("Maria da Silva"));
+    fireEvent.change(screen.getByLabelText("Anotações do acolhimento"), { target: { value: "rascunho" } });
+    fireEvent.click(screen.getByRole("button", { name: "Acolher José Pereira" }));
+    expect(screen.getByText(DISCARD_RECEPTION_TEXT)).not.toBeNull();
+    expect(document.activeElement?.textContent).toBe(DISCARD_RECEPTION_TEXT);
+    fireEvent.click(screen.getByRole("button", { name: "Continuar o acolhimento" }));
+    expect((screen.getByLabelText("Anotações do acolhimento") as HTMLTextAreaElement).value).toBe("rascunho");
+    // Abrir outro encaminhamento não descarta o acolhimento.
+    vi.mocked(api.getPsyReferral).mockResolvedValue({ ...referralRow({ id: "rf2" }), reason: "Outro motivo relatado", received_at: null,
+      referred_by: { user_id: "u-9", name: "Dra. Ana" } });
+    fireEvent.click(screen.getByRole("button", { name: "Abrir encaminhamento de José Pereira" }));
+    expect(await screen.findByText("Outro motivo relatado")).not.toBeNull();
+    expect((screen.getByLabelText("Anotações do acolhimento") as HTMLTextAreaElement).value).toBe("rascunho");
+    fireEvent.click(screen.getByRole("button", { name: "Acolher José Pereira" }));
+    fireEvent.click(screen.getByRole("button", { name: "Descartar e acolher José Pereira" }));
+    expect(screen.queryByText(DISCARD_RECEPTION_TEXT)).toBeNull();
+    expect((screen.getByLabelText("Anotações do acolhimento") as HTMLTextAreaElement).value).toBe("");
+    await waitFor(() => expect(document.activeElement?.textContent).toBe("José Pereira"));
   });
 
   it("Carregar mais pede a página seguinte pelo cursor", async () => {
@@ -93,9 +155,9 @@ describe("acolhimento do CAPS", () => {
     expect(screen.getByText("ESF Vila Verde · UBS Vila Verde")).not.toBeNull();
     expect(vi.mocked(api.getPsyPrefill).mock.calls[0]).toEqual([ "caps2", "pt1" ]);
     submit();
-    expect(screen.getByText("informe o CID principal")).not.toBeNull();
-    expect(screen.getByText("escolha a origem do usuário")).not.toBeNull();
-    expect(screen.getByText("marque as substâncias ou nenhuma")).not.toBeNull();
+    expect(screen.getByText(textAt("enrollment.cid_main"))).not.toBeNull();
+    expect(screen.getByText(textAt("enrollment.origin"))).not.toBeNull();
+    expect(screen.getByText(textAt("enrollment.substances"))).not.toBeNull();
     expect(api.recordPsyReception).not.toHaveBeenCalled();
     await fillEnrollment();
     vi.mocked(api.recordPsyReception).mockResolvedValue({ reception_id: "re9", enrollment_id: "en9" });
@@ -252,5 +314,85 @@ describe("acolhimento do CAPS", () => {
     fireEvent.change(screen.getByLabelText("Data de nascimento"), { target: { value: "1980-01-01" } });
     fireEvent.click(screen.getByRole("button", { name: "Buscar possíveis duplicados" }));
     await waitFor(() => expect(api.findPsyDuplicates).toHaveBeenCalledWith({ full_name: "João da Rua", birth_date: "1980-01-01" }));
+  });
+  it("Enter na busca do CID (principal ou secundário) não envia o acolhimento", async () => {
+    mount();
+    fireEvent.click(await screen.findByRole("button", { name: "Acolher Maria da Silva" }));
+    fireEvent.change(screen.getByLabelText("Desfecho"), { target: { value: "enrolled" } });
+    for (const label of [ "CID principal", "CID secundário (até 4)" ]) {
+      const input = screen.getByLabelText(label);
+      fireEvent.change(input, { target: { value: "F3" } });
+      // O Enter foi barrado (preventDefault): o <form> não faz a submissão implícita.
+      expect(fireEvent.keyDown(input, { key: "Enter" })).toBe(false);
+    }
+    expect(api.recordPsyReception).not.toHaveBeenCalled();
+    expect(screen.queryByText(textAt("enrollment.origin"))).toBeNull();
+  });
+
+  it("CID secundário repetido ou igual ao principal mostra a frase e não entra", async () => {
+    mount();
+    fireEvent.click(await screen.findByRole("button", { name: "Acolher Maria da Silva" }));
+    fireEvent.change(screen.getByLabelText("Desfecho"), { target: { value: "enrolled" } });
+    await fillEnrollment();
+    fireEvent.change(screen.getByLabelText("CID secundário (até 4)"), { target: { value: "depress" } });
+    fireEvent.click(await screen.findByRole("button", { name: "F32.2 — Episódio depressivo grave" }));
+    expect(screen.getByText(CID_REPEATED_TEXT)).not.toBeNull();
+    expect(screen.queryByRole("list", { name: "CIDs secundários" })).toBeNull();
+  });
+
+  it("o prefill não passa por cima do que a pessoa já mexeu na cobertura", async () => {
+    const late = deferred<api.PsyPrefill>();
+    mount();
+    vi.mocked(api.getPsyPrefill).mockReturnValue(late.promise);
+    fireEvent.click(await screen.findByRole("button", { name: "Acolher Maria da Silva" }));
+    fireEvent.change(screen.getByLabelText("Desfecho"), { target: { value: "enrolled" } });
+    fireEvent.click(screen.getByLabelText("Coberto por ESF"));
+    fireEvent.change(screen.getByLabelText("CNES da USF"), { target: { value: "1111111" } });
+    late.resolve(PREFILL);
+    await screen.findByText("ESF Vila Verde · UBS Vila Verde");
+    expect((screen.getByLabelText("CNES da USF") as HTMLInputElement).value).toBe("1111111");
+  });
+
+  it("EnrollmentFields sem prefill (edição) não lê a ESF", () => {
+    const d = emptyReceptionDraft(NOW31, TODAY31, "u-1", []).enrollment;
+    renderWithProviders(<EnrollmentFields unitId="caps2" patientId="pt1" options={OPTIONS} value={d} onChange={vi.fn()} problems={[]} today={TODAY31} />);
+    expect(api.getPsyPrefill).not.toHaveBeenCalled();
+  });
+
+  it("início antes do piso de 12 meses e acolhimento antes do início: as frases na tela, sem envio", async () => {
+    mount();
+    fireEvent.click(await screen.findByRole("button", { name: "Acolher Maria da Silva" }));
+    fireEvent.change(screen.getByLabelText("Desfecho"), { target: { value: "enrolled" } });
+    await fillEnrollment();
+    expect((screen.getByLabelText("Início da matrícula") as HTMLInputElement).min).toBe(enrollmentFloor(TODAY31));
+    fireEvent.change(screen.getByLabelText("Início da matrícula"), { target: { value: "2025-10-31" } });
+    submit();
+    expect(screen.getByText(startedOnText())).not.toBeNull();
+    expect(document.activeElement).toBe(screen.getByLabelText("Início da matrícula"));
+    fireEvent.change(screen.getByLabelText("Início da matrícula"), { target: { value: TODAY31 } });
+    fireEvent.change(screen.getByLabelText("Data e hora"), { target: { value: "2026-11-03T09:00" } });
+    submit();
+    expect(screen.getByText(RECEPTION_BEFORE_START)).not.toBeNull();
+    expect(api.recordPsyReception).not.toHaveBeenCalled();
+  });
+
+  it("grupo de substâncias inválido leva o foco à primeira caixa; Cancelar fica desabilitado durante o envio", async () => {
+    mount();
+    fireEvent.click(await screen.findByRole("button", { name: "Acolher Maria da Silva" }));
+    fireEvent.change(screen.getByLabelText("Desfecho"), { target: { value: "enrolled" } });
+    await waitFor(() => expect((screen.getByLabelText("CNES da USF") as HTMLInputElement).value).toBe("2384299"));
+    fireEvent.change(screen.getByLabelText("Origem"), { target: { value: "02" } });
+    fireEvent.change(screen.getByLabelText("CID principal"), { target: { value: "depress" } });
+    fireEvent.click(await screen.findByRole("button", { name: "F32.2 — Episódio depressivo grave" }));
+    submit();
+    expect(screen.getByText(textAt("enrollment.substances"))).not.toBeNull();
+    expect(document.activeElement).toBe(screen.getByLabelText(OPTIONS.substances[0].label));
+    fireEvent.click(screen.getByLabelText("Nenhuma"));
+    const slow = deferred<api.PsyReceptionResult>();
+    vi.mocked(api.recordPsyReception).mockReturnValue(slow.promise);
+    submit();
+    await waitFor(() => expect((screen.getByRole("button", { name: "Cancelar" }) as HTMLButtonElement).disabled).toBe(true));
+    slow.resolve({ reception_id: "re9", enrollment_id: "en9" });
+    expect(await screen.findByText(RECEPTION_ENROLLED)).not.toBeNull();
   });
 });

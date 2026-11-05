@@ -3,11 +3,11 @@
 // pelo `GET /psychosocial/prefill` (eSF tipo 70; sem CNES → aviso e o campo em branco) e o técnico de referência da equipe lotada.
 // Controlado: `value`/`onChange` são de quem usa (o acolhimento aqui; a edição na Task 6). `problems` vêm sem o prefixo `enrollment.`.
 // O pré-preenchimento é leitura nominal (a USF do paciente): `NOMINAL_QUERY`, com o id do CAPS na chave.
-import { useEffect, useId, useRef } from "react";
+import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getPsyPrefill, searchTerminology, type PsyOptions } from "../../lib/api";
 import {
-  ESF_CNES_MISSING, NO_SUBSTANCE, NOMINAL_QUERY, PSY_DETAIL_KEY, enrollmentFloor, psyError, type EnrollmentDraft
+  CID_REPEATED_TEXT, ESF_CNES_MISSING, NO_SUBSTANCE, NOMINAL_QUERY, PSY_DETAIL_KEY, enrollmentFloor, psyError, type EnrollmentDraft
 } from "../../lib/psychosocial";
 import type { Problem } from "../../lib/pharmacy";
 import { inputStyle, secondaryButtonStyle } from "../../components/formStyles";
@@ -15,27 +15,38 @@ import { CodeSearch } from "../consultation/CodeSearch";
 import { alert, checkLabel, fieldLabel, fieldset, legend, muted, row } from "../exams/styles";
 
 const MAX_SECONDARY = 4;
+// Enter na busca de CID não envia o formulário de fora (o CodeSearch é compartilhado e não sabe que está dentro de um <form>).
+const keepEnterInSearch = (e: KeyboardEvent<HTMLDivElement>) => {
+  if (e.key === "Enter" && e.target instanceof HTMLInputElement) e.preventDefault();
+};
 
-export function EnrollmentFields({ unitId, patientId, options, value, onChange, problems, today }: {
+// `prefill`: lê a ESF do paciente e preenche a cobertura só enquanto ninguém mexeu nela (o acolhimento liga; a edição, não).
+// `lockedOriginAndStart`: reservado para a edição (Task 6); aqui não muda nada (R4: o `origin_locked` do api vira frase).
+export function EnrollmentFields({ unitId, patientId, options, value, onChange, problems, today, prefill: usePrefill = false }: {
   unitId: string; patientId: string; options: PsyOptions; value: EnrollmentDraft; onChange(d: EnrollmentDraft): void; problems: Problem[];
-  today: string;
+  today: string; prefill?: boolean; lockedOriginAndStart?: boolean;
 }) {
   const uid = useId();
   const prefill = useQuery({
     queryKey: [ PSY_DETAIL_KEY, unitId, "prefill", patientId ],
     queryFn: () => getPsyPrefill(unitId, patientId),
+    enabled: usePrefill,
     ...NOMINAL_QUERY
   });
-  // O pré-preenchimento entra uma vez (depois, é da pessoa editar).
+  // O pré-preenchimento entra uma vez e nunca por cima do que a pessoa mexeu (cobertura ou CNES).
   const applied = useRef(false);
+  const touchedEsf = useRef(false);
   const latest = useRef({ value, onChange });
   latest.current = { value, onChange };
   useEffect(() => {
     const p = prefill.data;
     if (!p || applied.current) return;
     applied.current = true;
-    if (p.esf_covered) latest.current.onChange({ ...latest.current.value, esfCovered: true, esfCnes: p.esf_cnes ?? "" });
+    const v = latest.current.value;
+    if (!p.esf_covered || touchedEsf.current || v.esfCovered || v.esfCnes.trim() !== "") return;
+    latest.current.onChange({ ...v, esfCovered: true, esfCnes: p.esf_cnes ?? "" });
   }, [ prefill.data ]);
+  const [ cidNote, setCidNote ] = useState<string | null>(null);
 
   const set = (patch: Partial<EnrollmentDraft>) => onChange({ ...value, ...patch });
   const textOf = (path: string) => problems.find((p) => p.path === path)?.text ?? null;
@@ -77,11 +88,18 @@ export function EnrollmentFields({ unitId, patientId, options, value, onChange, 
       {value.cidMain ? (
         <div style={row}>
           <span style={fieldLabel}>CID principal<strong style={{ color: "var(--ink)" }}>{`${value.cidMain.code} — ${value.cidMain.label}`}</strong></span>
-          <button type="button" style={secondaryButtonStyle} onClick={() => set({ cidMain: null })}>Trocar o CID principal</button>
+          <button type="button" style={secondaryButtonStyle} onClick={() => { setCidNote(null); set({ cidMain: null }); }}>Trocar o CID principal</button>
         </div>
       ) : (
-        <CodeSearch label="CID principal" queryKey={`${PSY_DETAIL_KEY}:${unitId}:cid-main`} search={(q) => searchTerminology(q, "cid10")}
-          errorText={psyError} onPick={(c) => set({ cidMain: c })} />
+        <div onKeyDown={keepEnterInSearch}>
+          <CodeSearch label="CID principal" queryKey={`${PSY_DETAIL_KEY}:${unitId}:cid-main`} search={(q) => searchTerminology(q, "cid10")}
+            errorText={psyError}
+            onPick={(c) => {
+              if (value.cidSecondary.some((x) => x.code === c.code)) { setCidNote(CID_REPEATED_TEXT); return; }
+              setCidNote(null);
+              set({ cidMain: c });
+            }} />
+        </div>
       )}
       {errNode("cid_main")}
 
@@ -97,13 +115,17 @@ export function EnrollmentFields({ unitId, patientId, options, value, onChange, 
         </ul>
       )}
       {value.cidSecondary.length < MAX_SECONDARY && (
-        <CodeSearch label="CID secundário (até 4)" queryKey={`${PSY_DETAIL_KEY}:${unitId}:cid-secondary`} search={(q) => searchTerminology(q, "cid10")}
-          errorText={psyError}
-          onPick={(c) => {
-            if (c.code === value.cidMain?.code || value.cidSecondary.some((x) => x.code === c.code)) return;
-            set({ cidSecondary: [ ...value.cidSecondary, c ] });
-          }} />
+        <div onKeyDown={keepEnterInSearch}>
+          <CodeSearch label="CID secundário (até 4)" queryKey={`${PSY_DETAIL_KEY}:${unitId}:cid-secondary`} search={(q) => searchTerminology(q, "cid10")}
+            errorText={psyError}
+            onPick={(c) => {
+              if (c.code === value.cidMain?.code || value.cidSecondary.some((x) => x.code === c.code)) { setCidNote(CID_REPEATED_TEXT); return; }
+              setCidNote(null);
+              set({ cidSecondary: [ ...value.cidSecondary, c ] });
+            }} />
+        </div>
       )}
+      {cidNote && <p role="alert" style={alert}>{cidNote}</p>}
       {errNode("cid_secondary")}
 
       <fieldset style={fieldset} {...aria("substances")}>
@@ -121,14 +143,14 @@ export function EnrollmentFields({ unitId, patientId, options, value, onChange, 
 
       <label style={checkLabel}>
         <input type="checkbox" checked={value.esfCovered}
-          onChange={(e) => set({ esfCovered: e.target.checked, ...(e.target.checked ? {} : { esfCnes: "" }) })} />
+          onChange={(e) => { touchedEsf.current = true; set({ esfCovered: e.target.checked, ...(e.target.checked ? {} : { esfCnes: "" }) }); }} />
         Coberto por ESF
       </label>
       {value.esfCovered && (
         <label style={fieldLabel}>
           CNES da USF
           <input value={value.esfCnes} style={inputStyle} inputMode="numeric" autoComplete="off" {...aria("esf_cnes")}
-            onChange={(e) => set({ esfCnes: e.target.value })} />
+            onChange={(e) => { touchedEsf.current = true; set({ esfCnes: e.target.value }); }} />
         </label>
       )}
       {value.esfCovered && hint && <p style={muted}>{hint}</p>}

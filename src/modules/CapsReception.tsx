@@ -10,7 +10,7 @@ import { getPsyOptions, getPsyReferral, listPsyReferrals, type PsyReceptionResul
 import { todayInCity } from "../lib/campaigns";
 import { fmtDateTime } from "../lib/format";
 import {
-  NOMINAL_QUERY, NO_CLINICAL_IN_LIST, PSY_DETAIL_KEY, PSY_OPTIONS_KEY, PSY_REFERRALS_KEY, RECEPTION_DONE, RECEPTION_ENROLLED, STATIC_QUERY,
+  DISCARD_RECEPTION_TEXT, NOMINAL_QUERY, NO_CLINICAL_IN_LIST, NO_PENDING_REFERRALS, PSY_DETAIL_KEY, PSY_OPTIONS_KEY, PSY_REFERRALS_KEY, RECEPTION_DONE, RECEPTION_ENROLLED, STATIC_QUERY,
   TRAIL_NOTE, isStale, priorityLabel, psyError
 } from "../lib/psychosocial";
 import { DataTable, type Column } from "../components/DataTable";
@@ -42,7 +42,11 @@ function Reception({ unit, today = todayInCity(), now = new Date(), onOpenEnroll
   const [ target, setTarget ] = useState<Target | null>(null);
   const [ done, setDone ] = useState<{ text: string; enrollmentId: string | null } | null>(null);
   const [ notice, setNotice ] = useState<string | null>(null);
+  // "Acolher" outra pessoa com um acolhimento aberto: pergunta antes de descartar o rascunho.
+  const [ pending, setPending ] = useState<Target | null>(null);
   const doneRef = useRef<HTMLParagraphElement | null>(null);
+  const noticeRef = useRef<HTMLParagraphElement | null>(null);
+  const pendingRef = useRef<HTMLParagraphElement | null>(null);
 
   const listKey = [ PSY_REFERRALS_KEY, unit.id ];
   const list = useInfiniteQuery({
@@ -56,17 +60,27 @@ function Reception({ unit, today = todayInCity(), now = new Date(), onOpenEnroll
   const reload = () => { void queryClient.resetQueries({ queryKey: listKey }); };
 
   useEffect(() => { if (done) doneRef.current?.focus(); }, [ done ]);
+  useEffect(() => { if (notice) noticeRef.current?.focus(); }, [ notice ]);
+  useEffect(() => { if (pending) pendingRef.current?.focus(); }, [ pending ]);
 
   const begin = () => { setDone(null); setNotice(null); };
   const closeDetail = () => {
     setOpenId(null);
     queryClient.removeQueries({ queryKey: [ PSY_DETAIL_KEY, unit.id, "referral" ] });
   };
-  const open = (id: string) => { begin(); setTarget(null); setPicking(false); closeDetail(); setOpenId(id); };
-  const receive = (t: Target) => { begin(); closeDetail(); setPicking(false); setTarget(t); };
-  const stale = (text: string) => { setTarget(null); closeDetail(); setNotice(text); reload(); };
+  // Abrir um encaminhamento não descarta o acolhimento aberto.
+  const open = (id: string) => { begin(); setPicking(false); closeDetail(); setOpenId(id); };
+  const start = (t: Target) => { begin(); closeDetail(); setPicking(false); setPending(null); setTarget(t); };
+  const receive = (t: Target) => {
+    const same = target && target.patientId === t.patientId && target.referralId === t.referralId;
+    if (target && !same) { setPending(t); return; }
+    start(t);
+  };
+  const staleForm = (text: string) => { setTarget(null); setPending(null); closeDetail(); setNotice(text); reload(); };
+  const staleDetail = (text: string) => { closeDetail(); setNotice(text); reload(); };
   const finished = (r: PsyReceptionResult) => {
     setTarget(null);
+    setPending(null);
     setDone({ text: r.enrollment_id ? RECEPTION_ENROLLED : RECEPTION_DONE, enrollmentId: r.enrollment_id });
     reload();
   };
@@ -95,7 +109,7 @@ function Reception({ unit, today = todayInCity(), now = new Date(), onOpenEnroll
 
   return (
     <div style={stack}>
-      {notice && <p role="alert" style={alert}>{notice}</p>}
+      {notice && <p ref={noticeRef} tabIndex={-1} role="alert" style={alert}>{notice}</p>}
       {done && (
         <div style={row}>
           <p ref={doneRef} tabIndex={-1} role="status" style={okText}>{done.text}</p>
@@ -106,15 +120,22 @@ function Reception({ unit, today = todayInCity(), now = new Date(), onOpenEnroll
       )}
       {options.isError && <p role="alert" style={alert}>{psyError(options.error)}</p>}
 
+      {pending && (
+        <div style={row}>
+          <p ref={pendingRef} tabIndex={-1} style={alert}>{DISCARD_RECEPTION_TEXT}</p>
+          <button type="button" style={buttonStyle} onClick={() => start(pending)}>{`Descartar e acolher ${pending.name}`}</button>
+          <button type="button" style={secondaryButtonStyle} onClick={() => setPending(null)}>Continuar o acolhimento</button>
+        </div>
+      )}
       {target && (
         <Panel title="Acolhimento">
           {!options.data ? (options.isPending && <p style={muted}>carregando…</p>) : <ReceptionForm key={`${target.referralId ?? "spontaneous"}-${target.patientId}`} unit={unit}
             patient={{ patientId: target.patientId, name: target.name }} referralId={target.referralId} options={options.data} today={today} now={now}
-            onDone={finished} onCancel={() => setTarget(null)} onStale={stale} />}
+            onDone={finished} onCancel={() => { setPending(null); setTarget(null); }} onStale={staleForm} />}
         </Panel>
       )}
 
-      {openId && <ReferralDetail unitId={unit.id} id={openId} onClose={closeDetail} onStale={stale} />}
+      {openId && <ReferralDetail unitId={unit.id} id={openId} onClose={closeDetail} onStale={staleDetail} />}
 
       {!target && (
         <Panel title="Demanda espontânea">
@@ -138,7 +159,7 @@ function Reception({ unit, today = todayInCity(), now = new Date(), onOpenEnroll
           <p style={muted}>{TRAIL_NOTE}</p>
           {list.isError ? <p role="alert" style={alert}>{psyError(list.error)}</p> : (
             <DataTable<PsyReferralRow> cols={cols} rows={rows} rowKey={(r) => r.id}
-              empty={list.isPending ? "carregando…" : "nenhum encaminhamento aguardando acolhimento"} />
+              empty={list.isPending ? "carregando…" : NO_PENDING_REFERRALS} />
           )}
           {list.hasNextPage && (
             <div style={row}>

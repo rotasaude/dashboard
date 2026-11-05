@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { ApiError } from "./api";
 import {
-  PSY_ERRORS, RECEPTION_BEFORE_START, emptyReceptionDraft, psyRefusals, receptionInput, receptionProblems, receptionProcedures,
+  DATE_TIME_TEXT, FUTURE_DATE_TEXT, PSY_ERRORS, RECEPTION_BEFORE_START, RECEPTION_NOTES_TEXT, emptyReceptionDraft, psyRefusals, receptionInput, receptionProblems, receptionProcedures,
   type ReceptionDraft
 } from "./psychosocial";
 import { NOW31, OPTIONS, TODAY31 } from "../test/psychosocialFixtures";
@@ -31,9 +31,12 @@ describe("acolhimento (módulo 31)", () => {
     expect(receptionProblems({ ...empty, sigtapCode: "0301080232", outcome: "enrolled" }, TODAY31, NOW31).map((p) => p.path))
       .toEqual([ "enrollment.origin", "enrollment.cid_main", "enrollment.substances" ]);
     expect(receptionProblems(filled(), TODAY31, NOW31)).toEqual([]);
-    expect(receptionProblems(filled({ at: "2026-11-04T11:00" }), TODAY31, NOW31)).toEqual([ { path: "at", text: "a data não pode ser futura" } ]);
-    expect(receptionProblems(filled({ at: "" }), TODAY31, NOW31).map((p) => p.path)).toEqual([ "at" ]);
-    expect(receptionProblems(filled({ notes: "x".repeat(4001) }), TODAY31, NOW31).map((p) => p.path)).toEqual([ "notes" ]);
+    expect(receptionProblems(filled({ at: "2026-11-04T11:00" }), TODAY31, NOW31)).toEqual([ { path: "at", text: FUTURE_DATE_TEXT } ]);
+    expect(receptionProblems(filled({ at: "" }), TODAY31, NOW31)).toEqual([ { path: "at", text: DATE_TIME_TEXT } ]);
+    expect(receptionProblems(filled({ at: "2026-11-04" }), TODAY31, NOW31)).toEqual([ { path: "at", text: DATE_TIME_TEXT } ]);
+    expect(receptionProblems(filled({ notes: "x".repeat(4001) }), TODAY31, NOW31)).toEqual([ { path: "notes", text: RECEPTION_NOTES_TEXT } ]);
+    // O api fala de "at" com a mesma frase.
+    expect(psyRefusals(new ApiError(422, { error: "invalid_request", path: "at" }, "x"))[0].text).toBe(DATE_TIME_TEXT);
   });
 
   it("acolhimento antes do início da matrícula: a mesma frase do api (enrollment_required em at)", () => {

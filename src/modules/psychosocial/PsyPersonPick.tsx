@@ -6,7 +6,7 @@ import { useState, type FormEvent } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { findPsyDuplicates, lookupPsyPerson, lookupPsyPersonByCns, type PharmacyPerson } from "../../lib/api";
 import { isValidCns } from "../../lib/professionals";
-import { NO_REGISTRATION_TEXT, PSY_ERRORS, psyError } from "../../lib/psychosocial";
+import { NO_REGISTRATION_TEXT, PERSON_PICK_FAILED, PSY_ERRORS, psyError } from "../../lib/psychosocial";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { alert, checkLabel, fieldLabel, fieldset, form, legend, row } from "../exams/styles";
 import { PersonStart, type PersonChoice, type PersonSource } from "../territory/PersonStart";
@@ -29,7 +29,7 @@ export function PsyPersonPick({ onPick, onCancel }: { onPick(patientId: string, 
   function choose(choice: PersonChoice) {
     if (choice.kind === "patient") { setProblem(null); onPick(choice.patientId, choice.displayName ?? "paciente"); return; }
     // `citizen` não chega (o api materializa o paciente do par validado), mas não some calado.
-    setProblem(choice.kind === "new" ? NO_REGISTRATION_TEXT : "não foi possível escolher esta pessoa — busque de novo");
+    setProblem(choice.kind === "new" ? NO_REGISTRATION_TEXT : PERSON_PICK_FAILED);
   }
   const cancel = () => { setProblem(null); setRound((r) => r + 1); onCancel?.(); };
 

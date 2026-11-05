@@ -1,8 +1,9 @@
 // Os atalhos entre telas continuam abrindo o mesmo destino, agora via rota.
 import { describe, expect, it, vi } from "vitest";
 import type { ReactElement } from "react";
-import { renderModule, shellGroups } from "./App";
-import { NAV_GROUPS, navGroupsFor } from "./shell/modules";
+import { act, renderHook } from "@testing-library/react";
+import { renderModule, shellGroups, useCapsHandoff } from "./App";
+import { NAV_GROUPS, navGroupsFor, type ModuleId } from "./shell/modules";
 import { TerritoryMicroAreas } from "./modules/TerritoryMicroAreas";
 import { TerritoryTeam } from "./modules/TerritoryTeam";
 import { RegistryStatus } from "./modules/RegistryStatus";
@@ -74,6 +75,20 @@ describe("atalhos entre telas", () => {
     expect(el.type).toBe(CapsEnrollments);
     expect(el.props.initialEnrollmentId).toBe("en9");
     expect((renderModule("caps-enrollments", navigate) as ReactElement<{ initialEnrollmentId?: string | null }>).props.initialEnrollmentId).toBeNull();
+  });
+
+  it("o id da matrícula vale só para a ida a Usuários do CAPS: sair da tela o apaga", () => {
+    const { result, rerender, unmount } = renderHook(({ active }: { active: ModuleId }) => useCapsHandoff(active),
+      { initialProps: { active: "caps-reception" as ModuleId } });
+    expect(result.current.enrollmentId).toBeNull();
+    act(() => result.current.openEnrollment("en9"));
+    rerender({ active: "caps-enrollments" });
+    expect(result.current.enrollmentId).toBe("en9");
+    rerender({ active: "caps-today" });
+    expect(result.current.enrollmentId).toBeNull();
+    rerender({ active: "caps-enrollments" });
+    expect(result.current.enrollmentId).toBeNull();
+    unmount();
   });
 });
 

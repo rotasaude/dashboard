@@ -8,7 +8,7 @@ import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { recordPsyReception, type PsyOptions, type PsyReceptionResult, type PsyUnit } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import {
-  NO_RECEPTION_PROCEDURE, emptyReceptionDraft, isStale, outcomeLabel, psyRefusals, receptionInput, receptionProblems, receptionProcedures,
+  NO_PROCEDURE_OPTION, NO_RECEPTION_PROCEDURE, RECEPTION_NOTES_TEXT, emptyReceptionDraft, isStale, outcomeLabel, psyRefusals, receptionInput, receptionProblems, receptionProcedures,
   type EnrollmentDraft, type ReceptionDraft
 } from "../../lib/psychosocial";
 import type { Problem } from "../../lib/pharmacy";
@@ -39,11 +39,19 @@ export function ReceptionForm({ unit, patient, referralId, options, today, now, 
   const alive = useRef(true);
   const focusNext = useRef(false);
   const ref = useRef<HTMLFormElement | null>(null);
-  useEffect(() => () => { alive.current = false; }, []);
+  const title = useRef<HTMLParagraphElement | null>(null);
+  useEffect(() => {
+    // Ao abrir, o foco vai ao nome de quem é acolhido. (`alive` volta a true no remonte do StrictMode.)
+    alive.current = true;
+    title.current?.focus();
+    return () => { alive.current = false; };
+  }, []);
   useEffect(() => {
     if (!focusNext.current) return;
     focusNext.current = false;
-    ref.current?.querySelector<HTMLElement>("[aria-invalid='true'], [data-general='true']")?.focus();
+    const first = ref.current?.querySelector<HTMLElement>("[aria-invalid='true'], [data-general='true']");
+    // Um grupo de caixas inválido não recebe foco: vai à primeira caixa dele.
+    (first instanceof HTMLFieldSetElement ? first.querySelector<HTMLElement>("input") : first)?.focus();
   }, [ problems ]);
 
   const set = (patch: Partial<ReceptionDraft>) => {
@@ -74,7 +82,8 @@ export function ReceptionForm({ unit, patient, referralId, options, today, now, 
       if (!alive.current) return;
       const refusals = psyRefusals(err);
       if (isStale(err) && onStale) { onStale(refusals[0].text); return; }
-      show(refusals.map((r) => ({ path: r.path, text: r.text })));
+      // A evolução da ação e as anotações do acolhimento usam o mesmo path; aqui, a frase do acolhimento.
+      show(refusals.map((r) => ({ path: r.path, text: r.path === "notes" && [ "too_long", "invalid_request" ].includes(r.code) ? RECEPTION_NOTES_TEXT : r.text })));
     } finally {
       sending.current = false;
       if (alive.current) setBusy(false);
@@ -94,7 +103,7 @@ export function ReceptionForm({ unit, patient, referralId, options, today, now, 
 
   return (
     <form ref={ref} aria-label="Acolhimento" style={form} onSubmit={(e) => { void submit(e); }} noValidate>
-      <p style={{ margin: 0, fontSize: 13, fontWeight: 600 }}>{patient.name}</p>
+      <p ref={title} tabIndex={-1} style={{ margin: 0, fontSize: 13, fontWeight: 600 }}>{patient.name}</p>
       <p style={muted}>{referralId ? "Encaminhamento da atenção básica" : "Demanda espontânea"}</p>
       {top.map((t) => <p key={t} role="alert" tabIndex={-1} data-general="true" style={alert}>{t}</p>)}
 
@@ -106,7 +115,7 @@ export function ReceptionForm({ unit, patient, referralId, options, today, now, 
         <label style={fieldLabel}>
           Procedimento do acolhimento
           <select value={d.sigtapCode} style={inputStyle} {...aria("sigtap_code")} onChange={(e) => set({ sigtapCode: e.target.value })}>
-            {procs.length === 0 && <option value="">nenhum procedimento</option>}
+            {procs.length === 0 && <option value="">{NO_PROCEDURE_OPTION}</option>}
             {procs.map((p) => <option key={p.code} value={p.code}>{`${p.code} — ${p.name}`}</option>)}
           </select>
         </label>
@@ -132,12 +141,12 @@ export function ReceptionForm({ unit, patient, referralId, options, today, now, 
 
       {enrolled && (
         <EnrollmentFields unitId={unit.id} patientId={patient.patientId} options={options} value={d.enrollment} onChange={setEnrollment}
-          problems={enrollmentProblems} today={today} />
+          problems={enrollmentProblems} today={today} prefill />
       )}
 
       <div style={row}>
         <button type="submit" style={busy ? disabledButtonStyle : buttonStyle} disabled={busy}>Registrar acolhimento</button>
-        <button type="button" style={secondaryButtonStyle} onClick={onCancel}>Cancelar</button>
+        <button type="button" style={busy ? disabledButtonStyle : secondaryButtonStyle} disabled={busy} onClick={onCancel}>Cancelar</button>
       </div>
     </form>
   );

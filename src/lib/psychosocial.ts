@@ -24,7 +24,7 @@ export const NO_CAPS_BEDS = "nenhum CAPS seu tem leitos — só CAPS III, AD III
 export const NO_ACTIVE_CAPS = "nenhum CAPS ativo nesta cidade";
 export const SMALL_COUNT = "menos de 5";
 export const TRAIL_NOTE = "Abrir registra a leitura no prontuário do CAPS.";
-export const NO_CLINICAL_IN_LIST = "A lista não mostra CID, substâncias, evolução nem PTS.";
+export const NO_CLINICAL_IN_LIST = "A lista não mostra CID, substâncias, evolução, PTS nem o motivo do encaminhamento.";
 // Reabertura do mês, reavaliação do limite noturno e saída do leito (P25).
 export const REASON_TEXT = "o motivo tem de 10 a 500 caracteres";
 // Cancelamento da ação e motivo do encaminhamento (P12, P49).
@@ -210,6 +210,16 @@ export const NO_REGISTRATION_TEXT = "esta pessoa não tem cadastro — cadastre 
 export const ESF_CNES_MISSING = "a equipe de ESF que cobre o usuário não tem CNES cadastrado — digite o CNES da USF (7 dígitos)";
 // A mesma frase do `enrollment_required` em `at` que o api devolve (P40).
 export const RECEPTION_BEFORE_START = "o acolhimento é anterior ao início da matrícula";
+export const DATE_TIME_TEXT = "confira a data e a hora";
+export const FUTURE_DATE_TEXT = "a data não pode ser futura";
+export const RECEPTION_NOTES_TEXT = "as anotações do acolhimento têm até 4000 caracteres";
+export const RECEPTION_PROCEDURE_TEXT = "escolha o procedimento do acolhimento";
+export const RECEPTION_OUTCOME_TEXT = "escolha o desfecho";
+export const NO_PROCEDURE_OPTION = "nenhum procedimento";
+export const NO_PENDING_REFERRALS = "nenhum encaminhamento aguardando acolhimento";
+export const PERSON_PICK_FAILED = "não foi possível escolher esta pessoa — busque de novo";
+export const CID_REPEATED_TEXT = "este CID já está na matrícula — escolha outro";
+export const DISCARD_RECEPTION_TEXT = "há um acolhimento em andamento — descartar o que foi preenchido?";
 
 // Código do acolhimento: nome com "ACOLHIMENTO" e instrumento RAAS-PSI (09) ou BPA-I (02); `options` já vem filtrado pelo CBO.
 export const receptionProcedures = (o: PsyOptions): PsyProcedure[] =>
@@ -228,11 +238,12 @@ export function emptyReceptionDraft(now: Date, today: string, meId: string, proc
 export function receptionProblems(d: ReceptionDraft, today: string, now: Date): Problem[] {
   const out: Problem[] = [];
   const at = parseCityLocal(d.at);
-  if (!at || at.getTime() > now.getTime()) out.push({ path: "at", text: "a data não pode ser futura" });
+  if (!at) out.push({ path: "at", text: DATE_TIME_TEXT });
+  else if (at.getTime() > now.getTime()) out.push({ path: "at", text: FUTURE_DATE_TEXT });
   else if (d.outcome === "enrolled" && d.at.slice(0, 10) < d.enrollment.startedOn) out.push({ path: "at", text: RECEPTION_BEFORE_START });
-  if (!d.sigtapCode) out.push({ path: "sigtap_code", text: "escolha o procedimento do acolhimento" });
-  if (trimmedLength(d.notes) > 4000) out.push({ path: "notes", text: "as anotações do acolhimento têm até 4000 caracteres" });
-  if (!d.outcome) out.push({ path: "outcome", text: "escolha o desfecho" });
+  if (!d.sigtapCode) out.push({ path: "sigtap_code", text: RECEPTION_PROCEDURE_TEXT });
+  if (trimmedLength(d.notes) > 4000) out.push({ path: "notes", text: RECEPTION_NOTES_TEXT });
+  if (!d.outcome) out.push({ path: "outcome", text: RECEPTION_OUTCOME_TEXT });
   if (d.outcome === "enrolled") {
     for (const p of enrollmentProblems(d.enrollment, today)) out.push({ path: `enrollment.${p.path}`, text: p.text });
   }
@@ -466,7 +477,7 @@ const PATH_TEXT: Record<string, [ RegExp, string ][]> = {
     [ /^enrollment_id$/, "a matrícula não está aberta, ou começa depois da entrada no leito" ],
     [ /^at$/, RECEPTION_BEFORE_START ]
   ],
-  performed_in_future: [ [ /^(at|held_on)$/, "a data não pode ser futura" ] ]
+  performed_in_future: [ [ /^(at|held_on)$/, FUTURE_DATE_TEXT ] ]
 };
 
 // `invalid_request` e `too_long` por campo (o último segmento do path, sem índice; ou o path inteiro).
@@ -514,7 +525,7 @@ const FIELD_TEXT: [ RegExp, string ][] = [
   [ /^bed_id$/, "escolha um leito ativo deste CAPS" ],
   [ /^held_on$/, "a data do matriciamento não pode ser futura" ],
   [ /^health_team_id$/, "escolha a equipe da atenção básica" ],
-  [ /^(performed_at|at)$/, "confira a data e a hora" ],
+  [ /^(performed_at|at)$/, DATE_TIME_TEXT ],
   [ /^health_unit_id$/, "escolha um CAPS ativo" ],
   [ /^month$/, "mês inválido ou futuro" ],
   [ /^homeless$/, "marque se o usuário estava em situação de rua no mês" ],

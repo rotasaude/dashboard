@@ -233,11 +233,7 @@ function ShellInner({ initialModule }: { initialModule?: ModuleId }) {
   // Fora de uma tela, a sessão de assinatura volta para a Visão geral (o
   // return_to só aceita ids de tela).
   const active: ModuleId = route.kind === "screen" ? route.id : "overview";
-  // Módulo 31: a matrícula aberta no acolhimento vai a "Usuários do CAPS" (sem rota com id: nada de id na URL). Vale só para aquela
-  // ida — saiu da tela, apaga (voltar pelo menu nunca reabre o detalhe sem clique).
-  const [ capsEnrollmentId, setCapsEnrollmentId ] = useState<string | null>(null);
-  useEffect(() => { if (active !== "caps-enrollments") setCapsEnrollmentId(null); }, [ active ]);
-  const caps: CapsHandoff = useMemo(() => ({ enrollmentId: capsEnrollmentId, openEnrollment: setCapsEnrollmentId }), [ capsEnrollmentId ]);
+  const caps = useCapsHandoff(active);
 
   let content;
   if (route.kind === "home") content = (
@@ -284,6 +280,14 @@ function ShellInner({ initialModule }: { initialModule?: ModuleId }) {
 // A matrícula que o acolhimento abriu e "Usuários do CAPS" mostra ao entrar (módulo 31).
 export type CapsHandoff = { enrollmentId: string | null; openEnrollment(id: string): void };
 const NO_CAPS_HANDOFF: CapsHandoff = { enrollmentId: null, openEnrollment: () => {} };
+
+// Sem rota com id (nada de id na URL): o id fica no estado do shell e vale só para aquela ida — a tela ativa deixou de ser
+// "Usuários do CAPS", apaga (voltar pelo menu nunca reabre o detalhe sem clique).
+export function useCapsHandoff(active: ModuleId): CapsHandoff {
+  const [ enrollmentId, setEnrollmentId ] = useState<string | null>(null);
+  useEffect(() => { if (active !== "caps-enrollments") setEnrollmentId(null); }, [ active ]);
+  return useMemo(() => ({ enrollmentId, openEnrollment: setEnrollmentId }), [ enrollmentId ]);
+}
 
 export function renderModule(active: ModuleId, setActive: (id: ModuleId) => void, caps: CapsHandoff = NO_CAPS_HANDOFF) {
   switch (active) {
