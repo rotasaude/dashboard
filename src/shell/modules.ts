@@ -13,6 +13,7 @@ import { canUseDental, dentalRoles } from "../lib/dental";
 import { canUseVaccination } from "../lib/vaccination";
 import { canUseTransport, isDriverOnly, transportRoles } from "../lib/transport";
 import { canUseTfd } from "../lib/tfd";
+import { canUsePsychosocial, psychosocialRoles } from "../lib/psychosocial";
 export type ModuleId =
   | "overview" | "ingestion" | "conversations" | "consent"
   | "triages" | "classification" | "reports" | "protocols" | "events"
@@ -35,7 +36,9 @@ export type ModuleId =
   | "vaccination-admin"
   | "dental-prosthesis" | "dental-ceo-goals" | "dental-indicators" | "dental-admin"
   | "transport-trips" | "transport-series" | "transport-pending" | "transport-fleet" | "transport-my-trips" | "transport-panel"
-  | "transport-settings" | "tfd-queue" | "tfd-my-cases";
+  | "transport-settings" | "tfd-queue" | "tfd-my-cases"
+  | "caps-reception" | "caps-today" | "caps-enrollments" | "caps-groups" | "caps-beds" | "caps-matrix" | "caps-raas" | "caps-panel"
+  | "caps-settings";
 
 export interface NavItem { id: ModuleId; label: string; icon: string; }
 export interface NavGroupDef { label: string; items: NavItem[]; }
@@ -133,6 +136,17 @@ export const NAV_GROUPS: NavGroupDef[] = [
   { label: "TFD", items: [
     { id: "tfd-queue", label: "Comissão de TFD", icon: "⚖" },
     { id: "tfd-my-cases", label: "Meus pedidos de TFD", icon: "✎" }
+  ]},
+  { label: "CAPS", items: [
+    { id: "caps-reception", label: "Acolhimento", icon: "⇲" },
+    { id: "caps-today", label: "Hoje no CAPS", icon: "◷" },
+    { id: "caps-enrollments", label: "Usuários do CAPS", icon: "☰" },
+    { id: "caps-groups", label: "Grupos e oficinas", icon: "◎" },
+    { id: "caps-beds", label: "Leitos", icon: "▭" },
+    { id: "caps-matrix", label: "Matriciamento", icon: "⇄" },
+    { id: "caps-raas", label: "RAAS do mês", icon: "▤" },
+    { id: "caps-panel", label: "Painel do CAPS", icon: "▦" },
+    { id: "caps-settings", label: "CAPS: leitos e regras", icon: "⚙" }
   ]},
   { label: "Exames", items: [
     { id: "exam-acknowledgements", label: "Resultados aguardando ciência", icon: "⚑" },
@@ -327,6 +341,10 @@ export function navGroupsFor(
   const trOn = canUseTransport(user);
   const tfdOn = canUseTfd(user);
   const tr = transportRoles(user);
+  // Módulo 31 (ADR 0049): `psychosocial_care` E `clinical_record` (canUsePsychosocial); a equipe trabalha, a coordenação também
+  // fecha e vê o painel; faturista só baixa a RAAS; admin e analista veem o painel (P52); o cadastro (leitos e regras) é do admin.
+  const psyOn = canUsePsychosocial(user);
+  const psy = psychosocialRoles(user);
   return NAV_GROUPS.filter((group) => {
     if (group.label === "Conta") return !user?.operator;
     if (group.label === "Equipe") return isAdmin;
@@ -423,6 +441,11 @@ export function navGroupsFor(
       if (item.id === "tfd-queue") return tfdOn && tr.committee;
       // O api confere o CBO 225 (403 cbo_not_allowed, traduzido na tela): a sessão não traz o CBO.
       if (item.id === "tfd-my-cases") return tfdOn && isProfessional;
+      if (item.id === "caps-raas") return psyOn && (psy.staff || psy.billing);
+      if (item.id === "caps-panel") return psyOn && (psy.lead || psy.admin || psy.analyst);
+      if (item.id === "caps-settings") return psyOn && psy.admin;
+      if (item.id === "caps-reception" || item.id === "caps-today" || item.id === "caps-enrollments" || item.id === "caps-groups"
+        || item.id === "caps-beds" || item.id === "caps-matrix") return psyOn && psy.staff;
       if (item.id === "integrations" || item.id === "cnes") return canIntegrations;
       if (item.id === "production") return canProduction;
       return true;

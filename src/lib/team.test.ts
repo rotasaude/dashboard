@@ -56,12 +56,17 @@ describe("reviewerCount", () => {
 const apiError = (status: number, body: unknown) => new ApiError(status, body, String(status));
 
 describe("convite", () => {
-  it("oferece os 21 papéis da cidade que se convidam pela Equipe", () => {
+  it("oferece os 23 papéis da cidade que se convidam pela Equipe", () => {
     expect(INVITE_ROLES.map((r) => r.role).sort()).toEqual([
       "analyst", "billing_clerk", "campaign_manager", "care_regulator", "citizen_verifier", "driver", "exam_regulator", "health_professional", "lab_releaser", "lab_staff",
-      "municipal_admin", "pharmacist", "pharmacy_assistant", "protocol_author", "protocol_publisher", "protocol_reviewer", "stock_keeper", "surveillance",
-      "tfd_committee", "transport_dispatcher", "viewer"
+      "municipal_admin", "pharmacist", "pharmacy_assistant", "protocol_author", "protocol_publisher", "protocol_reviewer", "psychosocial_lead", "psychosocial_staff",
+      "stock_keeper", "surveillance", "tfd_committee", "transport_dispatcher", "viewer"
     ]);
+    // Módulo 31 (ADR 0049): equipe e coordenação do CAPS leem prontuário fechado — privilegiadas.
+    expect(INVITE_ROLES.find((r) => r.role === "psychosocial_staff")?.label).toBe("Equipe do CAPS");
+    expect(INVITE_ROLES.find((r) => r.role === "psychosocial_lead")?.label).toBe("Coordenação do CAPS");
+    expect(isPrivilegedRole("psychosocial_staff")).toBe(true);
+    expect(isPrivilegedRole("psychosocial_lead")).toBe(true);
     // Módulo 30 (ADR 0048): central e comissão leem dado nominal — privilegiadas; o motorista não.
     expect(INVITE_ROLES.find((r) => r.role === "transport_dispatcher")?.label).toBe("Central de transporte");
     expect(INVITE_ROLES.find((r) => r.role === "tfd_committee")?.label).toBe("Comissão de TFD");

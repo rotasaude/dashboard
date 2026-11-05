@@ -102,11 +102,14 @@ export const INVITE_ROLES: { role: string; label: string }[] = [
   { role: "transport_dispatcher", label: "Central de transporte" },
   { role: "driver", label: "Motorista" },
   { role: "tfd_committee", label: "Comissão de TFD" },
+  // Módulo 31 (ADR 0049): o prontuário do CAPS é fechado à equipe lotada — privilegiadas (step-up para conceder).
+  { role: "psychosocial_staff", label: "Equipe do CAPS" },
+  { role: "psychosocial_lead", label: "Coordenação do CAPS" },
   { role: "municipal_admin", label: "Administrador municipal" }
 ];
 
 // Membership::PRIVILEGED_ROLES: conceder OU convidar exige step-up.
-const PRIVILEGED_ROLES = new Set([ "municipal_admin", REVIEWER_ROLE, VERIFIER_ROLE, PROFESSIONAL_ROLE, CAMPAIGN_MANAGER_ROLE, "exam_regulator", "lab_staff", "lab_releaser", "billing_clerk", "surveillance", "care_regulator", "pharmacist", "pharmacy_assistant", "transport_dispatcher", "tfd_committee" ]);
+const PRIVILEGED_ROLES = new Set([ "municipal_admin", REVIEWER_ROLE, VERIFIER_ROLE, PROFESSIONAL_ROLE, CAMPAIGN_MANAGER_ROLE, "exam_regulator", "lab_staff", "lab_releaser", "billing_clerk", "surveillance", "care_regulator", "pharmacist", "pharmacy_assistant", "transport_dispatcher", "tfd_committee", "psychosocial_staff", "psychosocial_lead" ]);
 
 export function isPrivilegedRole(role: string): boolean {
   return PRIVILEGED_ROLES.has(role);

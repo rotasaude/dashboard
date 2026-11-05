@@ -80,6 +80,15 @@ import { TransportPanel } from "./modules/TransportPanel";
 import { TransportSettings } from "./modules/TransportSettings";
 import { TfdQueue } from "./modules/TfdQueue";
 import { TfdMyCases } from "./modules/TfdMyCases";
+import { CapsReception } from "./modules/CapsReception";
+import { CapsToday } from "./modules/CapsToday";
+import { CapsEnrollments } from "./modules/CapsEnrollments";
+import { CapsGroups } from "./modules/CapsGroups";
+import { CapsBeds } from "./modules/CapsBeds";
+import { CapsMatrix } from "./modules/CapsMatrix";
+import { CapsRaas } from "./modules/CapsRaas";
+import { CapsPanel } from "./modules/CapsPanel";
+import { CapsSettings } from "./modules/CapsSettings";
 import { isDriverOnly } from "./lib/transport";
 import { ProviderPortal } from "./modules/ProviderPortal";
 import { AcknowledgementNotice } from "./modules/exams/AcknowledgementNotice";
@@ -373,6 +382,15 @@ export function renderModule(active: ModuleId, setActive: (id: ModuleId) => void
     case "transport-settings": return <TransportSettings onGoToSecurity={() => setActive("security")} />;
     case "tfd-queue": return <TfdQueue onGoToSecurity={() => setActive("security")} />;
     case "tfd-my-cases": return <TfdMyCases />;
+    case "caps-reception": return <CapsReception onGoToSecurity={() => setActive("security")} />;
+    case "caps-today": return <CapsToday />;
+    case "caps-enrollments": return <CapsEnrollments onGoToSecurity={() => setActive("security")} />;
+    case "caps-groups": return <CapsGroups />;
+    case "caps-beds": return <CapsBeds />;
+    case "caps-matrix": return <CapsMatrix />;
+    case "caps-raas": return <CapsRaas onGoToSecurity={() => setActive("security")} />;
+    case "caps-panel": return <CapsPanel />;
+    case "caps-settings": return <CapsSettings onGoToSecurity={() => setActive("security")} />;
     default:               return <Placeholder title={labelFor(active)} />;
   }
 }
