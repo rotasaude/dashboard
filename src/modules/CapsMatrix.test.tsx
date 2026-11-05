@@ -78,6 +78,7 @@ describe("Matriciamento do CAPS", () => {
     // O cache da lista guarda só os campos da linha.
     const cached = client.getQueryCache().findAll({ queryKey: [ "psyMatrix", CAPS_II.id ] })[0].state.data as { pages: { items: object[] }[] };
     expect(Object.keys(cached.pages[0].items[0])).not.toContain("topic");
+    expect(Object.keys(cached.pages[0].items[0])).not.toContain("shared_text");
 
     fireEvent.click(screen.getByRole("button", { name: "Abrir matriciamento de 03/11/2026" }));
     expect(await screen.findByText(SHARED)).not.toBeNull();
@@ -271,9 +272,55 @@ describe("Matriciamento do CAPS", () => {
     expect(vi.mocked(api.addPsyMatrixCase).mock.calls[0]).toEqual([ "ms1", { patient_id: "pt1", shared_text: "Combinar visita domiciliar com a ACS." } ]);
     const ok = await screen.findByText(CASE_SAVED);
     expect(ok.textContent).not.toContain(CAPS_II.name);
-    await waitFor(() => expect(api.getPsyMatrixSupport).toHaveBeenCalledTimes(2));
+    // O caso devolvido (201) entra no detalhe aberto sem reler o detalhe (nenhuma trilha nova); a lista é relida.
+    expect(await screen.findByText("Combinar visita domiciliar com a ACS.")).not.toBeNull();
     await waitFor(() => expect(api.listPsyMatrixSupports).toHaveBeenCalledTimes(2));
+    expect(api.getPsyMatrixSupport).toHaveBeenCalledTimes(1);
     expect(screen.queryByLabelText("Texto compartilhado com a equipe")).toBeNull();
+  });
+
+  it("Abrir na linha já aberta não esvazia o detalhe; o caso novo aparece", async () => {
+    await openSupport();
+    fireEvent.click(screen.getByRole("button", { name: "Abrir matriciamento de 03/11/2026" }));
+    expect(screen.getByText(SHARED)).not.toBeNull();
+    expect(api.getPsyMatrixSupport).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "Adicionar caso" }));
+    await pickPerson();
+    fireEvent.change(screen.getByLabelText("Texto compartilhado com a equipe"), { target: { value: "Combinar visita domiciliar com a ACS." } });
+    fireEvent.click(screen.getByRole("button", { name: "Salvar caso" }));
+    expect(await screen.findByText("Combinar visita domiciliar com a ACS.")).not.toBeNull();
+    expect(screen.getByText(SHARED)).not.toBeNull();
+  });
+
+  it("Cancelar devolve o foco ao botão que abriu o formulário", async () => {
+    mount();
+    await openForm();
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Registrar matriciamento" }));
+    cleanup();
+
+    await openSupport();
+    fireEvent.click(screen.getByRole("button", { name: "Adicionar caso" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Cancelar" }));
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Adicionar caso" }));
+    // Também na busca da pessoa e depois de escolhê-la.
+    fireEvent.click(screen.getByRole("button", { name: "Adicionar caso" }));
+    await pickPerson();
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Adicionar caso" }));
+  });
+
+  it("lista que mudou ao rolar (invalid_cursor): a frase e a lista relida do começo", async () => {
+    vi.mocked(api.listPsyMatrixSupports)
+      .mockResolvedValueOnce({ items: [ matrixSupportRow() ], next_before: "cursor-1" })
+      .mockRejectedValueOnce(new ApiError(422, { error: "invalid_cursor", path: "before" }, "x"))
+      .mockResolvedValueOnce({ items: [ matrixSupportRow() ], next_before: null });
+    mount();
+    fireEvent.click(await screen.findByRole("button", { name: "Carregar mais" }));
+    expect(await screen.findByText(PSY_ERRORS.invalid_cursor)).not.toBeNull();
+    await waitFor(() => expect(api.listPsyMatrixSupports).toHaveBeenCalledTimes(3));
+    expect(vi.mocked(api.listPsyMatrixSupports).mock.calls[2]).toEqual([ CAPS_II.id, null ]);
+    expect(screen.getByRole("button", { name: "Abrir matriciamento de 03/11/2026" })).not.toBeNull();
   });
 
   it("trocar a pessoa guarda o texto; texto acima de 2000 não envia", async () => {
@@ -298,10 +345,12 @@ describe("Matriciamento do CAPS", () => {
     await pickPerson();
     fireEvent.change(screen.getByLabelText("Texto compartilhado com a equipe"), { target: { value: "Combinar visita domiciliar com a ACS." } });
     fireEvent.click(screen.getByRole("button", { name: "Salvar caso" }));
-    expect((await screen.findAllByText(MATRIX_CANCELLED_NOTE)).length).toBeGreaterThan(0);
+    expect(await screen.findByText(MATRIX_CANCELLED_NOTE)).not.toBeNull();
     await waitFor(() => expect(screen.queryByRole("button", { name: "Adicionar caso" })).toBeNull());
     expect(screen.queryByLabelText("Texto compartilhado com a equipe")).toBeNull();
     expect(screen.getByText("cancelado")).not.toBeNull();
+    // A frase aparece uma vez só, também depois de o detalhe reler.
+    expect(screen.getAllByText(MATRIX_CANCELLED_NOTE).length).toBe(1);
   });
 
   it("recusa do texto no api aparece no campo, com o texto digitado intacto", async () => {

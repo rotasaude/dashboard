@@ -7,7 +7,10 @@
 // "Adicionar caso" não aparece no matriciamento cancelado (409 `already_cancelled`, P44). O nome do CAPS não é citado nas frases.
 import { useEffect, useRef, useState } from "react";
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
-import { errorCode, getPsyMatrixSupport, getPsyOptions, listPsyMatrixSupports, type PsyMatrixSupportRow, type PsyOptions, type PsyPage, type PsyUnit } from "../lib/api";
+import {
+  errorCode, getPsyMatrixSupport, getPsyOptions, listPsyMatrixSupports, type PsyMatrixCase, type PsyMatrixSupport, type PsyMatrixSupportRow, type PsyOptions, type PsyPage,
+  type PsyUnit
+} from "../lib/api";
 import { fmtDay } from "../lib/careLines";
 import { fmtDateTime } from "../lib/format";
 import {
@@ -77,6 +80,10 @@ function Matrix({ unit, today, now }: CapsMatrixProps & { unit: PsyUnit }) {
     const el = opener.current;
     (el && el.isConnected ? el : listRef.current)?.focus();
   }, [ refocus ]);
+  // "Cancelar" o formulário devolve o foco ao "Registrar matriciamento".
+  const registerBtn = useRef<HTMLButtonElement | null>(null);
+  const [ registerFocus, setRegisterFocus ] = useState(0);
+  useEffect(() => { if (registerFocus > 0) registerBtn.current?.focus(); }, [ registerFocus ]);
   // A lista mudou enquanto se rolava: a frase, e relê do começo.
   useEffect(() => {
     if (!list.isFetchNextPageError || errorCode(list.error) !== "invalid_cursor") return;
@@ -91,7 +98,11 @@ function Matrix({ unit, today, now }: CapsMatrixProps & { unit: PsyUnit }) {
     queryClient.removeQueries({ queryKey: [ PSY_DETAIL_KEY, unit.id, "matrix" ] });
   };
   const begin = () => { setDone(null); setNotice(null); };
-  const open = (id: string, from: HTMLElement) => { begin(); closeDetail(); opener.current = from; setOpenId(id); };
+  // "Abrir" na linha já aberta não faz nada (fechar e reabrir o mesmo id esvaziaria o cache do detalhe aberto).
+  const open = (id: string, from: HTMLElement) => {
+    if (id === openId) return;
+    begin(); closeDetail(); opener.current = from; setOpenId(id);
+  };
   const close = () => { closeDetail(); setRefocus((n) => n + 1); };
   const stale = (text: string) => { closeDetail(); setNotice(text); reload(); };
 
@@ -119,13 +130,13 @@ function Matrix({ unit, today, now }: CapsMatrixProps & { unit: PsyUnit }) {
       {creating ? (
         <Panel title="Registrar matriciamento">
           {!options.data ? (options.isPending && <p className="mono" style={muted}>carregando…</p>) : (
-            <MatrixForm unit={unit} options={options.data} today={today} now={now} onCancel={() => setCreating(false)}
+            <MatrixForm unit={unit} options={options.data} today={today} now={now} onCancel={() => { setCreating(false); setRegisterFocus((n) => n + 1); }}
               onSaved={() => { setCreating(false); setDone(MATRIX_SAVED); reload(); }} />
           )}
         </Panel>
       ) : (
         <div style={row}>
-          <button type="button" style={buttonStyle} onClick={() => { begin(); setCreating(true); }}>Registrar matriciamento</button>
+          <button ref={registerBtn} type="button" style={buttonStyle} onClick={() => { begin(); setCreating(true); }}>Registrar matriciamento</button>
         </div>
       )}
 
@@ -185,7 +196,17 @@ function MatrixDetail({ unit, id, options, onClose, onChanged, onStale }: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ detail.isError, detail.error ]);
 
+  // Caso salvo: o 201 entra no detalhe aberto sem reler (a releitura gravaria outra trilha); a lista relê a contagem.
+  const appendCase = (c: PsyMatrixCase) => {
+    queryClient.setQueryData<PsyMatrixSupport>(key, (old) => (old ? { ...old, cases: [ ...old.cases, c ] } : old));
+    onChanged();
+  };
+  // Cancelado no meio: só uma releitura mostra a situação nova.
   const refresh = () => { void queryClient.invalidateQueries({ queryKey: key }); onChanged(); };
+  // "Cancelar" o formulário do caso devolve o foco ao "Adicionar caso".
+  const addBtn = useRef<HTMLButtonElement | null>(null);
+  const [ addFocus, setAddFocus ] = useState(0);
+  useEffect(() => { if (addFocus > 0) addBtn.current?.focus(); }, [ addFocus ]);
   const cancelled = s ? s.action_cancelled_at !== null : false;
 
   return (
@@ -211,7 +232,7 @@ function MatrixDetail({ unit, id, options, onClose, onChanged, onStale }: {
               <span style={muted}>Tema</span>
               <p style={{ margin: 0, fontSize: 13, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{s.topic}</p>
             </div>
-            {cancelled && <p role="status" style={muted}>{MATRIX_CANCELLED_NOTE}</p>}
+            {cancelled && notice !== MATRIX_CANCELLED_NOTE && <p role="status" style={muted}>{MATRIX_CANCELLED_NOTE}</p>}
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               <span style={muted}>Casos compartilhados</span>
               <p style={muted}>{MATRIX_READ_NOTE}</p>
@@ -224,14 +245,14 @@ function MatrixDetail({ unit, id, options, onClose, onChanged, onStale }: {
             </div>
             {adding && (
               <MatrixCaseForm support={s}
-                onCancel={() => setAdding(false)}
-                onSaved={() => { setAdding(false); setNotice(null); setDone(CASE_SAVED); refresh(); }}
+                onCancel={() => { setAdding(false); setAddFocus((n) => n + 1); }}
+                onSaved={(c) => { setAdding(false); setNotice(null); setDone(CASE_SAVED); appendCase(c); }}
                 onCancelled={() => { setAdding(false); setDone(null); setNotice(MATRIX_CANCELLED_NOTE); refresh(); }}
                 onStale={onStale} />
             )}
             {!adding && !cancelled && (
               <div style={row}>
-                <button type="button" style={buttonStyle} onClick={() => { setDone(null); setNotice(null); setAdding(true); }}>Adicionar caso</button>
+                <button ref={addBtn} type="button" style={buttonStyle} onClick={() => { setDone(null); setNotice(null); setAdding(true); }}>Adicionar caso</button>
               </div>
             )}
           </>

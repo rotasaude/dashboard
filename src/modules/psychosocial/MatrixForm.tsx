@@ -11,7 +11,7 @@ import {
   type MatrixDraft
 } from "../../lib/psychosocial";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
-import { alert, checkLabel, fieldLabel, fieldset, form, legend, muted, row } from "../exams/styles";
+import { checkLabel, fieldLabel, fieldset, form, legend, muted, row } from "../exams/styles";
 import { useFormProblems } from "./useFormProblems";
 
 const OWN_FIELDS = [ "health_team_id", "held_on", "topic", "participants_user_ids", "sigtap_code" ];
@@ -31,8 +31,6 @@ export function MatrixForm({ unit, options, today, now, onSaved, onCancel }: Mat
     set({ userIds: on ? [ ...d.userIds, userId ] : d.userIds.filter((id) => id !== userId) }, "participants_user_ids");
 
   // Código gravado que saiu da lista aparece cru; nunca some.
-  // A crítica da ação cai toda no procedimento (P23): mais de uma frase no mesmo campo, sem repetir.
-  const procErrors = f.problems.filter((p) => p.path === "sigtap_code").filter((p, i, all) => all.findIndex((x) => x.text === p.text) === i);
   const lostCode = d.sigtapCode !== "" && !procs.some((p) => p.code === d.sigtapCode);
 
   return (
@@ -93,7 +91,7 @@ export function MatrixForm({ unit, options, today, now, onSaved, onCancel }: Mat
         </select>
       </label>
       {procs.length === 0 && <p style={muted}>{NO_MATRIX_PROCEDURES}</p>}
-      {procErrors.map((p, i) => <p key={p.text} id={i === 0 ? `${f.fid("sigtap_code")}-err` : undefined} role="alert" style={alert}>{p.text}</p>)}
+      {errNode("sigtap_code")}
 
       <div style={row}>
         <button type="submit" style={busy ? disabledButtonStyle : buttonStyle} disabled={busy}>Salvar matriciamento</button>
