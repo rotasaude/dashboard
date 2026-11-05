@@ -32,6 +32,7 @@ const EMPTY_TEXT = "nenhum pedido devolvido para esta unidade";
 
 interface UnitOption { id: string; name: string; cbo: string | null }
 
+// As unidades vêm dos vínculos do próprio profissional (sem `kind`): a unidade onde ele trabalha aparece pelo nome, de propósito, sem withoutCaps.
 // Uma opção por unidade; havendo mais de um vínculo ativo na mesma unidade, vale o primeiro que pode pedir regulação.
 function unitOptions(links: ProfessionalLink[]): UnitOption[] {
   const out: UnitOption[] = [];

@@ -159,6 +159,14 @@ describe("prótese", () => {
     expect(screen.getByRole("option", { name: "UPA" })).not.toBeNull();
   });
 
+  it("seletor de unidade: nem o admin vê o CAPS (P46/P53; prótese não é do CAPS)", async () => {
+    mocked(api.fetchCurrentSession).mockResolvedValue(dentalUser([ "health_professional", "municipal_admin" ]));
+    mocked(api.listActiveUnits).mockResolvedValue([ UBS, { id: "c1", name: "CAPS AD III Boqueirão", kind: "caps" } ]);
+    renderWithProviders(<DentalProsthesis />);
+    expect(await screen.findByRole("option", { name: "UBS Centro" })).not.toBeNull();
+    expect(screen.queryByRole("option", { name: /CAPS/ })).toBeNull();
+  });
+
   it("portão: interruptor desligado e papel errado não leem nada", async () => {
     mocked(api.fetchCurrentSession).mockResolvedValue(dentalUser([ "health_professional" ], { features: [ "clinical_record" ] }));
     renderWithProviders(<DentalProsthesis />);

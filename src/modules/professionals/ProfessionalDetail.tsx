@@ -35,6 +35,7 @@ export function ProfessionalDetail({ professionalId, onBack }: Props) {
   // Carregadas junto com a ficha (não só quando o painel de abrir vínculo
   // aparece): a lista de unidades e a tabela CBO já estão prontas quando a
   // pessoa clica em "Abrir vínculo".
+  // Configuração da rede: a lotação da equipe do CAPS nasce do vínculo CNES, então o CAPS aparece pelo nome para o admin (de propósito, sem withoutCaps).
   const units = useQuery({ queryKey: [ "activeUnits" ], queryFn: listActiveUnits });
   const cbo = useQuery({ queryKey: [ "cbo" ], queryFn: listCbo });
   // Modelos e tipos (módulo 17): antes do retorno antecipado abaixo — hooks

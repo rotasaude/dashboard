@@ -30,6 +30,7 @@ export function VaccinationAdmin({ onGoToSecurity }: { onGoToSecurity?(): void }
 function Body({ onGoToSecurity }: { onGoToSecurity?(): void }) {
   const queryClient = useQueryClient();
   const admin = useQuery({ queryKey: [ VAC_ADMIN_KEY ], queryFn: listVaccineRooms, ...STATIC_QUERY });
+  // Configuração da rede: o CAPS aparece pelo nome para o admin (de propósito, sem withoutCaps).
   const units = useQuery({ queryKey: [ UNITS_KEY ], queryFn: listAllUnits, ...STATIC_QUERY });
   const memberships = useQuery({ queryKey: [ MEMBERSHIPS_KEY ], queryFn: listMemberships, ...STATIC_QUERY });
   const [ selectedId, setSelectedId ] = useState<string | null>(null);

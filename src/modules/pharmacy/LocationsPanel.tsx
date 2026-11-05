@@ -83,7 +83,8 @@ function LocationForm({ location, units, onSaved, onCancel, onGoToSecurity }: {
   const touch = <T,>(set: (v: T) => void) => (v: T) => { setError(null); set(v); };
 
   const isUnit = kind === "unit";
-  // A unidade atual do local aparece mesmo desativada (a edição não a perde); as demais, só as ativas.
+  // A unidade atual do local aparece mesmo desativada (a edição não a perde); as demais, só as ativas. Configuração da rede: o CAPS aparece
+  // pelo nome para o admin (a farmácia do CAPS é dele), de propósito, sem withoutCaps.
   const options = units.filter((u) => u.active || u.id === location?.health_unit?.id);
 
   function body(): AdminLocationInput {

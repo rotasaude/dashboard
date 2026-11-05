@@ -2,6 +2,7 @@
 // escolha; lida ao escolher/filtrar e depois de cada ação — nunca sozinha (sem polling). A instalação só pela consulta.
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { withoutCaps } from "../lib/attendance";
 import { ApiError, changeProsthesisStage, getMyProfessional, listActiveUnits, listProsthesisOrders, type ProsthesisOrder } from "../lib/api";
 import { STATIC_QUERY, dentalError, dentalRole, nextStages, prosthesisStageLabel, prosthesisStageTone, reasonProblem } from "../lib/dental";
 import { fmtDay } from "../lib/exams";
@@ -28,7 +29,9 @@ function Body({ admin }: { admin: boolean }) {
   // O api só lista onde há vínculo ativo com papel odontológico (403 nas outras); o admin municipal vê todas.
   const mine = useQuery({ queryKey: [ "myProfessional" ], queryFn: getMyProfessional, enabled: !admin, ...STATIC_QUERY });
   const linked = new Set((mine.data?.links ?? []).filter((l) => !l.ended_at && dentalRole(l.cbo_code)).map((l) => l.health_unit_id));
-  const units = { ...allUnits, data: admin ? allUnits.data : (allUnits.data ?? []).filter((u) => linked.has(u.id)) };
+  // Prótese não é do CAPS: nem o admin o vê aqui (P46/P53).
+  const operational = withoutCaps(allUnits.data ?? []);
+  const units = { ...allUnits, data: admin ? operational : operational.filter((u) => linked.has(u.id)) };
   const [ unit, setUnit ] = useState("");
   const [ stage, setStage ] = useState("");
   const [ orders, setOrders ] = useState<ProsthesisOrder[]>([]);
