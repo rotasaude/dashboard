@@ -950,3 +950,59 @@ export function closeStayInput(d: CloseStayDraft, reassessment?: string | null):
   const reason = reassessment?.trim() ?? "";
   return { ended_at: cityLocalIso(d.endedAt) ?? d.endedAt, reason: d.reason.trim(), ...(reason ? { reassessment: { reason } } : {}) };
 }
+
+// ─── RAAS do mês, remessa e fichas (Task 11; F-31.6; P14, P15, P24, P42, P43, P57, P58) ───
+// O api decide pendência, fechamento, reabertura, remessa e o que entra nas fichas; a tela mostra a lista e não oferece o que já sabe
+// que seria recusado (fechar com pendência na tela, reabrir mês exportado, gerar remessa de mês aberto).
+export const RAAS_DOWNLOAD_NOTE = "Baixar a remessa ou as fichas fica registrado.";
+export const MONTH_CLOSED_DONE = "Mês fechado.";
+export const MONTH_REOPENED = "Mês reaberto.";
+export const NO_MONTH_RECORDS = "nenhum usuário com registro neste mês";
+export const NO_MONTH_PROBLEMS = "nenhum registro com pendência neste mês";
+export const NO_RAAS_EXPORTS = "nenhuma remessa gerada para este mês";
+export const CLOSE_MONTH_NOTE = "Fechar trava as ações do mês e libera a remessa e as fichas do faturamento; só a coordenação reabre, e só antes da remessa.";
+export const REOPEN_MONTH_NOTE = "Reabrir destrava as ações do mês; a remessa sai só depois de fechar de novo.";
+export const GENERATE_RAAS_NOTE = "A remessa leva os registros fechados com ação de RAAS; a competência de apresentação é a aberta no faturamento.";
+export const SHEETS_PREVIEW_NOTE = "Com o mês aberto, as fichas saem como PRÉVIA.";
+export const BILLING_SHEETS_NOTE = "As fichas espelho do mês aparecem aqui quando a remessa do mês existe.";
+export const RAAS_AFTER_CLOSE_NOTE = "A remessa sai depois do fechamento do mês.";
+export const raasExportedText = (competence: string): string => {
+  const c = /^(\d{4})(0[1-9]|1[0-2])$/.exec(competence);
+  return `Remessa gerada · competência de apresentação ${c ? `${c[2]}/${c[1]}` : competence}.`;
+};
+export const HOMELESS_LABEL: Record<string, string> = { "": "não informada", yes: "sim", no: "não" };
+export const homelessValue = (h: boolean | null): "" | "yes" | "no" => (h === null ? "" : h ? "yes" : "no");
+
+// O mês corrente (da cidade, a partir de `today`) e os anteriores, "AAAA-MM"; nunca futuro.
+export function recentMonths(today: string, count = 13): string[] {
+  let year = Number(today.slice(0, 4));
+  let m = Number(today.slice(5, 7));
+  const out: string[] = [];
+  for (let i = 0; i < count; i++) {
+    out.push(`${year}-${String(m).padStart(2, "0")}`);
+    m -= 1;
+    if (m === 0) { m = 12; year -= 1; }
+  }
+  return out;
+}
+
+const plural = (n: number, one: string, many: string): string => `${n} ${n === 1 ? one : many}`;
+// "1 registro · 1 com pendência · 3 ações" (e " · N com aviso" só quando há).
+export function monthCountsText(c: { records: number; with_problems: number; with_warnings: number; actions: number }): string {
+  const parts = [ plural(c.records, "registro", "registros"), `${c.with_problems} com pendência` ];
+  if (c.with_warnings > 0) parts.push(`${c.with_warnings} com aviso`);
+  parts.push(plural(c.actions, "ação", "ações"));
+  return parts.join(" · ");
+}
+export const closeBlockedHint = (n: number): string => (n === 1 ? "resolva a pendência antes de fechar" : `resolva as ${n} pendências antes de fechar`);
+
+// `month_has_problems` (P24): a lista `{ error, path: "records.<id>" }` por registro, em códigos (a linha rotula com `monthProblemLabel`).
+export function monthRefusalsByRecord(err: unknown): Record<string, string[]> {
+  const out: Record<string, string[]> = {};
+  for (const r of psyRefusals(err)) {
+    const m = /^records\.(.+)$/.exec(r.path);
+    if (!m || !r.code) continue;
+    (out[m[1]] ??= []).push(r.code);
+  }
+  return out;
+}
