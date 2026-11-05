@@ -127,6 +127,32 @@ describe("regras do CAPS (limites e prazo do PTS)", () => {
     await confirm();
     await waitFor(() => expect(vi.mocked(api.updatePsySettings).mock.calls[0][0].care_plan_review_days).toBe(45));
   });
+  it("digitar num campo recusado mantém o foco nele, com outro campo também recusado", async () => {
+    mount();
+    await screen.findByLabelText("Prazo de revisão do PTS (dias)");
+    change("CAPS III — janela (dias)", "3");
+    change("Prazo de revisão do PTS (dias)", "0");
+    saveRules();
+    // Depois do envio, o foco vai ao primeiro campo recusado (na ordem da tela).
+    expect(document.activeElement).toBe(input("CAPS III — janela (dias)"));
+    // O mesmo no outro sentido: foco no segundo recusado, dois caracteres seguidos (sem user-event no projeto: foco + change).
+    const prazo = input("Prazo de revisão do PTS (dias)");
+    prazo.focus();
+    change("Prazo de revisão do PTS (dias)", "6");
+    expect(document.activeElement).toBe(prazo);
+    expect(prazo.getAttribute("aria-invalid")).toBeNull();
+    change("Prazo de revisão do PTS (dias)", "60");
+    expect(document.activeElement).toBe(prazo);
+    expect(prazo.value).toBe("60");
+    // O outro campo segue recusado, sem ter roubado o foco.
+    expect(input("CAPS III — janela (dias)").getAttribute("aria-invalid")).toBe("true");
+    // Digitar no recusado remove a recusa dele e o foco continua nele.
+    const window = input("CAPS III — janela (dias)");
+    window.focus();
+    change("CAPS III — janela (dias)", "30");
+    expect(document.activeElement).toBe(window);
+    expect(window.value).toBe("30");
+  });
   it("recusa do api com path vai para o campo e a frase aparece uma vez", async () => {
     mount();
     await screen.findByLabelText("Prazo de revisão do PTS (dias)");

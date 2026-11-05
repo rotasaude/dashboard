@@ -99,10 +99,18 @@ function SettingsForm({ saved, done, setDone, onGoToSecurity }: {
   const [ problems, setProblems ] = useState<Problem[]>([]);
   const [ confirming, setConfirming ] = useState(false);
   const formRef = useRef<HTMLFormElement | null>(null);
-  useEffect(() => { formRef.current?.querySelector<HTMLElement>("[aria-invalid='true']")?.focus(); }, [ problems ]);
+  // O foco vai ao primeiro campo recusado só depois de um envio (ou de uma recusa do api), nunca a cada tecla: digitar num campo
+  // recusado não pode levar o foco a outro.
+  const [ focusTick, setFocusTick ] = useState(0);
+  useEffect(() => {
+    if (focusTick > 0) formRef.current?.querySelector<HTMLElement>("[aria-invalid='true']")?.focus();
+  }, [ focusTick ]);
 
   // Mexer num campo fecha a confirmação aberta: o que se confirma é sempre o que está na tela.
-  const set = (path: string, value: string) => { setDraft((d) => ({ ...d, [path]: value })); setDone(false); setConfirming(false); setProblems((list) => list.filter((p) => p.path !== path)); };
+  const set = (path: string, value: string) => { setDraft((d) => ({ ...d, [path]: value })); setDone(false); setConfirming(false); setProblems((list) => {
+    const rest = list.filter((p) => p.path !== path);
+    return rest.length === list.length ? list : rest;
+  }); };
   const errId = (path: string) => `cs-err-${path.replace(/\W/g, "-")}`;
   const err = (path: string) => {
     const texts = [ ...new Set(problems.filter((p) => p.path === path).map((p) => p.text)) ];
@@ -122,6 +130,7 @@ function SettingsForm({ saved, done, setDone, onGoToSecurity }: {
     setDone(false);
     const found = settingsProblems(toSettings(draft));
     setProblems(found);
+    setFocusTick((t) => t + 1);
     setConfirming(found.length === 0);
   }
 
@@ -154,7 +163,7 @@ function SettingsForm({ saved, done, setDone, onGoToSecurity }: {
           translateError={(e) => {
             const refusals = psyRefusals(e);
             const mine = refusals.filter((r) => FIELD_PATHS.includes(r.path));
-            if (mine.length > 0) setProblems(mine.map((r) => ({ path: r.path, text: r.text })));
+            if (mine.length > 0) { setProblems(mine.map((r) => ({ path: r.path, text: r.text }))); setFocusTick((t) => t + 1); }
             return [ ...new Set(refusals.map((r) => r.text)) ].join("; ");
           }}
         />
