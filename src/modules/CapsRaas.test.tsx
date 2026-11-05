@@ -9,7 +9,8 @@ import { CAPS_II, MONTH31, TODAY31, month, monthRecord, psyUser, raasExport } fr
 import * as api from "../lib/api";
 import { ApiError } from "../lib/api";
 import {
-  MONTH_CLOSED_DONE, MONTH_REOPENED, NO_RAAS_EXPORTS, PSY_ERRORS, PSY_MONTH_KEY, RAAS_DOWNLOAD_NOTE, closeBlockedHint, monthCountsText,
+  BILLING_SHEETS_NOTE, MONTH_CLOSED_DONE, MONTH_REOPENED, MONTH_STALE_TEXT, NO_RAAS_EXPORTS, ORPHAN_PROBLEMS_TEXT, PSY_ERRORS, PSY_MONTH_KEY,
+  RAAS_DOWNLOAD_NOTE, closeBlockedHint, monthCountsText, psyError,
   monthProblemLabel, monthWarningLabel, reasonProblem, recentMonths
 } from "../lib/psychosocial";
 import { saveFile } from "./lab/saveFile";
@@ -23,6 +24,7 @@ vi.mock("./lab/saveFile", () => ({ saveFile: vi.fn() }));
 afterEach(() => { cleanup(); vi.clearAllMocks(); vi.restoreAllMocks(); });
 
 const REC = "3f2b8c1e-7d4a-4c5e-9b1a-2e6f8d0c4a71";
+const GONE = "9a1c7e2b-5d3f-4b6a-8c0e-1f2a3b4c5d6e";
 const LEAD = { user_id: "u-1", name: "Ana Coordenadora", cbo_code: "251510" };
 const REASON = "ação lançada no mês errado";
 const PDF = { blob: new Blob([ "%PDF" ], { type: "application/pdf" }), filename: null };
@@ -100,7 +102,11 @@ describe("RAAS do mês", () => {
     const { client } = mount(psyUser([ "psychosocial_lead" ]), { mfa_verified_at: null });
     fireEvent.click(await screen.findByRole("button", { name: "Fechar o mês" }));
     // A pendência nova apareceu depois da leitura: o api manda a lista com o id do registro.
-    vi.mocked(api.closePsyMonth).mockRejectedValueOnce(new ApiError(422, { error: "month_has_problems", problems: [ { error: "cid_missing", path: `records.${REC}` } ] }, "422"));
+    vi.mocked(api.closePsyMonth).mockRejectedValueOnce(new ApiError(422, { error: "month_has_problems", problems: [
+      { error: "cid_missing", path: `records.${REC}` }, { error: "patient_cns_missing", path: `records.${GONE}` } ] }, "422"));
+    // A releitura demora: enquanto isso, a lista da recusa vale.
+    let reread: (m: api.PsyMonth) => void = () => undefined;
+    vi.mocked(api.getPsyMonth).mockImplementationOnce(() => new Promise((res) => { reread = res; }));
     // Depois do código, a sessão volta com a janela aberta.
     vi.mocked(api.fetchCurrentSession).mockResolvedValue(psyUser([ "psychosocial_lead" ]));
     await fillTotpAndConfirm("123456");
@@ -109,8 +115,17 @@ describe("RAAS do mês", () => {
     expect(api.closePsyMonth).toHaveBeenCalledTimes(1);
     expect(api.closePsyMonth).toHaveBeenCalledWith(MONTH31, CAPS_II.id);
     await waitFor(() => expect(api.getPsyMonth).toHaveBeenCalledTimes(2));
-    // A pendência vai para a linha do registro (o path preserva o uuid).
+    // A pendência vai para a linha do registro (o path preserva o uuid); a de registro que a tela não tem, ao topo, com contexto.
     expect(within(rowOf("Maria da Silva")).getByText(monthProblemLabel("cid_missing"))).not.toBeNull();
+    expect(screen.getByText(ORPHAN_PROBLEMS_TEXT)).not.toBeNull();
+    expect(screen.getByText(monthProblemLabel("patient_cns_missing"))).not.toBeNull();
+    expect((screen.getByRole("button", { name: "Fechar o mês" }) as HTMLButtonElement).disabled).toBe(true);
+    // A releitura chega: ela é a verdade, e a lista da recusa sai.
+    reread(month({ counts: { records: 1, open: 1, closed: 0, exported: 0, with_problems: 1, with_warnings: 0, actions: 3 },
+      records: [ { ...clean, problems: [ "homeless_missing" ] } ] }));
+    expect(await within(rowOf("Maria da Silva")).findByText(monthProblemLabel("homeless_missing"))).not.toBeNull();
+    expect(within(rowOf("Maria da Silva")).queryByText(monthProblemLabel("cid_missing"))).toBeNull();
+    expect(screen.queryByText(ORPHAN_PROBLEMS_TEXT)).toBeNull();
 
     vi.mocked(api.getPsyMonth).mockResolvedValue(month({ status: "closed", closure: { closed_at: "2026-11-04T09:00:00-03:00", closed_by: LEAD },
       counts: { records: 1, open: 0, closed: 1, exported: 0, with_problems: 0, with_warnings: 0, actions: 3 }, records: [ { ...clean, status: "closed" } ] }));
@@ -149,10 +164,20 @@ describe("RAAS do mês", () => {
     vi.mocked(api.fetchPsySheets).mockResolvedValue(PDF);
     mount();
     // Mês aberto: a coordenação vê a PRÉVIA das fichas (mês e linha).
-    fireEvent.click(await screen.findByRole("button", { name: "Ficha de Maria da Silva" }));
+    // Duplo clique abre uma janela só.
+    const one = await screen.findByRole("button", { name: "Ficha (PDF) de Maria da Silva" });
+    fireEvent.click(one);
+    fireEvent.click(one);
     await waitFor(() => expect(api.fetchPsySheets).toHaveBeenCalledWith(MONTH31, { unitId: CAPS_II.id, enrollmentId: "en1" }));
-    fireEvent.click(screen.getByRole("button", { name: "Fichas espelho do mês (PDF)" }));
+    await waitFor(() => expect((one as HTMLButtonElement).disabled).toBe(false));
+    expect(api.fetchPsySheets).toHaveBeenCalledTimes(1);
+    const all = screen.getByRole("button", { name: "Fichas espelho do mês (PDF)" });
+    fireEvent.click(all);
+    fireEvent.click(all);
     await waitFor(() => expect(api.fetchPsySheets).toHaveBeenLastCalledWith(MONTH31, { unitId: CAPS_II.id, enrollmentId: null }));
+    await waitFor(() => expect((all as HTMLButtonElement).disabled).toBe(false));
+    expect(api.fetchPsySheets).toHaveBeenCalledTimes(2);
+    expect(window.open).toHaveBeenCalledTimes(2);
     expect(screen.queryByRole("button", { name: "Gerar remessa" })).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Fechar o mês" }));
@@ -193,7 +218,7 @@ describe("RAAS do mês", () => {
     expect(screen.queryByRole("button", { name: "Fechar o mês" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Gerar remessa" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Fichas espelho do mês (PDF)" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Ficha de Maria da Silva" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Ficha (PDF) de Maria da Silva" })).toBeNull();
     expect(api.listPsyRaasExports).not.toHaveBeenCalled();
     // Outro mês: nova leitura com o id do CAPS.
     fireEvent.change(screen.getByLabelText("Mês de atendimento"), { target: { value: "2026-10" } });
@@ -218,16 +243,45 @@ describe("RAAS do mês", () => {
     expect(win.close).toHaveBeenCalled();
   });
 
-  it("faturista sem remessa no mês: gera com step-up (mês aberto é recusado); sem fichas (R12)", async () => {
+  it("faturista sem remessa no mês: fichas em qualquer mês (mês aberto é recusado); gera com step-up", async () => {
     vi.mocked(api.createPsyRaasExport).mockRejectedValueOnce(new ApiError(409, { error: "month_open" }, "409"));
+    vi.mocked(api.fetchPsySheets).mockRejectedValueOnce(new ApiError(409, { error: "month_open" }, "409"));
+    const win = { location: { href: "" }, close: vi.fn(), opener: null };
+    vi.spyOn(window, "open").mockReturnValue(win as unknown as Window);
     mount(psyUser([ "billing_clerk" ]), { mfa_verified_at: null });
     expect(await screen.findByText(NO_RAAS_EXPORTS)).not.toBeNull();
-    expect(screen.queryByRole("button", { name: "Fichas espelho do mês (PDF)" })).toBeNull();
+    expect(screen.getByText(BILLING_SHEETS_NOTE)).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Fichas espelho do mês (PDF)" }));
+    expect(await screen.findByText(PSY_ERRORS.month_open)).not.toBeNull();
+    expect(win.close).toHaveBeenCalled();
+    expect(api.getPsyMonth).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Gerar remessa" }));
     await fillTotpAndConfirm("654321");
     expect(await screen.findByText(PSY_ERRORS.month_open)).not.toBeNull();
     expect(api.stepUpMfa).toHaveBeenCalledWith("654321");
     expect(api.createPsyRaasExport).toHaveBeenCalledTimes(1);
+  });
+
+  it("pendência rebaixada a aviso não bloqueia o fechamento", async () => {
+    vi.mocked(api.getPsyMonth).mockResolvedValue(month({ counts: { records: 1, open: 1, closed: 0, exported: 0, with_problems: 0, with_warnings: 1, actions: 0 },
+      records: [ monthRecord({ problems: [], homeless: false, actions_count: 0, warnings: [ "cid_missing", "no_actions" ] }) ] }));
+    mount();
+    await screen.findByText("Maria da Silva");
+    expect(within(rowOf("Maria da Silva")).getByText(monthWarningLabel("cid_missing"))).not.toBeNull();
+    expect(within(rowOf("Maria da Silva")).getByText(monthWarningLabel("no_actions"))).not.toBeNull();
+    expect((screen.getByRole("button", { name: "Fechar o mês" }) as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.queryByText(closeBlockedHint(1))).toBeNull();
+  });
+
+  it("releitura com erro: a lista antiga fica, com aviso", async () => {
+    const offline = new ApiError(500, { error: "server_error" }, "500");
+    vi.mocked(api.setPsyHomeless).mockResolvedValue({ id: "mr1", enrollment_id: "en1", health_unit_id: CAPS_II.id, month: MONTH31, status: "open", homeless: true });
+    mount(psyUser([ "psychosocial_staff" ]));
+    await screen.findByText("Maria da Silva");
+    vi.mocked(api.getPsyMonth).mockRejectedValueOnce(offline);
+    fireEvent.change(screen.getByLabelText("Situação de rua em novembro de 2026 — Maria da Silva"), { target: { value: "yes" } });
+    expect(await screen.findByText(`${MONTH_STALE_TEXT} ${psyError(offline)}`)).not.toBeNull();
+    expect(screen.getByText("Maria da Silva")).not.toBeNull();
   });
 
   it("janela do pop-up bloqueada: frase", async () => {

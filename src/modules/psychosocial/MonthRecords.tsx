@@ -12,7 +12,8 @@ import { todayInCity } from "../../lib/campaigns";
 import { fmtDay } from "../../lib/careLines";
 import { monthLabel } from "../../lib/regulation";
 import {
-  CLOSE_MONTH_NOTE, HOMELESS_LABEL, MONTH_CLOSED_DONE, MONTH_REOPENED, NO_CLINICAL_IN_LIST, NO_MONTH_PROBLEMS, NO_MONTH_RECORDS, PSY_ERRORS,
+  CLOSE_MONTH_NOTE, HOMELESS_LABEL, MONTH_CLOSED_DONE, MONTH_REOPENED, MONTH_STALE_TEXT, NO_CLINICAL_IN_LIST, NO_MONTH_PROBLEMS, NO_MONTH_RECORDS,
+  ORPHAN_PROBLEMS_TEXT, PSY_ERRORS,
   REOPEN_MONTH_NOTE, closeBlockedHint, homelessValue, isStale, monthCountsText, monthProblemLabel, monthRefusalsByRecord, monthStatusLabel,
   monthWarningLabel, psyError, reasonProblem, type PsyRoles
 } from "../../lib/psychosocial";
@@ -42,12 +43,15 @@ export function MonthRecords({ unit, month, query, roles, onGoToSecurity, reload
   const [ open, setOpen ] = useState<"close" | "reopen" | null>(null);
   const [ notice, setNotice ] = useState<Notice | null>(null);
   const [ onlyProblems, setOnlyProblems ] = useState(false);
-  // A lista da recusa do fechamento, por registro (some da linha quando a situação de rua dela muda).
-  const [ refused, setRefused ] = useState<Record<string, string[]>>({});
+  // A lista da recusa do fechamento, por registro, com o `dataUpdatedAt` do mês na hora da recusa: vale até a releitura chegar (a
+  // releitura é a verdade; se ela falhar, a lista da recusa fica, com o aviso).
+  const [ refusal, setRefusal ] = useState<{ at: number; byRecord: Record<string, string[]> } | null>(null);
   // A escolha de situação de rua enquanto o api não devolve o mês relido.
   const [ chosen, setChosen ] = useState<Record<string, "yes" | "no">>({});
   const [ savingId, setSavingId ] = useState<string | null>(null);
   const [ rowError, setRowError ] = useState<{ id: string; text: string } | null>(null);
+  const [ opening, setOpening ] = useState(false);
+  const openingRef = useRef(false);
   const sending = useRef(false);
   const alive = useRef(true);
   const noticeRef = useRef<HTMLParagraphElement | null>(null);
@@ -57,7 +61,7 @@ export function MonthRecords({ unit, month, query, roles, onGoToSecurity, reload
   const m = query.data;
   const status = m?.status ?? null;
   // A situação mudou (fechado, reaberto, exportado): a confirmação aberta não vale mais.
-  useEffect(() => { setOpen(null); setRefused({}); }, [ status ]);
+  useEffect(() => { setOpen(null); setRefusal(null); }, [ status ]);
 
   if (query.isPending) return <p className="mono" style={muted}>carregando…</p>;
   if (query.isError && !m) return <p role="alert" style={alert}>{psyError(query.error)}</p>;
@@ -65,6 +69,7 @@ export function MonthRecords({ unit, month, query, roles, onGoToSecurity, reload
 
   const label = monthLabel(month);
   const isOpen = m.status === "open";
+  const refused = refusal && query.dataUpdatedAt <= refusal.at ? refusal.byRecord : {};
   const problemsOf = (r: PsyMonthRecord): string[] => [ ...new Set([ ...r.problems, ...(refused[r.id] ?? []) ]) ];
   const pending = m.records.reduce((n, r) => n + problemsOf(r).length, 0);
   const known = new Set(m.records.map((r) => r.id));
@@ -85,7 +90,6 @@ export function MonthRecords({ unit, month, query, roles, onGoToSecurity, reload
     try {
       await setPsyHomeless(r.id, value === "yes");
       if (!alive.current) return;
-      setRefused((x) => without(x, r.id));
       await reloadMonth();
     } catch (err) {
       if (!alive.current) return;
@@ -101,9 +105,17 @@ export function MonthRecords({ unit, month, query, roles, onGoToSecurity, reload
   }
 
   async function sheet(r: PsyMonthRecord) {
+    if (openingRef.current) return;
+    openingRef.current = true;
+    setOpening(true);
     setNotice(null);
-    const res = await openSheets(month, { unitId: unit.id, enrollmentId: r.enrollment_id });
-    if (!res.ok && alive.current) setNotice({ text: res.text, ok: false });
+    try {
+      const res = await openSheets(month, { unitId: unit.id, enrollmentId: r.enrollment_id });
+      if (!res.ok && alive.current) setNotice({ text: res.text, ok: false });
+    } finally {
+      openingRef.current = false;
+      if (alive.current) setOpening(false);
+    }
   }
 
   const homelessCell = (r: PsyMonthRecord) => {
@@ -138,7 +150,8 @@ export function MonthRecords({ unit, month, query, roles, onGoToSecurity, reload
   ];
   if (roles.lead) {
     cols.push({ label: "", w: "auto", align: "right", card: "actions", render: (r) => (r.warnings.includes("no_actions") ? null : (
-      <button type="button" style={secondaryButtonStyle} aria-label={`Ficha de ${r.patient.name}`} onClick={() => { void sheet(r); }}>Ficha (PDF)</button>
+      <button type="button" disabled={opening} style={opening ? disabledButtonStyle : secondaryButtonStyle} aria-label={`Ficha (PDF) de ${r.patient.name}`}
+        onClick={() => { void sheet(r); }}>Ficha (PDF)</button>
     )) });
   }
 
@@ -146,6 +159,7 @@ export function MonthRecords({ unit, month, query, roles, onGoToSecurity, reload
     <Panel title={`RAAS de ${label}`} sub={monthCountsText(m.counts)}>
       <div style={stack}>
         {notice && <p ref={noticeRef} tabIndex={-1} role={notice.ok ? "status" : "alert"} style={notice.ok ? okText : alert}>{notice.text}</p>}
+        {query.isError && <p role="alert" style={alert}>{`${MONTH_STALE_TEXT} ${psyError(query.error)}`}</p>}
         <div style={row}>
           <Tag tone={m.status === "open" ? "info" : m.status === "exported" ? "ok" : "neutral"}>{monthStatusLabel(m.status)}</Tag>
           {m.closure && <span style={muted}>{`fechado em ${fmtDay(todayInCity(new Date(m.closure.closed_at)))} por ${m.closure.closed_by.name}`}</span>}
@@ -174,12 +188,12 @@ export function MonthRecords({ unit, month, query, roles, onGoToSecurity, reload
                 await closePsyMonth(month, unit.id);
               } catch (err) {
                 const code = errorCode(err) ?? "";
-                if (code === "month_has_problems") { setRefused(monthRefusalsByRecord(err)); void reloadMonth(); }
+                if (code === "month_has_problems") { setRefusal({ at: query.dataUpdatedAt, byRecord: monthRefusalsByRecord(err) }); void reloadMonth(); }
                 else if (isStale(err) || STALE_CODES.includes(code)) void reloadAll();
                 throw err;
               }
             }}
-            onDone={() => { setRefused({}); finish(MONTH_CLOSED_DONE); }}
+            onDone={() => { setRefusal(null); finish(MONTH_CLOSED_DONE); }}
             onCancel={() => setOpen(null)}
             onGoToSecurity={onGoToSecurity}
             translateError={(err) => (errorCode(err) === "month_has_problems" ? PSY_ERRORS.month_has_problems : psyError(err))}
@@ -189,7 +203,12 @@ export function MonthRecords({ unit, month, query, roles, onGoToSecurity, reload
           <ReopenMonth unit={unit} month={month} onGoToSecurity={onGoToSecurity} onDone={() => finish(MONTH_REOPENED)}
             onStale={() => { void reloadAll(); }} onCancel={() => setOpen(null)} />
         )}
-        {orphan.length > 0 && <div style={row}>{orphan.map((c) => <Tag key={c} tone="down">{monthProblemLabel(c)}</Tag>)}</div>}
+        {orphan.length > 0 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <p style={muted}>{ORPHAN_PROBLEMS_TEXT}</p>
+            <div style={row}>{orphan.map((c) => <Tag key={c} tone="down">{monthProblemLabel(c)}</Tag>)}</div>
+          </div>
+        )}
         <p style={muted}>{NO_CLINICAL_IN_LIST}</p>
         <label style={checkLabel}>
           <input type="checkbox" checked={onlyProblems} onChange={(ev) => setOnlyProblems(ev.target.checked)} />

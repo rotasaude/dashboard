@@ -4,8 +4,8 @@
 // - Gerar (step-up, P15): a coordenação só com o mês fechado (ela lê o mês); o faturista não lê o mês (P43) e vê o botão enquanto o
 //   mês não tem remessa — o api recusa mês aberto (409 `month_open`) com frase. `raas_layout_unavailable` é o caminho de hoje (gate):
 //   frase em `role="status"`, não erro — o caminho é a ficha espelho.
-// - Fichas: a coordenação em qualquer mês (aberto = PRÉVIA, api); o faturista só nos meses com remessa na lista (R12; 409 `month_open`
-//   vira frase).
+// - Fichas: coordenação e faturista em qualquer mês (R12 revisto). Com o mês aberto, a coordenação recebe a PRÉVIA (api) e o
+//   faturista, 409 `month_open` com frase (P43). Duplo clique abre uma janela só.
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { createPsyRaasExport, errorCode, fetchPsyRaasFile, listPsyRaasExports, type PsyRaasExport, type PsyUnit } from "../../lib/api";
@@ -36,6 +36,8 @@ export function RaasExports({ unit, month, roles, monthStatus, onGoToSecurity, o
   const [ generating, setGenerating ] = useState(false);
   const [ notice, setNotice ] = useState<Notice | null>(null);
   const [ downloading, setDownloading ] = useState(false);
+  const [ opening, setOpening ] = useState(false);
+  const openingRef = useRef(false);
   const busy = useRef(false);
   const alive = useRef(true);
   const outcome = useRef<PsyRaasExport | "layout" | null>(null);
@@ -49,7 +51,7 @@ export function RaasExports({ unit, month, roles, monthStatus, onGoToSecurity, o
   const lead = roles.lead;
   // Com a situação lida (coordenação), só o mês fechado; sem ela, só o faturista (a coordenação espera a leitura).
   const canGenerate = exports.isSuccess && items.length === 0 && (monthStatus !== null ? monthStatus === "closed" : roles.billing && !lead);
-  const canSheets = lead || items.length > 0;
+  const canSheets = lead || roles.billing;
 
   async function download(x: PsyRaasExport) {
     if (busy.current) return;
@@ -68,9 +70,17 @@ export function RaasExports({ unit, month, roles, monthStatus, onGoToSecurity, o
   }
 
   async function sheets() {
+    if (openingRef.current) return;
+    openingRef.current = true;
+    setOpening(true);
     setNotice(null);
-    const res = await openSheets(month, { unitId: unit.id, enrollmentId: null });
-    if (!res.ok && alive.current) setNotice({ text: res.text, ok: false });
+    try {
+      const res = await openSheets(month, { unitId: unit.id, enrollmentId: null });
+      if (!res.ok && alive.current) setNotice({ text: res.text, ok: false });
+    } finally {
+      openingRef.current = false;
+      if (alive.current) setOpening(false);
+    }
   }
 
   return (
@@ -84,11 +94,12 @@ export function RaasExports({ unit, month, roles, monthStatus, onGoToSecurity, o
               onClick={() => { setNotice(null); setGenerating(true); }}>Gerar remessa</button>
           )}
           {canSheets && (
-            <button type="button" style={secondaryButtonStyle} onClick={() => { void sheets(); }}>Fichas espelho do mês (PDF)</button>
+            <button type="button" disabled={opening} style={opening ? disabledButtonStyle : secondaryButtonStyle}
+              onClick={() => { void sheets(); }}>Fichas espelho do mês (PDF)</button>
           )}
         </div>
         {lead && monthStatus === "open" && <p style={muted}>{`${RAAS_AFTER_CLOSE_NOTE} ${SHEETS_PREVIEW_NOTE}`}</p>}
-        {!lead && items.length === 0 && exports.isSuccess && <p style={muted}>{BILLING_SHEETS_NOTE}</p>}
+        {!lead && <p style={muted}>{BILLING_SHEETS_NOTE}</p>}
         {generating && (
           <SensitiveAction
             key="generate"
@@ -118,8 +129,9 @@ export function RaasExports({ unit, month, roles, monthStatus, onGoToSecurity, o
             translateError={psyError}
           />
         )}
+        {exports.isError && <p role="alert" style={alert}>{psyError(exports.error)}</p>}
         {exports.isPending ? <p className="mono" style={muted}>carregando…</p>
-          : exports.isError ? <p role="alert" style={alert}>{psyError(exports.error)}</p>
+          : !exports.data ? null
           : (
             <DataTable<PsyRaasExport>
               cols={[
