@@ -964,7 +964,12 @@ export const CLOSE_MONTH_NOTE = "Fechar trava as ações do mês e libera a reme
 export const REOPEN_MONTH_NOTE = "Reabrir destrava as ações do mês; a remessa sai só depois de fechar de novo.";
 export const GENERATE_RAAS_NOTE = "A remessa leva os registros fechados com ação de RAAS; a competência de apresentação é a aberta no faturamento.";
 export const SHEETS_PREVIEW_NOTE = "Com o mês aberto, as fichas saem como PRÉVIA.";
-export const BILLING_SHEETS_NOTE = "As fichas espelho do mês aparecem aqui quando a remessa do mês existe.";
+// R12 revisto: o faturista pede as fichas em qualquer mês; o api só as dá com o mês fechado (409 `month_open`, P43).
+export const BILLING_SHEETS_NOTE = "As fichas espelho do faturamento saem só com o mês fechado.";
+// A releitura do mês falhou e a tela mostra a lista anterior.
+export const MONTH_STALE_TEXT = "não foi possível reler o mês — a lista abaixo pode estar desatualizada:";
+// `month_has_problems` com registro que a lista da tela ainda não tem (entrou depois da leitura).
+export const ORPHAN_PROBLEMS_TEXT = "Pendências de registros que ainda não aparecem na lista (o mês está sendo relido):";
 export const RAAS_AFTER_CLOSE_NOTE = "A remessa sai depois do fechamento do mês.";
 export const raasExportedText = (competence: string): string => {
   const c = /^(\d{4})(0[1-9]|1[0-2])$/.exec(competence);
@@ -1006,3 +1011,88 @@ export function monthRefusalsByRecord(err: unknown): Record<string, string[]> {
   }
   return out;
 }
+
+// ─── Matriciamento e casos compartilhados (Task 12; F-31.7; P4, P12, P23, P25, P44, R8, R14) ───
+// O api decide a equipe (ativa, da atenção básica, de unidade que não é CAPS), a lotação dos participantes e a crítica da SIGTAP; a
+// tela só não envia o que já sabe que será recusado. A lista não traz tema nem texto compartilhado (P4); o detalhe, só no clique.
+import type { PsyMatrixSupportInput } from "./api";
+export const MATRIX_SAVED = "Matriciamento registrado.";
+export const CASE_SAVED = "Caso compartilhado registrado.";
+export const NO_MATRIX_SUPPORTS = "nenhum matriciamento registrado neste CAPS";
+export const NO_MATRIX_CASES = "nenhum caso compartilhado neste matriciamento";
+export const NO_MATRIX_PROCEDURES = "nenhum procedimento do SIGTAP para matriciamento (BPA-C) serve para o seu CBO neste CAPS";
+export const NO_HEALTH_TEAMS = "nenhuma equipe da atenção básica para escolher";
+export const MATRIX_LIST_NOTE = "A lista não mostra o tema nem os textos compartilhados com a UBS.";
+export const MATRIX_BPAC_NOTE = "Vai ao BPA-C como ação da equipe, sem paciente.";
+export const MATRIX_READ_NOTE = "A equipe matriciada lê este texto; o resto do prontuário do CAPS continua fechado.";
+export const MATRIX_NO_CLINICAL_NOTE = "Não escreva CID, substância nem evolução aqui: a UBS lê este texto.";
+export const MATRIX_CANCELLED_NOTE = "Este matriciamento foi cancelado — não recebe novos casos.";
+export const CASE_NOT_ENROLLED_NOTE = "A pessoa não precisa ter matrícula no CAPS.";
+export const MATRIX_TEAM_TEXT = "escolha a equipe da UBS";
+export const MATRIX_DATE_TEXT = "informe a data do matriciamento";
+export const MATRIX_PROCEDURE_TEXT = "escolha o procedimento do matriciamento";
+export const MATRIX_TOPIC_TEXT = "tema: de 1 a 200 caracteres";
+export const MATRIX_PARTICIPANTS_TEXT = "marque ao menos um profissional do CAPS";
+export const MATRIX_PARTICIPANTS_MAX_TEXT = "no máximo 20 profissionais por matriciamento";
+export const CASE_PATIENT_TEXT = "escolha a pessoa do caso";
+export const CASE_TEXT = "texto compartilhado: de 10 a 2000 caracteres";
+export const MAX_MATRIX_PARTICIPANTS = 20;
+export const MAX_SHARED_TEXT = 2000;
+
+// BPA-C sem paciente (P44): o api exige o instrumento 01 e não o 02 (`Instrument.for`, sem matrícula).
+export const matrixProcedures = (o: PsyOptions): PsyProcedure[] => o.procedures.filter((p) => procInstrument(p, false) === "bpa_c");
+// O primeiro de nome "MATRICIAMENTO"; sem ele, o único que houver; senão a pessoa escolhe.
+export const defaultMatrixProcedure = (procs: PsyProcedure[]): string =>
+  (procs.find((p) => /MATRICIAMENTO/i.test(p.name)) ?? (procs.length === 1 ? procs[0] : undefined))?.code ?? "";
+
+export type MatrixDraft = { teamId: string; heldOn: string; topic: string; userIds: string[]; sigtapCode: string };
+
+export function emptyMatrixDraft(today: string, procs: PsyProcedure[]): MatrixDraft {
+  return { teamId: "", heldOn: today, topic: "", userIds: [], sigtapCode: defaultMatrixProcedure(procs) };
+}
+
+const isCalendarDate = (v: string): boolean => /^\d{4}-\d{2}-\d{2}$/.test(v) && new Date(`${v}T12:00:00Z`).toISOString().slice(0, 10) === v;
+
+// Tudo de uma vez, com os paths do api. `today` é o dia da cidade na hora do envio.
+export function matrixProblems(d: MatrixDraft, today: string): Problem[] {
+  const out: Problem[] = [];
+  if (!d.teamId) out.push({ path: "health_team_id", text: MATRIX_TEAM_TEXT });
+  if (!isCalendarDate(d.heldOn)) out.push({ path: "held_on", text: MATRIX_DATE_TEXT });
+  else if (d.heldOn > today) out.push({ path: "held_on", text: FUTURE_DATE_TEXT });
+  const topic = textProblem(d.topic, 1, 200, "tema");
+  if (topic) out.push({ path: "topic", text: MATRIX_TOPIC_TEXT });
+  if (d.userIds.length === 0) out.push({ path: "participants_user_ids", text: MATRIX_PARTICIPANTS_TEXT });
+  else if (d.userIds.length > MAX_MATRIX_PARTICIPANTS) out.push({ path: "participants_user_ids", text: MATRIX_PARTICIPANTS_MAX_TEXT });
+  if (!d.sigtapCode) out.push({ path: "sigtap_code", text: MATRIX_PROCEDURE_TEXT });
+  return out;
+}
+
+export function matrixInput(d: MatrixDraft, unitId: string): PsyMatrixSupportInput {
+  return { health_unit_id: unitId, health_team_id: d.teamId, held_on: d.heldOn, topic: d.topic.trim(), participants_user_ids: d.userIds, sigtap_code: d.sigtapCode };
+}
+
+const MATRIX_FIELDS = [ "health_team_id", "held_on", "topic", "participants_user_ids", "sigtap_code" ];
+
+// A crítica da ação nos campos do matriciamento (P23): `performed_at` é `held_on`; o resto (quantidade, local, CBO…) é do
+// procedimento. O api já manda assim; aqui também, para o que vier com outro path. `participants_user_ids[i]` vai ao grupo de caixas.
+export function matrixRefusal(r: { code: string; path: string; text: string }): Problem {
+  let path = r.path;
+  if (path === "performed_at") path = "held_on";
+  else if (/^participants_user_ids\[\d+\]$/.test(path)) path = "participants_user_ids";
+  else if (path !== "" && !MATRIX_FIELDS.includes(path)) path = "sigtap_code";
+  return { path, text: path === r.path || !r.code ? r.text : psyCodeText(r.code, path) };
+}
+
+// "equipe · unidade" (a unidade vem de `options.health_teams`; equipe que saiu da lista aparece só pelo nome).
+export const matrixTeamLabel = (team: { id: string; name: string }, teams: PsyOptions["health_teams"]): string => {
+  const unit = teams.find((t) => t.id === team.id)?.health_unit.name;
+  return unit ? `${team.name} · ${unit}` : team.name;
+};
+
+export function caseProblems(d: { patientId: string; text: string }): Problem[] {
+  const out: Problem[] = [];
+  if (!d.patientId) out.push({ path: "patient_id", text: CASE_PATIENT_TEXT });
+  if (textProblem(d.text, 10, MAX_SHARED_TEXT, "texto compartilhado")) out.push({ path: "shared_text", text: CASE_TEXT });
+  return out;
+}
+export const caseInput = (patientId: string, text: string): { patient_id: string; shared_text: string } => ({ patient_id: patientId, shared_text: text.trim() });
