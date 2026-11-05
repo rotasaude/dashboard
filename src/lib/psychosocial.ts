@@ -1,0 +1,540 @@
+// Regras de tela do módulo 31 (CAPS; contrato 2026-11-04 §1–§11 e §15) sem React. Lotação, crítica do SIGTAP, CBO, mês
+// fechado, leito, limite de noites, BPA-C, trilha e imutabilidade são do api; a tela só não envia o que já sabe que será recusado.
+// Limites e códigos conferidos contra o api real (api-truth.md; `Psychosocial::Catalog`, `ActionRules`, `FAILURE_STATUS`): onde o
+// plano diz outra coisa, vale o api. Nenhuma frase interpola nome, CPF, CNS, CID, substância ou texto do corpo.
+import {
+  ApiError, errorCode,
+  type CareIntensity, type PsyActionInput, type PsyCarePlanInput, type PsyCode, type PsyCount, type PsyEnrollmentInput,
+  type PsyPlace, type PsyProcedure, type PsySettings
+} from "./api";
+import { NOMINAL_QUERY, STATIC_QUERY, fmtDay } from "./careLines";
+import { addDays } from "./campaigns";
+import { featureDisabledKey, featureLabel, hasFeature } from "./features";
+import { cityLocalIso, parseCityLocal } from "./format";
+import type { Problem, Refusal } from "./pharmacy";
+import { cityLocalInput } from "./vaccination";
+
+export { NOMINAL_QUERY, STATIC_QUERY };
+
+// ─── Frases fixas ───────────────────────────────────────────────────────────
+export const PSY_DISABLED = "a atenção psicossocial está desligada nesta cidade";
+export const PSY_NO_ROLE = "seu papel não permite usar o CAPS";
+export const NO_CAPS_UNIT = "você não está lotado em nenhum CAPS — a lotação vem do vínculo CNES ativo na unidade";
+export const SMALL_COUNT = "menos de 5";
+export const TRAIL_NOTE = "Abrir registra a leitura no prontuário do CAPS.";
+export const NO_CLINICAL_IN_LIST = "A lista não mostra CID, substâncias, evolução nem PTS.";
+// Reabertura do mês, reavaliação do limite noturno e saída do leito (P25).
+export const REASON_TEXT = "o motivo tem de 10 a 500 caracteres";
+// Cancelamento da ação e motivo do encaminhamento (P12, P49).
+export const LONG_REASON_TEXT = "o motivo tem de 10 a 2000 caracteres";
+
+// ─── Chaves de consulta ─────────────────────────────────────────────────────
+export const PSY_UNITS_KEY = "psyUnits";
+export const PSY_OPTIONS_KEY = "psyOptions";
+export const PSY_REFERRALS_KEY = "psyReferrals";
+export const PSY_ENROLLMENTS_KEY = "psyEnrollments";
+// Raiz de todo detalhe nominal (matrícula, ação, encaminhamento, PTS, permanência, matriciamento): `NOMINAL_QUERY`, sem cache.
+export const PSY_DETAIL_KEY = "psyDetail";
+export const PSY_ACTIONS_KEY = "psyActions";
+export const PSY_GROUPS_KEY = "psyGroups";
+export const PSY_TODAY_KEY = "psyToday";
+export const PSY_BEDS_KEY = "psyBeds";
+export const PSY_MONTH_KEY = "psyMonth";
+export const PSY_EXPORTS_KEY = "psyExports";
+export const PSY_MATRIX_KEY = "psyMatrix";
+export const PSY_SETTINGS_KEY = "psySettings";
+export const PSY_DASHBOARD_KEY = "psyDashboard";
+
+// ─── Portão e papéis ────────────────────────────────────────────────────────
+type SessionLike = { operator: boolean; memberships?: { role: string }[]; features?: unknown } | null | undefined;
+
+// Decisão 24: `psychosocial_care` e `clinical_record` na sessão (sem cascata, P22), e nunca o operador da plataforma.
+export function canUsePsychosocial(user: SessionLike): boolean {
+  return !!user && !user.operator && hasFeature(user, "psychosocial_care") && hasFeature(user, "clinical_record");
+}
+
+export type PsyRoles = { staff: boolean; lead: boolean; admin: boolean; analyst: boolean; billing: boolean; professional: boolean };
+
+// `psychosocial_lead` implica `psychosocial_staff`. A lotação no CAPS é do api (`not_on_caps_team`).
+export function psychosocialRoles(user: SessionLike): PsyRoles {
+  const roles = user?.memberships?.map((m) => m.role) ?? [];
+  const lead = roles.includes("psychosocial_lead");
+  return {
+    staff: lead || roles.includes("psychosocial_staff"), lead, admin: roles.includes("municipal_admin"), analyst: roles.includes("analyst"),
+    billing: roles.includes("billing_clerk"), professional: roles.includes("health_professional")
+  };
+}
+
+// P50: documento do CAPS só por médico — CBO 2251, 2252 ou 2253.
+export const isPrescriber = (cbo: string | null | undefined): boolean => !!cbo && /^225[123]/.test(cbo);
+
+// ─── Rótulos. Código novo do api aparece cru. ───────────────────────────────
+const pick = (map: Record<string, string>) => (code: string): string => (Object.prototype.hasOwnProperty.call(map, code) ? map[code] : code);
+
+// Ordem do contrato §1.
+export const CAPS_MODALITIES = [ "caps_i", "caps_ii", "caps_iii", "caps_i_child", "caps_ad", "caps_ad_iii", "caps_ad_iv" ] as const;
+// Só essas têm leito (acolhimento noturno).
+export const NIGHT_MODALITIES: readonly string[] = [ "caps_iii", "caps_ad_iii", "caps_ad_iv" ];
+export const hasBeds = (modality: string | null | undefined): boolean => !!modality && NIGHT_MODALITIES.includes(modality);
+
+export const modalityLabel = pick({
+  caps_i: "CAPS I", caps_ii: "CAPS II", caps_iii: "CAPS III", caps_i_child: "CAPS i (infantojuvenil)", caps_ad: "CAPS AD",
+  caps_ad_iii: "CAPS AD III", caps_ad_iv: "CAPS AD IV"
+});
+export const instrumentLabel = pick({ raas_psi: "RAAS-PSI", bpa_c: "BPA-C", bpa_i: "BPA-I" });
+export const intensityLabel = pick({ intensive: "intensivo", semi_intensive: "semi-intensivo", non_intensive: "não intensivo" });
+export const outcomeLabel = pick({ enrolled: "matricular no CAPS", referred_elsewhere: "encaminhar a outro serviço", no_follow_up: "sem seguimento" });
+export const priorityLabel = pick({ routine: "rotina", priority: "prioritário" });
+export const groupKindLabel = pick({ group: "grupo", workshop: "oficina", assembly: "assembleia" });
+export const placeLabel = pick({ caps: "no CAPS", territory: "no território" });
+export const monthStatusLabel = pick({ open: "aberto", closed: "fechado", exported: "remessa gerada" });
+// ISO: 1 = segunda … 7 = domingo.
+const weekday = pick({ 1: "segunda", 2: "terça", 3: "quarta", 4: "quinta", 5: "sexta", 6: "sábado", 7: "domingo" });
+export const weekdayLabel = (n: number): string => weekday(String(n));
+export const countLabel = (c: PsyCount): string => (c === "lt5" ? SMALL_COUNT : String(c));
+// Rótulo de `options` (origem, destino, substância); código fora da lista aparece cru.
+export const codeLabel = (list: PsyCode[] | null | undefined, code: string): string => list?.find((c) => c.code === code)?.label ?? code;
+// R6: o painel (admin, analista) não lê `options`; os 8 destinos do `raas.yml`.
+export const DESTINATION_LABEL: Record<string, string> = {
+  "00": "Permanência", "01": "Alta", "02": "Transferência para outro CAPS", "03": "Encaminhamento para a atenção básica", "04": "Abandono",
+  "05": "Óbito", "06": "Internação", "07": "Outros"
+};
+export const destinationLabel = pick(DESTINATION_LABEL);
+// R5: o api manda o CID sem ponto ("F322"); a tela mostra "F32.2".
+export function cidLabel(code: string): string {
+  const c = code.trim().toUpperCase();
+  return /^[A-Z]\d{2}[0-9A-Z]+$/.test(c) ? `${c.slice(0, 3)}.${c.slice(3)}` : c;
+}
+
+// ─── Pendências e avisos da RAAS do mês (P14, P24, P57) ─────────────────────
+// Bloqueiam o fechamento.
+export const MONTH_PROBLEM_TEXT: Record<string, string> = {
+  patient_cns_missing: "CNS do usuário ausente", phone_missing: "telefone do usuário ausente",
+  homeless_missing: "situação de rua do mês não informada", professional_cns_missing: "CNS do profissional ausente",
+  professional_not_in_cnes: "profissional fora do CNES local", cid_missing: "CID ausente", action_out_of_rule: "ação fora da regra do SIGTAP",
+  night_stay_open: "permanência noturna aberta no mês"
+};
+// Não bloqueiam. `phone_missing` é aviso para quem está em situação de rua num CAPS com telefone (P57).
+export const MONTH_WARNING_TEXT: Record<string, string> = {
+  no_actions: "nenhuma ação de RAAS no mês — fica fora da remessa e das fichas",
+  phone_missing: "sem telefone do usuário — a remessa usa o telefone do CAPS"
+};
+export const monthProblemLabel = pick(MONTH_PROBLEM_TEXT);
+export const monthWarningLabel = pick(MONTH_WARNING_TEXT);
+
+// ─── Validações locais (os `path` são os do api) ────────────────────────────
+const trimmedLength = (v: string): number => v.trim().length;
+
+// `null` quando o texto cabe; mede sem os espaços das pontas, como o api.
+export function textProblem(value: string, min: number, max: number, label: string): string | null {
+  const n = trimmedLength(value);
+  return n < min || n > max ? `${label}: de ${min} a ${max} caracteres` : null;
+}
+export function reasonProblem(reason: string, min = 10, max = 500): string | null {
+  const n = trimmedLength(reason);
+  return n < min || n > max ? `o motivo tem de ${min} a ${max} caracteres` : null;
+}
+
+export const PHONE_TEXT = "o telefone tem 10 ou 11 dígitos, com DDD";
+// Toda unidade (P27): só dígitos, 10 ou 11; vazio vale (nulo).
+export function phoneProblem(phone: string): string | null {
+  const v = phone.trim();
+  return v === "" || /^\d{10,11}$/.test(v) ? null : PHONE_TEXT;
+}
+
+// Só com `kind === "caps"`: modalidade obrigatória; classificação 115 opcional, com 3 dígitos quando preenchida.
+export function unitCapsProblems(d: { kind: string; capsModality: string; serviceClassification: string }): Problem[] {
+  if (d.kind !== "caps") return [];
+  const out: Problem[] = [];
+  if (!d.capsModality) out.push({ path: "caps_modality", text: "escolha a modalidade do CAPS" });
+  const sc = d.serviceClassification.trim();
+  if (sc !== "" && !/^\d{3}$/.test(sc)) out.push({ path: "service_classification", text: PSY_ERRORS.invalid_service_classification });
+  return out;
+}
+
+// Matrícula retroativa: no máximo até o dia 1º do mês de 12 meses atrás (P42); o nascimento é do api.
+export function enrollmentFloor(today: string): string {
+  const [ y, m ] = today.split("-").map(Number);
+  const back = y * 12 + (m - 1) - 12;
+  return `${Math.floor(back / 12)}-${String((back % 12) + 1).padStart(2, "0")}-01`;
+}
+
+export type EnrollmentDraft = {
+  startedOn: string; origin: string; cidMain: { code: string; label: string } | null; cidSecondary: { code: string; label: string }[];
+  substances: string[]; esfCovered: boolean; esfCnes: string; referenceUserId: string;
+};
+// "99" = nenhuma, só sozinha (raas.yml).
+export const NO_SUBSTANCE = "99";
+
+export function emptyEnrollmentDraft(today: string, meId: string): EnrollmentDraft {
+  return { startedOn: today, origin: "", cidMain: null, cidSecondary: [], substances: [], esfCovered: false, esfCnes: "", referenceUserId: meId };
+}
+
+export function enrollmentProblems(d: EnrollmentDraft, today: string): Problem[] {
+  const out: Problem[] = [];
+  const floor = enrollmentFloor(today);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(d.startedOn) || d.startedOn > today || d.startedOn < floor) {
+    out.push({ path: "started_on", text: `o início vai de ${fmtDay(floor)} até hoje — nunca futuro` });
+  }
+  if (!d.origin) out.push({ path: "origin", text: "escolha a origem do usuário" });
+  if (!d.cidMain) out.push({ path: "cid_main", text: "informe o CID principal" });
+  if (d.cidSecondary.length > 4) out.push({ path: "cid_secondary", text: "no máximo 4 CIDs secundários" });
+  if (d.substances.length === 0) out.push({ path: "substances", text: "marque as substâncias ou nenhuma" });
+  else if (d.substances.includes(NO_SUBSTANCE) && d.substances.length > 1) {
+    out.push({ path: "substances", text: "nenhuma não combina com outra substância" });
+  }
+  if (d.esfCovered && !/^\d{7}$/.test(d.esfCnes.trim())) out.push({ path: "esf_cnes", text: PSY_ERRORS.esf_cnes_required });
+  if (!d.referenceUserId) out.push({ path: "reference_user_id", text: "escolha o técnico de referência" });
+  return out;
+}
+
+// Sem cobertura de ESF, `esf_cnes` não vai (o api recusa); sem secundários, a chave não vai.
+export function enrollmentInput(d: EnrollmentDraft, unitId: string, patientId: string): PsyEnrollmentInput {
+  return {
+    health_unit_id: unitId, patient_id: patientId, started_on: d.startedOn, origin: d.origin, cid_main: d.cidMain?.code ?? "",
+    ...(d.cidSecondary.length > 0 ? { cid_secondary: d.cidSecondary.map((c) => c.code) } : {}),
+    substances: d.substances, esf_covered: d.esfCovered, ...(d.esfCovered ? { esf_cnes: d.esfCnes.trim() } : {}),
+    reference_user_id: d.referenceUserId
+  };
+}
+
+export type ParticipantDraft =
+  | { kind: "enrollment"; enrollmentId: string; name: string }
+  | { kind: "patient"; patientId: string; name: string }
+  | { kind: "family"; name: string };
+export type ActionDraft = {
+  sigtapCode: string; performedAt: string /* "YYYY-MM-DDTHH:MM", hora de parede da cidade */; place: PsyPlace; quantity: string; notes: string;
+  authorizationNumber: string; groupId: string | null; participants: ParticipantDraft[];
+};
+
+export function emptyActionDraft(now: Date): ActionDraft {
+  return { sigtapCode: "", performedAt: cityLocalInput(now), place: "caps", quantity: "1", notes: "", authorizationNumber: "", groupId: null,
+    participants: [] };
+}
+
+// Instrumento que o api vai decidir (P3), só para a crítica local: 09 com matriculado → RAAS; senão 02 → BPA-I; senão 01 → BPA-C.
+export function procInstrument(proc: PsyProcedure, enrolled: boolean): "raas_psi" | "bpa_i" | "bpa_c" | "enrollment_required" | null {
+  const codes = proc.instrument_codes;
+  if (enrolled && codes.includes("09")) return "raas_psi";
+  if (codes.includes("02")) return "bpa_i";
+  if (codes.includes("01")) return "bpa_c";
+  return codes.includes("09") ? "enrollment_required" : null;
+}
+
+const AUTHORIZATION_TEXT = "o número de autorização tem 13 dígitos";
+const participantPath = (i: number) => `participants[${i}]`;
+const MAX_PARTICIPANTS = 100;
+
+// Crítica local (P23 na ordem do api, só o que a tela sabe): `proc` vem de `options.procedures`; sem ele (ou com `max_quantity` e
+// `requires_authorization` ausentes), não restringe — o api critica na hora, todas de uma vez.
+export function actionProblems(d: ActionDraft, proc: PsyProcedure | undefined, now: Date): Problem[] {
+  const out: Problem[] = [];
+  if (!d.sigtapCode) out.push({ path: "sigtap_code", text: "escolha o procedimento" });
+  const q = d.quantity.trim();
+  const quantity = /^\d+$/.test(q) ? Number(q) : NaN;
+  if (!Number.isInteger(quantity) || quantity < 1 || quantity > 999) {
+    out.push({ path: "quantity", text: "a quantidade é um número inteiro de 1 a 999" });
+  } else if (typeof proc?.max_quantity === "number" && quantity > proc.max_quantity) {
+    out.push({ path: "quantity", text: `${PSY_ERRORS.quantity_exceeded} (máximo ${proc.max_quantity})` });
+  }
+  const at = parseCityLocal(d.performedAt);
+  if (!at || at.getTime() > now.getTime()) out.push({ path: "performed_at", text: PSY_ERRORS.performed_in_future });
+  const enrolled = d.participants.some((p) => p.kind === "enrollment");
+  if (proc && procInstrument(proc, enrolled) === "enrollment_required") {
+    out.push({ path: "participants", text: PSY_ERRORS.enrollment_required });
+  }
+  const auth = d.authorizationNumber.trim();
+  if (auth !== "" && !/^\d{13}$/.test(auth)) out.push({ path: "authorization_number", text: AUTHORIZATION_TEXT });
+  else if (auth === "" && proc?.requires_authorization === true) {
+    out.push({ path: "authorization_number", text: PSY_ERRORS.authorization_required });
+  }
+  const seen = new Set<string>();
+  d.participants.forEach((p, i) => {
+    if (p.kind === "family") {
+      if (proc && !proc.family_care) out.push({ path: `${participantPath(i)}.family_name`, text: PSY_ERRORS.family_only_for_family_care });
+      else if (textProblem(p.name, 3, 120, "nome do familiar")) {
+        out.push({ path: `${participantPath(i)}.family_name`, text: "nome do familiar: de 3 a 120 caracteres" });
+      }
+      return;
+    }
+    const key = p.kind === "enrollment" ? `e:${p.enrollmentId}` : `p:${p.patientId}`;
+    if (seen.has(key)) out.push({ path: participantPath(i), text: "este participante está repetido" });
+    seen.add(key);
+  });
+  if (d.participants.length > MAX_PARTICIPANTS) out.push({ path: "participants", text: `no máximo ${MAX_PARTICIPANTS} participantes por ação` });
+  if (proc && procInstrument(proc, enrolled) === "bpa_i" && d.participants.filter((p) => p.kind !== "family").length !== 1) {
+    out.push({ path: "participants", text: PSY_ERRORS.bpa_i_single_patient });
+  }
+  if (trimmedLength(d.notes) > 4000) out.push({ path: "notes", text: "a evolução tem até 4000 caracteres" });
+  return out;
+}
+
+
+// Matriculado vai por `enrollment_id` (P40); opcionais vazios não vão (o api recusa `""`).
+export function actionInput(d: ActionDraft, unitId: string): PsyActionInput {
+  const notes = d.notes.trim();
+  const auth = d.authorizationNumber.trim();
+  return {
+    health_unit_id: unitId, sigtap_code: d.sigtapCode, performed_at: cityLocalIso(d.performedAt) ?? d.performedAt, place: d.place,
+    quantity: Number(d.quantity.trim()),
+    ...(notes ? { notes } : {}), ...(auth ? { authorization_number: auth } : {}), ...(d.groupId ? { group_id: d.groupId } : {}),
+    participants: d.participants.map((p) => (p.kind === "enrollment" ? { enrollment_id: p.enrollmentId }
+      : p.kind === "patient" ? { patient_id: p.patientId } : { family_name: p.name.trim() }))
+  };
+}
+
+export type CarePlanDraft = {
+  needs: string; goals: { text: string; responsibleUserId: string; dueOn: string }[]; intensity: CareIntensity | ""; reviewOn: string;
+};
+
+// Limites do api (R14): necessidades 1–4000; 1 a 20 objetivos de 1–500 com responsável; revisão depois de hoje e até hoje + 365.
+export function carePlanProblems(d: CarePlanDraft, today: string): Problem[] {
+  const out: Problem[] = [];
+  if (textProblem(d.needs, 1, 4000, "")) out.push({ path: "needs", text: "problemas e necessidades: de 1 a 4000 caracteres" });
+  if (d.goals.length < 1 || d.goals.length > 20) out.push({ path: "goals", text: "o PTS tem de 1 a 20 objetivos" });
+  d.goals.forEach((g, i) => {
+    if (textProblem(g.text, 1, 500, "")) out.push({ path: `goals[${i}].text`, text: "objetivo: de 1 a 500 caracteres" });
+    if (!g.responsibleUserId) out.push({ path: `goals[${i}].responsible_user_id`, text: "escolha o responsável pelo objetivo" });
+  });
+  if (!d.intensity) out.push({ path: "intensity", text: "escolha a frequência proposta" });
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(d.reviewOn) || d.reviewOn <= today || d.reviewOn > addDays(today, 365)) {
+    out.push({ path: "review_on", text: "a revisão precisa ser depois de hoje e em até 365 dias" });
+  }
+  return out;
+}
+
+export function carePlanInput(d: CarePlanDraft): PsyCarePlanInput {
+  return {
+    needs: d.needs.trim(), intensity: d.intensity as CareIntensity, review_on: d.reviewOn,
+    goals: d.goals.map((g) => ({ text: g.text.trim(), responsible_user_id: g.responsibleUserId, ...(g.dueOn ? { due_on: g.dueOn } : {}) }))
+  };
+}
+
+// Inteiros: janela 7–90 dias; noites 1–90; prazo do PTS 30–365 dias (api, R14).
+export function settingsProblems(s: PsySettings): Problem[] {
+  const out: Problem[] = [];
+  const int = (v: unknown, min: number, max: number) => typeof v === "number" && Number.isInteger(v) && v >= min && v <= max;
+  for (const [ modality, limits ] of Object.entries(s.night_limits) as [ string, Record<string, number> ][]) {
+    for (const [ key, value ] of Object.entries(limits)) {
+      const path = `night_limits.${modality}.${key}`;
+      if (key === "window_days") { if (!int(value, 7, 90)) out.push({ path, text: "a janela vai de 7 a 90 dias" }); }
+      else if (!int(value, 1, 90)) out.push({ path, text: "o limite de noites vai de 1 a 90" });
+    }
+  }
+  if (!int(s.care_plan_review_days, 30, 365)) out.push({ path: "care_plan_review_days", text: "o prazo de revisão do PTS vai de 30 a 365 dias" });
+  return out;
+}
+
+// ─── Recusas do api ─────────────────────────────────────────────────────────
+// Um código → uma frase. O que muda com o `path` fica em PATH_TEXT; `invalid_request`/`too_long` em FIELD_TEXT; `night_limit_reached` em
+// `nightLimitText`. Código que o api não manda (ou que ainda não tem frase) aparece como "recusado pelo servidor (<código>)".
+export const PSY_ERRORS: Record<string, string> = {
+  // Portão, papel e lotação
+  not_on_caps_team: "você não está lotado neste CAPS — o vínculo CNES ativo na unidade é que dá acesso",
+  missing_role: "seu papel não permite esta ação",
+  lead_required: "só a coordenação do CAPS faz isso (com o mês fechado, só ela corrige)",
+  not_author: "só quem registrou a ação emite documentos dela",
+  out_of_context: "fora do atendimento, abra o prontuário com motivo para ver isto",
+  unauthenticated: "sua sessão terminou — entre de novo",
+  mfa_required: "confirme sua identidade com o código do autenticador e tente de novo",
+  not_found: "não encontrado — a tela foi atualizada",
+  // Cadastro de unidade (/attendance/units; P34, P53) e CAPS fora de outros módulos (P32, P51)
+  caps_modality_mismatch: "a modalidade só vale para unidade do tipo CAPS, e todo CAPS precisa dela",
+  invalid_service_classification: "a classificação do serviço 115 tem 3 dígitos",
+  invalid_phone: PHONE_TEXT,
+  unit_has_caps_records: "esta unidade já tem registros do CAPS — não pode deixar de ser CAPS",
+  caps_has_beds: "este CAPS tem leitos ativos — desative os leitos antes de passar para uma modalidade sem acolhimento noturno",
+  unit_has_attendances: "a unidade já tem histórico de atendimento, cobertura ou prestador",
+  caps_unit_not_allowed: "esta unidade é um CAPS e não serve para esta operação — escolha outra unidade",
+  // Leitos e acolhimento noturno
+  caps_without_beds: "só CAPS III, CAPS AD III e CAPS AD IV têm leitos",
+  bed_label_taken: "já existe um leito com este nome neste CAPS",
+  bed_taken: "este leito já está ocupado nesse período",
+  already_staying: "este usuário já está em outra permanência aberta",
+  night_stay_open: "o usuário está num leito do acolhimento noturno — registre a saída antes de encerrar a matrícula",
+  // Busca de pessoa (P30)
+  person_not_found: "não encontramos ninguém com este CPF ou CNS",
+  invalid_cpf: "CPF inválido — confira os 11 dígitos",
+  invalid_cns: "CNS inválido — confira os 15 dígitos",
+  citizen_not_verified: "o CPF ainda não foi conferido no cadastro nacional — tente de novo mais tarde",
+  too_many_requests: "muitas buscas em pouco tempo — espere um minuto",
+  // Encaminhamento, acolhimento e matrícula
+  referral_not_pending: "este encaminhamento já foi acolhido — a fila foi atualizada",
+  enrollment_open: "este usuário já tem matrícula aberta neste CAPS",
+  esf_cnes_required: "informe o CNES da USF que cobre o usuário (7 dígitos)",
+  origin_locked: "origem e início só mudam antes da primeira RAAS exportada",
+  started_after_actions: "o início não pode passar da primeira ação registrada desta matrícula",
+  closed_on_in_future: "a data de encerramento não pode ser futura",
+  destination_is_permanence: "escolha o destino do usuário — permanência não encerra a matrícula",
+  already_closed: "isto já foi encerrado — a tela foi atualizada",
+  // Ação e crítica do SIGTAP (P23; `action_rejected` é o topo e vem com a lista)
+  action_rejected: "a ação foi recusada na crítica do SIGTAP — confira os campos destacados",
+  instrument_mismatch: "o instrumento deste procedimento no SIGTAP (RAAS-PSI, BPA-I ou BPA-C) não serve para este registro",
+  cbo_incompatible: "o seu CBO neste CAPS não é compatível com este procedimento no SIGTAP",
+  quantity_exceeded: "a quantidade passa do máximo do SIGTAP para este procedimento",
+  performed_in_future: "a data da ação não pode ser futura",
+  month_closed: "o mês desta ação está fechado — só a coordenação do CAPS corrige, reabrindo o mês",
+  enrollment_required: "ação de RAAS precisa de ao menos um participante com matrícula aberta",
+  authorization_required: "este procedimento exige o número de autorização (13 dígitos)",
+  family_only_for_family_care: "familiar sem cadastro só entra no atendimento familiar",
+  bpa_i_single_patient: "este procedimento vai na BPA-I: registre um usuário por ação",
+  already_cancelled: "isto já estava cancelado — a tela foi atualizada",
+  // Documentos pela ação (P8, P47, P50)
+  prescriber_required: "o documento sai só de atendimento individual, com um usuário matriculado, por médico (CBO 2251, 2252 ou 2253)",
+  invalid_content: "o conteúdo do documento está incompleto ou é de um tipo que o CAPS não emite",
+  // RAAS do mês, remessa e fichas (P14, P15, P43)
+  month_has_problems: "o mês tem pendências — resolva a lista antes de fechar",
+  month_open: "o mês ainda está aberto — a remessa e as fichas do faturamento saem só depois do fechamento",
+  record_not_open: "o registro deste mês não está mais aberto — a tela foi atualizada",
+  already_exported: "a remessa deste mês já foi gerada — não dá mais para mudar",
+  raas_layout_unavailable: "o layout oficial da remessa RAAS ainda não foi homologado — use as fichas espelho para digitar no aplicativo RAAS",
+  nothing_to_export: "nenhum registro do mês tem ação de RAAS — não há remessa a gerar",
+  integrity_mismatch: "o arquivo não confere com o gerado — avise a coordenação",
+  // Leitura
+  invalid_cursor: "a lista mudou enquanto você rolava — a tela foi atualizada",
+  invalid_kinds: "filtro da linha do tempo inválido — recarregue a tela",
+  // Forma (o texto por campo vem de FIELD_TEXT)
+  invalid_request: "pedido inválido — recarregue a tela e tente de novo",
+  too_long: "o texto passou do tamanho máximo"
+};
+
+// Frase que depende do `path` (o mesmo código em telas diferentes).
+const PATH_TEXT: Record<string, [ RegExp, string ][]> = {
+  month_closed: [
+    [ /(^|\.)started_on$/, "o início da matrícula cai num mês já fechado — a coordenação do CAPS precisa reabrir o mês" ],
+    [ /^closed_on$/, "o encerramento cai num mês já fechado — a coordenação do CAPS precisa reabrir o mês" ],
+    [ /^started_at$/, "a entrada no leito cai num mês já fechado — a coordenação do CAPS precisa reabrir o mês" ],
+    [ /^ended_at$/, "a permanência tem noite num mês já fechado — a coordenação do CAPS precisa reabrir o mês" ]
+  ],
+  enrollment_required: [
+    [ /^participants\[\d+\]$/, "este participante não tem matrícula aberta neste CAPS na data da ação" ],
+    [ /^enrollment_id$/, "a matrícula não está aberta, ou começa depois da entrada no leito" ],
+    [ /^at$/, "o acolhimento é anterior ao início da matrícula" ]
+  ],
+  performed_in_future: [ [ /^(at|held_on)$/, "a data não pode ser futura" ] ]
+};
+
+// `invalid_request` e `too_long` por campo (o último segmento do path, sem índice; ou o path inteiro).
+const FIELD_TEXT: [ RegExp, string ][] = [
+  [ /^reassessment\.reason$/, REASON_TEXT ],
+  // Motivo: 10–500 (reabrir, sair do leito) ou 10–2000 (cancelar ação, encaminhar) — a frase vale para os dois.
+  [ /^reason$/, "o motivo tem pelo menos 10 caracteres e não pode passar do limite" ],
+  [ /^notes$/, "a evolução tem até 4000 caracteres" ],
+  [ /^needs$/, "problemas e necessidades: de 1 a 4000 caracteres" ],
+  [ /^goals\[\d+\]\.text$/, "objetivo: de 1 a 500 caracteres" ],
+  [ /^goals\[\d+\]\.responsible_user_id$/, "escolha um responsável lotado neste CAPS" ],
+  [ /^goals$/, "o PTS tem de 1 a 20 objetivos" ],
+  [ /^topic$/, "o tema tem de 1 a 200 caracteres" ],
+  [ /^shared_text$/, "o texto compartilhado tem de 10 a 2000 caracteres" ],
+  [ /^participants\[\d+\]\.family_name$/, "nome do familiar: de 3 a 120 caracteres" ],
+  [ /^participants\[\d+\]$/, "este participante está repetido ou não existe" ],
+  [ /^participants$/, `no máximo ${MAX_PARTICIPANTS} participantes por ação` ],
+  [ /^participants_user_ids$/, "escolha de 1 a 20 participantes lotados neste CAPS" ],
+  [ /^name$/, "o nome tem de 1 a 120 caracteres" ],
+  [ /^label$/, "o nome do leito tem de 1 a 20 caracteres" ],
+  [ /^capacity$/, "as vagas vão de 1 a 100" ],
+  [ /^quantity$/, "a quantidade é um número inteiro de 1 a 999" ],
+  [ /^authorization_number$/, AUTHORIZATION_TEXT ],
+  [ /^care_plan_review_days$/, "o prazo de revisão do PTS vai de 30 a 365 dias" ],
+  [ /^night_limits\.[a-z_]+\.window_days$/, "a janela vai de 7 a 90 dias" ],
+  [ /^night_limits(\.|$)/, "o limite de noites vai de 1 a 90" ],
+  [ /(^|\.)started_on$/, "o início vai até 12 meses para trás, nunca futuro nem antes do nascimento" ],
+  [ /^closed_on$/, "o encerramento não pode ser antes do início" ],
+  [ /^destination$/, "escolha um destino da lista" ],
+  [ /(^|\.)origin$/, "escolha uma origem da lista" ],
+  [ /(^|\.)cid_main$/, "CID principal inválido — escolha um da lista" ],
+  [ /(^|\.)cid_secondary$/, "no máximo 4 CIDs secundários, todos da lista" ],
+  [ /(^|\.)substances$/, "marque as substâncias ou nenhuma (nenhuma não combina com outra)" ],
+  [ /(^|\.)esf_cnes$/, "o CNES da USF tem 7 dígitos e só vai com cobertura de ESF" ],
+  [ /(^|\.)reference_user_id$/, "escolha um técnico de referência lotado neste CAPS" ],
+  [ /^responsible_user_id$/, "escolha um responsável lotado neste CAPS" ],
+  [ /^review_on$/, "a revisão precisa ser depois de hoje e em até 365 dias" ],
+  [ /^intensity$/, "escolha a frequência proposta" ],
+  [ /^ends_at$/, "o fim precisa ser depois do início" ],
+  [ /^(starts_at|weekday)$/, "confira o dia e o horário do grupo" ],
+  [ /^started_at$/, "a entrada vai até 12 horas a partir de agora" ],
+  [ /^expected_end_at$/, "a saída prevista é depois da entrada, em até 30 dias" ],
+  [ /^ended_at$/, "a saída é depois da entrada e nunca futura" ],
+  [ /^bed_id$/, "escolha um leito ativo deste CAPS" ],
+  [ /^held_on$/, "a data do matriciamento não pode ser futura" ],
+  [ /^health_team_id$/, "escolha a equipe da atenção básica" ],
+  [ /^(performed_at|at)$/, "confira a data e a hora" ],
+  [ /^health_unit_id$/, "escolha um CAPS ativo" ],
+  [ /^month$/, "mês inválido ou futuro" ],
+  [ /^homeless$/, "marque se o usuário estava em situação de rua no mês" ],
+  [ /^(cpf|cns)$/, "informe o CPF ou o CNS" ]
+];
+
+// R20: no CAPS III, "seguidas" ou "intercaladas"; janela de `window_days` (30 sem ela).
+export function nightLimitText(d: { used: number; limit: number; window_days?: number | null; rule?: string | null }): string {
+  const kind = d.rule === "consecutive" ? " seguidas" : d.rule === "alternate" ? " intercaladas" : "";
+  return `limite de noites atingido: ${d.used} de ${d.limit} noites${kind} em ${d.window_days ?? 30} dias — só a coordenação passa, com reavaliação`;
+}
+
+export type PsyRefusal = Refusal & { participantIndex: number | null };
+const OFFLINE_TEXT = "não foi possível falar com o servidor — tente de novo";
+
+function bodyOf(err: unknown): Record<string, unknown> | null {
+  const b = err instanceof ApiError ? err.body : null;
+  return b && typeof b === "object" ? (b as Record<string, unknown>) : null;
+}
+const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
+
+// Frase de um código num path. `MONTH_PROBLEM_TEXT` cobre a lista do `month_has_problems` (path `records.<id>`).
+function codeText(code: string, path: string, status: number): string {
+  if (code === "invalid_request" || code === "too_long") return FIELD_TEXT.find(([ re ]) => re.test(path))?.[1] ?? PSY_ERRORS[code];
+  // `night_stay_open` é pendência no mês e recusa no encerramento: no registro do mês, vale a frase da pendência.
+  if (path.startsWith("records.") && Object.prototype.hasOwnProperty.call(MONTH_PROBLEM_TEXT, code)) return MONTH_PROBLEM_TEXT[code];
+  const byPath = PATH_TEXT[code]?.find(([ re ]) => re.test(path));
+  if (byPath) return byPath[1];
+  if (Object.prototype.hasOwnProperty.call(PSY_ERRORS, code)) return PSY_ERRORS[code];
+  if (code === "" && status === 404) return PSY_ERRORS.not_found;
+  return `recusado pelo servidor (${code || status})`;
+}
+
+// "participants[2]" ou "participants[2].family_name" → 2.
+const indexFromPath = (path: string): number | null => {
+  const m = /^participants\[(\d+)\]/.exec(path);
+  return m ? Number(m[1]) : null;
+};
+
+// Todas as recusas, traduzidas: uma por `problems[]` (chave `error`, ou `code` por tolerância), com o índice do participante
+// (`participant_index`, senão o de `participants[i]`); sem `problems` válidos, a do topo.
+export function psyRefusals(err: unknown): PsyRefusal[] {
+  const feature = featureDisabledKey(err);
+  if (feature !== null) {
+    const text = feature === "" || feature === "psychosocial_care" ? PSY_DISABLED : `${featureLabel(feature)} está desligado nesta cidade`;
+    return [ { path: "", code: "feature_disabled", text, participantIndex: null } ];
+  }
+  if (!(err instanceof ApiError)) return [ { path: "", code: "", text: OFFLINE_TEXT, participantIndex: null } ];
+  const body = bodyOf(err);
+  const code = errorCode(err) ?? "";
+  if (code === "night_limit_reached") {
+    const used = num(body?.used);
+    const limit = num(body?.limit);
+    const text = used !== null && limit !== null
+      ? nightLimitText({ used, limit, window_days: num(body?.window_days), rule: typeof body?.rule === "string" ? body.rule : null })
+      : "limite de noites atingido — só a coordenação passa, com reavaliação";
+    return [ { path: "", code, text, participantIndex: null } ];
+  }
+  const list = Array.isArray(body?.problems) ? body.problems : [];
+  const mapped = list.flatMap((raw): PsyRefusal[] => {
+    if (!raw || typeof raw !== "object") return [];
+    const row = raw as Record<string, unknown>;
+    const c = typeof row.error === "string" ? row.error : typeof row.code === "string" ? row.code : "";
+    if (!c) return [];
+    const path = typeof row.path === "string" ? row.path : "";
+    const index = num(row.participant_index);
+    return [ { path, code: c, text: codeText(c, path, err.status), participantIndex: index !== null ? index : indexFromPath(path) } ];
+  });
+  if (mapped.length > 0) return mapped;
+  const path = typeof body?.path === "string" ? body.path : "";
+  return [ { path, code, text: codeText(code, path, err.status), participantIndex: indexFromPath(path) } ];
+}
+
+export function psyError(err: unknown): string {
+  return psyRefusals(err)[0].text;
+}
+
+// A tela está velha (o item sumiu ou já foi acolhido): quem chama relê a lista e fecha o detalhe.
+export const isStale = (err: unknown): boolean => [ "not_found", "referral_not_pending" ].includes(errorCode(err) ?? "");
