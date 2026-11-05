@@ -9,6 +9,7 @@ import { CONSULTATION_KEY, JUSTIFIED_KEY, OPTIONS_KEY } from "../../lib/consulta
 import { OPENING_ENDED, clinicalRecordError, countdownLabel, deadlineMs } from "../../lib/clinicalRecord";
 import { useAuth } from "../../lib/auth";
 import { hasFeature } from "../../lib/features";
+import { canSeePsychosocialLink } from "../../lib/psychosocial";
 import { TIMELINE_KEY } from "../../lib/timeline";
 import { Panel } from "../../components/Panel";
 import { Tag } from "../../components/Tag";
@@ -82,7 +83,8 @@ export function JustifiedRecord({ opening, onEnd, searchDelayMs }: Props) {
               timeline={hasFeature(user, "patient_timeline") ? {
                 subject: { openingId: opening.opening_id }, endOnOutOfContext: true, onOpeningRequired: handleOpeningRequired, searchDelayMs,
                 onAddendumAdded: rereadRecord
-              } : undefined} />
+              } : undefined}
+              psychosocial={canSeePsychosocialLink(user) ? { patientId: record.data.patient.id, canRefer: true } : undefined} />
             {viewing && (
               <ConsultationLoader key={viewing} id={viewing} endOnOutOfContext
                 options={options.data ?? null} patientProblems={record.data.problems} searchDelayMs={searchDelayMs}

@@ -17,6 +17,7 @@ import type { TimelineSubject } from "../../lib/api";
 import { SegmentedControl } from "../../shell/SegmentedControl";
 import { PatientTimeline } from "../timeline/PatientTimeline";
 import { PatientExams, type PatientExamsProps } from "../exams/PatientExams";
+import { PsychosocialLinkCard } from "../psychosocial/PsychosocialLinkCard";
 
 // Módulo 20: a aba "Linha do tempo" (quem passa a prop decide a pessoa).
 // `onAddendumAdded`: o mesmo do Resumo, para a consulta aberta pela aba; os
@@ -42,9 +43,10 @@ export function VitalsList({ vitals, label }: { vitals: VitalSigns; label: strin
 
 // Módulo 19c: `besideProblems` = os medicamentos em uso, logo depois dos problemas.
 // Módulo 20: `timeline` liga as abas "Resumo" e "Linha do tempo"; módulo 21a: `exams`, a aba "Exames".
-export function PatientPanel({ record, onOpenConsultation, besideProblems, timeline, exams }: {
+// Módulo 31: `psychosocial` liga o cartão do vínculo com o CAPS no Resumo, depois dos problemas (quem passa confere interruptor e papel).
+export function PatientPanel({ record, onOpenConsultation, besideProblems, timeline, exams, psychosocial }: {
   record: ClinicalRecord; onOpenConsultation(id: string): void; besideProblems?: ReactNode; timeline?: PatientTimelineProps;
-  exams?: PatientExamsProps;
+  exams?: PatientExamsProps; psychosocial?: { patientId: string; canRefer: boolean };
 }) {
   const { patient, problems, consultations } = record;
   const doc = patientDocument(patient);
@@ -95,6 +97,7 @@ export function PatientPanel({ record, onOpenConsultation, besideProblems, timel
         )}
       </div>
       {besideProblems}
+      {psychosocial && <PsychosocialLinkCard patientId={psychosocial.patientId} canRefer={psychosocial.canRefer} />}
 
       <div style={block}>
         <strong style={sub}>Escuta de hoje</strong>

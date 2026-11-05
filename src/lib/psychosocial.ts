@@ -14,6 +14,8 @@ import { featureDisabledKey, featureLabel, hasFeature } from "./features";
 import { cityLocalIso, parseCityLocal } from "./format";
 import type { Problem, Refusal } from "./pharmacy";
 import { cityLocalInput } from "./vaccination";
+import type { PsyReferralInput, ReferralPriority } from "./api";
+import { formatPhone } from "./controlled";
 
 export { NOMINAL_QUERY, STATIC_QUERY };
 
@@ -1096,3 +1098,46 @@ export function caseProblems(d: { patientId: string; text: string }): Problem[] 
   return out;
 }
 export const caseInput = (patientId: string, text: string): { patient_id: string; shared_text: string } => ({ patient_id: patientId, shared_text: text.trim() });
+
+// ─── Vínculo visto pela UBS e "Encaminhar ao CAPS" (Task 13; §4, §7, P10, P44, P46, P48, R19) ──────────────────
+// Fora de /psychosocial/* o CAPS nunca aparece pelo nome nem pela modalidade: o cartão diz "o CAPS" (o api nem manda o nome), e a
+// frase de sucesso do encaminhamento também. O nome do CAPS aparece só no seletor do formulário. Do vínculo, só o telefone do CAPS
+// (P48), o início, o técnico de referência e os casos compartilhados com a equipe de quem lê — nunca CID, PTS nem evolução.
+export const LINK_TITLE = "Atenção psicossocial";
+export const LINK_CASES_TITLE = "Matriciamento com a sua equipe";
+export const REFER_BUTTON = "Encaminhar ao CAPS";
+export const REFERRAL_SENT = "Encaminhamento enviado ao CAPS.";
+export const REFERRAL_NOTE = "O CAPS recebe na fila de acolhimento. O usuário não recebe aviso.";
+export const REFERRAL_CAPS_TEXT = "escolha o CAPS";
+export const REFERRAL_REASON_TEXT = "motivo do encaminhamento: de 10 a 2000 caracteres";
+export const REFERRAL_PRIORITY_TEXT = "escolha a prioridade";
+export const MAX_REFERRAL_REASON = 2000;
+
+export const linkSinceText = (since: string): string => `Em acompanhamento no CAPS desde ${fmtDay(since)}`;
+// O telefone é do CAPS (P48), e só entra quando há.
+export const linkReferenceText = (name: string, phone: string | null | undefined): string =>
+  `Técnico de referência: ${name}${phone ? ` · ${formatPhone(phone)}` : ""}`;
+
+// O cartão e o botão: interruptor (decisão 24) e o health_professional da UBS. O api confere o contexto de leitura (ADR 0031).
+export function canSeePsychosocialLink(user: SessionLike): boolean {
+  return canUsePsychosocial(user) && psychosocialRoles(user).professional;
+}
+
+// Recusas em que o cartão some, sem frase: fora do contexto (a resposta é a mesma com ou sem vínculo), sem o papel, e o interruptor
+// desligado tratado como "sem vínculo" (P44). Nenhuma delas pode dizer se o paciente tem vínculo.
+export const linkHidden = (err: unknown): boolean =>
+  featureDisabledKey(err) !== null || [ "out_of_context", "missing_role" ].includes(errorCode(err) ?? "");
+
+export type ReferralDraft = { unitId: string; reason: string; priority: ReferralPriority | "" };
+
+export function referralProblems(d: ReferralDraft): Problem[] {
+  const out: Problem[] = [];
+  if (!d.unitId) out.push({ path: "health_unit_id", text: REFERRAL_CAPS_TEXT });
+  if (textProblem(d.reason, 10, MAX_REFERRAL_REASON, "motivo do encaminhamento")) out.push({ path: "reason", text: REFERRAL_REASON_TEXT });
+  if (d.priority !== "routine" && d.priority !== "priority") out.push({ path: "priority", text: REFERRAL_PRIORITY_TEXT });
+  return out;
+}
+
+export function referralInput(d: ReferralDraft, patientId: string): PsyReferralInput {
+  return { patient_id: patientId, health_unit_id: d.unitId, reason: d.reason.trim(), priority: d.priority as ReferralPriority };
+}

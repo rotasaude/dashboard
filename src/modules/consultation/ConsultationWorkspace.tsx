@@ -27,6 +27,7 @@ import { canUseBilling, unitBills } from "../../lib/billing";
 import { allowedTypes, canRequestRegulation } from "../../lib/regulation";
 import { canRequestTfd } from "../../lib/tfd";
 import { DENTAL_DISABLED, canUseDental, dentalError, dentalRole, offeredKinds } from "../../lib/dental";
+import { canSeePsychosocialLink } from "../../lib/psychosocial";
 
 interface Props {
   attendanceId: string;
@@ -176,6 +177,7 @@ export function ConsultationWorkspace(props: Props) {
           <PatientPanel record={record.data} onOpenConsultation={setViewing}
             exams={examsOn ? { patientId: record.data.patient.id, consultationId: consultation?.status === "draft" ? consultation.id : null } : undefined}
             timeline={timelineOn ? { subject: { attendanceId: props.attendanceId }, searchDelayMs: props.searchDelayMs } : undefined}
+            psychosocial={canSeePsychosocialLink(user) ? { patientId: record.data.patient.id, canRefer: true } : undefined}
             besideProblems={documentsOn ? (
             <MedicationsBlock patientId={record.data.patient.id} unitId={props.unit.id} searchDelayMs={props.searchDelayMs}
               draftConsultationId={consultation?.status === "draft" ? consultation.id : null} />
