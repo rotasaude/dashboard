@@ -264,8 +264,9 @@ export function receptionInput(d: ReceptionDraft, unitId: string, patientId: str
   return out;
 }
 
+// `startedOn` da matrícula (quando a tela sabe): ação anterior a ele é recusada no participante (P40).
 export type ParticipantDraft =
-  | { kind: "enrollment"; enrollmentId: string; name: string }
+  | { kind: "enrollment"; enrollmentId: string; name: string; startedOn?: string }
   | { kind: "patient"; patientId: string; name: string }
   | { kind: "family"; name: string };
 export type ActionDraft = {
@@ -287,17 +288,28 @@ export function procInstrument(proc: PsyProcedure, enrolled: boolean): "raas_psi
   return codes.includes("09") ? "enrollment_required" : null;
 }
 
-const AUTHORIZATION_TEXT = "o número de autorização tem 13 dígitos";
+export const AUTHORIZATION_TEXT = "o número de autorização tem 13 dígitos";
+// Ações da matrícula (F-31.4).
+export const ACTION_SAVED = "Ação registrada.";
+export const ACTION_CANCELLED = "Ação cancelada.";
+export const NO_ACTIONS = "nenhuma ação registrada nesta matrícula";
+export const NO_OTHER_ENROLLMENTS = "nenhum outro usuário em acompanhamento neste CAPS";
+// O api não diz se o mês da ação está fechado (só recusa com `lead_required`): a dica vai para quem não é coordenação.
+export const CANCEL_LEAD_NOTE = "Com o mês fechado, só a coordenação do CAPS cancela.";
+export const maxQuantityHint = (max: number): string => `máximo do SIGTAP: ${max}`;
+// `enrollment_required` em `participants[i]` (P40): matrícula fechada, de outro CAPS ou iniciada depois da data da ação.
+export const PARTICIPANT_NOT_ENROLLED = "este participante não tem matrícula aberta neste CAPS na data da ação";
 const participantPath = (i: number) => `participants[${i}]`;
 const MAX_PARTICIPANTS = 100;
 
-// Crítica local (P23 na ordem do api, só o que a tela sabe): `proc` vem de `options.procedures`; sem ele (ou com `max_quantity` e
-// `requires_authorization` ausentes), não restringe — o api critica na hora, todas de uma vez.
+// Crítica local (P23 na ordem do api, só o que a tela sabe): `proc` vem de `options.procedures` (já filtrado pelo CBO de quem lança);
+// sem ele (ou com `max_quantity`, `requires_authorization` ou o início da matrícula ausentes), não restringe — o api critica na hora,
+// todas de uma vez. Quantidade vazia vale 1 (o api usa 1 quando a chave falta).
 export function actionProblems(d: ActionDraft, proc: PsyProcedure | undefined, now: Date): Problem[] {
   const out: Problem[] = [];
   if (!d.sigtapCode) out.push({ path: "sigtap_code", text: "escolha o procedimento" });
   const q = d.quantity.trim();
-  const quantity = /^\d+$/.test(q) ? Number(q) : NaN;
+  const quantity = q === "" ? 1 : /^\d+$/.test(q) ? Number(q) : NaN;
   if (!Number.isInteger(quantity) || quantity < 1 || quantity > 999) {
     out.push({ path: "quantity", text: "a quantidade é um número inteiro de 1 a 999" });
   } else if (typeof proc?.max_quantity === "number" && quantity > proc.max_quantity) {
@@ -305,8 +317,13 @@ export function actionProblems(d: ActionDraft, proc: PsyProcedure | undefined, n
   }
   const at = parseCityLocal(d.performedAt);
   if (!at || at.getTime() > now.getTime()) out.push({ path: "performed_at", text: PSY_ERRORS.performed_in_future });
-  const enrolled = d.participants.some((p) => p.kind === "enrollment");
-  if (proc && procInstrument(proc, enrolled) === "enrollment_required") {
+  // Como o api: a matrícula só conta se começou até o dia (local) da ação; a que começa depois é recusada na linha dela.
+  const day = d.performedAt.slice(0, 10);
+  const late = (p: ParticipantDraft) => p.kind === "enrollment" && !!p.startedOn && !!at && p.startedOn > day;
+  const refused = d.participants.flatMap((p, i) => (late(p) ? [ i ] : []));
+  refused.forEach((i) => out.push({ path: participantPath(i), text: PARTICIPANT_NOT_ENROLLED }));
+  const enrolled = d.participants.some((p) => p.kind === "enrollment" && !late(p));
+  if (proc && refused.length === 0 && procInstrument(proc, enrolled) === "enrollment_required") {
     out.push({ path: "participants", text: PSY_ERRORS.enrollment_required });
   }
   const auth = d.authorizationNumber.trim();
@@ -342,7 +359,7 @@ export function actionInput(d: ActionDraft, unitId: string): PsyActionInput {
   const auth = d.authorizationNumber.trim();
   return {
     health_unit_id: unitId, sigtap_code: d.sigtapCode, performed_at: cityLocalIso(d.performedAt) ?? d.performedAt, place: d.place,
-    quantity: Number(d.quantity.trim()),
+    ...(d.quantity.trim() !== "" ? { quantity: Number(d.quantity.trim()) } : {}),
     ...(notes ? { notes } : {}), ...(auth ? { authorization_number: auth } : {}), ...(d.groupId ? { group_id: d.groupId } : {}),
     participants: d.participants.map((p) => (p.kind === "enrollment" ? { enrollment_id: p.enrollmentId }
       : p.kind === "patient" ? { patient_id: p.patientId } : { family_name: p.name.trim() }))
@@ -566,7 +583,7 @@ const PATH_TEXT: Record<string, [ RegExp, string ][]> = {
     [ /^ended_at$/, "a permanência tem noite num mês já fechado — a coordenação do CAPS precisa reabrir o mês" ]
   ],
   enrollment_required: [
-    [ /^participants\[\d+\]$/, "este participante não tem matrícula aberta neste CAPS na data da ação" ],
+    [ /^participants\[\d+\]$/, PARTICIPANT_NOT_ENROLLED ],
     [ /^enrollment_id$/, "a matrícula não está aberta, ou começa depois da entrada no leito" ],
     [ /^at$/, RECEPTION_BEFORE_START ]
   ],

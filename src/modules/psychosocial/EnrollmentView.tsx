@@ -1,6 +1,7 @@
 // Detalhe da matrícula no CAPS (F-31.2, F-31.3): lido só depois do clique (`GET /psychosocial/enrollments/:id`, o api grava a trilha),
 // com `NOMINAL_QUERY` e o id do CAPS na chave; ao desmontar, a chave sai do cache. Abas "Matrícula" (dados, edição e encerramento),
-// "PTS" (versões; o GET grava a trilha `care_plans` e só corre ao abrir a aba), "Ações" (Task 7) e "Linha do tempo" (Task 14).
+// "PTS" (versões; o GET grava a trilha `care_plans` e só corre ao abrir a aba), "Ações" (a lista só corre ao abrir a aba) e "Linha do
+// tempo" (Task 14).
 // O CID vem sem ponto e aparece com ponto (R5); destino, origem e substância pelos rótulos de `options` (código novo aparece cru).
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -17,6 +18,7 @@ import { Tag } from "../../components/Tag";
 import { buttonStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { SegmentedControl } from "../../shell/SegmentedControl";
 import { alert, grid, muted, okText, row } from "../exams/styles";
+import { ActionsPanel } from "./ActionsPanel";
 import { CarePlans } from "./CarePlans";
 import { CloseEnrollment } from "./CloseEnrollment";
 import { EnrollmentEdit } from "./EnrollmentEdit";
@@ -32,7 +34,7 @@ export type EnrollmentViewProps = {
   onChanged?(): void; onStale?(text: string): void; onGoToSecurity?(): void;
 };
 
-export function EnrollmentView({ enrollmentId, unit, options, today, onClose, onChanged, onStale }: EnrollmentViewProps) {
+export function EnrollmentView({ enrollmentId, unit, options, roles, today, now, onClose, onChanged, onStale }: EnrollmentViewProps) {
   const queryClient = useQueryClient();
   const key = [ PSY_DETAIL_KEY, unit.id, "enrollment", enrollmentId ];
   const detail = useQuery({ queryKey: key, queryFn: () => getPsyEnrollment(enrollmentId), ...NOMINAL_QUERY });
@@ -109,7 +111,8 @@ export function EnrollmentView({ enrollmentId, unit, options, today, onClose, on
               <CarePlans enrollment={e} unit={unit} options={options} today={today} onStale={refresh}
                 onSaved={(plan) => { update({ ...e, care_plan_review_on: plan.review_on }); onChanged?.(); }} />
             )}
-            {/* "Ações" (Task 7) e "Linha do tempo" (Task 14) encaixam aqui. */}
+            {tab === "actions" && <ActionsPanel enrollment={e} unit={unit} options={options} roles={roles} now={now} />}
+            {/* "Linha do tempo" (Task 14) encaixa aqui. */}
           </>
         )}
       </div>

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { ApiError } from "./api";
 import {
   CAPS_MODALITIES, CLOSE_BEFORE_START, DEFAULT_CARE_PLAN_REVIEW_DAYS, firstCarePlanLate, reviewDaysOf, CLOSE_DESTINATION_TEXT, DESTINATION_LABEL, NEXT_VISIT_TEXT, carePlanOverdue, carePlanTitle, cidKey, closeProblems,
-  enrollmentDraftOf, enrollmentEditProblems, enrollmentPatch, foldName, nextVisitInput, MONTH_PROBLEM_TEXT, NO_ACTIVE_CAPS, NO_CAPS_BEDS, MONTH_WARNING_TEXT, PSY_DISABLED, PSY_ERRORS, REASON_TEXT, actionInput, actionProblems,
+  enrollmentDraftOf, enrollmentEditProblems, enrollmentPatch, foldName, nextVisitInput, MONTH_PROBLEM_TEXT, NO_ACTIVE_CAPS, NO_CAPS_BEDS, MONTH_WARNING_TEXT, PARTICIPANT_NOT_ENROLLED, PSY_DISABLED, PSY_ERRORS, REASON_TEXT, actionInput, actionProblems,
   canUsePsychosocial, carePlanInput, carePlanProblems, cidLabel, codeLabel, countLabel, destinationLabel, emptyActionDraft, emptyEnrollmentDraft,
   enrollmentInput, enrollmentProblems, hasBeds, indexFromPath, isPrescriber, isStale, modalityLabel, monthProblemLabel, monthWarningLabel, nightLimitText,
   phoneProblem, psyError, psyRefusals, psychosocialRoles, reasonProblem, settingsProblems, textProblem, unitCapsProblems, weekdayLabel,
@@ -357,6 +357,28 @@ describe("regras do CAPS (módulo 31)", () => {
       patientId: `p${i}`, name: "" })) }))).toEqual([ "participants" ]);
     expect(paths(actionBase({ notes: "x".repeat(4001) }))).toEqual([ "notes" ]);
     expect(paths(actionBase({ notes: ` ${"x".repeat(4000)} ` }))).toEqual([]);
+  });
+
+  it("ação: matrícula que começa depois da data recusa o participante (P40); quantidade vazia vale 1", () => {
+    const late = { kind: "enrollment" as const, enrollmentId: "en2", name: "José", startedOn: "2026-11-05" };
+    const maria = { kind: "enrollment" as const, enrollmentId: "en1", name: "Maria", startedOn: "2026-09-10" };
+    // Só a matrícula tardia: o problema vai na linha dela, sem o enrollment_required geral (como o api).
+    const only = actionProblems(actionBase({ participants: [ late ] }), proc("0301080208"), NOW31);
+    expect(only.map((p) => p.path)).toEqual([ "participants[0]" ]);
+    expect(only[0].text).toBe(PARTICIPANT_NOT_ENROLLED);
+    expect(paths(actionBase({ participants: [ maria, late ] }))).toEqual([ "participants[1]" ]);
+    // Mesmo dia vale; início ausente não restringe.
+    expect(paths(actionBase({ participants: [ { ...late, startedOn: "2026-11-04" } ] }))).toEqual([]);
+    expect(paths(actionBase({ participants: [ { kind: "enrollment", enrollmentId: "en2", name: "José" } ] }))).toEqual([]);
+    // Ação de 02/09 com Maria (desde 10/09).
+    expect(paths(actionBase({ performedAt: "2026-09-02T09:00", participants: [ maria ] }))).toEqual([ "participants[0]" ]);
+    // 0301080232 (02 e 09): a matrícula tardia não conta como matriculada → BPA-I com um paciente passa no instrumento.
+    expect(paths(actionBase({ sigtapCode: "0301080232", participants: [ late ] }))).toEqual([ "participants[0]" ]);
+    expect(paths(actionBase({ quantity: "" }))).toEqual([]);
+    expect(paths(actionBase({ quantity: "  " }))).toEqual([]);
+    expect("quantity" in actionInput(actionBase({ quantity: " " }), "caps2")).toBe(false);
+    expect(actionInput(actionBase({ quantity: " 2 " }), "caps2").quantity).toBe(2);
+    expect(actionInput(actionBase({ participants: [ maria ] }), "caps2").participants).toEqual([ { enrollment_id: "en1" } ]);
   });
 
   it("ação: corpo com hora da cidade, quantidade número, ids certos; vazios não vão", () => {
