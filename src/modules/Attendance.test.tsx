@@ -95,6 +95,14 @@ describe("Attendance", () => {
     expect(screen.queryByRole("option", { name: "Gestão (secretaria ou central de regulação)" }) !== null).toBe(offered);
   });
 
+  it.each([ [ [ "psychosocial_care", "clinical_record" ], true ], [ [ "psychosocial_care" ], false ], [ [ "clinical_record" ], false ], [ [], false ] ])(
+    "módulo 31: com features %j o cadastro de unidade oferece o CAPS = %s", async (features, offered) => {
+      mocked(api.fetchCurrentSession).mockResolvedValue({ ...session("municipal_admin"), features });
+      renderAttendance();
+      fireEvent.click(await screen.findByRole("button", { name: "Nova unidade" }));
+      expect(screen.queryByRole("option", { name: "CAPS" }) !== null).toBe(offered);
+    });
+
   it("administrador sem municipal_lab não vê a coluna Coleta", async () => {
     mocked(api.fetchCurrentSession).mockResolvedValue(session("municipal_admin"));
     mocked(api.listAllUnits).mockResolvedValue([ { id: "u1", name: "UBS Centro", kind: "ubs", active: true, collects_samples: true } ]);

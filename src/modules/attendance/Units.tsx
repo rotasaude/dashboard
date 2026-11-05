@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  createUnit, listAllUnits, listNeighborhoods, setUnitActive, updateUnit, type HealthUnitRow, type ScreeningScope
+  createUnit, errorCode, listAllUnits, listNeighborhoods, setUnitActive, updateUnit, type HealthUnitRow, type ScreeningScope, type UnitCapsInput
 } from "../../lib/api";
-import { CEO_UNIT_KIND, HEALTH_MANAGEMENT_UNIT_KIND, UNIT_KINDS, attendanceError } from "../../lib/attendance";
+import { CAPS_UNIT_KIND, CEO_UNIT_KIND, HEALTH_MANAGEMENT_UNIT_KIND, UNIT_KINDS, attendanceError } from "../../lib/attendance";
+import { modalityLabel, psyError } from "../../lib/psychosocial";
 import { NEIGHBORHOODS_KEY } from "../../lib/territory";
 import { EMPTY_ADDRESS_FIELDS, addressFieldsFrom, addressPayload, formatAddress } from "../../lib/unitAddress";
 import { Panel } from "../../components/Panel";
@@ -19,7 +20,26 @@ import { DrainUnitPanel } from "./DrainUnitPanel";
 // Criar ou reativar muda quem entra em "unidades ativas" (UnitPicker,
 // destino de encaminhamento em UnitQueue): invalida a query `activeUnits`
 // para essas telas recarregarem (card dashboard#4, item 1 — Task 7).
-const KIND_LABEL: Record<string, string> = Object.fromEntries([ ...UNIT_KINDS, CEO_UNIT_KIND, HEALTH_MANAGEMENT_UNIT_KIND ].map((k) => [ k.value, k.label ]));
+const KIND_LABEL: Record<string, string> = Object.fromEntries([ ...UNIT_KINDS, CEO_UNIT_KIND, HEALTH_MANAGEMENT_UNIT_KIND, CAPS_UNIT_KIND ].map((k) => [ k.value, k.label ]));
+// Módulo 31 (P34, P53): recusas do cadastro que são do CAPS ou do telefone; a frase vem da lib do módulo (genérica, sem nome de CAPS).
+const CAPS_UNIT_ERRORS = [ "unit_has_caps_records", "caps_has_beds", "unit_has_attendances", "invalid_phone", "caps_modality_mismatch", "invalid_service_classification" ];
+const unitError = (err: unknown): string => (CAPS_UNIT_ERRORS.includes(errorCode(err) ?? "") ? psyError(err) : attendanceError(err));
+
+// O que o módulo 31 acrescenta ao corpo da unidade: telefone só quando mudou (vazio apaga: null); no CAPS, modalidade e classificação
+// (vazia = null) vão sempre; a unidade que deixou de ser CAPS apaga as duas. Sem nada a mandar, o corpo é o de sempre.
+function capsPayload(value: UnitFormValue, initial: UnitFormValue): UnitCapsInput | undefined {
+  const out: UnitCapsInput = {};
+  const phone = value.phone ?? "";
+  if (phone !== (initial.phone ?? "")) out.phone = phone === "" ? null : phone;
+  if (value.kind === "caps") {
+    out.caps_modality = value.capsModality ?? null;
+    out.service_classification = (value.serviceClassification ?? "") === "" ? null : (value.serviceClassification as string);
+  } else if (initial.kind === "caps") {
+    out.caps_modality = null;
+    out.service_classification = null;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
 // Módulo 18 (contratos §5): quem passa pela escuta inicial nesta unidade.
 const SCOPE_SHORT: Record<ScreeningScope, string> = { walk_in: "sem horário", all: "todos" };
 
@@ -29,7 +49,10 @@ interface Editing { id: string | null; initial: UnitFormValue }
 // Módulo 25: `surveillanceOn` = `surveillance` ligado; só então a unidade mostra e edita a marca notificadora.
 // Módulo 30: `tfdOn` = canUseTransport; só então o cadastro oferece a unidade de gestão.
 // Módulo 28: `dentalOn` = canUseDental; só então o cadastro oferece a unidade CEO.
-export function Units({ labOn = false, surveillanceOn = false, dentalOn = false, tfdOn = false }: { labOn?: boolean; surveillanceOn?: boolean; dentalOn?: boolean; tfdOn?: boolean } = {}) {
+// Módulo 31: `capsOn` = canUsePsychosocial; só então o cadastro oferece o tipo CAPS (sem step-up novo, P26).
+export function Units({ labOn = false, surveillanceOn = false, dentalOn = false, tfdOn = false, capsOn = false }: {
+  labOn?: boolean; surveillanceOn?: boolean; dentalOn?: boolean; tfdOn?: boolean; capsOn?: boolean;
+} = {}) {
   const queryClient = useQueryClient();
   const neighborhoods = useQuery({ queryKey: NEIGHBORHOODS_KEY, queryFn: listNeighborhoods });
   const [ rows, setRows ] = useState<HealthUnitRow[] | null>(null);
@@ -43,7 +66,7 @@ export function Units({ labOn = false, surveillanceOn = false, dentalOn = false,
     try {
       setRows(await listAllUnits());
     } catch (err) {
-      setError(attendanceError(err));
+      setError(unitError(err));
     }
   }
 
@@ -57,7 +80,7 @@ export function Units({ labOn = false, surveillanceOn = false, dentalOn = false,
       if (!row.active) void queryClient.invalidateQueries({ queryKey: [ "activeUnits" ] });
       await load();
     } catch (err) {
-      setError(attendanceError(err));
+      setError(unitError(err));
     } finally {
       setBusy(false);
     }
@@ -71,15 +94,21 @@ export function Units({ labOn = false, surveillanceOn = false, dentalOn = false,
       // T47: o CNES só segue quando mudou (vazio apaga: null) — o api só mexe nele quando a chave vem.
       const cnes = (value.cnes ?? "") === "" ? null : (value.cnes as string);
       const cnesChanged = cnes !== ((editing.initial.cnes ?? "") === "" ? null : editing.initial.cnes);
+      const caps = capsPayload(value, editing.initial);
       if (editing.id) {
         // O 7º argumento só segue quando a marca existe (interruptor ligado): desligado, o corpo é o de sempre.
-        if (cnesChanged) {
+        if (caps) {
+          await updateUnit(editing.id, value.name, value.kind, address, value.screeningScope, value.collectsSamples, value.notifying, cnesChanged ? cnes : undefined, caps);
+        } else if (cnesChanged) {
           await updateUnit(editing.id, value.name, value.kind, address, value.screeningScope, value.collectsSamples, value.notifying, cnes);
         } else if (value.notifying !== undefined) {
           await updateUnit(editing.id, value.name, value.kind, address, value.screeningScope, value.collectsSamples, value.notifying);
         } else {
           await updateUnit(editing.id, value.name, value.kind, address, value.screeningScope, value.collectsSamples);
         }
+      } else if (caps) {
+        await createUnit(value.name, value.kind, address, cnesChanged ? cnes : undefined, caps);
+        void queryClient.invalidateQueries({ queryKey: [ "activeUnits" ] });
       } else if (cnesChanged) {
         await createUnit(value.name, value.kind, address, cnes);
         void queryClient.invalidateQueries({ queryKey: [ "activeUnits" ] });
@@ -90,7 +119,7 @@ export function Units({ labOn = false, surveillanceOn = false, dentalOn = false,
       setEditing(null);
       await load();
     } catch (err) {
-      setError(attendanceError(err));
+      setError(unitError(err));
     } finally {
       setBusy(false);
     }
@@ -138,6 +167,7 @@ export function Units({ labOn = false, surveillanceOn = false, dentalOn = false,
             busy={busy}
             dentalOn={dentalOn}
             tfdOn={tfdOn}
+            capsOn={capsOn}
             onSave={(value) => void save(value)}
             onCancel={() => setEditing(null)}
           />
@@ -147,7 +177,8 @@ export function Units({ labOn = false, surveillanceOn = false, dentalOn = false,
           <DataTable<HealthUnitRow>
             cols={[
               { label: "Nome", w: "2fr", render: (r) => r.name },
-              { label: "Tipo", w: "1fr", render: (r) => KIND_LABEL[r.kind] ?? r.kind },
+              { label: "Tipo", w: "1fr", render: (r) =>
+                (r.kind === "caps" && r.caps_modality ? modalityLabel(r.caps_modality) : KIND_LABEL[r.kind] ?? r.kind) },
               { label: "CNES", w: "0.9fr", render: (r) => r.cnes ?? "—" },
               { label: "Endereço", w: "3fr", render: (r) =>
                 formatAddress(r, r.neighborhood_id ? nameOf.get(r.neighborhood_id) : null) },
@@ -161,6 +192,7 @@ export function Units({ labOn = false, surveillanceOn = false, dentalOn = false,
                     <button type="button" style={secondaryButtonStyle}
                       onClick={() => setEditing({ id: r.id, initial: {
                         name: r.name, kind: r.kind, cnes: r.cnes ?? "", ...addressFieldsFrom(r), screeningScope: r.screening_scope ?? "walk_in",
+                        phone: r.phone ?? "", ...(r.kind === "caps" ? { capsModality: r.caps_modality ?? "", serviceClassification: r.service_classification ?? "" } : {}),
                         ...(labOn ? { collectsSamples: r.collects_samples === true } : {}),
                         ...(surveillanceOn ? { notifying: r.notifying === true } : {})
                       } })}>

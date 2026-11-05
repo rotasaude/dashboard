@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import type { Neighborhood, ScreeningScope } from "../../lib/api";
 import { SCOPE_LABEL } from "../../lib/screening";
 import { onlyDigits, unitKindOptions } from "../../lib/attendance";
+import { CAPS_MODALITIES, modalityLabel, phoneProblem, unitCapsProblems } from "../../lib/psychosocial";
 import { matchNeighborhood, sortByName } from "../../lib/territory";
 import { maskCep, zipError, type AddressFields } from "../../lib/unitAddress";
 import { VIACEP_TIMEOUT_MS, lookupCep } from "../../lib/viacep";
@@ -15,8 +16,11 @@ import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } fr
 // `notifying` (módulo 25) só aparece com o interruptor `surveillance` ligado e na edição.
 // `screeningScope` (módulo 18) só existe na edição: a unidade nova nasce `walk_in` no api.
 // `cnes` (T47, módulo 30): opcional em todo tipo; vazio = sem CNES. A unidade Gestão precisa dele para o BPA do TFD.
+// Módulo 31: `phone` (P27) vale para toda unidade (10 ou 11 dígitos; vazio = sem telefone); `capsModality` e `serviceClassification`
+// (115, opcional, 3 dígitos) só existem com `kind === "caps"`.
 export interface UnitFormValue extends AddressFields {
   name: string; kind: string; cnes?: string; screeningScope?: ScreeningScope; collectsSamples?: boolean; notifying?: boolean;
+  phone?: string; capsModality?: string; serviceClassification?: string;
 }
 export const CNES_TEXT = "o CNES tem 7 dígitos";
 
@@ -29,17 +33,22 @@ interface Props {
   dentalOn?: boolean;
   // Módulo 30: transporte usável (canUseTransport) — só então a unidade de gestão é oferecida.
   tfdOn?: boolean;
+  // Módulo 31: `psychosocial_care` + `clinical_record` (canUsePsychosocial) — só então o CAPS é oferecido.
+  capsOn?: boolean;
   onSave(value: UnitFormValue): void;
   onCancel(): void;
 }
 
 type CepState = { kind: "idle" } | { kind: "loading" } | { kind: "found"; neighborhood: string } | { kind: "failed" };
 
-export function UnitForm({ initial, neighborhoods, busy, cepTimeoutMs = VIACEP_TIMEOUT_MS, dentalOn = false, tfdOn = false, onSave, onCancel }: Props) {
+export function UnitForm({ initial, neighborhoods, busy, cepTimeoutMs = VIACEP_TIMEOUT_MS, dentalOn = false, tfdOn = false, capsOn = false, onSave, onCancel }: Props) {
   const [ value, setValue ] = useState<UnitFormValue>(initial);
   const [ cep, setCep ] = useState<CepState>({ kind: "idle" });
-  const [ error, setError ] = useState<string | null>(null);
+  // Todas as recusas de uma vez: cada texto é um alerta.
+  const [ errors, setErrors ] = useState<string[]>([]);
   const [ cnesError, setCnesError ] = useState(false);
+  const [ phoneError, setPhoneError ] = useState(false);
+  const [ capsPaths, setCapsPaths ] = useState<string[]>([]);
   // Cada CEP digitado ganha um número; resposta de número velho é descartada
   // (o admin corrigiu o CEP antes de a primeira consulta voltar).
   const seq = useRef(0);
@@ -73,20 +82,30 @@ export function UnitForm({ initial, neighborhoods, busy, cepTimeoutMs = VIACEP_T
 
   function save() {
     if (busy || !value.name.trim()) return;
-    const invalidZip = zipError(value.zip);
+    const found: string[] = [];
     const cnes = value.cnes ?? "";
-    if (cnes !== "" && !/^\d{7}$/.test(cnes)) { setError(CNES_TEXT); setCnesError(true); return; }
-    setCnesError(false);
-    if (invalidZip) { setError(invalidZip); return; }
-    setError(null);
-    onSave(value);
+    const badCnes = cnes !== "" && !/^\d{7}$/.test(cnes);
+    if (badCnes) found.push(CNES_TEXT);
+    const invalidZip = zipError(value.zip);
+    if (invalidZip) found.push(invalidZip);
+    const phone = phoneProblem(value.phone ?? "");
+    if (phone) found.push(phone);
+    const caps = unitCapsProblems({ kind: value.kind, capsModality: value.capsModality ?? "", serviceClassification: value.serviceClassification ?? "" });
+    found.push(...caps.map((p) => p.text));
+    setCnesError(badCnes);
+    setPhoneError(!!phone);
+    setCapsPaths(caps.map((p) => p.path));
+    setErrors(found);
+    if (found.length > 0) return;
+    // Fora do CAPS, a modalidade e a classificação não seguem (o api recusaria `caps_modality_mismatch`).
+    onSave(value.kind === "caps" ? value : { ...value, capsModality: undefined, serviceClassification: undefined });
   }
 
   const blocked = busy || !value.name.trim();
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10, maxWidth: 420 }}>
-      {error && <p role="alert" style={{ margin: 0, fontSize: 12.5, color: "var(--down)" }}>{error}</p>}
+      {errors.map((text) => <p key={text} role="alert" style={{ margin: 0, fontSize: 12.5, color: "var(--down)" }}>{text}</p>)}
       <label style={labelStyle}>
         Nome
         <input value={value.name} onChange={(e) => set({ name: e.target.value })} style={inputStyle} />
@@ -94,13 +113,36 @@ export function UnitForm({ initial, neighborhoods, busy, cepTimeoutMs = VIACEP_T
       <label style={labelStyle}>
         Tipo
         <select value={value.kind} onChange={(e) => set({ kind: e.target.value })} style={inputStyle}>
-          {unitKindOptions(dentalOn || value.kind === "ceo", tfdOn || value.kind === "health_management").map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}
+          {unitKindOptions(dentalOn || value.kind === "ceo", tfdOn || value.kind === "health_management", capsOn || value.kind === "caps").map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}
         </select>
       </label>
+      {value.kind === "caps" && (
+        <>
+          <label style={labelStyle}>
+            Modalidade do CAPS
+            <select value={value.capsModality ?? ""} onChange={(e) => set({ capsModality: e.target.value })} style={inputStyle}
+              aria-invalid={capsPaths.includes("caps_modality") ? true : undefined}>
+              <option value="">Escolha a modalidade</option>
+              {CAPS_MODALITIES.map((m) => <option key={m} value={m}>{modalityLabel(m)}</option>)}
+            </select>
+          </label>
+          <label style={labelStyle}>
+            Classificação do serviço 115
+            <input value={value.serviceClassification ?? ""} onChange={(e) => set({ serviceClassification: onlyDigits(e.target.value).slice(0, 3) })} style={inputStyle}
+              inputMode="numeric" maxLength={3} placeholder="3 dígitos, como no CNES (opcional)"
+              aria-invalid={capsPaths.includes("service_classification") ? true : undefined} />
+          </label>
+        </>
+      )}
       <label style={labelStyle}>
         CNES (opcional)
         <input value={value.cnes ?? ""} onChange={(e) => { set({ cnes: onlyDigits(e.target.value).slice(0, 7) }); setCnesError(false); }} style={inputStyle}
           inputMode="numeric" placeholder="7 dígitos" aria-invalid={cnesError ? true : undefined} />
+      </label>
+      <label style={labelStyle}>
+        Telefone
+        <input value={value.phone ?? ""} onChange={(e) => set({ phone: onlyDigits(e.target.value) })} style={inputStyle}
+          inputMode="tel" placeholder="10 ou 11 dígitos, com DDD (opcional)" aria-invalid={phoneError ? true : undefined} />
       </label>
       <label style={labelStyle}>
         CEP

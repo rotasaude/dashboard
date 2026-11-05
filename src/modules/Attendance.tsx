@@ -38,6 +38,7 @@ import { EMPTY_NAMES, namesBody, namesProblem, type NamesDraft } from "../lib/ci
 import { hasFeature } from "../lib/features";
 import { canUseDental } from "../lib/dental";
 import { canUseTransport } from "../lib/transport";
+import { canUsePsychosocial } from "../lib/psychosocial";
 import { canUseBilling, showUnitProcedures } from "../lib/billing";
 import { UnitProcedures } from "./billing/UnitProcedures";
 
@@ -151,7 +152,7 @@ export function Attendance({ onNavigate }: { onNavigate(id: ModuleId): void }) {
       {canVerify && <ErasureRequest />}
       {isAdmin && <History />}
       {isAdmin && <ErasureRequests onGoToSecurity={goToSecurity} />}
-      {isAdmin && <Units labOn={hasFeature(user, "municipal_lab")} surveillanceOn={hasFeature(user, "surveillance")} dentalOn={canUseDental(user)} tfdOn={canUseTransport(user)} />}
+      {isAdmin && <Units labOn={hasFeature(user, "municipal_lab")} surveillanceOn={hasFeature(user, "surveillance")} dentalOn={canUseDental(user)} tfdOn={canUseTransport(user)} capsOn={canUsePsychosocial(user)} />}
     </div>
   );
 }

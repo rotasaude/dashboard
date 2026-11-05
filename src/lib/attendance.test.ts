@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ApiError } from "./api";
-import { attendanceError, isValidCpf, maskCpf, splitReferenceUnits, unitKindOptions } from "./attendance";
+import { CAPS_UNIT_KIND, attendanceError, isValidCpf, maskCpf, splitReferenceUnits, unitKindOptions } from "./attendance";
 
 describe("attendance helpers", () => {
   it("mascara e valida CPF", () => {
@@ -131,5 +131,14 @@ describe("módulo 30", () => {
   it("patient_on_trip tem frase", () => {
     expect(attendanceError(new ApiError(409, { error: "patient_on_trip" }, "x")))
       .toBe("o paciente está numa viagem em andamento; tente de novo depois que a viagem for fechada");
+  });
+});
+
+describe("módulo 31", () => {
+  it("o CAPS só é oferecido com o interruptor (terceiro parâmetro)", () => {
+    expect(CAPS_UNIT_KIND).toEqual({ value: "caps", label: "CAPS" });
+    expect(unitKindOptions(false, false, true).map((k) => k.value)).toContain("caps");
+    expect(unitKindOptions(false, false).map((k) => k.value)).not.toContain("caps");
+    expect(unitKindOptions(true, true).map((k) => k.value)).not.toContain("caps");
   });
 });

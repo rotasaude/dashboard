@@ -39,8 +39,10 @@ export const UNIT_KINDS = [
 export const CEO_UNIT_KIND = { value: "ceo", label: "CEO (Centro de Especialidades Odontológicas)" };
 // Módulo 30: a unidade de gestão (CNES do BPA do TFD) é oferecida com o transporte usável (a mesma condição da tela de regras, que a exige para faturar); a já criada continua legível (KIND_LABEL).
 export const HEALTH_MANAGEMENT_UNIT_KIND = { value: "health_management", label: "Gestão (secretaria ou central de regulação)" };
-export function unitKindOptions(dentalOn: boolean, tfdOn = false): { value: string; label: string }[] {
-  return [ ...UNIT_KINDS, ...(dentalOn ? [ CEO_UNIT_KIND ] : []), ...(tfdOn ? [ HEALTH_MANAGEMENT_UNIT_KIND ] : []) ];
+// Módulo 31 (F-31.1): o CAPS só é oferecido no cadastro com `psychosocial_care` e `clinical_record` (canUsePsychosocial); o já criado continua legível.
+export const CAPS_UNIT_KIND = { value: "caps", label: "CAPS" };
+export function unitKindOptions(dentalOn: boolean, tfdOn = false, capsOn = false): { value: string; label: string }[] {
+  return [ ...UNIT_KINDS, ...(dentalOn ? [ CEO_UNIT_KIND ] : []), ...(tfdOn ? [ HEALTH_MANAGEMENT_UNIT_KIND ] : []), ...(capsOn ? [ CAPS_UNIT_KIND ] : []) ];
 }
 
 export function currentUnitKey(userId: string): string {
