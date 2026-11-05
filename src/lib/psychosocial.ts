@@ -20,6 +20,8 @@ export { NOMINAL_QUERY, STATIC_QUERY };
 export const PSY_DISABLED = "a atenção psicossocial está desligada nesta cidade";
 export const PSY_NO_ROLE = "seu papel não permite usar o CAPS";
 export const NO_CAPS_UNIT = "você não está lotado em nenhum CAPS — a lotação vem do vínculo CNES ativo na unidade";
+export const NO_CAPS_BEDS = "nenhum CAPS seu tem leitos — só CAPS III, AD III e AD IV";
+export const NO_ACTIVE_CAPS = "nenhum CAPS ativo nesta cidade";
 export const SMALL_COUNT = "menos de 5";
 export const TRAIL_NOTE = "Abrir registra a leitura no prontuário do CAPS.";
 export const NO_CLINICAL_IN_LIST = "A lista não mostra CID, substâncias, evolução nem PTS.";
@@ -484,7 +486,8 @@ function bodyOf(err: unknown): Record<string, unknown> | null {
 const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
 // Só código e path no formato do api saem do corpo; qualquer outra coisa (nome, texto, mensagem) fica fora da tela.
 const CODE_FORMAT = /^[a-z0-9_]{1,64}$/;
-const PATH_FORMAT = /^[a-z0-9_.[\]]{1,64}$/;
+// Hífen: o `month_has_problems` manda `records.<uuid>`.
+const PATH_FORMAT = /^[a-z0-9_.[\]-]{1,64}$/;
 const safeCode = (v: unknown): string => (typeof v === "string" && CODE_FORMAT.test(v) ? v : "");
 const safePath = (v: unknown): string => (typeof v === "string" && PATH_FORMAT.test(v) ? v : "");
 

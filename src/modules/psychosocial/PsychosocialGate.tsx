@@ -8,16 +8,13 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { listPsyUnits, type PsyUnit } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import {
-  NO_CAPS_UNIT, PSY_DETAIL_KEY, PSY_DISABLED, PSY_NO_ROLE, PSY_UNITS_KEY, STATIC_QUERY, canUsePsychosocial, modalityLabel, psyError,
+  NO_ACTIVE_CAPS, NO_CAPS_BEDS, NO_CAPS_UNIT, PSY_DETAIL_KEY, PSY_DISABLED, PSY_NO_ROLE, PSY_UNITS_KEY, STATIC_QUERY, canUsePsychosocial, modalityLabel, psyError,
   psychosocialRoles, type PsyRoles
 } from "../../lib/psychosocial";
 import { PageHeader } from "../../components/PageHeader";
 import { EmptyState } from "../../components/EmptyState";
 import { inputStyle } from "../../components/formStyles";
 import { alert, fieldLabel, muted, stack } from "../exams/styles";
-
-export const NO_CAPS_BEDS = "nenhum CAPS seu tem leitos — só CAPS III, AD III e AD IV";
-export const NO_ACTIVE_CAPS = "nenhum CAPS ativo nesta cidade";
 
 // "team": CAPS de lotação (a equipe); "any": o que o api devolver (faturista, admin e analista veem todos); "beds": só os com
 // acolhimento noturno; "none": não lê (a tela escolhe sozinha, ou não depende de CAPS).

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ApiError } from "./api";
 import {
-  CAPS_MODALITIES, DESTINATION_LABEL, MONTH_PROBLEM_TEXT, MONTH_WARNING_TEXT, PSY_DISABLED, PSY_ERRORS, REASON_TEXT, actionInput, actionProblems,
+  CAPS_MODALITIES, DESTINATION_LABEL, MONTH_PROBLEM_TEXT, NO_ACTIVE_CAPS, NO_CAPS_BEDS, MONTH_WARNING_TEXT, PSY_DISABLED, PSY_ERRORS, REASON_TEXT, actionInput, actionProblems,
   canUsePsychosocial, carePlanInput, carePlanProblems, cidLabel, codeLabel, countLabel, destinationLabel, emptyActionDraft, emptyEnrollmentDraft,
   enrollmentInput, enrollmentProblems, hasBeds, indexFromPath, isPrescriber, isStale, modalityLabel, monthProblemLabel, monthWarningLabel, nightLimitText,
   phoneProblem, psyError, psyRefusals, psychosocialRoles, reasonProblem, settingsProblems, textProblem, unitCapsProblems, weekdayLabel,
@@ -222,6 +222,22 @@ describe("regras do CAPS (módulo 31)", () => {
     expect(psyError(refusal(422, { error: "month_has_problems" }))).toBe(PSY_ERRORS.month_has_problems);
     expect(psyRefusals(refusal(422, { error: "month_has_problems", problems: [ { error: "cid_missing", path: "records.mr3" } ] }))[0].text)
       .toBe("CID ausente");
+  });
+
+  it("month_has_problems com o id real (uuid, com hífen): path preservado e frase da pendência", () => {
+    const id1 = "3f2b8c1e-9a4d-4e6f-8b2a-1c0d9e8f7a6b";
+    const id2 = "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d";
+    expect(id1).toHaveLength(36);
+    const r = psyRefusals(refusal(422, { error: "month_has_problems", problems: [
+      { error: "homeless_missing", path: `records.${id1}` }, { error: "night_stay_open", path: `records.${id2}` } ] }));
+    expect(r.map((x) => [ x.path, x.code, x.text ])).toEqual([
+      [ `records.${id1}`, "homeless_missing", "situação de rua do mês não informada" ],
+      [ `records.${id2}`, "night_stay_open", "permanência noturna aberta no mês" ] ]);
+  });
+
+  it("frases do portão moram aqui", () => {
+    expect(NO_CAPS_BEDS).toBe("nenhum CAPS seu tem leitos — só CAPS III, AD III e AD IV");
+    expect(NO_ACTIVE_CAPS).toBe("nenhum CAPS ativo nesta cidade");
   });
 
   it("isStale: não encontrado e encaminhamento já acolhido", () => {
