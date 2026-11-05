@@ -23,7 +23,7 @@ const last = () => calls[calls.length - 1];
 const bodyOf = () => JSON.parse(String(last().init.body));
 const headerOf = (name: string) => (last().init.headers as Record<string, string>)[name];
 // O que nunca pode ir na URL: CPF, CNS, nome, CID, substância e texto clínico.
-const SECRET_IN_URL = /12345678909|898001234567890|Maria|F32|F322|alcohol|Idea|Relata|risco|Caso|ação lançada|registrada/;
+const SECRET_IN_URL = /12345678909|898000000000002|Maria|F32|F322|alcohol|Idea|Relata|risco|Caso|ação lançada|registrada/;
 
 describe("cliente do CAPS (módulo 31)", () => {
   it("unidades e opções: envelope { items }; opções pela unidade", async () => {
@@ -46,6 +46,25 @@ describe("cliente do CAPS (módulo 31)", () => {
     expect(calls[1].url).toBe("/psychosocial/enrollments?health_unit_id=caps2&status=open&before=c1");
     expect(rows.map((r) => r.id)).toEqual([ "en1", "en2" ]);
     expect(calls.some((c) => /[?&]q=/.test(c.url))).toBe(false);
+  });
+
+  it("lista de usuários: cursor que volta ou não acaba não prende o laço (Set de cursores, teto de 50 páginas)", async () => {
+    // Freio do teste: o laço antigo nunca pararia.
+    const runaway = (body: (i: number) => unknown) => {
+      let i = 0;
+      vi.stubGlobal("fetch", vi.fn(async (url: string, init: RequestInit = {}) => {
+        calls.push({ url, init });
+        if (calls.length > 60) throw new Error("runaway");
+        return new Response(JSON.stringify(body(i++)), { status: 200, headers: { "Content-Type": "application/json" } });
+      }));
+    };
+    runaway((i) => ({ items: [ enrollmentRow({ id: `en${i}` }) ], next_before: i % 2 === 0 ? "c1" : "c2" }));
+    expect((await api.listPsyEnrollments({ unitId: "caps2", status: "open" })).length).toBe(3);
+    expect(calls.length).toBe(3);
+    calls.length = 0;
+    runaway((i) => ({ items: [ enrollmentRow({ id: `en${i}` }) ], next_before: `c${i + 1}` }));
+    expect((await api.listPsyEnrollments({ unitId: "caps2", status: "open" })).length).toBe(50);
+    expect(calls.length).toBe(50);
   });
 
   it("encaminhamento da UBS: motivo só no corpo, com JSON; devolve o criado", async () => {
@@ -78,9 +97,9 @@ describe("cliente do CAPS (módulo 31)", () => {
     expect(last().init.method).toBe("POST");
     expect(bodyOf()).toEqual({ cpf: "12345678909" });
     expect(p).toEqual({ patient_id: "pt1", display_name: "Maria", has_cpf: true, cns_masked: null, citizen_id: null, registration_id: null });
-    await api.lookupPsyPersonByCns("898001234567890");
+    await api.lookupPsyPersonByCns("898000000000002");
     expect(last().url).toBe("/psychosocial/person_lookup");
-    expect(bodyOf()).toEqual({ cns: "898001234567890" });
+    expect(bodyOf()).toEqual({ cns: "898000000000002" });
     stub({ candidates: [ { patient_id: "pt1", display_name: "Maria", birth_date: "1980-01-01", has_cpf: false } ] });
     const c = await api.findPsyDuplicates({ full_name: "Maria da Silva", birth_date: "1980-01-01" });
     expect(last().url).toBe("/psychosocial/patients/duplicates");
@@ -179,6 +198,14 @@ describe("cliente do CAPS (módulo 31)", () => {
     expect(last().url).not.toMatch(SECRET_IN_URL);
     expect(bodyOf().notes).toBe("Relata melhora");
     expect("group_id" in bodyOf()).toBe(false);
+    // Texto opcional só com espaços não vai (o api recusa ""); o que vai, vai aparado.
+    await api.createPsyAction({ health_unit_id: "caps2", sigtap_code: "0301080208", performed_at: "2026-11-04T09:00", place: "caps",
+      notes: "   ", authorization_number: " \n ", group_id: null, participants: [ { enrollment_id: "en1" } ] });
+    expect("notes" in bodyOf()).toBe(false);
+    expect("authorization_number" in bodyOf()).toBe(false);
+    await api.createPsyAction({ health_unit_id: "caps2", sigtap_code: "0301080208", performed_at: "2026-11-04T09:00", place: "caps",
+      notes: "  Relata melhora  ", participants: [ { enrollment_id: "en1" } ] });
+    expect(bodyOf().notes).toBe("Relata melhora");
   });
 
   it("ações da matrícula paginadas; detalhe; cancelar com o motivo no corpo", async () => {
@@ -321,7 +348,8 @@ describe("cliente do CAPS (módulo 31)", () => {
     expect(last().url).toBe("/psychosocial/patients/pt1/link");
     expect(link.enrolled).toBe(false);
     stub({ items: [], next_before: "c1" });
-    expect(await api.getPsyEnrollmentTimeline("en1")).toEqual({ items: [], next_before: "c1" });
+    const page: api.PsyTimelinePage = await api.getPsyEnrollmentTimeline("en1");
+    expect(page).toEqual({ items: [], next_before: "c1" });
     expect(last().url).toBe("/psychosocial/enrollments/en1/timeline");
     await api.getPsyEnrollmentTimeline("en1", "c1");
     expect(last().url).toBe("/psychosocial/enrollments/en1/timeline?before=c1");

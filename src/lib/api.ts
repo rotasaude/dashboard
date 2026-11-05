@@ -6027,12 +6027,16 @@ const psyWrite = (method: "POST" | "PATCH", body: unknown = {}): RequestInit => 
 // Query só com os valores preenchidos, na ordem dada.
 const psyQuery = (params: Record<string, string | null | undefined>) =>
   new URLSearchParams(Object.entries(params).filter((e): e is [string, string] => typeof e[1] === "string" && e[1] !== ""));
-// Tira as chaves opcionais vazias (undefined, null ou "") do corpo.
+// Tira as chaves opcionais vazias (undefined, null, "" ou só espaços) do corpo; o texto que vai, vai aparado.
 function psyCompact<T extends object>(body: T, keys: (keyof T)[]): T {
   const out = { ...body };
   for (const key of keys) {
     const v = out[key] as unknown;
-    if (v === undefined || v === null || v === "") delete out[key];
+    if (typeof v === "string") {
+      const trimmed = v.trim();
+      if (trimmed === "") delete out[key];
+      else (out as Record<keyof T, unknown>)[key] = trimmed;
+    } else if (v === undefined || v === null) delete out[key];
   }
   return out;
 }
@@ -6053,6 +6057,7 @@ export type NightLimitRule = "total" | "consecutive" | "alternate";
 // Painel: 1 a 4 chegam como "lt5" (0 fica 0).
 export type PsyCount = number | "lt5";
 export interface PsyPage<T> { items: T[]; next_before: string | null }
+export type PsyTimelinePage = PsyPage<TimelineEntry>;
 
 // ── Formas comuns ──
 // `name` é o nome de exibição; nunca CPF.
@@ -6297,16 +6302,20 @@ export function createPsyEnrollment(i: PsyEnrollmentInput): Promise<PsyEnrollmen
   return jsonFetch<PsyEnrollment>(psyPath("enrollments"), psyWrite("POST", i));
 }
 // R13: o filtro por nome é local e precisa da lista inteira — lê todas as páginas (500 por página).
+const PSY_MAX_PAGES = 50;
 export async function listPsyEnrollments(q: { unitId: string; status: PsyEnrollmentStatus }): Promise<PsyEnrollmentRow[]> {
   const rows: PsyEnrollmentRow[] = [];
+  const seen = new Set<string>();
   let before: string | null = null;
-  do {
+  for (let n = 0; n < PSY_MAX_PAGES; n++) {
     const page: PsyPage<PsyEnrollmentRow> = await psyPage(withQuery(psyPath("enrollments"),
       psyQuery({ health_unit_id: q.unitId, status: q.status, before })));
     rows.push(...page.items);
-    // Cursor repetido encerraria nunca: para na página que não avança.
-    before = page.next_before !== before ? page.next_before : null;
-  } while (before);
+    // Cursor que já passou (ou que não acaba) prenderia o laço: para ali.
+    if (!page.next_before || seen.has(page.next_before)) break;
+    seen.add(page.next_before);
+    before = page.next_before;
+  }
   return rows;
 }
 export function getPsyEnrollment(id: string): Promise<PsyEnrollment> {
@@ -6451,7 +6460,7 @@ export function getPsyLink(patientId: string): Promise<PsyLink> {
 }
 
 // ── Linha do tempo do CAPS e painel ──
-export function getPsyEnrollmentTimeline(enrollmentId: string, before?: string | null): Promise<PsyPage<TimelineEntry>> {
+export function getPsyEnrollmentTimeline(enrollmentId: string, before?: string | null): Promise<PsyTimelinePage> {
   return psyPage(withQuery(psyPath("enrollments", enrollmentId, "timeline"), psyQuery({ before })));
 }
 // Sem `unitId`, todos os CAPS que o papel alcança.
