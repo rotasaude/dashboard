@@ -164,6 +164,13 @@ describe("cliente do CAPS (módulo 31)", () => {
     expect(bodyOf().needs).toBe("Isolamento");
   });
 
+  it("PTS a revisar: só o CAPS na URL, lista em { items }", async () => {
+    stub({ items: [ { enrollment_id: "en1", patient: { patient_id: "pt1", name: "Maria", cns_masked: null }, review_on: null } ] });
+    expect((await api.listPsyCarePlansDue("caps2")).map((c) => c.enrollment_id)).toEqual([ "en1" ]);
+    expect(last().url).toBe("/psychosocial/care_plans/due?health_unit_id=caps2");
+    expect(last().init.method ?? "GET").toBe("GET");
+  });
+
   it("grupos e Hoje: filtro de ativos só quando pedido; data opcional", async () => {
     stub({ items: [] });
     await api.listPsyGroups("caps2");

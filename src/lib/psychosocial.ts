@@ -4,8 +4,8 @@
 // plano diz outra coisa, vale o api. Nenhuma frase interpola nome, CPF, CNS, CID, substância ou texto do corpo.
 import {
   ApiError, errorCode,
-  type CareIntensity, type PsyActionInput, type PsyCarePlanInput, type PsyCode, type PsyCount, type PsyEnrollmentInput,
-  type PsyOptions, type PsyPlace, type PsyProcedure, type PsyReceptionInput, type PsySettings, type ReceptionOutcome
+  type CareIntensity, type PsyActionInput, type PsyCarePlanInput, type PsyCode, type PsyCount, type PsyEnrollment, type PsyEnrollmentInput,
+  type PsyEnrollmentPatch, type PsyOptions, type PsyPlace, type PsyProcedure, type PsyReceptionInput, type PsySettings, type ReceptionOutcome
 } from "./api";
 import { NOMINAL_QUERY, STATIC_QUERY, fmtDay } from "./careLines";
 import { addDays } from "./campaigns";
@@ -376,6 +376,90 @@ export function carePlanInput(d: CarePlanDraft): PsyCarePlanInput {
   };
 }
 
+// ─── Usuários do CAPS: lista, matrícula, encerramento e PTS (F-31.2, F-31.3) ───
+// P33: a equipe não lê `GET /settings`; a revisão sugerida usa este prazo e o api confere a data (depois de hoje, até hoje + 365).
+export const DEFAULT_CARE_PLAN_REVIEW_DAYS = 90;
+export const ENROLLMENT_UPDATED = "Matrícula atualizada.";
+export const ENROLLMENT_CLOSED = "Matrícula encerrada.";
+export const CARE_PLAN_SAVED = "Nova versão do PTS salva.";
+// P37: PATCH vazio é recusado (422 invalid_request); a tela não envia.
+export const NOTHING_CHANGED = "nada mudou — altere algum campo antes de salvar";
+export const CLOSE_NOTE = "Encerrar fecha a RAAS do mês com o destino.";
+export const CLOSE_DESTINATION_TEXT = "escolha o destino do usuário";
+export const CLOSE_DATE_TEXT = "confira a data de conclusão";
+export const CLOSE_BEFORE_START = "o encerramento não pode ser antes do início";
+export const NEXT_VISIT_TEXT = "confira a data e a hora do próximo atendimento";
+export const CARE_PLAN_OVERDUE_TAG = "PTS vencido";
+export const NO_CARE_PLAN = "sem PTS";
+export const NO_CARE_PLAN_YET = "esta matrícula ainda não tem PTS";
+export const NO_CARE_PLAN_DUE = "sem PTS — o prazo do primeiro PTS já passou";
+export const RESPONSIBLE_OUT = "responsável fora da equipe";
+export const NO_OPEN_ENROLLMENTS = "nenhum usuário em acompanhamento neste CAPS";
+export const NO_CLOSED_ENROLLMENTS = "nenhuma matrícula encerrada neste CAPS";
+export const NO_NAME_MATCH = "ninguém com este nome na lista";
+export const ENROLLMENT_OTHER_CAPS = "esta matrícula é de outro CAPS — escolha o CAPS dela no seletor acima";
+// `GET /care_plans/due` (P16): a coordenação vê o CAPS inteiro; os demais, só as matrículas em que são referência.
+export const DUE_LEAD_NOTE = "Revisões vencidas de todo o CAPS.";
+export const DUE_STAFF_NOTE = "Revisões vencidas das matrículas em que você é a referência.";
+
+// R4: o api não manda `care_plan_overdue`; vencido = revisão antes de hoje.
+export const carePlanOverdue = (reviewOn: string | null | undefined, today: string): boolean => !!reviewOn && reviewOn < today;
+export const dueText = (reviewOn: string | null): string => (reviewOn ? `revisão vencida em ${fmtDay(reviewOn)}` : NO_CARE_PLAN_DUE);
+export const carePlanTitle = (version: number, reviewOn: string, overdue: boolean): string =>
+  overdue ? `Versão ${version} · revisão vencida em ${fmtDay(reviewOn)}` : `Versão ${version}`;
+// Nome por busca local: sem acento e sem caixa.
+export const foldName = (v: string): string => v.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+// O mesmo CID com ou sem ponto ("F322" = "F32.2").
+export const cidKey = (code: string): string => code.trim().toUpperCase().replace(/\./g, "");
+
+// Rascunho da edição a partir do detalhe (o CID vem sem rótulo: a tela mostra o código com ponto, R5).
+export function enrollmentDraftOf(e: PsyEnrollment): EnrollmentDraft {
+  return {
+    startedOn: e.started_on, origin: e.origin, cidMain: e.cid_main ? { code: e.cid_main, label: "" } : null,
+    cidSecondary: e.cid_secondary.map((code) => ({ code, label: "" })), substances: [ ...e.substances ], esfCovered: e.esf_covered,
+    esfCnes: e.esf_cnes ?? "", referenceUserId: e.reference.user_id
+  };
+}
+export const nextVisitInput = (iso: string | null | undefined): string => {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? "" : cityLocalInput(d);
+};
+
+// As regras da matrícula, menos o piso do início quando ele não mudou: o api aceita o início reenviado igual sem conferir o piso.
+export function enrollmentEditProblems(d: EnrollmentDraft, nextVisit: string, original: PsyEnrollment, today: string): Problem[] {
+  const out = enrollmentProblems(d, today).filter((p) => !(p.path === "started_on" && d.startedOn === original.started_on));
+  if (nextVisit !== "" && !parseCityLocal(nextVisit)) out.push({ path: "next_visit_at", text: NEXT_VISIT_TEXT });
+  return out;
+}
+
+const sameSet = (a: string[], b: string[]) => a.length === b.length && [ ...a ].sort().join("|") === [ ...b ].sort().join("|");
+// Só o que mudou (P37). Sem cobertura de ESF, `esf_cnes` não vai (o api apaga o CNES).
+export function enrollmentPatch(d: EnrollmentDraft, nextVisit: string, o: PsyEnrollment): PsyEnrollmentPatch {
+  const out: PsyEnrollmentPatch = {};
+  if (d.startedOn !== o.started_on) out.started_on = d.startedOn;
+  if (d.origin !== o.origin) out.origin = d.origin;
+  if (d.cidMain && cidKey(d.cidMain.code) !== cidKey(o.cid_main)) out.cid_main = d.cidMain.code;
+  if (!sameSet(d.cidSecondary.map((c) => cidKey(c.code)), o.cid_secondary.map(cidKey))) out.cid_secondary = d.cidSecondary.map((c) => c.code);
+  if (!sameSet(d.substances, o.substances)) out.substances = d.substances;
+  if (d.esfCovered !== o.esf_covered) out.esf_covered = d.esfCovered;
+  if (d.esfCovered && d.esfCnes.trim() !== (o.esf_cnes ?? "")) out.esf_cnes = d.esfCnes.trim();
+  if (d.referenceUserId !== o.reference.user_id) out.reference_user_id = d.referenceUserId;
+  if (nextVisit !== nextVisitInput(o.next_visit_at)) out.next_visit_at = nextVisit ? cityLocalIso(nextVisit) ?? nextVisit : null;
+  return out;
+}
+
+// Encerramento: tudo de uma vez; o mês fechado é do api.
+export function closeProblems(d: { destination: string; closedOn: string }, today: string, startedOn: string): Problem[] {
+  const out: Problem[] = [];
+  if (!d.destination) out.push({ path: "destination", text: CLOSE_DESTINATION_TEXT });
+  else if (d.destination === "00") out.push({ path: "destination", text: PSY_ERRORS.destination_is_permanence });
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(d.closedOn)) out.push({ path: "closed_on", text: CLOSE_DATE_TEXT });
+  else if (d.closedOn > today) out.push({ path: "closed_on", text: PSY_ERRORS.closed_on_in_future });
+  else if (d.closedOn < startedOn) out.push({ path: "closed_on", text: CLOSE_BEFORE_START });
+  return out;
+}
+
 // Inteiros: janela 7–90 dias; noites 1–90; prazo do PTS 30–365 dias (api, R14).
 export function settingsProblems(s: PsySettings): Problem[] {
   const out: Problem[] = [];
@@ -506,7 +590,8 @@ const FIELD_TEXT: [ RegExp, string ][] = [
   [ /^night_limits\.[a-z_]+\.window_days$/, "a janela vai de 7 a 90 dias" ],
   [ /^night_limits(\.|$)/, "o limite de noites vai de 1 a 90" ],
   [ /(^|\.)started_on$/, "o início vai até 12 meses para trás, nunca futuro nem antes do nascimento" ],
-  [ /^closed_on$/, "o encerramento não pode ser antes do início" ],
+  [ /^closed_on$/, CLOSE_BEFORE_START ],
+  [ /^next_visit_at$/, NEXT_VISIT_TEXT ],
   [ /^destination$/, "escolha um destino da lista" ],
   [ /(^|\.)origin$/, "escolha uma origem da lista" ],
   [ /(^|\.)cid_main$/, "CID principal inválido — escolha um da lista" ],

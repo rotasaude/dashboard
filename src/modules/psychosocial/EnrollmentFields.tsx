@@ -7,7 +7,7 @@ import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getPsyPrefill, searchTerminology, type PsyOptions } from "../../lib/api";
 import {
-  CID_REPEATED_TEXT, ESF_CNES_MISSING, NO_SUBSTANCE, NOMINAL_QUERY, PSY_DETAIL_KEY, enrollmentFloor, psyError, type EnrollmentDraft
+  CID_REPEATED_TEXT, ESF_CNES_MISSING, NO_SUBSTANCE, NOMINAL_QUERY, PSY_DETAIL_KEY, cidKey, cidLabel, enrollmentFloor, psyError, type EnrollmentDraft
 } from "../../lib/psychosocial";
 import type { Problem } from "../../lib/pharmacy";
 import { inputStyle, secondaryButtonStyle } from "../../components/formStyles";
@@ -21,8 +21,11 @@ const keepEnterInSearch = (e: KeyboardEvent<HTMLDivElement>) => {
 };
 
 // `prefill`: lê a ESF do paciente e preenche a cobertura só enquanto ninguém mexeu nela (o acolhimento liga; a edição, não).
-// `lockedOriginAndStart`: reservado para a edição (Task 6); aqui não muda nada (R4: o `origin_locked` do api vira frase).
-export function EnrollmentFields({ unitId, patientId, options, value, onChange, problems, today, prefill: usePrefill = false }: {
+// `lockedOriginAndStart`: a edição trava origem e início só depois que o api recusou com `origin_locked` (R4: nada pré-travado).
+// O CID aparece com ponto (R5); o detalhe da matrícula não traz rótulo, e aí só o código aparece.
+const cidText = (c: { code: string; label: string }) => (c.label ? `${cidLabel(c.code)} — ${c.label}` : cidLabel(c.code));
+
+export function EnrollmentFields({ unitId, patientId, options, value, onChange, problems, today, prefill: usePrefill = false, lockedOriginAndStart = false }: {
   unitId: string; patientId: string; options: PsyOptions; value: EnrollmentDraft; onChange(d: EnrollmentDraft): void; problems: Problem[];
   today: string; prefill?: boolean; lockedOriginAndStart?: boolean;
 }) {
@@ -72,12 +75,12 @@ export function EnrollmentFields({ unitId, patientId, options, value, onChange, 
       <div style={row}>
         <label style={fieldLabel}>
           Início da matrícula
-          <input type="date" value={value.startedOn} min={enrollmentFloor(today)} max={today} style={inputStyle} {...aria("started_on")}
+          <input type="date" value={value.startedOn} min={enrollmentFloor(today)} max={today} style={inputStyle} disabled={lockedOriginAndStart} {...aria("started_on")}
             onChange={(e) => set({ startedOn: e.target.value })} />
         </label>
         <label style={fieldLabel}>
           Origem
-          <select value={value.origin} style={inputStyle} {...aria("origin")} onChange={(e) => set({ origin: e.target.value })}>
+          <select value={value.origin} style={inputStyle} disabled={lockedOriginAndStart} {...aria("origin")} onChange={(e) => set({ origin: e.target.value })}>
             <option value="">Escolha a origem</option>
             {options.origins.map((o) => <option key={o.code} value={o.code}>{o.label}</option>)}
           </select>
@@ -87,7 +90,7 @@ export function EnrollmentFields({ unitId, patientId, options, value, onChange, 
 
       {value.cidMain ? (
         <div style={row}>
-          <span style={fieldLabel}>CID principal<strong style={{ color: "var(--ink)" }}>{`${value.cidMain.code} — ${value.cidMain.label}`}</strong></span>
+          <span style={fieldLabel}>CID principal<strong style={{ color: "var(--ink)" }}>{cidText(value.cidMain)}</strong></span>
           <button type="button" style={secondaryButtonStyle} onClick={() => { setCidNote(null); set({ cidMain: null }); }}>Trocar o CID principal</button>
         </div>
       ) : (
@@ -95,7 +98,7 @@ export function EnrollmentFields({ unitId, patientId, options, value, onChange, 
           <CodeSearch label="CID principal" queryKey={`${PSY_DETAIL_KEY}:${unitId}:cid-main`} search={(q) => searchTerminology(q, "cid10")}
             errorText={psyError}
             onPick={(c) => {
-              if (value.cidSecondary.some((x) => x.code === c.code)) { setCidNote(CID_REPEATED_TEXT); return; }
+              if (value.cidSecondary.some((x) => cidKey(x.code) === cidKey(c.code))) { setCidNote(CID_REPEATED_TEXT); return; }
               setCidNote(null);
               set({ cidMain: c });
             }} />
@@ -107,8 +110,8 @@ export function EnrollmentFields({ unitId, patientId, options, value, onChange, 
         <ul aria-label="CIDs secundários" style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 4 }}>
           {value.cidSecondary.map((c) => (
             <li key={c.code} style={row}>
-              <span>{`${c.code} — ${c.label}`}</span>
-              <button type="button" style={secondaryButtonStyle} aria-label={`Tirar o CID ${c.code}`}
+              <span>{cidText(c)}</span>
+              <button type="button" style={secondaryButtonStyle} aria-label={`Tirar o CID ${cidLabel(c.code)}`}
                 onClick={() => set({ cidSecondary: value.cidSecondary.filter((x) => x.code !== c.code) })}>Tirar</button>
             </li>
           ))}
@@ -119,7 +122,8 @@ export function EnrollmentFields({ unitId, patientId, options, value, onChange, 
           <CodeSearch label="CID secundário (até 4)" queryKey={`${PSY_DETAIL_KEY}:${unitId}:cid-secondary`} search={(q) => searchTerminology(q, "cid10")}
             errorText={psyError}
             onPick={(c) => {
-              if (c.code === value.cidMain?.code || value.cidSecondary.some((x) => x.code === c.code)) { setCidNote(CID_REPEATED_TEXT); return; }
+              const key = cidKey(c.code);
+              if (key === cidKey(value.cidMain?.code ?? "") || value.cidSecondary.some((x) => cidKey(x.code) === key)) { setCidNote(CID_REPEATED_TEXT); return; }
               setCidNote(null);
               set({ cidSecondary: [ ...value.cidSecondary, c ] });
             }} />

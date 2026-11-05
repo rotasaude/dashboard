@@ -6130,6 +6130,8 @@ export interface PsyCarePlan {
 export interface PsyCarePlanInput {
   needs: string; goals: { text: string; responsible_user_id: string; due_on?: string | null }[]; intensity: CareIntensity; review_on: string;
 }
+// `GET /care_plans/due`: revisões vencidas (a coordenação vê o CAPS; os demais, só onde são referência). `review_on` nulo = sem PTS.
+export interface PsyCarePlanDue { enrollment_id: string; patient: PsyPatientRef; review_on: string | null }
 
 // ── Grupos e Hoje ──
 // `weekday` 1–7.
@@ -6334,6 +6336,9 @@ export function listPsyCarePlans(enrollmentId: string): Promise<PsyCarePlan[]> {
 }
 export function createPsyCarePlan(enrollmentId: string, i: PsyCarePlanInput): Promise<PsyCarePlan> {
   return jsonFetch<PsyCarePlan>(psyPath("enrollments", enrollmentId, "care_plans"), psyWrite("POST", i));
+}
+export function listPsyCarePlansDue(unitId: string): Promise<PsyCarePlanDue[]> {
+  return psyItems<PsyCarePlanDue>(withQuery(psyPath("care_plans", "due"), psyQuery({ health_unit_id: unitId })));
 }
 
 // ── Grupos e Hoje ──

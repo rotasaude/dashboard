@@ -1,13 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { ApiError } from "./api";
 import {
-  CAPS_MODALITIES, DESTINATION_LABEL, MONTH_PROBLEM_TEXT, NO_ACTIVE_CAPS, NO_CAPS_BEDS, MONTH_WARNING_TEXT, PSY_DISABLED, PSY_ERRORS, REASON_TEXT, actionInput, actionProblems,
+  CAPS_MODALITIES, CLOSE_BEFORE_START, CLOSE_DESTINATION_TEXT, DESTINATION_LABEL, NEXT_VISIT_TEXT, carePlanOverdue, carePlanTitle, cidKey, closeProblems,
+  enrollmentDraftOf, enrollmentEditProblems, enrollmentPatch, foldName, nextVisitInput, MONTH_PROBLEM_TEXT, NO_ACTIVE_CAPS, NO_CAPS_BEDS, MONTH_WARNING_TEXT, PSY_DISABLED, PSY_ERRORS, REASON_TEXT, actionInput, actionProblems,
   canUsePsychosocial, carePlanInput, carePlanProblems, cidLabel, codeLabel, countLabel, destinationLabel, emptyActionDraft, emptyEnrollmentDraft,
   enrollmentInput, enrollmentProblems, hasBeds, indexFromPath, isPrescriber, isStale, modalityLabel, monthProblemLabel, monthWarningLabel, nightLimitText,
   phoneProblem, psyError, psyRefusals, psychosocialRoles, reasonProblem, settingsProblems, textProblem, unitCapsProblems, weekdayLabel,
   type ActionDraft, type CarePlanDraft
 } from "./psychosocial";
-import { NOW31, OPTIONS, TODAY31, psySettings, psyUser } from "../test/psychosocialFixtures";
+import { NOW31, OPTIONS, TODAY31, enrollment, psySettings, psyUser } from "../test/psychosocialFixtures";
 
 const proc = (code: string) => OPTIONS.procedures.find((p) => p.code === code);
 const refusal = (status: number, body: unknown) => new ApiError(status, body, "recusa");
@@ -418,5 +419,54 @@ describe("regras do CAPS (módulo 31)", () => {
     expect(isPrescriber("225410")).toBe(false);
     expect(isPrescriber("251510")).toBe(false);
     expect(isPrescriber(null)).toBe(false);
+  });
+});
+
+describe("usuários do CAPS: edição, encerramento e PTS (Task 6)", () => {
+  const base = enrollment();
+  const draft = () => enrollmentDraftOf(base);
+
+  it("PATCH só com o que mudou: CID com ou sem ponto, substâncias em outra ordem e próximo atendimento igual não vão", () => {
+    expect(enrollmentPatch(draft(), nextVisitInput(base.next_visit_at), base)).toEqual({});
+    const d = { ...draft(), cidMain: { code: "F32.2", label: "Episódio depressivo grave" } };
+    expect(enrollmentPatch(d, nextVisitInput(base.next_visit_at), base)).toEqual({});
+    const two = enrollment({ substances: [ "01", "02" ] });
+    expect(enrollmentPatch({ ...enrollmentDraftOf(two), substances: [ "02", "01" ] }, nextVisitInput(two.next_visit_at), two)).toEqual({});
+    expect(enrollmentPatch(draft(), "", base)).toEqual({ next_visit_at: null });
+    expect(enrollmentPatch({ ...draft(), cidSecondary: [ { code: "F41.1", label: "" } ] }, nextVisitInput(base.next_visit_at), base))
+      .toEqual({ cid_secondary: [ "F41.1" ] });
+  });
+
+  it("ESF: tirar a cobertura manda só esf_covered; trocar o CNES manda o CNES aparado", () => {
+    const visit = nextVisitInput(base.next_visit_at);
+    expect(enrollmentPatch({ ...draft(), esfCovered: false, esfCnes: "" }, visit, base)).toEqual({ esf_covered: false });
+    expect(enrollmentPatch({ ...draft(), esfCnes: " 1234567 " }, visit, base)).toEqual({ esf_cnes: "1234567" });
+  });
+
+  it("o piso do início só vale para início novo", () => {
+    const old = enrollment({ started_on: "2025-06-01" });
+    expect(enrollmentEditProblems(enrollmentDraftOf(old), "", old, TODAY31)).toEqual([]);
+    expect(enrollmentEditProblems({ ...enrollmentDraftOf(old), startedOn: "2025-07-01" }, "", old, TODAY31).map((p) => p.path)).toEqual([ "started_on" ]);
+    expect(enrollmentEditProblems(enrollmentDraftOf(old), "2026-11-10", old, TODAY31)).toEqual([ { path: "next_visit_at", text: NEXT_VISIT_TEXT } ]);
+  });
+
+  it("encerramento: destino e data conferidos de uma vez", () => {
+    expect(closeProblems({ destination: "00", closedOn: "2026-11-05" }, TODAY31, "2026-09-10")).toEqual([
+      { path: "destination", text: PSY_ERRORS.destination_is_permanence }, { path: "closed_on", text: PSY_ERRORS.closed_on_in_future }
+    ]);
+    expect(closeProblems({ destination: "", closedOn: "2026-09-01" }, TODAY31, "2026-09-10")).toEqual([
+      { path: "destination", text: CLOSE_DESTINATION_TEXT }, { path: "closed_on", text: CLOSE_BEFORE_START }
+    ]);
+    expect(closeProblems({ destination: "01", closedOn: TODAY31 }, TODAY31, "2026-09-10")).toEqual([]);
+  });
+
+  it("vencido calculado na tela; título da versão; nome sem acento e sem caixa", () => {
+    expect(carePlanOverdue("2026-11-03", TODAY31)).toBe(true);
+    expect(carePlanOverdue(TODAY31, TODAY31)).toBe(false);
+    expect(carePlanOverdue(null, TODAY31)).toBe(false);
+    expect(carePlanTitle(2, "2026-11-01", true)).toBe("Versão 2 · revisão vencida em 01/11/2026");
+    expect(carePlanTitle(1, "2026-12-01", false)).toBe("Versão 1");
+    expect(foldName(" JOSÉ ")).toBe("jose");
+    expect(cidKey("f32.2")).toBe("F322");
   });
 });
