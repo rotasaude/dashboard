@@ -19,7 +19,7 @@ const DASH = psyDashboard({
   new_in_month: "lt5", care_plans_overdue: 8,
   closed_by_destination: { "01": 6, "02": 0, "03": 0, "04": 0, "05": 0, "06": 0, "07": 0 },
   actions_by_instrument: { raas_psi: 410, bpa_c: 12, bpa_i: "lt5" }, bed_occupancy: { nights: 43, bed_days: 60 },
-  raas_month: { open: 30, closed: 7, exported: 0, no_actions: 2 }
+  raas_month: { open: 30, closed: 7, exported: 0, no_actions: "lt5" }
 });
 
 beforeEach(() => {
@@ -39,8 +39,8 @@ describe("painel do CAPS", () => {
     // no seletor e na linha por unidade
     expect(screen.getAllByText("CAPS II Centro · CAPS II").length).toBe(2);
     expect(screen.getAllByText("CAPS AD III Boqueirão · CAPS AD III").length).toBe(2);
-    // new_in_month, a linha do AD III, bpa_i e no_actions (2) — o 2 chega como número e aparece como número
-    expect(screen.getAllByText("menos de 5").length).toBe(3);
+    // new_in_month, a linha do AD III, bpa_i e no_actions (de 1 a 4 o api manda "lt5")
+    expect(screen.getAllByText("menos de 5").length).toBe(4);
     expect(screen.getByText("Alta")).not.toBeNull();
     expect(screen.getByText("Transferência para outro CAPS")).not.toBeNull();
     expect(screen.getByText("RAAS-PSI")).not.toBeNull();

@@ -8,17 +8,20 @@ import { entry } from "../../test/timelineFixtures";
 import { CAPS_II, OPTIONS, TODAY31, enrollment, psyUser } from "../../test/psychosocialFixtures";
 import * as api from "../../lib/api";
 import { detailTarget, filtersFrom, timelineKindLabel, timelineKinds, toggleKind, EMPTY_DRAFT } from "../../lib/timeline";
-import { psychosocialRoles } from "../../lib/psychosocial";
+import { psyError, psychosocialRoles } from "../../lib/psychosocial";
 import { PatientTimeline } from "../timeline/PatientTimeline";
 import { CAPS_ONLY_NOTE, CapsTimeline } from "./CapsTimeline";
 import { EnrollmentView } from "./EnrollmentView";
 
 vi.mock("../../lib/api", async (orig) => ({ ...(await orig<typeof api>()), fetchCurrentSession: vi.fn(), getPsyEnrollmentTimeline: vi.fn(),
   getPsyEnrollment: vi.fn(), getTimeline: vi.fn() }));
-afterEach(() => { cleanup(); vi.clearAllMocks(); });
+// mockReset: uma resposta "Once" que sobra num teste não vaza para o seguinte.
+afterEach(() => { cleanup(); vi.clearAllMocks(); vi.mocked(api.getPsyEnrollmentTimeline).mockReset(); });
 
+// Forma do api (`Timeline::Sources::PsychosocialSource`): detail_ref real, summary nulo, status recorded/open/closed. Nada abre aqui.
 const psy = (o: Partial<api.TimelineEntry>) => entry({ kind: "psychosocial", unit: { id: CAPS_II.id, name: CAPS_II.name },
-  professional: { name: "Lia Psicóloga", cbo_code: "251510" }, summary: null, status: null, detail_ref: null, ...o });
+  professional: { name: "Lia Psicóloga", cbo_code: "251510" }, summary: null, status: "recorded",
+  detail_ref: { type: "psychosocial_action", id: o.id ?? "a1" }, ...o });
 const MARKER = entry({ id: "psychosocial_link:en1", kind: "psychosocial_link", occurred_at: "2026-09-10T00:00:00-03:00", unit: null,
   professional: null, title: "Acompanhamento no CAPS", summary: "Desde 10/09/2026", status: "open", detail_ref: null });
 
@@ -31,7 +34,8 @@ describe("linha do tempo do CAPS", () => {
   it("entradas da fonte psychosocial em páginas, sem abrir detalhe", async () => {
     vi.mocked(api.getPsyEnrollmentTimeline)
       .mockResolvedValueOnce({ items: [ psy({ id: "psychosocial:a1", title: "Atendimento individual em CAPS" }) ], next_before: "c1" })
-      .mockResolvedValueOnce({ items: [ psy({ id: "psychosocial:p1", title: "PTS versão 1" }) ], next_before: null });
+      .mockResolvedValueOnce({ items: [ psy({ id: "psychosocial:p1", title: "PTS versão 1", detail_ref: { type: "psychosocial_care_plan", id: "p1" } }) ],
+        next_before: null });
     mount();
     expect(await screen.findByText("Atendimento individual em CAPS")).not.toBeNull();
     expect(screen.getAllByText("CAPS").length).toBeGreaterThan(0);
@@ -43,6 +47,32 @@ describe("linha do tempo do CAPS", () => {
     expect(vi.mocked(api.getPsyEnrollmentTimeline).mock.calls[1]).toEqual([ "en1", "c1" ]);
     expect(screen.queryByRole("button", { name: "Carregar mais" })).toBeNull();
     expect(screen.queryByRole("button", { name: /^Abrir/ })).toBeNull();
+    expect(screen.getAllByText("registrado").length).toBe(2);
+  });
+
+  it("situação da permanência: aberta 'em aberto', encerrada 'encerrado'; nunca o código cru", async () => {
+    vi.mocked(api.getPsyEnrollmentTimeline).mockResolvedValueOnce({ items: [
+      psy({ id: "psychosocial:n1", title: "Acolhimento noturno", status: "open", detail_ref: { type: "psychosocial_night_stay", id: "n1" } }),
+      psy({ id: "psychosocial:n0", title: "Acolhimento noturno", status: "closed", detail_ref: { type: "psychosocial_night_stay", id: "n0" } })
+    ], next_before: null });
+    mount();
+    expect(await screen.findByText("em aberto")).not.toBeNull();
+    expect(screen.getByText("encerrado")).not.toBeNull();
+    expect(screen.queryByText("open")).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Abrir/ })).toBeNull();
+  });
+
+  it("invalid_cursor no 'Carregar mais': a frase, e a lista é relida do começo", async () => {
+    vi.mocked(api.getPsyEnrollmentTimeline)
+      .mockResolvedValueOnce({ items: [ psy({ id: "psychosocial:a1", title: "Atendimento individual em CAPS" }) ], next_before: "c1" })
+      .mockRejectedValueOnce(new api.ApiError(422, { error: "invalid_cursor", path: "before" }, "422"))
+      .mockResolvedValueOnce({ items: [ psy({ id: "psychosocial:a2", title: "Atendimento familiar em CAPS" }) ], next_before: null });
+    mount();
+    fireEvent.click(await screen.findByRole("button", { name: "Carregar mais" }));
+    expect((await screen.findByRole("alert")).textContent).toBe(psyError(new api.ApiError(422, { error: "invalid_cursor" }, "422")));
+    expect(await screen.findByText("Atendimento familiar em CAPS")).not.toBeNull();
+    expect(vi.mocked(api.getPsyEnrollmentTimeline).mock.calls).toEqual([ [ "en1", null ], [ "en1", "c1" ], [ "en1", null ] ]);
+    expect(screen.queryByText("Atendimento individual em CAPS")).toBeNull();
   });
 
   it("entrada repetida entre páginas aparece uma vez; tipo desconhecido aparece cru", async () => {
@@ -103,6 +133,8 @@ describe("marcador do CAPS na linha do tempo geral", () => {
       entries: [ MARKER ] });
     renderWithProviders(<PatientTimeline subject={{ attendanceId: "a1" }} />);
     expect(await screen.findByText("Acompanhamento no CAPS")).not.toBeNull();
+    expect(screen.getByText("em aberto")).not.toBeNull();
+    expect(screen.queryByText("open")).toBeNull();
     await waitFor(() => expect(screen.queryByLabelText("CAPS")).not.toBeNull());
     expect(screen.queryByText(/CAPS II|Centro/)).toBeNull();
     expect(screen.queryByRole("button", { name: /^Abrir caps/ })).toBeNull();

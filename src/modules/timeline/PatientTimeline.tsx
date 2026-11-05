@@ -10,7 +10,7 @@ import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { errorCode, getTimeline, type Addendum, type PatientProblem, type TimelineEntry, type TimelineFilters, type TimelineSubject } from "../../lib/api";
 import {
   ALL_FILTERS, EMPTY_DRAFT, PARTIAL_NOTICE, TIMELINE_EMPTY, TIMELINE_KEY, detailTarget, endsOpening, entryWhen,
-  entryWhere, filterProblem, filtersFrom, mergePages, openLabel, statusLabel, subjectKey, timelineError, timelineKindLabel,
+  filterProblem, filtersFrom, mergePages, openLabel, statusLabel, subjectKey, timelineError, timelineKindLabel,
   timelineKinds, toggleKind, type DetailTarget, type FilterDraft
 } from "../../lib/timeline";
 import { hasFeature } from "../../lib/features";
@@ -21,6 +21,7 @@ import { VERIFIER_ROLE } from "../../lib/team";
 import { DataTable } from "../../components/DataTable";
 import { Tag } from "../../components/Tag";
 import { disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
+import { EntryWhere } from "./EntryWhere";
 import { TimelineDetail } from "./TimelineDetail";
 import { TIMELINE_DOCUMENT_KEY } from "./DocumentDetail";
 
@@ -148,15 +149,7 @@ export function PatientTimeline({
               )
             },
             { label: "Situação", w: "0.9fr", render: (e) => statusLabel(e.status, e.status_label) },
-            { label: "Onde e quem", w: "1.6fr", render: (e) => {
-              const w = entryWhere(e);
-              if (!w.unit && !w.person) return "—";
-              return (
-                <span style={{ display: "flex", flexDirection: "column" }}>
-                  {w.unit ?? "—"}{w.person && <span style={{ color: "var(--ink2)" }}>{w.person}</span>}
-                </span>
-              );
-            } },
+            { label: "Onde e quem", w: "1.6fr", render: (e) => <EntryWhere entry={e} /> },
             {
               label: "", w: "auto", align: "right", render: (e) => {
                 const target = detailTarget(e, inContext, canOpenRequests);

@@ -29,8 +29,8 @@ export const NO_BEDS = "sem leitos";
 export const OCCUPANCY_NOT_COMPUTED = "não calculada";
 export const PANEL_SMALL_NOTE = "Contagens de 1 a 4 aparecem como “menos de 5”.";
 export const PANEL_OVERDUE_NOTE = "PTS vencidos é a situação de hoje, qualquer que seja o mês escolhido.";
-const INSTRUMENTS = [ "raas_psi", "bpa_c", "bpa_i" ];
-const RAAS_STATES = [ "open", "closed", "exported", "no_actions" ];
+const INSTRUMENTS = [ "raas_psi", "bpa_c", "bpa_i" ] as const;
+const RAAS_STATES = [ "open", "closed", "exported", "no_actions" ] as const;
 const raasStateLabel = (k: string): string => (k === "no_actions" ? "sem ação no mês" : monthStatusLabel(k));
 
 // Nunca calcula com "lt5" (o número escondido voltaria pela conta); sem leito-dia, não há leito.
@@ -94,10 +94,12 @@ function PanelBody({ roles, today }: { roles: PsyRoles; today?: string }) {
 
 type CountRow = { key: string; label: string; count: PsyCount };
 const countCol = { label: "Quantidade", w: "0.8fr", align: "right" as const, render: (r: CountRow) => <span className="mono">{countLabel(r.count)}</span> };
-const rowsOf = (map: Record<string, PsyCount>, known: string[], label: (k: string) => string): CountRow[] => {
-  const extra = Object.keys(map).filter((k) => !known.includes(k)).sort();
-  return [ ...known.filter((k) => k in map), ...extra ].map((key) => ({ key, label: label(key), count: map[key] }));
-};
+// Chaves conhecidas na ordem do contrato; as que o api acrescentar, depois, cruas.
+function rowsOf<K extends string>(map: Readonly<Record<K, PsyCount>>, known: readonly K[], label: (k: string) => string): CountRow[] {
+  const counts: Readonly<Record<string, PsyCount>> = map;
+  const extra = Object.keys(counts).filter((k) => !(known as readonly string[]).includes(k)).sort();
+  return [ ...known.filter((k) => k in counts), ...extra ].map((key) => ({ key, label: label(key), count: counts[key] }));
+}
 
 function CountTable({ title, head, rows }: { title: string; head: string; rows: CountRow[] }) {
   return (
@@ -114,8 +116,8 @@ function DashboardView({ data }: { data: PsyDashboard }) {
     key: u.health_unit_id, label: `${u.name} · ${modalityLabel(u.caps_modality)}`, count: u.count
   }));
   const destinations = rowsOf(data.closed_by_destination, [], destinationLabel);
-  const instruments = rowsOf(data.actions_by_instrument as unknown as Record<string, PsyCount>, INSTRUMENTS, instrumentLabel);
-  const raas = rowsOf(data.raas_month as unknown as Record<string, PsyCount>, RAAS_STATES, raasStateLabel);
+  const instruments = rowsOf(data.actions_by_instrument, INSTRUMENTS, instrumentLabel);
+  const raas = rowsOf(data.raas_month, RAAS_STATES, raasStateLabel);
   return (
     <div style={stack}>
       <p className="mono" style={muted}>{`Mês: ${monthLabel(data.month)}`}</p>

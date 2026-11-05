@@ -172,7 +172,9 @@ const STATUS_LABEL: Record<string, string> = {
   // Módulo 27a: retirada na farmácia (a entrada não abre detalhe — detail_ref nulo).
   dispensed: "dispensado",
   // Módulo 29: dose de vacina (cancelled já está acima).
-  active: "aplicada"
+  active: "aplicada",
+  // Módulo 31: marcador do CAPS e permanência noturna aberta (closed já está acima). Rótulo genérico, serve a qualquer fonte.
+  open: "em aberto"
 };
 
 export function statusLabel(status: string | null, apiLabel?: string | null): string {
