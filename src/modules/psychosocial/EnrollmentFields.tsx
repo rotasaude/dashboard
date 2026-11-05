@@ -12,6 +12,7 @@ import {
 import type { Problem } from "../../lib/pharmacy";
 import { inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { CodeSearch } from "../consultation/CodeSearch";
+import { fieldErrors } from "./useFormProblems";
 import { alert, checkLabel, fieldLabel, fieldset, legend, muted, row } from "../exams/styles";
 
 const MAX_SECONDARY = 4;
@@ -55,10 +56,7 @@ export function EnrollmentFields({ unitId, patientId, options, value, onChange, 
   const textOf = (path: string) => problems.find((p) => p.path === path)?.text ?? null;
   const fid = (path: string) => `${uid}-${path}`;
   const aria = (path: string) => (textOf(path) ? { "aria-invalid": true as const, "aria-describedby": `${fid(path)}-err` } : {});
-  const errNode = (path: string) => {
-    const t = textOf(path);
-    return t ? <p id={`${fid(path)}-err`} role="alert" style={alert}>{t}</p> : null;
-  };
+  const errNode = (path: string) => fieldErrors(problems, path, `${fid(path)}-err`);
 
   function toggleSubstance(code: string, on: boolean) {
     if (!on) { set({ substances: value.substances.filter((c) => c !== code) }); return; }

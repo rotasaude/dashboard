@@ -21,6 +21,15 @@ export type FormSend<T> = {
   refused?(refusals: PsyRefusal[]): Problem[];
 };
 
+// Todas as frases distintas do path (a crítica do api pode pôr mais de uma no mesmo campo). Uma só: um <p> com o id; mais de uma:
+// o id fica no wrapper, para o `aria-describedby` do campo apontar para algo que existe.
+export function fieldErrors(problems: Problem[], path: string, id: string): ReactNode {
+  const texts = [ ...new Set(problems.filter((p) => p.path === path).map((p) => p.text)) ];
+  if (texts.length === 0) return null;
+  if (texts.length === 1) return <p id={id} role="alert" style={alert}>{texts[0]}</p>;
+  return <div id={id} style={{ display: "flex", flexDirection: "column", gap: 2 }}>{texts.map((t) => <p key={t} role="alert" style={alert}>{t}</p>)}</div>;
+}
+
 export function useFormProblems() {
   const uid = useId();
   const [ problems, setProblems ] = useState<Problem[]>([]);
@@ -48,14 +57,7 @@ export function useFormProblems() {
   const textOf = (path: string) => problems.find((p) => p.path === path)?.text ?? null;
   const fid = (path: string) => `${uid}-${path}`;
   const aria = (path: string) => (textOf(path) ? { "aria-invalid": true as const, "aria-describedby": `${fid(path)}-err` } : {});
-  // Todas as frases distintas do path (a crítica do api pode pôr mais de uma no mesmo campo). Uma só: um <p> com o id; mais de uma:
-  // o id fica no wrapper, para o `aria-describedby` do campo apontar para algo que existe.
-  const errNode = (path: string): ReactNode => {
-    const texts = [ ...new Set(problems.filter((p) => p.path === path).map((p) => p.text)) ];
-    if (texts.length === 0) return null;
-    if (texts.length === 1) return <p id={`${fid(path)}-err`} role="alert" style={alert}>{texts[0]}</p>;
-    return <div id={`${fid(path)}-err`} style={{ display: "flex", flexDirection: "column", gap: 2 }}>{texts.map((t) => <p key={t} role="alert" style={alert}>{t}</p>)}</div>;
-  };
+  const errNode = (path: string): ReactNode => fieldErrors(problems, path, `${fid(path)}-err`);
   // As frases que não são de nenhum campo do formulário, sem repetir.
   const top = (own: (path: string) => boolean): ReactNode =>
     [ ...new Set(problems.filter((p) => !own(p.path)).map((p) => p.text)) ]
