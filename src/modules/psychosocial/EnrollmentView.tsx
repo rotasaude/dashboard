@@ -28,9 +28,10 @@ const TABS: { key: Tab; label: string }[] = [
   { key: "record", label: "Matrícula" }, { key: "plan", label: "PTS" }, { key: "actions", label: "Ações" }, { key: "timeline", label: "Linha do tempo" }
 ];
 
-// `roles`, `now` e `onGoToSecurity` servem às abas de ações e documentos (Tasks 7 e 8).
+// `roles`, `now` e `onGoToSecurity` servem às abas de ações e documentos (Tasks 7 e 8). `now` só nos testes: sem ele, a hora é lida
+// na hora de cada conferência (nunca congelada na abertura).
 export type EnrollmentViewProps = {
-  enrollmentId: string; unit: PsyUnit; options: PsyOptions; roles: PsyRoles; today: string; now: Date; onClose(): void;
+  enrollmentId: string; unit: PsyUnit; options: PsyOptions; roles: PsyRoles; today: string; now?: Date; onClose(): void;
   onChanged?(): void; onStale?(text: string): void; onGoToSecurity?(): void;
 };
 

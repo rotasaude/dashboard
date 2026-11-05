@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { ApiError } from "./api";
 import {
   CAPS_MODALITIES, CLOSE_BEFORE_START, DEFAULT_CARE_PLAN_REVIEW_DAYS, firstCarePlanLate, reviewDaysOf, CLOSE_DESTINATION_TEXT, DESTINATION_LABEL, NEXT_VISIT_TEXT, carePlanOverdue, carePlanTitle, cidKey, closeProblems,
-  enrollmentDraftOf, enrollmentEditProblems, enrollmentPatch, foldName, nextVisitInput, MONTH_PROBLEM_TEXT, NO_ACTIVE_CAPS, NO_CAPS_BEDS, MONTH_WARNING_TEXT, PARTICIPANT_NOT_ENROLLED, PSY_DISABLED, PSY_ERRORS, REASON_TEXT, actionInput, actionProblems,
+  enrollmentDraftOf, enrollmentEditProblems, enrollmentPatch, foldName, nextVisitInput, MONTH_PROBLEM_TEXT, NO_ACTIVE_CAPS, NO_CAPS_BEDS, MONTH_WARNING_TEXT, PARTICIPANT_NOT_ENROLLED, PSY_DISABLED, psyCodeText, PSY_ERRORS, REASON_TEXT, actionInput, actionProblems,
   canUsePsychosocial, carePlanInput, carePlanProblems, cidLabel, codeLabel, countLabel, destinationLabel, emptyActionDraft, emptyEnrollmentDraft,
   enrollmentInput, enrollmentProblems, hasBeds, indexFromPath, isPrescriber, isStale, modalityLabel, monthProblemLabel, monthWarningLabel, nightLimitText,
   phoneProblem, psyError, psyRefusals, psychosocialRoles, reasonProblem, settingsProblems, textProblem, unitCapsProblems, weekdayLabel,
@@ -379,6 +379,24 @@ describe("regras do CAPS (módulo 31)", () => {
     expect("quantity" in actionInput(actionBase({ quantity: " " }), "caps2")).toBe(false);
     expect(actionInput(actionBase({ quantity: " 2 " }), "caps2").quantity).toBe(2);
     expect(actionInput(actionBase({ participants: [ maria ] }), "caps2").participants).toEqual([ { enrollment_id: "en1" } ]);
+  });
+
+  it("ação: máximo e autorização da SIGTAP só valem no mês da competência de options", () => {
+    const at = (performedAt: string, o: Partial<ActionDraft> = {}) =>
+      actionProblems(actionBase({ performedAt, ...o }), proc(o.sigtapCode ?? "0301080208"), NOW31, "202611").map((p) => p.path);
+    expect(at("2026-11-03T09:00", { quantity: "32" })).toEqual([ "quantity" ]);
+    expect(at("2026-10-30T09:00", { quantity: "32" })).toEqual([]);
+    expect(at("2026-11-03T09:00", { sigtapCode: "0301080291" })).toEqual([ "authorization_number" ]);
+    expect(at("2026-10-30T09:00", { sigtapCode: "0301080291" })).toEqual([]);
+    // A forma vale sempre.
+    expect(at("2026-10-30T09:00", { quantity: "1000" })).toEqual([ "quantity" ]);
+    expect(at("2026-10-30T09:00", { authorizationNumber: "12" })).toEqual([ "authorization_number" ]);
+  });
+
+  it("psyCodeText: a frase de um código num path (o remapeamento por participant_index)", () => {
+    expect(psyCodeText("enrollment_required", "participants[1]")).toBe(PARTICIPANT_NOT_ENROLLED);
+    expect(psyCodeText("enrollment_required", "participants")).toBe(PSY_ERRORS.enrollment_required);
+    expect(psyCodeText("family_only_for_family_care", "participants[1]")).toBe(PSY_ERRORS.family_only_for_family_care);
   });
 
   it("ação: corpo com hora da cidade, quantidade número, ids certos; vazios não vão", () => {

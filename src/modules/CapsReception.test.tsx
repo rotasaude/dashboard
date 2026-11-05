@@ -21,7 +21,7 @@ afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
 const PREFILL = { esf_covered: true, esf_cnes: "2384299", usf: { id: "ubs1", name: "UBS Vila Verde" }, team: { id: "ht1", name: "ESF Vila Verde" } };
 
-function mount(o: { onOpenEnrollment?: (h: { enrollmentId: string; unitId: string }) => void; prefill?: api.PsyPrefill } = {}) {
+function mount(o: { onOpenEnrollment?: (h: { enrollmentId: string; unitId: string }) => void; prefill?: api.PsyPrefill; realClock?: boolean } = {}) {
   vi.mocked(api.fetchCurrentSession).mockResolvedValue(psyUser());
   vi.mocked(api.listPsyUnits).mockResolvedValue([ CAPS_II ]);
   vi.mocked(api.getPsyOptions).mockResolvedValue(OPTIONS);
@@ -29,7 +29,8 @@ function mount(o: { onOpenEnrollment?: (h: { enrollmentId: string; unitId: strin
   vi.mocked(api.getPsyPrefill).mockResolvedValue(o.prefill ?? PREFILL);
   vi.mocked(api.searchTerminology).mockResolvedValue([ { code: "F32.2", label: "Episódio depressivo grave" } ]);
   vi.mocked(api.recordPsyReception).mockResolvedValue({ reception_id: "re9", enrollment_id: null });
-  return renderWithProviders(<CapsReception today={TODAY31} now={NOW31} onOpenEnrollment={o.onOpenEnrollment} />);
+  return renderWithProviders(o.realClock ? <CapsReception today={TODAY31} onOpenEnrollment={o.onOpenEnrollment} />
+    : <CapsReception today={TODAY31} now={NOW31} onOpenEnrollment={o.onOpenEnrollment} />);
 }
 // As frases do bloco de matrícula vazio, vindas da lib (nunca repetidas aqui).
 const EMPTY_ENROLLMENT = receptionProblems({ ...emptyReceptionDraft(NOW31, TODAY31, "u-1", []), sigtapCode: "x", outcome: "enrolled" }, TODAY31, NOW31);
@@ -238,6 +239,25 @@ describe("acolhimento do CAPS", () => {
     expect("enrollment" in sent()).toBe(false);
     await waitFor(() => expect(api.listPsyReferrals).toHaveBeenCalledTimes(2));
     expect(screen.queryByRole("button", { name: "Registrar acolhimento" })).toBeNull();
+  });
+
+  it("relógio que anda: o acolhimento feito depois de abrir a tela não é data futura (sem now por prop)", async () => {
+    vi.useFakeTimers({ toFake: [ "Date" ] });
+    try {
+      vi.setSystemTime(NOW31);
+      mount({ realClock: true });
+      vi.setSystemTime(new Date("2026-11-04T10:20:00-03:00"));
+      fireEvent.click(await screen.findByRole("button", { name: "Acolher Maria da Silva" }));
+      expect((screen.getByLabelText("Data e hora") as HTMLInputElement).value).toBe("2026-11-04T10:20");
+      fireEvent.change(screen.getByLabelText("Data e hora"), { target: { value: "2026-11-04T10:40" } });
+      fireEvent.change(screen.getByLabelText("Desfecho"), { target: { value: "no_follow_up" } });
+      vi.setSystemTime(new Date("2026-11-04T11:00:00-03:00"));
+      submit();
+      expect((await screen.findByRole("status")).textContent).toBe(RECEPTION_DONE);
+      expect(sent().at).toBe("2026-11-04T10:40:00-03:00");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("acolhimento sem matrícula: frase de sucesso, sem o botão da matrícula", async () => {

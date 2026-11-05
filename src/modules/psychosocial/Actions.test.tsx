@@ -145,11 +145,15 @@ describe("Ações do CAPS", () => {
     fireEvent.change(screen.getByLabelText("Quantidade"), { target: { value: "2" } });
     expect(screen.queryByText(`${PSY_ERRORS.quantity_exceeded} (máximo 31)`)).toBeNull();
     expect(document.activeElement).toBe(screen.getByLabelText("Data e hora"));
-    // Ação antes do início da matrícula (10/09): na linha do participante.
+    // Ação antes do início da matrícula (10/09): na linha do participante. Setembro não é a competência de `options` (202611):
+    // máximo e autorização daquela competência não valem, e o api critica.
     fireEvent.change(screen.getByLabelText("Data e hora"), { target: { value: "2026-09-02T09:00" } });
     fireEvent.change(screen.getByLabelText("Procedimento"), { target: { value: "0301080291" } });
     fireEvent.click(screen.getByRole("button", { name: "Salvar ação" }));
     expect(within(screen.getByTestId("participant-0")).getByText(PARTICIPANT_NOT_ENROLLED)).not.toBeNull();
+    expect(screen.queryByText(PSY_ERRORS.authorization_required)).toBeNull();
+    fireEvent.change(screen.getByLabelText("Data e hora"), { target: { value: "2026-11-03T09:30" } });
+    fireEvent.click(screen.getByRole("button", { name: "Salvar ação" }));
     expect(screen.getByText(PSY_ERRORS.authorization_required)).not.toBeNull();
     fireEvent.change(screen.getByLabelText("Número de autorização"), { target: { value: "123" } });
     fireEvent.click(screen.getByRole("button", { name: "Salvar ação" }));
@@ -218,7 +222,8 @@ describe("Ações do CAPS", () => {
     // Só o `participant_index` (path sem índice): a frase vai para a linha mesmo assim.
     vi.mocked(api.createPsyAction).mockRejectedValueOnce(rejected([ { error: "enrollment_required", path: "participants", participant_index: 1 } ]));
     fireEvent.click(screen.getByRole("button", { name: "Salvar ação" }));
-    expect(await within(screen.getByTestId("participant-1")).findByText(PSY_ERRORS.enrollment_required)).not.toBeNull();
+    // A frase é a do participante, recalculada para o path da linha.
+    expect(await within(screen.getByTestId("participant-1")).findByText(PARTICIPANT_NOT_ENROLLED)).not.toBeNull();
     // `participants` sem índice fica no bloco dos participantes.
     vi.mocked(api.createPsyAction).mockRejectedValueOnce(rejected([ { error: "enrollment_required", path: "participants" } ]));
     fireEvent.click(screen.getByRole("button", { name: "Salvar ação" }));
@@ -294,6 +299,76 @@ describe("Ações do CAPS", () => {
     mount({ enrollment: enrollment({ status: "closed", closed_on: "2026-11-01", destination: "01" }) });
     expect(await screen.findByText(NO_ACTIONS)).not.toBeNull();
     expect(screen.queryByRole("button", { name: "Registrar ação" })).toBeNull();
+  });
+
+  it("dois familiares fora do atendimento familiar: a frase em cada linha, e cada aria-describedby aponta para um id que existe", async () => {
+    await openForm();
+    fireEvent.change(screen.getByLabelText("Procedimento"), { target: { value: "0301080208" } });
+    fireEvent.click(screen.getByRole("button", { name: "Adicionar familiar sem cadastro" }));
+    fireEvent.change(screen.getByLabelText("Nome do familiar 2"), { target: { value: "Joana Silva" } });
+    fireEvent.click(screen.getByRole("button", { name: "Adicionar familiar sem cadastro" }));
+    fireEvent.change(screen.getByLabelText("Nome do familiar 3"), { target: { value: "Pedro Silva" } });
+    fireEvent.click(screen.getByRole("button", { name: "Salvar ação" }));
+    for (const [ i, label ] of [ [ 1, "Nome do familiar 2" ], [ 2, "Nome do familiar 3" ] ] as const) {
+      expect(within(screen.getByTestId(`participant-${i}`)).getByText(PSY_ERRORS.family_only_for_family_care)).not.toBeNull();
+      const described = screen.getByLabelText(label).getAttribute("aria-describedby") as string;
+      expect(document.getElementById(described)?.textContent).toBe(PSY_ERRORS.family_only_for_family_care);
+    }
+    // Trocar o procedimento limpa as marcas dos familiares.
+    fireEvent.change(screen.getByLabelText("Procedimento"), { target: { value: "0301080224" } });
+    expect(screen.queryByText(PSY_ERRORS.family_only_for_family_care)).toBeNull();
+    expect(api.createPsyAction).not.toHaveBeenCalled();
+  });
+
+  it("foco ao acrescentar e retirar participante: o campo novo ou o botão vizinho, nunca o body", async () => {
+    await openForm();
+    fireEvent.click(screen.getByRole("button", { name: "Adicionar familiar sem cadastro" }));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText("Nome do familiar 2")));
+    fireEvent.click(screen.getByRole("button", { name: "Adicionar familiar sem cadastro" }));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText("Nome do familiar 3")));
+    // Retirar o último: o foco vai ao Retirar da linha anterior.
+    fireEvent.click(screen.getByRole("button", { name: "Retirar participante 3" }));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: "Retirar participante 2" })));
+    // Retirar o único retirável: o foco vai ao botão de acrescentar familiar.
+    fireEvent.click(screen.getByRole("button", { name: "Retirar participante 2" }));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: "Adicionar familiar sem cadastro" })));
+    // Matriculado incluído: o foco vai ao Retirar dele.
+    fireEvent.click(screen.getByRole("button", { name: "Adicionar usuário matriculado" }));
+    const pick = await screen.findByLabelText("Usuário matriculado");
+    await waitFor(() => expect(within(pick).queryByText("José Pereira")).not.toBeNull());
+    fireEvent.change(pick, { target: { value: "en2" } });
+    fireEvent.click(screen.getByRole("button", { name: "Incluir" }));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: "Retirar participante 2" })));
+    expect(document.activeElement).not.toBe(document.body);
+  });
+
+  it("relógio que anda: a ação feita depois de abrir o formulário não é data futura (sem now por prop)", async () => {
+    vi.useFakeTimers({ toFake: [ "Date" ] });
+    try {
+      vi.setSystemTime(NOW31);
+      vi.mocked(api.fetchCurrentSession).mockResolvedValue(psyUser());
+      vi.mocked(api.listPsyUnits).mockResolvedValue([ CAPS_II ]);
+      vi.mocked(api.getPsyOptions).mockResolvedValue(OPTIONS);
+      vi.mocked(api.listPsyCarePlansDue).mockResolvedValue([]);
+      vi.mocked(api.getPsyEnrollment).mockResolvedValue(enrollment());
+      vi.mocked(api.createPsyAction).mockResolvedValue(action());
+      renderWithProviders(<CapsEnrollments today={TODAY31} />);
+      fireEvent.click(await screen.findByRole("button", { name: "Abrir Maria da Silva" }));
+      fireEvent.click(await screen.findByRole("tab", { name: "Ações" }));
+      vi.setSystemTime(new Date("2026-11-04T10:20:00-03:00"));
+      fireEvent.click(await screen.findByRole("button", { name: "Registrar ação" }));
+      // O padrão e o máximo do campo são a hora em que o formulário abriu.
+      expect((screen.getByLabelText("Data e hora") as HTMLInputElement).value).toBe("2026-11-04T10:20");
+      fireEvent.change(screen.getByLabelText("Procedimento"), { target: { value: "0301080208" } });
+      fireEvent.change(screen.getByLabelText("Data e hora"), { target: { value: "2026-11-04T10:40" } });
+      vi.setSystemTime(new Date("2026-11-04T11:00:00-03:00"));
+      fireEvent.click(screen.getByRole("button", { name: "Salvar ação" }));
+      expect(screen.queryByText(PSY_ERRORS.performed_in_future)).toBeNull();
+      await waitFor(() => expect(api.createPsyAction).toHaveBeenCalledTimes(1));
+      expect(sent().performed_at).toBe("2026-11-04T10:40:00-03:00");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("a aba Ações do detalhe da matrícula monta a lista da matrícula", async () => {

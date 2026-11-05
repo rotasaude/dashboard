@@ -25,14 +25,16 @@ const ENROLLMENT_PATH: Record<keyof EnrollmentDraft, string> = {
 };
 
 export function ReceptionForm({ unit, patient, referralId, options, today, now, onDone, onCancel, onStale }: {
-  unit: PsyUnit; patient: { patientId: string; name: string }; referralId: string | null; options: PsyOptions; today: string; now: Date;
+  unit: PsyUnit; patient: { patientId: string; name: string }; referralId: string | null; options: PsyOptions; today: string; now?: Date;
   onDone(r: PsyReceptionResult): void; onCancel(): void; onStale?(text: string): void;
 }) {
   const { user } = useAuth();
   const f = useFormProblems();
+  // "Agora" na hora de cada uso (`now` só nos testes): a tela aberta há meia hora não recusa o acolhimento de 10 minutos atrás.
+  const clock = () => now ?? new Date();
   const procs = receptionProcedures(options);
   const meId = user && options.team.some((p) => p.user_id === user.id) ? user.id : "";
-  const [ d, setD ] = useState<ReceptionDraft>(() => emptyReceptionDraft(now, today, meId, procs));
+  const [ d, setD ] = useState<ReceptionDraft>(() => emptyReceptionDraft(clock(), today, meId, procs));
   const { problems, setProblems, aria, errNode, busy } = f;
 
   const set = (patch: Partial<ReceptionDraft>) => {
@@ -48,7 +50,7 @@ export function ReceptionForm({ unit, patient, referralId, options, today, now, 
   };
 
   const submit = (ev: FormEvent) => f.submit(ev, {
-    check: () => receptionProblems(d, today, now),
+    check: () => receptionProblems(d, today, clock()),
     call: () => recordPsyReception(receptionInput(d, unit.id, patient.patientId, referralId)),
     ok: onDone,
     stale: onStale,

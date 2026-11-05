@@ -10,12 +10,12 @@ import {
   ACTION_SAVED, NOMINAL_QUERY, NO_ACTIONS, PSY_ACTIONS_KEY, PSY_DETAIL_KEY, TRAIL_NOTE, instrumentLabel, placeLabel, psyError, type PsyRoles
 } from "../../lib/psychosocial";
 import { DataTable, type Column } from "../../components/DataTable";
-import { buttonStyle, secondaryButtonStyle } from "../../components/formStyles";
+import { buttonStyle, disabledButtonStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { alert, muted, okText, row } from "../exams/styles";
 import { ActionDetail, actionStatusTag } from "./ActionDetail";
 import { ActionForm } from "./ActionForm";
 
-export type ActionsPanelProps = { enrollment: PsyEnrollment; unit: PsyUnit; options: PsyOptions; roles: PsyRoles; now: Date };
+export type ActionsPanelProps = { enrollment: PsyEnrollment; unit: PsyUnit; options: PsyOptions; roles: PsyRoles; now?: Date };
 
 // Só os campos da linha (sem `notes`, sem nada clínico).
 const actionRowOf = (r: PsyActionRow): PsyActionRow => ({
@@ -110,13 +110,14 @@ export function ActionsPanel({ enrollment: e, unit, options, roles, now }: Actio
       {actions.isError && <p role="alert" style={alert}>{psyError(actions.error)}</p>}
       {/* Uma página seguinte que falha deixa a consulta em erro, mas as linhas já lidas ficam. */}
       {actions.data && (
-        <div ref={listRef} tabIndex={-1} aria-label="Ações da matrícula">
+        <div ref={listRef} tabIndex={-1} role="region" aria-label="Ações da matrícula">
           <DataTable<PsyActionRow> cols={cols} rows={rows} rowKey={(r) => r.id} empty={NO_ACTIONS} rowStyle={(r) => (r.cancelled ? struck : undefined)} />
         </div>
       )}
       {actions.hasNextPage && (
         <div style={row}>
-          <button type="button" style={secondaryButtonStyle} disabled={actions.isFetchingNextPage} onClick={() => void actions.fetchNextPage()}>
+          <button type="button" style={actions.isFetchingNextPage ? disabledButtonStyle : secondaryButtonStyle} disabled={actions.isFetchingNextPage}
+            onClick={() => void actions.fetchNextPage()}>
             Carregar mais
           </button>
         </div>

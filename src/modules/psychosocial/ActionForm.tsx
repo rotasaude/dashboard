@@ -6,12 +6,14 @@
 // a linha dele (`participant_index` ou o índice de `participants[i]`), o resto no campo ou no topo, e o formulário fica intacto.
 // O matriculado da tela é o primeiro participante, fixo, sempre por `enrollment_id` (P40). Outros matriculados vêm da lista de
 // matrículas abertas do CAPS (lida só ao pedir); familiar sem cadastro, pelo nome. Sem duplo envio (`useFormProblems`).
-import { useState } from "react";
+// "Agora" é lido na hora (`now` só nos testes): o formulário aberto há meia hora não acha que a ação de 10 minutos atrás é futura.
+// Acrescentar ou retirar participante leva o foco ao campo novo ou ao botão vizinho.
+import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { createPsyAction, listPsyEnrollments, type PsyAction, type PsyOptions, type PsyPlace, type PsyProcedure, type PsyUnit } from "../../lib/api";
 import {
   NOMINAL_QUERY, NO_OTHER_ENROLLMENTS, PSY_ENROLLMENTS_KEY, actionInput, actionProblems, emptyActionDraft, indexFromPath, instrumentLabel,
-  maxQuantityHint, placeLabel, procInstrument, psyError, type ActionDraft, type ParticipantDraft
+  maxQuantityHint, placeLabel, procInstrument, psyCodeText, psyError, type ActionDraft, type ParticipantDraft
 } from "../../lib/psychosocial";
 import type { Problem } from "../../lib/pharmacy";
 import { cityLocalInput } from "../../lib/vaccination";
@@ -29,41 +31,68 @@ let rowSeq = 0;
 const withKey = (p: ParticipantDraft): Row => ({ ...p, key: `participant-${++rowSeq}` });
 
 export type ActionFormProps = {
-  unit: PsyUnit; options: PsyOptions; enrollment: { id: string; name: string; startedOn: string }; now: Date;
+  unit: PsyUnit; options: PsyOptions; enrollment: { id: string; name: string; startedOn: string }; now?: Date;
   onSaved(a: PsyAction): void; onCancel(): void;
 };
 
 export function ActionForm({ unit, options, enrollment, now, onSaved, onCancel }: ActionFormProps) {
   const f = useFormProblems();
   const { aria, errNode, busy } = f;
+  const clock = () => now ?? new Date();
   const [ d, setD ] = useState<Omit<ActionDraft, "participants">>(() => {
-    const { participants: _p, ...rest } = emptyActionDraft(now);
+    const { participants: _p, ...rest } = emptyActionDraft(clock());
     return rest;
   });
   const [ rows, setRows ] = useState<Row[]>(() => [ withKey({ kind: "enrollment", enrollmentId: enrollment.id, name: enrollment.name,
     startedOn: enrollment.startedOn }) ]);
   const [ picking, setPicking ] = useState(false);
   const [ pickId, setPickId ] = useState("");
+  // `data-focus` do elemento que recebe o foco depois de mudar a lista de participantes.
+  const pendingFocus = useRef<string | null>(null);
+  useEffect(() => {
+    const target = pendingFocus.current;
+    if (!target) return;
+    pendingFocus.current = null;
+    f.formRef.current?.querySelector<HTMLElement>(`[data-focus="${target}"]`)?.focus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ rows, picking ]);
 
   const proc: PsyProcedure | undefined = options.procedures.find((p) => p.code === d.sigtapCode);
   const draft = (): ActionDraft => ({ ...d, participants: rows.map(({ key: _k, ...p }) => p) });
   const set = (patch: Partial<typeof d>, ...paths: string[]) => { f.clear(...paths); setD((x) => ({ ...x, ...patch })); };
   // Tirar ou acrescentar participante muda os índices: as marcas dos participantes saem.
-  const setParticipants = (next: Row[]) => {
+  const setParticipants = (next: Row[], focus: string) => {
     f.setProblems((ps) => ps.filter((p) => !p.path.startsWith("participants")));
+    pendingFocus.current = focus;
     setRows(next);
   };
+  const addFamily = () => {
+    const row = withKey({ kind: "family", name: "" });
+    setParticipants([ ...rows, row ], `field-${row.key}`);
+  };
+  // O vizinho que tem "Retirar" (o seguinte, senão o anterior que não seja o fixo); sem ele, o botão de acrescentar familiar.
+  const remove = (i: number) => {
+    const next = rows[i + 1] ?? (i - 1 > 0 ? rows[i - 1] : undefined);
+    setParticipants(rows.filter((_, n) => n !== i), next ? `remove-${next.key}` : "add-family");
+  };
+  const stopPicking = () => { pendingFocus.current = "add-enrolled"; setPicking(false); setPickId(""); };
 
   const others = useQuery({
     queryKey: [ PSY_ENROLLMENTS_KEY, unit.id, "open" ], queryFn: () => listPsyEnrollments({ unitId: unit.id, status: "open" }),
     enabled: picking, ...NOMINAL_QUERY
   });
+  // A lista de matriculados chega: o foco vai a ela.
+  useEffect(() => {
+    if (picking && others.isSuccess) f.formRef.current?.querySelector<HTMLElement>("[data-focus='pick']")?.focus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ picking, others.isSuccess ]);
   const taken = new Set(rows.flatMap((r) => (r.kind === "enrollment" ? [ r.enrollmentId ] : [])));
   const pickable = (others.data ?? []).filter((e) => !taken.has(e.id));
   const include = () => {
     const e = pickable.find((x) => x.id === pickId);
     if (!e) return;
-    setParticipants([ ...rows, withKey({ kind: "enrollment", enrollmentId: e.id, name: e.patient.name, startedOn: e.started_on }) ]);
+    const row = withKey({ kind: "enrollment", enrollmentId: e.id, name: e.patient.name, startedOn: e.started_on });
+    setParticipants([ ...rows, row ], `remove-${row.key}`);
     setPickId("");
     setPicking(false);
   };
@@ -74,18 +103,23 @@ export function ActionForm({ unit, options, enrollment, now, onSaved, onCancel }
   const loose = options.procedures.filter((p) => !INSTRUMENT_ORDER.includes(procInstrument(p, true) ?? ""));
   const showAuth = proc?.requires_authorization === true || d.authorizationNumber !== "" || !!f.textOf("authorization_number");
   const own = (path: string) => OWN_FIELDS.includes(path) || ((indexFromPath(path) ?? rows.length) < rows.length);
-  // O problema de participante vai para a linha dele, mesmo que o api dê só o `participant_index`.
-  const refused = (list: { path: string; text: string; participantIndex: number | null }[]): Problem[] =>
-    list.map((r) => ({
-      path: r.participantIndex !== null && indexFromPath(r.path) !== r.participantIndex ? `participants[${r.participantIndex}]` : r.path, text: r.text
-    }));
-  // As frases da linha, sem repetir.
-  const rowProblems = (i: number) => f.problems.filter((p, n, all) => indexFromPath(p.path) === i && all.findIndex((x) => x.text === p.text) === n);
+  // O problema de participante vai para a linha dele, mesmo que o api dê só o `participant_index`; a frase é a do novo path.
+  const refused = (list: { code: string; path: string; text: string; participantIndex: number | null }[]): Problem[] =>
+    list.map((r) => {
+      if (r.participantIndex === null || indexFromPath(r.path) === r.participantIndex) return { path: r.path, text: r.text };
+      const path = `participants[${r.participantIndex}]`;
+      return { path, text: r.code ? psyCodeText(r.code, path) : r.text };
+    });
+  // As frases da linha, sem repetir dentro dela.
+  const rowProblems = (i: number) => {
+    const mine = f.problems.filter((p) => indexFromPath(p.path) === i);
+    return mine.filter((p, n) => mine.findIndex((x) => x.text === p.text) === n);
+  };
 
   return (
     <form ref={f.formRef} aria-label="Registrar ação" style={form} noValidate onSubmit={(ev) => {
       void f.submit(ev, {
-        check: () => actionProblems(draft(), proc, now), call: () => createPsyAction(actionInput(draft(), unit.id)), ok: onSaved, refused
+        check: () => actionProblems(draft(), proc, clock(), options.competence), call: () => createPsyAction(actionInput(draft(), unit.id)), ok: onSaved, refused
       });
     }}>
       <p ref={f.titleRef} tabIndex={-1} style={{ margin: 0, fontSize: 13, fontWeight: 600 }}>Registrar ação</p>
@@ -94,7 +128,11 @@ export function ActionForm({ unit, options, enrollment, now, onSaved, onCancel }
       <label style={fieldLabel}>
         Procedimento
         <select value={d.sigtapCode} style={inputStyle} {...aria("sigtap_code")}
-          onChange={(ev) => set({ sigtapCode: ev.target.value }, "sigtap_code", "quantity", "authorization_number", "participants")}>
+          onChange={(ev) => {
+            // O procedimento decide o familiar: as marcas dos nomes saem com as do código.
+            f.setProblems((ps) => ps.filter((p) => !/^participants\[\d+\]\.family_name$/.test(p.path)));
+            set({ sigtapCode: ev.target.value }, "sigtap_code", "quantity", "authorization_number", "participants");
+          }}>
           <option value="">Escolha o procedimento</option>
           {groups.map((g) => (
             <optgroup key={g.ins} label={instrumentLabel(g.ins)}>
@@ -109,7 +147,7 @@ export function ActionForm({ unit, options, enrollment, now, onSaved, onCancel }
       <div style={row}>
         <label style={fieldLabel}>
           Data e hora
-          <input type="datetime-local" value={d.performedAt} max={cityLocalInput(now)} style={inputStyle} {...aria("performed_at")}
+          <input type="datetime-local" value={d.performedAt} max={cityLocalInput(clock())} style={inputStyle} {...aria("performed_at")}
             onChange={(ev) => set({ performedAt: ev.target.value }, "performed_at")} />
         </label>
         <label style={fieldLabel}>
@@ -146,6 +184,7 @@ export function ActionForm({ unit, options, enrollment, now, onSaved, onCancel }
 
       <fieldset style={fieldset}>
         <legend style={legend}>Participantes</legend>
+        {errNode("participants")}
         {rows.map((r, i) => {
           const familyPath = `participants[${i}].family_name`;
           return (
@@ -154,7 +193,7 @@ export function ActionForm({ unit, options, enrollment, now, onSaved, onCancel }
                 {r.kind === "family" ? (
                   <label style={fieldLabel}>
                     {`Nome do familiar ${i + 1}`}
-                    <input value={r.name} autoComplete="off" style={inputStyle} {...aria(familyPath)}
+                    <input value={r.name} autoComplete="off" style={inputStyle} data-focus={`field-${r.key}`} {...aria(familyPath)}
                       onChange={(ev) => {
                         f.clear(familyPath, `participants[${i}]`);
                         const name = ev.target.value;
@@ -163,8 +202,8 @@ export function ActionForm({ unit, options, enrollment, now, onSaved, onCancel }
                   </label>
                 ) : <span style={{ fontSize: 13 }}>{r.name}</span>}
                 {i > 0 && (
-                  <button type="button" style={secondaryButtonStyle} aria-label={`Retirar participante ${i + 1}`}
-                    onClick={() => setParticipants(rows.filter((x) => x.key !== r.key))}>Retirar</button>
+                  <button type="button" style={secondaryButtonStyle} aria-label={`Retirar participante ${i + 1}`} data-focus={`remove-${r.key}`}
+                    onClick={() => remove(i)}>Retirar</button>
                 )}
               </div>
               {rowProblems(i).map((p) => (
@@ -177,7 +216,6 @@ export function ActionForm({ unit, options, enrollment, now, onSaved, onCancel }
             </div>
           );
         })}
-        {errNode("participants")}
         {picking && (
           <div style={row}>
             {others.isPending ? <p className="mono" style={muted}>carregando…</p>
@@ -187,7 +225,7 @@ export function ActionForm({ unit, options, enrollment, now, onSaved, onCancel }
                 <>
                   <label style={fieldLabel}>
                     Usuário matriculado
-                    <select value={pickId} style={inputStyle} onChange={(ev) => setPickId(ev.target.value)}>
+                    <select value={pickId} style={inputStyle} data-focus="pick" onChange={(ev) => setPickId(ev.target.value)}>
                       <option value="">Escolha o usuário</option>
                       {pickable.map((e) => <option key={e.id} value={e.id}>{e.patient.name}</option>)}
                     </select>
@@ -195,13 +233,13 @@ export function ActionForm({ unit, options, enrollment, now, onSaved, onCancel }
                   <button type="button" style={pickId ? secondaryButtonStyle : disabledButtonStyle} disabled={!pickId} onClick={include}>Incluir</button>
                 </>
               )}
-            <button type="button" style={secondaryButtonStyle} onClick={() => { setPicking(false); setPickId(""); }}>Desistir</button>
+            <button type="button" style={secondaryButtonStyle} onClick={stopPicking}>Desistir</button>
           </div>
         )}
         {rows.length < MAX_PARTICIPANTS && (
           <div style={row}>
-            {!picking && <button type="button" style={secondaryButtonStyle} onClick={() => setPicking(true)}>Adicionar usuário matriculado</button>}
-            <button type="button" style={secondaryButtonStyle} onClick={() => setParticipants([ ...rows, withKey({ kind: "family", name: "" }) ])}>
+            <button type="button" style={secondaryButtonStyle} data-focus="add-enrolled" onClick={() => setPicking(true)}>Adicionar usuário matriculado</button>
+            <button type="button" style={secondaryButtonStyle} data-focus="add-family" onClick={addFamily}>
               Adicionar familiar sem cadastro
             </button>
           </div>

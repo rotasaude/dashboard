@@ -42,7 +42,7 @@ export function CapsEnrollments({ initialEnrollment = null, ...props }: CapsEnro
 
 const STATUS_TABS: { key: PsyEnrollmentStatus; label: string }[] = [ { key: "open", label: "Em acompanhamento" }, { key: "closed", label: "Encerradas" } ];
 
-function Enrollments({ unit, roles, initial, today = todayInCity(), now = new Date(), onGoToSecurity }: Omit<CapsEnrollmentsProps, "initialEnrollment"> & {
+function Enrollments({ unit, roles, initial, today = todayInCity(), now, onGoToSecurity }: Omit<CapsEnrollmentsProps, "initialEnrollment"> & {
   unit: PsyUnit; roles: PsyRoles; initial: MutableRefObject<PsyEnrollmentHandoff | null>;
 }) {
   const queryClient = useQueryClient();
@@ -145,7 +145,7 @@ function Enrollments({ unit, roles, initial, today = todayInCity(), now = new Da
           <p style={muted}>{NO_CLINICAL_IN_LIST}</p>
           <p style={muted}>{TRAIL_NOTE}</p>
           {list.isError ? <p role="alert" style={alert}>{psyError(list.error)}</p> : (
-            <div ref={listRef} tabIndex={-1} aria-label="Lista de usuários do CAPS">
+            <div ref={listRef} tabIndex={-1} role="region" aria-label="Lista de usuários do CAPS">
               <DataTable<PsyEnrollmentRow> cols={cols} rows={rows} rowKey={(r) => r.id} empty={emptyText} />
             </div>
           )}

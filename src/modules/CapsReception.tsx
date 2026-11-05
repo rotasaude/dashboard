@@ -36,7 +36,7 @@ export function CapsReception(props: CapsReceptionProps) {
 
 type Target = { patientId: string; name: string; referralId: string | null };
 
-function Reception({ unit, today = todayInCity(), now = new Date(), onOpenEnrollment }: CapsReceptionProps & { unit: PsyUnit }) {
+function Reception({ unit, today = todayInCity(), now, onOpenEnrollment }: CapsReceptionProps & { unit: PsyUnit }) {
   const queryClient = useQueryClient();
   const [ openId, setOpenId ] = useState<string | null>(null);
   const [ picking, setPicking ] = useState(false);

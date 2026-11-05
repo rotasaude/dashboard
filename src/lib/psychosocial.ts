@@ -304,16 +304,18 @@ const MAX_PARTICIPANTS = 100;
 
 // Crítica local (P23 na ordem do api, só o que a tela sabe): `proc` vem de `options.procedures` (já filtrado pelo CBO de quem lança);
 // sem ele (ou com `max_quantity`, `requires_authorization` ou o início da matrícula ausentes), não restringe — o api critica na hora,
-// todas de uma vez. Quantidade vazia vale 1 (o api usa 1 quando a chave falta).
-export function actionProblems(d: ActionDraft, proc: PsyProcedure | undefined, now: Date): Problem[] {
+// todas de uma vez. Quantidade vazia vale 1 (o api usa 1 quando a chave falta). `competence` ("AAAAMM", de `options`): o máximo e a
+// autorização são da SIGTAP daquela competência; ação de outro mês é criticada pelo api na competência dela.
+export function actionProblems(d: ActionDraft, proc: PsyProcedure | undefined, now: Date, competence?: string): Problem[] {
   const out: Problem[] = [];
+  const sigtap = !competence || d.performedAt.slice(0, 7).replace("-", "") === competence ? proc : undefined;
   if (!d.sigtapCode) out.push({ path: "sigtap_code", text: "escolha o procedimento" });
   const q = d.quantity.trim();
   const quantity = q === "" ? 1 : /^\d+$/.test(q) ? Number(q) : NaN;
   if (!Number.isInteger(quantity) || quantity < 1 || quantity > 999) {
     out.push({ path: "quantity", text: "a quantidade é um número inteiro de 1 a 999" });
-  } else if (typeof proc?.max_quantity === "number" && quantity > proc.max_quantity) {
-    out.push({ path: "quantity", text: `${PSY_ERRORS.quantity_exceeded} (máximo ${proc.max_quantity})` });
+  } else if (typeof sigtap?.max_quantity === "number" && quantity > sigtap.max_quantity) {
+    out.push({ path: "quantity", text: `${PSY_ERRORS.quantity_exceeded} (máximo ${sigtap.max_quantity})` });
   }
   const at = parseCityLocal(d.performedAt);
   if (!at || at.getTime() > now.getTime()) out.push({ path: "performed_at", text: PSY_ERRORS.performed_in_future });
@@ -328,7 +330,7 @@ export function actionProblems(d: ActionDraft, proc: PsyProcedure | undefined, n
   }
   const auth = d.authorizationNumber.trim();
   if (auth !== "" && !/^\d{13}$/.test(auth)) out.push({ path: "authorization_number", text: AUTHORIZATION_TEXT });
-  else if (auth === "" && proc?.requires_authorization === true) {
+  else if (auth === "" && sigtap?.requires_authorization === true) {
     out.push({ path: "authorization_number", text: PSY_ERRORS.authorization_required });
   }
   const seen = new Set<string>();
@@ -675,6 +677,9 @@ function codeText(code: string, path: string, status: number): string {
   if (code === "" && status === 404) return PSY_ERRORS.not_found;
   return `recusado pelo servidor (${code || status})`;
 }
+
+// A frase de um código num path (quem remapeia o path de uma recusa recalcula a frase).
+export const psyCodeText = (code: string, path: string, status = 422): string => codeText(safeCode(code), safePath(path), status);
 
 // "participants[2]" ou "participants[2].family_name" → 2.
 export const indexFromPath = (path: string): number | null => {
