@@ -145,6 +145,31 @@ describe("acolhimento do CAPS", () => {
     expect(screen.queryByRole("button", { name: "Carregar mais" })).toBeNull();
   });
 
+  it("lista que mudou ao rolar (invalid_cursor): a frase e a fila relida do começo, com cursor nulo", async () => {
+    mount();
+    vi.mocked(api.listPsyReferrals)
+      .mockResolvedValueOnce({ items: [ referralRow() ], next_before: "c1" })
+      .mockRejectedValueOnce(new ApiError(422, { error: "invalid_cursor", path: "before" }, "x"))
+      .mockResolvedValueOnce({ items: [ referralRow() ], next_before: null });
+    fireEvent.click(await screen.findByRole("button", { name: "Carregar mais" }));
+    expect(await screen.findByText(PSY_ERRORS.invalid_cursor)).not.toBeNull();
+    await waitFor(() => expect(api.listPsyReferrals).toHaveBeenCalledTimes(3));
+    expect(vi.mocked(api.listPsyReferrals).mock.calls[2]).toEqual([ "caps2", { before: null } ]);
+    expect(screen.getByRole("button", { name: "Acolher Maria da Silva" })).not.toBeNull();
+  });
+
+  it("erro de rede na página seguinte: as linhas da primeira continuam na tela, com o alerta", async () => {
+    mount();
+    vi.mocked(api.listPsyReferrals)
+      .mockResolvedValueOnce({ items: [ referralRow() ], next_before: "c1" })
+      .mockRejectedValueOnce(new ApiError(500, { error: "server_error" }, "x"));
+    fireEvent.click(await screen.findByRole("button", { name: "Carregar mais" }));
+    await waitFor(() => expect(api.listPsyReferrals).toHaveBeenCalledTimes(2));
+    expect((await screen.findAllByRole("alert")).length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "Acolher Maria da Silva" })).not.toBeNull();
+    expect(screen.getByText("Maria da Silva")).not.toBeNull();
+  });
+
   it("acolher com matrícula: valida o bloco inteiro antes de enviar e manda numa chamada só", async () => {
     const onOpenEnrollment = vi.fn();
     mount({ onOpenEnrollment });
@@ -377,6 +402,26 @@ describe("acolhimento do CAPS", () => {
     const d = emptyReceptionDraft(NOW31, TODAY31, "u-1", []).enrollment;
     renderWithProviders(<EnrollmentFields unitId="caps2" patientId="pt1" options={OPTIONS} value={d} onChange={vi.fn()} problems={[]} today={TODAY31} />);
     expect(api.getPsyPrefill).not.toHaveBeenCalled();
+  });
+
+  it("EnrollmentFields: duas frases no mesmo campo aparecem todas, com o id no wrapper; uma só fica no próprio <p>", () => {
+    const d = emptyReceptionDraft(NOW31, TODAY31, "u-1", []).enrollment;
+    const two = [ { path: "started_on", text: "Primeira frase do início." }, { path: "started_on", text: "Segunda frase do início." },
+      { path: "started_on", text: "Primeira frase do início." } ];
+    renderWithProviders(<EnrollmentFields unitId="caps2" patientId="pt1" options={OPTIONS} value={d} onChange={vi.fn()} problems={two} today={TODAY31} />);
+    const first = screen.getByText("Primeira frase do início.");
+    const second = screen.getByText("Segunda frase do início.");
+    expect(first.getAttribute("role")).toBe("alert");
+    expect(second.getAttribute("role")).toBe("alert");
+    const wrapper = first.parentElement as HTMLElement;
+    expect(wrapper).toBe(second.parentElement);
+    expect(wrapper.getAttribute("role")).toBeNull();
+    expect(screen.getByLabelText("Início da matrícula").getAttribute("aria-describedby")).toBe(wrapper.id);
+    cleanup();
+    renderWithProviders(<EnrollmentFields unitId="caps2" patientId="pt1" options={OPTIONS} value={d} onChange={vi.fn()} problems={[ two[0] ]} today={TODAY31} />);
+    const only = screen.getByText("Primeira frase do início.");
+    expect(only.tagName).toBe("P");
+    expect(screen.getByLabelText("Início da matrícula").getAttribute("aria-describedby")).toBe(only.id);
   });
 
   it("início antes do piso de 12 meses e acolhimento antes do início: as frases na tela, sem envio", async () => {

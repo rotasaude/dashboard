@@ -6,7 +6,7 @@
 // acolher, a fila é relida; com matrícula, "Abrir matrícula" leva a "Usuários do CAPS".
 import { useEffect, useRef, useState } from "react";
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
-import { getPsyOptions, getPsyReferral, listPsyReferrals, type PsyReceptionResult, type PsyReferralRow, type PsyUnit } from "../lib/api";
+import { errorCode, getPsyOptions, getPsyReferral, listPsyReferrals, type PsyReceptionResult, type PsyReferralRow, type PsyUnit } from "../lib/api";
 import { todayInCity } from "../lib/campaigns";
 import { fmtDateTime } from "../lib/format";
 import {
@@ -63,6 +63,13 @@ function Reception({ unit, today = todayInCity(), now, onOpenEnrollment }: CapsR
   useEffect(() => { if (done) doneRef.current?.focus(); }, [ done ]);
   useEffect(() => { if (notice) noticeRef.current?.focus(); }, [ notice ]);
   useEffect(() => { if (pending) pendingRef.current?.focus(); }, [ pending ]);
+  // A fila mudou enquanto se rolava: a frase, e relê do começo (o cursor antigo não vale mais).
+  useEffect(() => {
+    if (!list.isFetchNextPageError || errorCode(list.error) !== "invalid_cursor") return;
+    setNotice(psyError(list.error));
+    void queryClient.resetQueries({ queryKey: listKey, exact: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ list.isFetchNextPageError, list.error ]);
 
   const begin = () => { setDone(null); setNotice(null); };
   const closeDetail = () => {
@@ -158,7 +165,9 @@ function Reception({ unit, today = todayInCity(), now, onOpenEnrollment }: CapsR
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           <p style={muted}>{NO_CLINICAL_IN_LIST}</p>
           <p style={muted}>{TRAIL_NOTE}</p>
-          {list.isError ? <p role="alert" style={alert}>{psyError(list.error)}</p> : (
+          {list.isError && <p role="alert" style={alert}>{psyError(list.error)}</p>}
+          {/* Uma página seguinte que falha deixa a consulta em erro, mas as linhas já lidas ficam. */}
+          {(list.data || !list.isError) && (
             <DataTable<PsyReferralRow> cols={cols} rows={rows} rowKey={(r) => r.id}
               empty={list.isPending ? "carregando…" : NO_PENDING_REFERRALS} />
           )}
