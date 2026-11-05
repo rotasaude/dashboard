@@ -174,6 +174,29 @@ describe("Leitos do CAPS", () => {
     expect(api.closePsyNightStay).not.toHaveBeenCalled();
   });
 
+  it("permanência encerrada: o cartão diz quando saiu, sem saída prevista nem botão de saída; Ver permanência fica", async () => {
+    const b = bedBoard();
+    vi.mocked(api.getPsyBedBoard).mockResolvedValue({
+      ...b, items: b.items.map((i) => (i.stay ? { ...i, stay: { ...i.stay, ended_at: "2026-11-04T08:30:00-03:00" } } : i))
+    });
+    mount();
+    expect(await screen.findByText(/saiu às 04\/11\/2026, 08:30/)).not.toBeNull();
+    expect(screen.queryByText(/saída prevista/)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Registrar saída de José Pereira" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Ver permanência de José Pereira" })).not.toBeNull();
+  });
+
+  it("permanência aberta (ended_at nulo): saída prevista e botão de saída como antes", async () => {
+    const b = bedBoard();
+    vi.mocked(api.getPsyBedBoard).mockResolvedValue({
+      ...b, items: b.items.map((i) => (i.stay ? { ...i, stay: { ...i.stay, ended_at: null } } : i))
+    });
+    mount();
+    expect(await screen.findByText(/saída prevista/)).not.toBeNull();
+    expect(screen.queryByText(/saiu às/)).toBeNull();
+    expect(screen.getByRole("button", { name: "Registrar saída de José Pereira" })).not.toBeNull();
+  });
+
   it("saída: o campo vem com a hora de agora (arredondada ao minuto), não com a da entrada", async () => {
     vi.mocked(api.getPsyBedBoard).mockResolvedValue((() => {
       const b = bedBoard();
@@ -269,7 +292,7 @@ describe("Leitos do CAPS", () => {
       const b = bedBoard();
       const bed = (id: string, label: string) => ({ id, health_unit_id: CAPS_AD_III.id, label, active: true });
       return bedBoard({ items: [ ...b.items,
-        { bed: bed("b3", "Leito 3"), stay: { id: "ns3", patient: ANA, started_at: "2026-11-03T19:00:00-03:00", expected_end_at: "2026-11-07T08:00:00-03:00" },
+        { bed: bed("b3", "Leito 3"), stay: { id: "ns3", patient: ANA, started_at: "2026-11-03T19:00:00-03:00", expected_end_at: "2026-11-07T08:00:00-03:00", ended_at: null },
           nights_used: 2, limit: 14 },
         { bed: bed("b4", "Leito 4"), stay: null, nights_used: null, limit: null } ] });
     }

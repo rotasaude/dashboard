@@ -32,10 +32,12 @@ export function ReceptionForm({ unit, patient, referralId, options, today, now, 
   const f = useFormProblems();
   // "Agora" na hora de cada uso (`now` só nos testes): a tela aberta há meia hora não recusa o acolhimento de 10 minutos atrás.
   const clock = () => now ?? new Date();
-  const procs = receptionProcedures(options);
   const meId = user && options.team.some((p) => p.user_id === user.id) ? user.id : "";
   const [ d, setD ] = useState<ReceptionDraft>(() => emptyReceptionDraft(clock(), today, meId));
   const { problems, setProblems, aria, errNode, busy } = f;
+  // O que o seletor oferece depende do desfecho; a frase de "sem procedimento" é de quem não tem nenhum de acolhimento.
+  const procs = receptionProcedures(options, d.outcome);
+  const hasAny = receptionProcedures(options).length > 0;
 
   const set = (patch: Partial<ReceptionDraft>) => {
     const keys = Object.keys(patch).map((k) => (k === "sigtapCode" ? "sigtap_code" : k));
@@ -45,7 +47,10 @@ export function ReceptionForm({ unit, patient, referralId, options, today, now, 
   // Trocar o desfecho tira a recusa que dependia dele: a frase do próprio desfecho, as do topo (ex.: `enrollment_open`) e as da matrícula.
   const setOutcome = (outcome: ReceptionDraft["outcome"]) => {
     setProblems((ps) => ps.filter((p) => p.path !== "outcome" && OWN_FIELDS.includes(p.path)));
-    setD((x) => ({ ...x, outcome }));
+    // O procedimento que não vale mais com o novo desfecho sai da escolha (e a recusa dele, que era dele).
+    const stillValid = d.sigtapCode === "" || receptionProcedures(options, outcome).some((p) => p.code === d.sigtapCode);
+    if (!stillValid) setProblems((ps) => ps.filter((p) => p.path !== "sigtap_code"));
+    setD((x) => ({ ...x, outcome, sigtapCode: stillValid ? x.sigtapCode : "" }));
   };
   // Um campo da matrícula editado perde a marca dele.
   const setEnrollment = (e: EnrollmentDraft) => {
@@ -85,7 +90,7 @@ export function ReceptionForm({ unit, patient, referralId, options, today, now, 
           </select>
         </label>
       </div>
-      {procs.length === 0 && <p style={muted}>{NO_RECEPTION_PROCEDURE}</p>}
+      {!hasAny && <p style={muted}>{NO_RECEPTION_PROCEDURE}</p>}
       {errNode("at")}{errNode("sigtap_code")}
 
       <label style={fieldLabel}>

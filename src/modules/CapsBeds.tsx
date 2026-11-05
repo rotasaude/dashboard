@@ -171,9 +171,12 @@ function BedCard({ item, unit, windowDays, writable, disabled, onEnter, onClose,
               {bedStayText(stay.patient.name, item.nights_used, item.limit, windowDays, unit.caps_modality)}
             </Tag>
           </div>
-          <p style={muted}>{`Entrada ${fmtDateTime(stay.started_at)} · saída prevista ${fmtDateTime(stay.expected_end_at)}`}</p>
+          <p style={muted}>
+            {stay.ended_at ? `Entrada ${fmtDateTime(stay.started_at)} · saiu às ${fmtDateTime(stay.ended_at)}`
+              : `Entrada ${fmtDateTime(stay.started_at)} · saída prevista ${fmtDateTime(stay.expected_end_at)}`}
+          </p>
           <div style={row}>
-            {writable && (
+            {writable && !stay.ended_at && (
               <button type="button" style={primary} disabled={disabled} aria-label={`Registrar saída de ${stay.patient.name}`}
                 onClick={(ev) => onClose({ ...item, stay }, ev.currentTarget)}>Registrar saída</button>
             )}

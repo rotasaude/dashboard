@@ -126,6 +126,46 @@ describe("acolhimento do CAPS", () => {
     expect(screen.queryByText(RECEPTION_PROCEDURE_TEXT)).toBeNull();
   });
 
+  describe("procedimento por desfecho (P61)", () => {
+    // 0301080194 (RAAS-PSI) e 0301080020 (noturno, RAAS-PSI) só valem com matrícula; 0301080232 também é BPA-I.
+    const NIGHT = { ...OPTIONS.procedures[1], code: "0301080020", name: "ACOLHIMENTO NOTURNO DE PACIENTES COM TRANSTORNOS MENTAIS", instrument_codes: [ "09" ] };
+    const THIRD = { ...OPTIONS.procedures[1], code: "0301080194", name: "ACOLHIMENTO EM TERCEIRO TURNO DE PACIENTE EM CAPS", instrument_codes: [ "09" ] };
+    const codes = () => Array.from((screen.getByLabelText("Procedimento do acolhimento") as HTMLSelectElement).options).map((o) => o.value).filter(Boolean);
+    async function open() {
+      mount();
+      vi.mocked(api.getPsyOptions).mockResolvedValue({ ...OPTIONS, procedures: [ ...OPTIONS.procedures, NIGHT, THIRD ] });
+      fireEvent.click(await screen.findByRole("button", { name: "Acolher Maria da Silva" }));
+      await screen.findByLabelText("Procedimento do acolhimento");
+    }
+
+    it("sem matrícula: só os de BPA-I; com matrícula: todos os de acolhimento", async () => {
+      await open();
+      fireEvent.change(screen.getByLabelText("Desfecho"), { target: { value: "referred_elsewhere" } });
+      expect(codes()).toEqual([ "0301080232" ]);
+      fireEvent.change(screen.getByLabelText("Desfecho"), { target: { value: "no_follow_up" } });
+      expect(codes()).toEqual([ "0301080232" ]);
+      fireEvent.change(screen.getByLabelText("Desfecho"), { target: { value: "enrolled" } });
+      expect(codes()).toEqual([ "0301080232", "0301080020", "0301080194" ]);
+    });
+
+    it("desfecho ainda vazio: só os de BPA-I", async () => {
+      await open();
+      expect(codes()).toEqual([ "0301080232" ]);
+    });
+
+    it("trocar de matricular para sem seguimento limpa o procedimento que deixou de valer", async () => {
+      await open();
+      fireEvent.change(screen.getByLabelText("Desfecho"), { target: { value: "enrolled" } });
+      fireEvent.change(screen.getByLabelText("Procedimento do acolhimento"), { target: { value: "0301080194" } });
+      fireEvent.change(screen.getByLabelText("Desfecho"), { target: { value: "no_follow_up" } });
+      expect((screen.getByLabelText("Procedimento do acolhimento") as HTMLSelectElement).value).toBe("");
+      // O que continua valendo fica.
+      fireEvent.change(screen.getByLabelText("Procedimento do acolhimento"), { target: { value: "0301080232" } });
+      fireEvent.change(screen.getByLabelText("Desfecho"), { target: { value: "enrolled" } });
+      expect((screen.getByLabelText("Procedimento do acolhimento") as HTMLSelectElement).value).toBe("0301080232");
+    });
+  });
+
   it("trocar o desfecho limpa a recusa do api que dependia dele (enrollment_open no topo)", async () => {
     mount();
     fireEvent.click(await screen.findByRole("button", { name: "Acolher Maria da Silva" }));

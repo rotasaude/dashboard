@@ -105,7 +105,7 @@ export function bedBoard(o: Partial<PsyBedBoard> = {}): PsyBedBoard {
   return { date: TODAY31, window_days: 30, items: [
     { bed: { id: "b1", health_unit_id: CAPS_AD_III.id, label: "Leito 1", active: true }, stay: null, nights_used: null, limit: null },
     { bed: { id: "b2", health_unit_id: CAPS_AD_III.id, label: "Leito 2", active: true },
-      stay: { id: "ns1", patient: JOSE, started_at: "2026-11-02T19:00:00-03:00", expected_end_at: "2026-11-06T08:00:00-03:00" },
+      stay: { id: "ns1", patient: JOSE, started_at: "2026-11-02T19:00:00-03:00", expected_end_at: "2026-11-06T08:00:00-03:00", ended_at: null },
       nights_used: 9, limit: 14 }
   ], ...o };
 }

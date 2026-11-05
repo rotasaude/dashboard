@@ -6184,7 +6184,8 @@ export type PsyDocumentInput =
 export interface PsyBedInput { health_unit_id: string; label: string; active?: boolean }
 export interface PsyBedPatch { label?: string; active?: boolean }
 export interface PsyBoardItem {
-  bed: PsyBed; stay: { id: string; patient: PsyPatientRef; started_at: string; expected_end_at: string } | null;
+  // `ended_at`: ISO quando a permanência já foi encerrada, nulo enquanto aberta.
+  bed: PsyBed; stay: { id: string; patient: PsyPatientRef; started_at: string; expected_end_at: string; ended_at: string | null } | null;
   // Noites usadas na janela e o limite (no CAPS III, o de intercaladas); nulos sem permanência.
   nights_used: number | null; limit: number | null;
 }

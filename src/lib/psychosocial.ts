@@ -224,8 +224,12 @@ export const CID_REPEATED_TEXT = "este CID já está na matrícula — escolha o
 export const DISCARD_RECEPTION_TEXT = "há um acolhimento em andamento — descartar o que foi preenchido?";
 
 // Código do acolhimento: nome com "ACOLHIMENTO" e instrumento RAAS-PSI (09) ou BPA-I (02); `options` já vem filtrado pelo CBO.
-export const receptionProcedures = (o: PsyOptions): PsyProcedure[] =>
-  o.procedures.filter((p) => /ACOLHIMENTO/i.test(p.name) && (p.instrument_codes.includes("09") || p.instrument_codes.includes("02")));
+// Só com matrícula (`enrolled`) vale RAAS-PSI ("09"); sem matrícula a ação é BPA-I ("02"), e os de RAAS-PSI (ex.: o acolhimento noturno)
+// ficam de fora (P61). Sem `outcome`, todos os de acolhimento.
+export const receptionProcedures = (o: PsyOptions, outcome?: ReceptionOutcome | ""): PsyProcedure[] =>
+  o.procedures.filter((p) => /ACOLHIMENTO/i.test(p.name) && (
+    outcome === undefined || outcome === "enrolled" ? p.instrument_codes.includes("09") || p.instrument_codes.includes("02")
+      : p.instrument_codes.includes("02")));
 
 export type ReceptionDraft = {
   at: string /* "YYYY-MM-DDTHH:MM", hora de parede da cidade */; sigtapCode: string; notes: string; outcome: ReceptionOutcome | "";
