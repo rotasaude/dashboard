@@ -217,6 +217,7 @@ export const RECEPTION_NOTES_TEXT = "as anotações do acolhimento têm até 400
 export const RECEPTION_PROCEDURE_TEXT = "escolha o procedimento do acolhimento";
 export const RECEPTION_OUTCOME_TEXT = "escolha o desfecho";
 export const NO_PROCEDURE_OPTION = "nenhum procedimento";
+export const CHOOSE_PROCEDURE_OPTION = "Escolha o procedimento";
 export const NO_PENDING_REFERRALS = "nenhum encaminhamento aguardando acolhimento";
 export const PERSON_PICK_FAILED = "não foi possível escolher esta pessoa — busque de novo";
 export const CID_REPEATED_TEXT = "este CID já está na matrícula — escolha outro";
@@ -231,8 +232,9 @@ export type ReceptionDraft = {
   enrollment: EnrollmentDraft;
 };
 
-export function emptyReceptionDraft(now: Date, today: string, meId: string, procs: PsyProcedure[]): ReceptionDraft {
-  return { at: cityLocalInput(now), sigtapCode: procs[0]?.code ?? "", notes: "", outcome: "", enrollment: emptyEnrollmentDraft(today, meId) };
+// O procedimento começa vazio: o primeiro da lista pode ser o acolhimento noturno, e quem registra tem de escolher.
+export function emptyReceptionDraft(now: Date, today: string, meId: string): ReceptionDraft {
+  return { at: cityLocalInput(now), sigtapCode: "", notes: "", outcome: "", enrollment: emptyEnrollmentDraft(today, meId) };
 }
 
 // Tudo de uma vez; o bloco de matrícula só com `enrolled`, com os paths do api (`enrollment.<campo>`).
@@ -867,7 +869,7 @@ export function psyDocumentError(err: unknown, opts: { controlled?: boolean } = 
 // de cada noite; a tela só não envia o que já sabe que será recusado (entrada até agora + 12 h, saída prevista depois da entrada e em
 // até 30 dias, matrícula iniciada até o dia da entrada; saída depois da entrada e nunca futura; motivos de 10 a 500).
 export const BED_FREE = "livre";
-export const NIGHT_STAY_NOTE = "Cada noite fechada vira ação de acolhimento noturno na RAAS (api).";
+export const NIGHT_STAY_NOTE = "Cada noite fechada vira ação de acolhimento noturno na RAAS.";
 export const NIGHT_STAY_STARTED = "Entrada registrada.";
 export const NIGHT_STAY_CLOSED = "Saída registrada.";
 // Reavaliação mandada sem necessidade: o api ignora e devolve `reassessment: null` (P41).

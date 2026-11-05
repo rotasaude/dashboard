@@ -8,25 +8,24 @@ import {
 import { NOW31, OPTIONS, TODAY31 } from "../test/psychosocialFixtures";
 
 const filled = (o: Partial<ReceptionDraft> = {}): ReceptionDraft => {
-  const d = emptyReceptionDraft(NOW31, TODAY31, "u-1", receptionProcedures(OPTIONS));
-  return { ...d, outcome: "enrolled", enrollment: { ...d.enrollment, origin: "02", cidMain: { code: "F32.2", label: "Episódio depressivo grave" },
+  const d = emptyReceptionDraft(NOW31, TODAY31, "u-1");
+  return { ...d, sigtapCode: "0301080232", outcome: "enrolled", enrollment: { ...d.enrollment, origin: "02", cidMain: { code: "F32.2", label: "Episódio depressivo grave" },
     substances: [ "99" ], esfCovered: true, esfCnes: "2384299" }, ...o };
 };
 
 describe("acolhimento (módulo 31)", () => {
-  it("procedimento do acolhimento: nome com ACOLHIMENTO e instrumento 09 ou 02; o primeiro é o padrão", () => {
+  it("procedimento do acolhimento: nome com ACOLHIMENTO e instrumento 09 ou 02; o rascunho abre sem procedimento escolhido", () => {
     const extra = { ...OPTIONS.procedures[0], code: "0301080999", name: "ACOLHIMENTO SO BPA-C", instrument_codes: [ "01" ] };
     expect(receptionProcedures({ ...OPTIONS, procedures: [ ...OPTIONS.procedures, extra ] }).map((p) => p.code)).toEqual([ "0301080232" ]);
-    const d = emptyReceptionDraft(NOW31, TODAY31, "u-1", receptionProcedures(OPTIONS));
-    expect(d.sigtapCode).toBe("0301080232");
+    const d = emptyReceptionDraft(NOW31, TODAY31, "u-1");
+    expect(d.sigtapCode).toBe("");
     expect(d.at).toBe("2026-11-04T10:00");
     expect(d.outcome).toBe("");
     expect(d.enrollment.startedOn).toBe(TODAY31);
-    expect(emptyReceptionDraft(NOW31, TODAY31, "u-1", []).sigtapCode).toBe("");
   });
 
   it("confere tudo de uma vez; o bloco de matrícula só com `enrolled`, com o prefixo enrollment.", () => {
-    const empty = emptyReceptionDraft(NOW31, TODAY31, "u-1", []);
+    const empty = emptyReceptionDraft(NOW31, TODAY31, "u-1");
     expect(receptionProblems(empty, TODAY31, NOW31).map((p) => p.path)).toEqual([ "sigtap_code", "outcome" ]);
     expect(receptionProblems({ ...empty, sigtapCode: "0301080232", outcome: "enrolled" }, TODAY31, NOW31).map((p) => p.path))
       .toEqual([ "enrollment.origin", "enrollment.cid_main", "enrollment.substances" ]);

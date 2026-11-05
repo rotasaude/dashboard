@@ -7,7 +7,7 @@ import { CAPS_II, NOW31, OPTIONS, TODAY31, psyUser, referralRow } from "../test/
 import * as api from "../lib/api";
 import { ApiError } from "../lib/api";
 import {
-  CID_REPEATED_TEXT, DISCARD_RECEPTION_TEXT, ESF_CNES_MISSING, NO_CLINICAL_IN_LIST, NO_RECEPTION_PROCEDURE, NO_REGISTRATION_TEXT, PSY_DETAIL_KEY,
+  CHOOSE_PROCEDURE_OPTION, CID_REPEATED_TEXT, DISCARD_RECEPTION_TEXT, ESF_CNES_MISSING, NO_CLINICAL_IN_LIST, NO_RECEPTION_PROCEDURE, NO_REGISTRATION_TEXT, PSY_DETAIL_KEY,
   PSY_ERRORS, RECEPTION_BEFORE_START, RECEPTION_DONE, RECEPTION_ENROLLED, RECEPTION_PROCEDURE_TEXT, TRAIL_NOTE, emptyReceptionDraft, enrollmentFloor,
   priorityLabel, psyError, psyRefusals, receptionProblems
 } from "../lib/psychosocial";
@@ -33,12 +33,13 @@ function mount(o: { onOpenEnrollment?: (h: { enrollmentId: string; unitId: strin
     : <CapsReception today={TODAY31} now={NOW31} onOpenEnrollment={o.onOpenEnrollment} />);
 }
 // As frases do bloco de matrícula vazio, vindas da lib (nunca repetidas aqui).
-const EMPTY_ENROLLMENT = receptionProblems({ ...emptyReceptionDraft(NOW31, TODAY31, "u-1", []), sigtapCode: "x", outcome: "enrolled" }, TODAY31, NOW31);
+const EMPTY_ENROLLMENT = receptionProblems({ ...emptyReceptionDraft(NOW31, TODAY31, "u-1"), sigtapCode: "x", outcome: "enrolled" }, TODAY31, NOW31);
 const textAt = (path: string) => EMPTY_ENROLLMENT.find((p) => p.path === path)?.text as string;
-const startedOnText = () => receptionProblems({ ...emptyReceptionDraft(NOW31, TODAY31, "u-1", []), sigtapCode: "x", outcome: "enrolled",
-  enrollment: { ...emptyReceptionDraft(NOW31, TODAY31, "u-1", []).enrollment, startedOn: "2025-10-31" } }, TODAY31, NOW31)
+const startedOnText = () => receptionProblems({ ...emptyReceptionDraft(NOW31, TODAY31, "u-1"), sigtapCode: "x", outcome: "enrolled",
+  enrollment: { ...emptyReceptionDraft(NOW31, TODAY31, "u-1").enrollment, startedOn: "2025-10-31" } }, TODAY31, NOW31)
   .find((p) => p.path === "enrollment.started_on")?.text as string;
 const deferred = <T,>() => { let resolve!: (v: T) => void; const promise = new Promise<T>((r) => { resolve = r; }); return { promise, resolve }; };
+const pickProcedure = () => fireEvent.change(screen.getByLabelText("Procedimento do acolhimento"), { target: { value: "0301080232" } });
 const submit = () => fireEvent.click(screen.getByRole("button", { name: "Registrar acolhimento" }));
 const sent = (i = 0) => vi.mocked(api.recordPsyReception).mock.calls[i][0];
 
@@ -88,6 +89,7 @@ describe("acolhimento do CAPS", () => {
   it("404 no POST do acolhimento (encaminhamento anonimizado): fecha o formulário, frase com foco e relê a fila", async () => {
     mount();
     fireEvent.click(await screen.findByRole("button", { name: "Acolher Maria da Silva" }));
+    pickProcedure();
     fireEvent.change(screen.getByLabelText("Desfecho"), { target: { value: "referred_elsewhere" } });
     vi.mocked(api.recordPsyReception).mockRejectedValueOnce(new ApiError(404, { error: "not_found" }, "x"));
     submit();
@@ -106,6 +108,34 @@ describe("acolhimento do CAPS", () => {
     submit();
     expect(screen.getByText(RECEPTION_PROCEDURE_TEXT)).not.toBeNull();
     expect(api.recordPsyReception).not.toHaveBeenCalled();
+  });
+
+  it("o procedimento do acolhimento abre sem escolha; enviar sem escolher mostra a frase no campo e não chama o api", async () => {
+    mount();
+    fireEvent.click(await screen.findByRole("button", { name: "Acolher Maria da Silva" }));
+    const select = screen.getByLabelText("Procedimento do acolhimento") as HTMLSelectElement;
+    expect(select.value).toBe("");
+    expect(screen.getByRole("option", { name: CHOOSE_PROCEDURE_OPTION })).not.toBeNull();
+    expect(screen.queryByText(RECEPTION_PROCEDURE_TEXT)).toBeNull();
+    fireEvent.change(screen.getByLabelText("Desfecho"), { target: { value: "no_follow_up" } });
+    submit();
+    expect(screen.getByText(RECEPTION_PROCEDURE_TEXT)).not.toBeNull();
+    expect(select.getAttribute("aria-invalid")).toBe("true");
+    expect(api.recordPsyReception).not.toHaveBeenCalled();
+    fireEvent.change(select, { target: { value: "0301080232" } });
+    expect(screen.queryByText(RECEPTION_PROCEDURE_TEXT)).toBeNull();
+  });
+
+  it("trocar o desfecho limpa a recusa do api que dependia dele (enrollment_open no topo)", async () => {
+    mount();
+    fireEvent.click(await screen.findByRole("button", { name: "Acolher Maria da Silva" }));
+    pickProcedure();
+    fireEvent.change(screen.getByLabelText("Desfecho"), { target: { value: "referred_elsewhere" } });
+    vi.mocked(api.recordPsyReception).mockRejectedValueOnce(new ApiError(409, { error: "enrollment_open" }, "x"));
+    submit();
+    expect(await screen.findByText(PSY_ERRORS.enrollment_open)).not.toBeNull();
+    fireEvent.change(screen.getByLabelText("Desfecho"), { target: { value: "no_follow_up" } });
+    expect(screen.queryByText(PSY_ERRORS.enrollment_open)).toBeNull();
   });
 
   it("Acolher leva o foco ao nome; outra linha com acolhimento aberto pergunta antes de descartar", async () => {
@@ -174,6 +204,7 @@ describe("acolhimento do CAPS", () => {
     const onOpenEnrollment = vi.fn();
     mount({ onOpenEnrollment });
     fireEvent.click(await screen.findByRole("button", { name: "Acolher Maria da Silva" }));
+    pickProcedure();
     fireEvent.change(screen.getByLabelText("Desfecho"), { target: { value: "enrolled" } });
     // O prefill da ESF marca a cobertura e o CNES da USF, com a equipe como dica.
     await waitFor(() => expect((screen.getByLabelText("CNES da USF") as HTMLInputElement).value).toBe("2384299"));
@@ -232,6 +263,7 @@ describe("acolhimento do CAPS", () => {
   it("recusas do api todas de uma vez, nos campos (prefixo enrollment. tirado); o formulário fica", async () => {
     mount();
     fireEvent.click(await screen.findByRole("button", { name: "Acolher Maria da Silva" }));
+    pickProcedure();
     fireEvent.change(screen.getByLabelText("Desfecho"), { target: { value: "enrolled" } });
     await waitFor(() => expect((screen.getByLabelText("CNES da USF") as HTMLInputElement).value).toBe("2384299"));
     await fillEnrollment();
@@ -252,6 +284,7 @@ describe("acolhimento do CAPS", () => {
   it("sem matrícula não manda o bloco; enrollment_open e referral_not_pending viram frase e relêem a fila", async () => {
     mount();
     fireEvent.click(await screen.findByRole("button", { name: "Acolher Maria da Silva" }));
+    pickProcedure();
     fireEvent.change(screen.getByLabelText("Desfecho"), { target: { value: "referred_elsewhere" } });
     vi.mocked(api.recordPsyReception).mockRejectedValueOnce(new ApiError(409, { error: "enrollment_open" }, "x"));
     submit();
@@ -273,6 +306,7 @@ describe("acolhimento do CAPS", () => {
       mount({ realClock: true });
       vi.setSystemTime(new Date("2026-11-04T10:20:00-03:00"));
       fireEvent.click(await screen.findByRole("button", { name: "Acolher Maria da Silva" }));
+    pickProcedure();
       expect((screen.getByLabelText("Data e hora") as HTMLInputElement).value).toBe("2026-11-04T10:20");
       fireEvent.change(screen.getByLabelText("Data e hora"), { target: { value: "2026-11-04T10:40" } });
       fireEvent.change(screen.getByLabelText("Desfecho"), { target: { value: "no_follow_up" } });
@@ -288,6 +322,7 @@ describe("acolhimento do CAPS", () => {
   it("acolhimento sem matrícula: frase de sucesso, sem o botão da matrícula", async () => {
     mount({ onOpenEnrollment: vi.fn() });
     fireEvent.click(await screen.findByRole("button", { name: "Acolher Maria da Silva" }));
+    pickProcedure();
     fireEvent.change(screen.getByLabelText("Desfecho"), { target: { value: "no_follow_up" } });
     fireEvent.change(screen.getByLabelText("Anotações do acolhimento"), { target: { value: "  Veio com a irmã.  " } });
     submit();
@@ -306,6 +341,7 @@ describe("acolhimento do CAPS", () => {
     await waitFor(() => expect(api.lookupPsyPerson).toHaveBeenCalledWith("12345678909"));
     fireEvent.click(await screen.findByRole("button", { name: "Escolher Ana Souza" }));
     expect(screen.getByText("Ana Souza")).not.toBeNull();
+    pickProcedure();
     fireEvent.change(screen.getByLabelText("Desfecho"), { target: { value: "no_follow_up" } });
     submit();
     await waitFor(() => expect(api.recordPsyReception).toHaveBeenCalledTimes(1));
@@ -339,6 +375,7 @@ describe("acolhimento do CAPS", () => {
     await waitFor(() => expect(api.lookupPsyPersonByCns).toHaveBeenCalledWith("898000000000002"));
     expect(api.lookupPsyPerson).not.toHaveBeenCalled();
     fireEvent.click(await screen.findByRole("button", { name: "Escolher João Sem CPF" }));
+    pickProcedure();
     fireEvent.change(screen.getByLabelText("Desfecho"), { target: { value: "referred_elsewhere" } });
     submit();
     await waitFor(() => expect(sent().patient_id).toBe("pt5"));
@@ -399,13 +436,13 @@ describe("acolhimento do CAPS", () => {
   });
 
   it("EnrollmentFields sem prefill (edição) não lê a ESF", () => {
-    const d = emptyReceptionDraft(NOW31, TODAY31, "u-1", []).enrollment;
+    const d = emptyReceptionDraft(NOW31, TODAY31, "u-1").enrollment;
     renderWithProviders(<EnrollmentFields unitId="caps2" patientId="pt1" options={OPTIONS} value={d} onChange={vi.fn()} problems={[]} today={TODAY31} />);
     expect(api.getPsyPrefill).not.toHaveBeenCalled();
   });
 
   it("EnrollmentFields: duas frases no mesmo campo aparecem todas, com o id no wrapper; uma só fica no próprio <p>", () => {
-    const d = emptyReceptionDraft(NOW31, TODAY31, "u-1", []).enrollment;
+    const d = emptyReceptionDraft(NOW31, TODAY31, "u-1").enrollment;
     const two = [ { path: "started_on", text: "Primeira frase do início." }, { path: "started_on", text: "Segunda frase do início." },
       { path: "started_on", text: "Primeira frase do início." } ];
     renderWithProviders(<EnrollmentFields unitId="caps2" patientId="pt1" options={OPTIONS} value={d} onChange={vi.fn()} problems={two} today={TODAY31} />);
@@ -427,6 +464,7 @@ describe("acolhimento do CAPS", () => {
   it("início antes do piso de 12 meses e acolhimento antes do início: as frases na tela, sem envio", async () => {
     mount();
     fireEvent.click(await screen.findByRole("button", { name: "Acolher Maria da Silva" }));
+    pickProcedure();
     fireEvent.change(screen.getByLabelText("Desfecho"), { target: { value: "enrolled" } });
     await fillEnrollment();
     expect((screen.getByLabelText("Início da matrícula") as HTMLInputElement).min).toBe(enrollmentFloor(TODAY31));
@@ -444,6 +482,7 @@ describe("acolhimento do CAPS", () => {
   it("grupo de substâncias inválido leva o foco à primeira caixa; Cancelar fica desabilitado durante o envio", async () => {
     mount();
     fireEvent.click(await screen.findByRole("button", { name: "Acolher Maria da Silva" }));
+    pickProcedure();
     fireEvent.change(screen.getByLabelText("Desfecho"), { target: { value: "enrolled" } });
     await waitFor(() => expect((screen.getByLabelText("CNES da USF") as HTMLInputElement).value).toBe("2384299"));
     fireEvent.change(screen.getByLabelText("Origem"), { target: { value: "02" } });

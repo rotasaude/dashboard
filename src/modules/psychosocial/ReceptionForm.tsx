@@ -8,7 +8,7 @@ import { useState, type FormEvent } from "react";
 import { recordPsyReception, type PsyOptions, type PsyReceptionResult, type PsyUnit } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import {
-  NO_PROCEDURE_OPTION, NO_RECEPTION_PROCEDURE, RECEPTION_NOTES_TEXT, emptyReceptionDraft, outcomeLabel, receptionInput, receptionProblems, receptionProcedures,
+  CHOOSE_PROCEDURE_OPTION, NO_PROCEDURE_OPTION, NO_RECEPTION_PROCEDURE, RECEPTION_NOTES_TEXT, emptyReceptionDraft, outcomeLabel, receptionInput, receptionProblems, receptionProcedures,
   type EnrollmentDraft, type ReceptionDraft
 } from "../../lib/psychosocial";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
@@ -34,13 +34,18 @@ export function ReceptionForm({ unit, patient, referralId, options, today, now, 
   const clock = () => now ?? new Date();
   const procs = receptionProcedures(options);
   const meId = user && options.team.some((p) => p.user_id === user.id) ? user.id : "";
-  const [ d, setD ] = useState<ReceptionDraft>(() => emptyReceptionDraft(clock(), today, meId, procs));
+  const [ d, setD ] = useState<ReceptionDraft>(() => emptyReceptionDraft(clock(), today, meId));
   const { problems, setProblems, aria, errNode, busy } = f;
 
   const set = (patch: Partial<ReceptionDraft>) => {
     const keys = Object.keys(patch).map((k) => (k === "sigtapCode" ? "sigtap_code" : k));
     setProblems((ps) => ps.filter((p) => !keys.includes(p.path)));
     setD((x) => ({ ...x, ...patch }));
+  };
+  // Trocar o desfecho tira a recusa que dependia dele: a frase do próprio desfecho, as do topo (ex.: `enrollment_open`) e as da matrícula.
+  const setOutcome = (outcome: ReceptionDraft["outcome"]) => {
+    setProblems((ps) => ps.filter((p) => p.path !== "outcome" && OWN_FIELDS.includes(p.path)));
+    setD((x) => ({ ...x, outcome }));
   };
   // Um campo da matrícula editado perde a marca dele.
   const setEnrollment = (e: EnrollmentDraft) => {
@@ -75,7 +80,7 @@ export function ReceptionForm({ unit, patient, referralId, options, today, now, 
         <label style={fieldLabel}>
           Procedimento do acolhimento
           <select value={d.sigtapCode} style={inputStyle} {...aria("sigtap_code")} onChange={(e) => set({ sigtapCode: e.target.value })}>
-            {procs.length === 0 && <option value="">{NO_PROCEDURE_OPTION}</option>}
+            <option value="">{procs.length === 0 ? NO_PROCEDURE_OPTION : CHOOSE_PROCEDURE_OPTION}</option>
             {procs.map((p) => <option key={p.code} value={p.code}>{`${p.code} — ${p.name}`}</option>)}
           </select>
         </label>
@@ -92,7 +97,7 @@ export function ReceptionForm({ unit, patient, referralId, options, today, now, 
       <label style={fieldLabel}>
         Desfecho
         <select value={d.outcome} style={inputStyle} {...aria("outcome")}
-          onChange={(e) => set({ outcome: e.target.value as ReceptionDraft["outcome"] })}>
+          onChange={(e) => setOutcome(e.target.value as ReceptionDraft["outcome"])}>
           <option value="">Escolha o desfecho</option>
           {options.reception_outcomes.map((o) => <option key={o} value={o}>{outcomeLabel(o)}</option>)}
         </select>

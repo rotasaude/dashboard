@@ -75,6 +75,7 @@ describe("Leitos do CAPS", () => {
     mount();
     await enterStay("Leito 1", "en1");
     expect(screen.getByText(NIGHT_STAY_NOTE)).not.toBeNull();
+    expect(NIGHT_STAY_NOTE).toBe("Cada noite fechada vira ação de acolhimento noturno na RAAS.");
     expect(screen.queryByRole("option", { name: /José Pereira/ })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Registrar entrada" }));
     expect(await screen.findByText(NIGHT_STAY_STARTED)).not.toBeNull();
@@ -171,6 +172,18 @@ describe("Leitos do CAPS", () => {
     fireEvent.click(screen.getByRole("button", { name: "Confirmar saída" }));
     expect(screen.getByText(STAY_END_IN_FUTURE)).not.toBeNull();
     expect(api.closePsyNightStay).not.toHaveBeenCalled();
+  });
+
+  it("saída: o campo vem com a hora de agora (arredondada ao minuto), não com a da entrada", async () => {
+    vi.mocked(api.getPsyBedBoard).mockResolvedValue((() => {
+      const b = bedBoard();
+      return { ...b, items: b.items.map((i) => (i.stay ? { ...i, stay: { ...i.stay, started_at: "2026-11-04T09:19:00-03:00" } } : i)) };
+    })());
+    vi.mocked(api.fetchCurrentSession).mockResolvedValue(psyUser());
+    vi.mocked(api.listPsyUnits).mockResolvedValue([ CAPS_AD_III ]);
+    renderWithProviders(<CapsBeds today={TODAY31} now={new Date("2026-11-04T10:05:42-03:00")} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Registrar saída de José Pereira" }));
+    expect((screen.getByLabelText("Saída") as HTMLInputElement).value).toBe("2026-11-04T10:05");
   });
 
   it("saída: envia data e motivo uma vez, relê o mapa e não lê o detalhe", async () => {
