@@ -61,8 +61,8 @@ describe("cartão do vínculo com o CAPS", () => {
     expect(await screen.findByText(linkSinceText("2026-09-10"))).not.toBeNull();
     expect(linkSinceText("2026-09-10")).toBe("Em acompanhamento no CAPS desde 10/09/2026");
     // Duas linhas (P48): o telefone é do CAPS, não do técnico.
-    expect(screen.getByText(linkReferenceText(ME_PSY.name, null))).not.toBeNull();
-    expect(linkReferenceText(ME_PSY.name, null)).toBe("Técnico de referência: Lia Psicóloga");
+    expect(screen.getByText(linkReferenceText(ME_PSY.name))).not.toBeNull();
+    expect(linkReferenceText(ME_PSY.name)).toBe("Técnico de referência: Lia Psicóloga");
     expect(screen.getByText(capsPhoneText("4133334444"))).not.toBeNull();
     expect(capsPhoneText("4133334444")).toBe("Telefone do CAPS: (41) 3333-4444");
     expect(screen.queryByText(/Técnico de referência:.*3333/)).toBeNull();

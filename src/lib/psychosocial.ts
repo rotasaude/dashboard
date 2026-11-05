@@ -5,7 +5,7 @@
 import {
   ApiError, errorCode,
   type CareIntensity, type ClinicalDocument, type PsyAction, type PsyActionInput, type PsyCarePlanInput, type PsyCode, type PsyCount, type PsyEnrollment, type PsyEnrollmentInput,
-  type PsyEnrollmentPatch, type PsyGroup, type PsyGroupInput, type PsyGroupKind, type PsyGroupPatch, type PsyNightStayClose, type PsyNightStayInput, type PsyOptions, type PsyPlace, type PsyProcedure, type PsyReceptionInput, type PsySettings, type ReceptionOutcome
+  type PsyEnrollmentPatch, type PsyGroup, type PsyGroupInput, type PsyGroupKind, type PsyGroupPatch, type PsyMatrixSupportInput, type PsyNightStayClose, type PsyNightStayInput, type PsyOptions, type PsyPlace, type PsyProcedure, type PsyReceptionInput, type PsyReferralInput, type PsySettings, type ReceptionOutcome, type ReferralPriority
 } from "./api";
 import { NOMINAL_QUERY, STATIC_QUERY, fmtDay } from "./careLines";
 import { addDays } from "./campaigns";
@@ -14,8 +14,6 @@ import { featureDisabledKey, featureLabel, hasFeature } from "./features";
 import { cityLocalIso, parseCityLocal } from "./format";
 import type { Problem, Refusal } from "./pharmacy";
 import { cityLocalInput } from "./vaccination";
-import type { PsyReferralInput, ReferralPriority } from "./api";
-import { formatPhone } from "./controlled";
 
 export { NOMINAL_QUERY, STATIC_QUERY };
 
@@ -1017,7 +1015,6 @@ export function monthRefusalsByRecord(err: unknown): Record<string, string[]> {
 // ─── Matriciamento e casos compartilhados (Task 12; F-31.7; P4, P12, P23, P25, P44, R8, R14) ───
 // O api decide a equipe (ativa, da atenção básica, de unidade que não é CAPS), a lotação dos participantes e a crítica da SIGTAP; a
 // tela só não envia o que já sabe que será recusado. A lista não traz tema nem texto compartilhado (P4); o detalhe, só no clique.
-import type { PsyMatrixSupportInput } from "./api";
 export const MATRIX_SAVED = "Matriciamento registrado.";
 export const CASE_SAVED = "Caso compartilhado registrado.";
 export const NO_MATRIX_SUPPORTS = "nenhum matriciamento registrado neste CAPS";
@@ -1114,9 +1111,8 @@ export const REFERRAL_PRIORITY_TEXT = "escolha a prioridade";
 export const MAX_REFERRAL_REASON = 2000;
 
 export const linkSinceText = (since: string): string => `Em acompanhamento no CAPS desde ${fmtDay(since)}`;
-// O telefone é do CAPS (P48), e só entra quando há.
-export const linkReferenceText = (name: string, phone: string | null | undefined): string =>
-  `Técnico de referência: ${name}${phone ? ` · ${formatPhone(phone)}` : ""}`;
+// O telefone é do CAPS (P48) e vai em linha própria, nunca aqui.
+export const linkReferenceText = (name: string): string => `Técnico de referência: ${name}`;
 
 // O cartão e o botão: interruptor (decisão 24) e o health_professional da UBS. O api confere o contexto de leitura (ADR 0031).
 export function canSeePsychosocialLink(user: SessionLike): boolean {

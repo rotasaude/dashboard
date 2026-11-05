@@ -70,7 +70,7 @@ export function PsychosocialLinkCard({ patientId, canRefer }: { patientId: strin
     <div style={block}>
       <strong style={sub}>{LINK_TITLE}</strong>
       {v.since && <p style={text}>{linkSinceText(v.since)}</p>}
-      {v.reference && <p style={text}>{linkReferenceText(v.reference, null)}</p>}
+      {v.reference && <p style={text}>{linkReferenceText(v.reference)}</p>}
       {v.phone && <p style={text}>{capsPhoneText(v.phone)}</p>}
       {v.cases.length > 0 && (
         <>
