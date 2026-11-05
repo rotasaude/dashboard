@@ -2,14 +2,14 @@
 // não passa; a coordenação passa com reavaliação, uma vez), saída com data e motivo (mês fechado, limite na saída, já encerrada) e
 // o detalhe da permanência só no clique. As frases vêm da lib.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { renderWithProviders } from "../test/campaignFixtures";
 import { CAPS_AD_III, CAPS_II, NOW31, TODAY31, bedBoard, enrollmentRow, nightStay, psyUser } from "../test/psychosocialFixtures";
 import * as api from "../lib/api";
 import { ApiError } from "../lib/api";
 import {
   BED_FREE, NIGHT_STAY_CLOSED, NIGHT_STAY_NOTE, NIGHT_STAY_STARTED, PSY_ERRORS, REASON_TEXT, REASSESSMENT_NOT_NEEDED, STAY_END_BEFORE_START,
-  STAY_END_IN_FUTURE, STAY_EXPECTED_END_TEXT, STAY_START_TEXT, TRAIL_NOTE, bedStayText, nightLimitText, psyCodeText
+  STAY_END_IN_FUTURE, STAY_EXPECTED_END_TEXT, STAY_OVERDUE_TAG, STAY_START_TEXT, TRAIL_NOTE, bedStayText, nightLimitText, psyCodeText
 } from "../lib/psychosocial";
 import { CapsBeds } from "./CapsBeds";
 
@@ -129,6 +129,7 @@ describe("Leitos do CAPS", () => {
     vi.mocked(api.startPsyNightStay).mockRejectedValueOnce(new ApiError(409, { error: "already_staying" }, "x"));
     fireEvent.click(screen.getByRole("button", { name: "Registrar entrada" }));
     expect(await screen.findByText(PSY_ERRORS.already_staying)).not.toBeNull();
+    expect(PSY_ERRORS.already_staying).toBe("o paciente já tem permanência nesse período");
   });
 
   it("coordenação: reavaliação com motivo de 10 a 500, enviada uma vez", async () => {
@@ -195,6 +196,53 @@ describe("Leitos do CAPS", () => {
     expect(await screen.findByText(/saída prevista/)).not.toBeNull();
     expect(screen.queryByText(/saiu às/)).toBeNull();
     expect(screen.getByRole("button", { name: "Registrar saída de José Pereira" })).not.toBeNull();
+  });
+
+  describe("saída prevista vencida (P62)", () => {
+    const withStay = (patch: Record<string, unknown>) => {
+      const b = bedBoard();
+      vi.mocked(api.getPsyBedBoard).mockResolvedValue({ ...b, items: b.items.map((i) => (i.stay ? { ...i, stay: { ...i.stay, ...patch } } : i)) });
+    };
+    const YESTERDAY = "2026-11-03T08:00:00-03:00";
+
+    it("aberta com a saída prevista no passado: a marca aparece no cartão", async () => {
+      withStay({ expected_end_at: YESTERDAY });
+      mount();
+      expect(await screen.findByText(STAY_OVERDUE_TAG)).not.toBeNull();
+      expect(screen.getByText(/· saída prevista 03\/11\/2026, 08:00/)).not.toBeNull();
+    });
+
+    it("aberta com a saída prevista no futuro: sem marca", async () => {
+      withStay({ expected_end_at: "2026-11-05T08:00:00-03:00" });
+      mount();
+      await screen.findByText(/saída prevista/);
+      expect(screen.queryByText(STAY_OVERDUE_TAG)).toBeNull();
+    });
+
+    it("encerrada: sem marca, mesmo com a saída prevista no passado", async () => {
+      withStay({ expected_end_at: YESTERDAY, ended_at: "2026-11-04T08:30:00-03:00" });
+      mount();
+      await screen.findByText(/saiu às/);
+      expect(screen.queryByText(STAY_OVERDUE_TAG)).toBeNull();
+    });
+
+    it("o detalhe da permanência também leva a marca (e só a vencida)", async () => {
+      withStay({ expected_end_at: YESTERDAY });
+      vi.mocked(api.getPsyNightStay).mockResolvedValue(nightStay({ expected_end_at: YESTERDAY }));
+      mount();
+      fireEvent.click(await screen.findByRole("button", { name: "Ver permanência de José Pereira" }));
+      const detail = await screen.findByRole("region", { name: "Permanência de José Pereira" });
+      await waitFor(() => expect(within(detail).getByText("Saída prevista")).not.toBeNull());
+      expect(within(detail).getByText(STAY_OVERDUE_TAG)).not.toBeNull();
+    });
+
+    it("o detalhe de permanência no prazo não leva a marca", async () => {
+      mount();
+      fireEvent.click(await screen.findByRole("button", { name: "Ver permanência de José Pereira" }));
+      const detail = await screen.findByRole("region", { name: "Permanência de José Pereira" });
+      await waitFor(() => expect(within(detail).getByText("Saída prevista")).not.toBeNull());
+      expect(within(detail).queryByText(STAY_OVERDUE_TAG)).toBeNull();
+    });
   });
 
   it("saída: o campo vem com a hora de agora (arredondada ao minuto), não com a da entrada", async () => {

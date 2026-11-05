@@ -12,7 +12,7 @@ import { fmtDay } from "../lib/careLines";
 import { fmtDateTime } from "../lib/format";
 import {
   BED_FREE, INACTIVE_BEDS_NOTE, NIGHT_STAY_CLOSED, NIGHT_STAY_STARTED, NOMINAL_QUERY, NO_ACTIVE_BEDS, NO_CLINICAL_IN_LIST, NO_REASSESSMENT, PSY_BEDS_KEY,
-  PSY_DETAIL_KEY, REASSESSMENT_NOT_NEEDED, TRAIL_NOTE, bedNearLimit, bedStayText, psyError, type PsyRoles
+  PSY_DETAIL_KEY, REASSESSMENT_NOT_NEEDED, STAY_OVERDUE_TAG, TRAIL_NOTE, bedNearLimit, bedStayText, psyError, stayOverdue, type PsyRoles
 } from "../lib/psychosocial";
 import { EmptyState } from "../components/EmptyState";
 import { KeyValue } from "../components/KeyValue";
@@ -25,6 +25,8 @@ import { NightStayForm } from "./psychosocial/NightStayForm";
 import { CloseNightStay } from "./psychosocial/CloseNightStay";
 
 export type CapsBedsProps = { today?: string; now?: Date };
+// "Agora" na hora de cada render (`now` só nos testes): a marca de vencida acompanha o relógio.
+const clock = (now?: Date) => now ?? new Date();
 
 export function CapsBeds(props: CapsBedsProps) {
   return (
@@ -102,7 +104,7 @@ function Beds({ unit, roles, today, now }: CapsBedsProps & { unit: PsyUnit; role
             onStale={(text) => finish(text, false)} onCancel={back} />
         </div>
       )}
-      {open?.kind === "detail" && <StayDetail key={open.item.stay.id} unit={unit} item={open.item} onClose={back} />}
+      {open?.kind === "detail" && <StayDetail key={open.item.stay.id} unit={unit} item={open.item} now={now} onClose={back} />}
       {board.isPending ? <p className="mono" style={muted}>carregando…</p>
         : board.isError ? <p role="alert" style={alert}>{psyError(board.error)}</p>
         : (
@@ -113,7 +115,7 @@ function Beds({ unit, roles, today, now }: CapsBedsProps & { unit: PsyUnit; role
                 {active.length === 0 ? <EmptyState title={NO_ACTIVE_BEDS} /> : (
                   <div style={cards}>
                     {active.map((item) => (
-                      <BedCard key={item.bed.id} item={item} unit={unit} windowDays={windowDays} writable={writable} disabled={busy}
+                      <BedCard key={item.bed.id} item={item} unit={unit} now={now} windowDays={windowDays} writable={writable} disabled={busy}
                         onEnter={(from) => start({ kind: "enter", item }, from)}
                         onClose={(o, from) => start({ kind: "close", item: o }, from)}
                         onDetail={(o, from) => start({ kind: "detail", item: o }, from)} />
@@ -144,8 +146,8 @@ function Beds({ unit, roles, today, now }: CapsBedsProps & { unit: PsyUnit; role
 }
 
 // `writable`: o mapa é o de hoje (entrada e saída); `disabled`: há envio em curso num formulário aberto.
-function BedCard({ item, unit, windowDays, writable, disabled, onEnter, onClose, onDetail }: {
-  item: PsyBoardItem; unit: PsyUnit; windowDays: number; writable: boolean; disabled: boolean;
+function BedCard({ item, unit, now, windowDays, writable, disabled, onEnter, onClose, onDetail }: {
+  item: PsyBoardItem; unit: PsyUnit; now?: Date; windowDays: number; writable: boolean; disabled: boolean;
   onEnter(from: HTMLElement): void; onClose(o: Occupied, from: HTMLElement): void; onDetail(o: Occupied, from: HTMLElement): void;
 }) {
   const primary = disabled ? disabledButtonStyle : buttonStyle;
@@ -175,6 +177,7 @@ function BedCard({ item, unit, windowDays, writable, disabled, onEnter, onClose,
             {stay.ended_at ? `Entrada ${fmtDateTime(stay.started_at)} · saiu às ${fmtDateTime(stay.ended_at)}`
               : `Entrada ${fmtDateTime(stay.started_at)} · saída prevista ${fmtDateTime(stay.expected_end_at)}`}
           </p>
+          {stayOverdue(stay, clock(now)) && <div style={row}><Tag tone="warn">{STAY_OVERDUE_TAG}</Tag></div>}
           <div style={row}>
             {writable && !stay.ended_at && (
               <button type="button" style={primary} disabled={disabled} aria-label={`Registrar saída de ${stay.patient.name}`}
@@ -190,7 +193,7 @@ function BedCard({ item, unit, windowDays, writable, disabled, onEnter, onClose,
 }
 
 // Detalhe nominal (trilha `night_stay` no api): só depois do clique, sem cache, com o id do CAPS na chave.
-function StayDetail({ unit, item, onClose }: { unit: PsyUnit; item: Occupied; onClose(): void }) {
+function StayDetail({ unit, item, now, onClose }: { unit: PsyUnit; item: Occupied; now?: Date; onClose(): void }) {
   const detail = useQuery({
     queryKey: [ PSY_DETAIL_KEY, unit.id, "nightStay", item.stay.id ], queryFn: () => getPsyNightStay(item.stay.id), ...NOMINAL_QUERY
   });
@@ -211,7 +214,7 @@ function StayDetail({ unit, item, onClose }: { unit: PsyUnit; item: Occupied; on
               {s.patient.cns_masked && <KeyValue k="CNS" v={s.patient.cns_masked} />}
               <KeyValue k="Leito" v={s.bed.label} mono={false} />
               <KeyValue k="Entrada" v={fmtDateTime(s.started_at)} />
-              <KeyValue k="Saída prevista" v={fmtDateTime(s.expected_end_at)} />
+              <KeyValue k="Saída prevista" v={stayOverdue(s, clock(now)) ? <>{fmtDateTime(s.expected_end_at)} <Tag tone="warn">{STAY_OVERDUE_TAG}</Tag></> : fmtDateTime(s.expected_end_at)} />
               {s.ended_at && <KeyValue k="Saída" v={fmtDateTime(s.ended_at)} />}
               <KeyValue k="Registrou a entrada" v={s.started_by.name} mono={false} />
             </div>

@@ -511,6 +511,13 @@ export const CLOSE_DATE_TEXT = "confira a data de conclusão";
 export const CLOSE_BEFORE_START = "o encerramento não pode ser antes do início";
 export const NEXT_VISIT_TEXT = "confira a data e a hora do próximo atendimento";
 export const CARE_PLAN_OVERDUE_TAG = "PTS vencido";
+// Permanência aberta cuja saída prevista já passou (P62): vem de `ended_at` nulo e `expected_end_at` antes de agora; o api não manda campo.
+export const STAY_OVERDUE_TAG = "saída prevista vencida";
+export const stayOverdue = (stay: { ended_at: string | null; expected_end_at: string }, now: Date): boolean => {
+  if (stay.ended_at) return false;
+  const end = new Date(stay.expected_end_at).getTime();
+  return !Number.isNaN(end) && end < now.getTime();
+};
 export const NO_CARE_PLAN = "sem PTS";
 export const NO_CARE_PLAN_YET = "esta matrícula ainda não tem PTS";
 export const NO_CARE_PLAN_DUE = "sem PTS — o prazo do primeiro PTS já passou";
@@ -623,7 +630,7 @@ export const PSY_ERRORS: Record<string, string> = {
   caps_without_beds: "só CAPS III, CAPS AD III e CAPS AD IV têm leitos",
   bed_label_taken: "já existe um leito com este nome neste CAPS",
   bed_taken: "este leito já está ocupado nesse período",
-  already_staying: "este usuário já está em outra permanência aberta",
+  already_staying: "o paciente já tem permanência nesse período",
   night_stay_open: "o usuário está num leito do acolhimento noturno — registre a saída antes de encerrar a matrícula",
   // Busca de pessoa (P30)
   person_not_found: "não encontramos ninguém com este CPF ou CNS",
