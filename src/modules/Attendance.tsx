@@ -4,7 +4,7 @@ import {
   errorCode, getMyProfessional, listActiveUnits, lookupCitizen, revokeVerification, verifyCitizen, listVerifications,
   type AttendanceCitizen, type VerifyExtra, type Sex, type AttendanceTriage, type HealthUnit, type VerificationRow
 } from "../lib/api";
-import { ATTENDANCE_REFETCH_MS, attendanceError, currentUnitKey, isValidCpf, maskCpf, nivelLabel, onlyDigits } from "../lib/attendance";
+import { ATTENDANCE_REFETCH_MS, attendanceError, currentUnitKey, isValidCpf, maskCpf, nivelLabel, onlyDigits, withoutCaps } from "../lib/attendance";
 import { todayInCity } from "../lib/campaigns";
 import { fmtDateTime } from "../lib/format";
 import { useAuth } from "../lib/auth";
@@ -64,6 +64,8 @@ export function Attendance({ onNavigate }: { onNavigate(id: ModuleId): void }) {
   // Enquanto escolhe outra unidade, as seções da unidade atual somem (AT-16).
   const [ choosingUnit, setChoosingUnit ] = useState(false);
   const unitsQuery = useQuery({ queryKey: [ "activeUnits" ], queryFn: listActiveUnits, enabled: !!unit });
+  // Destino de encaminhamento: sem o CAPS (P46/P53; o api recusa `caps_unit_not_allowed`).
+  const destinationUnits = withoutCaps(unitsQuery.data ?? []);
   const canCareRole = (user?.memberships.map((m) => m.role) ?? []).includes("health_professional");
   // Chave por usuário (F-10.5): o QueryClient é criado uma vez em main.tsx e
   // sobrevive a troca de sessão (login/logout não chama queryClient.clear());
@@ -125,12 +127,12 @@ export function Attendance({ onNavigate }: { onNavigate(id: ModuleId): void }) {
       {canVerify && unit && <div id="sec-checkin"><CheckIn unit={unit} onUnitInvalid={onUnitInvalid} demographicsOn={hasFeature(user, "procedure_billing")} /></div>}
       {/* A validação presencial sobe para perto do check-in: é a tarefa mais comum do balcão (FC-10). */}
       {canVerify && <div id="sec-balcao"><Counter cadsusOn={hasFeature(user, "cadsus_lookup")} demographicsOn={hasFeature(user, "procedure_billing")} /></div>}
-      {canCare && unit && <ScreeningQueue unit={unit} units={unitsQuery.data ?? []} />}
+      {canCare && unit && <ScreeningQueue unit={unit} units={destinationUnits} />}
       {(canVerify || canCareRole) && unit && (
         <div id="sec-fila">
         <UnitQueue
           unit={unit}
-          units={unitsQuery.data ?? []}
+          units={destinationUnits}
           canCare={canCare}
           careBlocked={careBlocked}
           onGoToSecurity={goToSecurity}

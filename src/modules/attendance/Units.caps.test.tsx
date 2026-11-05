@@ -119,6 +119,15 @@ describe("Units — CAPS e telefone (módulo 31)", () => {
     save();
     expect(await screen.findByText("já existe uma unidade com este nome")).not.toBeNull();
   });
+  it("esvaziar unidade: o CAPS não é oferecido como destino (o api recusa caps_unit_not_allowed)", async () => {
+    mocked(api.listAllUnits).mockResolvedValue([ { ...UBS, live_requests_count: 2 }, { id: "u7", name: "UBS Xaxim", kind: "ubs", active: true }, CAPS ]);
+    renderUnits();
+    const row = (await screen.findByText("UBS Centro")).closest("[role=row]") as HTMLElement;
+    fireEvent.click(within(row).getByRole("button", { name: "Esvaziar" }));
+    const select = await screen.findByLabelText("Unidade de destino");
+    expect(within(select).getByRole("option", { name: "UBS Xaxim" })).not.toBeNull();
+    expect(within(select).queryByRole("option", { name: /CAPS/ })).toBeNull();
+  });
   it("a frase de unit_has_attendances é genérica: não nomeia o CAPS", () => {
     expect(PSY_ERRORS.unit_has_attendances).not.toMatch(/CAPS/);
   });

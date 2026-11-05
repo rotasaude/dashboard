@@ -94,6 +94,17 @@ describe("RegulationOffers", () => {
     expect(mocked(api.createCareProvider)).not.toHaveBeenCalled();
   });
 
+  it("rede própria: o CAPS não é oferecido como unidade da rede (P46/P53)", async () => {
+    mocked(api.listAllUnits).mockResolvedValue([ { ...AMB_ESPEC, kind: "other", active: true },
+      { id: "c1", name: "CAPS AD III Boqueirão", kind: "caps", active: true, caps_modality: "caps_ad_iii" } ] as never);
+    renderWithProviders(<RegulationOffers today={TODAY26} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Novo prestador" }));
+    text("Tipo", "own");
+    const select = screen.getByLabelText("Unidade da rede");
+    await within(select).findByRole("option", { name: AMB_ESPEC.name });
+    expect(within(select).queryByRole("option", { name: /CAPS/ })).toBeNull();
+  });
+
   it("editar prestador: o tipo não muda; recusa cnes_taken fica no formulário", async () => {
     mocked(api.updateCareProvider).mockRejectedValue(new ApiError(409, { error: "cnes_taken" }, "x"));
     renderWithProviders(<RegulationOffers today={TODAY26} />);

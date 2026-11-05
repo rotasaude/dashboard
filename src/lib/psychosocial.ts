@@ -554,3 +554,11 @@ export function psyError(err: unknown): string {
 
 // A tela está velha (o item sumiu ou já foi acolhido): quem chama relê a lista e fecha o detalhe.
 export const isStale = (err: unknown): boolean => [ "not_found", "referral_not_pending" ].includes(errorCode(err) ?? "");
+
+// ─── Frases fixas das regras e dos leitos da cidade (Task 4) ────────────────
+export const CAPS_III_NOTE = "Os limites do CAPS III estão a confirmar na norma (gate do go-live).";
+export const SETTINGS_SAVED = "Regras salvas.";
+export const BED_ADDED = "Leito adicionado.";
+export const BED_DEACTIVATED = "Leito desativado.";
+export const BED_REACTIVATED = "Leito reativado.";
+export const NO_NIGHT_CAPS = "Nenhum CAPS ativo com acolhimento noturno cadastrado (só CAPS III, CAPS AD III e CAPS AD IV têm leitos).";

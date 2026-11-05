@@ -3,7 +3,7 @@ import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/re
 import { renderWithProviders } from "../test/campaignFixtures";
 import { psySettings, psyUser } from "../test/psychosocialFixtures";
 import * as api from "../lib/api";
-import { PSY_BEDS_KEY, PSY_DISABLED, PSY_ERRORS, PSY_NO_ROLE, PSY_SETTINGS_KEY, settingsProblems, textProblem } from "../lib/psychosocial";
+import { BED_ADDED, BED_DEACTIVATED, BED_REACTIVATED, CAPS_III_NOTE, NO_NIGHT_CAPS, PSY_BEDS_KEY, PSY_DISABLED, PSY_ERRORS, PSY_NO_ROLE, PSY_SETTINGS_KEY, SETTINGS_SAVED, settingsProblems, textProblem } from "../lib/psychosocial";
 import { CapsSettings } from "./CapsSettings";
 
 vi.mock("../lib/api", async (orig) => ({ ...(await orig<typeof api>()), fetchCurrentSession: vi.fn(), listAllUnits: vi.fn(), listPsyBeds: vi.fn(),
@@ -44,7 +44,7 @@ describe("regras do CAPS (limites e prazo do PTS)", () => {
     expect(input("CAPS AD III — janela (dias)").value).toBe("30");
     expect(input("CAPS AD IV — noites na janela").value).toBe("14");
     expect(input("CAPS AD IV — janela (dias)").value).toBe("30");
-    expect(screen.getByText("Os limites do CAPS III estão a confirmar na norma (gate do go-live).")).not.toBeNull();
+    expect(screen.getByText(CAPS_III_NOTE)).not.toBeNull();
     change("Prazo de revisão do PTS (dias)", "0");
     saveRules();
     expect(prazoText).toBe("o prazo de revisão do PTS vai de 30 a 365 dias");
@@ -60,7 +60,7 @@ describe("regras do CAPS (limites e prazo do PTS)", () => {
         caps_ad_iv: { total: 14, window_days: 30 } },
       care_plan_review_days: 60
     });
-    expect((await screen.findByRole("status")).textContent).toBe("Regras salvas.");
+    expect((await screen.findByRole("status")).textContent).toBe(SETTINGS_SAVED);
   });
   it("o prazo vai de 30 a 365: 29 e 366 recusados; 30 e 365 passam", async () => {
     mount();
@@ -142,6 +142,12 @@ describe("regras do CAPS (limites e prazo do PTS)", () => {
     expect(screen.getByRole("alert").textContent).toBe(`${review}; ${window}`);
     expect(input("Prazo de revisão do PTS (dias)").getAttribute("aria-invalid")).toBe("true");
     expect(input("CAPS AD III — janela (dias)").getAttribute("aria-invalid")).toBe("true");
+    // Editar um campo limpa só a recusa dele.
+    change("Prazo de revisão do PTS (dias)", "45");
+    expect(input("Prazo de revisão do PTS (dias)").getAttribute("aria-invalid")).toBeNull();
+    expect(screen.queryByText(review)).toBeNull();
+    expect(input("CAPS AD III — janela (dias)").getAttribute("aria-invalid")).toBe("true");
+    expect(screen.getByText(window)).not.toBeNull();
   });
   it("só o administrador abre a tela; coordenação e equipe não leem nada; interruptor desligado", async () => {
     for (const roles of [ [ "psychosocial_lead" ], [ "psychosocial_staff" ], [ "analyst" ] ]) {
@@ -182,9 +188,15 @@ describe("leitos do CAPS", () => {
     expect(within(panel()).getByText("ativo")).not.toBeNull();
     expect(within(panel()).getByText("inativo")).not.toBeNull();
   });
+  it("CAPS desativado não tem painel de leitos", async () => {
+    mount(psyUser([ "municipal_admin" ]), [ UNITS[0], unit("capsad3", "CAPS AD III Boqueirão", "caps_ad_iii", false) ]);
+    expect(await screen.findByText(NO_NIGHT_CAPS)).not.toBeNull();
+    expect(screen.queryByRole("heading", { name: /Leitos ·/ })).toBeNull();
+    expect(api.listPsyBeds).not.toHaveBeenCalled();
+  });
   it("sem CAPS com leito: frase, sem painel", async () => {
     mount(psyUser([ "municipal_admin" ]), [ UNITS[0], UNITS[1] ]);
-    expect(await screen.findByText("Nenhum CAPS com acolhimento noturno cadastrado (só CAPS III, CAPS AD III e CAPS AD IV têm leitos).")).not.toBeNull();
+    expect(await screen.findByText(NO_NIGHT_CAPS)).not.toBeNull();
     expect(api.listPsyBeds).not.toHaveBeenCalled();
   });
   it("adiciona o leito com step-up, relê a lista e limpa o campo", async () => {
@@ -198,7 +210,7 @@ describe("leitos do CAPS", () => {
     await waitFor(() => expect(api.createPsyBed).toHaveBeenCalledWith({ health_unit_id: "capsad3", label: "Leito 3" }));
     expect(await within(panel()).findByText("Leito 3")).not.toBeNull();
     expect((within(panel()).getByLabelText("Rótulo do leito") as HTMLInputElement).value).toBe("");
-    expect(within(panel()).getByRole("status").textContent).toBe("Leito adicionado.");
+    expect(within(panel()).getByRole("status").textContent).toBe(BED_ADDED);
   });
   it("rótulo vazio ou com mais de 20 caracteres é recusado com a frase, sem pedir o código", async () => {
     mount();
@@ -233,9 +245,11 @@ describe("leitos do CAPS", () => {
     await confirm();
     await waitFor(() => expect(api.updatePsyBed).toHaveBeenCalledWith("b1", { active: false }));
     await waitFor(() => expect(api.listPsyBeds).toHaveBeenCalledTimes(2));
+    expect(within(p).getByRole("status").textContent).toBe(BED_DEACTIVATED);
     fireEvent.click(within(panel()).getByRole("button", { name: "Reativar" }));
     await confirm();
     await waitFor(() => expect(api.updatePsyBed).toHaveBeenLastCalledWith("b2", { active: true }));
+    expect((await within(panel()).findByRole("status")).textContent).toBe(BED_REACTIVATED);
   });
   it("falha ao ler os leitos mostra a frase do painel", async () => {
     mount();

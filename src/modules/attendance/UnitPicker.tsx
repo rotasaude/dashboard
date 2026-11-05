@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { listActiveUnits, type HealthUnit } from "../../lib/api";
-import { attendanceError, currentUnitKey } from "../../lib/attendance";
+import { attendanceError, currentUnitKey, withoutCaps } from "../../lib/attendance";
 import { Panel } from "../../components/Panel";
 import { EmptyState } from "../../components/EmptyState";
 import { secondaryButtonStyle } from "../../components/formStyles";
@@ -54,8 +54,9 @@ export function UnitPicker({ userId, onChange, linkedUnitIds, onChoosing }: Prop
 
   useEffect(() => {
     let cancelled = false;
-    void listActiveUnits().then((list) => {
+    void listActiveUnits().then((all) => {
       if (cancelled) return;
+      const list = withoutCaps(all);
       setUnits(list);
       const storedId = readStored(userId);
       if (storedId) {

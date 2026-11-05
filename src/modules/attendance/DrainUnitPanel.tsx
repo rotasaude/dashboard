@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { drainUnit, type HealthUnitRow, type UnitDrainResult } from "../../lib/api";
-import { attendanceError } from "../../lib/attendance";
+import { attendanceError, withoutCaps } from "../../lib/attendance";
 import { FrozenTextNotice } from "../../components/FrozenTextNotice";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 
@@ -21,7 +21,7 @@ export function DrainUnitPanel({ unit, units, onCancel, onDone }: {
   const [ reason, setReason ] = useState("");
   const [ busy, setBusy ] = useState(false);
   const [ error, setError ] = useState<string | null>(null);
-  const targets = units.filter((u) => u.active && u.id !== unit.id);
+  const targets = withoutCaps(units).filter((u) => u.active && u.id !== unit.id);
   const valid = targetId !== "" && reason.trim().length >= MIN_REASON;
 
   async function confirm() {

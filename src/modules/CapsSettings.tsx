@@ -6,7 +6,7 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getPsySettings, listAllUnits, updatePsySettings, type PsySettings } from "../lib/api";
 import {
-  PSY_SETTINGS_KEY, PSY_UNITS_KEY, STATIC_QUERY, hasBeds, psyError, psyRefusals, settingsProblems
+  CAPS_III_NOTE, NO_NIGHT_CAPS, PSY_SETTINGS_KEY, SETTINGS_SAVED, PSY_UNITS_KEY, STATIC_QUERY, hasBeds, psyError, psyRefusals, settingsProblems
 } from "../lib/psychosocial";
 import type { Problem } from "../lib/pharmacy";
 import { Panel } from "../components/Panel";
@@ -19,7 +19,6 @@ import { alert, fieldLabel, fieldset, legend, muted, okText, stack } from "./exa
 export type CapsSettingsProps = { onGoToSecurity?: () => void };
 
 const REVIEW_PATH = "care_plan_review_days";
-const CAPS_III_NOTE = "Os limites do CAPS III estão a confirmar na norma (gate do go-live).";
 
 // Um campo por chave do api: o `path` é o do corpo (`night_limits.<modalidade>.<chave>`), que também é o dos problemas.
 const GROUPS: { title: string; fields: { path: string; label: string }[] }[] = [
@@ -71,7 +70,7 @@ function Body({ onGoToSecurity }: CapsSettingsProps) {
   const units = useQuery({ queryKey: [ PSY_UNITS_KEY, "all" ], queryFn: listAllUnits, ...STATIC_QUERY });
   // "Regras salvas." mora aqui: a releitura depois de gravar pode trocar a chave do formulário e remontá-lo.
   const [ done, setDone ] = useState(false);
-  const withBeds = (units.data ?? []).filter((u) => u.kind === "caps" && hasBeds(u.caps_modality));
+  const withBeds = (units.data ?? []).filter((u) => u.kind === "caps" && u.active && hasBeds(u.caps_modality));
   return (
     <div style={stack}>
       <Panel title="Regras do CAPS" sub="valem para as próximas entradas e revisões">
@@ -83,7 +82,7 @@ function Body({ onGoToSecurity }: CapsSettingsProps) {
       </Panel>
       {units.isError && <p role="alert" style={alert}>{psyError(units.error)}</p>}
       {units.data && withBeds.length === 0 && (
-        <p style={muted}>Nenhum CAPS com acolhimento noturno cadastrado (só CAPS III, CAPS AD III e CAPS AD IV têm leitos).</p>
+        <p style={muted}>{NO_NIGHT_CAPS}</p>
       )}
       {withBeds.map((u) => <BedsAdmin key={u.id} unit={u} onGoToSecurity={onGoToSecurity} />)}
     </div>
@@ -103,7 +102,7 @@ function SettingsForm({ saved, done, setDone, onGoToSecurity }: {
   useEffect(() => { formRef.current?.querySelector<HTMLElement>("[aria-invalid='true']")?.focus(); }, [ problems ]);
 
   // Mexer num campo fecha a confirmação aberta: o que se confirma é sempre o que está na tela.
-  const set = (path: string, value: string) => { setDraft((d) => ({ ...d, [path]: value })); setDone(false); setConfirming(false); };
+  const set = (path: string, value: string) => { setDraft((d) => ({ ...d, [path]: value })); setDone(false); setConfirming(false); setProblems((list) => list.filter((p) => p.path !== path)); };
   const errId = (path: string) => `cs-err-${path.replace(/\W/g, "-")}`;
   const err = (path: string) => {
     const texts = [ ...new Set(problems.filter((p) => p.path === path).map((p) => p.text)) ];
@@ -129,7 +128,7 @@ function SettingsForm({ saved, done, setDone, onGoToSecurity }: {
   return (
     <div style={stack}>
       <form ref={formRef} style={stack} onSubmit={(e) => { e.preventDefault(); review(); }}>
-        {done && <p role="status" style={okText}>Regras salvas.</p>}
+        {done && <p role="status" style={okText}>{SETTINGS_SAVED}</p>}
         <fieldset style={fieldset}>
           <legend style={legend}>Limite do acolhimento noturno</legend>
           <p style={muted}>{CAPS_III_NOTE}</p>

@@ -25,6 +25,18 @@ describe("UnitPicker", () => {
     localStorage.clear();
   });
 
+  it("o CAPS nunca é oferecido (P46/P53) e a unidade guardada que é CAPS é descartada", async () => {
+    localStorage.setItem(currentUnitKey("u1"), "c1");
+    mocked(api.listActiveUnits).mockResolvedValue([ ...units, { id: "c1", name: "CAPS AD III Boqueirão", kind: "caps" } ]);
+    const onChange = vi.fn();
+    render(<UnitPicker userId="u1" onChange={onChange} />);
+    expect(await screen.findByText("UBS Centro")).not.toBeNull();
+    expect(screen.queryByText(/CAPS/)).toBeNull();
+    expect(screen.queryByText(/^Unidade:/)).toBeNull();
+    expect(localStorage.getItem(currentUnitKey("u1"))).toBeNull();
+    expect(onChange).toHaveBeenCalledWith(null);
+  });
+
   it("sem unidade guardada mostra a lista e grava a escolha", async () => {
     mocked(api.listActiveUnits).mockResolvedValue(units);
     const onChange = vi.fn();

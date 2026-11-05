@@ -57,6 +57,17 @@ describe("Territory", () => {
     expect(rowOf("Batel").getByText("inativo")).toBeTruthy();
   });
 
+  it("a cobertura do bairro não oferece o CAPS (P46/P53)", async () => {
+    mocked(api.listActiveUnits).mockResolvedValue([
+      { id: "u1", name: "UBS Centro", kind: "ubs" }, { id: "c1", name: "CAPS AD III Boqueirão", kind: "caps" }
+    ]);
+    renderIt();
+    await screen.findByText("Centro");
+    fireEvent.click(rowOf("Centro").getByRole("button", { name: "Cobertura de Centro" }));
+    expect(await screen.findByLabelText("UBS Centro")).not.toBeNull();
+    expect(screen.queryByLabelText(/CAPS/)).toBeNull();
+  });
+
   it("busca sem diferenciar maiúsculas e acentos", async () => {
     renderIt();
     await screen.findByText("Centro");

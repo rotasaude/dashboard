@@ -41,6 +41,14 @@ describe("UnassignedRequests", () => {
     mocked(api.listActiveUnits).mockResolvedValue([ { id: "u1", name: "UBS Centro", kind: "ubs" }, { id: "u2", name: "UBS Xaxim", kind: "ubs" } ]);
   });
 
+  it("o CAPS não é oferecido como unidade que vai marcar (P46/P53)", async () => {
+    mocked(api.listActiveUnits).mockResolvedValue([ { id: "u1", name: "UBS Centro", kind: "ubs" }, { id: "c1", name: "CAPS AD III Boqueirão", kind: "caps" } ]);
+    renderIt();
+    fireEvent.click(await screen.findByRole("button", { name: "Atribuir unidade" }));
+    await screen.findByRole("option", { name: "UBS Centro" });
+    expect(screen.queryByRole("option", { name: /CAPS/ })).toBeNull();
+  });
+
   it("lista os pedidos sem unidade com pedido, atendimento, prazo e prioridade", async () => {
     renderIt();
     expect(await screen.findByText("Triagem")).not.toBeNull();

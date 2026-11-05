@@ -6,6 +6,7 @@
 import { useState } from "react";
 import { createCareProvider, updateCareProvider } from "../../lib/api";
 import type { CareProvider, CareProviderInput, HealthUnitRow, ProviderKind } from "../../lib/api";
+import { withoutCaps } from "../../lib/attendance";
 import { cnesProblem, ibgeProblem, providerKindLabel, providerNameProblem, regulationError } from "../../lib/regulation";
 import { SensitiveAction } from "../../components/SensitiveAction";
 import { buttonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
@@ -30,8 +31,8 @@ export function ProviderForm({ provider, units, onSaved, onCancel, onGoToSecurit
   const touch = <T,>(set: (v: T) => void) => (v: T) => { setError(null); set(v); };
 
   const own = kind === "own";
-  // A unidade atual do prestador aparece mesmo desativada (a edição não a perde); as demais, só as ativas.
-  const options = units.filter((u) => u.active || u.id === provider?.health_unit?.id);
+  // A unidade atual do prestador aparece mesmo desativada (a edição não a perde); as demais, só as ativas. Nunca o CAPS (P46/P53; o api recusa `caps_unit_not_allowed`).
+  const options = withoutCaps(units).filter((u) => u.active || u.id === provider?.health_unit?.id);
 
   function body(): CareProviderInput {
     const base = { name: name.trim(), kind: kind as ProviderKind, active };

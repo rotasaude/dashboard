@@ -6,7 +6,7 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { assignRequestUnit, errorCode, listActiveUnits, listUnassignedRequests, type RequestRow } from "../../lib/api";
-import { ATTENDANCE_REFETCH_MS, attendanceError } from "../../lib/attendance";
+import { ATTENDANCE_REFETCH_MS, attendanceError, withoutCaps } from "../../lib/attendance";
 import { PRIORITY_LABEL, fmtDueOn, requestKindLabel, requestMarks } from "../../lib/scheduling";
 import { Panel } from "../../components/Panel";
 import { DataTable } from "../../components/DataTable";
@@ -99,7 +99,7 @@ function AssignPanel({ row, onCancel, onDone, onConflict }: {
         Unidade que vai marcar
         <select value={unitId} onChange={(e) => setUnitId(e.target.value)} style={inputStyle}>
           <option value="">escolha…</option>
-          {(units.data ?? []).map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+          {withoutCaps(units.data ?? []).map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
         </select>
       </label>
       <div style={{ display: "flex", gap: 8 }}>

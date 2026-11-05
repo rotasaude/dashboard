@@ -5,7 +5,7 @@
 import { useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createPsyBed, listPsyBeds, updatePsyBed, type HealthUnitRow, type PsyBed } from "../../lib/api";
-import { PSY_BEDS_KEY, STATIC_QUERY, psyError, textProblem } from "../../lib/psychosocial";
+import { BED_ADDED, BED_DEACTIVATED, BED_REACTIVATED, PSY_BEDS_KEY, STATIC_QUERY, psyError, textProblem } from "../../lib/psychosocial";
 import { Panel } from "../../components/Panel";
 import { DataTable } from "../../components/DataTable";
 import { Tag } from "../../components/Tag";
@@ -36,8 +36,8 @@ export function BedsAdmin({ unit, onGoToSecurity }: { unit: HealthUnitRow; onGoT
   }
   function finished(p: Pending) {
     setPending(null);
-    if (p.kind === "add") { setLabel(""); setNotice("Leito adicionado."); }
-    else setNotice(p.bed.active ? "Leito desativado." : "Leito reativado.");
+    if (p.kind === "add") { setLabel(""); setNotice(BED_ADDED); }
+    else setNotice(p.bed.active ? BED_DEACTIVATED : BED_REACTIVATED);
     void queryClient.invalidateQueries({ queryKey: [ PSY_BEDS_KEY, "admin", unit.id ] });
   }
 

@@ -41,6 +41,12 @@ export const CEO_UNIT_KIND = { value: "ceo", label: "CEO (Centro de Especialidad
 export const HEALTH_MANAGEMENT_UNIT_KIND = { value: "health_management", label: "Gestão (secretaria ou central de regulação)" };
 // Módulo 31 (F-31.1): o CAPS só é oferecido no cadastro com `psychosocial_care` e `clinical_record` (canUsePsychosocial); o já criado continua legível.
 export const CAPS_UNIT_KIND = { value: "caps", label: "CAPS" };
+// Fora de /psychosocial/* o CAPS não aparece pelo nome (P46/P53) e o api recusa o CAPS como destino de check-in, agenda, cobertura, prestador e
+// designação (422 `caps_unit_not_allowed`): os seletores desses módulos tiram o CAPS da lista. O cache `activeUnits` segue inteiro (o
+// formulário "Encaminhar ao CAPS" precisa do CAPS), por isso o filtro é de quem monta o seletor.
+export function withoutCaps<T extends { kind: string }>(units: readonly T[]): T[] {
+  return units.filter((u) => u.kind !== CAPS_UNIT_KIND.value);
+}
 export function unitKindOptions(dentalOn: boolean, tfdOn = false, capsOn = false): { value: string; label: string }[] {
   return [ ...UNIT_KINDS, ...(dentalOn ? [ CEO_UNIT_KIND ] : []), ...(tfdOn ? [ HEALTH_MANAGEMENT_UNIT_KIND ] : []), ...(capsOn ? [ CAPS_UNIT_KIND ] : []) ];
 }

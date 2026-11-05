@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ApiError } from "./api";
-import { CAPS_UNIT_KIND, attendanceError, isValidCpf, maskCpf, splitReferenceUnits, unitKindOptions } from "./attendance";
+import { CAPS_UNIT_KIND, attendanceError, isValidCpf, maskCpf, splitReferenceUnits, unitKindOptions, withoutCaps } from "./attendance";
 
 describe("attendance helpers", () => {
   it("mascara e valida CPF", () => {
@@ -140,5 +140,10 @@ describe("módulo 31", () => {
     expect(unitKindOptions(false, false, true).map((k) => k.value)).toContain("caps");
     expect(unitKindOptions(false, false).map((k) => k.value)).not.toContain("caps");
     expect(unitKindOptions(true, true).map((k) => k.value)).not.toContain("caps");
+  });
+  it("withoutCaps tira só o CAPS e mantém a ordem", () => {
+    const list = [ { id: "a", kind: "ubs" }, { id: "b", kind: "caps" }, { id: "c", kind: "upa" } ];
+    expect(withoutCaps(list).map((u) => u.id)).toEqual([ "a", "c" ]);
+    expect(withoutCaps([])).toEqual([]);
   });
 });

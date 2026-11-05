@@ -7,6 +7,7 @@ import {
 import {
   NEIGHBORHOODS_KEY, SOURCE_LABEL, normalizeName, sortByName, territoryError, validateNeighborhoodName
 } from "../lib/territory";
+import { withoutCaps } from "../lib/attendance";
 import { PANEL_NEIGHBORHOODS_KEY } from "../lib/neighborhoodFilter";
 import { PageHeader } from "../components/PageHeader";
 import { Panel } from "../components/Panel";
@@ -173,6 +174,8 @@ function CoverageEditor({ neighborhood, onCancel, onDone }: { neighborhood: Neig
     () => new Set(neighborhood.units.filter((u) => u.active).map((u) => u.id)));
   const [ busy, setBusy ] = useState(false);
   const [ error, setError ] = useState<string | null>(null);
+  // Nunca o CAPS na cobertura (P46/P53; o api recusa `caps_unit_not_allowed`).
+  const choices = units.data ? withoutCaps(units.data) : undefined;
   // Unidade desativada depois de entrar na cobertura: a API recusaria
   // (inactive_unit) se ela fosse junto, então sai — e a tela diz isso.
   const leaving = neighborhood.units.filter((u) => !u.active);
@@ -187,10 +190,10 @@ function CoverageEditor({ neighborhood, onCancel, onDone }: { neighborhood: Neig
   }
 
   async function save() {
-    if (busy || !units.data) return;
+    if (busy || !choices) return;
     setBusy(true); setError(null);
     try {
-      await replaceCoverage(neighborhood.id, sortByName(units.data).filter((u) => selected.has(u.id)).map((u) => u.id));
+      await replaceCoverage(neighborhood.id, sortByName(choices).filter((u) => selected.has(u.id)).map((u) => u.id));
       onDone();
     } catch (err) {
       setError(territoryError(err));
@@ -208,11 +211,11 @@ function CoverageEditor({ neighborhood, onCancel, onDone }: { neighborhood: Neig
       {units.isError && <p role="alert" style={alertStyle}>{territoryError(units.error)}</p>}
       {units.isPending ? (
         <p className="mono" style={{ margin: 0, fontSize: 10.5, color: "var(--ink3)" }}>carregando…</p>
-      ) : (units.data ?? []).length === 0 ? (
+      ) : (choices ?? []).length === 0 ? (
         <p style={{ margin: 0, fontSize: 12.5 }}>nenhuma unidade ativa na cidade</p>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          {sortByName(units.data ?? []).map((u, i) => (
+          {sortByName(choices ?? []).map((u, i) => (
             <label key={u.id} style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 12.5 }}>
               <input type="checkbox" autoFocus={i === 0} checked={selected.has(u.id)} onChange={() => toggle(u.id)} />
               {u.name}
