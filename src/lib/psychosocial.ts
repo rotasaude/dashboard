@@ -861,3 +861,92 @@ export function psyDocumentError(err: unknown, opts: { controlled?: boolean } = 
   if (PSY_DOCUMENT_CODES.includes(code) || (code === "invalid_content" && field === "kind")) return psyError(err);
   return documentError(err, opts);
 }
+
+// ─── Leitos e acolhimento noturno (Task 10; F-31.5; P41) ────────────────────
+// O api decide leito sem sobreposição (`bed_taken`), outra permanência (`already_staying`), mês fechado, limite de noites e a ação
+// de cada noite; a tela só não envia o que já sabe que será recusado (entrada até agora + 12 h, saída prevista depois da entrada e em
+// até 30 dias, matrícula iniciada até o dia da entrada; saída depois da entrada e nunca futura; motivos de 10 a 500).
+export const BED_FREE = "livre";
+export const NIGHT_STAY_NOTE = "Cada noite fechada vira ação de acolhimento noturno na RAAS (api).";
+export const NIGHT_STAY_STARTED = "Entrada registrada.";
+export const NIGHT_STAY_CLOSED = "Saída registrada.";
+// Reavaliação mandada sem necessidade: o api ignora e devolve `reassessment: null` (P41).
+export const REASSESSMENT_NOT_NEEDED = "O limite não foi atingido nesta chamada: a reavaliação não foi necessária e não ficou registrada.";
+export const NO_ACTIVE_BEDS = "nenhum leito ativo neste CAPS — os leitos são cadastrados pela administração";
+export const INACTIVE_BEDS_NOTE = "Leitos inativos não recebem entrada.";
+export const NO_STAY_CANDIDATES = "nenhum usuário com matrícula aberta e fora do leito neste CAPS";
+export const NO_REASSESSMENT = "sem reavaliação";
+export const STAY_ENROLLMENT_TEXT = "escolha o usuário";
+export const STAY_START_TEXT = "a entrada vai até 12 horas a partir de agora";
+export const STAY_EXPECTED_END_TEXT = "a saída prevista é depois da entrada, em até 30 dias";
+export const STAY_END_BEFORE_START = "a saída precisa ser depois da entrada";
+export const STAY_END_IN_FUTURE = "a saída não pode ser futura";
+
+const HOUR_MS = 3_600_000;
+const STAY_AHEAD_MS = 12 * HOUR_MS;
+const STAY_MAX_MS = 30 * 24 * HOUR_MS;
+
+// "José Pereira · 9 de 14 noites em 30 dias"; no CAPS III, o limite do mapa é o das intercaladas (P41, R20). Sem contagem, só o nome.
+export function bedStayText(
+  name: string, used: number | null, limit: number | null, windowDays: number, modality: string | null | undefined
+): string {
+  if (used === null || limit === null) return name;
+  const kind = modality === "caps_iii" ? "intercaladas " : "";
+  return `${name} · ${used} de ${limit} noites ${kind}em ${windowDays} dias`;
+}
+// Perto do limite: falta uma noite ou menos.
+export const bedNearLimit = (used: number | null, limit: number | null): boolean => used !== null && limit !== null && used >= limit - 1;
+
+export type NightStayDraft = { enrollmentId: string; startedAt: string; expectedEndAt: string };
+export const emptyNightStayDraft = (now: Date): NightStayDraft => ({ enrollmentId: "", startedAt: cityLocalInput(now), expectedEndAt: "" });
+
+// `startedOn`: início da matrícula escolhida (a lista local), quando conhecido.
+export function nightStayProblems(d: NightStayDraft, now: Date, startedOn?: string | null): Problem[] {
+  const out: Problem[] = [];
+  if (!d.enrollmentId) out.push({ path: "enrollment_id", text: STAY_ENROLLMENT_TEXT });
+  else if (startedOn && d.startedAt.slice(0, 10) < startedOn) out.push({ path: "enrollment_id", text: psyCodeText("enrollment_required", "enrollment_id") });
+  const start = parseCityLocal(d.startedAt);
+  if (!start) out.push({ path: "started_at", text: DATE_TIME_TEXT });
+  else if (start.getTime() > now.getTime() + STAY_AHEAD_MS) out.push({ path: "started_at", text: STAY_START_TEXT });
+  const end = parseCityLocal(d.expectedEndAt);
+  if (!end) out.push({ path: "expected_end_at", text: DATE_TIME_TEXT });
+  else if (start && (end.getTime() <= start.getTime() || end.getTime() > start.getTime() + STAY_MAX_MS)) {
+    out.push({ path: "expected_end_at", text: STAY_EXPECTED_END_TEXT });
+  }
+  return out;
+}
+
+// Reavaliação (só a coordenação manda): motivo de 10 a 500, no path do api.
+export function reassessmentProblems(reason: string): Problem[] {
+  const t = reasonProblem(reason);
+  return t ? [ { path: "reassessment.reason", text: t } ] : [];
+}
+
+export function nightStayInput(d: NightStayDraft, bedId: string, reassessment?: string | null): import("./api").PsyNightStayInput {
+  const reason = reassessment?.trim() ?? "";
+  return {
+    bed_id: bedId, enrollment_id: d.enrollmentId, started_at: cityLocalIso(d.startedAt) ?? d.startedAt,
+    expected_end_at: cityLocalIso(d.expectedEndAt) ?? d.expectedEndAt, ...(reason ? { reassessment: { reason } } : {})
+  };
+}
+
+export type CloseStayDraft = { endedAt: string; reason: string };
+export const emptyCloseStayDraft = (now: Date): CloseStayDraft => ({ endedAt: cityLocalInput(now), reason: "" });
+
+// `startedAt`: ISO da entrada (do mapa).
+export function closeStayProblems(d: CloseStayDraft, startedAt: string, now: Date): Problem[] {
+  const out: Problem[] = [];
+  const end = parseCityLocal(d.endedAt);
+  const start = new Date(startedAt);
+  if (!end) out.push({ path: "ended_at", text: DATE_TIME_TEXT });
+  else if (!Number.isNaN(start.getTime()) && end.getTime() <= start.getTime()) out.push({ path: "ended_at", text: STAY_END_BEFORE_START });
+  else if (end.getTime() > now.getTime()) out.push({ path: "ended_at", text: STAY_END_IN_FUTURE });
+  const r = reasonProblem(d.reason);
+  if (r) out.push({ path: "reason", text: r });
+  return out;
+}
+
+export function closeStayInput(d: CloseStayDraft, reassessment?: string | null): import("./api").PsyNightStayClose {
+  const reason = reassessment?.trim() ?? "";
+  return { ended_at: cityLocalIso(d.endedAt) ?? d.endedAt, reason: d.reason.trim(), ...(reason ? { reassessment: { reason } } : {}) };
+}
