@@ -253,6 +253,13 @@ describe("cliente do CAPS (módulo 31)", () => {
     expect(bodyOf()).toEqual({ kind: "prescription", content: { items: [] } });
     await api.issuePsyDocument("ac1", { kind: "sick_note", content: { type: "leave", days: 2, cid_authorized: false } }, "d0");
     expect(bodyOf()).toEqual({ kind: "sick_note", content: { type: "leave", days: 2, cid_authorized: false }, replaces_document_id: "d0" });
+    const notification = {
+      notification_type: "B" as const, paper_number: "1234567", numbering_uf: "PR",
+      item: { catalog_item: { id: "ci3" }, quantity: 30, quantity_unit: "comprimido", route: "oral" as const, dosage_instructions: "1 à noite", duration_days: 30 }
+    };
+    await api.issuePsyDocument("ac1", { kind: "controlled_notification_record", content: notification });
+    expect(last().url).toBe("/psychosocial/actions/ac1/documents");
+    expect(bodyOf()).toEqual({ kind: "controlled_notification_record", content: notification });
   });
 
   it("leitos (admin): lista pela unidade; criar e mudar no corpo", async () => {

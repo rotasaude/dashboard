@@ -4,11 +4,12 @@
 // plano diz outra coisa, vale o api. Nenhuma frase interpola nome, CPF, CNS, CID, substância ou texto do corpo.
 import {
   ApiError, errorCode,
-  type CareIntensity, type PsyActionInput, type PsyCarePlanInput, type PsyCode, type PsyCount, type PsyEnrollment, type PsyEnrollmentInput,
+  type CareIntensity, type ClinicalDocument, type PsyAction, type PsyActionInput, type PsyCarePlanInput, type PsyCode, type PsyCount, type PsyEnrollment, type PsyEnrollmentInput,
   type PsyEnrollmentPatch, type PsyOptions, type PsyPlace, type PsyProcedure, type PsyReceptionInput, type PsySettings, type ReceptionOutcome
 } from "./api";
 import { NOMINAL_QUERY, STATIC_QUERY, fmtDay } from "./careLines";
 import { addDays } from "./campaigns";
+import { documentError } from "./clinicalDocuments";
 import { featureDisabledKey, featureLabel, hasFeature } from "./features";
 import { cityLocalIso, parseCityLocal } from "./format";
 import type { Problem, Refusal } from "./pharmacy";
@@ -740,3 +741,35 @@ export const BED_ADDED = "Leito adicionado.";
 export const BED_DEACTIVATED = "Leito desativado.";
 export const BED_REACTIVATED = "Leito reativado.";
 export const NO_NIGHT_CAPS = "Nenhum CAPS ativo com acolhimento noturno cadastrado (só CAPS III, CAPS AD III e CAPS AD IV têm leitos).";
+
+// ─── Documentos pela ação (Task 8; F-31.4, decisão 19; P8, P47, P50, P58) ──────
+// Receita, registro da Notificação (sempre papel, sem SNCR) e atestado, pelo fluxo do 19/19d. Quem decide é o api (`not_author`,
+// `prescriber_required`, `already_cancelled`); a tela só mostra o botão a quem ele aceitaria.
+export const PSY_DOCUMENTS_NOTE = "Receita, notificação e atestado saem só do atendimento individual, com um usuário matriculado, por médico (quem registrou a ação).";
+export const PSY_NOTIFICATION_RECORDED = "Notificação de papel registrada na ação. Guarde o talão; nada é impresso aqui.";
+export const PSY_NO_DOCUMENTS = "nenhum documento emitido nesta ação";
+
+type DocAction = Pick<PsyAction, "cancelled" | "professional" | "participants">;
+
+// O próprio atendimento individual (um participante, matriculado), não cancelado, de médico (CBO 2251/2252/2253).
+export function canIssuePsyDocument(a: DocAction, userId: string | null | undefined): boolean {
+  if (!userId || a.cancelled || a.professional.user_id !== userId || !isPrescriber(a.professional.cbo_code)) return false;
+  const [ only, ...rest ] = a.participants;
+  return !!only && rest.length === 0 && "enrollment_id" in only && !!only.enrollment_id;
+}
+
+// A autora cancela o próprio; a coordenação lotada cancela o de outra profissional do CAPS (P47 E1).
+export function canCancelPsyDocument(doc: Pick<ClinicalDocument, "status" | "author">, userId: string | null | undefined, roles: Pick<PsyRoles, "lead">): boolean {
+  return !!userId && doc.status === "issued" && (doc.author.id === userId || roles.lead);
+}
+
+// Recusa da emissão: as do CAPS (rota /psychosocial, autoria, prescritor, ação cancelada, tipo) pela frase do CAPS; as do 19c/19d
+// (conteúdo, item, SNCR, catálogo) pela frase do 19.
+const PSY_DOCUMENT_CODES = [ "prescriber_required", "not_author", "already_cancelled", "not_found", "missing_role", "not_on_caps_team", "invalid_request" ];
+export function psyDocumentError(err: unknown, opts: { controlled?: boolean } = {}): string {
+  if (featureDisabledKey(err) === "psychosocial_care") return psyError(err);
+  const code = errorCode(err) ?? "";
+  const field = bodyOf(err)?.field ?? null;
+  if (PSY_DOCUMENT_CODES.includes(code) || (code === "invalid_content" && field === "kind")) return psyError(err);
+  return documentError(err, opts);
+}

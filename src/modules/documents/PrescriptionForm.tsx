@@ -50,10 +50,12 @@ interface Props {
   searchDelayMs?: number;
   replacing?: boolean;
   controlled?: ControlledContext;
+  // Frase da recusa do envio (padrão: a do 19). O CAPS (módulo 31) troca pela dele nas recusas da rota da ação.
+  errorText?(err: unknown): string;
 }
 
 export function PrescriptionForm({
-  cboCode, unitId, today, initial, onSubmit, onCancel, busy: externalBusy = false, searchDelayMs, replacing, controlled
+  cboCode, unitId, today, initial, onSubmit, onCancel, busy: externalBusy = false, searchDelayMs, replacing, controlled, errorText
 }: Props) {
   const nurse = professionalKind(cboCode) === "nurse";
   const protocols = useQuery({ queryKey: [ PROTOCOLS_KEY ], queryFn: listNursingProtocols, enabled: nurse, retry: false });
@@ -136,7 +138,7 @@ export function PrescriptionForm({
       // O CPF nunca vai no corpo: só o endereço (o api usa o CPF do cadastro).
       await onSubmit(special ? { ...content, patient_identification: identificationInput(identification) } : content);
     } catch (err) {
-      setProblems([ documentError(err, { controlled: !!controlled }) ]);
+      setProblems([ errorText ? errorText(err) : documentError(err, { controlled: !!controlled }) ]);
     } finally {
       inFlight.current = false;
       setOwnBusy(false);

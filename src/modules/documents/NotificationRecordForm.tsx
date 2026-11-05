@@ -27,9 +27,11 @@ interface Props {
   onCancel(): void;
   searchDelayMs?: number;
   busy?: boolean;
+  // Frase da recusa do envio (padrão: a do 19). O CAPS (módulo 31) troca pela dele nas recusas da rota da ação.
+  errorText?(err: unknown): string;
 }
 
-export function NotificationRecordForm({ unitId, defaultUf, onSubmit, onCancel, searchDelayMs, busy: externalBusy = false }: Props) {
+export function NotificationRecordForm({ unitId, defaultUf, onSubmit, onCancel, searchDelayMs, busy: externalBusy = false, errorText }: Props) {
   const [ d, setD ] = useState<NotificationDraft>(() => emptyNotification(defaultUf));
   const [ ownBusy, setOwnBusy ] = useState(false);
   const inFlight = useRef(false);
@@ -54,7 +56,7 @@ export function NotificationRecordForm({ unitId, defaultUf, onSubmit, onCancel, 
     try {
       await onSubmit(notificationInput(d));
     } catch (err) {
-      setProblems([ documentError(err) ]);
+      setProblems([ errorText ? errorText(err) : documentError(err) ]);
     } finally {
       inFlight.current = false;
       setOwnBusy(false);

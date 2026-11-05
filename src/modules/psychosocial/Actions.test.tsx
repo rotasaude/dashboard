@@ -17,7 +17,7 @@ import { CapsEnrollments } from "../CapsEnrollments";
 
 vi.mock("../../lib/api", async (orig) => ({ ...(await orig<typeof api>()), fetchCurrentSession: vi.fn(), listPsyActions: vi.fn(),
   getPsyAction: vi.fn(), createPsyAction: vi.fn(), cancelPsyAction: vi.fn(), listPsyEnrollments: vi.fn(), listPsyUnits: vi.fn(),
-  getPsyOptions: vi.fn(), listPsyCarePlansDue: vi.fn(), getPsyEnrollment: vi.fn() }));
+  getPsyOptions: vi.fn(), listPsyCarePlansDue: vi.fn(), getPsyEnrollment: vi.fn(), listPsyActionDocuments: vi.fn() }));
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
 const JOSE = { patient_id: "pt2", name: "José Pereira", cns_masked: null };
@@ -27,6 +27,8 @@ beforeEach(() => {
   // Se o api mandar evolução ou CID na lista por engano, nada aparece nem fica no cache.
   vi.mocked(api.listPsyActions).mockResolvedValue({ items: [ { ...actionRow(), notes: "NÃO NA LISTA", cid_main: "F322" } as never ], next_before: null });
   vi.mocked(api.getPsyAction).mockResolvedValue(action());
+  // O detalhe traz os documentos da ação (Task 8).
+  vi.mocked(api.listPsyActionDocuments).mockResolvedValue([]);
   vi.mocked(api.listPsyEnrollments).mockResolvedValue([ enrollmentRow(), enrollmentRow({ id: "en2", patient: JOSE, started_on: "2026-10-01" }) ]);
 });
 
@@ -63,7 +65,8 @@ describe("Ações do CAPS", () => {
     fireEvent.click(screen.getByRole("button", { name: OPEN_LABEL }));
     expect(await screen.findByText("Relata melhora do sono.")).not.toBeNull();
     expect(vi.mocked(api.getPsyAction).mock.calls[0][0]).toBe("ac1");
-    expect(client.getQueryCache().findAll({ queryKey: [ PSY_DETAIL_KEY, "caps2", "action", "ac1" ] }).length).toBe(1);
+    // Exata: os documentos da ação (Task 8) ficam sob a mesma raiz e saem do cache junto com ela.
+    expect(client.getQueryCache().findAll({ queryKey: [ PSY_DETAIL_KEY, "caps2", "action", "ac1" ], exact: true }).length).toBe(1);
     // O título do detalhe recebe o foco.
     await waitFor(() => expect(document.activeElement?.tagName).toBe("H3"));
     fireEvent.click(screen.getByRole("button", { name: "Fechar ação" }));

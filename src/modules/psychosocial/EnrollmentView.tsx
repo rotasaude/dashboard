@@ -35,7 +35,7 @@ export type EnrollmentViewProps = {
   onChanged?(): void; onStale?(text: string): void; onGoToSecurity?(): void;
 };
 
-export function EnrollmentView({ enrollmentId, unit, options, roles, today, now, onClose, onChanged, onStale }: EnrollmentViewProps) {
+export function EnrollmentView({ enrollmentId, unit, options, roles, today, now, onClose, onChanged, onStale, onGoToSecurity }: EnrollmentViewProps) {
   const queryClient = useQueryClient();
   const key = [ PSY_DETAIL_KEY, unit.id, "enrollment", enrollmentId ];
   const detail = useQuery({ queryKey: key, queryFn: () => getPsyEnrollment(enrollmentId), ...NOMINAL_QUERY });
@@ -112,7 +112,9 @@ export function EnrollmentView({ enrollmentId, unit, options, roles, today, now,
               <CarePlans enrollment={e} unit={unit} options={options} today={today} onStale={refresh}
                 onSaved={(plan) => { update({ ...e, care_plan_review_on: plan.review_on }); onChanged?.(); }} />
             )}
-            {tab === "actions" && <ActionsPanel enrollment={e} unit={unit} options={options} roles={roles} now={now} />}
+            {tab === "actions" && (
+              <ActionsPanel enrollment={e} unit={unit} options={options} roles={roles} today={today} now={now} onGoToSecurity={onGoToSecurity} />
+            )}
             {/* "Linha do tempo" (Task 14) encaixa aqui. */}
           </>
         )}

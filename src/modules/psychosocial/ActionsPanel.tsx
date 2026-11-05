@@ -2,6 +2,7 @@
 // `next_before`, R13) nunca traz evolução: cada linha é lida campo a campo antes de ir ao cache, mesmo que o api mande outro campo
 // por engano. Situação pelo `cancelled` (o api não diz se o mês está fechado: decide no cancelamento). O detalhe só no clique
 // (`ActionDetail`, com `NOMINAL_QUERY` e o id do CAPS na chave) e sai do cache ao fechar. "Registrar ação" só com a matrícula aberta.
+// Os documentos da ação (receita, Notificação de papel e atestado; Task 8) entram no detalhe e saem do cache com ele.
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { errorCode, listPsyActions, type PsyActionRow, type PsyEnrollment, type PsyOptions, type PsyPage, type PsyUnit } from "../../lib/api";
@@ -13,9 +14,13 @@ import { DataTable, type Column } from "../../components/DataTable";
 import { buttonStyle, disabledButtonStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { alert, muted, okText, row } from "../exams/styles";
 import { ActionDetail, actionStatusTag } from "./ActionDetail";
+import { ActionDocuments } from "./ActionDocuments";
 import { ActionForm } from "./ActionForm";
 
-export type ActionsPanelProps = { enrollment: PsyEnrollment; unit: PsyUnit; options: PsyOptions; roles: PsyRoles; now?: Date };
+// `today` e `onGoToSecurity` vão aos documentos da ação (Task 8): o atestado mede as datas pelo dia da cidade; o cancelamento pede o código.
+export type ActionsPanelProps = {
+  enrollment: PsyEnrollment; unit: PsyUnit; options: PsyOptions; roles: PsyRoles; today?: string; now?: Date; onGoToSecurity?(): void;
+};
 
 // Só os campos da linha (sem `notes`, sem nada clínico).
 const actionRowOf = (r: PsyActionRow): PsyActionRow => ({
@@ -26,7 +31,7 @@ const actionRowOf = (r: PsyActionRow): PsyActionRow => ({
 });
 const struck: CSSProperties = { textDecoration: "line-through" };
 
-export function ActionsPanel({ enrollment: e, unit, options, roles, now }: ActionsPanelProps) {
+export function ActionsPanel({ enrollment: e, unit, options, roles, today, now, onGoToSecurity }: ActionsPanelProps) {
   const queryClient = useQueryClient();
   const listKey = [ PSY_ACTIONS_KEY, unit.id, e.id ];
   const actions = useInfiniteQuery({
@@ -103,7 +108,9 @@ export function ActionsPanel({ enrollment: e, unit, options, roles, now }: Actio
           onCancel={() => setCreating(false)} onSaved={() => { setCreating(false); setDone(ACTION_SAVED); reload(); }} />
       )}
       {openId && (
-        <ActionDetail key={openId} actionId={openId} roles={roles} unit={unit} onClose={close} onChanged={reload} onStale={stale} />
+        <ActionDetail key={openId} actionId={openId} roles={roles} unit={unit} onClose={close} onChanged={reload} onStale={stale}>
+          {(a) => <ActionDocuments action={a} unit={unit} roles={roles} today={today} onGoToSecurity={onGoToSecurity} />}
+        </ActionDetail>
       )}
       <p style={muted}>{TRAIL_NOTE}</p>
       {actions.isPending && <p className="mono" style={muted}>carregando…</p>}

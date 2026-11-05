@@ -6171,8 +6171,11 @@ export interface PsyAction extends PsyActionRow {
   health_unit_id: string; month: string; origin: PsyActionOrigin | string; notes: string | null; authorization_number: string | null;
   participants: PsyActionParticipant[]; cancelled_at: string | null; cancel_reason: string | null; created_at: string;
 }
-// R9: receita e atestado pela ação (a notificação de controlado fica para o ciclo).
-export type PsyDocumentInput = { kind: "prescription"; content: PrescriptionInput } | { kind: "sick_note"; content: SickNoteInput };
+// R9 (P56): receita, registro da Notificação de papel (19d; sempre papel, sem SNCR, P58) e atestado pela ação.
+export type PsyDocumentInput =
+  | { kind: "prescription"; content: PrescriptionInput }
+  | { kind: "controlled_notification_record"; content: NotificationRecordInput }
+  | { kind: "sick_note"; content: SickNoteInput };
 
 // ── Leitos e acolhimento noturno ──
 export interface PsyBedInput { health_unit_id: string; label: string; active?: boolean }

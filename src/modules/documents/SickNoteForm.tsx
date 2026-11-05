@@ -25,9 +25,11 @@ interface Props {
   busy?: boolean;
   searchDelayMs?: number;
   replacing?: boolean;
+  // Frase da recusa do envio (padrão: a do 19). O CAPS (módulo 31) troca pela dele nas recusas da rota da ação.
+  errorText?(err: unknown): string;
 }
 
-export function SickNoteForm({ initial, today, onSubmit, onCancel, busy: externalBusy = false, searchDelayMs, replacing }: Props) {
+export function SickNoteForm({ initial, today, onSubmit, onCancel, busy: externalBusy = false, searchDelayMs, replacing, errorText }: Props) {
   const [ d, setD ] = useState<SickNoteDraft>(initial);
   const [ ownBusy, setOwnBusy ] = useState(false);
   const inFlight = useRef(false);
@@ -46,7 +48,7 @@ export function SickNoteForm({ initial, today, onSubmit, onCancel, busy: externa
     try {
       await onSubmit(sickNoteInput(d));
     } catch (err) {
-      setProblem(documentError(err));
+      setProblem(errorText ? errorText(err) : documentError(err));
     } finally {
       inFlight.current = false;
       setOwnBusy(false);
