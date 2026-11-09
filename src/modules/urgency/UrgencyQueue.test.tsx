@@ -1,15 +1,23 @@
 // Fila da UPA (F-32.3; contrato §6, §14 Q6/Q18): três faixas, estouro por texto (nunca só por cor), nenhum texto clínico e
 // polling sem timer sobrando. Os botões só aparecem com a ação ligada pela mesa e com o papel que o api aceita.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createRef, type Ref } from "react";
 
-vi.mock("../../lib/api", async (orig) => ({ ...(await orig<typeof import("../../lib/api")>()), getUrgencyQueue: vi.fn() }));
+vi.mock("../../lib/api", async (orig) => ({
+  ...(await orig<typeof import("../../lib/api")>()), getUrgencyQueue: vi.fn(),
+  listCallLocations: vi.fn(), callForClassification: vi.fn(), callAttendance: vi.fn(), callNext: vi.fn(), recallAttendance: vi.fn()
+}));
 
 import * as api from "../../lib/api";
 import { ApiError } from "../../lib/api";
-import { NO_CLINICAL_IN_LIST } from "../../lib/urgency";
-import { NOW32, UPA, colorRow, patientRef, queue, unidentifiedRef, waitingRow } from "../../test/urgencyFixtures";
+import { NO_CLINICAL_IN_LIST, writeCallLocation } from "../../lib/urgency";
+import {
+  DOCTOR_LINK, NOW32, NURSE_LINK, UPA, callLocation, colorRow, encounter, inCareRow, patientRef, queue, unidentifiedRef, urgencyUser,
+  waitingRow
+} from "../../test/urgencyFixtures";
+import { UrgencyDesk } from "./UrgencyDesk";
 import { UrgencyQueue, type UrgencyQueueHandle, type UrgencyQueueProps } from "./UrgencyQueue";
 
 afterEach(cleanup);
@@ -261,5 +269,139 @@ describe("polling", () => {
     mount({ roles: { reception: false, nurse: false, doctor: false } });
     await vi.advanceTimersByTimeAsync(30_000);
     expect(api.getUrgencyQueue).not.toHaveBeenCalled();
+  });
+});
+
+// A chamada pela mesa da UPA (F-32.5; contrato §6, §14 Q7): o seletor do local no topo da fila; a enfermagem 2235 chama para a
+// classificação, o médico 225 chama para o atendimento (por linha e "Chamar próximo", que no api segue a cor); "Chamar de novo"
+// repete o tipo da última chamada. Depois de cada chamada a fila relê.
+describe("chamada", () => {
+  const LOCS = { items: [ callLocation(), callLocation({ id: "loc2", name: "Sala de medicação", active: false }) ], location_required: true };
+  beforeEach(() => {
+    for (const fn of [ api.listCallLocations, api.callForClassification, api.callAttendance, api.callNext, api.recallAttendance ]) {
+      vi.mocked(fn as ReturnType<typeof vi.fn>).mockReset();
+    }
+    sessionStorage.clear();
+    vi.mocked(api.listCallLocations).mockResolvedValue(LOCS);
+    vi.mocked(api.getUrgencyQueue).mockResolvedValue(queue());
+  });
+
+  function mountDesk(links = [ NURSE_LINK ], features?: string[]) {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={client}>
+      <UrgencyDesk unit={UPA} user={urgencyUser([ "health_professional" ], features)} links={links} />
+    </QueryClientProvider>);
+  }
+  async function chooseLocation() {
+    await screen.findByRole("option", { name: "Consultório 1" });
+    fireEvent.change(screen.getByLabelText("Local da chamada"), { target: { value: "loc1" } });
+  }
+  const queueReads = () => vi.mocked(api.getUrgencyQueue).mock.calls.length;
+
+  it("enfermagem: 'Chamar para classificação' leva o local; aviso e a fila relê; sem 'Chamar próximo'", async () => {
+    vi.mocked(api.callForClassification).mockResolvedValue({ encounter: encounter(),
+      call: { id: "c1", kind: "classification", ticket: "U-042", location: "Consultório 1", called_at: "2026-11-05T10:00:00-03:00" } });
+    mountDesk();
+    await chooseLocation();
+    expect(screen.queryByRole("option", { name: "Sala de medicação" })).toBeNull();
+    const before = queueReads();
+    fireEvent.click(screen.getByRole("button", { name: "Chamar para classificação U-042" }));
+    await waitFor(() => expect(vi.mocked(api.callForClassification).mock.calls[0]).toEqual([ "en1", "loc1" ]));
+    expect(await screen.findByText("U-042 chamada para a classificação em Consultório 1")).not.toBeNull();
+    await waitFor(() => expect(queueReads()).toBeGreaterThan(before));
+    expect(screen.queryByRole("button", { name: "Chamar próximo" })).toBeNull();
+    // Não chama para o atendimento.
+    expect(screen.queryByRole("button", { name: "Chamar U-040" })).toBeNull();
+  });
+
+  it("médico: 'Chamar' por cor e 'Chamar próximo' levam o local; nenhuma chamada em quem aguarda classificação", async () => {
+    vi.mocked(api.callAttendance).mockResolvedValue({ attendance: { id: "at2", ticket: "U-040" } as api.Attendance });
+    vi.mocked(api.callNext).mockResolvedValue({ attendance: { id: "at2", ticket: "U-040" } as api.Attendance });
+    mountDesk([ DOCTOR_LINK ]);
+    await chooseLocation();
+    const awaiting = screen.getByRole("region", { name: "Aguardando classificação" });
+    expect(within(awaiting).queryByRole("button", { name: /^Chamar/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Chamar U-040" }));
+    await waitFor(() => expect(vi.mocked(api.callAttendance).mock.calls[0]).toEqual([ "at2", "upa1", "loc1" ]));
+    expect(await screen.findByText("U-040 chamada para o atendimento em Consultório 1")).not.toBeNull();
+    const before = queueReads();
+    fireEvent.click(screen.getByRole("button", { name: "Chamar próximo" }));
+    await waitFor(() => expect(vi.mocked(api.callNext).mock.calls[0]).toEqual([ "upa1", "loc1" ]));
+    await waitFor(() => expect(queueReads()).toBeGreaterThan(before));
+  });
+
+  it("422 not_classified mostra a frase", async () => {
+    vi.mocked(api.callAttendance).mockRejectedValue(new ApiError(422, { error: "not_classified" }, "x"));
+    mountDesk([ DOCTOR_LINK ]);
+    await chooseLocation();
+    fireEvent.click(screen.getByRole("button", { name: "Chamar U-040" }));
+    expect(await screen.findByText("classifique a pessoa antes de chamar para o atendimento")).not.toBeNull();
+  });
+
+  it("already_called e queue_empty só releem a fila, sem alerta", async () => {
+    vi.mocked(api.callAttendance).mockRejectedValue(new ApiError(409, { error: "already_called" }, "x"));
+    vi.mocked(api.callNext).mockRejectedValue(new ApiError(404, { error: "queue_empty" }, "x"));
+    mountDesk([ DOCTOR_LINK ]);
+    await chooseLocation();
+    let before = queueReads();
+    fireEvent.click(screen.getByRole("button", { name: "Chamar U-040" }));
+    await waitFor(() => expect(queueReads()).toBeGreaterThan(before));
+    before = queueReads();
+    fireEvent.click(screen.getByRole("button", { name: "Chamar próximo" }));
+    await waitFor(() => expect(queueReads()).toBeGreaterThan(before));
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("'Chamar de novo U-038' em atendimento leva o local; o aviso usa o local da resposta", async () => {
+    vi.mocked(api.recallAttendance).mockResolvedValue({ call_id: "c9",
+      call: { id: "c9", kind: "care", ticket: "U-038", location: "Consultório 1", called_at: "2026-11-05T10:00:00-03:00" } });
+    mountDesk([ DOCTOR_LINK ]);
+    await chooseLocation();
+    const before = queueReads();
+    fireEvent.click(screen.getByRole("button", { name: "Chamar de novo U-038" }));
+    await waitFor(() => expect(vi.mocked(api.recallAttendance).mock.calls[0]).toEqual([ "at3", "loc1" ]));
+    expect(await screen.findByText("U-038 chamada de novo em Consultório 1")).not.toBeNull();
+    await waitFor(() => expect(queueReads()).toBeGreaterThan(before));
+  });
+
+  it("local obrigatório sem escolha: não chama, a frase e o foco no seletor; o local lembrado já vem escolhido", async () => {
+    mountDesk();
+    await screen.findByRole("option", { name: "Consultório 1" });
+    fireEvent.click(screen.getByRole("button", { name: "Chamar para classificação U-042" }));
+    expect(screen.getByText("escolha o local da chamada — a unidade tem TV na sala de espera")).not.toBeNull();
+    expect(document.activeElement).toBe(screen.getByLabelText("Local da chamada"));
+    expect(api.callForClassification).not.toHaveBeenCalled();
+    cleanup();
+    writeCallLocation("u-1", "upa1", "loc1");
+    vi.mocked(api.callForClassification).mockResolvedValue({ encounter: encounter(), call: null });
+    mountDesk();
+    await screen.findByRole("option", { name: "Consultório 1" });
+    expect((screen.getByLabelText("Local da chamada") as HTMLSelectElement).value).toBe("loc1");
+    fireEvent.click(screen.getByRole("button", { name: "Chamar para classificação U-042" }));
+    await waitFor(() => expect(vi.mocked(api.callForClassification).mock.calls[0]).toEqual([ "en1", "loc1" ]));
+  });
+
+  it("sem waiting_room_display: nenhum seletor nem 'Chamar de novo'; a chamada sai sem local", async () => {
+    vi.mocked(api.getUrgencyQueue).mockResolvedValue(queue({ in_care: [ inCareRow() ],
+      awaiting_classification: [ waitingRow({ last_call: { kind: "classification", location: null, called_at: "2026-11-05T09:58:00-03:00" } }) ] }));
+    vi.mocked(api.callForClassification).mockResolvedValue({ encounter: encounter(), call: null });
+    mountDesk([ NURSE_LINK ], [ "urgency_care", "clinical_record" ]);
+    fireEvent.click(await screen.findByRole("button", { name: "Chamar para classificação U-042" }));
+    await waitFor(() => expect(vi.mocked(api.callForClassification).mock.calls[0]).toEqual([ "en1", null ]));
+    expect(await screen.findByText("U-042 chamada para a classificação")).not.toBeNull();
+    expect(screen.queryByLabelText("Local da chamada")).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Chamar de novo/ })).toBeNull();
+    expect(api.listCallLocations).not.toHaveBeenCalled();
+  });
+
+  it("a recepção não vê seletor nem chamada", async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={client}>
+      <UrgencyDesk unit={UPA} user={urgencyUser([ "citizen_verifier" ])} links={[]} />
+    </QueryClientProvider>);
+    await screen.findByRole("region", { name: "Aguardando classificação" });
+    expect(screen.queryByLabelText("Local da chamada")).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Chamar/ })).toBeNull();
+    expect(api.listCallLocations).not.toHaveBeenCalled();
   });
 });

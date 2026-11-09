@@ -403,6 +403,34 @@ describe("Mesa da UPA: classificação", () => {
     expect(screen.queryByText("U-042 classificado: amarelo.")).toBeNull();
   });
 
+  // Carry da Task 7: o envio da linha descartada que responde depois não fecha o painel da outra linha.
+  it("a resposta tardia de uma classificação descartada não fecha o painel de outra linha", async () => {
+    vi.mocked(api.getUrgencyQueue).mockResolvedValue(queue());
+    vi.mocked(api.getUrgencyEncounter).mockResolvedValue(encounter());
+    vi.mocked(api.suggestUrgencyColor).mockResolvedValue(suggestion());
+    const late = deferred<Awaited<ReturnType<typeof api.classifyUrgency>>>();
+    vi.mocked(api.classifyUrgency).mockReturnValue(late.promise);
+    mountDesk();
+    fireEvent.click(await screen.findByRole("button", { name: "Classificar U-042" }));
+    const panel = await screen.findByRole("region", { name: "Classificação de risco — U-042" });
+    fireEvent.change(await within(panel).findByLabelText("Queixa principal"), { target: { value: "febre" } });
+    fireEvent.change(within(panel).getByLabelText("Dor (0 a 10)"), { target: { value: "5" } });
+    await within(panel).findByText(/^Sugerida: amarelo/, {}, { timeout: 2000 });
+    fireEvent.click(within(panel).getByRole("radio", { name: "amarelo · até 60 min" }));
+    fireEvent.click(within(panel).getByRole("button", { name: "Classificar" }));
+    await waitFor(() => expect(api.classifyUrgency).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole("button", { name: "Reclassificar U-040" }));
+    fireEvent.click(screen.getByRole("button", { name: "Descartar" }));
+    expect(await screen.findByRole("region", { name: "Classificação de risco — U-040" })).not.toBeNull();
+    const before = vi.mocked(api.getUrgencyQueue).mock.calls.length;
+    await act(async () => {
+      late.resolve({ encounter: encounter({ state: "classified", color: "yellow", classifications: [ classification() ] }), suggested: null });
+    });
+    await waitFor(() => expect(vi.mocked(api.getUrgencyQueue).mock.calls.length).toBeGreaterThan(before));
+    expect(screen.getByRole("region", { name: "Classificação de risco — U-040" })).not.toBeNull();
+    expect(screen.queryByText("U-042 classificado: amarelo.")).toBeNull();
+  });
+
   it("o médico não vê 'Classificar'", async () => {
     vi.mocked(api.getUrgencyQueue).mockResolvedValue(queue());
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });

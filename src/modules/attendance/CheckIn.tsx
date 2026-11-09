@@ -105,6 +105,12 @@ export function CheckIn({ unit, onUnitInvalid, demographicsOn = false }: Props) 
   );
 }
 
+// Módulo 32a (Q7): a senha para entregar à pessoa, que será chamada por ela na TV. Sem senha, nada.
+function TicketLine({ ticket }: { ticket: string | null }) {
+  if (!ticket) return null;
+  return <p style={{ margin: 0, fontSize: 20, fontWeight: 700, fontFamily: "var(--font-mono)" }}>{`Senha ${ticket} — entregue à pessoa`}</p>;
+}
+
 function CodeFlow({ unit, onUnitInvalid, cpf, onCpf: setCpf, demographicsOn = false }: FlowProps) {
   const queryClient = useQueryClient();
   const [ state, setState ] = useState<"form" | "found" | "done">("form");
@@ -114,6 +120,8 @@ function CodeFlow({ unit, onUnitInvalid, cpf, onCpf: setCpf, demographicsOn = fa
     { citizen: CheckInCitizen; triage: CheckInTriage | null; appointment: CheckInAppointment | null } | null
   >(null);
   const [ verified, setVerified ] = useState(false);
+  // Módulo 32a (Q7): a senha do dia, quando a unidade tem o painel da sala de espera.
+  const [ ticket, setTicket ] = useState<string | null>(null);
   // Módulo 19 (Divergência D2): validação ativa criada agora pelo check-in, para completar os nomes.
   const [ newVerificationId, setNewVerificationId ] = useState<string | null>(null);
   // Módulo 22: raça/cor e endereço pela validação do par (POST /attendance/verifications/:id/names, só os campos do paciente).
@@ -123,7 +131,7 @@ function CodeFlow({ unit, onUnitInvalid, cpf, onCpf: setCpf, demographicsOn = fa
 
   function reset() {
     setState("form"); setCpf(""); setCode(""); setChecked(false); setFound(null); setVerified(false); setError(null);
-    setNewVerificationId(null); setDemographicsClosed(false);
+    setNewVerificationId(null); setDemographicsClosed(false); setTicket(null);
   }
 
   async function search() {
@@ -150,6 +158,7 @@ function CodeFlow({ unit, onUnitInvalid, cpf, onCpf: setCpf, demographicsOn = fa
     try {
       const result = await checkIn(cpf, code, unit.id, checked);
       setVerified(result.verified);
+      setTicket(result.attendance.ticket ?? null);
       setNewVerificationId(result.verified ? result.verification_id ?? null : null);
       setState("done");
       invalidateAfterCheckIn(queryClient, unit.id, !!found.appointment);
@@ -240,6 +249,7 @@ function CodeFlow({ unit, onUnitInvalid, cpf, onCpf: setCpf, demographicsOn = fa
       {state === "done" && (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           <p role="status" style={{ margin: 0, fontSize: 13, fontWeight: 600 }}>Atendimento iniciado</p>
+          <TicketLine ticket={ticket} />
           {verified && <p role="status" style={{ margin: 0, fontSize: 13, fontWeight: 600 }}>cadastro validado</p>}
           {newVerificationId && <CompleteNames verificationId={newVerificationId} />}
           {(() => {
@@ -275,6 +285,7 @@ function ExceptionFlow({ unit, onUnitInvalid, cpf, onCpf: setCpf, demographicsOn
   const [ selected, setSelected ] = useState<ExceptionRow | null>(null);
   const [ reason, setReason ] = useState("");
   const [ done, setDone ] = useState(false);
+  const [ ticket, setTicket ] = useState<string | null>(null);
   // Contrato §13 E2: a validação do par, quando houver (null = par só declarado).
   const [ verificationId, setVerificationId ] = useState<string | null>(null);
   // §14 L26: as flags do paciente vêm na resposta (ausentes = api antigo, formulário como antes).
@@ -285,7 +296,7 @@ function ExceptionFlow({ unit, onUnitInvalid, cpf, onCpf: setCpf, demographicsOn
 
   function reset() {
     setCpf(""); setRows(null); setSelected(null); setReason(""); setDone(false); setError(null);
-    setVerificationId(null); setFlags(null); setDemographicsClosed(false);
+    setVerificationId(null); setFlags(null); setDemographicsClosed(false); setTicket(null);
   }
 
   async function search() {
@@ -319,6 +330,7 @@ function ExceptionFlow({ unit, onUnitInvalid, cpf, onCpf: setCpf, demographicsOn
       const result = await checkInByException(cpf, target, unit.id, reason);
       setVerificationId(result.verification_id ?? null);
       setFlags(result.citizen ?? null);
+      setTicket(result.attendance.ticket ?? null);
       setDone(true);
       invalidateAfterCheckIn(queryClient, unit.id, selected.kind === "appointment");
     } catch (err) {
@@ -339,6 +351,7 @@ function ExceptionFlow({ unit, onUnitInvalid, cpf, onCpf: setCpf, demographicsOn
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         <p role="status" style={{ margin: 0, fontSize: 13, fontWeight: 600 }}>Atendimento iniciado</p>
+        <TicketLine ticket={ticket} />
         {offer && verificationId && (
           <DemographicsForm key={verificationId} title="Completar dados do paciente" missing={known ? missing : undefined} addressLocked={addressLocked}
             save={async (body) => { await saveVerificationDemographics(verificationId, body); }}

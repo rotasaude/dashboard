@@ -9,6 +9,7 @@
 //   (401), 408, 425, 429 e falha de rede seguem no intervalo, mantendo a última fila, e se recuperam sozinhas.
 // - Botões: só os que a mesa ligou (`actions`, Tasks 7–10) e que o papel permite no api (A8: identificar é da recepção; A13: a
 //   recepção nunca chama de novo; Q2: só a enfermagem 2235 classifica e chama para a classificação; o médico chama por cor).
+// - `toolbar` (da mesa): o local da chamada e "Chamar próximo", no topo da fila.
 import { forwardRef, useId, useImperativeHandle, useMemo, useState, type ReactNode } from "react";
 import {
   ApiError, getUrgencyQueue,
@@ -30,14 +31,14 @@ export interface QueueActions {
   onClassify?(row: UrgencyWaitingRow | UrgencyColorRow): void;
   onCallClassification?(row: UrgencyWaitingRow | UrgencyColorRow): void;
   onCallCare?(row: UrgencyColorRow): void;
-  onRecall?(row: { attendance_id: string }): void;
+  onRecall?(row: { attendance_id: string; ticket: string | null }): void;
   onOpenCare?(row: UrgencyInCareRow): void;
   onIdentify?(row: UrgencyWaitingRow): void;
   onLeft?(row: UrgencyWaitingRow): void;
 }
 export interface UrgencyQueueHandle { refresh(): void }
 export type QueueRoles = Pick<UrgencyRoles, "reception" | "nurse" | "doctor">;
-export interface UrgencyQueueProps { unit: HealthUnit; roles: QueueRoles; actions: QueueActions }
+export interface UrgencyQueueProps { unit: HealthUnit; roles: QueueRoles; actions: QueueActions; toolbar?: ReactNode }
 
 const LAST_CALL_KIND = { classification: "classificação", care: "atendimento" } as const;
 const CONSULTATION_TEXT = { draft: "em rascunho", finalized: "finalizada", discarded: "—" } as const;
@@ -106,7 +107,7 @@ function Band({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-export const UrgencyQueue = forwardRef<UrgencyQueueHandle, UrgencyQueueProps>(function UrgencyQueue({ unit, roles, actions }, ref) {
+export const UrgencyQueue = forwardRef<UrgencyQueueHandle, UrgencyQueueProps>(function UrgencyQueue({ unit, roles, actions, toolbar }, ref) {
   // Parado = a última leitura foi uma recusa definitiva (403/404/422) que ninguém mandou tentar de novo: o fetcher nulo desliga o
   // timer. "Tentar de novo"/refresh() dispensa essa recusa, e o fetcher volta (lê na hora); a próxima resposta decide de novo.
   const [ dismissed, setDismissed ] = useState<unknown>(null);
@@ -128,7 +129,7 @@ export const UrgencyQueue = forwardRef<UrgencyQueueHandle, UrgencyQueueProps>(fu
   const { onClassify, onCallClassification, onCallCare, onRecall, onOpenCare, onIdentify, onLeft } = actions;
   // A13: a nova chamada repete o tipo da última; chama de novo quem faz aquele tipo (nunca a recepção).
   const canRecall = (c: UrgencyLastCall | null) => !!c && ((c.kind === "classification" && roles.nurse) || (c.kind === "care" && roles.doctor));
-  const recall = (r: UrgencyWaitingRow): Btn => onRecall && canRecall(r.last_call) && { label: "Chamar de novo", onClick: () => onRecall({ attendance_id: r.attendance_id }) };
+  const recall = (r: UrgencyWaitingRow): Btn => onRecall && canRecall(r.last_call) && { label: "Chamar de novo", onClick: () => onRecall({ attendance_id: r.attendance_id, ticket: r.ticket }) };
   const identify = (r: UrgencyWaitingRow): Btn => onIdentify && roles.reception && r.patient.unidentified && { label: "Identificar", onClick: () => onIdentify(r) };
   const left = (r: UrgencyWaitingRow): Btn => onLeft && { label: "Saiu sem atendimento", onClick: () => onLeft(r) };
 
@@ -177,6 +178,7 @@ export const UrgencyQueue = forwardRef<UrgencyQueueHandle, UrgencyQueueProps>(fu
   return (
     <Panel title="Fila da urgência" sub="por risco · quem corre mais risco é atendido primeiro">
       <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+        {toolbar && <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-start", gap: 12 }}>{toolbar}</div>}
         {polling.error != null && (
           <p role="alert" style={{ margin: 0, fontSize: 12.5, color: "var(--down)" }}>{urgencyError(polling.error)}</p>
         )}

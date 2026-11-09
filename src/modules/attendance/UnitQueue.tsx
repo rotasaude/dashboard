@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  callAttendance, callNext, closeAttendance, errorCode, getScreening, listUnitQueue,
+  callAttendance, callNext, closeAttendance, errorCode, getScreening, listUnitQueue, recallAttendance,
   type AppointmentRequestSummary, type HealthUnit, type QueueRow, type CallResult, type Screening
 } from "../../lib/api";
 import { ATTENDANCE_REFETCH_MS, attendanceError } from "../../lib/attendance";
@@ -29,6 +29,8 @@ import { UnitDeclarations } from "./UnitDeclarations";
 import { PatientTimeline } from "../timeline/PatientTimeline";
 import { ProceduresPanel } from "../billing/ProceduresPanel";
 import { unitBills } from "../../lib/billing";
+import { canUseWaitingRoom, urgencyError } from "../../lib/urgency";
+import { CallLocationPicker, useCallLocation } from "./CallLocationPicker";
 
 // UnitQueue (Task 7) — a fila da unidade atual (spec §6 "Fila"), em duas
 // partes: "Aguardando" (ordenada pela API — prioridade, depois chegada — esta
@@ -97,6 +99,10 @@ export function UnitQueue({
 }: Props) {
   const queryClient = useQueryClient();
   const auth = useAuth();
+  // Módulo 32a (F-32.5, contrato §6, §14 Q7): com o painel da sala de espera, o local da chamada (lembrado na sessão) vai em cada
+  // chamada e quem já foi chamado pode ser chamado de novo. Sem o interruptor, a chamada sai como antes, sem o segundo argumento.
+  const waitingRoom = canCare && canUseWaitingRoom(auth.user);
+  const location = useCallLocation(auth.user?.id ?? "", unit.id, waitingRoom);
   const query = useQuery({ queryKey: [ "unitQueue", unit.id ], queryFn: () => listUnitQueue(unit.id),
     refetchInterval: ATTENDANCE_REFETCH_MS
   });
@@ -141,10 +147,11 @@ export function UnitQueue({
   } };
 
   async function onCallNext() {
-    if (callingNext) return;
+    if (callingNext || !location.ready()) return;
     setCallingNext(true); msg.start();
     try {
-      const result = await callNext(unit.id);
+      const loc = location.selected;
+      const result = await (loc ? callNext(unit.id, loc) : callNext(unit.id));
       // Contrato §9: a escuta vem dentro de `attendance`.
       openCalled(result);
       invalidate();
@@ -161,6 +168,8 @@ export function UnitQueue({
       // already_called: outro profissional chamou o mesmo primeiro da fila —
       // recarrega em vez de mostrar erro parado (mesmo padrão de onCall).
       if (code === "already_called") { invalidate(); return; }
+      // call_location_required / invalid_call_location: a frase fica junto do seletor, com o foco nele.
+      if (location.refused(err)) return;
       handleClinicalRefusal(code, () => void auth.reload(), onClinicalRefused);
       msg.fail(attendanceError(err));
     } finally {
@@ -169,10 +178,11 @@ export function UnitQueue({
   }
 
   async function onCall(row: QueueRow) {
-    if (rowBusy) return;
+    if (rowBusy || !location.ready()) return;
     setRowBusy(row.id); msg.start();
     try {
-      const result = await callAttendance(row.id, unit.id);
+      const loc = location.selected;
+      const result = await (loc ? callAttendance(row.id, unit.id, loc) : callAttendance(row.id, unit.id));
       openCalled(result);
       invalidate();
     } catch (err) {
@@ -180,8 +190,29 @@ export function UnitQueue({
       // already_called: outro profissional chamou primeiro — recarrega em
       // vez de mostrar erro parado.
       if (code === "already_called") { invalidate(); return; }
+      if (location.refused(err)) return;
       handleClinicalRefusal(code, () => void auth.reload(), onClinicalRefused);
       msg.fail(attendanceError(err));
+    } finally {
+      setRowBusy(null);
+    }
+  }
+
+  // "Chamar de novo" (Q7): outra chamada na TV, sem mudar o atendimento; o local é o escolhido agora.
+  async function onRecall(row: QueueRow) {
+    if (rowBusy || !location.ready()) return;
+    setRowBusy(row.id); msg.start();
+    try {
+      const sel = location.selected;
+      const result = await recallAttendance(row.id, sel);
+      invalidate();
+      msg.ok(`${ticketOf(row)} chamada de novo em ${result.call?.location ?? location.nameOf(sel) ?? "—"}`);
+    } catch (err) {
+      const code = errorCode(err);
+      if (code === "already_closed") { invalidate(); return; }
+      if (location.refused(err)) return;
+      handleClinicalRefusal(code, () => void auth.reload(), onClinicalRefused);
+      msg.fail(urgencyError(err));
     } finally {
       setRowBusy(null);
     }
@@ -224,6 +255,8 @@ export function UnitQueue({
   const inCareIds = new Set(inCare.map((r) => r.id));
   const waiting = uniq(shown(query.data?.waiting).filter((r) => !inCareIds.has(r.id)));
   const staleCount = waiting.filter((r) => staleArrival(r.checked_in_at, at)).length;
+  // Q7: a senha do dia aparece quando alguma linha tem.
+  const ticketCols = [ ...waiting, ...inCare ].some((r) => r.ticket) ? [ ticketCol ] : [];
   const consultationRow = panel?.kind === "consultation" ? inCare.find((r) => r.id === panel.attendanceId) : undefined;
   const consultationRef = useReveal<HTMLElement>(panel?.kind === "consultation");
 
@@ -249,10 +282,14 @@ export function UnitQueue({
         {expanded ? "Ocultar" : "Mostrar"}
       </button>
     ) : canCare && (
-      <ActionButton busy={callingNext} onClick={onCallNext}
-        disabledReason={query.isSuccess && waiting.length === 0 ? "ninguém aguardando" : null}>Chamar próximo</ActionButton>
+      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-start", gap: 12, justifyContent: "flex-end" }}>
+        <CallLocationPicker state={location} />
+        <ActionButton busy={callingNext} onClick={onCallNext}
+          disabledReason={query.isSuccess && waiting.length === 0 ? "ninguém aguardando" : null}>Chamar próximo</ActionButton>
+      </div>
     )}>
       <div hidden={collapsed} style={{ display: collapsed ? "none" : "flex", flexDirection: "column", gap: 20 }}>
+        {preUrgency && <CallLocationPicker state={location} />}
         <ActionMessage message={msg.message && msg.message.text !== careBlocked ? msg.message : null} />
         {query.isError && (
           <p role="alert" style={{ margin: 0, fontSize: 12.5, color: "var(--down)" }}>{attendanceError(query.error)}</p>
@@ -277,6 +314,7 @@ export function UnitQueue({
                 <DataTable<QueueRow>
                   rowStyle={redRow}
                   cols={[
+                    ...ticketCols,
                     personCol,
                     { label: "Cor", w: "0.8fr", render: (r) => colorTag(r) },
                     { label: "Chegada", w: "1fr", render: (r) => arrivalLabel(r.checked_in_at, at) },
@@ -329,6 +367,7 @@ export function UnitQueue({
               ) : (
                 <DataTable<QueueRow>
                   cols={[
+                    ...ticketCols,
                     personCol,
                     { label: "Cor", w: "0.8fr", render: (r) => colorTag(r) },
                     { label: "Protocolo", w: "1.5fr", render: (r) => r.protocol_name ?? "—" },
@@ -338,6 +377,12 @@ export function UnitQueue({
                       label: "", w: "auto" as const, align: "right" as const, render: (r: QueueRow) => (
                         <div data-row-actions style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, justifyContent: "flex-end" }}>
                           {declarationButton(r)}
+                          {waitingRoom && (
+                            <button type="button" style={secondaryButtonStyle} aria-label={`Chamar de novo ${ticketOf(r)}`}
+                              aria-disabled={rowBusy ? true : undefined} onClick={() => void onRecall(r)}>
+                              Chamar de novo
+                            </button>
+                          )}
                           {canCare && clinicalRecord && (
                             <button type="button" style={secondaryButtonStyle}
                               onClick={() => setPanel({ kind: "consultation", attendanceId: r.id })}>
@@ -465,6 +510,10 @@ export function UnitQueue({
     </Panel>
   );
 }
+
+// A senha (Q7) ou, sem ela, o nome de exibição/CPF.
+const ticketOf = (r: QueueRow): string => r.ticket ?? personLabel(r).title;
+const ticketCol = { label: "Senha", w: "0.6fr" as const, render: (r: QueueRow) => <span className="mono">{r.ticket ?? "—"}</span> };
 
 function ClosePanel(
   { row, unit, units, onClinicalRefused, onCancel, onDone }: {
