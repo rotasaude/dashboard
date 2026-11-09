@@ -10,7 +10,8 @@ const FIELDS: Record<ConditionContext, ConditionField[]> = {
   eligibility: fieldsFor("eligibility"),
   suggestion: fieldsFor("suggestion", { definition: SUGGESTION_DEF }),
   restriction: fieldsFor("restriction", { neighborhoods: NEIGHBORHOODS }),
-  screening: fieldsFor("screening")
+  screening: fieldsFor("screening"),
+  urgency: fieldsFor("urgency")
 };
 const field = (context: ConditionContext, id: string) => FIELDS[context].find((f) => f.id === id)!;
 const AGE = "profile.age";
@@ -229,5 +230,19 @@ describe("edição do modelo", () => {
     expect(toTree(root)).toEqual({ any: [ { gte: [ AGE, 60 ] } ] });
     root = removeNode(root, inner.key);
     expect(toTree(root)).toBeNull();
+  });
+});
+
+describe("classificação de risco (módulo 32a)", () => {
+  it("sinais vitais sem a dor do 18, a dor (0 a 10) como pain_scale, idade e sexo; nunca a queixa", () => {
+    expect(FIELDS.urgency.map((f) => f.id)).toEqual([
+      "vitals.systolic", "vitals.diastolic", "vitals.heart_rate", "vitals.respiratory_rate", "vitals.temperature_c", "vitals.spo2",
+      "vitals.capillary_glucose", "vitals.weight_kg", "vitals.height_cm", "vitals.bmi", "vitals.glucose_moment",
+      "pain_scale", "profile.age", "profile.sex"
+    ]);
+    expect(field("urgency", "pain_scale")).toMatchObject({ label: "dor (0 a 10)", kind: "number", group: "Dor", min: 0, max: 10 });
+    const parsed = fromTree({ gte: [ "pain_scale", 8 ] }, FIELDS.urgency);
+    expect(parsed.ok && toTree(parsed.root)).toEqual({ gte: [ "pain_scale", 8 ] });
+    expect(fromTree({ gte: [ "vitals.pain_score", 8 ] }, FIELDS.urgency).ok).toBe(false);
   });
 });

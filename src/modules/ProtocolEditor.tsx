@@ -11,12 +11,21 @@ import { SchedulingPanel } from "./protocolEditor/SchedulingPanel";
 import { RiskRulesPanel } from "./protocolEditor/RiskRulesPanel";
 import { ScreeningSimulator } from "./protocolEditor/ScreeningSimulator";
 import { SCREENING_TEMPLATE, isScreeningDefinition } from "../lib/riskRules";
+import { URGENCY_PROTOCOL_NAME, URGENCY_TEMPLATE, isUrgencyDefinition } from "../lib/urgencyRules";
+import { UrgencyLevelsPanel } from "./protocolEditor/UrgencyLevelsPanel";
+import { UrgencyRulesPanel } from "./protocolEditor/UrgencyRulesPanel";
+import { canUseUrgency } from "../lib/urgency";
+import { useAuth } from "../lib/auth";
 import { gateErrorMessage, parseErrorMessage } from "../lib/editorMessages";
 import { statusLabel } from "../lib/protocolStatus";
 import { PageHeader } from "../components/PageHeader";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../components/formStyles";
 
 export function ProtocolEditor() {
+  // Módulo 32a: o modelo de classificação de risco só com `urgency_care`
+  // (e o `clinical_record` que ele exige) na sessão.
+  const { user } = useAuth();
+  const urgencyOn = canUseUrgency(user);
   const [ text, setText ] = useState<string>(TEMPLATE);
   const [ parseError, setParseError ] = useState<string | null>(null);
   const [ gate, setGate ] = useState<GateResult | null>(null);
@@ -53,6 +62,13 @@ export function ProtocolEditor() {
     setLoaded(null);
     if (value === "__new__") { setText(TEMPLATE); return; }
     if (value === "__new_screening__") { setText(SCREENING_TEMPLATE); return; }
+    if (value === "__new_urgency__") {
+      // Preflight E2: o modelo vira a próxima versão do protocolo de urgência
+      // da cidade (o mesmo nome da semente), nunca uma versão já usada.
+      const version = Math.max(0, ...opts.filter((o) => o.name === URGENCY_PROTOCOL_NAME).map((o) => Number(o.version) || 0)) + 1;
+      setText(JSON.stringify({ ...JSON.parse(URGENCY_TEMPLATE), version }, null, 2));
+      return;
+    }
     const [ name, version ] = value.split("@@");
     const row = opts.find((o) => o.name === name && o.version === version);
     if (row && row.status !== "draft") setLoaded({ name, status: row.status });
@@ -92,7 +108,7 @@ export function ProtocolEditor() {
   function runPreview() {
     const parsed = parseDefinition(text);
     const ans = parseDefinition(answers);
-    if (!parsed.ok || !ans.ok) return;
+    if (!parsed.ok || !ans.ok || isUrgencyDefinition(parsed.value)) return;
     previewProtocol(parsed.value, ans.value as Record<string, string>).then(setPreview);
   }
 
@@ -110,6 +126,10 @@ export function ProtocolEditor() {
   const current = parseDefinition(text);
   // Módulo 18: `kind: "screening"` troca a coluna da direita pelas regras de cor e o simulador do acolhimento.
   const screeningKind = current.ok && isScreeningDefinition(current.value);
+  // Módulo 32a: `kind: "urgency_classification"` troca a coluna pelos níveis e
+  // pelas regras de cor. Sem simulador nem pré-visualização (Q1: o api
+  // responde 422 ao preview deste kind).
+  const urgencyKind = current.ok && isUrgencyDefinition(current.value);
   // Nomes de protocolo da cidade para a sugestão (um nome por protocolo, sem a versão).
   const protocolNames = [ ...new Set(opts.map((o) => o.name)) ].sort();
 
@@ -128,6 +148,7 @@ export function ProtocolEditor() {
         >
           <option value="__new__">Nova (template)</option>
           <option value="__new_screening__">Novo acolhimento (modelo)</option>
+          {urgencyOn && <option value="__new_urgency__">Nova classificação de risco (modelo)</option>}
           {opts.map(o => (
             <option key={`${o.name}@@${o.version}`} value={`${o.name}@@${o.version}`}>
               {o.name}@{o.version} ({statusLabel(o.status)})
@@ -191,7 +212,32 @@ export function ProtocolEditor() {
         )}
       </section>
 
-      {screeningKind ? (
+      {urgencyKind ? (
+        <section>
+          <p role="note" style={{ margin: "0 0 8px", fontSize: 13, color: "var(--warn)" }}>
+            O modelo é só exemplo: as regras precisam de revisão clínica e das assinaturas antes de valer. Fluxogramas do Manchester dependem de licença da cidade.
+          </p>
+          {/* Q16: um protocolo de urgência ativo por cidade, conferido pelo kind. */}
+          <p style={{ margin: "0 0 8px", fontSize: 13, color: "var(--ink2)" }}>
+            Só uma classificação de risco vale por vez na cidade: ativar esta versão tira de uso a que está ativa hoje.
+          </p>
+          <h2 style={{ fontSize: 16, margin: "0 0 8px" }}>Cores e tempos máximos</h2>
+          <UrgencyLevelsPanel
+            key={`levels-${offerKey}`}
+            definition={current.ok ? current.value : null}
+            onChange={(next) => setText(JSON.stringify(next, null, 2))}
+          />
+          <h2 style={{ fontSize: 16, margin: "16px 0 8px" }}>Regras de cor (classificação de risco)</h2>
+          <UrgencyRulesPanel
+            key={`urgency-${offerKey}`}
+            definition={current.ok ? current.value : null}
+            onChange={(next) => setText(JSON.stringify(next, null, 2))}
+          />
+          <p style={{ margin: "12px 0 0", fontSize: 12, color: "var(--ink3)" }}>
+            Este tipo de protocolo não tem simulador: confira as regras com a equipe antes de enviar para revisão.
+          </p>
+        </section>
+      ) : screeningKind ? (
         <section>
           <h2 style={{ fontSize: 16, margin: "0 0 8px" }}>Regras de cor (acolhimento)</h2>
           <RiskRulesPanel

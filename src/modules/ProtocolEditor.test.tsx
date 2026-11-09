@@ -10,6 +10,9 @@ vi.mock("../lib/api", async (importOriginal) => {
   };
 });
 
+// Módulo 32a: o editor lê a sessão (o modelo de urgência depende do urgency_care).
+vi.mock("../lib/auth", () => ({ useAuth: () => ({ user: null }) }));
+
 import * as api from "../lib/api";
 import { ProtocolEditor } from "./ProtocolEditor";
 

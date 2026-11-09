@@ -17,7 +17,7 @@ import type { ConditionTree, PanelNeighborhood } from "./api";
 import { SEX_OPTIONS } from "./profile";
 import { GLUCOSE_MOMENTS, GLUCOSE_MOMENT_LABEL, VITALS } from "./screening";
 
-export type ConditionContext = "eligibility" | "suggestion" | "restriction" | "screening";
+export type ConditionContext = "eligibility" | "suggestion" | "restriction" | "screening" | "urgency";
 export type FieldKind = "number" | "choice" | "boolean";
 export interface FieldOption { value: string; label: string; inactive?: boolean }
 export interface ConditionField {
@@ -88,9 +88,15 @@ const CIAP2: ConditionField = {
   codes: { pattern: /^[A-Z]\d{2}$/, example: "K86, A03" }
 };
 
+// Classificação de risco (módulo 32a; contrato §14 Q1/Q3): a dor sai de
+// `vitals` e vira `pain_scale` (0 a 10). A queixa nunca entra na condição.
+const PAIN_SCALE: ConditionField = { id: "pain_scale", label: "dor (0 a 10)", kind: "number", group: "Dor", min: 0, max: 10 };
+const URGENCY_FIELDS: ConditionField[] = [ ...VITAL_FIELDS.filter((f) => f.id !== "vitals.pain_score"), PAIN_SCALE, AGE, SEX ];
+
 export function fieldsFor(context: ConditionContext, sources: FieldSources = {}): ConditionField[] {
   if (context === "eligibility") return [ AGE, SEX ];
   if (context === "screening") return [ ...VITAL_FIELDS, CIAP2, AGE, SEX ];
+  if (context === "urgency") return URGENCY_FIELDS;
   if (context === "restriction") return [ AGE, SEX, neighborhoodField(sources.neighborhoods ?? []) ];
   return [ AGE, SEX, ...stepFields(sources.definition), ...outcomeFields(sources.definition) ];
 }
