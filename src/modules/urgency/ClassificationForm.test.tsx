@@ -2,7 +2,7 @@
 // obrigatória, a cor sugerida com o critério (só depois da dor), a justificativa quando a cor é outra ou não há sugestão, e a
 // reclassificação com o histórico. A queixa e os sinais só vão no corpo do pedido.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 vi.mock("../../lib/api", async (orig) => ({
@@ -16,12 +16,12 @@ import {
   NURSE_LINK, UPA, classification, encounter, queue, suggestion, unidentifiedRef, urgencyUser
 } from "../../test/urgencyFixtures";
 import { ClassificationForm } from "./ClassificationForm";
-import { UrgencyDesk } from "./UrgencyDesk";
+import { DISCARD_QUESTION, NOTICE_MS, UrgencyDesk } from "./UrgencyDesk";
 
 const CRITERION = "Temperatura de 39 °C ou mais";
 const JUSTIFICATION_TEXT = "explique a cor escolhida (pelo menos 10 caracteres)";
 
-afterEach(cleanup);
+afterEach(() => { cleanup(); vi.useRealTimers(); });
 // Com chaves: o retorno do beforeEach vira teardown no vitest.
 beforeEach(() => {
   vi.mocked(api.getUrgencyEncounter).mockReset();
@@ -111,6 +111,56 @@ describe("Classificação de risco (F-32.3)", () => {
     await new Promise((r) => setTimeout(r, 20));
     expect(screen.queryByText("Sugerida: verde — Dor leve (2 a 4)")).toBeNull();
     expect(screen.getByText("Sugerida: laranja — Dor intensa (8 a 10)")).not.toBeNull();
+  });
+
+  it("limpar a dor esconde a sugestão velha na hora; o envio nunca sai de uma sugestão velha", async () => {
+    vi.mocked(api.getUrgencyEncounter).mockResolvedValue(encounter());
+    const later = deferred<UrgencySuggestion>();
+    vi.mocked(api.suggestUrgencyColor).mockResolvedValueOnce(suggestion()).mockReturnValueOnce(later.promise);
+    mount({ suggestDelayMs: 0 });
+    fireEvent.change(await screen.findByLabelText("Queixa principal"), { target: { value: "febre" } });
+    const pain = screen.getByLabelText("Dor (0 a 10)");
+    fireEvent.change(pain, { target: { value: "5" } });
+    await screen.findByText(`Sugerida: amarelo — ${CRITERION}`);
+    fireEvent.change(pain, { target: { value: "" } });
+    // Na mesma renderização, sem esperar a espera curta.
+    expect(screen.queryByText(`Sugerida: amarelo — ${CRITERION}`)).toBeNull();
+    expect(screen.getByText("Informe a dor para ver a cor sugerida.")).not.toBeNull();
+    fireEvent.click(screen.getByRole("radio", { name: "amarelo · até 60 min" }));
+    fireEvent.change(pain, { target: { value: "9" } });
+    expect(screen.queryByText(`Sugerida: amarelo — ${CRITERION}`)).toBeNull();
+    // A sugestão da dor 5 não vale para a dor 9: o envio espera a nova.
+    const go = screen.getByRole("button", { name: "Classificar" }) as HTMLButtonElement;
+    expect(go.disabled).toBe(true);
+    fireEvent.click(go);
+    expect(api.classifyUrgency).not.toHaveBeenCalled();
+    later.resolve(suggestion({ suggested: { color: "orange", criterion: "Dor intensa (8 a 10)", rule_id: "dor-intensa" } }));
+    expect(await screen.findByText("Sugerida: laranja — Dor intensa (8 a 10)")).not.toBeNull();
+    // Amarelo agora é outra cor que a sugerida: pede justificativa.
+    expect(screen.getByLabelText("Justificativa")).not.toBeNull();
+  });
+
+  it("depois de justification_required, uma sugestão nova para outra dor volta à regra local", async () => {
+    vi.mocked(api.getUrgencyEncounter).mockResolvedValue(encounter());
+    vi.mocked(api.suggestUrgencyColor).mockResolvedValue(suggestion());
+    vi.mocked(api.classifyUrgency).mockRejectedValue(new ApiError(422, { error: "justification_required", path: "justification" }, "x"));
+    mount({ suggestDelayMs: 0 });
+    fireEvent.change(await screen.findByLabelText("Queixa principal"), { target: { value: "febre" } });
+    fireEvent.change(screen.getByLabelText("Dor (0 a 10)"), { target: { value: "5" } });
+    await screen.findByText(`Sugerida: amarelo — ${CRITERION}`);
+    fireEvent.click(screen.getByRole("radio", { name: "amarelo · até 60 min" }));
+    expect(screen.queryByLabelText("Justificativa")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Classificar" }));
+    expect(await screen.findByLabelText("Justificativa")).not.toBeNull();
+    // A releitura da mesma dor mantém o pedido do api.
+    await waitFor(() => expect(api.suggestUrgencyColor).toHaveBeenCalledTimes(2));
+    await screen.findByText(`Sugerida: amarelo — ${CRITERION}`);
+    expect(screen.getByLabelText("Justificativa")).not.toBeNull();
+    // Outra dor, sugestão nova (amarela de novo): o pedido era para a anterior.
+    fireEvent.change(screen.getByLabelText("Dor (0 a 10)"), { target: { value: "6" } });
+    await waitFor(() => expect(api.suggestUrgencyColor).toHaveBeenCalledTimes(3));
+    await screen.findByText(`Sugerida: amarelo — ${CRITERION}`);
+    await waitFor(() => expect(screen.queryByLabelText("Justificativa")).toBeNull());
   });
 
   it("sem protocolo ativo: aviso e justificativa obrigatória", async () => {
@@ -265,6 +315,92 @@ describe("Mesa da UPA: classificação", () => {
     fireEvent.keyDown(panel, { key: "Escape" });
     expect(screen.queryByRole("region", { name: "Classificação de risco — U-042" })).toBeNull();
     expect(client.getQueryCache().findAll({ queryKey: [ "urgencyDetail" ] }).length).toBe(0);
+  });
+
+  async function openDirty() {
+    vi.mocked(api.getUrgencyQueue).mockResolvedValue(queue());
+    vi.mocked(api.getUrgencyEncounter).mockResolvedValue(encounter());
+    vi.mocked(api.suggestUrgencyColor).mockResolvedValue(suggestion());
+    const client = mountDesk();
+    fireEvent.click(await screen.findByRole("button", { name: "Classificar U-042" }));
+    const panel = await screen.findByRole("region", { name: "Classificação de risco — U-042" });
+    fireEvent.change(await within(panel).findByLabelText("Queixa principal"), { target: { value: "febre" } });
+    return { client, panel };
+  }
+
+  it("com algo digitado, Escape pergunta antes; continuar mantém tudo; descartar fecha e limpa o detalhe", async () => {
+    const { client, panel } = await openDirty();
+    fireEvent.keyDown(panel, { key: "Escape" });
+    const dialog = screen.getByRole("alertdialog", { name: "Descartar a classificação?" });
+    expect(within(dialog).getByText(DISCARD_QUESTION)).not.toBeNull();
+    expect(document.activeElement?.textContent).toBe("Continuar classificando");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Continuar classificando" }));
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect((within(panel).getByLabelText("Queixa principal") as HTMLTextAreaElement).value).toBe("febre");
+    fireEvent.keyDown(panel, { key: "Escape" });
+    fireEvent.click(screen.getByRole("button", { name: "Descartar" }));
+    expect(screen.queryByRole("region", { name: "Classificação de risco — U-042" })).toBeNull();
+    expect(client.getQueryCache().findAll({ queryKey: [ "urgencyDetail" ] }).length).toBe(0);
+  });
+
+  it("com algo digitado, 'Cancelar' também pergunta antes", async () => {
+    const { panel } = await openDirty();
+    fireEvent.click(within(panel).getByRole("button", { name: "Cancelar" }));
+    expect(screen.getByRole("alertdialog", { name: "Descartar a classificação?" })).not.toBeNull();
+    expect(screen.getByRole("region", { name: "Classificação de risco — U-042" })).not.toBeNull();
+  });
+
+  it("Escape dentro de um campo não fecha o painel", async () => {
+    vi.mocked(api.getUrgencyQueue).mockResolvedValue(queue());
+    vi.mocked(api.getUrgencyEncounter).mockResolvedValue(encounter());
+    mountDesk();
+    fireEvent.click(await screen.findByRole("button", { name: "Classificar U-042" }));
+    const panel = await screen.findByRole("region", { name: "Classificação de risco — U-042" });
+    fireEvent.keyDown(await within(panel).findByLabelText("Queixa principal"), { key: "Escape" });
+    expect(screen.getByRole("region", { name: "Classificação de risco — U-042" })).not.toBeNull();
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+  });
+
+  it("com algo digitado, outra linha pergunta antes de trocar o painel", async () => {
+    await openDirty();
+    fireEvent.click(screen.getByRole("button", { name: "Reclassificar U-040" }));
+    expect(screen.getByRole("alertdialog", { name: "Descartar a classificação?" })).not.toBeNull();
+    expect(screen.getByRole("region", { name: "Classificação de risco — U-042" })).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Descartar" }));
+    expect(await screen.findByRole("region", { name: "Classificação de risco — U-040" })).not.toBeNull();
+    expect(screen.queryByRole("region", { name: "Classificação de risco — U-042" })).toBeNull();
+  });
+
+  it("sem nada digitado, outra linha troca o painel na hora", async () => {
+    vi.mocked(api.getUrgencyQueue).mockResolvedValue(queue());
+    vi.mocked(api.getUrgencyEncounter).mockResolvedValue(encounter());
+    mountDesk();
+    fireEvent.click(await screen.findByRole("button", { name: "Classificar U-042" }));
+    await screen.findByLabelText("Queixa principal");
+    fireEvent.click(screen.getByRole("button", { name: "Reclassificar U-040" }));
+    expect(await screen.findByRole("region", { name: "Classificação de risco — U-040" })).not.toBeNull();
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+  });
+
+  it("o aviso de classificado some sozinho", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.mocked(api.getUrgencyQueue).mockResolvedValue(queue());
+    vi.mocked(api.getUrgencyEncounter).mockResolvedValue(encounter());
+    vi.mocked(api.suggestUrgencyColor).mockResolvedValue(suggestion());
+    vi.mocked(api.classifyUrgency).mockResolvedValue({
+      encounter: encounter({ state: "classified", color: "yellow", classifications: [ classification() ] }), suggested: suggestion().suggested
+    });
+    mountDesk();
+    fireEvent.click(await screen.findByRole("button", { name: "Classificar U-042" }));
+    const panel = await screen.findByRole("region", { name: "Classificação de risco — U-042" });
+    fireEvent.change(await within(panel).findByLabelText("Queixa principal"), { target: { value: "febre" } });
+    fireEvent.change(within(panel).getByLabelText("Dor (0 a 10)"), { target: { value: "5" } });
+    await within(panel).findByText(/^Sugerida: amarelo/, {}, { timeout: 2000 });
+    fireEvent.click(within(panel).getByRole("radio", { name: "amarelo · até 60 min" }));
+    fireEvent.click(within(panel).getByRole("button", { name: "Classificar" }));
+    expect(await screen.findByText("U-042 classificado: amarelo.")).not.toBeNull();
+    act(() => { vi.advanceTimersByTime(NOTICE_MS); });
+    expect(screen.queryByText("U-042 classificado: amarelo.")).toBeNull();
   });
 
   it("o médico não vê 'Classificar'", async () => {

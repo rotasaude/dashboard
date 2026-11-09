@@ -17,10 +17,12 @@ import {
 import { EMPTY_VITALS_FORM, VITALS, bmiOf, parseVitals, type VitalKey, type VitalsForm, type VitalsProblems } from "../../lib/screening";
 import {
   DEFAULT_LEVELS, NOMINAL_QUERY, URGENCY_COLORS, URGENCY_COLOR_TONE, URGENCY_DETAIL_KEY, URGENCY_ERRORS, classificationBody,
-  classificationProblems, colorLabel, justificationNeeded, maxWaitLabel, urgencyError, urgencyRefusals, type ClassificationDraft
+  chars, classificationProblems, colorLabel, justificationNeeded, maxWaitLabel, painValue, urgencyError, urgencyRefusals,
+  type ClassificationDraft
 } from "../../lib/urgency";
 import type { Refusal } from "../../lib/pharmacy";
 import { useDebouncedValue } from "../../lib/useDebouncedValue";
+import { useLeaveGuard } from "../../lib/useLeaveGuard";
 import { FrozenTextNotice } from "../../components/FrozenTextNotice";
 import { Tag } from "../../components/Tag";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
@@ -32,6 +34,8 @@ export interface ClassificationFormProps {
   suggestDelayMs?: number;
   onDone(encounter: UrgencyEncounter): void;
   onCancel(): void;
+  // Algo digitado e não enviado (a mesa pergunta antes de fechar ou trocar o painel).
+  onDirtyChange?(dirty: boolean): void;
 }
 
 export const PAIN_FIRST = "Informe a dor para ver a cor sugerida.";
@@ -46,17 +50,14 @@ const VITAL_FIELDS = new Set<string>([ ...VITALS.map((v) => v.key as string).fil
 // Os campos do formulário que mostram a recusa sob si (o resto vai ao topo).
 const FORM_FIELDS = new Set([ "complaint", "pain_scale", "color", "justification" ]);
 
-const chars = (v: string): number => [ ...v.trim() ].length;
-const painValue = (raw: string): number | null => {
-  const t = raw.trim();
-  if (!/^\d{1,2}$/.test(t)) return null;
-  const n = Number(t);
-  return n <= 10 ? n : null;
-};
+// Cada estado da prévia guarda a chave (sinais + dor + releitura) a que responde: só vale enquanto ela é a da tela.
+type SuggestState =
+  | { kind: "idle" } | { kind: "loading"; key: string } | { kind: "ready"; key: string; suggested: UrgencySuggestion["suggested"] }
+  | { kind: "error"; key: string };
+// A chave é "<sinais e dor>#<releitura>"; a primeira parte é a base (o que a pessoa digitou).
+const baseOf = (key: string): string => key.slice(0, key.lastIndexOf("#"));
 
-type SuggestState = { kind: "idle" } | { kind: "loading" } | { kind: "ready"; suggested: UrgencySuggestion["suggested"] } | { kind: "error" };
-
-export function ClassificationForm({ encounterId, suggestDelayMs = 400, onDone, onCancel }: ClassificationFormProps) {
+export function ClassificationForm({ encounterId, suggestDelayMs = 400, onDone, onCancel, onDirtyChange }: ClassificationFormProps) {
   const detail = useQuery({
     queryKey: [ URGENCY_DETAIL_KEY, encounterId ], queryFn: () => getUrgencyEncounter(encounterId), ...NOMINAL_QUERY
   });
@@ -70,18 +71,22 @@ export function ClassificationForm({ encounterId, suggestDelayMs = 400, onDone, 
       </div>
     );
   }
-  return <Form encounter={detail.data} suggestDelayMs={suggestDelayMs} onDone={onDone} onCancel={onCancel} />;
+  return <Form encounter={detail.data} suggestDelayMs={suggestDelayMs} onDone={onDone} onCancel={onCancel} onDirtyChange={onDirtyChange} />;
 }
 
-function Form({ encounter, suggestDelayMs, onDone, onCancel }: { encounter: UrgencyEncounter; suggestDelayMs: number } & Pick<ClassificationFormProps, "onDone" | "onCancel">) {
+type FormProps = { encounter: UrgencyEncounter; suggestDelayMs: number } & Pick<ClassificationFormProps, "onDone" | "onCancel" | "onDirtyChange">;
+
+function Form({ encounter, suggestDelayMs, onDone, onCancel, onDirtyChange }: FormProps) {
   const ids = useId();
   const [ complaint, setComplaint ] = useState("");
   const [ vitalsForm, setVitalsForm ] = useState<VitalsForm>(EMPTY_VITALS_FORM);
   const [ pain, setPain ] = useState("");
   const [ color, setColor ] = useState<UrgencyColor | null>(null);
   const [ justification, setJustification ] = useState("");
-  // O api pediu a justificativa com uma sugestão que a tela não tinha: o campo fica, e ela vai no corpo.
-  const [ forceJustification, setForceJustification ] = useState(false);
+  // O api pediu a justificativa com uma sugestão que a tela não tinha: o campo fica, e ela vai no corpo, até chegar uma
+  // sugestão nova para outros sinais ou outra dor (a base em que o api pediu).
+  const [ forceBase, setForceBase ] = useState<string | null>(null);
+  const forceJustification = forceBase !== null;
   const [ suggest, setSuggest ] = useState<SuggestState>({ kind: "idle" });
   const [ levels, setLevels ] = useState<UrgencyLevel[]>(DEFAULT_LEVELS);
   const [ refresh, setRefresh ] = useState(0);
@@ -95,29 +100,34 @@ function Form({ encounter, suggestDelayMs, onDone, onCancel }: { encounter: Urge
   const { vitals, problems: vitalProblems } = parseVitals({ ...vitalsForm, pain_score: "" });
   const painNum = painValue(pain);
   const vitalsOk = Object.keys(vitalProblems).length === 0;
-  const inputKey = painNum !== null && vitalsOk ? JSON.stringify({ vitals, pain: painNum, refresh }) : "";
+  const inputKey = painNum !== null && vitalsOk ? `${JSON.stringify({ vitals, pain: painNum })}#${refresh}` : "";
   const settledKey = useDebouncedValue(inputKey, suggestDelayMs);
 
   useEffect(() => {
     if (!settledKey) { seq.current += 1; setSuggest({ kind: "idle" }); return; }
-    const { vitals: v, pain: p } = JSON.parse(settledKey) as { vitals: typeof vitals; pain: number };
+    const { vitals: v, pain: p } = JSON.parse(baseOf(settledKey)) as { vitals: typeof vitals; pain: number };
     const mine = ++seq.current;
-    setSuggest({ kind: "loading" });
+    const key = settledKey;
+    setSuggest({ kind: "loading", key });
     suggestUrgencyColor({ encounter_id: encounter.id, vital_signs: v, pain_scale: p })
       .then((s) => {
         if (mine !== seq.current) return;
-        setSuggest({ kind: "ready", suggested: s.suggested });
+        setSuggest({ kind: "ready", key, suggested: s.suggested });
+        // Sugestão nova para outra base: o pedido de justificativa do api era para a antiga.
+        setForceBase((fb) => (fb !== null && fb !== baseOf(key) ? null : fb));
         if (Array.isArray(s.levels) && s.levels.length > 0) setLevels(s.levels);
       })
       // A prévia não é recusa: sem alerta, a classificação segue com a justificativa.
-      .catch(() => { if (mine === seq.current) setSuggest({ kind: "error" }); });
+      .catch(() => { if (mine === seq.current) setSuggest({ kind: "error", key }); });
   }, [ settledKey, encounter.id ]);
   // Resposta que chegar depois de fechar é ignorada.
   useEffect(() => () => { seq.current += 1; }, []);
 
-  const pending = inputKey !== "" && (inputKey !== settledKey || suggest.kind === "loading");
-  const suggestedColor = suggest.kind === "ready" ? suggest.suggested?.color ?? null : null;
-  const decided = suggest.kind === "ready" || suggest.kind === "error";
+  // A prévia só vale para a chave que está na tela: mudou a dor ou um sinal, a antiga some na hora e o envio espera a nova.
+  const current = suggest.kind === "ready" || suggest.kind === "error" ? (suggest.key === inputKey ? suggest : null) : null;
+  const pending = inputKey !== "" && current === null;
+  const suggestedColor = current?.kind === "ready" ? current.suggested?.color ?? null : null;
+  const decided = current !== null;
   // Para a regra da justificativa: com o pedido do api, como se não houvesse sugestão.
   const ruleSuggested = forceJustification ? null : suggestedColor;
   const askJustification = forceJustification || (decided && justificationNeeded(suggestedColor, color));
@@ -142,6 +152,12 @@ function Form({ encounter, suggestDelayMs, onDone, onCancel }: { encounter: Urge
     return !(m && VITAL_FIELDS.has(m[1]));
   });
 
+  // Algo digitado e não enviado: o navegador avisa ao sair (useLeaveGuard) e a mesa pergunta antes de fechar.
+  const dirty = complaint !== "" || pain !== "" || color !== null || justification !== ""
+    || JSON.stringify(vitalsForm) !== JSON.stringify(EMPTY_VITALS_FORM);
+  useLeaveGuard(dirty && !busy);
+  useEffect(() => { onDirtyChange?.(dirty); }, [ dirty, onDirtyChange ]);
+
   const closed = encounter.state === "closed";
   const reclassify = encounter.classifications.length > 0;
   const blocked = busy || pending;
@@ -157,7 +173,7 @@ function Form({ encounter, suggestDelayMs, onDone, onCancel }: { encounter: Urge
     } catch (err) {
       const list = urgencyRefusals(err);
       if (list.some((r) => r.code === "justification_required")) {
-        setForceJustification(true);
+        setForceBase(baseOf(inputKey));
         // A sugestão do api mudou (ex.: protocolo ativado agora): pede de novo.
         setRefresh((n) => n + 1);
       }
@@ -211,14 +227,14 @@ function Form({ encounter, suggestDelayMs, onDone, onCancel }: { encounter: Urge
       <fieldset aria-label="Cor" style={box}>
         <legend style={legend}>Cor</legend>
         <div role="status" style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", fontSize: 12.5 }}>
-          {!pending && suggest.kind === "idle" && <span style={hint}>{vitalsOk ? PAIN_FIRST : FIX_VITALS_FIRST}</span>}
+          {inputKey === "" && <span style={hint}>{vitalsOk ? PAIN_FIRST : FIX_VITALS_FIRST}</span>}
           {pending && <span className="mono" style={hint}>calculando a sugestão…</span>}
-          {!pending && suggest.kind === "error" && <span style={hint}>{SUGGESTION_FAILED}</span>}
-          {!pending && suggest.kind === "ready" && suggest.suggested === null && <span>{NO_SUGGESTION}</span>}
-          {!pending && suggest.kind === "ready" && suggest.suggested !== null && (
+          {current?.kind === "error" && <span style={hint}>{SUGGESTION_FAILED}</span>}
+          {current?.kind === "ready" && current.suggested === null && <span>{NO_SUGGESTION}</span>}
+          {current?.kind === "ready" && current.suggested !== null && (
             <>
-              <Tag tone={URGENCY_COLOR_TONE[suggest.suggested.color]}>{colorLabel(suggest.suggested.color)}</Tag>
-              <span>{`Sugerida: ${colorLabel(suggest.suggested.color)} — ${suggest.suggested.criterion}`}</span>
+              <Tag tone={URGENCY_COLOR_TONE[current.suggested.color]}>{colorLabel(current.suggested.color)}</Tag>
+              <span>{`Sugerida: ${colorLabel(current.suggested.color)} — ${current.suggested.criterion}`}</span>
             </>
           )}
         </div>

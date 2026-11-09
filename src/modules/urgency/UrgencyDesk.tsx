@@ -6,13 +6,14 @@
 // - enfermagem 2235: "Classificar"/"Reclassificar" abre a classificação de risco (ClassificationForm) num painel acima da fila.
 // Enquanto os vínculos do profissional carregam, nada de "seu papel não atua nesta UPA" (piscaria antes dos vínculos).
 // Quem monta passa `key={unit.id}`: trocar de UPA remonta tudo e nada de uma unidade aparece na outra.
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { HealthUnit, ProfessionalLink, SessionUser, UrgencyArrival, UrgencyEncounter } from "../../lib/api";
 import { URGENCY_DETAIL_KEY, colorLabel, urgencyRoles } from "../../lib/urgency";
 import { useReveal } from "../../lib/useReveal";
 import { Panel } from "../../components/Panel";
 import { EmptyState } from "../../components/EmptyState";
+import { dangerButtonStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { ArrivalForm } from "./ArrivalForm";
 import { ClassificationForm } from "./ClassificationForm";
 import { TicketCard } from "./TicketCard";
@@ -24,19 +25,58 @@ export const LINKS_LOADING = "carregando seus vínculos…";
 // O painel aberto por uma linha da fila: só o id do encontro e a senha (o detalhe é lido pelo id, nunca vai na URL).
 type Classifying = { encounterId: string; ticket: string | null };
 
-// O painel de classificação: aparece à vista, com o foco no título (useReveal); Escape fecha.
-function ClassificationPanel({ target, onDone, onClose }: { target: Classifying; onDone(e: UrgencyEncounter): void; onClose(): void }) {
+// Quanto tempo o aviso de "classificado" fica à vista.
+export const NOTICE_MS = 8_000;
+export const DISCARD_QUESTION = "A classificação em andamento não foi enviada. Descartar o que foi digitado?";
+
+// Escape dentro de um campo não fecha nada (quem digita pode estar só saindo de uma sugestão do navegador).
+const inField = (el: EventTarget) => el instanceof HTMLElement && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName);
+
+interface PanelProps {
+  target: Classifying;
+  confirming: boolean;
+  onDone(e: UrgencyEncounter): void;
+  onClose(): void;
+  onDirtyChange(dirty: boolean): void;
+  onDiscard(): void;
+  onKeep(): void;
+}
+
+// O painel de classificação: aparece à vista, com o foco no título (useReveal). Escape e "Cancelar" fecham; com algo digitado, a
+// mesa pergunta antes (`confirming`), e o formulário segue montado com tudo o que foi digitado até a resposta.
+function ClassificationPanel({ target, confirming, onDone, onClose, onDirtyChange, onDiscard, onKeep }: PanelProps) {
   const ref = useReveal<HTMLDivElement>(true);
+  const keepRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => { if (confirming) keepRef.current?.focus(); }, [ confirming ]);
+  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== "Escape" || inField(e.target)) return;
+    e.stopPropagation();
+    if (confirming) onKeep(); else onClose();
+  };
   return (
-    <div ref={ref} onKeyDown={(e) => { if (e.key === "Escape") { e.stopPropagation(); onClose(); } }}>
+    <div ref={ref} onKeyDown={onKeyDown}>
       <Panel title={`Classificação de risco — ${target.ticket ?? "sem senha"}`} sub="sinais vitais · dor · cor sugerida pelo protocolo">
-        <div style={{ padding: 16 }}>
-          <ClassificationForm encounterId={target.encounterId} onDone={onDone} onCancel={onClose} />
+        <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 12 }}>
+          {confirming && (
+            <div role="alertdialog" aria-label="Descartar a classificação?" style={confirmBox}>
+              <p style={{ margin: 0, fontSize: 12.5 }}>{DISCARD_QUESTION}</p>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button ref={keepRef} type="button" style={secondaryButtonStyle} onClick={onKeep}>Continuar classificando</button>
+                <button type="button" style={dangerButtonStyle} onClick={onDiscard}>Descartar</button>
+              </div>
+            </div>
+          )}
+          <ClassificationForm encounterId={target.encounterId} onDone={onDone} onCancel={onClose} onDirtyChange={onDirtyChange} />
         </div>
       </Panel>
     </div>
   );
 }
+
+const confirmBox: CSSProperties = {
+  display: "flex", flexDirection: "column", gap: 8, padding: "10px 12px", border: "1px solid var(--warn)", borderRadius: 8,
+  background: "var(--warn-bg)"
+};
 
 export interface UrgencyDeskProps {
   unit: HealthUnit;
@@ -58,17 +98,40 @@ export function UrgencyDesk({ unit, user, links, linksLoading = false }: Urgency
   const [ nextArrival, setNextArrival ] = useState(false);
   const [ classifying, setClassifying ] = useState<Classifying | null>(null);
   const [ notice, setNotice ] = useState<string | null>(null);
+  // O formulário aberto tem algo digitado e não enviado.
+  const [ dirty, setDirty ] = useState(false);
+  // A troca pedida enquanto havia algo digitado: fechar (null) ou abrir outra linha; espera a resposta da pergunta.
+  const [ asked, setAsked ] = useState<{ next: Classifying | null } | null>(null);
+  const onDirtyChange = useCallback((d: boolean) => setDirty(d), []);
 
-  // Fechar tira o detalhe (queixa, sinais) do cache.
-  const closeClassification = () => { setClassifying(null); queryClient.removeQueries({ queryKey: [ URGENCY_DETAIL_KEY ] }); };
+  // O aviso some sozinho (timer limpo ao desmontar ou ao trocar o aviso).
+  useEffect(() => {
+    if (notice === null) return;
+    const id = setTimeout(() => setNotice(null), NOTICE_MS);
+    return () => clearTimeout(id);
+  }, [ notice ]);
+
+  // Trocar o painel tira o detalhe (queixa, sinais) do cache.
+  const switchTo = (next: Classifying | null) => {
+    setAsked(null); setDirty(false);
+    queryClient.removeQueries({ queryKey: [ URGENCY_DETAIL_KEY ] });
+    setClassifying(next);
+  };
+  // Fechar ou abrir outra linha: com algo digitado, pergunta antes.
+  const request = (next: Classifying | null) => {
+    if (next && classifying?.encounterId === next.encounterId) return;
+    if (classifying && dirty) { setAsked({ next }); return; }
+    if (next) setNotice(null);
+    switchTo(next);
+  };
   const classified = (e: UrgencyEncounter) => {
     setNotice(`${e.ticket ?? "Paciente"} classificado: ${e.color ? colorLabel(e.color) : "—"}.`);
-    closeClassification();
+    switchTo(null);
     queueRef.current?.refresh();
   };
   // Q2: só a enfermagem 2235 classifica (a fila também confere o papel).
   const actions: QueueActions = roles.nurse
-    ? { onClassify: (row) => { setNotice(null); setClassifying({ encounterId: row.encounter_id, ticket: row.ticket }); } }
+    ? { onClassify: (row) => request({ encounterId: row.encounter_id, ticket: row.ticket }) }
     : {};
 
   if (!roles.reception && !roles.nurse && !roles.doctor) {
@@ -89,7 +152,10 @@ export function UrgencyDesk({ unit, user, links, linksLoading = false }: Urgency
       )}
       {notice && <p role="status" style={{ margin: 0, fontSize: 12.5, color: "var(--ink2)" }}>{notice}</p>}
       {classifying && (
-        <ClassificationPanel key={classifying.encounterId} target={classifying} onDone={classified} onClose={closeClassification} />
+        <ClassificationPanel key={classifying.encounterId} target={classifying} confirming={asked !== null} onDone={classified}
+          onClose={() => request(null)} onDirtyChange={onDirtyChange}
+          onDiscard={() => { const next = asked?.next ?? null; if (next) setNotice(null); switchTo(next); }}
+          onKeep={() => setAsked(null)} />
       )}
       <UrgencyQueue ref={queueRef} unit={unit} roles={roles} actions={actions} />
     </div>

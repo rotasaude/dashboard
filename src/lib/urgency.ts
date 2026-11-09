@@ -268,7 +268,7 @@ export function urgencyRefusals(err: unknown, overrides: Record<string, string> 
 }
 
 // ─── Validações locais (os `path` e os limites são os do api; mede sem os espaços das pontas) ──────────────────
-const chars = (v: string): number => [ ...v.trim() ].length;
+export const chars = (v: string): number => [ ...v.trim() ].length;
 const within = (v: string, min: number, max: number): boolean => { const n = chars(v); return n >= min && n <= max; };
 
 export type ArrivalDraft =
@@ -305,7 +305,8 @@ export function justificationNeeded(suggested: UrgencyColor | null, final: Urgen
   return suggested === null || (final !== null && final !== suggested);
 }
 
-const painValue = (raw: string): number | null => {
+// A dor do formulário: inteiro de 0 a 10, ou null.
+export const painValue = (raw: string): number | null => {
   const t = raw.trim();
   if (!/^\d{1,2}$/.test(t)) return null;
   const n = Number(t);
