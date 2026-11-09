@@ -6,7 +6,8 @@
 //   alta com retorno → prazo e motivo; registrado por engano → motivo. Óbito, "contra orientação" e "registrado por engano" pedem a
 //   confirmação; os limites e as frases são os do api (outcomeProblems/outcomeBody, Task 2).
 // - O aviso do sucesso só diz o tipo (nada de destino, motivo nem prazo): quem monta o mostra depois de fechar o painel.
-import { useId, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useId, useState, type CSSProperties, type ReactNode } from "react";
+import { errorCode } from "../../lib/api";
 import { recordUrgencyOutcome, type UrgencyEncounter, type UrgencyOutcomeKind } from "../../lib/api";
 import {
   DESK_OUTCOMES, IDENTIFIED_OUTCOMES, OUTCOME_KIND_LABEL, URGENCY_ERRORS, consultationContext, outcomeBody, outcomeKindsFor,
@@ -23,7 +24,14 @@ export interface OutcomeFormProps {
   encounter: OutcomeTarget;
   doctor: boolean;
   onRecorded(e: UrgencyEncounter, notice: string): void;
+  // O api recusou por estado que a tela pode ter lido velho (consulta em rascunho, não finalizada): quem tem o detalhe relê.
+  onStale?(): void;
+  // 409 encounter_closed: outra pessoa encerrou; quem monta fecha o painel e relê a fila.
+  onEncounterClosed?(): void;
 }
+
+// As recusas de estado que pedem reler o detalhe (nunca em foco nem ao abrir: cada leitura grava trilha).
+const STALE_CODES = new Set([ "consultation_in_progress", "consultation_not_finalized", "consultation_finalized", "patient_unidentified" ]);
 
 const EMPTY: OutcomeDraft = { kind: null, destination: "", vacancyRequest: "", returnDays: "", returnReason: "", reason: "" };
 // Irreversíveis sem nenhum campo que os segure: pedem a confirmação.
@@ -43,7 +51,7 @@ export function outcomeNotice(kind: UrgencyOutcomeKind): string {
 type Shown = { path: string; text: string };
 const FIELD_PATHS = [ "destination", "vacancy_request", "return_guidance.days", "return_guidance.reason", "reason" ];
 
-export function OutcomeForm({ encounter, doctor, onRecorded }: OutcomeFormProps) {
+export function OutcomeForm({ encounter, doctor, onRecorded, onStale, onEncounterClosed }: OutcomeFormProps) {
   const ids = useId();
   const [ draft, setDraft ] = useState<OutcomeDraft>(EMPTY);
   // Os problemas aparecem depois da primeira tentativa (a do motivo do engano, sob o botão de confirmar, desde o começo).
@@ -54,8 +62,13 @@ export function OutcomeForm({ encounter, doctor, onRecorded }: OutcomeFormProps)
   const waitsConsultation = (k: UrgencyOutcomeKind) => !DESK_OUTCOMES.includes(k) && !ctx.consultationFinalized;
   const waitsIdentity = (k: UrgencyOutcomeKind) => IDENTIFIED_OUTCOMES.includes(k) && ctx.unidentified;
   const off = (k: UrgencyOutcomeKind) => waitsConsultation(k) || waitsIdentity(k);
-  const kind = draft.kind;
-  const problems = outcomeProblems(draft, ctx);
+  // O tipo escolhido que deixou de valer (ex.: "registrado por engano" depois da finalização, Q30) sai da escolha.
+  const kind = draft.kind !== null && kinds.includes(draft.kind) ? draft.kind : null;
+  const kindsKey = kinds.join(",");
+  useEffect(() => {
+    setDraft((d) => (d.kind !== null && !kindsKey.split(",").includes(d.kind) ? { ...d, kind: null } : d));
+  }, [ kindsKey ]);
+  const problems = outcomeProblems({ ...draft, kind }, ctx);
   const set = (patch: Partial<OutcomeDraft>) => { setDraft((d) => ({ ...d, ...patch })); setShown([]); };
   const fieldText = (path: string) => shown.find((p) => p.path === path)?.text ?? null;
   const general = shown.filter((p) => !FIELD_PATHS.includes(p.path));
@@ -68,7 +81,10 @@ export function OutcomeForm({ encounter, doctor, onRecorded }: OutcomeFormProps)
       const result = await recordUrgencyOutcome(encounter.id, outcomeBody({ ...draft, kind }));
       onRecorded(result.encounter, outcomeNotice(kind));
     } catch (err) {
+      const code = errorCode(err);
+      if (code === "encounter_closed" && onEncounterClosed) { onEncounterClosed(); return; }
       setShown(urgencyRefusals(err).map((r) => ({ path: r.path, text: r.text })));
+      if (code && STALE_CODES.has(code)) onStale?.();
     }
   }
 

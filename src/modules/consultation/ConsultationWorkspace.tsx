@@ -80,7 +80,8 @@ export function ConsultationWorkspace(props: Props) {
   // Nenhum tipo oferecido (o api recusaria qualquer início): uma linha no lugar dos botões.
   const noKindReason = props.urgency
     ? (urgencyOffered ? null : "seu CBO não atende urgência nesta unidade")
-    : options.data && kinds.length === 0
+    // Fora da urgência, "urgency" não conta (ex.: médico da UPA num atendimento do 13 de antes da urgência).
+    : options.data && kinds.filter((k) => k !== "urgency").length === 0
       ? ((options.data.kinds ?? []).includes("dental") ? DENTAL_DISABLED : "seu CBO não registra consulta neste atendimento")
       : null;
   const documentsOn = canUseDocuments(user) && (!isDental || (role === "dentist" && !baseline));

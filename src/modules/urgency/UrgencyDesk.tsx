@@ -103,7 +103,8 @@ function LeavingPanel({ leaving, doctor, onClosed }: { leaving: Leaving; doctor:
       <Panel title={`Saída — ${leaving.ticket ?? "sem senha"}`} sub="saída sem atendimento · registro por engano"
         right={<button type="button" style={secondaryButtonStyle} onClick={() => onClosed()}>Cancelar</button>}>
         <div style={{ padding: 16 }}>
-          <OutcomeForm encounter={leaving.target} doctor={doctor} onRecorded={(_e, notice) => onClosed(notice)} />
+          <OutcomeForm encounter={leaving.target} doctor={doctor} onRecorded={(_e, notice) => onClosed(notice)}
+            onEncounterClosed={() => onClosed(URGENCY_ERRORS.encounter_closed)} />
         </div>
       </Panel>
     </div>
@@ -243,7 +244,12 @@ export function UrgencyDesk({ unit, user, links, linksLoading = false, onGoToSec
       onOpenCare: (row) => openCare(row)
     } satisfies QueueActions : {}),
     ...(roles.outcomeDesk ? {
-      onLeft: (row) => { setCare(null); setLeaving({ target: { id: row.encounter_id, patient: row.patient, consultation_status: null }, ticket: row.ticket }); }
+      // A linha em atendimento traz o estado da consulta (Q30 e consultation_in_progress); a de espera ainda não tem consulta.
+      // A consulta aberta do médico continua aberta (os dois painéis convivem).
+      onLeft: (row) => setLeaving({
+        target: { id: row.encounter_id, patient: row.patient, consultation_status: "consultation_status" in row ? row.consultation_status : null },
+        ticket: row.ticket
+      })
     } satisfies QueueActions : {}),
     ...(waitingRoom ? {
       onRecall: (row) => void call(async (loc) => {

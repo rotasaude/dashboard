@@ -3,10 +3,11 @@
 // meio, a consulta do 19a com `kind: "urgency"` (documentos, exames, notificação, adendos e assinatura como no 19a); embaixo, o
 // desfecho da urgência. Finalizar a consulta não encerra o atendimento: o desfecho encerra, e então o painel fecha, a mesa relê a
 // fila e mostra o aviso (sem texto clínico). O detalhe é lido pelo id do encontro (nunca vai na URL) e sai do cache ao fechar.
+// Cada leitura do detalhe grava trilha: lido ao abrir, ao finalizar e quando o api recusa o desfecho por estado desatualizado.
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getUrgencyEncounter, type HealthUnit, type UrgencyInCareRow } from "../../lib/api";
-import { URGENCY_DETAIL_KEY, urgencyError } from "../../lib/urgency";
+import { NOMINAL_QUERY, URGENCY_DETAIL_KEY, URGENCY_ERRORS, urgencyError } from "../../lib/urgency";
 import { useReveal } from "../../lib/useReveal";
 import { Panel } from "../../components/Panel";
 import { ConsultationWorkspace } from "../consultation/ConsultationWorkspace";
@@ -27,7 +28,8 @@ export interface UrgencyCareProps {
 export function UrgencyCare({ row, unit, units, onClosed, onGoToSecurity }: UrgencyCareProps) {
   const ref = useReveal<HTMLDivElement>(true);
   const detail = useQuery({
-    queryKey: [ URGENCY_DETAIL_KEY, row.encounter_id ], queryFn: () => getUrgencyEncounter(row.encounter_id), gcTime: 0, staleTime: 0
+    // Cada leitura grava trilha: nada de nova tentativa, foco ou reconexão (NOMINAL_QUERY); só a releitura pedida.
+    queryKey: [ URGENCY_DETAIL_KEY, row.encounter_id ], queryFn: () => getUrgencyEncounter(row.encounter_id), ...NOMINAL_QUERY
   });
   // Finalizada nesta tela: o desfecho já libera os tipos que esperam a consulta, mesmo antes de o detalhe relido chegar.
   const [ finalizedHere, setFinalizedHere ] = useState(false);
@@ -45,7 +47,10 @@ export function UrgencyCare({ row, unit, units, onClosed, onGoToSecurity }: Urge
             onClose={() => onClosed()}
             onFinalized={() => { setFinalizedHere(true); void detail.refetch(); }} />
           {finalizedHere && <p role="status" style={{ margin: 0, fontSize: 12.5, fontWeight: 600 }}>{FINALIZED_NOTICE}</p>}
-          {target && <OutcomeForm encounter={target} doctor onRecorded={(_e, notice) => onClosed(notice)} />}
+          {target && (
+            <OutcomeForm encounter={target} doctor onRecorded={(_e, notice) => onClosed(notice)}
+              onStale={() => void detail.refetch()} onEncounterClosed={() => onClosed(URGENCY_ERRORS.encounter_closed)} />
+          )}
         </div>
       </Panel>
     </div>

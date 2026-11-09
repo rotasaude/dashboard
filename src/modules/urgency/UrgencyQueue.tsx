@@ -34,7 +34,8 @@ export interface QueueActions {
   onRecall?(row: { attendance_id: string; ticket: string | null }): void;
   onOpenCare?(row: UrgencyInCareRow): void;
   onIdentify?(row: UrgencyWaitingRow): void;
-  onLeft?(row: UrgencyWaitingRow): void;
+  // Q10: a saída de balcão vale em qualquer estado antes do fechamento (também em quem já está em atendimento).
+  onLeft?(row: UrgencyWaitingRow | UrgencyInCareRow): void;
 }
 export interface UrgencyQueueHandle { refresh(): void }
 export type QueueRoles = Pick<UrgencyRoles, "reception" | "nurse" | "doctor">;
@@ -168,7 +169,7 @@ export const UrgencyQueue = forwardRef<UrgencyQueueHandle, UrgencyQueueProps>(fu
     { label: "Consulta", w: "0.9fr", render: (r) => (r.consultation_status ? CONSULTATION_TEXT[r.consultation_status] ?? "—" : "—") },
     { label: "", w: "auto", align: "right", card: "actions", render: (r) => rowButtons(who(r), [
       onOpenCare && roles.doctor && { label: "Atender", onClick: () => onOpenCare(r) },
-      recall(r), identify(r)
+      recall(r), identify(r), onLeft && { label: "Saiu sem atendimento", onClick: () => onLeft(r) }
     ]) }
   ];
 

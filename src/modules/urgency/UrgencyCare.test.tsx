@@ -24,6 +24,7 @@ import { consultation as consultationFixture, finalized, options as optionsFixtu
 import {
   DOCTOR_LINK, NURSE_LINK, UPA, classification, encounter, inCareRow, queue, unidentifiedRef, urgencyUser
 } from "../../test/urgencyFixtures";
+import { ConsultationWorkspace } from "../consultation/ConsultationWorkspace";
 import { OutcomeForm } from "./OutcomeForm";
 import { UrgencyDesk } from "./UrgencyDesk";
 
@@ -89,11 +90,65 @@ describe("atendimento médico", () => {
     expect(within(screen.getByRole("region", { name: "Finalizar consulta" })).queryByLabelText("Desfecho")).toBeNull();
   });
 
-  it("CBO sem urgência: a frase no lugar do botão", async () => {
-    vi.mocked(api.getConsultationOptions).mockResolvedValue({ ...optionsFixture(), kinds: [] });
+  it("CBO sem urgência: a frase no lugar do botão, e nenhum botão de consulta comum", async () => {
+    vi.mocked(api.getConsultationOptions).mockResolvedValue({ ...optionsFixture(), kinds: [ "general" ] });
     await mountCare(inCareRow());
     expect(await screen.findByText("seu CBO não atende urgência nesta unidade")).not.toBeNull();
     expect(screen.queryByRole("button", { name: "Iniciar atendimento de urgência" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Iniciar consulta" })).toBeNull();
+  });
+
+  it("consulta comum (atendimento do 13) na UPA com só 'urgency' oferecido: a frase, nunca um painel sem botão", async () => {
+    const user = urgencyUser([ "health_professional" ], FEATURES);
+    vi.mocked(api.fetchCurrentSession).mockResolvedValue(user);
+    renderWithProviders(<ConsultationWorkspace attendanceId="a13" unit={UPA} units={[ UPA ]} onClose={() => undefined} onFinalized={() => undefined} />);
+    expect(await screen.findByText("seu CBO não registra consulta neste atendimento")).not.toBeNull();
+    expect(screen.queryByRole("button", { name: /^Iniciar/ })).toBeNull();
+  });
+
+  it("trocar de linha salva na hora o que foi digitado no rascunho (sem esperar a pausa do autosave)", async () => {
+    vi.mocked(api.getUrgencyQueue).mockResolvedValue(queue({ awaiting_classification: [], by_color: [],
+      in_care: [ inCareRow(), inCareRow({ encounter_id: "en4", attendance_id: "at4", ticket: "U-039" }) ] }));
+    vi.mocked(api.getUrgencyEncounter).mockResolvedValue(careEncounter());
+    vi.mocked(api.startConsultation).mockResolvedValue(consultationFixture({ id: "co1", attendance_id: "at3", kind: "urgency", care_type: null }));
+    vi.mocked(api.saveConsultationDraft).mockResolvedValue(consultationFixture({ id: "co1", kind: "urgency", care_type: null }));
+    mountDesk();
+    fireEvent.click(await screen.findByRole("button", { name: "Atender U-038" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Iniciar atendimento de urgência" }));
+    fireEvent.change(await screen.findByLabelText(/^Subjetivo/), { target: { value: "dor no peito há 2 horas" } });
+    expect(api.saveConsultationDraft).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Atender U-039" }));
+    await waitFor(() => expect(api.saveConsultationDraft).toHaveBeenCalled());
+    const [ id, body ] = vi.mocked(api.saveConsultationDraft).mock.calls[0];
+    expect(id).toBe("co1");
+    expect(body.subjective).toBe("dor no peito há 2 horas");
+    expect("care_type" in body).toBe(false);
+  });
+
+  it("abrir a saída de outra linha não fecha o atendimento aberto", async () => {
+    vi.mocked(api.getUrgencyQueue).mockResolvedValue(queue({ in_care: [ inCareRow() ] }));
+    vi.mocked(api.getUrgencyEncounter).mockResolvedValue(careEncounter());
+    mountDesk();
+    fireEvent.click(await screen.findByRole("button", { name: "Atender U-038" }));
+    await screen.findByRole("region", { name: "Atendimento — U-038" });
+    fireEvent.click(screen.getByRole("button", { name: "Saiu sem atendimento U-040" }));
+    expect(await screen.findByRole("region", { name: "Saída — U-040" })).not.toBeNull();
+    expect(screen.getByRole("region", { name: "Atendimento — U-038" })).not.toBeNull();
+  });
+
+  it("recusa de estado do desfecho relê o detalhe (uma vez, nunca ao abrir de novo nem no foco)", async () => {
+    vi.mocked(api.recordUrgencyOutcome).mockRejectedValue(new ApiError(409, { error: "consultation_in_progress", path: "kind" }, "x"));
+    await mountCare(inCareRow());
+    const form = await screen.findByRole("group", { name: "Desfecho da urgência" });
+    expect(api.getUrgencyEncounter).toHaveBeenCalledTimes(1);
+    fireEvent.click(within(form).getByRole("radio", { name: "Saiu sem atendimento" }));
+    fireEvent.click(within(form).getByRole("button", { name: "Registrar desfecho" }));
+    expect(await screen.findByText("há uma consulta em rascunho neste atendimento — finalize-a antes")).not.toBeNull();
+    await waitFor(() => expect(api.getUrgencyEncounter).toHaveBeenCalledTimes(2));
+    window.dispatchEvent(new Event("focus"));
+    window.dispatchEvent(new Event("online"));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(api.getUrgencyEncounter).toHaveBeenCalledTimes(2);
   });
 
   it("exame pedido sem prioridade na urgência aparece como urgente (o api faz nascer urgente)", async () => {
@@ -272,6 +327,60 @@ describe("desfecho", () => {
     fireEvent.click(screen.getByRole("button", { name: "Registrar desfecho" }));
     expect(await screen.findByText("há uma consulta em rascunho neste atendimento — finalize-a antes")).not.toBeNull();
     expect(onRecorded).not.toHaveBeenCalled();
+  });
+
+  it("recepção: 'Saiu sem atendimento' também em quem já está em atendimento (Q10: desfecho de balcão antes do fechamento)", async () => {
+    vi.mocked(api.getUrgencyQueue).mockResolvedValue(queue({ awaiting_classification: [], by_color: [], in_care: [ inCareRow() ] }));
+    vi.mocked(api.recordUrgencyOutcome).mockResolvedValue({ encounter: careEncounter({ state: "closed" }), attendance: { id: "at3", status: "closed", outcome: "left" } });
+    const user = urgencyUser([ "citizen_verifier" ], FEATURES);
+    vi.mocked(api.fetchCurrentSession).mockResolvedValue(user);
+    renderWithProviders(<UrgencyDesk unit={UPA} user={user} links={[]} />);
+    const inCare = await screen.findByRole("region", { name: "Em atendimento" });
+    expect(within(inCare).queryByRole("button", { name: "Atender U-038" })).toBeNull();
+    fireEvent.click(within(inCare).getByRole("button", { name: "Saiu sem atendimento U-038" }));
+    const panel = await screen.findByRole("region", { name: "Saída — U-038" });
+    expect(within(panel).getAllByRole("radio").map((r) => (r as HTMLInputElement).labels?.[0]?.textContent))
+      .toEqual([ "Saiu sem atendimento", "Registrado por engano" ]);
+    fireEvent.click(within(panel).getByRole("radio", { name: "Saiu sem atendimento" }));
+    fireEvent.click(within(panel).getByRole("button", { name: "Registrar desfecho" }));
+    await waitFor(() => expect(vi.mocked(api.recordUrgencyOutcome).mock.calls[0]).toEqual([ "en3", { kind: "left_without_care" } ]));
+    expect(await screen.findByText("Atendimento encerrado: saiu sem atendimento.")).not.toBeNull();
+    expect(api.getUrgencyEncounter).not.toHaveBeenCalled();
+  });
+
+  it("em atendimento com a consulta finalizada: a saída de balcão não oferece 'Registrado por engano' (Q30)", async () => {
+    vi.mocked(api.getUrgencyQueue).mockResolvedValue(queue({ awaiting_classification: [], by_color: [],
+      in_care: [ inCareRow({ consultation_id: "co1", consultation_status: "finalized" }) ] }));
+    mountDesk([ NURSE_LINK ]);
+    fireEvent.click(await screen.findByRole("button", { name: "Saiu sem atendimento U-038" }));
+    const panel = await screen.findByRole("region", { name: "Saída — U-038" });
+    expect(within(panel).getAllByRole("radio").length).toBe(1);
+  });
+
+  it("encounter_closed: o painel fecha, a frase e a fila relida", async () => {
+    vi.mocked(api.getUrgencyQueue).mockResolvedValue(queue({ in_care: [] }));
+    vi.mocked(api.recordUrgencyOutcome).mockRejectedValue(new ApiError(409, { error: "encounter_closed" }, "x"));
+    mountDesk([ NURSE_LINK ]);
+    fireEvent.click(await screen.findByRole("button", { name: "Saiu sem atendimento U-040" }));
+    const panel = await screen.findByRole("region", { name: "Saída — U-040" });
+    fireEvent.click(within(panel).getByRole("radio", { name: "Saiu sem atendimento" }));
+    const before = queueReads();
+    fireEvent.click(within(panel).getByRole("button", { name: "Registrar desfecho" }));
+    expect(await screen.findByText("este atendimento já foi encerrado")).not.toBeNull();
+    expect(screen.queryByRole("region", { name: "Saída — U-040" })).toBeNull();
+    await waitFor(() => expect(queueReads()).toBeGreaterThan(before));
+  });
+
+  it("o tipo escolhido que deixa de valer sai da escolha (registrado por engano depois da finalização)", () => {
+    const onRecorded = vi.fn();
+    const { rerender } = render(<OutcomeForm encounter={encounter({ state: "in_care" })} doctor onRecorded={onRecorded} />);
+    fireEvent.click(screen.getByRole("radio", { name: "Registrado por engano" }));
+    rerender(<OutcomeForm encounter={encounter({ state: "in_care", consultation_id: "co1", consultation_status: "finalized" })} doctor onRecorded={onRecorded} />);
+    expect(screen.queryByLabelText("Motivo do registro por engano")).toBeNull();
+    expect(screen.getAllByRole("radio").some((r) => (r as HTMLInputElement).checked)).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "Registrar desfecho" }));
+    expect(screen.getByText("escolha o desfecho")).not.toBeNull();
+    expect(api.recordUrgencyOutcome).not.toHaveBeenCalled();
   });
 
   it("'Saiu sem atendimento' na fila abre o desfecho de balcão, sem ler o detalhe; o aviso e a fila relida", async () => {
