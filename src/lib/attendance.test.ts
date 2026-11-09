@@ -147,3 +147,14 @@ describe("módulo 31", () => {
     expect(withoutCaps([])).toEqual([]);
   });
 });
+
+describe("módulo 32a", () => {
+  it("check-in numa UPA com a urgência ligada vai pela recepção da urgência (Q10)", () => {
+    expect(attendanceError(new ApiError(422, { error: "urgency_reception_required" }, "x")))
+      .toBe("na UPA a chegada é registrada pela recepção da urgência");
+  });
+  it("exclusão de quem espera na UPA fica pendente (Q28)", () => {
+    expect(attendanceError(new ApiError(409, { error: "patient_in_urgency" }, "x")))
+      .toBe("a pessoa está em atendimento na urgência — confirme depois do desfecho; o pedido continua pendente");
+  });
+});

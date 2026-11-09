@@ -232,10 +232,14 @@ const NOTE_FIELD_LABEL: Record<string, string> = {
   complaint_note: "A queixa", orientation_note: "A orientação", color_change_reason: "A justificativa"
 };
 
+// Módulo 32a (§1, Q30): a escuta numa UPA responde 422 `screening_not_in_upa`.
+export const SCREENING_NOT_IN_UPA = "na UPA a classificação de risco substitui a escuta";
+
 // `implausible_vital` e `note_too_long` vêm com `field` (contratos §3, §9): a frase diz qual.
 export function screeningError(err: unknown): string {
   if (err instanceof ApiError) {
     const body = (err.body ?? {}) as { error?: string; field?: string };
+    if (body.error === "screening_not_in_upa") return SCREENING_NOT_IN_UPA;
     if (body.error === "implausible_vital") {
       if (body.field === "glucose_moment") return "Informe o momento da glicemia.";
       if (body.field === "vitals") return "Confira os sinais vitais.";

@@ -172,6 +172,9 @@ const MESSAGES: Record<string, string> = {
   invalid_cnes: "o CNES tem 7 dígitos",
   cnes_taken: "já existe unidade com este CNES",
   patient_on_trip: "o paciente está numa viagem em andamento; tente de novo depois que a viagem for fechada",
+  // Módulo 32a (Q10, Q28): na UPA com a urgência ligada, a chegada é da recepção da urgência; a exclusão de quem espera fica pendente.
+  urgency_reception_required: "na UPA a chegada é registrada pela recepção da urgência",
+  patient_in_urgency: "a pessoa está em atendimento na urgência — confirme depois do desfecho; o pedido continua pendente",
   regulation_request_required: "com a regulação ligada, encaminhamento sem unidade de destino é pelo “Pedir regulação” na consulta — escolha a unidade da rede"
 };
 

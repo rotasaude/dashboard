@@ -583,8 +583,8 @@ export function individualRulesProblem(input: IndividualRulesInput, person: Pers
 // O corpo real do POST/PATCH (RegistrationInput | RegistrationUpdate) é um rascunho.
 export type RegistrationDraft = RegistrationBody & { new_patient?: NewPatient | null; patient_id?: string; citizen_id?: string };
 
-const CPF_TEXT = "CPF inválido: confira os 11 dígitos";
-const CNS_TEXT = "CNS inválido: confira os 15 dígitos";
+export const CPF_TEXT = "CPF inválido: confira os 11 dígitos";
+export const CNS_TEXT = "CNS inválido: confira os 15 dígitos";
 const SOCIAL_NAME_MAX = 70;
 const text = (value: unknown): string | null => (typeof value === "string" ? squish(value) || null : null);
 const validCns = (value: string) => /^\d{15}$/.test(value) && isValidCns(value);

@@ -6535,7 +6535,8 @@ export type CallKind = "classification" | "care";
 // Painel: contagens de 1 a 4 chegam como "lt5" (0 fica 0); tempos com contagem 0 chegam null.
 export type UrgencyCount = number | "lt5";
 export type UrgencyTime = number | "lt5" | null;
-type ConsultationStatus = "draft" | "finalized";
+// Task 1 carry: o api pode mandar a consulta descartada (sem consulta utilizável).
+export type UrgencyConsultationStatus = "draft" | "finalized" | "discarded";
 
 // <patient-ref> (contrato §2): `description` só do provisório e só no detalhe (e na lista de provisórios, Q29).
 export interface UrgencyPatientRef {
@@ -6567,7 +6568,7 @@ export interface UrgencyColorRow extends UrgencyWaitingRow {
 // Em atendimento: os campos da espera + cor e chamada; nunca `overdue`.
 export interface UrgencyInCareRow extends UrgencyWaitingRow {
   color: UrgencyColor | null; max_wait_minutes: number | null; called_at: string | null; called_by_name: string | null;
-  consultation_id: string | null; consultation_status: ConsultationStatus | null;
+  consultation_id: string | null; consultation_status: UrgencyConsultationStatus | null;
 }
 export interface UrgencyQueue {
   awaiting_classification: UrgencyWaitingRow[]; by_color: UrgencyColorRow[]; in_care: UrgencyInCareRow[];
@@ -6608,7 +6609,7 @@ export interface UrgencyEncounter {
   id: string; attendance_id: string; health_unit_id: string; state: UrgencyState; ticket: string | null; arrived_at: string;
   patient: UrgencyPatientRef; color: UrgencyColor | null; max_wait_minutes: number | null; overdue: boolean;
   first_classified_at: string | null; classifications: UrgencyClassificationView[];
-  consultation_id: string | null; consultation_status: ConsultationStatus | null; outcome: UrgencyOutcomeView | null;
+  consultation_id: string | null; consultation_status: UrgencyConsultationStatus | null; outcome: UrgencyOutcomeView | null;
 }
 export interface UrgencyCall { id: string; kind: CallKind; ticket: string | null; location: string | null; called_at: string }
 // Identificação (só a recepção): paciente existente (fusão) ou novo, com a conferência de duplicado (Q23).

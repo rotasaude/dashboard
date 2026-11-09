@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { ApiError } from "./api";
 import {
-  EMPTY_VITALS_FORM, alertField, alertLabel, bmiOf, colorProblem, defaultDueDays, destinationPayload, destinationProblem,
+  EMPTY_VITALS_FORM, SCREENING_NOT_IN_UPA, alertField, alertLabel, bmiOf, colorProblem, defaultDueDays, destinationPayload, destinationProblem,
   emptyDestination, needsColorReason, parseVitals, screeningError, vitalsFormFrom, waitLabel, waitedMinutes, type VitalsForm
 } from "./screening";
 
@@ -168,5 +168,12 @@ describe("espera e erros", () => {
     [ undefined, "o texto passa de 500 caracteres" ]
   ])("note_too_long field=%s", (field, phrase) => {
     expect(screeningError(new ApiError(422, { error: "note_too_long", field }, "x"))).toBe(phrase);
+  });
+});
+
+describe("módulo 32a", () => {
+  it("na UPA não há escuta: a classificação de risco substitui (§1, Q30)", () => {
+    expect(SCREENING_NOT_IN_UPA).toBe("na UPA a classificação de risco substitui a escuta");
+    expect(screeningError(new ApiError(422, { error: "screening_not_in_upa" }, "x"))).toBe(SCREENING_NOT_IN_UPA);
   });
 });
