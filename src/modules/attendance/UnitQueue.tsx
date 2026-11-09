@@ -30,7 +30,7 @@ import { PatientTimeline } from "../timeline/PatientTimeline";
 import { ProceduresPanel } from "../billing/ProceduresPanel";
 import { unitBills } from "../../lib/billing";
 import { canUseWaitingRoom, urgencyError } from "../../lib/urgency";
-import { CallLocationPicker, useCallLocation } from "./CallLocationPicker";
+import { CallLocationPicker, atLocation, useCallLocation } from "./CallLocationPicker";
 
 // UnitQueue (Task 7) — a fila da unidade atual (spec §6 "Fila"), em duas
 // partes: "Aguardando" (ordenada pela API — prioridade, depois chegada — esta
@@ -206,7 +206,7 @@ export function UnitQueue({
       const sel = location.selected;
       const result = await recallAttendance(row.id, sel);
       invalidate();
-      msg.ok(`${ticketOf(row)} chamada de novo em ${result.call?.location ?? location.nameOf(sel) ?? "—"}`);
+      msg.ok(`${ticketOf(row)} chamada de novo${atLocation(result.call?.location ?? location.nameOf(sel))}`);
     } catch (err) {
       const code = errorCode(err);
       if (code === "already_closed") { invalidate(); return; }
@@ -289,7 +289,8 @@ export function UnitQueue({
       </div>
     )}>
       <div hidden={collapsed} style={{ display: collapsed ? "none" : "flex", flexDirection: "column", gap: 20 }}>
-        {preUrgency && <CallLocationPicker state={location} />}
+        {/* Rótulo próprio: a mesa da UPA, logo acima, tem o seu "Local da chamada". */}
+        {preUrgency && <CallLocationPicker state={location} label="Local da chamada (antes da urgência)" />}
         <ActionMessage message={msg.message && msg.message.text !== careBlocked ? msg.message : null} />
         {query.isError && (
           <p role="alert" style={{ margin: 0, fontSize: 12.5, color: "var(--down)" }}>{attendanceError(query.error)}</p>
@@ -545,7 +546,8 @@ function ClosePanel(
       const code = errorCode(err);
       if (code === "already_closed") { onDone(null); return; }
       handleClinicalRefusal(code, () => void auth.reload(), onClinicalRefused);
-      setError(attendanceError(err));
+      // Módulo 32a (A15): numa UPA com a urgência, o walk_in fecha pelo desfecho da urgência, não por aqui.
+      setError(code === "urgency_outcome_required" ? urgencyError(err) : attendanceError(err));
     } finally {
       setBusy(false);
     }

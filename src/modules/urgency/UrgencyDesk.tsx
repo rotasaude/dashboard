@@ -7,24 +7,33 @@
 // - chamada (F-32.5, contrato §6, §14 Q7): com `waiting_room_display`, o local da chamada (lembrado na sessão) fica no topo da fila e
 //   vai em cada chamada. A enfermagem chama para a classificação; o médico 225 chama para o atendimento quem já foi classificado
 //   ("Chamar" por linha e "Chamar próximo", que no api segue a ordem por cor); "Chamar de novo" repete o tipo da última chamada.
-//   `already_called` e `queue_empty` só releem; os pedidos de antes da urgência (E8) também releem depois de cada chamada.
+//   `already_called` só relê; `queue_empty` relê e diz "ninguém aguardando"; os pedidos de antes da urgência (E8) também releem
+//   depois de cada chamada.
+// - atendimento médico (F-32.4, §7): o médico que chama ("Chamar", "Chamar próximo") abre o atendimento (UrgencyCare) da linha
+//   chamada, achada pelo `attendance_id` na fila relida (a resposta da chamada não traz a senha nem o encontro); "Atender" reabre.
+//   Se "Chamar próximo" chamou um atendimento de antes da urgência (Q24, A14), o aviso aponta o painel dele.
+// - desfecho de balcão: "Saiu sem atendimento" (todos os papéis) abre o desfecho com os tipos de balcão, sem ler o detalhe.
+//   Registrado o desfecho, o painel fecha, a fila relê e o aviso só diz o tipo.
 // Enquanto os vínculos do profissional carregam, nada de "seu papel não atua nesta UPA" (piscaria antes dos vínculos).
 // Quem monta passa `key={unit.id}`: trocar de UPA remonta tudo e nada de uma unidade aparece na outra.
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  callAttendance, callForClassification, callNext, errorCode, recallAttendance,
-  type HealthUnit, type ProfessionalLink, type SessionUser, type UrgencyArrival, type UrgencyEncounter
+  callAttendance, callForClassification, callNext, errorCode, getUrgencyQueue, recallAttendance,
+  type HealthUnit, type ProfessionalLink, type QueueRow, type SessionUser, type UrgencyArrival, type UrgencyEncounter,
+  type UrgencyInCareRow
 } from "../../lib/api";
-import { URGENCY_DETAIL_KEY, canUseWaitingRoom, colorLabel, urgencyError, urgencyRoles } from "../../lib/urgency";
+import { URGENCY_DETAIL_KEY, URGENCY_ERRORS, canUseWaitingRoom, colorLabel, urgencyError, urgencyRoles } from "../../lib/urgency";
 import { useReveal } from "../../lib/useReveal";
 import { Panel } from "../../components/Panel";
 import { EmptyState } from "../../components/EmptyState";
 import { dangerButtonStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { ActionButton } from "../../components/ActionButton";
-import { CallLocationPicker, useCallLocation } from "../attendance/CallLocationPicker";
+import { CallLocationPicker, atLocation, useCallLocation } from "../attendance/CallLocationPicker";
 import { ArrivalForm } from "./ArrivalForm";
 import { ClassificationForm } from "./ClassificationForm";
+import { OutcomeForm, type OutcomeTarget } from "./OutcomeForm";
+import { UrgencyCare } from "./UrgencyCare";
 import { TicketCard } from "./TicketCard";
 import { UrgencyQueue, type QueueActions, type UrgencyQueueHandle } from "./UrgencyQueue";
 
@@ -37,6 +46,10 @@ type Classifying = { encounterId: string; ticket: string | null };
 // Quanto tempo o aviso de "classificado" fica à vista.
 export const NOTICE_MS = 8_000;
 export const DISCARD_QUESTION = "A classificação em andamento não foi enviada. Descartar o que foi digitado?";
+export const PRE_URGENCY_CALLED = "é um atendimento de antes da urgência: abra “Atendimentos de antes da urgência”, abaixo.";
+
+// A saída sem atendimento aberta por uma linha da fila: o bastante para o desfecho de balcão (sem o detalhe).
+type Leaving = { target: OutcomeTarget; ticket: string | null };
 
 // Escape dentro de um campo não fecha nada (quem digita pode estar só saindo de uma sugestão do navegador).
 const inField = (el: EventTarget) => el instanceof HTMLElement && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName);
@@ -82,6 +95,21 @@ function ClassificationPanel({ target, confirming, onDone, onClose, onDirtyChang
   );
 }
 
+// A saída sem atendimento pela fila (D14, Q10): os desfechos de balcão, com o foco no título.
+function LeavingPanel({ leaving, doctor, onClosed }: { leaving: Leaving; doctor: boolean; onClosed(notice?: string): void }) {
+  const ref = useReveal<HTMLDivElement>(true);
+  return (
+    <div ref={ref} onKeyDown={(e) => { if (e.key === "Escape" && !inField(e.target)) { e.stopPropagation(); onClosed(); } }}>
+      <Panel title={`Saída — ${leaving.ticket ?? "sem senha"}`} sub="saída sem atendimento · registro por engano"
+        right={<button type="button" style={secondaryButtonStyle} onClick={() => onClosed()}>Cancelar</button>}>
+        <div style={{ padding: 16 }}>
+          <OutcomeForm encounter={leaving.target} doctor={doctor} onRecorded={(_e, notice) => onClosed(notice)} />
+        </div>
+      </Panel>
+    </div>
+  );
+}
+
 const confirmBox: CSSProperties = {
   display: "flex", flexDirection: "column", gap: 8, padding: "10px 12px", border: "1px solid var(--warn)", borderRadius: 8,
   background: "var(--warn-bg)"
@@ -98,7 +126,7 @@ export interface UrgencyDeskProps {
   onGoToSecurity?(): void;
 }
 
-export function UrgencyDesk({ unit, user, links, linksLoading = false }: UrgencyDeskProps) {
+export function UrgencyDesk({ unit, user, links, linksLoading = false, onGoToSecurity }: UrgencyDeskProps) {
   const roles = urgencyRoles(user, links, unit.id);
   const queueRef = useRef<UrgencyQueueHandle>(null);
   const queryClient = useQueryClient();
@@ -119,6 +147,9 @@ export function UrgencyDesk({ unit, user, links, linksLoading = false }: Urgency
   // A troca pedida enquanto havia algo digitado: fechar (null) ou abrir outra linha; espera a resposta da pergunta.
   const [ asked, setAsked ] = useState<{ next: Classifying | null } | null>(null);
   const onDirtyChange = useCallback((d: boolean) => setDirty(d), []);
+  // O atendimento médico aberto (a linha de "em atendimento") e a saída sem atendimento aberta.
+  const [ care, setCare ] = useState<UrgencyInCareRow | null>(null);
+  const [ leaving, setLeaving ] = useState<Leaving | null>(null);
 
   // O aviso some sozinho (timer limpo ao desmontar ou ao trocar o aviso).
   useEffect(() => {
@@ -157,15 +188,40 @@ export function UrgencyDesk({ unit, user, links, linksLoading = false }: Urgency
       setNotice(await run(location.selected));
     } catch (err) {
       const code = errorCode(err);
-      if (code !== "already_called" && code !== "queue_empty" && !location.refused(err)) setCallError(urgencyError(err));
+      if (code === "queue_empty") setNotice(URGENCY_ERRORS.queue_empty);
+      else if (code !== "already_called" && !location.refused(err)) setCallError(urgencyError(err));
     } finally {
       calling.current = false;
       queueRef.current?.refresh();
       void queryClient.invalidateQueries({ queryKey: [ "unitQueue", unit.id ] });
     }
   }
-  const at = (name: string | null) => (name ? ` em ${name}` : "");
   const label = (ticket: string | null) => ticket ?? "Paciente";
+
+  // A linha chamada, em "em atendimento" da fila relida agora (a resposta da chamada só traz o id do atendimento).
+  async function calledRow(attendanceId: string): Promise<UrgencyInCareRow | null> {
+    try {
+      return (await getUrgencyQueue(unit.id)).in_care.find((r) => r.attendance_id === attendanceId) ?? null;
+    } catch {
+      return null;
+    }
+  }
+  // E8/A14: um atendimento do 13 aberto antes da urgência, na fila do 13 que o painel de baixo já leu.
+  const preUrgencyRow = (attendanceId: string): QueueRow | null => {
+    const q = queryClient.getQueryData<{ waiting?: QueueRow[]; in_care?: QueueRow[] }>([ "unitQueue", unit.id ]);
+    return [ ...(q?.waiting ?? []), ...(q?.in_care ?? []) ].find((r) => r.id === attendanceId) ?? null;
+  };
+  const openCare = (row: UrgencyInCareRow) => { setLeaving(null); setCare(row); };
+  // Fechar o atendimento ou a saída; com o desfecho registrado, o aviso (só o tipo) e a fila relida.
+  const closeCare = (notice?: string) => {
+    if (care) queryClient.removeQueries({ queryKey: [ URGENCY_DETAIL_KEY, care.encounter_id ] });
+    setCare(null);
+    if (notice) { setNotice(notice); queueRef.current?.refresh(); }
+  };
+  const closeLeaving = (notice?: string) => {
+    setLeaving(null);
+    if (notice) { setNotice(notice); queueRef.current?.refresh(); }
+  };
 
   // Q2: só a enfermagem 2235 classifica e chama para a classificação; o médico 225 chama para o atendimento (a fila também confere o
   // papel). "Chamar de novo" só com o painel da sala de espera (o api recusa sem ele).
@@ -174,25 +230,39 @@ export function UrgencyDesk({ unit, user, links, linksLoading = false }: Urgency
       onClassify: (row) => request({ encounterId: row.encounter_id, ticket: row.ticket }),
       onCallClassification: (row) => void call(async (loc) => {
         const r = await callForClassification(row.encounter_id, loc);
-        return `${label(row.ticket)} chamada para a classificação${at(r.call?.location ?? null)}`;
+        return `${label(row.ticket)} chamada para a classificação${atLocation(r.call?.location)}`;
       })
     } satisfies QueueActions : {}),
     ...(roles.doctor ? {
       onCallCare: (row) => void call(async (loc) => {
         await (loc ? callAttendance(row.attendance_id, unit.id, loc) : callAttendance(row.attendance_id, unit.id));
-        return `${label(row.ticket)} chamada para o atendimento${at(location.nameOf(loc))}`;
-      })
+        const called = await calledRow(row.attendance_id);
+        if (called) openCare(called);
+        return `${label(row.ticket)} chamada para o atendimento${atLocation(location.nameOf(loc))}`;
+      }),
+      onOpenCare: (row) => openCare(row)
+    } satisfies QueueActions : {}),
+    ...(roles.outcomeDesk ? {
+      onLeft: (row) => { setCare(null); setLeaving({ target: { id: row.encounter_id, patient: row.patient, consultation_status: null }, ticket: row.ticket }); }
     } satisfies QueueActions : {}),
     ...(waitingRoom ? {
       onRecall: (row) => void call(async (loc) => {
         const r = await recallAttendance(row.attendance_id, loc);
-        return `${label(row.ticket)} chamada de novo em ${r.call?.location ?? location.nameOf(loc) ?? "—"}`;
+        return `${label(row.ticket)} chamada de novo${atLocation(r.call?.location ?? location.nameOf(loc))}`;
       })
     } satisfies QueueActions : {})
   };
   const callNextNow = () => call(async (loc) => {
     const r = await (loc ? callNext(unit.id, loc) : callNext(unit.id));
-    return `${r.attendance.ticket ?? "Próxima pessoa"} chamada para o atendimento${at(location.nameOf(loc))}`;
+    const where = atLocation(location.nameOf(loc));
+    const called = await calledRow(r.attendance.id);
+    if (called) {
+      openCare(called);
+      return `${label(called.ticket)} chamada para o atendimento${where}`;
+    }
+    const pre = preUrgencyRow(r.attendance.id);
+    if (pre) return `${pre.ticket ?? "Próxima pessoa"} chamada para o atendimento${where} — ${PRE_URGENCY_CALLED}`;
+    return `Próxima pessoa chamada para o atendimento${where}`;
   });
   const toolbar = waitingRoom || roles.doctor ? (
     <>
@@ -225,6 +295,10 @@ export function UrgencyDesk({ unit, user, links, linksLoading = false }: Urgency
           onDiscard={() => { const next = asked?.next ?? null; if (next) setNotice(null); switchTo(next); }}
           onKeep={() => setAsked(null)} />
       )}
+      {care && (
+        <UrgencyCare key={care.encounter_id} row={care} unit={unit} units={[ unit ]} onClosed={closeCare} onGoToSecurity={onGoToSecurity} />
+      )}
+      {leaving && <LeavingPanel key={leaving.target.id} leaving={leaving} doctor={false} onClosed={closeLeaving} />}
       {callError && <p role="alert" style={{ margin: 0, fontSize: 12.5, color: "var(--down)" }}>{callError}</p>}
       <UrgencyQueue ref={queueRef} unit={unit} roles={roles} actions={actions} toolbar={toolbar} />
     </div>

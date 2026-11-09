@@ -11,7 +11,7 @@ import {
 } from "../../lib/api";
 import {
   SOAP_FIELDS, TEXT_MAX_LABEL, blockedReason, checkDraft, consultationError, consultationMessage, draftFrom, finalizeProblems,
-  type ConsultationDraft
+  type ConsultationDraft, type DraftCheck
 } from "../../lib/consultation";
 import { dentalApiProblems, dentalError, dentalFinalizeProblems, isCancelPlanPath, linkPlanItem, planCancelPathIndex, planItemPathIndex, withoutPlanChange } from "../../lib/dental";
 import { DentalEditor } from "../dental/DentalEditor";
@@ -48,6 +48,9 @@ export interface ConsultationEditorProps {
   searchDelayMs?: number;
   // Módulo 28: consulta odontológica — some o tipo de atendimento do 19a e as condutas; entra o bloco odontológico.
   dental?: { role: DentalRole; baseline: boolean; sex: Sex };
+  // Módulo 32a (contrato §7, §14 Q10): a consulta de urgência — sem tipo de atendimento (o api recusa `care_type`), sem o desfecho
+  // do 13, finaliza com `{}` e não encerra o atendimento; o exame sem prioridade nasce urgente no api.
+  urgency?: boolean;
   onFinalized(c: Consultation): void;
   onLocked(message: string): void;
 }
@@ -66,13 +69,23 @@ function finalizeRefusals(err: unknown): Refusal[] {
   return dentalApiProblems(err).map((p) => (p.text !== p.code ? p : { ...p, text: consultationMessage(p.code) ?? (p.code === REGULATION_REQUIRED_CODE ? REGULATION_REQUIRED_TEXT : p.code) }));
 }
 
+export const URGENCY_OUTCOME_LATER = "O desfecho da urgência vem depois de finalizar.";
 const UNSAVED_DRAFT_TEXT = "o rascunho não foi salvo — veja o aviso no topo da consulta e tente de novo";
+
+// Na urgência, o rascunho vai sem `care_type` (o api recusaria o PATCH inteiro).
+function checkFor(d: ConsultationDraft, urgency: boolean): DraftCheck {
+  const check = checkDraft(d);
+  if (!urgency) return check;
+  const { care_type: _careType, ...input } = check.input;
+  return { ...check, input };
+}
 
 export function ConsultationEditor(props: ConsultationEditorProps) {
   const { consultation, record, options, unit, units } = props;
+  const urgency = !!props.urgency;
   const [ draft, setDraft ] = useState<ConsultationDraft>(() => draftFrom(consultation));
   // Mesma forma (e ordem de chaves) do `value` do autosave: abrir o rascunho não dispara PATCH.
-  const [ initialKey ] = useState(() => JSON.stringify(checkDraft(draftFrom(consultation)).input));
+  const [ initialKey ] = useState(() => JSON.stringify(checkFor(draftFrom(consultation), urgency).input));
   const [ locked, setLocked ] = useState(false);
   const lockedRef = useRef(false);
   // Selado: o rascunho já foi salvo e a finalização está a caminho; nada mais se edita nem se salva.
@@ -97,7 +110,7 @@ export function ConsultationEditor(props: ConsultationEditorProps) {
     return true;
   }
 
-  const check = checkDraft(draft);
+  const check = checkFor(draft, urgency);
   const blocked = blockedReason(check);
   const autosave = useAutosave({
     value: check.input, initialKey, blockedReason: blocked, enabled: !locked && !sealing, delayMs: props.autosaveDelayMs ?? 1500,
@@ -126,7 +139,7 @@ export function ConsultationEditor(props: ConsultationEditorProps) {
 
   const today = todayInCity();
   const { referralUnitId } = outcomeView(outcome, props.referenceUnitIds, unit, units);
-  const outcomeIssue = outcomeProblem(outcome, referralUnitId, !!props.regulation && regulationCount > 0);
+  const outcomeIssue = urgency ? null : outcomeProblem(outcome, referralUnitId, !!props.regulation && regulationCount > 0);
   // O problema da FAO (problem_required) já sai do finalizeProblems: uma frase só por falta.
   const dentalMissing = dental && draft.dental
     ? dentalFinalizeProblems(draft.dental, { ...dental, problemsCount: draft.problems.length, plan: dentalPlan })
@@ -149,7 +162,7 @@ export function ConsultationEditor(props: ConsultationEditorProps) {
         return;
       }
       setSealing(true);
-      props.onFinalized(await finalizeConsultation(consultation.id, outcomeBody(outcome, referralUnitId)));
+      props.onFinalized(await finalizeConsultation(consultation.id, urgency ? null : outcomeBody(outcome, referralUnitId)));
     } catch (err) {
       if (!lock(err)) {
         if (dental) dentalRefused(err);
@@ -216,7 +229,7 @@ export function ConsultationEditor(props: ConsultationEditorProps) {
       <VitalSignsFields form={draft.vitals} problems={check.vitalsProblems} alerts={[]}
         bmi={bmiOf(check.input.vitals.weight_kg, check.input.vitals.height_cm)} onChange={(vitals) => set({ vitals })} />
 
-      {!dental && (
+      {!dental && !urgency && (
         <label style={{ ...labelStyle, maxWidth: 320 }}>
           Tipo de atendimento
           <select value={draft.careType} style={inputStyle} onChange={(e) => set({ careType: e.target.value })}>
@@ -238,7 +251,7 @@ export function ConsultationEditor(props: ConsultationEditorProps) {
       {!dental && <ConductsField options={options.conducts} value={draft.conducts} onChange={(conducts) => set({ conducts })} />}
       {mode !== "baseline" && (
         <ExamRequestsField value={draft.exams} onChange={(exams) => set({ exams })} cid10Allowed={options.cid10_allowed_for_cbo}
-          searchDelayMs={props.searchDelayMs} priorityOn={props.examPriority} />
+          searchDelayMs={props.searchDelayMs} priorityOn={props.examPriority} defaultPriority={urgency ? "urgent" : "routine"} />
       )}
       {/* Módulo 25 (ADR 0043): a notificação nunca bloqueia a finalização — fora de `missing`, de
           `finalizeProblems` e de `blockedFinal`; a falha dela só aparece nela. */}
@@ -255,19 +268,29 @@ export function ConsultationEditor(props: ConsultationEditorProps) {
       )}
 
       {!finalizing ? (
-        <div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-start" }}>
           <button type="button" disabled={locked} style={locked ? disabledButtonStyle : buttonStyle} onClick={() => { setRefusals([]); setFinalizing(true); }}>
             Finalizar consulta
           </button>
+          {urgency && <p style={muted}>{URGENCY_OUTCOME_LATER}</p>}
         </div>
       ) : (
         <section aria-label="Finalizar consulta" style={box}>
           <strong>Finalizar consulta</strong>
-          <p style={muted}>
-            Finalizar encerra o atendimento com o desfecho abaixo{mode !== "baseline" && " e gera a ficha do e-SUS"}. Encaminhamento e retorno geram o pedido de agendamento.
-          </p>
-          <OutcomeFields idPrefix="consultation-" value={outcome} onChange={setOutcome}
-            referenceIds={props.referenceUnitIds} unit={unit} units={units} regulationHint={props.regulation} />
+          {urgency ? (
+            <>
+              <p style={muted}>Finalizar não encerra o atendimento na UPA.</p>
+              <p style={muted}>{URGENCY_OUTCOME_LATER}</p>
+            </>
+          ) : (
+            <>
+              <p style={muted}>
+                Finalizar encerra o atendimento com o desfecho abaixo{mode !== "baseline" && " e gera a ficha do e-SUS"}. Encaminhamento e retorno geram o pedido de agendamento.
+              </p>
+              <OutcomeFields idPrefix="consultation-" value={outcome} onChange={setOutcome}
+                referenceIds={props.referenceUnitIds} unit={unit} units={units} regulationHint={props.regulation} />
+            </>
+          )}
           {missing.length > 0 && (
             <ul aria-label="o que falta para finalizar" style={{ margin: 0, paddingLeft: 18 }}>
               {missing.map((m) => <li key={m} style={alert}>{m}</li>)}

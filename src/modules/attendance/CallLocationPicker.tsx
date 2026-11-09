@@ -10,6 +10,8 @@ import { CALL_LOCATIONS_KEY, URGENCY_ERRORS, callLocationKey, readCallLocation, 
 import { inputStyle } from "../../components/formStyles";
 
 export const NO_LOCATIONS_TEXT = "cadastre os locais de chamada em Urgência → Senhas, locais e TVs";
+// O pedaço " em <local>" dos avisos de chamada; sem local, nada (nunca "em —").
+export const atLocation = (name: string | null | undefined): string => (name ? ` em ${name}` : "");
 
 export interface CallLocationState {
   enabled: boolean;

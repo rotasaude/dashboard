@@ -39,6 +39,9 @@ interface Props {
   onClose(): void;
   onFinalized(): void;
   onGoToSecurity?(): void;
+  // Módulo 32a (contrato §7, §14 Q10): a consulta de urgência na UPA — um botão só, sem procedimentos do 22 (o BPA da UPA é do
+  // encontro) e sem o desfecho do 13 no editor (o desfecho é da urgência, depois de finalizar).
+  urgency?: boolean;
 }
 
 // Módulo 19b (Ruling R8): logo depois de finalizar ou de um adendo, o bloco
@@ -72,10 +75,14 @@ export function ConsultationWorkspace(props: Props) {
   const dentalOffered = kinds.includes("dental");
   // Enquanto as opções carregam, a consulta comum continua à mão, como hoje; carregadas, só o que o api oferece.
   const generalOffered = !options.data || kinds.includes("general");
+  // Com `urgency`, só o tipo da urgência (Q10: na UPA o api oferece só `urgency` ao 225*).
+  const urgencyOffered = !options.data || kinds.includes("urgency");
   // Nenhum tipo oferecido (o api recusaria qualquer início): uma linha no lugar dos botões.
-  const noKindReason = options.data && kinds.length === 0
-    ? ((options.data.kinds ?? []).includes("dental") ? DENTAL_DISABLED : "seu CBO não registra consulta neste atendimento")
-    : null;
+  const noKindReason = props.urgency
+    ? (urgencyOffered ? null : "seu CBO não atende urgência nesta unidade")
+    : options.data && kinds.length === 0
+      ? ((options.data.kinds ?? []).includes("dental") ? DENTAL_DISABLED : "seu CBO não registra consulta neste atendimento")
+      : null;
   const documentsOn = canUseDocuments(user) && (!isDental || (role === "dentist" && !baseline));
   // Módulo 20: a aba "Linha do tempo" no painel do paciente, pelo atendimento (em contexto).
   const timelineOn = hasFeature(user, "patient_timeline");
@@ -83,7 +90,8 @@ export function ConsultationWorkspace(props: Props) {
   // Módulo 22: procedimentos realizados no atendimento, nunca na UBS (ADR 0039).
   // Módulo 28 (spec §9): a consulta odontológica não gera BPA — o painel do 22 nunca aparece nela.
   // Antes de iniciar, só para quem pode abrir a consulta comum (o tipo odontológico não fatura).
-  const proceduresOn = canUseBilling(user) && unitBills(props.unit) && (consultation ? !isDental : generalOffered);
+  // Módulo 32a: na urgência, o procedimento é do encontro (BPA da UPA), nunca deste painel.
+  const proceduresOn = !props.urgency && canUseBilling(user) && unitBills(props.unit) && (consultation ? !isDental : generalOffered);
   // Módulo 26a (F-26.2): "Pedir regulação" no rascunho e os pedidos na consulta finalizada; só quem pode pedir e com CBO que pede.
   const regulationOn = canRequestRegulation(user) && allowedTypes(consultation?.cbo_code).length > 0 && !baseline;
   // Módulo 30 (F-30.5): "Pedir TFD" na consulta finalizada; TFD usável (tfd + transporte + prontuário) e CBO 225 da consulta.
@@ -190,6 +198,13 @@ export function ConsultationWorkspace(props: Props) {
           {!consultation && noKindReason && <p role="status" style={{ margin: 0, fontSize: 12.5, color: "var(--ink3)" }}>{noKindReason}</p>}
           {!consultation && !noKindReason && (
             <div>
+              {props.urgency ? (
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <button type="button" disabled={busy} style={busy ? disabledButtonStyle : buttonStyle} onClick={() => void open({ kind: "urgency" })}>
+                    Iniciar atendimento de urgência
+                  </button>
+                </div>
+              ) : (
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 {generalOffered && (
                   <button type="button" disabled={busy} style={busy ? disabledButtonStyle : buttonStyle} onClick={() => void open()}>
@@ -208,6 +223,7 @@ export function ConsultationWorkspace(props: Props) {
                   </button>
                 )}
               </div>
+              )}
               <p style={{ margin: "6px 0 0", fontSize: 12, color: "var(--ink3)" }}>Se você já começou esta consulta, o seu rascunho abre.</p>
             </div>
           )}
@@ -227,6 +243,7 @@ export function ConsultationWorkspace(props: Props) {
                 referenceUnitIds={props.referenceUnitIds} unit={props.unit} units={props.units} examPriority={examsOn} regulation={regulationOn}
                 notifications={canSuggestNotification(user) && cboCanNotify(consultation.cbo_code)}
                 dental={isDental && role ? { role, baseline, sex: record.data.patient.sex } : undefined}
+                urgency={props.urgency}
                 autosaveDelayMs={props.autosaveDelayMs} searchDelayMs={props.searchDelayMs}
                 onFinalized={(c) => { setNotSent(c.regulation_not_sent ?? []); setConsultation(c); restartRereads(); void rereadProblems(c.id); props.onFinalized(); }}
                 onLocked={(message) => void reload(message)} />

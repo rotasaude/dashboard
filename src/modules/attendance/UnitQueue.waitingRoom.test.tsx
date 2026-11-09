@@ -18,7 +18,7 @@ import { ApiError, type Attendance, type HealthUnit, type QueueRow } from "../..
 import { AuthProvider } from "../../lib/auth";
 import { readCallLocation } from "../../lib/urgency";
 import { sessionWith } from "../../test/campaignFixtures";
-import { UBS } from "../../test/urgencyFixtures";
+import { UBS, UPA } from "../../test/urgencyFixtures";
 import { CheckIn } from "./CheckIn";
 import { UnitQueue } from "./UnitQueue";
 
@@ -41,12 +41,12 @@ const attendanceFixture = (o: Partial<Attendance> = {}): Attendance => ({
 });
 const LOCS = { items: [ { id: "loc1", health_unit_id: "ubs1", name: "Consultório 1", active: true } ], location_required: true };
 
-function mountUnitQueue(unit: HealthUnit, features = [ "waiting_room_display" ]) {
+function mountUnitQueue(unit: HealthUnit, features = [ "waiting_room_display" ], preUrgency = false) {
   vi.mocked(api.fetchCurrentSession).mockResolvedValue(sessionWith([ "health_professional" ], { features } as never));
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const wrapper = ({ children }: { children: ReactNode }) =>
     <QueryClientProvider client={client}><AuthProvider>{children}</AuthProvider></QueryClientProvider>;
-  render(<UnitQueue unit={unit} units={[ unit ]} canCare />, { wrapper });
+  render(<UnitQueue unit={unit} units={[ unit ]} canCare preUrgency={preUrgency} />, { wrapper });
 }
 
 describe("fila do 13 com a TV (UBS)", () => {
@@ -126,6 +126,44 @@ describe("fila do 13 com a TV (UBS)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Chamar de novo A-006" }));
     expect(await screen.findByText("esta pessoa ainda não foi chamada")).not.toBeNull();
     expect(vi.mocked(api.recallAttendance).mock.calls[0]).toEqual([ "a2", null ]);
+  });
+
+  it("'Chamar de novo' sem local na resposta nem escolhido: o aviso sem 'em —'", async () => {
+    vi.mocked(api.listUnitQueue).mockResolvedValue({ waiting: [],
+      in_care: [ queueRow({ id: "a2", ticket: "A-006", called_at: "2026-11-05T09:58:00-03:00", called_by_name: "Dra. Lia" }) ] });
+    vi.mocked(api.listCallLocations).mockResolvedValue({ ...LOCS, location_required: false });
+    vi.mocked(api.recallAttendance).mockResolvedValue({ call_id: "c9",
+      call: { id: "c9", kind: "care", ticket: "A-006", location: null, called_at: "2026-11-05T10:00:00-03:00" } });
+    mountUnitQueue(UBS);
+    await screen.findByRole("option", { name: "Consultório 1" });
+    fireEvent.click(screen.getByRole("button", { name: "Chamar de novo A-006" }));
+    expect(await screen.findByText("A-006 chamada de novo")).not.toBeNull();
+    expect(screen.queryByText(/em —/)).toBeNull();
+  });
+
+  it("E8 (UPA): os atendimentos de antes da urgência chamam com o local do seletor próprio", async () => {
+    vi.mocked(api.listUnitQueue).mockResolvedValue({ waiting: [ queueRow({ id: "a1", ticket: "U-001" }),
+      queueRow({ id: "w1", ticket: "U-042", source: "walk_in" }) ], in_care: [] });
+    vi.mocked(api.listCallLocations).mockResolvedValue({ ...LOCS, items: [ { ...LOCS.items[0], health_unit_id: "upa1" } ] });
+    vi.mocked(api.callAttendance).mockResolvedValue({ attendance: attendanceFixture({ id: "a1", health_unit_id: "upa1" }) });
+    mountUnitQueue(UPA, [ "waiting_room_display" ], true);
+    fireEvent.click(await screen.findByRole("button", { name: "Mostrar" }));
+    await screen.findByRole("option", { name: "Consultório 1" });
+    expect(screen.queryByLabelText("Local da chamada")).toBeNull();
+    fireEvent.change(screen.getByLabelText("Local da chamada (antes da urgência)"), { target: { value: "loc1" } });
+    expect(screen.queryByText("U-042")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Chamar" }));
+    await waitFor(() => expect(vi.mocked(api.callAttendance).mock.calls[0]).toEqual([ "a1", "upa1", "loc1" ]));
+  });
+
+  it("numa UPA, encerrar um walk_in sem o desfecho da urgência: a frase da urgência", async () => {
+    vi.mocked(api.listUnitQueue).mockResolvedValue({ waiting: [],
+      in_care: [ queueRow({ id: "a2", ticket: "U-042", called_at: "2026-11-05T09:58:00-03:00", called_by_name: "Dra. Lia" }) ] });
+    vi.mocked(api.closeAttendance).mockRejectedValue(new ApiError(422, { error: "urgency_outcome_required" }, "x"));
+    mountUnitQueue(UPA, [ "clinical_record" ]);
+    fireEvent.click(await screen.findByRole("button", { name: "Encerrar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar encerramento" }));
+    expect(await screen.findByText("numa UPA, o atendimento termina pelo desfecho da urgência")).not.toBeNull();
   });
 
   it("sem waiting_room_display: a fila e a chamada do 13 iguais a hoje", async () => {

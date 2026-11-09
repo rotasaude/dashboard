@@ -9,6 +9,8 @@ vi.mock("../../lib/api", async (orig) => ({
   ...(await orig<typeof import("../../lib/api")>()), getUrgencyQueue: vi.fn(),
   listCallLocations: vi.fn(), callForClassification: vi.fn(), callAttendance: vi.fn(), callNext: vi.fn(), recallAttendance: vi.fn()
 }));
+// O painel do atendimento médico tem o próprio teste (UrgencyCare.test.tsx); aqui só a chamada.
+vi.mock("./UrgencyCare", () => ({ UrgencyCare: (p: { row: { ticket: string | null } }) => <span>{`atendimento ${p.row.ticket} (dublê)`}</span> }));
 
 import * as api from "../../lib/api";
 import { ApiError } from "../../lib/api";
@@ -315,8 +317,9 @@ describe("chamada", () => {
   });
 
   it("médico: 'Chamar' por cor e 'Chamar próximo' levam o local; nenhuma chamada em quem aguarda classificação", async () => {
-    vi.mocked(api.callAttendance).mockResolvedValue({ attendance: { id: "at2", ticket: "U-040" } as api.Attendance });
-    vi.mocked(api.callNext).mockResolvedValue({ attendance: { id: "at2", ticket: "U-040" } as api.Attendance });
+    // A resposta do api (attendance_json) não traz a senha.
+    vi.mocked(api.callAttendance).mockResolvedValue({ attendance: { id: "at2" } as api.Attendance });
+    vi.mocked(api.callNext).mockResolvedValue({ attendance: { id: "at2" } as api.Attendance });
     mountDesk([ DOCTOR_LINK ]);
     await chooseLocation();
     const awaiting = screen.getByRole("region", { name: "Aguardando classificação" });
@@ -338,7 +341,7 @@ describe("chamada", () => {
     expect(await screen.findByText("classifique a pessoa antes de chamar para o atendimento")).not.toBeNull();
   });
 
-  it("already_called e queue_empty só releem a fila, sem alerta", async () => {
+  it("already_called e queue_empty releem a fila, sem alerta; queue_empty diz 'ninguém aguardando'", async () => {
     vi.mocked(api.callAttendance).mockRejectedValue(new ApiError(409, { error: "already_called" }, "x"));
     vi.mocked(api.callNext).mockRejectedValue(new ApiError(404, { error: "queue_empty" }, "x"));
     mountDesk([ DOCTOR_LINK ]);
@@ -349,6 +352,7 @@ describe("chamada", () => {
     before = queueReads();
     fireEvent.click(screen.getByRole("button", { name: "Chamar próximo" }));
     await waitFor(() => expect(queueReads()).toBeGreaterThan(before));
+    expect(await screen.findByText("ninguém aguardando")).not.toBeNull();
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
