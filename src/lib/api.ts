@@ -486,11 +486,18 @@ export interface HealthUnit extends Partial<UnitAddress> {
   caps_modality?: CapsModality | string | null;
   service_classification?: string | null;
   phone?: string | null;
+  // Módulo 32a (contrato §1, Q8): prefixo da senha (1 a 3 letras maiúsculas) e tempos de espera na TV (UPA). Ausentes em api anterior.
+  ticket_prefix?: string | null;
+  show_wait_times?: boolean;
 }
 // Campos do módulo 31 na escrita da unidade: cada chave só vai no corpo quando recebida (null apaga).
-export interface UnitCapsInput { caps_modality?: string | null; service_classification?: string | null; phone?: string | null }
-const unitCapsBody = (caps?: UnitCapsInput): Record<string, string | null> =>
-  Object.fromEntries(Object.entries(caps ?? {}).filter(([ , v ]) => v !== undefined)) as Record<string, string | null>;
+// Módulo 32a: `ticket_prefix` só como texto válido (null → 422 invalid_ticket_prefix) e `show_wait_times` (Q8, E6).
+export interface UnitCapsInput {
+  caps_modality?: string | null; service_classification?: string | null; phone?: string | null;
+  ticket_prefix?: string; show_wait_times?: boolean;
+}
+const unitCapsBody = (caps?: UnitCapsInput): Record<string, string | boolean | null> =>
+  Object.fromEntries(Object.entries(caps ?? {}).filter(([ , v ]) => v !== undefined)) as Record<string, string | boolean | null>;
 export interface HealthUnitRow extends HealthUnit {
   active: boolean;
   // O que ainda prende a unidade (api#29): pedidos vivos e horários marcados.
@@ -578,11 +585,16 @@ export interface Attendance {
   id: string; triage_id: string | null; health_unit_id: string; unit_name: string; status: string;
   checked_in_at: string; check_in_method: string; outcome: string | null;
   referral_unit_name: string | null; referral_note: string | null; closed_at: string | null;
+  // Módulo 32a (contrato §6, Q7): senha do dia; null sem senha. Ausente em api anterior.
+  ticket?: string | null;
 }
 
 export interface QueueRow {
   id: string; cpf_masked: string; checked_in_at: string; protocol_name: string | null; priority: number | null;
-  source: "triage" | "appointment"; appointment_time: string | null;
+  // Módulo 32a: "walk_in" é a chegada pela recepção da urgência (UPA).
+  source: "triage" | "appointment" | "walk_in"; appointment_time: string | null;
+  // Módulo 32a (contrato §6, Q7): senha do dia; null sem senha. Ausente em api anterior.
+  ticket?: string | null;
   called_at: string | null; called_by_name: string | null;
   // Módulo 11 (spec 2026-09-28 §4.1): unidades ativas que cobrem o bairro da
   // triagem deste atendimento (sem triagem, o bairro atual do cidadão).
@@ -648,14 +660,20 @@ export async function listUnitQueue(unitId: string): Promise<{ waiting: QueueRow
 // Módulo 18 (contrato §9): a chamada devolve a escuta aninhada no atendimento, para o profissional.
 export interface CallResult { attendance: Attendance & { screening?: Screening | null } }
 
-export async function callAttendance(id: string, healthUnitId: string): Promise<CallResult> {
+// Módulo 32a (contrato §6, Q7): o local da chamada só vai no corpo quando recebido (sem local → a chamada sai sem ele).
+const callLocationBody = (callLocationId?: string | null): { call_location_id?: string } =>
+  (callLocationId === undefined || callLocationId === null ? {} : { call_location_id: callLocationId });
+
+export async function callAttendance(id: string, healthUnitId: string, callLocationId?: string | null): Promise<CallResult> {
   return jsonFetch(`${ATTENDANCE_BASE}/attendances/${encodeURIComponent(id)}/call`, {
-    method: "POST", body: JSON.stringify({ health_unit_id: healthUnitId })
+    method: "POST", body: JSON.stringify({ health_unit_id: healthUnitId, ...callLocationBody(callLocationId) })
   });
 }
 
-export async function callNext(unitId: string): Promise<CallResult> {
-  return jsonFetch(`${ATTENDANCE_BASE}/units/${encodeURIComponent(unitId)}/call_next`, { method: "POST", body: "{}" });
+export async function callNext(unitId: string, callLocationId?: string | null): Promise<CallResult> {
+  return jsonFetch(`${ATTENDANCE_BASE}/units/${encodeURIComponent(unitId)}/call_next`, {
+    method: "POST", body: JSON.stringify(callLocationBody(callLocationId))
+  });
 }
 
 export async function closeAttendance(
@@ -1757,8 +1775,9 @@ export function saveConsultationDraft(id: string, input: ConsultationDraftInput)
   return jsonFetch(consultationPath(id), { method: "PATCH", body: JSON.stringify(input) });
 }
 
-export function finalizeConsultation(id: string, outcome: OutcomeBody): Promise<Consultation> {
-  return jsonFetch(consultationPath(id, "finalize"), postProfessional({ outcome }));
+// Módulo 32a (Q10, D5): a consulta de urgência finaliza com `{}` (sem desfecho do 13; o desfecho é da urgência).
+export function finalizeConsultation(id: string, outcome: OutcomeBody | null): Promise<Consultation> {
+  return jsonFetch(consultationPath(id, "finalize"), postProfessional(outcome === null ? {} : { outcome }));
 }
 
 export function getConsultation(id: string): Promise<Consultation> {
@@ -3606,7 +3625,8 @@ const billingPath = (...parts: string[]) => [ BILLING_BASE, ...parts.map(encodeU
 const billingPost = (body: unknown): RequestInit => ({ method: "POST", body: JSON.stringify(body) });
 
 // Módulo 30: "tfd" (ajuda de custo; source_ref { type: "tfd_allowance", id }).
-export type ProcedureSource = "attendance" | "consultation" | "lab_report" | "manual" | "tfd";
+// Módulo 32a: "urgency" (source_ref { type: "urgency_encounter", id }).
+export type ProcedureSource = "attendance" | "consultation" | "lab_report" | "manual" | "tfd" | "urgency";
 export type BillingInstrument = "bpa_i" | "bpa_c" | "not_bpa";
 export type ProcedureCharacter = "elective" | "urgent";
 export type ProcedureStatus = "recorded" | "cancelled";
@@ -3662,7 +3682,8 @@ export interface BillingPeriod {
 }
 // Divergência B6: o que a tela mostra de cada pendência (opcional em api sem a B6).
 export interface PendingItem {
-  procedure_id: string; reasons: string[]; fix: PendingFix | string;
+  // Módulo 32a (Q12): a pendência do paciente provisório da UPA vem sem linha (`procedure_id: null`), com o encontro.
+  procedure_id: string | null; urgency_encounter_id?: string; reasons: string[]; fix: PendingFix | string;
   performed_on?: string; sigtap_code?: string; label?: string; late?: boolean;
   // Módulo 24a: L8 (`has_cpf`, CNS mascarado) e L6 (`address_from_household`: endereço do cadastro domiciliar).
   // Módulo 31 (B7): a produção do CAPS chega com `patient: null` e `fix: "patient"` (sem nome na tela).
@@ -5084,7 +5105,8 @@ export async function findPharmacyDuplicates(q: DuplicateQuery): Promise<Duplica
 }
 
 // ─── Saúde bucal (módulo 28; ADR 0046; contrato §3–§10, §16) ───
-export type ConsultationKind = "general" | "dental";
+// Módulo 32a (Q10): "urgency" na UPA com urgency_care (só 225*).
+export type ConsultationKind = "general" | "dental" | "urgency";
 export type DentalRole = "dentist" | "auxiliary";
 export type ToothFace = "M" | "D" | "O" | "V" | "L";
 export type DentalLocationKind = "tooth" | "face" | "sextant" | "arch" | "mouth";
@@ -6488,4 +6510,254 @@ export function getPsyEnrollmentTimeline(enrollmentId: string, before?: string |
 // Sem `unitId`, todos os CAPS que o papel alcança.
 export function getPsyDashboard(q: { month?: string | null; unitId?: string | null }): Promise<PsyDashboard> {
   return jsonFetch<PsyDashboard>(withQuery(psyPath("dashboard"), psyQuery({ month: q.month, health_unit_id: q.unitId })));
+}
+
+// ─── Urgência (módulo 32a; ADR 0050; contrato 2026-11-05 §2–§11) ───
+// Formas do api real (preflight §A; contrato §14 Q1–Q29). Na URL só ids e o mês: CPF, CNS, nome, queixa e a
+// descrição do não identificado vão sempre no corpo. Escritas com corpo JSON (`{}` quando vazio); listas
+// desembrulham `{ items }` (menos os locais, que trazem `location_required`). A TV (pareamento e painel) não
+// tem sessão: vai sem cookie, com o token no cabeçalho X-Display-Token.
+const URGENCY_BASE = import.meta.env.VITE_URGENCY_BASE || "/urgency";
+const WAITING_ROOM_BASE = import.meta.env.VITE_WAITING_ROOM_BASE || "/waiting_room";
+const urgencyPath = (...parts: string[]) => [ URGENCY_BASE, ...parts.map(encodeURIComponent) ].join("/");
+const waitingRoomPath = (...parts: string[]) => [ WAITING_ROOM_BASE, ...parts.map(encodeURIComponent) ].join("/");
+const urgencyWrite = (method: "POST" | "PATCH", body?: unknown): RequestInit => ({ method, body: JSON.stringify(body ?? {}) });
+const urgencyQuery = (params: Record<string, string | null | undefined>) =>
+  new URLSearchParams(Object.entries(params).filter((e): e is [string, string] => typeof e[1] === "string" && e[1] !== ""));
+
+export type UrgencyColor = "red" | "orange" | "yellow" | "green" | "blue";
+export type UrgencyState = "waiting_classification" | "classified" | "in_care" | "closed";
+// Q25: `registered_in_error` (aberto por engano ou em duplicidade, com `reason`) fica fora do painel e do cidadão.
+export type UrgencyOutcomeKind =
+  | "discharged" | "discharged_to_primary_care" | "transferred" | "left_without_care" | "left_against_advice" | "death"
+  | "registered_in_error";
+export type CallKind = "classification" | "care";
+// Painel: contagens de 1 a 4 chegam como "lt5" (0 fica 0); tempos com contagem 0 chegam null.
+export type UrgencyCount = number | "lt5";
+export type UrgencyTime = number | "lt5" | null;
+type ConsultationStatus = "draft" | "finalized";
+
+// <patient-ref> (contrato §2): `description` só do provisório e só no detalhe (e na lista de provisórios, Q29).
+export interface UrgencyPatientRef {
+  patient_id: string; name: string; cns_masked: string | null; unidentified: boolean; description?: string | null;
+}
+// `candidates` vem sempre [] (Q4).
+export interface UrgencyLookup { patient: UrgencyPatientRef | null; candidates: UrgencyPatientRef[] }
+// 409 duplicate_suspected (Q23): `{ error, path: "new_patient", candidates }`, na forma do 24a/27a.
+export type UrgencyDuplicateCandidate = Omit<DuplicateCandidate, "registration_id">;
+// D1 + Q23: `duplicates_reviewed` só com `new_patient` (reenvio depois de conferir os candidatos).
+export type UrgencyArrivalInput = { health_unit_id: string } & (
+  | { patient_id: string }
+  | { new_patient: NewPatient; duplicates_reviewed?: true }
+  | { unidentified: { description: string } }
+);
+// A chegada nunca traz a descrição do provisório.
+export interface UrgencyArrival { attendance_id: string; encounter_id: string; ticket: string | null; patient: UrgencyPatientRef }
+
+export interface UrgencyLastCall { kind: CallKind; location: string | null; called_at: string }
+// Fila (Urgency::Queue): aguardando classificação manda `max_wait_minutes: null`.
+export interface UrgencyWaitingRow {
+  encounter_id: string; attendance_id: string; ticket: string | null; patient: UrgencyPatientRef; arrived_at: string;
+  waited_minutes: number; last_call: UrgencyLastCall | null; max_wait_minutes?: number | null;
+}
+// `overdue` pelo relógio da 1ª classificação (`classified_at`) contra o tempo máximo da vigente (Q18): vem pronto do api.
+export interface UrgencyColorRow extends UrgencyWaitingRow {
+  color: UrgencyColor; overdue: boolean; max_wait_minutes: number; classified_at: string;
+}
+// Em atendimento: os campos da espera + cor e chamada; nunca `overdue`.
+export interface UrgencyInCareRow extends UrgencyWaitingRow {
+  color: UrgencyColor | null; max_wait_minutes: number | null; called_at: string | null; called_by_name: string | null;
+  consultation_id: string | null; consultation_status: ConsultationStatus | null;
+}
+export interface UrgencyQueue {
+  awaiting_classification: UrgencyWaitingRow[]; by_color: UrgencyColorRow[]; in_care: UrgencyInCareRow[];
+}
+
+export interface UrgencyLevel { color: UrgencyColor; max_wait_minutes: number }
+// Prévia da cor (Q1, Q23): `pain_scale` nulo → `suggested: null`. A queixa é aceita e ignorada.
+export interface UrgencySuggestInput { encounter_id: string; complaint?: string; vital_signs: VitalSigns; pain_scale: number | null }
+export interface UrgencySuggestion {
+  suggested: { color: UrgencyColor; criterion: string; rule_id?: string } | null; levels: UrgencyLevel[];
+}
+// Q22: `pain_scale` (0–10) obrigatório; `vital_signs` sem `pain_score`. `justification` só quando exigida.
+export interface UrgencyClassificationInput {
+  complaint: string; vital_signs: VitalSigns; pain_scale: number; color: UrgencyColor; justification?: string;
+}
+// Sem acesso clínico (a recepção, Q19) não vêm `complaint`, `vital_signs`, `pain_scale`, `justification`, `criterion`
+// nem `suggested.criterion`. `criterion` do topo só quando a cor final é a sugerida.
+export interface UrgencyClassificationView {
+  id: string; position: number; color: UrgencyColor; suggested_color: UrgencyColor | null;
+  suggested: { color: UrgencyColor; criterion?: string | null } | null; criterion?: string | null;
+  complaint?: string; vital_signs?: VitalSigns; pain_scale?: number | null; justification?: string | null;
+  max_wait_minutes: number; protocol_definition_id: string | null; classified_at: string;
+  by: { name: string; cbo_code: string | null };
+}
+// Q25: `reason` só em registered_in_error (10–500); limites do api: destino 3–200, vaga ≤500, retorno 1–90 dias e motivo 3–300.
+export interface UrgencyOutcomeInput {
+  kind: UrgencyOutcomeKind; destination?: string; vacancy_request?: string; return_guidance?: { days: number; reason: string };
+  reason?: string;
+}
+// Sem acesso clínico não vêm `destination`, `vacancy_request`, `reason` nem `return_guidance.reason`.
+export interface UrgencyOutcomeView {
+  kind: UrgencyOutcomeKind; destination?: string | null; vacancy_request?: string | null;
+  return_guidance: { days: number; reason?: string | null } | null; reason?: string | null; recorded_at: string;
+  by: { name: string };
+}
+// Detalhe (D4, Q6): a cor vigente, o tempo máximo dela e o estouro vêm prontos.
+export interface UrgencyEncounter {
+  id: string; attendance_id: string; health_unit_id: string; state: UrgencyState; ticket: string | null; arrived_at: string;
+  patient: UrgencyPatientRef; color: UrgencyColor | null; max_wait_minutes: number | null; overdue: boolean;
+  first_classified_at: string | null; classifications: UrgencyClassificationView[];
+  consultation_id: string | null; consultation_status: ConsultationStatus | null; outcome: UrgencyOutcomeView | null;
+}
+export interface UrgencyCall { id: string; kind: CallKind; ticket: string | null; location: string | null; called_at: string }
+// Identificação (só a recepção): paciente existente (fusão) ou novo, com a conferência de duplicado (Q23).
+export type IdentifyInput = { patient_id: string } | { new_patient: NewPatient; duplicates_reviewed?: true };
+// Q17: `moved` e `kept_duplicates` (itens repetidos que ficaram no provisório); 0 com paciente novo.
+export interface UrgencyIdentifyResult { encounter: UrgencyEncounter; merged: boolean; moved: number; kept_duplicates: number }
+export interface UrgencyOutcomeResult { encounter: UrgencyEncounter; attendance: { id: string; status: string; outcome: string | null } }
+
+// Locais de chamada (D6): nome 1–40; `location_required` vem com a lista.
+export interface CallLocation { id: string; health_unit_id: string; name: string; active: boolean }
+export interface CallLocationList { items: CallLocation[]; location_required: boolean }
+// TVs (D7, A18): nome 1–60; `active: false` também revoga.
+export interface WaitingRoomDisplay {
+  id: string; health_unit_id: string; name: string; active: boolean; show_wait_times: boolean; paired: boolean;
+  paired_at: string | null; last_seen_at: string | null; revoked: boolean; revoked_at: string | null;
+}
+// O código é texto de 6 dígitos (o zero da frente conta): nunca Number().
+export interface PairingCode { code: string; expires_at: string }
+// Painel da TV: nunca nome, CPF, cor da pessoa nem queixa. `wait_times` null fora da UPA ou com o flag desligado;
+// quando vem, traz as 5 cores.
+export interface BoardCall { ticket: string; location: string | null; kind: CallKind; called_at: string }
+export interface BoardWaitTime { color: UrgencyColor; median_minutes: number | "lt5_patients" }
+export interface WaitingRoomBoard { unit: { name: string }; calls: BoardCall[]; wait_times: BoardWaitTime[] | null; updated_at: string }
+
+// Painel do gestor (Urgency::Dashboard, Q15): sem total; `registered_in_error` fora de tudo (Q25).
+export interface UrgencyTimeRow { color: UrgencyColor; count: UrgencyCount; median_minutes: UrgencyTime; p90_minutes: UrgencyTime }
+export interface UrgencyOverMaxWait { color: UrgencyColor; count: UrgencyCount; over: UrgencyCount }
+export type UrgencyCareOutcomeKind = Exclude<UrgencyOutcomeKind, "registered_in_error">;
+export interface UrgencyDashboard {
+  month: string; units: { id: string; name: string }[];
+  door_to_classification: UrgencyTimeRow[]; classification_to_physician: UrgencyTimeRow[]; over_max_wait: UrgencyOverMaxWait[];
+  by_color: Record<UrgencyColor | "unclassified", UrgencyCount>;
+  by_outcome: Record<UrgencyCareOutcomeKind, UrgencyCount>;
+  // Evasão = só left_without_care (Q28).
+  evasion: { before_classification: UrgencyCount; after_classification: UrgencyCount };
+  stay: { count: UrgencyCount; median_minutes: UrgencyTime; p90_minutes: UrgencyTime };
+}
+// Retornos pedidos à UBS (D10, Q20): nunca o motivo.
+export interface CounterReferral {
+  encounter_id: string; patient: UrgencyPatientRef; upa: { name: string }; closed_at: string; return_days: number; due_on: string;
+}
+// Q29: provisórios ainda não identificados (abertos ou fechados nos últimos 7 dias), para a recepção. Nenhum dado clínico.
+export interface ProvisionalEncounter {
+  encounter_id: string; attendance_id: string; arrived_at: string; closed_at: string | null;
+  outcome_kind: UrgencyOutcomeKind | null; patient: UrgencyPatientRef;
+}
+
+// ── Recepção, classificação, fila e desfecho ──
+export function lookupUrgencyPerson(q: { cpf: string } | { cns: string }): Promise<UrgencyLookup> {
+  return jsonFetch<UrgencyLookup>(urgencyPath("person_lookup"), urgencyWrite("POST", q));
+}
+export function createUrgencyArrival(i: UrgencyArrivalInput): Promise<UrgencyArrival> {
+  return jsonFetch<UrgencyArrival>(urgencyPath("arrivals"), urgencyWrite("POST", i));
+}
+export function getUrgencyQueue(unitId: string): Promise<UrgencyQueue> {
+  return jsonFetch<UrgencyQueue>(withQuery(urgencyPath("queue"), urgencyQuery({ health_unit_id: unitId })));
+}
+// Grava trilha no api (o detalhe tem o clínico ou a descrição).
+export async function getUrgencyEncounter(id: string): Promise<UrgencyEncounter> {
+  return (await jsonFetch<{ encounter: UrgencyEncounter }>(urgencyPath("encounters", id))).encounter;
+}
+export function suggestUrgencyColor(i: UrgencySuggestInput): Promise<UrgencySuggestion> {
+  return jsonFetch<UrgencySuggestion>(urgencyPath("suggest"), urgencyWrite("POST", i));
+}
+// 201 `{ encounter, suggested: { color, criterion } | null }` (sem `rule_id`).
+export function classifyUrgency(
+  encounterId: string, i: UrgencyClassificationInput
+): Promise<{ encounter: UrgencyEncounter; suggested: UrgencySuggestion["suggested"] }> {
+  return jsonFetch(urgencyPath("encounters", encounterId, "classifications"), urgencyWrite("POST", i));
+}
+// `{ encounter, call }`; `call` null sem o waiting_room_display.
+export function callForClassification(encounterId: string, callLocationId: string | null): Promise<{ encounter: UrgencyEncounter; call: UrgencyCall | null }> {
+  return jsonFetch(urgencyPath("encounters", encounterId, "call_for_classification"), urgencyWrite("POST", callLocationBody(callLocationId)));
+}
+// Chamar de novo (Q7): sob /attendance; a nova chamada repete o tipo da última. 201 `{ call_id, call }`.
+export function recallAttendance(attendanceId: string, callLocationId: string | null): Promise<{ call_id: string; call: UrgencyCall }> {
+  return jsonFetch(`${ATTENDANCE_BASE}/attendances/${encodeURIComponent(attendanceId)}/recall`, urgencyWrite("POST", callLocationBody(callLocationId)));
+}
+// 201 `{ encounter, attendance: { id, status, outcome } }`.
+export function recordUrgencyOutcome(encounterId: string, i: UrgencyOutcomeInput): Promise<UrgencyOutcomeResult> {
+  return jsonFetch<UrgencyOutcomeResult>(urgencyPath("encounters", encounterId, "outcome"), urgencyWrite("POST", i));
+}
+export function identifyUrgencyPatient(encounterId: string, i: IdentifyInput): Promise<UrgencyIdentifyResult> {
+  return jsonFetch<UrgencyIdentifyResult>(urgencyPath("encounters", encounterId, "identify"), urgencyWrite("POST", i));
+}
+export async function listCounterReferrals(unitId: string): Promise<CounterReferral[]> {
+  const b = await jsonFetch<{ items?: CounterReferral[] }>(withQuery(urgencyPath("counter_referrals"), urgencyQuery({ health_unit_id: unitId })));
+  return b.items ?? [];
+}
+// Grava trilha no api (leva a descrição física).
+export async function listProvisionalEncounters(unitId: string): Promise<ProvisionalEncounter[]> {
+  const b = await jsonFetch<{ items?: ProvisionalEncounter[] }>(
+    withQuery(urgencyPath("provisional_encounters"), urgencyQuery({ health_unit_id: unitId })));
+  return b.items ?? [];
+}
+// Sem `unitId`, todas as UPAs ativas que o papel alcança.
+export function getUrgencyDashboard(q: { month: string; unitId?: string | null }): Promise<UrgencyDashboard> {
+  return jsonFetch<UrgencyDashboard>(withQuery(urgencyPath("dashboard"), urgencyQuery({ month: q.month, health_unit_id: q.unitId })));
+}
+
+// ── Locais de chamada (sob /attendance, Q7) e TVs (admin, com step-up) ──
+export function listCallLocations(unitId: string): Promise<CallLocationList> {
+  return jsonFetch<CallLocationList>(withQuery(`${ATTENDANCE_BASE}/call_locations`, urgencyQuery({ health_unit_id: unitId })));
+}
+export function createCallLocation(i: { health_unit_id: string; name: string; active: boolean }): Promise<CallLocation> {
+  return jsonFetch<CallLocation>(`${ATTENDANCE_BASE}/call_locations`, urgencyWrite("POST", i));
+}
+export function updateCallLocation(id: string, i: { name: string; active: boolean }): Promise<CallLocation> {
+  return jsonFetch<CallLocation>(`${ATTENDANCE_BASE}/call_locations/${encodeURIComponent(id)}`, urgencyWrite("PATCH", i));
+}
+export async function listWaitingRoomDisplays(unitId: string): Promise<WaitingRoomDisplay[]> {
+  const b = await jsonFetch<{ items?: WaitingRoomDisplay[] }>(withQuery(waitingRoomPath("displays"), urgencyQuery({ health_unit_id: unitId })));
+  return b.items ?? [];
+}
+export function createWaitingRoomDisplay(
+  i: { health_unit_id: string; name: string; active: boolean; show_wait_times: boolean }
+): Promise<WaitingRoomDisplay> {
+  return jsonFetch<WaitingRoomDisplay>(waitingRoomPath("displays"), urgencyWrite("POST", i));
+}
+export function updateWaitingRoomDisplay(id: string, i: { name: string; active: boolean; show_wait_times: boolean }): Promise<WaitingRoomDisplay> {
+  return jsonFetch<WaitingRoomDisplay>(waitingRoomPath("displays", id), urgencyWrite("PATCH", i));
+}
+// 201; TV desativada → 422 display_inactive.
+export function createPairingCode(displayId: string): Promise<PairingCode> {
+  return jsonFetch<PairingCode>(waitingRoomPath("displays", displayId, "pairing_code"), urgencyWrite("POST"));
+}
+export function revokeWaitingRoomDisplay(displayId: string): Promise<WaitingRoomDisplay> {
+  return jsonFetch<WaitingRoomDisplay>(waitingRoomPath("displays", displayId, "revoke"), urgencyWrite("POST"));
+}
+
+// ── A TV: sem cookie (credentials: "omit"), fora da sessão; recusa vira ApiError como no jsonFetch ──
+async function displayFetch<T>(input: string, init: RequestInit): Promise<T> {
+  const res = await fetch(input, { ...init, credentials: "omit" });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    let body: unknown = text;
+    if (text) { try { body = JSON.parse(text); } catch { /* deixa string */ } }
+    throw new ApiError(res.status, body, `${res.status} on ${input}`);
+  }
+  return await res.json() as T;
+}
+// 201 `{ display_token }`. O api exige Content-Type JSON (415 json_required); o código vai como texto.
+export function pairWaitingRoomDisplay(code: string): Promise<{ display_token: string }> {
+  return displayFetch(waitingRoomPath("pair"), {
+    method: "POST", headers: { Accept: "application/json", "Content-Type": "application/json" }, body: JSON.stringify({ code })
+  });
+}
+// A URL é exatamente /waiting_room/board: o api recusa qualquer chave na query (sem cache-buster).
+// 401 display_revoked ou invalid_token → parear de novo.
+export function fetchWaitingRoomBoard(token: string): Promise<WaitingRoomBoard> {
+  return displayFetch(waitingRoomPath("board"), { headers: { Accept: "application/json", "X-Display-Token": token } });
 }

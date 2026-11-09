@@ -64,7 +64,7 @@ export function PendingPanel({ period, onClose, canFix = false }: { period: Bill
           <section key={g.fix} aria-label={info.title} style={box}>
             <strong>{`${info.title} · ${g.items.length}`}</strong>
             {info.hint && <p style={muted}>{info.hint}</p>}
-            <DataTable<PendingItem> cols={cols} rows={g.items} rowKey={(i) => i.procedure_id} />
+            <DataTable<PendingItem> cols={cols} rows={g.items} rowKey={(i) => i.procedure_id ?? `ue:${i.urgency_encounter_id}`} />
           </section>
         );
       })}

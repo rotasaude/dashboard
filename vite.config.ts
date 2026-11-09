@@ -26,6 +26,8 @@ import react from "@vitejs/plugin-react";
 //   /transport → transporte sanitário (módulo 30: frota, viagens, séries, motorista, painel)
 //   /tfd → TFD (módulo 30: laudo, comissão, trechos, ajuda de custo, pagamento)
 //   /psychosocial → CAPS (módulo 31: acolhimento, matrícula, PTS, ações, leitos, RAAS, matriciamento, painel)
+//   /urgency → urgência na UPA (módulo 32a: chegada, classificação de risco, fila por cor, desfecho, retornos à UBS, painel)
+//   /waiting_room → TV da sala de espera (módulo 32a: TVs do admin, pareamento e painel da TV, sem cookie)
 //   /signature  → assinatura digital (módulo 19b). O prestador devolve a pessoa a
 //                 /dashboard/signature/callback (base do Vite), que NÃO casa com este
 //                 prefixo: o retorno é do dashboard, e só o POST /signature/oauth/callback vai ao api.
@@ -100,7 +102,10 @@ export default defineConfig({
       "^/transport(/|$)": proxy(TARGET),
       "^/tfd(/|$)": proxy(TARGET),
       // Módulo 31: atenção psicossocial (CAPS). Regex como os vizinhos.
-      "^/psychosocial(/|$)": proxy(TARGET)
+      "^/psychosocial(/|$)": proxy(TARGET),
+      // Módulo 32a: urgência (UPA) e TV da sala de espera. Regex como os vizinhos.
+      "^/urgency(/|$)": proxy(TARGET),
+      "^/waiting_room(/|$)": proxy(TARGET)
     }
   }
 });

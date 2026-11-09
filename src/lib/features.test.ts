@@ -126,3 +126,12 @@ describe("módulo 29", () => {
     expect(featureLabel("rnds_mock")).toBe("RNDS simulada (fora de produção)");
   });
 });
+
+describe("módulo 32a", () => {
+  it("urgency_care e waiting_room_display têm nome e vêm da sessão", () => {
+    expect(featureLabel("urgency_care")).toBe("Urgência (UPA)");
+    expect(featureLabel("waiting_room_display")).toBe("Painel de chamada na sala de espera (TV)");
+    expect(hasFeature({ features: [ "urgency_care" ] }, "urgency_care")).toBe(true);
+    expect(hasFeature({ features: [ "urgency_care" ] }, "waiting_room_display")).toBe(false);
+  });
+});
