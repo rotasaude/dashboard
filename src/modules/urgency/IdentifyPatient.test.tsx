@@ -4,7 +4,7 @@
 // Na mesa: "Identificar" nas linhas da fila e a lista de provisórios (Q29), lida só quando pedida (cada leitura grava trilha).
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, focusManager, onlineManager } from "@tanstack/react-query";
 
 vi.mock("../../lib/api", async (orig) => ({
   ...(await orig<typeof import("../../lib/api")>()),
@@ -50,7 +50,7 @@ function mount(props: { onIdentified?(e: UrgencyEncounter, notice: string): void
 
 // `scope`: na mesa, o painel da identificação (a recepção também tem o "CPF ou CNS" da chegada).
 async function search(doc = "52998224725", scope: HTMLElement = document.body) {
-  fireEvent.change(await within(scope).findByLabelText("CPF ou CNS"), { target: { value: doc } });
+  fireEvent.change(await within(scope).findByLabelText("CPF ou CNS do paciente"), { target: { value: doc } });
   fireEvent.click(within(scope).getByRole("button", { name: "Buscar" }));
 }
 
@@ -100,17 +100,51 @@ describe("IdentifyPatient (F-32.2)", () => {
     expect(onIdentified.mock.calls[0][1]).toBe("Identificado: Carlos Dias.");
   });
 
-  it("desmarcar a caixa ou escolher outro paciente volta a bloquear a ligação", async () => {
+  it("desmarcar a caixa volta a bloquear a ligação; escolher outro paciente começa sem a caixa", async () => {
     vi.mocked(api.getUrgencyEncounter).mockResolvedValue(provisional);
     vi.mocked(api.lookupUrgencyPerson).mockResolvedValue({ patient: patientRef({ patient_id: "pa7", name: "Carlos Dias" }), candidates: [] });
     mount();
     await search();
     fireEvent.click(await screen.findByRole("button", { name: "É Carlos Dias" }));
-    fireEvent.click(screen.getByLabelText(mergeBox("Carlos Dias")));
+    const box = screen.getByLabelText(mergeBox("Carlos Dias")) as HTMLInputElement;
+    fireEvent.click(box);
+    expect(screen.getByRole("button", { name: "Ligar ao paciente existente" }).getAttribute("aria-disabled")).toBeNull();
+    fireEvent.click(box);
+    expect(box.checked).toBe(false);
+    expect(screen.getByRole("button", { name: "Ligar ao paciente existente" }).getAttribute("aria-disabled")).toBe("true");
+    fireEvent.click(box);
     fireEvent.click(screen.getByRole("button", { name: "Escolher outro" }));
     fireEvent.click(await screen.findByRole("button", { name: "É Carlos Dias" }));
     expect((screen.getByLabelText(mergeBox("Carlos Dias")) as HTMLInputElement).checked).toBe(false);
     expect(screen.getByRole("button", { name: "Ligar ao paciente existente" }).getAttribute("aria-disabled")).toBe("true");
+  });
+
+  it("desmarcar depois de 'Ligar' recolhe a pergunta: sem 'Confirmar' vivo, nada é enviado", async () => {
+    vi.mocked(api.getUrgencyEncounter).mockResolvedValue(provisional);
+    vi.mocked(api.lookupUrgencyPerson).mockResolvedValue({ patient: patientRef({ patient_id: "pa7", name: "Carlos Dias" }), candidates: [] });
+    mount();
+    await search();
+    fireEvent.click(await screen.findByRole("button", { name: "É Carlos Dias" }));
+    const box = () => screen.getByLabelText(mergeBox("Carlos Dias"));
+    fireEvent.click(box());
+    fireEvent.click(screen.getByRole("button", { name: "Ligar ao paciente existente" }));
+    expect(screen.getByRole("button", { name: "Confirmar" })).not.toBeNull();
+    fireEvent.click(box());
+    expect(screen.queryByRole("button", { name: "Confirmar" })).toBeNull();
+    expect(screen.queryByText("Ligar agora? Não dá para desfazer.")).toBeNull();
+    // Marcar de novo não ressuscita a pergunta: é preciso pedir "Ligar" outra vez.
+    fireEvent.click(box());
+    expect(screen.queryByRole("button", { name: "Confirmar" })).toBeNull();
+    expect(api.identifyUrgencyPatient).not.toHaveBeenCalled();
+  });
+
+  it("na identificação, ninguém pelo documento oferece só o paciente novo", async () => {
+    vi.mocked(api.getUrgencyEncounter).mockResolvedValue(provisional);
+    vi.mocked(api.lookupUrgencyPerson).mockResolvedValue({ patient: null, candidates: [] });
+    mount();
+    await search();
+    expect(await screen.findByText("Ninguém com este documento. Cadastre como paciente novo.")).not.toBeNull();
+    expect(screen.queryByText(/registre sem identificação/)).toBeNull();
   });
 
   it("paciente novo: o provisório recebe os dados, sem fusão nem caixa", async () => {
@@ -150,7 +184,7 @@ describe("IdentifyPatient (F-32.2)", () => {
     expect(await screen.findByText("este paciente já foi identificado por outra pessoa")).not.toBeNull();
     expect(await screen.findByText("Agora é: Pedro Alves.")).not.toBeNull();
     expect(screen.queryByRole("button", { name: "Ligar ao paciente existente" })).toBeNull();
-    expect(screen.queryByLabelText("CPF ou CNS")).toBeNull();
+    expect(screen.queryByLabelText("CPF ou CNS do paciente")).toBeNull();
     expect(api.identifyUrgencyPatient).toHaveBeenCalledTimes(1);
     expect(api.getUrgencyEncounter).toHaveBeenCalledTimes(2);
   });
@@ -159,7 +193,7 @@ describe("IdentifyPatient (F-32.2)", () => {
     vi.mocked(api.getUrgencyEncounter).mockResolvedValue(encounter({ patient: patientRef({ name: "Pedro Alves" }) }));
     mount();
     expect(await screen.findByText("Agora é: Pedro Alves.")).not.toBeNull();
-    expect(screen.queryByLabelText("CPF ou CNS")).toBeNull();
+    expect(screen.queryByLabelText("CPF ou CNS do paciente")).toBeNull();
   });
 
   it("Q17: itens repetidos que ficaram no provisório entram no aviso", async () => {
@@ -313,9 +347,12 @@ describe("Mesa da UPA: identificar (F-32.2)", () => {
     expect(within(list).getByText(/^encerrado 05\/11\/2026/)).not.toBeNull();
     expect(within(list).getByText(/Óbito/)).not.toBeNull();
     expect(vi.mocked(api.listProvisionalEncounters).mock.calls).toEqual([ [ "upa1" ] ]);
-    window.dispatchEvent(new Event("focus"));
-    window.dispatchEvent(new Event("online"));
-    document.dispatchEvent(new Event("visibilitychange"));
+    // react-query v5: foco e reconexão pelos gerentes (é o que eles disparam no navegador).
+    focusManager.setFocused(false); focusManager.setFocused(true);
+    onlineManager.setOnline(false); onlineManager.setOnline(true);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(api.listProvisionalEncounters).toHaveBeenCalledTimes(1);
+    focusManager.setFocused(undefined);
     fireEvent.click(within(list).getByRole("button", { name: /^Identificar/ }));
     const panel = await screen.findByRole("region", { name: /^Identificar paciente — chegada/ });
     expect(vi.mocked(api.getUrgencyEncounter).mock.calls[0][0]).toBe("en9");
@@ -327,7 +364,7 @@ describe("Mesa da UPA: identificar (F-32.2)", () => {
     expect(panel.isConnected).toBe(false);
   });
 
-  it("'Ocultar' tira a lista da tela; sem pedir, ela não é lida", async () => {
+  it("'Ocultar' tira a lista da tela e do cache: reabrir lê de novo", async () => {
     vi.mocked(api.listProvisionalEncounters).mockResolvedValue([ provisionalEncounter() ]);
     mountDesk();
     const list = await screen.findByRole("region", { name: "Pacientes não identificados" });
@@ -335,6 +372,31 @@ describe("Mesa da UPA: identificar (F-32.2)", () => {
     expect(await within(list).findByText(DESCRIPTION)).not.toBeNull();
     fireEvent.click(within(list).getByRole("button", { name: "Ocultar" }));
     expect(within(list).queryByText(DESCRIPTION)).toBeNull();
+    expect(api.listProvisionalEncounters).toHaveBeenCalledTimes(1);
+    fireEvent.click(within(list).getByRole("button", { name: "Mostrar a lista" }));
+    // Sem cache: "carregando…" e um segundo GET (não a lista antiga na hora).
+    expect(within(list).getByText("carregando…")).not.toBeNull();
+    expect(await within(list).findByText(DESCRIPTION)).not.toBeNull();
+    expect(api.listProvisionalEncounters).toHaveBeenCalledTimes(2);
+  });
+
+  it("identificar pela fila não relê a lista aberta (trilha por paciente): a linha sai só da tela", async () => {
+    vi.mocked(api.getUrgencyQueue).mockResolvedValue(queue({ awaiting_classification: [ provisionalRow ], by_color: [], in_care: [] }));
+    vi.mocked(api.listProvisionalEncounters).mockResolvedValue([
+      provisionalEncounter({ encounter_id: "en1", closed_at: null, outcome_kind: null }), provisionalEncounter()
+    ]);
+    vi.mocked(api.getUrgencyEncounter).mockResolvedValue(provisional);
+    vi.mocked(api.lookupUrgencyPerson).mockResolvedValue({ patient: patientRef({ patient_id: "pa7", name: "Carlos Dias" }), candidates: [] });
+    vi.mocked(api.identifyUrgencyPatient).mockResolvedValue(identified("Carlos Dias"));
+    mountDesk();
+    const list = await screen.findByRole("region", { name: "Pacientes não identificados" });
+    fireEvent.click(within(list).getByRole("button", { name: "Mostrar a lista" }));
+    await waitFor(() => expect(within(list).getAllByRole("button", { name: /^Identificar —/ }).length).toBe(2));
+    fireEvent.click(await screen.findByRole("button", { name: "Identificar U-044" }));
+    const panel = await screen.findByRole("region", { name: "Identificar paciente — U-044" });
+    await pickAndConfirm("Carlos Dias", panel);
+    await waitFor(() => expect(within(list).getAllByRole("button", { name: /^Identificar —/ }).length).toBe(1));
+    expect(within(list).getByText(/^encerrado/)).not.toBeNull();
     expect(api.listProvisionalEncounters).toHaveBeenCalledTimes(1);
   });
 

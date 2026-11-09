@@ -11,6 +11,11 @@ import { inputStyle } from "../../components/formStyles";
 import { alert, fieldLabel, fieldset, legend, row } from "../exams/styles";
 
 export const DOC_TEXT = "digite o CPF (11 dígitos) ou o CNS (15 dígitos)";
+// Ninguém pelo documento: na chegada há também o registro sem identificação; na identificação, só o paciente novo.
+export const NOT_FOUND_TEXT = "Ninguém com este documento. Cadastre como paciente novo ou registre sem identificação.";
+export const IDENTIFY_NOT_FOUND_TEXT = "Ninguém com este documento. Cadastre como paciente novo.";
+// A8: `invalid_request` em `patient_id` = o escolhido é um provisório (ou já fundido); o 404 é patient_not_found.
+export const PROVISIONAL_TEXT = "este cadastro é provisório (sem identificação) — escolha outro paciente ou cadastre como paciente novo";
 
 export type NewDraft = { fullName: string; birthDate: string; sex: string; cpf: string; reason: string; cns: string };
 export const EMPTY_NEW: NewDraft = { fullName: "", birthDate: "", sex: "", cpf: "", reason: "", cns: "" };

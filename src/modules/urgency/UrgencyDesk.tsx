@@ -16,14 +16,15 @@
 //   Registrado o desfecho, o painel fecha, a fila relê e o aviso só diz o tipo.
 // - identificação (F-32.2, A8): só a recepção. "Identificar" nas linhas do provisório (as três faixas) e na lista de não
 //   identificados (Q29, lida só quando pedida, também para o encontro já encerrado) abre o painel IdentifyPatient. Identificado, o
-//   painel fecha, a fila e a lista releem e o aviso leva só o nome (nunca a descrição).
+//   painel fecha, a fila relê e o aviso leva só o nome (nunca a descrição). A lista grava uma trilha por paciente a cada leitura:
+//   relê só quando a identificação partiu dela; partindo da fila, a linha identificada sai da lista em cache, sem novo GET.
 // Enquanto os vínculos do profissional carregam, nada de "seu papel não atua nesta UPA" (piscaria antes dos vínculos).
 // Quem monta passa `key={unit.id}`: trocar de UPA remonta tudo e nada de uma unidade aparece na outra.
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   callAttendance, callForClassification, callNext, errorCode, getUrgencyQueue, recallAttendance,
-  type HealthUnit, type ProfessionalLink, type QueueRow, type SessionUser, type UrgencyArrival, type UrgencyEncounter,
+  type HealthUnit, type ProfessionalLink, type ProvisionalEncounter, type QueueRow, type SessionUser, type UrgencyArrival, type UrgencyEncounter,
   type UrgencyInCareRow
 } from "../../lib/api";
 import { URGENCY_DETAIL_KEY, URGENCY_ERRORS, canUseWaitingRoom, colorLabel, urgencyError, urgencyRoles } from "../../lib/urgency";
@@ -117,7 +118,7 @@ function LeavingPanel({ leaving, doctor, onClosed }: { leaving: Leaving; doctor:
 }
 
 // A identificação aberta por uma linha da fila ou da lista de provisórios: o id do encontro e o rótulo do painel.
-type Identifying = { encounterId: string; label: string };
+type Identifying = { encounterId: string; label: string; from: "queue" | "list" };
 
 // O painel da identificação, à vista e com o foco no título; Escape fora dos campos fecha (nada foi enviado ainda).
 function IdentifyPanel({ target, onIdentified, onClose }: { target: Identifying; onIdentified(notice: string): void; onClose(): void }) {
@@ -257,7 +258,12 @@ export function UrgencyDesk({ unit, user, links, linksLoading = false, onGoToSec
     if (notice) {
       setNotice(notice);
       queueRef.current?.refresh();
-      void queryClient.invalidateQueries({ queryKey: [ PROVISIONAL_KEY, unit.id ] });
+      const key = [ PROVISIONAL_KEY, unit.id ];
+      if (identifying?.from === "list") void queryClient.invalidateQueries({ queryKey: key });
+      else {
+        const id = identifying?.encounterId;
+        queryClient.setQueryData<ProvisionalEncounter[]>(key, (old) => old?.filter((i) => i.encounter_id !== id));
+      }
     }
   };
 
@@ -289,7 +295,7 @@ export function UrgencyDesk({ unit, user, links, linksLoading = false, onGoToSec
       })
     } satisfies QueueActions : {}),
     ...(roles.identify ? {
-      onIdentify: (row) => openIdentify({ encounterId: row.encounter_id, label: row.ticket ?? "sem senha" })
+      onIdentify: (row) => openIdentify({ encounterId: row.encounter_id, label: row.ticket ?? "sem senha", from: "queue" })
     } satisfies QueueActions : {}),
     ...(waitingRoom ? {
       onRecall: (row) => void call(async (loc) => {
@@ -352,7 +358,7 @@ export function UrgencyDesk({ unit, user, links, linksLoading = false, onGoToSec
       <UrgencyQueue ref={queueRef} unit={unit} roles={roles} actions={actions} toolbar={toolbar} />
       {roles.identify && (
         <ProvisionalEncounters unit={unit}
-          onIdentify={(item) => openIdentify({ encounterId: item.encounter_id, label: arrivalLabel(item) })} />
+          onIdentify={(item) => openIdentify({ encounterId: item.encounter_id, label: arrivalLabel(item), from: "list" })} />
       )}
     </div>
   );

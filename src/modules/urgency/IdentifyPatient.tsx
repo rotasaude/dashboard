@@ -3,6 +3,8 @@
 // com a descrição do provisório (Q19). Vale também para o encontro já encerrado (Q25: o óbito sem documento, no dia seguinte).
 // - Paciente existente (busca por CPF ou CNS, ou um candidato do duplicado): a fusão é irreversível (Q5/Q21), então as duas pessoas
 //   ficam lado a lado, a caixa de confirmação é obrigatória e o ConfirmButton pede um segundo passo antes de enviar `patient_id`.
+//   Mexer na caixa recolhe a pergunta do ConfirmButton (ele remonta), e o envio confere a caixa de novo: desmarcar depois de
+//   "Ligar" nunca deixa um "Confirmar" vivo. Enquanto o envio corre, a caixa fica travada.
 // - Paciente novo: o provisório recebe os dados (`new_patient`), sem fusão nem caixa; o 409 duplicate_suspected mostra os
 //   candidatos (Q23): escolher um vai à confirmação da fusão, "Nenhum destes" reenvia com `duplicates_reviewed: true`.
 // - Uma vez só: already_identified/not_unidentified mostram a frase, releem o encontro ("Agora é: <nome>.") e o formulário some.
@@ -26,9 +28,8 @@ import {
 import { ConfirmButton } from "../../components/ConfirmButton";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { alert, box, fieldLabel, fieldset, form, legend, muted, row } from "../exams/styles";
-import { NOT_FOUND_TEXT, PROVISIONAL_TEXT } from "./ArrivalForm";
 import {
-  DOC_TEXT, EMPTY_NEW, NEW_PATIENT_PATHS, NewPatientFields, candidateLine, candidatesOf, docMask, docQuery, draftPath, toNewPatient,
+  DOC_TEXT, EMPTY_NEW, IDENTIFY_NOT_FOUND_TEXT, NEW_PATIENT_PATHS, NewPatientFields, PROVISIONAL_TEXT, candidateLine, candidatesOf, docMask, docQuery, draftPath, toNewPatient,
   withDoc, type NewDraft
 } from "./NewPatientFields";
 
@@ -50,7 +51,8 @@ export function identifiedNotice(r: UrgencyIdentifyResult): string {
 
 // Q25: na identificação, encounter_open quer dizer que o paciente escolhido já tem um atendimento aberto nesta UPA.
 const OVERRIDES = { encounter_open: ENCOUNTER_OPEN_ON_IDENTIFY, patient_not_found: PATIENT_GONE_TEXT };
-// O encontro já não é de um provisório: outra pessoa identificou antes.
+// O paciente do encontro já não é provisório: already_identified (outra pessoa identificou antes) ou not_unidentified (o api diz
+// que o paciente do encontro não é um provisório). Nos dois, a frase, a releitura e "Agora é".
 const LOST_CODES = new Set([ "already_identified", "not_unidentified" ]);
 
 // O paciente escolhido para a fusão: o achado pela busca (com o CNS mascarado) ou um candidato do duplicado (com o nascimento).
@@ -85,7 +87,10 @@ export function IdentifyPatient({ encounterId, onIdentified, onCancel }: Identif
   const searchingRef = useRef(false);
   const [ found, setFound ] = useState<{ patient: UrgencyPatientRef | null } | null>(null);
   const [ chosen, setChosen ] = useState<Chosen | null>(null);
-  const [ confirmed, setConfirmed ] = useState(false);
+  const [ confirmed, setConfirmedState ] = useState(false);
+  // O valor da caixa no momento do envio (o onConfirm não confia no fechamento da renderização).
+  const confirmedRef = useRef(false);
+  const setConfirmed = (v: boolean) => { confirmedRef.current = v; setConfirmedState(v); };
   const [ creating, setCreating ] = useState(false);
   const [ draft, setDraft ] = useState<NewDraft>(EMPTY_NEW);
   const [ duplicates, setDuplicates ] = useState<UrgencyDuplicateCandidate[] | null>(null);
@@ -225,13 +230,14 @@ export function IdentifyPatient({ encounterId, onIdentified, onCancel }: Identif
             </div>
           </div>
           <label style={{ ...fieldLabel, flexDirection: "row", alignItems: "flex-start", gap: 8 }}>
-            <input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />
+            <input type="checkbox" checked={confirmed} aria-disabled={busy || undefined}
+              onChange={(e) => { if (!busyRef.current) setConfirmed(e.target.checked); }} />
             <span>{mergeConfirmText(chosen.name)}</span>
           </label>
           <div style={row}>
-            <ConfirmButton label="Ligar ao paciente existente" question={MERGE_QUESTION} variant="danger"
+            <ConfirmButton key={String(confirmed)} label="Ligar ao paciente existente" question={MERGE_QUESTION} variant="danger"
               disabledReason={confirmed ? null : MERGE_BLOCKED_REASON}
-              onConfirm={() => submit({ patient_id: chosen.patient_id })} />
+              onConfirm={() => (confirmedRef.current ? submit({ patient_id: chosen.patient_id }) : undefined)} />
             <button type="button" style={secondaryButtonStyle} onClick={() => choose(null)}>Escolher outro</button>
           </div>
         </fieldset>
@@ -239,7 +245,7 @@ export function IdentifyPatient({ encounterId, onIdentified, onCancel }: Identif
         <>
           <form onSubmit={search} noValidate style={{ ...row, alignItems: "flex-end" }}>
             <label style={{ ...fieldLabel, minWidth: 220 }}>
-              CPF ou CNS
+              CPF ou CNS do paciente
               <input value={docMask(doc)} style={inputStyle} inputMode="numeric" autoComplete="off"
                 aria-invalid={docProblem ? true : undefined} aria-describedby={docProblem ? errId : undefined}
                 onChange={(e) => { setDoc(onlyDigits(e.target.value).slice(0, 15)); setDocProblem(null); setFound(null); }} />
@@ -258,7 +264,7 @@ export function IdentifyPatient({ encounterId, onIdentified, onCancel }: Identif
                 </button>
               </div>
             </div>
-          ) : <p role="status" style={{ margin: 0, fontSize: 13 }}>{NOT_FOUND_TEXT}</p>)}
+          ) : <p role="status" style={{ margin: 0, fontSize: 13 }}>{IDENTIFY_NOT_FOUND_TEXT}</p>)}
 
           {!creating && (
             <div style={row}>

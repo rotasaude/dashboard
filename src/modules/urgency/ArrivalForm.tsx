@@ -16,17 +16,14 @@ import type { Problem } from "../../lib/pharmacy";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { alert, box, fieldLabel, fieldset, form, legend, muted, row } from "../exams/styles";
 import {
-  DOC_TEXT, EMPTY_NEW, NEW_PATIENT_PATHS, NewPatientFields, candidateLine, candidatesOf, docMask, docQuery, draftPath, toNewPatient,
+  DOC_TEXT, EMPTY_NEW, NEW_PATIENT_PATHS, NOT_FOUND_TEXT, NewPatientFields, PROVISIONAL_TEXT, candidateLine, candidatesOf, docMask, docQuery, draftPath, toNewPatient,
   withDoc, type NewDraft
 } from "./NewPatientFields";
 
-export { DOC_TEXT };
-export const NOT_FOUND_TEXT = "Ninguém com este documento. Cadastre como paciente novo ou registre sem identificação.";
+export { DOC_TEXT, NOT_FOUND_TEXT, PROVISIONAL_TEXT };
 export const UNIDENTIFIED_NOTICE =
   "Só para a pessoa em estado grave que não pode ser identificada agora (inconsciente, sem documento e sem acompanhante). " +
   "A recepção identifica depois, pela fila. A descrição fica só no atendimento: não vai para a fila nem para a TV.";
-// A8: `invalid_request` em `patient_id` na chegada = o escolhido é um provisório (ou já fundido); o 404 é patient_not_found.
-export const PROVISIONAL_TEXT = "este cadastro é provisório (sem identificação) — escolha outro paciente ou cadastre como paciente novo";
 const DESCRIPTION_HINT = "sexo e idade aparentes, sinais, roupas, onde foi encontrada";
 const DESCRIPTION_MAX = 500;
 
