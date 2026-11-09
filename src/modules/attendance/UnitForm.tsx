@@ -3,6 +3,7 @@ import type { Neighborhood, ScreeningScope } from "../../lib/api";
 import { SCOPE_LABEL } from "../../lib/screening";
 import { onlyDigits, unitKindOptions } from "../../lib/attendance";
 import { CAPS_MODALITIES, modalityLabel, phoneProblem, unitCapsProblems } from "../../lib/psychosocial";
+import { ticketPrefixProblem } from "../../lib/urgency";
 import { matchNeighborhood, sortByName } from "../../lib/territory";
 import { maskCep, zipError, type AddressFields } from "../../lib/unitAddress";
 import { VIACEP_TIMEOUT_MS, lookupCep } from "../../lib/viacep";
@@ -18,9 +19,11 @@ import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } fr
 // `cnes` (T47, módulo 30): opcional em todo tipo; vazio = sem CNES. A unidade Gestão precisa dele para o BPA do TFD.
 // Módulo 31: `phone` (P27) vale para toda unidade (10 ou 11 dígitos; vazio = sem telefone); `capsModality` e `serviceClassification`
 // (115, opcional, 3 dígitos) só existem com `kind === "caps"`.
+// Módulo 32a (com `waitingRoomOn`): `ticketPrefix` (1 a 3 letras maiúsculas; vazio só na unidade nova = padrão do api, U na UPA e A
+// nas demais) e, só na UPA, `showWaitTimes` (Q8: os tempos vão à TV só com este e o da TV ligados). Nada disso no CAPS.
 export interface UnitFormValue extends AddressFields {
   name: string; kind: string; cnes?: string; screeningScope?: ScreeningScope; collectsSamples?: boolean; notifying?: boolean;
-  phone?: string; capsModality?: string; serviceClassification?: string;
+  phone?: string; capsModality?: string; serviceClassification?: string; ticketPrefix?: string; showWaitTimes?: boolean;
 }
 export const CNES_TEXT = "o CNES tem 7 dígitos";
 
@@ -35,13 +38,15 @@ interface Props {
   tfdOn?: boolean;
   // Módulo 31: `psychosocial_care` + `clinical_record` (canUsePsychosocial) — só então o CAPS é oferecido.
   capsOn?: boolean;
+  // Módulo 32a: `waiting_room_display` ligado (canUseWaitingRoom) — só então o prefixo da senha e os tempos na TV aparecem.
+  waitingRoomOn?: boolean;
   onSave(value: UnitFormValue): void;
   onCancel(): void;
 }
 
 type CepState = { kind: "idle" } | { kind: "loading" } | { kind: "found"; neighborhood: string } | { kind: "failed" };
 
-export function UnitForm({ initial, neighborhoods, busy, cepTimeoutMs = VIACEP_TIMEOUT_MS, dentalOn = false, tfdOn = false, capsOn = false, onSave, onCancel }: Props) {
+export function UnitForm({ initial, neighborhoods, busy, cepTimeoutMs = VIACEP_TIMEOUT_MS, dentalOn = false, tfdOn = false, capsOn = false, waitingRoomOn = false, onSave, onCancel }: Props) {
   const [ value, setValue ] = useState<UnitFormValue>(initial);
   const [ cep, setCep ] = useState<CepState>({ kind: "idle" });
   // Todas as recusas de uma vez: cada texto é um alerta.
@@ -49,6 +54,7 @@ export function UnitForm({ initial, neighborhoods, busy, cepTimeoutMs = VIACEP_T
   const [ cnesError, setCnesError ] = useState(false);
   const [ phoneError, setPhoneError ] = useState(false);
   const [ capsPaths, setCapsPaths ] = useState<string[]>([]);
+  const [ prefixError, setPrefixError ] = useState(false);
   // Cada CEP digitado ganha um número; resposta de número velho é descartada
   // (o admin corrigiu o CEP antes de a primeira consulta voltar).
   const seq = useRef(0);
@@ -92,13 +98,25 @@ export function UnitForm({ initial, neighborhoods, busy, cepTimeoutMs = VIACEP_T
     if (phone) found.push(phone);
     const caps = unitCapsProblems({ kind: value.kind, capsModality: value.capsModality ?? "", serviceClassification: value.serviceClassification ?? "" });
     found.push(...caps.map((p) => p.text));
+    const prefixOn = waitingRoomOn && value.kind !== "caps";
+    const prefix = value.ticketPrefix ?? "";
+    // Vazio só na unidade nova (o api usa o padrão); a unidade já tem prefixo, então apagá-lo é recusado.
+    const badPrefix = prefixOn && (prefix !== "" || (initial.ticketPrefix ?? "") !== "") && ticketPrefixProblem(prefix) !== null;
+    if (badPrefix) found.push(ticketPrefixProblem(prefix) as string);
+    setPrefixError(badPrefix);
     setCnesError(badCnes);
     setPhoneError(!!phone);
     setCapsPaths(caps.map((p) => p.path));
     setErrors(found);
     if (found.length > 0) return;
     // Fora do CAPS, a modalidade e a classificação não seguem (o api recusaria `caps_modality_mismatch`).
-    onSave(value.kind === "caps" ? value : { ...value, capsModality: undefined, serviceClassification: undefined });
+    const caps32 = value.kind === "caps" ? value : { ...value, capsModality: undefined, serviceClassification: undefined };
+    // Sem o interruptor (ou no CAPS) nada do 32a segue; os tempos na TV só existem na UPA.
+    onSave({
+      ...caps32,
+      ticketPrefix: prefixOn ? caps32.ticketPrefix : undefined,
+      showWaitTimes: prefixOn && value.kind === "upa" ? caps32.showWaitTimes : undefined
+    });
   }
 
   const blocked = busy || !value.name.trim();
@@ -132,6 +150,30 @@ export function UnitForm({ initial, neighborhoods, busy, cepTimeoutMs = VIACEP_T
               inputMode="numeric" maxLength={3} placeholder="3 dígitos, como no CNES (opcional)"
               aria-invalid={capsPaths.includes("service_classification") ? true : undefined} />
           </label>
+        </>
+      )}
+      {waitingRoomOn && value.kind !== "caps" && (
+        <>
+          <label style={labelStyle}>
+            Prefixo da senha
+            <input value={value.ticketPrefix ?? ""} onChange={(e) => { set({ ticketPrefix: e.target.value.trim() }); setPrefixError(false); }}
+              style={inputStyle} maxLength={3} autoCapitalize="characters" placeholder={value.kind === "upa" ? "U" : "A"}
+              aria-invalid={prefixError ? true : undefined} aria-describedby="unit-ticket-prefix-hint" />
+          </label>
+          <p id="unit-ticket-prefix-hint" style={hintStyle}>1 a 3 letras maiúsculas, sem acento, no começo de cada senha. Em branco, a unidade nova usa U na UPA e A nas demais.</p>
+          {value.kind === "upa" && (
+            <>
+              <label style={{ ...labelStyle, flexDirection: "row", alignItems: "center", gap: 6 }}>
+                <input type="checkbox" checked={value.showWaitTimes ?? true} onChange={(e) => set({ showWaitTimes: e.target.checked })}
+                  aria-describedby="unit-wait-times-hint" />
+                Mostrar tempos de espera na TV
+              </label>
+              <p id="unit-wait-times-hint" style={hintStyle}>
+                Os tempos de espera por cor só aparecem na TV que também estiver com “Mostrar o tempo de espera por cor” ligado
+                (Senhas, locais e TVs). Desligado aqui, nenhuma TV desta UPA mostra os tempos.
+              </p>
+            </>
+          )}
         </>
       )}
       <label style={labelStyle}>

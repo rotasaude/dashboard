@@ -38,6 +38,11 @@ function capsPayload(value: UnitFormValue, initial: UnitFormValue): UnitCapsInpu
     out.caps_modality = null;
     out.service_classification = null;
   }
+  // Módulo 32a: prefixo e tempos na TV só quando mudaram (o UnitForm já os tirou sem o interruptor, no CAPS e, os tempos, fora da UPA).
+  // Prefixo vazio na unidade nova = o padrão do api; nunca `null` (invalid_ticket_prefix).
+  const prefix = value.ticketPrefix ?? "";
+  if (value.ticketPrefix !== undefined && prefix !== "" && prefix !== (initial.ticketPrefix ?? "")) out.ticket_prefix = prefix;
+  if (value.showWaitTimes !== undefined && value.showWaitTimes !== (initial.showWaitTimes ?? true)) out.show_wait_times = value.showWaitTimes;
   return Object.keys(out).length > 0 ? out : undefined;
 }
 // Módulo 18 (contratos §5): quem passa pela escuta inicial nesta unidade.
@@ -50,8 +55,9 @@ interface Editing { id: string | null; initial: UnitFormValue }
 // Módulo 30: `tfdOn` = canUseTransport; só então o cadastro oferece a unidade de gestão.
 // Módulo 28: `dentalOn` = canUseDental; só então o cadastro oferece a unidade CEO.
 // Módulo 31: `capsOn` = canUsePsychosocial; só então o cadastro oferece o tipo CAPS (sem step-up novo, P26).
-export function Units({ labOn = false, surveillanceOn = false, dentalOn = false, tfdOn = false, capsOn = false }: {
-  labOn?: boolean; surveillanceOn?: boolean; dentalOn?: boolean; tfdOn?: boolean; capsOn?: boolean;
+// Módulo 32a: `waitingRoomOn` = canUseWaitingRoom; só então o cadastro mostra o prefixo da senha e, na UPA, os tempos na TV.
+export function Units({ labOn = false, surveillanceOn = false, dentalOn = false, tfdOn = false, capsOn = false, waitingRoomOn = false }: {
+  labOn?: boolean; surveillanceOn?: boolean; dentalOn?: boolean; tfdOn?: boolean; capsOn?: boolean; waitingRoomOn?: boolean;
 } = {}) {
   const queryClient = useQueryClient();
   const neighborhoods = useQuery({ queryKey: NEIGHBORHOODS_KEY, queryFn: listNeighborhoods });
@@ -132,7 +138,7 @@ export function Units({ labOn = false, surveillanceOn = false, dentalOn = false,
       title="Unidades"
       right={!editing && (
         <button type="button" style={buttonStyle}
-          onClick={() => setEditing({ id: null, initial: { name: "", kind: "ubs", ...EMPTY_ADDRESS_FIELDS } })}>
+          onClick={() => setEditing({ id: null, initial: { name: "", kind: "ubs", ...EMPTY_ADDRESS_FIELDS, ...(waitingRoomOn ? { ticketPrefix: "", showWaitTimes: true } : {}) } })}>
           Nova unidade
         </button>
       )}
@@ -168,6 +174,7 @@ export function Units({ labOn = false, surveillanceOn = false, dentalOn = false,
             dentalOn={dentalOn}
             tfdOn={tfdOn}
             capsOn={capsOn}
+            waitingRoomOn={waitingRoomOn}
             onSave={(value) => void save(value)}
             onCancel={() => setEditing(null)}
           />
@@ -194,7 +201,8 @@ export function Units({ labOn = false, surveillanceOn = false, dentalOn = false,
                         name: r.name, kind: r.kind, cnes: r.cnes ?? "", ...addressFieldsFrom(r), screeningScope: r.screening_scope ?? "walk_in",
                         phone: r.phone ?? "", ...(r.kind === "caps" ? { capsModality: r.caps_modality ?? "", serviceClassification: r.service_classification ?? "" } : {}),
                         ...(labOn ? { collectsSamples: r.collects_samples === true } : {}),
-                        ...(surveillanceOn ? { notifying: r.notifying === true } : {})
+                        ...(surveillanceOn ? { notifying: r.notifying === true } : {}),
+                        ...(waitingRoomOn ? { ticketPrefix: r.ticket_prefix ?? "", showWaitTimes: r.show_wait_times !== false } : {})
                       } })}>
                       Editar
                     </button>

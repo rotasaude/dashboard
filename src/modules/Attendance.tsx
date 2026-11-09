@@ -41,7 +41,7 @@ import { canUseTransport } from "../lib/transport";
 import { canUsePsychosocial } from "../lib/psychosocial";
 import { canUseBilling, showUnitProcedures } from "../lib/billing";
 import { UnitProcedures } from "./billing/UnitProcedures";
-import { canUseUrgency, isUpa } from "../lib/urgency";
+import { canUseUrgency, canUseWaitingRoom, isUpa } from "../lib/urgency";
 import { UrgencyDesk } from "./urgency/UrgencyDesk";
 
 // Atendimento (spec 2026-09-24-citizen-presencial-verification, Task 6, e
@@ -155,7 +155,7 @@ export function Attendance({ onNavigate }: { onNavigate(id: ModuleId): void }) {
       {canVerify && <ErasureRequest />}
       {isAdmin && <History />}
       {isAdmin && <ErasureRequests onGoToSecurity={goToSecurity} />}
-      {isAdmin && <Units labOn={hasFeature(user, "municipal_lab")} surveillanceOn={hasFeature(user, "surveillance")} dentalOn={canUseDental(user)} tfdOn={canUseTransport(user)} capsOn={canUsePsychosocial(user)} />}
+      {isAdmin && <Units labOn={hasFeature(user, "municipal_lab")} surveillanceOn={hasFeature(user, "surveillance")} dentalOn={canUseDental(user)} tfdOn={canUseTransport(user)} capsOn={canUsePsychosocial(user)} waitingRoomOn={canUseWaitingRoom(user)} />}
     </div>
   );
 }
