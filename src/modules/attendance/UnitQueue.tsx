@@ -239,8 +239,9 @@ export function UnitQueue({
     if (query.isSuccess && seenInCare.current === panel.attendanceId && finalizedHere.current !== panel.attendanceId) setPanel(null);
   }, [ panel, query.isSuccess, consultationRow ]);
 
-  // E8: sem ninguém de antes da urgência (e sem painel aberto), nada aparece.
-  if (preUrgency && !panel && !closing && !declaring && (!query.isSuccess || (waiting.length === 0 && inCare.length === 0))) return null;
+  // E8: sem ninguém de antes da urgência (e sem painel aberto), nada aparece; a leitura que falha aparece aberta, com o erro.
+  if (preUrgency && !panel && !closing && !declaring && (query.isPending || (query.isSuccess && waiting.length === 0 && inCare.length === 0))) return null;
+  const collapsed = preUrgency && !expanded && !query.isError;
 
   return (
     <Panel title={preUrgency ? "Atendimentos de antes da urgência" : "Fila"} right={preUrgency ? (
@@ -251,7 +252,7 @@ export function UnitQueue({
       <ActionButton busy={callingNext} onClick={onCallNext}
         disabledReason={query.isSuccess && waiting.length === 0 ? "ninguém aguardando" : null}>Chamar próximo</ActionButton>
     )}>
-      <div hidden={preUrgency && !expanded} style={{ display: preUrgency && !expanded ? "none" : "flex", flexDirection: "column", gap: 20 }}>
+      <div hidden={collapsed} style={{ display: collapsed ? "none" : "flex", flexDirection: "column", gap: 20 }}>
         <ActionMessage message={msg.message && msg.message.text !== careBlocked ? msg.message : null} />
         {query.isError && (
           <p role="alert" style={{ margin: 0, fontSize: 12.5, color: "var(--down)" }}>{attendanceError(query.error)}</p>
@@ -293,7 +294,8 @@ export function UnitQueue({
                     {
                       label: "", w: "auto", align: "right", render: (r) => (
                         <div data-row-actions style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, justifyContent: "flex-end" }}>
-                          {canCare && r.screening?.id && r.screening.destination === "same_day" && (
+                          {/* E8: a UPA recusa a escuta (screening_not_in_upa): sem "Reavaliar" nos atendimentos de antes da urgência. */}
+                          {canCare && !preUrgency && r.screening?.id && r.screening.destination === "same_day" && (
                             <ActionButton variant="secondary" busy={rowBusy === r.id} onClick={() => onReassess(r)}>Reavaliar</ActionButton>
                           )}
                           {canCare && (

@@ -3,20 +3,25 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 vi.mock("../../lib/api", async (orig) => ({
-  ...(await orig<typeof import("../../lib/api")>()), lookupUrgencyPerson: vi.fn(), createUrgencyArrival: vi.fn()
+  ...(await orig<typeof import("../../lib/api")>()), lookupUrgencyPerson: vi.fn(), createUrgencyArrival: vi.fn(), getUrgencyQueue: vi.fn()
 }));
 
 import * as api from "../../lib/api";
 import { ApiError } from "../../lib/api";
-import { DOCTOR_LINK, UPA, duplicateCandidates, patientRef, urgencyUser } from "../../test/urgencyFixtures";
+import { DOCTOR_LINK, UPA, duplicateCandidates, patientRef, queue, urgencyUser } from "../../test/urgencyFixtures";
 import { UrgencyDesk } from "./UrgencyDesk";
 
 afterEach(cleanup);
-beforeEach(() => { vi.mocked(api.lookupUrgencyPerson).mockReset(); vi.mocked(api.createUrgencyArrival).mockReset(); });
+beforeEach(() => {
+  vi.mocked(api.lookupUrgencyPerson).mockReset(); vi.mocked(api.createUrgencyArrival).mockReset();
+  vi.mocked(api.getUrgencyQueue).mockReset().mockResolvedValue(queue({ awaiting_classification: [], by_color: [], in_care: [] }));
+});
 
-function mount(roles = [ "citizen_verifier" ], links: api.ProfessionalLink[] = []) {
+function mount(roles = [ "citizen_verifier" ], links: api.ProfessionalLink[] = [], linksLoading = false) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  render(<QueryClientProvider client={client}><UrgencyDesk unit={UPA} user={urgencyUser(roles)} links={links} /></QueryClientProvider>);
+  render(<QueryClientProvider client={client}>
+    <UrgencyDesk unit={UPA} user={urgencyUser(roles)} links={links} linksLoading={linksLoading} />
+  </QueryClientProvider>);
 }
 
 async function searchFound(doc = "52998224725") {
@@ -142,6 +147,16 @@ describe("Recepção da UPA (F-32.2)", () => {
       new_patient: { full_name: "Maria Lima", birth_date: "1980-03-02", sex: "female", no_cpf_reason: reason.options[1].value } });
   });
 
+  it("paciente novo recusado por Patients::CreateTyped (invalid_patient): a frase fica no campo", async () => {
+    vi.mocked(api.createUrgencyArrival).mockRejectedValue(new ApiError(422, { error: "invalid_patient", path: "new_patient.full_name" }, "x"));
+    mount();
+    fillNewPatient();
+    fireEvent.click(screen.getByRole("button", { name: "Registrar chegada" }));
+    const msg = await screen.findByText("confira os dados do paciente novo");
+    expect(msg.id).toBe(screen.getByLabelText("Nome completo").getAttribute("aria-describedby"));
+    expect(screen.queryByText(/recusado pelo servidor/)).toBeNull();
+  });
+
   it("paciente novo com CPF já cadastrado: a frase fica no campo do CPF", async () => {
     vi.mocked(api.createUrgencyArrival).mockRejectedValue(new ApiError(409, { error: "cpf_taken", path: "new_patient.cpf" }, "x"));
     mount();
@@ -220,6 +235,19 @@ describe("Recepção da UPA (F-32.2)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Buscar" }));
     expect(await screen.findByText("Ninguém com este documento. Cadastre como paciente novo ou registre sem identificação.")).not.toBeNull();
     expect(document.body.textContent).not.toContain("52998224725");
+  });
+
+  it("a fila da urgência fica abaixo da recepção, lida pela unidade", async () => {
+    mount();
+    expect(await screen.findByRole("region", { name: "Fila da urgência" })).not.toBeNull();
+    expect(vi.mocked(api.getUrgencyQueue).mock.calls[0][0]).toBe("upa1");
+  });
+
+  it("vínculos ainda carregando: sem o aviso de papel (nada de piscar) e sem ler a fila", () => {
+    mount([ "health_professional" ], [], true);
+    expect(screen.queryByText("seu papel não atua nesta UPA")).toBeNull();
+    expect(screen.getByText("carregando seus vínculos…")).not.toBeNull();
+    expect(api.getUrgencyQueue).not.toHaveBeenCalled();
   });
 
   it("sem papel na UPA: o aviso, sem a recepção", () => {

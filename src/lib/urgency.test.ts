@@ -23,7 +23,9 @@ const EVERY_CONTRACT_CODE = [
   "duplicate_suspected", "pain_scale_required", "invalid_call_location", "display_inactive", "invalid_token", "patient_unidentified",
   "consultation_in_progress", "consultation_finalized", "merge_blocked", "cpf_taken", "cns_taken", "invalid_cpf", "invalid_cns",
   "cpf_or_reason_required", "citizen_not_verified", "too_many_requests", "invalid_unit", "missing_role", "not_called", "already_closed",
-  "call_location_name_taken", "invalid_show_wait_times", "not_caller", "not_in_care", "not_found"
+  "call_location_name_taken", "invalid_show_wait_times", "not_caller", "not_in_care", "not_found",
+  // Task 5 carry: Patients::CreateTyped recusa `new_patient.<campo>`.
+  "invalid_patient"
 ];
 const err = (status: number, body: unknown) => new ApiError(status, body, "x");
 

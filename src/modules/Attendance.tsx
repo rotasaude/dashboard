@@ -136,7 +136,8 @@ export function Attendance({ onNavigate }: { onNavigate(id: ModuleId): void }) {
           cancelar a troca devolve a escuta, a consulta e o que foi digitado (AT-16, I1). */}
       <div hidden={switchingUnit} style={switchingUnit ? undefined : { display: "contents" }}>
       {upaDesk && unit && (canVerify || canCareRole) && (
-        <UrgencyDesk key={unit.id} unit={unit} user={user} links={myProfessional.data?.links ?? []} onGoToSecurity={goToSecurity} />
+        <UrgencyDesk key={unit.id} unit={unit} user={user} links={myProfessional.data?.links ?? []}
+          linksLoading={canCareRole && myProfessional.isPending} onGoToSecurity={goToSecurity} />
       )}
       {canVerify && unit && !upaDesk && <div id="sec-checkin"><CheckIn unit={unit} onUnitInvalid={onUnitInvalid} demographicsOn={hasFeature(user, "procedure_billing")} /></div>}
       {/* A validação presencial sobe para perto do check-in: é a tarefa mais comum do balcão (FC-10). */}

@@ -149,6 +149,8 @@ export const URGENCY_ERRORS: Record<string, string> = {
   cns_taken: "já existe paciente com este CNS — busque por ele e ligue ao existente",
   invalid_cpf: CPF_TEXT,
   invalid_cns: CNS_TEXT,
+  // Patients::CreateTyped recusa `new_patient.<campo>` (Task 5 carry).
+  invalid_patient: "confira os dados do paciente novo",
   cpf_or_reason_required: "sem CPF, informe o motivo",
   already_identified: "este paciente já foi identificado por outra pessoa",
   not_unidentified: "só o paciente não identificado pode ser identificado",
