@@ -6,21 +6,21 @@
 // - Recusas do api pelo `path` (urgencyRefusals): no campo, quando ele está na tela; as outras no topo. Sucesso limpa tudo.
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import {
-  createUrgencyArrival, errorCode, lookupUrgencyPerson, ApiError,
-  type HealthUnit, type NewPatient, type PatientSex, type UrgencyArrival, type UrgencyArrivalInput, type UrgencyDuplicateCandidate,
-  type UrgencyPatientRef
+  createUrgencyArrival, errorCode, lookupUrgencyPerson,
+  type HealthUnit, type UrgencyArrival, type UrgencyArrivalInput, type UrgencyDuplicateCandidate, type UrgencyPatientRef
 } from "../../lib/api";
-import { isValidCpf, maskCpf, onlyDigits } from "../../lib/attendance";
+import { onlyDigits } from "../../lib/attendance";
 import { todayInCity } from "../../lib/campaigns";
-import { isValidCns } from "../../lib/professionals";
-import { CNS_TEXT, CPF_TEXT, DOMAINS } from "../../lib/territoryDictionaries";
-import { fmtDay } from "../../lib/territoryRegistry";
 import { URGENCY_ERRORS, arrivalBody, arrivalProblems, urgencyError, urgencyRefusals, type ArrivalDraft } from "../../lib/urgency";
 import type { Problem } from "../../lib/pharmacy";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { alert, box, fieldLabel, fieldset, form, legend, muted, row } from "../exams/styles";
+import {
+  DOC_TEXT, EMPTY_NEW, NEW_PATIENT_PATHS, NewPatientFields, candidateLine, candidatesOf, docMask, docQuery, draftPath, toNewPatient,
+  withDoc, type NewDraft
+} from "./NewPatientFields";
 
-export const DOC_TEXT = "digite o CPF (11 dígitos) ou o CNS (15 dígitos)";
+export { DOC_TEXT };
 export const NOT_FOUND_TEXT = "Ninguém com este documento. Cadastre como paciente novo ou registre sem identificação.";
 export const UNIDENTIFIED_NOTICE =
   "Só para a pessoa em estado grave que não pode ser identificada agora (inconsciente, sem documento e sem acompanhante). " +
@@ -31,44 +31,11 @@ const DESCRIPTION_HINT = "sexo e idade aparentes, sinais, roupas, onde foi encon
 const DESCRIPTION_MAX = 500;
 
 type Mode = "lookup" | "new" | "unidentified";
-type NewDraft = { fullName: string; birthDate: string; sex: string; cpf: string; reason: string; cns: string };
-const EMPTY_NEW: NewDraft = { fullName: "", birthDate: "", sex: "", cpf: "", reason: "", cns: "" };
-const DRAFT_PATH: Record<keyof NewDraft, string> = {
-  fullName: "full_name", birthDate: "birth_date", sex: "sex", cpf: "cpf", reason: "no_cpf_reason", cns: "cns"
-};
-const fieldBox = { display: "flex", flexDirection: "column" as const, gap: 4 };
-const SEX_OPTIONS: { code: PatientSex; label: string }[] = [ { code: "female", label: "Feminino" }, { code: "male", label: "Masculino" } ];
-
-const squish = (v: string) => v.replace(/\s+/g, " ").trim();
-// O campo único aceita os dois documentos: até 11 dígitos, a máscara do CPF; acima, o CNS em blocos.
-const maskCns = (input: string) => {
-  const d = onlyDigits(input).slice(0, 15);
-  return [ d.slice(0, 3), d.slice(3, 7), d.slice(7, 11), d.slice(11) ].filter(Boolean).join(" ");
-};
-const docMask = (digits: string) => (digits.length <= 11 ? maskCpf(digits) : maskCns(digits));
-
-function toNewPatient(d: NewDraft): NewPatient {
-  const np: NewPatient = { full_name: squish(d.fullName), birth_date: d.birthDate, sex: d.sex as PatientSex };
-  const cpf = onlyDigits(d.cpf);
-  if (cpf) np.cpf = cpf;
-  else if (d.reason) np.no_cpf_reason = d.reason;
-  const cns = onlyDigits(d.cns);
-  if (cns) np.cns = cns;
-  return np;
-}
-
-function candidatesOf(err: unknown): UrgencyDuplicateCandidate[] {
-  const list = err instanceof ApiError && err.body && typeof err.body === "object" ? (err.body as { candidates?: unknown }).candidates : null;
-  return Array.isArray(list)
-    ? list.filter((c): c is UrgencyDuplicateCandidate => !!c && typeof c === "object" && typeof (c as UrgencyDuplicateCandidate).patient_id === "string")
-    : [];
-}
-const candidateLine = (c: UrgencyDuplicateCandidate) => `${c.display_name} · nasc. ${fmtDay(c.birth_date)} · ${c.has_cpf ? "com CPF" : "sem CPF"}`;
 
 // Os campos de cada forma (os `path` do api); recusa de outro caminho vai ao topo.
 const FIELD_PATHS: Record<Mode, string[]> = {
   lookup: [],
-  new: [ "full_name", "birth_date", "sex", "cpf", "no_cpf_reason", "cns" ].map((f) => `new_patient.${f}`),
+  new: NEW_PATIENT_PATHS,
   unidentified: [ "unidentified", "unidentified.description" ]
 };
 
@@ -96,23 +63,17 @@ export function ArrivalForm({ unit, onArrived, autoFocus = false }: { unit: Heal
   function choose(next: Mode) {
     clearMessages(); setDuplicates(null); setMode(next);
     // Sem ninguém pelo documento, o paciente novo já começa com ele.
-    if (next === "new" && found?.patient === null) {
-      const d = onlyDigits(doc);
-      setDraft((cur) => (d.length === 11 ? { ...cur, cpf: maskCpf(d) } : d.length === 15 ? { ...cur, cns: maskCns(d) } : cur));
-    }
+    if (next === "new" && found?.patient === null) setDraft((cur) => withDoc(cur, onlyDigits(doc)));
   }
 
   async function search(e: FormEvent) {
     e.preventDefault();
     if (searchingRef.current) return;
-    const d = onlyDigits(doc);
-    const q = d.length === 11 ? { cpf: d } : d.length === 15 ? { cns: d } : null;
-    if (!q) { setDocProblem(DOC_TEXT); return; }
-    if ("cpf" in q && !isValidCpf(d)) { setDocProblem(CPF_TEXT); return; }
-    if ("cns" in q && !isValidCns(d)) { setDocProblem(CNS_TEXT); return; }
+    const q = docQuery(onlyDigits(doc));
+    if ("problem" in q) { setDocProblem(q.problem); return; }
     searchingRef.current = true; setSearching(true); setDocProblem(null); clearMessages(); setFound(null);
     try {
-      const result = await lookupUrgencyPerson(q);
+      const result = await lookupUrgencyPerson(q.query);
       setFound({ patient: result.patient });
       setMode("lookup"); setDuplicates(null);
     } catch (err) {
@@ -160,9 +121,9 @@ export function ArrivalForm({ unit, onArrived, autoFocus = false }: { unit: Heal
   function onUnidentifiedSubmit(e: FormEvent) { e.preventDefault(); submitDraft({ mode: "unidentified", description }); }
 
   // Mudou o paciente novo depois do aviso: a conferência vale para o que foi enviado, então some.
-  const edit = (key: keyof NewDraft) => (value: string) => {
+  const edit = (key: keyof NewDraft, value: string) => {
     setDraft((cur) => ({ ...cur, [key]: value })); setDuplicates(null);
-    setProblems((p) => p.filter((x) => x.path !== `new_patient.${DRAFT_PATH[key]}`));
+    setProblems((p) => p.filter((x) => x.path !== draftPath(key)));
   };
 
   const problemAt = (...paths: string[]) => problems.find((p) => paths.includes(p.path))?.text ?? null;
@@ -171,22 +132,6 @@ export function ArrivalForm({ unit, onArrived, autoFocus = false }: { unit: Heal
   const submitButton = (label: string) => (
     <button type="submit" aria-disabled={busy || undefined} style={busy ? disabledButtonStyle : buttonStyle}>{label}</button>
   );
-
-  const textField = (label: string, key: keyof NewDraft, opts: { type?: string; inputMode?: "numeric"; mask?(v: string): string } = {}) => {
-    const path = DRAFT_PATH[key];
-    const err = problemAt(`new_patient.${path}`);
-    return (
-      <div style={fieldBox}>
-        <label style={fieldLabel}>
-          {label}
-          <input type={opts.type ?? "text"} value={draft[key]} style={inputStyle} autoComplete="off" inputMode={opts.inputMode}
-            aria-invalid={err ? true : undefined} aria-describedby={err ? errId(path) : undefined}
-            onChange={(e) => edit(key)(opts.mask ? opts.mask(e.target.value) : e.target.value)} />
-        </label>
-        {fieldError(path, err)}
-      </div>
-    );
-  };
 
   const descriptionErr = problemAt("unidentified.description", "unidentified");
   const descriptionCount = [ ...description ].length;
@@ -228,42 +173,7 @@ export function ArrivalForm({ unit, onArrived, autoFocus = false }: { unit: Heal
 
       {mode === "new" && (
         <form style={form} onSubmit={onNewSubmit} noValidate aria-label="Paciente novo">
-          <fieldset style={fieldset}>
-            <legend style={legend}>Paciente novo</legend>
-            <div style={row}>
-              {textField("Nome completo", "fullName")}
-              {textField("Data de nascimento", "birthDate", { type: "date" })}
-              <div style={fieldBox}>
-                <label style={fieldLabel}>
-                  Sexo
-                  <select value={draft.sex} style={inputStyle} aria-describedby={problemAt("new_patient.sex") ? errId("sex") : undefined}
-                    onChange={(e) => edit("sex")(e.target.value)}>
-                    <option value="">Escolha</option>
-                    {SEX_OPTIONS.map((o) => <option key={o.code} value={o.code}>{o.label}</option>)}
-                  </select>
-                </label>
-                {fieldError("sex", problemAt("new_patient.sex"))}
-              </div>
-            </div>
-            <div style={row}>
-              {textField("CPF (se tiver)", "cpf", { inputMode: "numeric", mask: maskCpf })}
-              {!onlyDigits(draft.cpf) && (
-                <div style={fieldBox}>
-                  <label style={fieldLabel}>
-                    Motivo de não ter CPF
-                    <select value={draft.reason} style={inputStyle}
-                      aria-describedby={problemAt("new_patient.no_cpf_reason") ? errId("no_cpf_reason") : undefined}
-                      onChange={(e) => edit("reason")(e.target.value)}>
-                      <option value="">Escolha</option>
-                      {DOMAINS.justificativa_nao_possui_cpf.map((o) => <option key={o.code} value={String(o.code)}>{o.label}</option>)}
-                    </select>
-                  </label>
-                  {fieldError("no_cpf_reason", problemAt("new_patient.no_cpf_reason"))}
-                </div>
-              )}
-              {textField("CNS (se tiver)", "cns", { inputMode: "numeric", mask: maskCns })}
-            </div>
-          </fieldset>
+          <NewPatientFields draft={draft} problems={problems} idBase={ids} onEdit={edit} />
 
           {duplicates && (
             <fieldset style={fieldset}>

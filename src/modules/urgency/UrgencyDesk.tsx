@@ -14,6 +14,9 @@
 //   Se "Chamar próximo" chamou um atendimento de antes da urgência (Q24, A14), o aviso aponta o painel dele.
 // - desfecho de balcão: "Saiu sem atendimento" (todos os papéis) abre o desfecho com os tipos de balcão, sem ler o detalhe.
 //   Registrado o desfecho, o painel fecha, a fila relê e o aviso só diz o tipo.
+// - identificação (F-32.2, A8): só a recepção. "Identificar" nas linhas do provisório (as três faixas) e na lista de não
+//   identificados (Q29, lida só quando pedida, também para o encontro já encerrado) abre o painel IdentifyPatient. Identificado, o
+//   painel fecha, a fila e a lista releem e o aviso leva só o nome (nunca a descrição).
 // Enquanto os vínculos do profissional carregam, nada de "seu papel não atua nesta UPA" (piscaria antes dos vínculos).
 // Quem monta passa `key={unit.id}`: trocar de UPA remonta tudo e nada de uma unidade aparece na outra.
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
@@ -32,7 +35,9 @@ import { ActionButton } from "../../components/ActionButton";
 import { CallLocationPicker, atLocation, useCallLocation } from "../attendance/CallLocationPicker";
 import { ArrivalForm } from "./ArrivalForm";
 import { ClassificationForm } from "./ClassificationForm";
+import { IdentifyPatient } from "./IdentifyPatient";
 import { OutcomeForm, type OutcomeTarget } from "./OutcomeForm";
+import { PROVISIONAL_KEY, ProvisionalEncounters, arrivalLabel } from "./ProvisionalEncounters";
 import { UrgencyCare } from "./UrgencyCare";
 import { TicketCard } from "./TicketCard";
 import { UrgencyQueue, type QueueActions, type UrgencyQueueHandle } from "./UrgencyQueue";
@@ -111,6 +116,23 @@ function LeavingPanel({ leaving, doctor, onClosed }: { leaving: Leaving; doctor:
   );
 }
 
+// A identificação aberta por uma linha da fila ou da lista de provisórios: o id do encontro e o rótulo do painel.
+type Identifying = { encounterId: string; label: string };
+
+// O painel da identificação, à vista e com o foco no título; Escape fora dos campos fecha (nada foi enviado ainda).
+function IdentifyPanel({ target, onIdentified, onClose }: { target: Identifying; onIdentified(notice: string): void; onClose(): void }) {
+  const ref = useReveal<HTMLDivElement>(true);
+  return (
+    <div ref={ref} onKeyDown={(e) => { if (e.key === "Escape" && !inField(e.target)) { e.stopPropagation(); onClose(); } }}>
+      <Panel title={`Identificar paciente — ${target.label}`} sub="paciente existente (fusão, irreversível) · paciente novo">
+        <div style={{ padding: 16 }}>
+          <IdentifyPatient encounterId={target.encounterId} onIdentified={(_e, notice) => onIdentified(notice)} onCancel={onClose} />
+        </div>
+      </Panel>
+    </div>
+  );
+}
+
 const confirmBox: CSSProperties = {
   display: "flex", flexDirection: "column", gap: 8, padding: "10px 12px", border: "1px solid var(--warn)", borderRadius: 8,
   background: "var(--warn-bg)"
@@ -151,6 +173,7 @@ export function UrgencyDesk({ unit, user, links, linksLoading = false, onGoToSec
   // O atendimento médico aberto (a linha de "em atendimento") e a saída sem atendimento aberta.
   const [ care, setCare ] = useState<UrgencyInCareRow | null>(null);
   const [ leaving, setLeaving ] = useState<Leaving | null>(null);
+  const [ identifying, setIdentifying ] = useState<Identifying | null>(null);
 
   // O aviso some sozinho (timer limpo ao desmontar ou ao trocar o aviso).
   useEffect(() => {
@@ -223,6 +246,20 @@ export function UrgencyDesk({ unit, user, links, linksLoading = false, onGoToSec
     setLeaving(null);
     if (notice) { setNotice(notice); queueRef.current?.refresh(); }
   };
+  // A descrição do provisório sai do cache ao fechar; identificado, a fila e a lista de provisórios (se aberta) releem.
+  const openIdentify = (next: Identifying) => {
+    if (identifying) queryClient.removeQueries({ queryKey: [ URGENCY_DETAIL_KEY, identifying.encounterId ] });
+    setNotice(null); setIdentifying(next);
+  };
+  const closeIdentify = (notice?: string) => {
+    if (identifying) queryClient.removeQueries({ queryKey: [ URGENCY_DETAIL_KEY, identifying.encounterId ] });
+    setIdentifying(null);
+    if (notice) {
+      setNotice(notice);
+      queueRef.current?.refresh();
+      void queryClient.invalidateQueries({ queryKey: [ PROVISIONAL_KEY, unit.id ] });
+    }
+  };
 
   // Q2: só a enfermagem 2235 classifica e chama para a classificação; o médico 225 chama para o atendimento (a fila também confere o
   // papel). "Chamar de novo" só com o painel da sala de espera (o api recusa sem ele).
@@ -250,6 +287,9 @@ export function UrgencyDesk({ unit, user, links, linksLoading = false, onGoToSec
         target: { id: row.encounter_id, patient: row.patient, consultation_status: "consultation_status" in row ? row.consultation_status : null },
         ticket: row.ticket
       })
+    } satisfies QueueActions : {}),
+    ...(roles.identify ? {
+      onIdentify: (row) => openIdentify({ encounterId: row.encounter_id, label: row.ticket ?? "sem senha" })
     } satisfies QueueActions : {}),
     ...(waitingRoom ? {
       onRecall: (row) => void call(async (loc) => {
@@ -305,8 +345,15 @@ export function UrgencyDesk({ unit, user, links, linksLoading = false, onGoToSec
         <UrgencyCare key={care.encounter_id} row={care} unit={unit} units={[ unit ]} onClosed={closeCare} onGoToSecurity={onGoToSecurity} />
       )}
       {leaving && <LeavingPanel key={leaving.target.id} leaving={leaving} doctor={false} onClosed={closeLeaving} />}
+      {identifying && (
+        <IdentifyPanel key={identifying.encounterId} target={identifying} onIdentified={closeIdentify} onClose={() => closeIdentify()} />
+      )}
       {callError && <p role="alert" style={{ margin: 0, fontSize: 12.5, color: "var(--down)" }}>{callError}</p>}
       <UrgencyQueue ref={queueRef} unit={unit} roles={roles} actions={actions} toolbar={toolbar} />
+      {roles.identify && (
+        <ProvisionalEncounters unit={unit}
+          onIdentify={(item) => openIdentify({ encounterId: item.encounter_id, label: arrivalLabel(item) })} />
+      )}
     </div>
   );
 }
