@@ -15,9 +15,11 @@ interface Props {
   alerts: string[];
   bmi: number | null;
   onChange(next: VitalsForm): void;
+  // Campos que a tela pede à parte (a urgência pede a dor fora dos sinais, Q3). Padrão: nenhum (o 18 não muda).
+  omit?: VitalKey[];
 }
 
-export function VitalSignsFields({ form, problems, alerts, bmi, onChange }: Props) {
+export function VitalSignsFields({ form, problems, alerts, bmi, onChange, omit = [] }: Props) {
   const alertsByField = new Map<VitalKey, string>();
   const loose: string[] = [];
   for (const code of alerts) {
@@ -31,7 +33,7 @@ export function VitalSignsFields({ form, problems, alerts, bmi, onChange }: Prop
     <fieldset aria-label="Sinais vitais" style={box}>
       <legend style={legend}>Sinais vitais</legend>
       <div style={grid}>
-        {VITALS.map((spec) => {
+        {VITALS.filter((spec) => !omit.includes(spec.key)).map((spec) => {
           const alert = alertsByField.get(spec.key);
           const problem = problems[spec.key];
           return (
