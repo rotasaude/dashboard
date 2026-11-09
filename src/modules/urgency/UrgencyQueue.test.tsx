@@ -9,7 +9,7 @@ vi.mock("../../lib/api", async (orig) => ({ ...(await orig<typeof import("../../
 import * as api from "../../lib/api";
 import { ApiError } from "../../lib/api";
 import { NO_CLINICAL_IN_LIST } from "../../lib/urgency";
-import { UPA, colorRow, patientRef, queue, unidentifiedRef, waitingRow } from "../../test/urgencyFixtures";
+import { NOW32, UPA, colorRow, patientRef, queue, unidentifiedRef, waitingRow } from "../../test/urgencyFixtures";
 import { UrgencyQueue, type UrgencyQueueHandle, type UrgencyQueueProps } from "./UrgencyQueue";
 
 afterEach(cleanup);
@@ -166,7 +166,31 @@ it("erro de leitura: a frase em alerta, mantendo a última fila; refresh pelo re
 });
 
 describe("polling", () => {
-  beforeEach(() => { vi.useFakeTimers(); }); afterEach(() => { vi.useRealTimers(); });
+  // Relógio fixo (NOW32 = 10h de Brasília): a hora da última leitura sai no fuso da cidade (fmtHourMinute → cityDateFormat).
+  beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(NOW32); }); afterEach(() => { vi.useRealTimers(); });
+  const flush = (ms = 0) => act(async () => { await vi.advanceTimersByTimeAsync(ms); });
+  const forbidden = () => new ApiError(403, { error: "cbo_not_allowed" }, "x");
+
+  it("a hora da última leitura, no fuso da cidade", async () => {
+    vi.mocked(api.getUrgencyQueue).mockResolvedValue(queue());
+    mount({ roles: { reception: true, nurse: false, doctor: false } });
+    await flush();
+    expect(screen.getByText("atualiza a cada 10 s · 10:00")).not.toBeNull();
+  });
+
+  it.each([ 401, 408, 425, 429 ])("%i não para o polling: segue no intervalo e se recupera quando o api volta", async (status) => {
+    vi.mocked(api.getUrgencyQueue).mockRejectedValueOnce(new ApiError(status, { error: "unauthenticated" }, "x"))
+      .mockResolvedValue(queue());
+    mount({ roles: { reception: true, nurse: false, doctor: false } });
+    await flush();
+    expect(screen.getByRole("alert")).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Tentar de novo" })).toBeNull();
+    await flush(10_000);
+    expect(api.getUrgencyQueue).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.getByText("U-042")).not.toBeNull();
+    expect(screen.getByText("atualiza a cada 10 s · 10:00")).not.toBeNull();
+  });
 
   it("relê a cada 10 s; trocar de unidade descarta a fila antiga e para o timer dela", async () => {
     vi.mocked(api.getUrgencyQueue).mockResolvedValue(queue());
@@ -179,14 +203,58 @@ describe("polling", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it("403 cbo_not_allowed (técnico 3222) mostra a frase e para o polling", async () => {
-    vi.mocked(api.getUrgencyQueue).mockRejectedValue(new ApiError(403, { error: "cbo_not_allowed" }, "x"));
+  it("403 cbo_not_allowed (técnico 3222) mostra a frase, para o polling e troca o rodapé por 'parado às'", async () => {
+    vi.mocked(api.getUrgencyQueue).mockImplementation(() => Promise.reject(forbidden()));
     mount({ roles: { reception: false, nurse: true, doctor: false } });
-    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    await flush();
     expect(screen.getByRole("alert").textContent).toBe("seu CBO não permite esta etapa na UPA");
-    await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
+    await flush(60_000);
     expect(api.getUrgencyQueue).toHaveBeenCalledTimes(1);
     expect(vi.getTimerCount()).toBe(0);
+    expect(screen.queryByText(/atualiza a cada/)).toBeNull();
+    expect(screen.getByText("parado às 10:00")).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Tentar de novo" })).not.toBeNull();
+  });
+
+  it.each([ [ 404, "not_found" ], [ 422, "not_an_upa" ] ])("%i (%s) também para", async (status, error) => {
+    vi.mocked(api.getUrgencyQueue).mockImplementation(() => Promise.reject(new ApiError(status, { error }, "x")));
+    mount({ roles: { reception: true, nurse: false, doctor: false } });
+    // A primeira resposta precisa renderizar (o act só renderiza ao sair) antes de o relógio andar.
+    await flush();
+    await flush(30_000);
+    expect(api.getUrgencyQueue).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "Tentar de novo" })).not.toBeNull();
+  });
+
+  it("depois de parar, refresh() pelo ref lê de novo e volta a fazer polling; 'Tentar de novo' também", async () => {
+    vi.mocked(api.getUrgencyQueue).mockImplementationOnce(() => Promise.reject(forbidden()))
+      .mockImplementationOnce(() => Promise.reject(forbidden())).mockResolvedValue(queue());
+    const ref = createRef<UrgencyQueueHandle>();
+    mount({ roles: { reception: true, nurse: false, doctor: false } }, ref);
+    await flush();
+    expect(screen.getByText("parado às 10:00")).not.toBeNull();
+    await act(async () => { ref.current?.refresh(); });
+    await flush();
+    expect(api.getUrgencyQueue).toHaveBeenCalledTimes(2);
+    // A segunda recusa para de novo; o botão tenta outra vez.
+    expect(screen.getByRole("button", { name: "Tentar de novo" })).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Tentar de novo" }));
+    await flush();
+    expect(api.getUrgencyQueue).toHaveBeenCalledTimes(3);
+    expect(screen.getByText("U-042")).not.toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.getByText("atualiza a cada 10 s · 10:00")).not.toBeNull();
+    await flush(10_000);
+    expect(api.getUrgencyQueue).toHaveBeenCalledTimes(4);
+  });
+
+  it("cada faixa tem o título como heading", async () => {
+    vi.mocked(api.getUrgencyQueue).mockResolvedValue(queue());
+    mount({ roles: { reception: true, nurse: false, doctor: false } });
+    await flush();
+    for (const name of [ "Aguardando classificação", "Classificados, por cor", "Em atendimento" ]) {
+      expect(screen.getByRole("heading", { level: 3, name })).not.toBeNull();
+    }
   });
 
   it("sem papel nenhum, não lê", async () => {

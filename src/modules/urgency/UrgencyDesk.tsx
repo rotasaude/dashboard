@@ -30,7 +30,7 @@ export interface UrgencyDeskProps {
   onGoToSecurity?(): void;
 }
 
-export function UrgencyDesk({ unit, user, links, linksLoading = false, now }: UrgencyDeskProps) {
+export function UrgencyDesk({ unit, user, links, linksLoading = false }: UrgencyDeskProps) {
   const roles = urgencyRoles(user, links, unit.id);
   const queueRef = useRef<UrgencyQueueHandle>(null);
   // A senha da última chegada; "Próxima chegada" volta ao formulário com o foco no documento.
@@ -53,7 +53,7 @@ export function UrgencyDesk({ unit, user, links, linksLoading = false, now }: Ur
           )}
         </Panel>
       )}
-      <UrgencyQueue ref={queueRef} unit={unit} roles={roles} now={now} actions={QUEUE_ACTIONS} />
+      <UrgencyQueue ref={queueRef} unit={unit} roles={roles} actions={QUEUE_ACTIONS} />
     </div>
   );
 }

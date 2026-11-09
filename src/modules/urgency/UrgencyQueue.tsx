@@ -4,11 +4,12 @@
 //   (a descrição do não identificado fica no detalhe). A fila não grava trilha.
 // - Estouro (Q18): vem pronto do api (desde a 1ª classificação, contra o tempo máximo da vigente); a tela nunca recalcula e diz por
 //   texto, não só pela cor. A espera mostrada é desde a chegada.
-// - Recusa que não passa sozinha (403 cbo_not_allowed do técnico 3222, 422 not_an_upa, 401) para o polling; falha de rede segue
-//   tentando, mantendo a última fila.
+// - Só a recusa que não passa sozinha para o polling: 403 (cbo_not_allowed do técnico 3222, missing_link), 404 e 422 (not_an_upa).
+//   O rodapé troca "atualiza a cada…" por "parado às hh:mm" e "Tentar de novo"; `refresh()` também volta a ler. Sessão vencida
+//   (401), 408, 425, 429 e falha de rede seguem no intervalo, mantendo a última fila, e se recuperam sozinhas.
 // - Botões: só os que a mesa ligou (`actions`, Tasks 7–10) e que o papel permite no api (A8: identificar é da recepção; A13: a
 //   recepção nunca chama de novo; Q2: só a enfermagem 2235 classifica e chama para a classificação; o médico chama por cor).
-import { forwardRef, useEffect, useImperativeHandle, useState, type ReactNode } from "react";
+import { forwardRef, useId, useImperativeHandle, useMemo, useState, type ReactNode } from "react";
 import {
   ApiError, getUrgencyQueue,
   type HealthUnit, type UrgencyColor, type UrgencyColorRow, type UrgencyInCareRow, type UrgencyLastCall, type UrgencyPatientRef,
@@ -36,7 +37,7 @@ export interface QueueActions {
 }
 export interface UrgencyQueueHandle { refresh(): void }
 export type QueueRoles = Pick<UrgencyRoles, "reception" | "nurse" | "doctor">;
-export interface UrgencyQueueProps { unit: HealthUnit; roles: QueueRoles; now?(): Date; actions: QueueActions }
+export interface UrgencyQueueProps { unit: HealthUnit; roles: QueueRoles; actions: QueueActions }
 
 const LAST_CALL_KIND = { classification: "classificação", care: "atendimento" } as const;
 const CONSULTATION_TEXT = { draft: "em rascunho", finalized: "finalizada", discarded: "—" } as const;
@@ -58,8 +59,9 @@ const safeInCare = (r: UrgencyInCareRow): UrgencyInCareRow => ({
   called_by_name: r.called_by_name ?? null, consultation_id: r.consultation_id ?? null, consultation_status: r.consultation_status ?? null
 });
 
-// Recusa que não passa sozinha: parar de pedir (o 429 e a rede voltam a tentar).
-const stopsPolling = (err: unknown): boolean => err instanceof ApiError && err.status >= 400 && err.status < 500 && err.status !== 429;
+// Recusa que não passa sozinha: parar de pedir. Lista fechada — todo o resto (401, 408, 425, 429, 5xx, rede) segue tentando.
+const STOP_STATUSES = new Set([ 403, 404, 422 ]);
+const stopsPolling = (err: unknown): boolean => err instanceof ApiError && STOP_STATUSES.has(err.status);
 
 // ─── Células ────────────────────────────────────────────────────────────────
 const ticketCell = (r: UrgencyWaitingRow) => <span className="mono" data-testid="ticket">{r.ticket ?? "—"}</span>;
@@ -95,23 +97,29 @@ function rowButtons(ticketOrName: string, buttons: Btn[]): ReactNode {
 const who = (r: UrgencyWaitingRow) => r.ticket ?? r.patient.name;
 
 function Band({ label, children }: { label: string; children: ReactNode }) {
+  const id = useId();
   return (
-    <section aria-label={label} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      <strong>{label}</strong>
+    <section aria-labelledby={id} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <h3 id={id} style={{ margin: 0, fontSize: 12.5, fontWeight: 600, color: "var(--ink)" }}>{label}</h3>
       {children}
     </section>
   );
 }
 
 export const UrgencyQueue = forwardRef<UrgencyQueueHandle, UrgencyQueueProps>(function UrgencyQueue({ unit, roles, actions }, ref) {
-  // Recusa definitiva desta unidade: o polling para (o `key` da unidade volta a ler numa troca).
-  const [ stoppedFor, setStoppedFor ] = useState<string | null>(null);
+  // Parado = a última leitura foi uma recusa definitiva (403/404/422) que ninguém mandou tentar de novo: o fetcher nulo desliga o
+  // timer. "Tentar de novo"/refresh() dispensa essa recusa, e o fetcher volta (lê na hora); a próxima resposta decide de novo.
+  const [ dismissed, setDismissed ] = useState<unknown>(null);
   const hasRole = roles.reception || roles.nurse || roles.doctor;
-  const polling = usePolling<UrgencyQueueData>(
-    hasRole && stoppedFor !== unit.id ? () => getUrgencyQueue(unit.id) : null, URGENCY_QUEUE_POLL_MS, unit.id
-  );
-  useEffect(() => { if (stopsPolling(polling.error)) setStoppedFor(unit.id); }, [ polling.error, unit.id ]);
-  useImperativeHandle(ref, () => ({ refresh: polling.refresh }), [ polling.refresh ]);
+  const [ lastError, setLastError ] = useState<unknown>(null);
+  const stopped = stopsPolling(lastError) && lastError !== dismissed;
+  const polling = usePolling<UrgencyQueueData>(hasRole && !stopped ? () => getUrgencyQueue(unit.id) : null, URGENCY_QUEUE_POLL_MS, unit.id);
+  // O erro da última leitura decide a parada na renderização seguinte (o fetcher depende dela). Com o fetcher nulo o usePolling
+  // mantém o erro (mesma chave), então a parada se sustenta; trocar de unidade zera o erro e volta a ler.
+  if (polling.error !== lastError) setLastError(polling.error);
+  const stoppedAt = useMemo(() => (stopped ? Date.now() : null), [ stopped, polling.error ]);
+  const refresh = () => { if (stopped) setDismissed(polling.error); else polling.refresh(); };
+  useImperativeHandle(ref, () => ({ refresh }));
 
   const data = polling.data;
   const awaiting = (data?.awaiting_classification ?? []).map(safeWaiting);
@@ -164,6 +172,7 @@ export const UrgencyQueue = forwardRef<UrgencyQueueHandle, UrgencyQueueProps>(fu
   ];
 
   const loading = data === undefined && !polling.error;
+  const hhmm = (ms: number) => fmtHourMinute(new Date(ms).toISOString());
 
   return (
     <Panel title="Fila da urgência" sub="por risco · quem corre mais risco é atendido primeiro">
@@ -188,9 +197,16 @@ export const UrgencyQueue = forwardRef<UrgencyQueueHandle, UrgencyQueueProps>(fu
         )}
         <footer style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12, color: "var(--ink2)" }}>
           <span>{NO_CLINICAL_IN_LIST}</span>
-          <span className="mono" style={{ fontSize: 10.5, color: "var(--ink3)" }}>
-            {`atualiza a cada ${URGENCY_QUEUE_POLL_MS / 1000} s${polling.updatedAt ? ` · ${fmtHourMinute(new Date(polling.updatedAt).toISOString())}` : ""}`}
-          </span>
+          {stopped && stoppedAt !== null ? (
+            <span style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
+              <span className="mono" style={{ fontSize: 10.5, color: "var(--ink3)" }}>{`parado às ${hhmm(stoppedAt)}`}</span>
+              <button type="button" style={secondaryButtonStyle} onClick={refresh}>Tentar de novo</button>
+            </span>
+          ) : (
+            <span className="mono" style={{ fontSize: 10.5, color: "var(--ink3)" }}>
+              {`atualiza a cada ${URGENCY_QUEUE_POLL_MS / 1000} s${polling.updatedAt ? ` · ${hhmm(polling.updatedAt)}` : ""}`}
+            </span>
+          )}
         </footer>
       </div>
     </Panel>
