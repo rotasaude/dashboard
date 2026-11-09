@@ -14,6 +14,7 @@ import { canUseVaccination } from "../lib/vaccination";
 import { canUseTransport, isDriverOnly, transportRoles } from "../lib/transport";
 import { canUseTfd } from "../lib/tfd";
 import { canUsePsychosocial, psychosocialRoles } from "../lib/psychosocial";
+import { canUseUrgency, canUseWaitingRoom } from "../lib/urgency";
 export type ModuleId =
   | "overview" | "ingestion" | "conversations" | "consent"
   | "triages" | "classification" | "reports" | "protocols" | "events"
@@ -38,7 +39,8 @@ export type ModuleId =
   | "transport-trips" | "transport-series" | "transport-pending" | "transport-fleet" | "transport-my-trips" | "transport-panel"
   | "transport-settings" | "tfd-queue" | "tfd-my-cases"
   | "caps-reception" | "caps-today" | "caps-enrollments" | "caps-groups" | "caps-beds" | "caps-matrix" | "caps-raas" | "caps-panel"
-  | "caps-settings";
+  | "caps-settings"
+  | "urgency-panel" | "waiting-room-settings";
 
 export interface NavItem { id: ModuleId; label: string; icon: string; }
 export interface NavGroupDef { label: string; items: NavItem[]; }
@@ -147,6 +149,10 @@ export const NAV_GROUPS: NavGroupDef[] = [
     { id: "caps-raas", label: "RAAS do mês", icon: "▤" },
     { id: "caps-panel", label: "Painel do CAPS", icon: "▦" },
     { id: "caps-settings", label: "CAPS: leitos e regras", icon: "⚙" }
+  ]},
+  { label: "Urgência", items: [
+    { id: "urgency-panel", label: "Painel da urgência", icon: "▦" },
+    { id: "waiting-room-settings", label: "Senhas, locais e TVs", icon: "▭" }
   ]},
   { label: "Exames", items: [
     { id: "exam-acknowledgements", label: "Resultados aguardando ciência", icon: "⚑" },
@@ -345,6 +351,10 @@ export function navGroupsFor(
   // fecha e vê o painel; faturista só baixa a RAAS; admin e analista veem o painel (P52); o cadastro (leitos e regras) é do admin.
   const psyOn = canUsePsychosocial(user);
   const psy = psychosocialRoles(user);
+  // Módulo 32a (ADR 0050): `urgency_care` E `clinical_record` para o painel (admin e analista); a TV e os locais dependem só de
+  // `waiting_room_display` e são do admin. A mesa da UPA fica dentro de Atendimento (contrato §14 Q15).
+  const urgOn = canUseUrgency(user);
+  const wrOn = canUseWaitingRoom(user);
   return NAV_GROUPS.filter((group) => {
     if (group.label === "Conta") return !user?.operator;
     if (group.label === "Equipe") return isAdmin;
@@ -447,6 +457,8 @@ export function navGroupsFor(
       if (item.id === "caps-settings") return psyOn && psy.admin;
       if (item.id === "caps-reception" || item.id === "caps-today" || item.id === "caps-enrollments" || item.id === "caps-groups"
         || item.id === "caps-beds" || item.id === "caps-matrix") return psyOn && psy.staff;
+      if (item.id === "urgency-panel") return urgOn && (isAdmin || isAnalyst);
+      if (item.id === "waiting-room-settings") return wrOn && isAdmin;
       if (item.id === "integrations" || item.id === "cnes") return canIntegrations;
       if (item.id === "production") return canProduction;
       return true;

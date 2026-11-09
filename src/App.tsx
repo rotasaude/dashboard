@@ -90,6 +90,8 @@ import { CapsMatrix } from "./modules/CapsMatrix";
 import { CapsRaas } from "./modules/CapsRaas";
 import { CapsPanel } from "./modules/CapsPanel";
 import { CapsSettings } from "./modules/CapsSettings";
+import { UrgencyPanel } from "./modules/UrgencyPanel";
+import { WaitingRoomSettings } from "./modules/WaitingRoomSettings";
 import { isDriverOnly } from "./lib/transport";
 import { ProviderPortal } from "./modules/ProviderPortal";
 import { AcknowledgementNotice } from "./modules/exams/AcknowledgementNotice";
@@ -406,6 +408,8 @@ export function renderModule(active: ModuleId, setActive: (id: ModuleId) => void
     case "caps-raas": return <CapsRaas onGoToSecurity={() => setActive("security")} />;
     case "caps-panel": return <CapsPanel />;
     case "caps-settings": return <CapsSettings onGoToSecurity={() => setActive("security")} />;
+    case "urgency-panel": return <UrgencyPanel />;
+    case "waiting-room-settings": return <WaitingRoomSettings onGoToSecurity={() => setActive("security")} />;
     default:               return <Placeholder title={labelFor(active)} />;
   }
 }

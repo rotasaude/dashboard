@@ -14,7 +14,7 @@ import {
   IconBuildingWarehouse, IconPrescription, IconFilePlus, IconTransfer, IconTruckLoading, IconListSearch, IconScale, IconAlertTriangle, IconBuildingCog,
   IconDental, IconDentalBroken,
   IconBus, IconCalendarRepeat, IconUserX, IconCar, IconSteeringWheel,
-  IconBrain, IconDoorEnter, IconCalendarEvent, IconBed, IconShare, IconFileReport, IconUserHeart,
+  IconBrain, IconAmbulance, IconDeviceTv, IconDoorEnter, IconCalendarEvent, IconBed, IconShare, IconFileReport, IconUserHeart,
   IconVaccine, IconNeedle, IconCloudUpload, IconVaccineBottle, IconTemperatureSnow, IconCalendarMonth, IconReportMedical, IconFridge
 } from "@tabler/icons-react";
 import type { Catalog } from "./types";
@@ -36,6 +36,7 @@ export const CATALOG: Catalog = {
     "Transporte": { icon: IconBus, description: "Frota, viagens, séries, motorista e lista de passageiros" },
     "TFD": { icon: IconGavel, description: "Laudo, comissão, ajuda de custo e prestação de contas" },
     "CAPS": { icon: IconBrain, description: "Atenção psicossocial: acolhimento, PTS, grupos, leitos e RAAS" },
+    "Urgência": { icon: IconAmbulance, description: "UPA: tempos por cor, desfechos e o painel de chamada da sala de espera" },
     "Farmácia": { icon: IconBuildingWarehouse, description: "Almoxarifado, farmácia da unidade, dispensação e alertas" },
     "Vacinação": { icon: IconVaccine, description: "Sala de vacina, caderneta, envio à RNDS, estoque e cadeia de frio" },
     "Exames":      { icon: IconMicroscope, description: "Pedidos, resultados e prestadores" },
@@ -147,6 +148,8 @@ export const CATALOG: Catalog = {
     "caps-raas": { icon: IconFileReport, description: "Pendências, fechamento, remessa e fichas espelho" },
     "caps-panel": { icon: IconChartBar, description: "Matrículas, PTS, ações, leitos e RAAS do mês" },
     "caps-settings": { icon: IconSettings, description: "Leitos, limite de noites e prazo do PTS" },
+    "urgency-panel": { icon: IconChartBar, description: "Tempos por cor, fora do tempo, desfechos e evasão" },
+    "waiting-room-settings": { icon: IconDeviceTv, description: "Locais de chamada e TVs da sala de espera" },
     "campaigns": { icon: IconSpeakerphone, description: "Criar e enviar campanhas por SMS" },
     "team": { icon: IconUsers, description: "Usuários, convites e papéis" },
     "professionals": { icon: IconIdBadge2, description: "Vínculos, CBO e turnos" },

@@ -7,6 +7,8 @@ import { ResetPassword } from "./modules/ResetPassword";
 import { AcceptInvitation } from "./modules/AcceptInvitation";
 import { SignatureCallback } from "./modules/SignatureCallback";
 import { SncrCallback } from "./modules/SncrCallback";
+import { WaitingRoomTv } from "./modules/WaitingRoomTv";
+import { isTvHash } from "./lib/tvRoute";
 import { AuthProvider, useAuth } from "./lib/auth";
 import { useSessionQueryClient } from "./lib/sessionQueryClient";
 import { clearEntryFromUrl, readEntryFromUrl, type Entry } from "./lib/entry";
@@ -67,10 +69,20 @@ function Splash() {
   );
 }
 
-createRoot(document.getElementById("root")!).render(
-  <StrictMode>
-    <AuthProvider>
-      <AppRoot />
-    </AuthProvider>
-  </StrictMode>
-);
+const root = document.getElementById("root")!;
+// A TV (/#/tv) é tela cheia, fora do shell: nunca monta AuthProvider (nenhum /session) nem o roteador do shell.
+if (isTvHash(window.location.hash)) {
+  createRoot(root).render(
+    <StrictMode>
+      <WaitingRoomTv />
+    </StrictMode>
+  );
+} else {
+  createRoot(root).render(
+    <StrictMode>
+      <AuthProvider>
+        <AppRoot />
+      </AuthProvider>
+    </StrictMode>
+  );
+}
