@@ -41,6 +41,8 @@ import { canUseTransport } from "../lib/transport";
 import { canUsePsychosocial } from "../lib/psychosocial";
 import { canUseBilling, showUnitProcedures } from "../lib/billing";
 import { UnitProcedures } from "./billing/UnitProcedures";
+import { canUseUrgency, isUpa } from "../lib/urgency";
+import { UrgencyDesk } from "./urgency/UrgencyDesk";
 
 // Atendimento (spec 2026-09-24-citizen-presencial-verification, Task 6, e
 // 2026-09-25-citizen-appointments, Task 7): balcão de verificação presencial
@@ -89,12 +91,21 @@ export function Attendance({ onNavigate }: { onNavigate(id: ModuleId): void }) {
   const linkedUnitIds = new Set((myProfessional.data?.links ?? []).filter((l) => !l.ended_at).map((l) => l.health_unit_id));
   const canCare = canCareRole && !!unit && linkedUnitIds.has(unit.id);
   const switchingUnit = choosingUnit && !!unit;
+  // Módulo 32a (§14 Q15, Q10): numa UPA com a urgência, a mesa da UPA no lugar do check-in (o api recusaria com
+  // urgency_reception_required), da escuta, da fila, dos procedimentos, dos pedidos e da agenda do 13.
+  const upaDesk = !!unit && isUpa(unit) && canUseUrgency(user);
   const careBlocked = canCareRole && unit
     ? (myProfessional.isError ? attendanceError(myProfessional.error)
       : (myProfessional.isSuccess && myProfessional.data === null
         ? "Seu cadastro profissional ainda não foi feito. Fale com a administração da cidade."
         : (myProfessional.isSuccess && !canCare ? "Você não tem vínculo com esta unidade" : null)))
     : null;
+  const queueProps = unit && {
+    unit, units: destinationUnits, canCare, careBlocked, onGoToSecurity: goToSecurity,
+    clinicalRecord: hasFeature(user, "clinical_record"), patientTimeline: hasFeature(user, "patient_timeline"),
+    procedureBilling: canUseBilling(user), clinicalDocuments: hasFeature(user, "clinical_documents") && (canVerify || canCareRole),
+    professional: canCare, onClinicalRefused: () => void queryClient.invalidateQueries({ queryKey: [ "myProfessional", user.id ] })
+  };
 
   // Subtítulo pela tarefa de quem usa (AT-18).
   const pageSub = canVerify && canCareRole ? "balcão e fila clínica"
@@ -118,37 +129,26 @@ export function Attendance({ onNavigate }: { onNavigate(id: ModuleId): void }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <PageHeader title="Atendimento" sub={pageSub} />
-      {canVerify && unit && !switchingUnit && <PageIndex />}
+      {canVerify && unit && !switchingUnit && !upaDesk && <PageIndex />}
       {(canVerify || canCareRole) && <UnitPicker key={pickerKey} userId={user.id} onChange={setUnit}
         linkedUnitIds={linkedUnitIds} onChoosing={setChoosingUnit} />}
       {/* Trocando de unidade, as seções da atual ficam escondidas, mas montadas:
           cancelar a troca devolve a escuta, a consulta e o que foi digitado (AT-16, I1). */}
       <div hidden={switchingUnit} style={switchingUnit ? undefined : { display: "contents" }}>
-      {canVerify && unit && <div id="sec-checkin"><CheckIn unit={unit} onUnitInvalid={onUnitInvalid} demographicsOn={hasFeature(user, "procedure_billing")} /></div>}
+      {upaDesk && unit && (canVerify || canCareRole) && (
+        <UrgencyDesk key={unit.id} unit={unit} user={user} links={myProfessional.data?.links ?? []} onGoToSecurity={goToSecurity} />
+      )}
+      {canVerify && unit && !upaDesk && <div id="sec-checkin"><CheckIn unit={unit} onUnitInvalid={onUnitInvalid} demographicsOn={hasFeature(user, "procedure_billing")} /></div>}
       {/* A validação presencial sobe para perto do check-in: é a tarefa mais comum do balcão (FC-10). */}
       {canVerify && <div id="sec-balcao"><Counter cadsusOn={hasFeature(user, "cadsus_lookup")} demographicsOn={hasFeature(user, "procedure_billing")} /></div>}
-      {canCare && unit && <ScreeningQueue unit={unit} units={destinationUnits} />}
-      {(canVerify || canCareRole) && unit && (
-        <div id="sec-fila">
-        <UnitQueue
-          unit={unit}
-          units={destinationUnits}
-          canCare={canCare}
-          careBlocked={careBlocked}
-          onGoToSecurity={goToSecurity}
-          clinicalRecord={hasFeature(user, "clinical_record")}
-          patientTimeline={hasFeature(user, "patient_timeline")}
-          procedureBilling={canUseBilling(user)}
-          clinicalDocuments={hasFeature(user, "clinical_documents") && (canVerify || canCareRole)}
-          professional={canCare}
-          onClinicalRefused={() => void queryClient.invalidateQueries({ queryKey: [ "myProfessional", user.id ] })}
-        />
-        </div>
-      )}
+      {canCare && unit && !upaDesk && <ScreeningQueue unit={unit} units={destinationUnits} />}
+      {(canVerify || canCareRole) && queueProps && !upaDesk && <div id="sec-fila"><UnitQueue {...queueProps} /></div>}
+      {/* E8 (Q24): os atendimentos do 13 abertos antes de ligar a urgência continuam chamáveis e encerráveis pelo 13. */}
+      {(canVerify || canCareRole) && queueProps && upaDesk && <UnitQueue key={`pre-${queueProps.unit.id}`} {...queueProps} preUrgency />}
       {/* Módulo 22: procedimento avulso, só do profissional com vínculo e nunca na UBS. */}
-      {unit && showUnitProcedures({ user, canCare, unit }) && <UnitProcedures key={unit.id} unit={unit} />}
-      {canVerify && unit && <div id="sec-pedidos"><Requests unit={unit} /></div>}
-      {canVerify && unit && <div id="sec-agenda"><Agenda unit={unit} /></div>}
+      {unit && !upaDesk && showUnitProcedures({ user, canCare, unit }) && <UnitProcedures key={unit.id} unit={unit} />}
+      {canVerify && unit && !upaDesk && <div id="sec-pedidos"><Requests unit={unit} /></div>}
+      {canVerify && unit && !upaDesk && <div id="sec-agenda"><Agenda unit={unit} /></div>}
       </div>
       {canVerify && <UnassignedRequests />}
       {canVerify && <ErasureRequest />}

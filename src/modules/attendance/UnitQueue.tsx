@@ -59,6 +59,9 @@ interface Props {
   // Módulo 22: `procedure_billing` ligado na sessão. Sem o prontuário (modo
   // integrated), os procedimentos abrem pelo atendimento chamado; nunca na UBS.
   procedureBilling?: boolean;
+  // Módulo 32a (E8, Q24): numa UPA com a urgência, só os atendimentos do 13 abertos antes dela (sem `walk_in`), recolhidos e
+  // sem "Chamar próximo" (o api chamaria pela cor); some quando não há nenhum.
+  preUrgency?: boolean;
 }
 
 // Módulo 18: a escuta aberta no painel — a que veio na chamada, uma lida pelo
@@ -90,7 +93,7 @@ function handleClinicalRefusal(code: string | undefined, reload: () => void, onC
 
 export function UnitQueue({
   unit, units, canCare, careBlocked, onClinicalRefused, now = () => new Date(), clinicalRecord = false, onGoToSecurity,
-  clinicalDocuments = false, professional = false, patientTimeline = false, procedureBilling = false
+  clinicalDocuments = false, professional = false, patientTimeline = false, procedureBilling = false, preUrgency = false
 }: Props) {
   const queryClient = useQueryClient();
   const auth = useAuth();
@@ -107,6 +110,7 @@ export function UnitQueue({
   const [ panel, setPanel ] = useState<ScreeningPanel | null>(null);
   // Módulo 19c: a linha guardada aqui segura o painel mesmo que a pessoa saia da fila.
   const [ declaring, setDeclaring ] = useState<QueueRow | null>(null);
+  const [ expanded, setExpanded ] = useState(false);
   const timelineButton = canCare && patientTimeline && !clinicalRecord;
   const proceduresButton = canCare && procedureBilling && !clinicalRecord && unitBills(unit);
   const declarationButton = (r: QueueRow) => clinicalDocuments && (
@@ -215,9 +219,10 @@ export function UnitQueue({
   // Uma pessoa por lista, e quem já está em atendimento sai de Aguardando
   // (FC-19: a API pode devolver a mesma linha nas duas durante a chamada).
   const uniq = (rows: QueueRow[]) => rows.filter((r, i) => rows.findIndex((x) => x.id === r.id) === i);
-  const inCare = uniq(query.data?.in_care ?? []);
+  const shown = (rows: QueueRow[] | undefined) => (rows ?? []).filter((r) => !preUrgency || r.source !== "walk_in");
+  const inCare = uniq(shown(query.data?.in_care));
   const inCareIds = new Set(inCare.map((r) => r.id));
-  const waiting = uniq((query.data?.waiting ?? []).filter((r) => !inCareIds.has(r.id)));
+  const waiting = uniq(shown(query.data?.waiting).filter((r) => !inCareIds.has(r.id)));
   const staleCount = waiting.filter((r) => staleArrival(r.checked_in_at, at)).length;
   const consultationRow = panel?.kind === "consultation" ? inCare.find((r) => r.id === panel.attendanceId) : undefined;
   const consultationRef = useReveal<HTMLElement>(panel?.kind === "consultation");
@@ -234,12 +239,19 @@ export function UnitQueue({
     if (query.isSuccess && seenInCare.current === panel.attendanceId && finalizedHere.current !== panel.attendanceId) setPanel(null);
   }, [ panel, query.isSuccess, consultationRow ]);
 
+  // E8: sem ninguém de antes da urgência (e sem painel aberto), nada aparece.
+  if (preUrgency && !panel && !closing && !declaring && (!query.isSuccess || (waiting.length === 0 && inCare.length === 0))) return null;
+
   return (
-    <Panel title="Fila" right={canCare && (
+    <Panel title={preUrgency ? "Atendimentos de antes da urgência" : "Fila"} right={preUrgency ? (
+      <button type="button" style={secondaryButtonStyle} aria-expanded={expanded} onClick={() => setExpanded((v) => !v)}>
+        {expanded ? "Ocultar" : "Mostrar"}
+      </button>
+    ) : canCare && (
       <ActionButton busy={callingNext} onClick={onCallNext}
         disabledReason={query.isSuccess && waiting.length === 0 ? "ninguém aguardando" : null}>Chamar próximo</ActionButton>
     )}>
-      <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      <div hidden={preUrgency && !expanded} style={{ display: preUrgency && !expanded ? "none" : "flex", flexDirection: "column", gap: 20 }}>
         <ActionMessage message={msg.message && msg.message.text !== careBlocked ? msg.message : null} />
         {query.isError && (
           <p role="alert" style={{ margin: 0, fontSize: 12.5, color: "var(--down)" }}>{attendanceError(query.error)}</p>
