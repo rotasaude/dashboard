@@ -22,9 +22,11 @@ interface Props<T> {
   empty?: ReactNode;
   // Destaque de uma linha (ex.: cor vermelha do acolhimento, módulo 18).
   rowStyle?: (row: T) => CSSProperties | undefined;
+  // Nome acessível da tabela (aria-label), quando a tela tem mais de uma.
+  label?: string;
 }
 
-export function DataTable<T>({ cols, rows, rowKey, onRowClick, empty, rowStyle: extraStyle }: Props<T>) {
+export function DataTable<T>({ cols, rows, rowKey, onRowClick, empty, rowStyle: extraStyle, label }: Props<T>) {
   // Frações ganham piso de 10ch: o texto quebra em qualquer ponto, e sem piso
   // uma coluna de texto encolheria até uma letra por linha (spec 6a §3.7).
   const gridCols = cols.map((c) => {
@@ -37,7 +39,7 @@ export function DataTable<T>({ cols, rows, rowKey, onRowClick, empty, rowStyle: 
   return (
     // As colunas são da tabela (--dt-cols); cabeçalho e linhas usam subgrid no
     // CSS, com as mesmas colunas como reserva onde não há suporte (spec 6a §3.7).
-    <div role="table" className="dt" style={{ width: "100%", display: "grid", gridTemplateColumns: gridCols, columnGap: 12, ["--dt-cols" as string]: gridCols }}>
+    <div role="table" aria-label={label} className="dt" style={{ width: "100%", display: "grid", gridTemplateColumns: gridCols, columnGap: 12, ["--dt-cols" as string]: gridCols }}>
       <div
         role="row"
         className="mono dt-row dt-head"

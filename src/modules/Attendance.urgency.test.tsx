@@ -5,11 +5,11 @@ import { renderWithProviders } from "../test/campaignFixtures";
 vi.mock("../lib/api", async (orig) => ({ ...(await orig<typeof import("../lib/api")>()), fetchCurrentSession: vi.fn(), listActiveUnits: vi.fn(),
   getMyProfessional: vi.fn(), listAllUnits: vi.fn(), listVerifications: vi.fn(), listUnitRequests: vi.fn(), getUnitAgenda: vi.fn(),
   listUnassignedRequests: vi.fn(), listPendingErasures: vi.fn(), listAppointmentTypes: vi.fn(), listUnitQueue: vi.fn(),
-  listScreeningQueue: vi.fn(), getUrgencyQueue: vi.fn() }));
+  listScreeningQueue: vi.fn(), getUrgencyQueue: vi.fn(), listCounterReferrals: vi.fn() }));
 
 import * as api from "../lib/api";
 import { currentUnitKey } from "../lib/attendance";
-import { DOCTOR_LINK, UBS, UPA, myProfessional, queue, urgencyUser } from "../test/urgencyFixtures";
+import { DOCTOR_LINK, NURSE_LINK, UBS, UPA, counterReferral, myProfessional, queue, urgencyUser } from "../test/urgencyFixtures";
 import { Attendance } from "./Attendance";
 
 afterEach(() => { cleanup(); localStorage.clear(); });
@@ -42,6 +42,7 @@ beforeEach(() => {
   vi.mocked(api.listUnitQueue).mockResolvedValue({ waiting: [], in_care: [] });
   vi.mocked(api.listScreeningQueue).mockResolvedValue([]);
   vi.mocked(api.getUrgencyQueue).mockResolvedValue(queue({ awaiting_classification: [], by_color: [], in_care: [] }));
+  vi.mocked(api.listCounterReferrals).mockResolvedValue([ counterReferral() ]);
 });
 
 describe("Atendimento numa UPA com a urgência (§14 Q15)", () => {
@@ -111,5 +112,37 @@ describe("Atendimento numa UPA com a urgência (§14 Q15)", () => {
     pickUnit(UPA); mountAttendance(urgencyUser([ "health_professional" ]));
     expect(await screen.findByText("carregando seus vínculos…")).not.toBeNull();
     expect(screen.queryByText("seu papel não atua nesta UPA")).toBeNull();
+  });
+});
+
+// F-32.4 (Q20; preflight C-T13): a lista da UBS monta para a recepção ou para o profissional com vínculo ativo NA unidade; sem o
+// vínculo, não monta (o api responderia missing_link).
+describe("Retornos pedidos pela urgência no Atendimento da UBS", () => {
+  const REGION = { name: "Retornos pedidos pela urgência" };
+  const UBS_LINK = { ...NURSE_LINK, id: "l9", health_unit_id: "ubs1", unit_name: "UBS Centro" };
+  beforeEach(() => { vi.mocked(api.listCounterReferrals).mockClear(); });
+
+  it("recepção da UBS: a lista aparece", async () => {
+    pickUnit(UBS); mountAttendance(urgencyUser([ "citizen_verifier" ]));
+    const region = await screen.findByRole("region", REGION);
+    expect(await within(region).findByText("José Alves")).not.toBeNull();
+    expect(api.listCounterReferrals).toHaveBeenCalledWith("ubs1");
+  });
+
+  it("profissional com vínculo na UBS: a lista aparece", async () => {
+    vi.mocked(api.getMyProfessional).mockResolvedValue(myProfessional([ UBS_LINK ]));
+    pickUnit(UBS); mountAttendance(urgencyUser([ "health_professional" ]));
+    expect(await screen.findByRole("region", REGION)).not.toBeNull();
+  });
+
+  it("profissional sem vínculo na UBS, ou na UPA: não monta nem lê", async () => {
+    vi.mocked(api.getMyProfessional).mockResolvedValue(myProfessional([ NURSE_LINK ]));
+    pickUnit(UBS); mountAttendance(urgencyUser([ "health_professional" ]));
+    expect(await screen.findByText("Você não tem vínculo com esta unidade")).not.toBeNull();
+    expect(screen.queryByRole("region", REGION)).toBeNull();
+    cleanup(); pickUnit(UPA); mountAttendance(urgencyUser([ "citizen_verifier" ]));
+    expect(await screen.findByRole("heading", { name: "Recepção da UPA" })).not.toBeNull();
+    expect(screen.queryByRole("region", REGION)).toBeNull();
+    expect(api.listCounterReferrals).not.toHaveBeenCalled();
   });
 });

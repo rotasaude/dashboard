@@ -75,7 +75,9 @@ const REASON_LABEL: Record<string, string> = {
   missing_establishment_cnes: "estabelecimento sem CNES",
   // Contrato §12, D-U1: dados do paciente que o BPA-I exige.
   missing_race_color: "paciente sem raça/cor",
-  missing_address: "paciente sem CEP ou endereço"
+  missing_address: "paciente sem CEP ou endereço",
+  // Módulo 32a (Q12): encontro fechado do paciente provisório da UPA — a linha só nasce depois da identificação.
+  patient_unidentified: "paciente não identificado na UPA — a recepção precisa identificar"
 };
 export const REASON_CODES = Object.keys(REASON_LABEL);
 
@@ -88,7 +90,9 @@ const SOURCE_LABEL: Record<string, string> = {
   // Módulo 30: ajuda de custo do TFD (source_ref { type: "tfd_allowance", id }).
   tfd: "TFD",
   // Módulo 31: produção do CAPS (atendimento no CAPS que entra no BPA).
-  psychosocial: "atenção psicossocial (CAPS)"
+  psychosocial: "atenção psicossocial (CAPS)",
+  // Módulo 32a: classificação e atendimento na UPA (source_ref { type: "urgency_encounter", id }).
+  urgency: "urgência (UPA)"
 };
 export function sourceLabel(code: string): string {
   return SOURCE_LABEL[code] ?? code;
@@ -305,6 +309,16 @@ export function demographicsMissingOf(reasons: string[]): string[] {
   if (reasons.includes("missing_race_color")) out.push("race_color");
   if (reasons.includes("missing_address")) out.push("address");
   return out;
+}
+
+// Módulo 32a (Q12): a pendência do provisório da UPA vem sem linha (`procedure_id: null`), uma por encontro. Quem corrige é a
+// recepção da UPA, identificando o paciente; o faturista não completa dados (nem sabe quem é).
+export const URGENCY_PENDING_TAG = "Urgência — paciente não identificado";
+export const URGENCY_IDENTIFY_HINT = "a recepção da UPA identifica em Atendimento → Pacientes não identificados";
+export const isUrgencyPending = (i: Pick<PendingItem, "procedure_id" | "urgency_encounter_id">): boolean =>
+  i.procedure_id === null && !!i.urgency_encounter_id;
+export function pendingKey(i: Pick<PendingItem, "procedure_id" | "urgency_encounter_id">): string {
+  return i.procedure_id ?? `ue:${i.urgency_encounter_id ?? ""}`;
 }
 
 export function groupPending(items: PendingItem[]): { fix: string; items: PendingItem[] }[] {

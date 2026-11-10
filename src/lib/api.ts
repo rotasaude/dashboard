@@ -2389,7 +2389,9 @@ export type TimelineKind =
   // Módulo 30 (D12): viagem e TFD, detail_ref nulo.
   | "transport"
   // Módulo 31 (D18; P18, P46, P51): marcador "Acompanhamento no CAPS", sem nome do CAPS, unit e detail_ref nulos.
-  | "psychosocial_link";
+  | "psychosocial_link"
+  // Módulo 32a (§10, Q27): passagem pela UPA; detail_ref { type: "consultation", id } da consulta finalizada, ou nulo.
+  | "urgency";
 
 export interface TimelineDetailRef { type: string; id: string }
 export interface TimelineEntry {

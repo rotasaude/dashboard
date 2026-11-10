@@ -4,10 +4,15 @@
 // grava trilha (contém paciente): lê ao abrir, no "Conferir de novo" e depois
 // de o faturista completar raça/cor ou endereço (ação explícita; contrato §12,
 // D-U1) — nunca sozinha. Corrigido o cadastro, a pendência sai sem relançar (spec §2).
+// Módulo 32a (Q12): a pendência do provisório da UPA vem sem linha (`procedure_id: null`) e com o encontro; a chave cai no
+// `urgency_encounter_id`, e a correção é a identificação na recepção da UPA, nunca o "Completar dados".
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getPeriodPending, updatePatientDemographics, type BillingPeriod, type PendingItem } from "../../lib/api";
-import { LATE_TEXT, PENDING_KEY, PERIODS_KEY, patientName, billingError, demographicsMissingOf, establishmentLabel, fixInfo, groupPending, reasonLabel } from "../../lib/billing";
+import {
+  LATE_TEXT, PENDING_KEY, PERIODS_KEY, URGENCY_IDENTIFY_HINT, URGENCY_PENDING_TAG, patientName, billingError, demographicsMissingOf,
+  establishmentLabel, fixInfo, groupPending, isUrgencyPending, pendingKey, reasonLabel
+} from "../../lib/billing";
 import { competenceLabel } from "../../lib/competence";
 import { fmtDay } from "../../lib/exams";
 import { DataTable, type Column } from "../../components/DataTable";
@@ -21,16 +26,19 @@ const columns = (canFix: boolean, onFix: (i: PendingItem) => void): Column<Pendi
   { label: "Data", w: "0.8fr", render: (i) => fmtDay(i.performed_on ?? null) },
   { label: "Procedimento", w: "2fr", card: "title", render: (i) => (
     <>
-      {i.sigtap_code ? `${i.sigtap_code} — ${i.label ?? ""}` : i.procedure_id}
+      {i.sigtap_code ? `${i.sigtap_code} — ${i.label ?? ""}` : (i.procedure_id ?? "—")}
       {i.late && <> <Tag tone="info" mono={false}>{LATE_TEXT}</Tag></>}
+      {isUrgencyPending(i) && <> <Tag tone="warn" mono={false}>{URGENCY_PENDING_TAG}</Tag></>}
     </>
   ) },
   { label: "Paciente", w: "1.2fr", render: (i) => i.patient ? patientName(i.patient) : "—" },
   { label: "Profissional", w: "1.2fr", render: (i) => i.professional?.name ?? "—" },
   { label: "Motivo", w: "2fr", render: (i) => i.reasons.map(reasonLabel).join("; ") },
   ...(canFix ? [ { label: "", w: "auto", align: "right" as const, card: "actions" as const, render: (i: PendingItem) => (
-    i.patient && demographicsMissingOf(i.reasons).length > 0
-      ? <ActionButton variant="secondary" onClick={() => onFix(i)}>Completar dados</ActionButton> : null
+    isUrgencyPending(i)
+      ? <span style={muted}>{URGENCY_IDENTIFY_HINT}</span>
+      : i.patient && demographicsMissingOf(i.reasons).length > 0
+        ? <ActionButton variant="secondary" onClick={() => onFix(i)}>Completar dados</ActionButton> : null
   ) } ] : [])
 ];
 
@@ -64,13 +72,13 @@ export function PendingPanel({ period, onClose, canFix = false }: { period: Bill
           <section key={g.fix} aria-label={info.title} style={box}>
             <strong>{`${info.title} · ${g.items.length}`}</strong>
             {info.hint && <p style={muted}>{info.hint}</p>}
-            <DataTable<PendingItem> cols={cols} rows={g.items} rowKey={(i) => i.procedure_id ?? `ue:${i.urgency_encounter_id}`} />
+            <DataTable<PendingItem> cols={cols} rows={g.items} rowKey={pendingKey} />
           </section>
         );
       })}
       {fixing?.patient && (
         // Módulo 24a (L6): endereço do cadastro domiciliar só leitura; o faturista completa só raça/cor.
-        <DemographicsForm key={fixing.procedure_id} title={`Completar dados de ${patientName(fixing.patient)}`}
+        <DemographicsForm key={pendingKey(fixing)} title={`Completar dados de ${patientName(fixing.patient)}`}
           addressLocked={fixing.patient.address_from_household === true}
           missing={demographicsMissingOf(fixing.reasons).filter((m) => !(m === "address" && fixing.patient?.address_from_household === true))}
           save={async (body) => { await updatePatientDemographics(fixing.patient!.id, body); }}

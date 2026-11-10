@@ -43,6 +43,7 @@ import { canUseBilling, showUnitProcedures } from "../lib/billing";
 import { UnitProcedures } from "./billing/UnitProcedures";
 import { canUseUrgency, canUseWaitingRoom, isUpa } from "../lib/urgency";
 import { UrgencyDesk } from "./urgency/UrgencyDesk";
+import { CounterReferrals } from "./urgency/CounterReferrals";
 
 // Atendimento (spec 2026-09-24-citizen-presencial-verification, Task 6, e
 // 2026-09-25-citizen-appointments, Task 7): balcão de verificação presencial
@@ -144,6 +145,9 @@ export function Attendance({ onNavigate }: { onNavigate(id: ModuleId): void }) {
       {canVerify && <div id="sec-balcao"><Counter cadsusOn={hasFeature(user, "cadsus_lookup")} demographicsOn={hasFeature(user, "procedure_billing")} /></div>}
       {canCare && unit && !upaDesk && <ScreeningQueue unit={unit} units={destinationUnits} />}
       {(canVerify || canCareRole) && queueProps && !upaDesk && <div id="sec-fila"><UnitQueue {...queueProps} /></div>}
+      {/* Módulo 32a (F-32.4, Q20): retornos pedidos pela urgência, para a recepção ou para o profissional com vínculo NA unidade
+          (sem o vínculo, o api responderia missing_link). A própria lista some na UPA e no CAPS. */}
+      {unit && !upaDesk && canUseUrgency(user) && (canVerify || canCare) && <CounterReferrals key={unit.id} unit={unit} />}
       {/* E8 (Q24): os atendimentos do 13 abertos antes de ligar a urgência continuam chamáveis e encerráveis pelo 13. */}
       {(canVerify || canCareRole) && queueProps && upaDesk && <UnitQueue key={`pre-${queueProps.unit.id}`} {...queueProps} preUrgency />}
       {/* Módulo 22: procedimento avulso, só do profissional com vínculo e nunca na UBS. */}
