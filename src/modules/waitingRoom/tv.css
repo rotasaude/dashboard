@@ -1,15 +1,17 @@
 /* A TV da sala de espera (módulo 32a, F-32.5): tela inteira, fora do shell, legível a 5 m em 1280×720 e 1920×1080. Tipografia
-   pela largura (clamp), duas colunas a partir de 1280 px e uma abaixo. Só variáveis do tema; o foco é o global (:focus-visible). */
+   pela menor medida entre largura e altura (clamp com min(vw, vh)), duas colunas a partir de 1280 px e uma abaixo. A tela nunca
+   rola: a senha não quebra, o local fica sempre visível e as chamadas anteriores mais antigas saem por baixo quando não cabem.
+   Só variáveis do tema; o foco é o global (:focus-visible). */
 
 .tv {
-  min-height: 100vh; display: flex; flex-direction: column; gap: clamp(16px, 2vw, 40px);
-  padding: clamp(16px, 2.5vw, 56px); background: var(--bg); color: var(--ink); font-family: var(--font-sans);
+  height: 100vh; height: 100dvh; overflow: hidden; display: flex; flex-direction: column; gap: clamp(12px, min(2vw, 2.6vh), 40px);
+  padding: clamp(16px, min(2.5vw, 3.2vh), 56px); background: var(--bg); color: var(--ink); font-family: var(--font-sans);
 }
 .tv p, .tv h1, .tv h2, .tv ul { margin: 0; }
 
 .tv-head { display: flex; align-items: center; gap: clamp(12px, 2vw, 40px); }
-.tv-unit { flex: 1; font-size: clamp(24px, 2.6vw, 52px); font-weight: 700; line-height: 1.15; }
-.tv-clock { font-family: var(--font-mono); font-size: clamp(24px, 2.6vw, 52px); color: var(--ink2); }
+.tv-unit { flex: 1; font-size: clamp(24px, min(2.6vw, 4.4vh), 52px); font-weight: 700; line-height: 1.15; }
+.tv-clock { font-family: var(--font-mono); font-size: clamp(24px, min(2.6vw, 4.4vh), 52px); color: var(--ink2); }
 
 .tv-button {
   min-height: 44px; padding: 8px 20px; border-radius: 8px; font-size: clamp(16px, 1.3vw, 24px); font-weight: 600;
@@ -23,41 +25,56 @@
 }
 .tv-message { margin: auto; text-align: center; font-size: clamp(28px, 3.2vw, 60px); color: var(--ink2); }
 
-.tv-grid { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr); gap: clamp(16px, 2vw, 40px); }
+.tv-grid { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); gap: clamp(12px, min(2vw, 2.6vh), 40px); }
 
 .tv-current {
-  display: flex; flex-direction: column; justify-content: center; gap: clamp(8px, 1vw, 24px);
-  padding: clamp(20px, 3vw, 64px); border-radius: 16px; background: var(--panel); border: 2px solid var(--rule);
+  min-height: 0; overflow: hidden; display: flex; flex-direction: column; justify-content: center; gap: clamp(6px, min(1vw, 1.6vh), 24px);
+  padding: clamp(16px, min(3vw, 4.4vh), 64px); border-radius: 16px; background: var(--panel); border: 2px solid var(--rule);
 }
-.tv-current-kind { font-size: clamp(24px, 2.4vw, 48px); color: var(--ink2); }
+.tv-current-kind { font-size: clamp(20px, min(2.4vw, 4vh), 48px); color: var(--ink2); }
 .tv-current-ticket {
-  font-family: var(--font-mono); font-size: clamp(72px, 12vw, 220px); font-weight: 700; line-height: 1; overflow-wrap: anywhere;
+  font-family: var(--font-mono); font-size: clamp(56px, min(10vw, 19vh), 210px); font-weight: 700; line-height: 1; white-space: nowrap;
 }
-.tv-current-prefix { font-family: var(--font-sans); font-size: clamp(28px, 3.2vw, 60px); font-weight: 600; color: var(--ink2); }
-.tv-current-location { font-size: clamp(40px, 6vw, 110px); font-weight: 700; line-height: 1.1; overflow-wrap: anywhere; }
-.tv-current-time { font-size: clamp(20px, 1.8vw, 36px); color: var(--ink2); }
-.tv-empty { font-size: clamp(40px, 6vw, 110px); font-weight: 700; line-height: 1.1; }
+/* "Senha" numa linha própria: a senha inteira (até "ABC-123") cabe na coluna sem quebrar. */
+.tv-current-prefix { display: block; font-family: var(--font-sans); font-size: clamp(24px, min(3vw, 5vh), 56px); font-weight: 600; color: var(--ink2); }
+.tv-current-location {
+  font-size: clamp(32px, min(5vw, 9vh), 100px); font-weight: 700; line-height: 1.1; overflow-wrap: break-word;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden;
+}
+.tv-current-time { font-size: clamp(18px, min(1.8vw, 3vh), 36px); color: var(--ink2); }
+.tv-empty { font-size: clamp(32px, min(5vw, 9vh), 100px); font-weight: 700; line-height: 1.1; }
 
-.tv-side { display: flex; flex-direction: column; gap: clamp(16px, 2vw, 40px); }
+.tv-side { min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: clamp(12px, min(2vw, 2.6vh), 40px); }
 .tv-panel {
-  display: flex; flex-direction: column; gap: clamp(8px, 1vw, 20px);
-  padding: clamp(16px, 2vw, 40px); border-radius: 16px; background: var(--panel); border: 2px solid var(--rule);
+  flex: none; display: flex; flex-direction: column; gap: clamp(6px, min(1vw, 1.4vh), 20px);
+  padding: clamp(12px, min(2vw, 2.6vh), 40px); border-radius: 16px; background: var(--panel); border: 2px solid var(--rule);
 }
-.tv-panel-title { font-size: clamp(24px, 2.4vw, 48px); font-weight: 700; }
-.tv-list { list-style: none; padding: 0; display: flex; flex-direction: column; gap: clamp(6px, .8vw, 16px); }
-.tv-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px clamp(12px, 1.6vw, 32px); }
-.tv-prev-ticket { font-family: var(--font-mono); font-size: clamp(28px, 3.2vw, 60px); font-weight: 700; }
-.tv-prev-location { font-size: clamp(28px, 3.2vw, 60px); overflow-wrap: anywhere; }
-.tv-prev-meta { font-size: clamp(18px, 1.5vw, 30px); color: var(--ink2); }
+.tv-panel-title { font-size: clamp(20px, min(2.2vw, 3.6vh), 44px); font-weight: 700; }
+.tv-list { list-style: none; padding: 0; display: flex; flex-direction: column; gap: clamp(4px, min(.8vw, 1.2vh), 16px); }
+/* As anteriores ocupam o que sobra e cortam as mais antigas (as últimas da lista); o tempo de espera fica sempre inteiro. */
+.tv-panel-previous { flex: 1 1 auto; min-height: clamp(120px, 26vh, 320px); overflow: hidden; }
+/* Coluna com quebra: a chamada que não cabe inteira vai para uma segunda coluna, escondida; nunca aparece meia linha. */
+.tv-panel-previous .tv-list { flex: 1 1 auto; min-height: 0; flex-wrap: wrap; align-content: flex-start; overflow: hidden; }
+.tv-panel-previous .tv-row { width: 100%; flex-wrap: nowrap; white-space: nowrap; line-height: 1.2; }
+.tv-panel-previous .tv-prev-location { flex: 0 1 auto; min-width: 4ch; overflow: hidden; text-overflow: ellipsis; }
+/* Nas anteriores, senha, local e hora; o tipo (classificação ou atendimento) só aparece sem local, quando é a única pista. */
+.tv-panel-previous .tv-prev-location + .tv-prev-meta { display: none; }
+.tv-panel-previous .tv-prev-meta { flex: none; }
+.tv-panel-previous .tv-prev-meta:last-child { margin-left: auto; }
+.tv-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px clamp(10px, 1.4vw, 28px); }
+.tv-row-wait { flex-wrap: nowrap; align-items: center; min-width: 0; }
+.tv-prev-ticket { font-family: var(--font-mono); font-size: clamp(22px, min(2.3vw, 4vh), 48px); font-weight: 700; white-space: nowrap; }
+.tv-prev-location { font-size: clamp(22px, min(2.3vw, 4vh), 48px); overflow-wrap: break-word; }
+.tv-prev-meta { font-size: clamp(16px, min(1.4vw, 2.4vh), 28px); color: var(--ink2); }
 
 .tv-chip {
-  display: inline-flex; align-items: center; padding: 4px 16px; border-radius: 999px; font-weight: 700;
-  font-size: clamp(24px, 2.4vw, 48px); border: 2px solid currentColor;
+  flex: none; display: inline-flex; align-items: center; padding: 2px 14px; border-radius: 999px; font-weight: 700;
+  font-size: clamp(16px, min(1.6vw, 2.8vh), 34px); border: 2px solid currentColor;
 }
-.tv-wait { font-size: clamp(28px, 3.2vw, 60px); font-weight: 600; }
-.tv-priority { font-size: clamp(20px, 1.8vw, 36px); color: var(--ink2); }
+.tv-wait { min-width: 0; font-size: clamp(16px, min(1.6vw, 2.8vh), 34px); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tv-priority { font-size: clamp(16px, min(1.5vw, 2.6vh), 32px); color: var(--ink2); }
 
-.tv-foot { font-size: clamp(16px, 1.3vw, 24px); color: var(--ink3); }
+.tv-foot { flex: none; font-size: clamp(14px, min(1.2vw, 2vh), 24px); color: var(--ink3); }
 
 .tv-pairing { align-items: center; justify-content: center; }
 .tv-pairing-form { width: 100%; max-width: 640px; display: flex; flex-direction: column; gap: 16px; }

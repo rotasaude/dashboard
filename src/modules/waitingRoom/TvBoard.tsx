@@ -86,7 +86,7 @@ function Board({ board }: { board: WaitingRoomBoard }) {
         </section>
         <div className="tv-side">
           {previous.length > 0 && (
-            <section className="tv-panel" aria-label="Chamadas anteriores">
+            <section className="tv-panel tv-panel-previous" aria-label="Chamadas anteriores">
               <h2 className="tv-panel-title">Chamadas anteriores</h2>
               <ul className="tv-list">
                 {previous.map((c, i) => <PreviousCall key={`${c.ticket}|${c.called_at}|${i}`} call={c} />)}
@@ -136,7 +136,7 @@ function WaitTime({ wait }: { wait: BoardWaitTime }) {
   const tone = URGENCY_COLOR_TONE[wait.color];
   const { fg, bg } = toneColor(tone);
   return (
-    <li className="tv-row">
+    <li className="tv-row tv-row-wait">
       <span className="tv-chip" data-glyph={toneShape(tone) ?? undefined} style={{ color: fg, background: bg }}>
         {URGENCY_COLOR_LABEL[wait.color]}
       </span>
