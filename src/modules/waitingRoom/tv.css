@@ -56,7 +56,7 @@
 /* Coluna com quebra: a chamada que não cabe inteira vai para uma segunda coluna, escondida; nunca aparece meia linha. */
 .tv-panel-previous .tv-list { flex: 1 1 auto; min-height: 0; flex-wrap: wrap; align-content: flex-start; overflow: hidden; }
 .tv-panel-previous .tv-row { width: 100%; flex-wrap: nowrap; white-space: nowrap; line-height: 1.2; }
-.tv-panel-previous .tv-prev-location { flex: 0 1 auto; min-width: 4ch; overflow: hidden; text-overflow: ellipsis; }
+.tv-panel-previous .tv-prev-location { flex: 0 1 auto; min-width: 4ch; overflow: hidden; }
 /* Nas anteriores, senha, local e hora; o tipo (classificação ou atendimento) só aparece sem local, quando é a única pista. */
 .tv-panel-previous .tv-prev-location + .tv-prev-meta { display: none; }
 .tv-panel-previous .tv-prev-meta { flex: none; }
@@ -71,7 +71,7 @@
   flex: none; display: inline-flex; align-items: center; padding: 2px 14px; border-radius: 999px; font-weight: 700;
   font-size: clamp(16px, min(1.6vw, 2.8vh), 34px); border: 2px solid currentColor;
 }
-.tv-wait { min-width: 0; font-size: clamp(16px, min(1.6vw, 2.8vh), 34px); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tv-wait { min-width: 0; font-size: clamp(16px, min(1.6vw, 2.8vh), 34px); font-weight: 600; white-space: nowrap; overflow: hidden; }
 .tv-priority { font-size: clamp(16px, min(1.5vw, 2.6vh), 32px); color: var(--ink2); }
 
 .tv-foot { flex: none; font-size: clamp(14px, min(1.2vw, 2vh), 24px); color: var(--ink3); }
