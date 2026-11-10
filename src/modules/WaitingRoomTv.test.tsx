@@ -87,6 +87,7 @@ it("board lê campo a campo: chamada atual em destaque, as anteriores, tempos po
   render(<WaitingRoomTv now={() => NOW32} />);
   const current = await screen.findByRole("region", { name: "Chamada agora" });
   expect(current.getAttribute("aria-live")).toBe("polite");
+  expect(current.getAttribute("aria-atomic")).toBe("true");
   expect(within(current).getByText("U-042")).not.toBeNull();
   expect(within(current).getByText("Consultório 2")).not.toBeNull();
   expect(within(current).getByText("Atendimento")).not.toBeNull();
@@ -99,7 +100,7 @@ it("board lê campo a campo: chamada atual em destaque, as anteriores, tempos po
   expect(within(waits).getByText("amarelo")).not.toBeNull();
   expect(within(waits).getByText("laranja")).not.toBeNull();
   expect(within(waits).getByText("cerca de 34 min")).not.toBeNull();
-  expect(within(waits).getAllByText("menos de 5 pacientes")).toHaveLength(4);
+  expect(within(waits).getAllByText("poucas pessoas aguardando")).toHaveLength(4);
   expect(screen.getByText("Quem corre mais risco é atendido primeiro, mesmo que tenha chegado depois.")).not.toBeNull();
   expect(screen.getByText("atualizado às 10:00")).not.toBeNull();
   expect(document.body.textContent).not.toMatch(/Maria|52998224725|dor no peito|p-77|tok-abc/);
@@ -215,6 +216,17 @@ describe("polling e falhas", () => {
     expect(screen.getByText("U-042")).not.toBeNull();
     expect(screen.queryByText(WAITING_ROOM_DISABLED)).toBeNull();
   });
+});
+
+it("401 que chega depois de desmontar não apaga o token guardado", async () => {
+  localStorage.setItem("waitingRoom.displayToken", "tok-abc");
+  let reject!: (e: unknown) => void;
+  vi.mocked(api.fetchWaitingRoomBoard).mockReturnValue(new Promise((_, r) => { reject = r; }));
+  const { unmount } = render(<WaitingRoomTv />);
+  expect(api.fetchWaitingRoomBoard).toHaveBeenCalledTimes(1);
+  unmount();
+  await act(async () => reject(new ApiError(401, { error: "display_revoked" }, "x")));
+  expect(localStorage.getItem("waitingRoom.displayToken")).toBe("tok-abc");
 });
 
 it("localStorage indisponível: pareia e mostra o quadro com o token só na memória", async () => {

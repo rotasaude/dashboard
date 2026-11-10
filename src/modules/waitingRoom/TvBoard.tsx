@@ -15,7 +15,7 @@ import "./tv.css";
 
 export const TV_OFFLINE = "sem conexão — tentando de novo";
 export const TV_NO_CALLS = "Aguarde ser chamado pela sua senha.";
-export const TV_SMALL_WAIT = "menos de 5 pacientes";
+export const TV_SMALL_WAIT = "poucas pessoas aguardando";
 // 30 pedidos/min por token: depois de um 429, a TV espera um minuto inteiro antes do próximo pedido de verdade.
 export const TV_RATE_LIMIT_BACKOFF_MS = 60_000;
 const PREVIOUS_MAX = 7;
@@ -80,7 +80,7 @@ function Board({ board }: { board: WaitingRoomBoard }) {
   return (
     <>
       <div className="tv-grid">
-        <section className="tv-current" aria-label="Chamada agora" aria-live="polite">
+        <section className="tv-current" aria-label="Chamada agora" aria-live="polite" aria-atomic="true">
           {current ? <CurrentCall call={current} /> : <p className="tv-empty">{TV_NO_CALLS}</p>}
         </section>
         <div className="tv-side">
