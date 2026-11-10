@@ -1,15 +1,14 @@
 // Módulo 32a — F-32.4: "Retornos pedidos pela urgência" no Atendimento da UBS (contrato §7 e §14 Q11, Q20; preflight A10, C-T13).
 // As altas com retorno à UBS dos últimos 60 dias, sem o motivo (Q20: o motivo fica na linha do tempo do paciente). Cada item é lido
 // campo a campo, nunca espalhado: um `reason` que chegasse não aparece. Lida ao abrir a tela e no "Atualizar", sem polling, sem
-// releitura no foco e fora do cache ao sair (NOMINAL_QUERY: a lista tem nome de paciente). Nunca na UPA nem no CAPS; só com a urgência
+// releitura no foco e fora do cache ao sair (NOMINAL_QUERY: a lista tem nome de paciente). Só na UBS (nunca na UPA, no CAPS nem em outra unidade); só com a urgência
 // utilizável. O papel e o vínculo (recepção, ou profissional com vínculo ativo na unidade) são conferidos por quem monta.
 import { useQuery } from "@tanstack/react-query";
 import { listCounterReferrals, type CounterReferral, type HealthUnit } from "../../lib/api";
-import { CAPS_UNIT_KIND } from "../../lib/attendance";
 import { fmtDay } from "../../lib/audiencePhrase";
 import { useAuth } from "../../lib/auth";
 import { fmtDateTime } from "../../lib/format";
-import { COUNTER_REFERRALS_KEY, NOMINAL_QUERY, canUseUrgency, isUpa, urgencyError } from "../../lib/urgency";
+import { COUNTER_REFERRALS_KEY, NOMINAL_QUERY, canUseUrgency, urgencyError } from "../../lib/urgency";
 import { DataTable, type Column } from "../../components/DataTable";
 import { secondaryButtonStyle } from "../../components/formStyles";
 import { alert, muted, panel, row } from "../exams/styles";
@@ -36,7 +35,7 @@ const COLS: Column<Row>[] = [
 
 export function CounterReferrals({ unit }: { unit: HealthUnit }) {
   const { user } = useAuth();
-  const usable = canUseUrgency(user) && !isUpa(unit) && unit.kind !== CAPS_UNIT_KIND.value;
+  const usable = canUseUrgency(user) && unit.kind === "ubs";
   if (!usable) return null;
   return <CounterReferralList unit={unit} />;
 }

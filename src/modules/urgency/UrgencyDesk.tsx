@@ -20,7 +20,7 @@
 //   relê só quando a identificação partiu dela; partindo da fila, a linha identificada sai da lista em cache, sem novo GET.
 // Enquanto os vínculos do profissional carregam, nada de "seu papel não atua nesta UPA" (piscaria antes dos vínculos).
 // Quem monta passa `key={unit.id}`: trocar de UPA remonta tudo e nada de uma unidade aparece na outra.
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   callAttendance, callForClassification, callNext, errorCode, getUrgencyQueue, recallAttendance,
@@ -74,23 +74,34 @@ interface PanelProps {
 // mesa pergunta antes (`confirming`), e o formulário segue montado com tudo o que foi digitado até a resposta.
 function ClassificationPanel({ target, confirming, onDone, onClose, onDirtyChange, onDiscard, onKeep }: PanelProps) {
   const ref = useReveal<HTMLDivElement>(true);
+  const questionId = useId();
+  // Quem abriu o painel (lido na primeira renderização, antes do foco ir ao título): recebe o foco de volta ao descartar.
+  const [ opener ] = useState<Element | null>(() => document.activeElement);
+  const keep = () => {
+    onKeep();
+    ref.current?.querySelector<HTMLElement>("[data-reveal-title],h2,h3")?.focus();
+  };
+  const discard = () => {
+    onDiscard();
+    if (opener instanceof HTMLElement && opener.isConnected) opener.focus();
+  };
   const keepRef = useRef<HTMLButtonElement>(null);
   useEffect(() => { if (confirming) keepRef.current?.focus(); }, [ confirming ]);
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     if (e.key !== "Escape" || inField(e.target)) return;
     e.stopPropagation();
-    if (confirming) onKeep(); else onClose();
+    if (confirming) keep(); else onClose();
   };
   return (
     <div ref={ref} onKeyDown={onKeyDown}>
       <Panel title={`Classificação de risco — ${target.ticket ?? "sem senha"}`} sub="sinais vitais · dor · cor sugerida pelo protocolo">
         <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 12 }}>
           {confirming && (
-            <div role="alertdialog" aria-label="Descartar a classificação?" style={confirmBox}>
-              <p style={{ margin: 0, fontSize: 12.5 }}>{DISCARD_QUESTION}</p>
+            <div role="alertdialog" aria-label="Descartar a classificação?" aria-describedby={questionId} style={confirmBox}>
+              <p id={questionId} style={{ margin: 0, fontSize: 12.5 }}>{DISCARD_QUESTION}</p>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <button ref={keepRef} type="button" style={secondaryButtonStyle} onClick={onKeep}>Continuar classificando</button>
-                <button type="button" style={dangerButtonStyle} onClick={onDiscard}>Descartar</button>
+                <button ref={keepRef} type="button" style={secondaryButtonStyle} onClick={keep}>Continuar classificando</button>
+                <button type="button" style={dangerButtonStyle} onClick={discard}>Descartar</button>
               </div>
             </div>
           )}
@@ -145,8 +156,7 @@ export interface UrgencyDeskProps {
   links: ProfessionalLink[];
   // Os vínculos do profissional ainda carregando (`getMyProfessional`).
   linksLoading?: boolean;
-  // Relógio da fila e caminho para a verificação em duas etapas (Tasks 6–10).
-  now?(): Date;
+  // Caminho para a verificação em duas etapas.
   onGoToSecurity?(): void;
 }
 

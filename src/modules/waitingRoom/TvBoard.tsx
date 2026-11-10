@@ -13,6 +13,7 @@ import { usePolling } from "../../lib/usePolling";
 import { toneColor, toneShape } from "../../theme/tokens";
 import "./tv.css";
 
+export const TV_TITLE = "Painel de chamada";
 export const TV_OFFLINE = "sem conexão — tentando de novo";
 export const TV_NO_CALLS = "Aguarde ser chamado pela sua senha.";
 export const TV_SMALL_WAIT = "poucas pessoas aguardando";
@@ -58,7 +59,7 @@ export function TvBoard({ token, onRevoked, now = () => new Date() }: Props) {
   return (
     <main className="tv" aria-label="Painel de chamada">
       <header className="tv-head">
-        <h1 className="tv-unit">{data && !disabled ? data.unit.name : ""}</h1>
+        <h1 className="tv-unit">{data && !disabled ? data.unit.name : TV_TITLE}</h1>
         <p className="tv-clock">{fmtHourMinute(now().toISOString())}</p>
         {fullscreen.supported && !fullscreen.active && (
           <button type="button" className="tv-button" onClick={fullscreen.enter}>Tela cheia</button>

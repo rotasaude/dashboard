@@ -87,9 +87,12 @@ export function CallLocationPicker({ state, label = "Local da chamada" }: { stat
   if (!state.enabled) return null;
   // Lista carregada, local obrigatório e nenhum ativo: diz onde cadastrar.
   const noLocations = !state.loading && state.required && state.locations.length === 0;
+  // Sem local obrigatório e nenhum ativo (UBS sem TV com a chave ligada): um seletor só com "— escolha —" é ruído.
+  const nothingToPick = !state.required && state.locations.length === 0;
+  if (nothingToPick && !state.problem) return null;
   return (
     <span style={{ display: "inline-flex", flexDirection: "column", gap: 4, minWidth: 0, maxWidth: "100%" }}>
-      <span style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+      {!nothingToPick && <span style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
         <label htmlFor={selectId} style={{ fontSize: 12.5, color: "var(--ink2)" }}>{label}</label>
         <select id={selectId} ref={state.selectRef} value={state.selected ?? ""} onChange={(e) => state.select(e.target.value || null)}
           aria-invalid={state.problem ? true : undefined} aria-describedby={state.problem ? problemId : undefined}
@@ -97,7 +100,7 @@ export function CallLocationPicker({ state, label = "Local da chamada" }: { stat
           <option value="">— escolha —</option>
           {state.locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
         </select>
-      </span>
+      </span>}
       {state.problem && <p id={problemId} role="alert" style={{ margin: 0, fontSize: 12, color: "var(--down)" }}>{state.problem}</p>}
       {noLocations && <p style={{ margin: 0, fontSize: 12, color: "var(--ink2)" }}>{NO_LOCATIONS_TEXT}</p>}
     </span>

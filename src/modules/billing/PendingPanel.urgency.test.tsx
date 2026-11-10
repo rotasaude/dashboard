@@ -34,9 +34,29 @@ describe("PendingPanel — pendência da urgência sem linha", () => {
     const group = await screen.findByRole("region", { name: "Cadastro do paciente" });
     expect(within(group).getAllByText(URGENCY_PENDING_TAG).length).toBe(2);
     expect(within(group).getAllByText(reasonLabel("patient_unidentified")).length).toBe(2);
-    expect(within(group).getAllByText(URGENCY_IDENTIFY_HINT).length).toBe(2);
+    // Duas linhas e a dica do grupo.
+    expect(within(group).getAllByText(URGENCY_IDENTIFY_HINT).length).toBe(3);
     expect(within(group).queryByRole("button", { name: "Completar dados" })).toBeNull();
     expect(errors.mock.calls.some((c) => String(c[0]).includes("same key"))).toBe(false);
+  });
+
+  it("grupo só de urgência: a dica do grupo é a da recepção da UPA, sem 'raça/cor e endereço'", async () => {
+    mocked(api.getPeriodPending).mockResolvedValue([ urgency("en1") ]);
+    renderWithProviders(<PendingPanel period={period()} onClose={() => undefined} canFix />);
+    const group = await screen.findByRole("region", { name: "Cadastro do paciente" });
+    // Uma linha e a dica do grupo.
+    expect(within(group).getAllByText(URGENCY_IDENTIFY_HINT).length).toBe(2);
+    expect(group.textContent).not.toContain("o faturista completa aqui");
+  });
+
+  it("grupo misto: a dica normal ganha a frase da recepção da UPA e o item normal segue com 'Completar dados'", async () => {
+    mocked(api.getPeriodPending).mockResolvedValue([ urgency("en1"), pending({ procedure_id: "pp9", fix: "patient", reasons: [ "missing_race_color" ] }) ]);
+    renderWithProviders(<PendingPanel period={period()} onClose={() => undefined} canFix />);
+    const group = await screen.findByRole("region", { name: "Cadastro do paciente" });
+    // A dica do grupo (um parágrafo) traz as duas frases; a linha da urgência repete só a da recepção.
+    expect(within(group).getByText(/o faturista completa aqui.*recepção da UPA identifica/)).not.toBeNull();
+    expect(within(group).getAllByText(URGENCY_IDENTIFY_HINT).length).toBe(1);
+    expect(within(group).getAllByRole("button", { name: "Completar dados" }).length).toBe(1);
   });
 
   it("rótulos, origem e chave", () => {

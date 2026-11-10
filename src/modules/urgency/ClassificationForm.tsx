@@ -185,9 +185,12 @@ function Form({ encounter, suggestDelayMs, onDone, onCancel, onDirtyChange }: Fo
 
   const levelOf = (c: UrgencyColor) =>
     (levels.find((l) => l.color === c) ?? DEFAULT_LEVELS.find((l) => l.color === c) as UrgencyLevel).max_wait_minutes;
-  const problemEl = (path: string, id?: string) => {
+  const errId = (path: string) => `${ids}-err-${path}`;
+  // O erro do campo o descreve (junto do aviso do texto congelado, quando o campo tem um).
+  const describedBy = (path: string, extra?: string) => [ fieldText(path) ? errId(path) : null, extra ].filter(Boolean).join(" ") || undefined;
+  const problemEl = (path: string) => {
     const text = fieldText(path);
-    return text ? <small id={id} role="alert" style={problemStyle}>{text}</small> : null;
+    return text ? <small id={errId(path)} role="alert" style={problemStyle}>{text}</small> : null;
   };
 
   if (closed) {
@@ -207,7 +210,7 @@ function Form({ encounter, suggestDelayMs, onDone, onCancel, onDirtyChange }: Fo
 
       <label style={label}>
         Queixa principal
-        <textarea value={complaint} maxLength={500} style={{ ...inputStyle, minHeight: 48 }} aria-describedby={`${ids}-complaint`}
+        <textarea value={complaint} maxLength={500} style={{ ...inputStyle, minHeight: 48 }} aria-describedby={describedBy("complaint", `${ids}-complaint`)}
           aria-invalid={fieldText("complaint") ? true : undefined} onChange={(e) => setComplaint(e.target.value)} />
       </label>
       <span className="mono" style={hint}>{`${chars(complaint)}/500`}</span>
@@ -220,6 +223,7 @@ function Form({ encounter, suggestDelayMs, onDone, onCancel, onDirtyChange }: Fo
       <label style={{ ...label, maxWidth: 220 }}>
         Dor (0 a 10)
         <input value={pain} inputMode="numeric" style={inputStyle} aria-invalid={fieldText("pain_scale") ? true : undefined}
+          aria-describedby={describedBy("pain_scale")}
           onChange={(e) => setPain(e.target.value)} />
       </label>
       {problemEl("pain_scale")}
@@ -255,7 +259,7 @@ function Form({ encounter, suggestDelayMs, onDone, onCancel, onDirtyChange }: Fo
             <label style={label}>
               Justificativa
               <textarea value={justification} maxLength={500} style={{ ...inputStyle, minHeight: 56 }}
-                aria-describedby={`${ids}-justification`} aria-invalid={fieldText("justification") ? true : undefined}
+                aria-describedby={describedBy("justification", `${ids}-justification`)} aria-invalid={fieldText("justification") ? true : undefined}
                 onChange={(e) => setJustification(e.target.value)} />
             </label>
             {problemEl("justification")}

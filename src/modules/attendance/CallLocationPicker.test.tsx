@@ -118,6 +118,15 @@ it("invalid_call_location do api: a frase, esquece o lembrado e relê a lista; c
   expect(handled).toBe(false);
 });
 
+it("sem local obrigatório e nenhum local ativo: o seletor some", async () => {
+  vi.mocked(api.listCallLocations).mockResolvedValue({ items: [], location_required: false });
+  mountPicker();
+  await waitFor(() => expect(api.listCallLocations).toHaveBeenCalled());
+  await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+  expect(screen.queryByLabelText("Local da chamada")).toBeNull();
+  expect(screen.queryByRole("combobox")).toBeNull();
+});
+
 it("dois seletores da mesma unidade andam juntos (a mesa e o painel de antes da urgência)", async () => {
   vi.mocked(api.listCallLocations).mockResolvedValue(LOCS);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });

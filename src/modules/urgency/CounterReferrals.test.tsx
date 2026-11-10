@@ -65,4 +65,14 @@ describe("retornos pedidos pela urgência", () => {
     expect(screen.queryByRole("region", { name: "Retornos pedidos pela urgência" })).toBeNull();
     expect(api.listCounterReferrals).not.toHaveBeenCalled();
   });
+
+  it("só na UBS: hospital e outras unidades não mostram nada nem fazem o GET", async () => {
+    for (const kind of [ "hospital", "ceo", "health_management", "other" ]) {
+      mount({ ...UBS, id: `u-${kind}`, kind });
+      await settled();
+      expect(screen.queryByRole("region", { name: "Retornos pedidos pela urgência" })).toBeNull();
+      cleanup();
+    }
+    expect(api.listCounterReferrals).not.toHaveBeenCalled();
+  });
 });

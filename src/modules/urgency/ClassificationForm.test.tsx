@@ -263,6 +263,15 @@ describe("Classificação de risco (F-32.3)", () => {
     expect(api.suggestUrgencyColor).not.toHaveBeenCalled();
   });
 
+  it("o erro da queixa e o da dor ficam ligados aos campos por aria-describedby", async () => {
+    vi.mocked(api.getUrgencyEncounter).mockResolvedValue(encounter());
+    mount({ suggestDelayMs: 0 });
+    fireEvent.click(await screen.findByRole("button", { name: "Classificar" }));
+    const text = (el: HTMLElement) => (el.getAttribute("aria-describedby") ?? "").split(" ").map((id) => document.getElementById(id)?.textContent ?? "");
+    expect(text(screen.getByLabelText("Queixa principal"))).toContain("a queixa tem de 3 a 500 caracteres");
+    expect(text(screen.getByLabelText("Dor (0 a 10)"))).toContain("informe a dor (0 a 10)");
+  });
+
   it("'Cancelar' chama onCancel", async () => {
     vi.mocked(api.getUrgencyEncounter).mockResolvedValue(encounter());
     mount({ suggestDelayMs: 0 });
@@ -341,6 +350,28 @@ describe("Mesa da UPA: classificação", () => {
     fireEvent.click(screen.getByRole("button", { name: "Descartar" }));
     expect(screen.queryByRole("region", { name: "Classificação de risco — U-042" })).toBeNull();
     expect(client.getQueryCache().findAll({ queryKey: [ "urgencyDetail" ] }).length).toBe(0);
+  });
+
+  it("o alertdialog descreve a pergunta; Continuar leva o foco ao título do painel e Descartar, ao botão que abriu", async () => {
+    vi.mocked(api.getUrgencyQueue).mockResolvedValue(queue());
+    vi.mocked(api.getUrgencyEncounter).mockResolvedValue(encounter());
+    vi.mocked(api.suggestUrgencyColor).mockResolvedValue(suggestion());
+    mountDesk();
+    const opener = await screen.findByRole("button", { name: "Classificar U-042" });
+    opener.focus();
+    fireEvent.click(opener);
+    const panel = await screen.findByRole("region", { name: "Classificação de risco — U-042" });
+    fireEvent.change(await within(panel).findByLabelText("Queixa principal"), { target: { value: "febre" } });
+    fireEvent.keyDown(panel, { key: "Escape" });
+    const dialog = screen.getByRole("alertdialog", { name: "Descartar a classificação?" });
+    const describedBy = dialog.getAttribute("aria-describedby") as string;
+    expect(document.getElementById(describedBy)?.textContent).toBe(DISCARD_QUESTION);
+    fireEvent.click(within(dialog).getByRole("button", { name: "Continuar classificando" }));
+    expect(document.activeElement?.textContent).toContain("Classificação de risco — U-042");
+    fireEvent.keyDown(panel, { key: "Escape" });
+    fireEvent.click(screen.getByRole("button", { name: "Descartar" }));
+    expect(screen.queryByRole("region", { name: "Classificação de risco — U-042" })).toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Classificar U-042" }));
   });
 
   it("com algo digitado, 'Cancelar' também pergunta antes", async () => {

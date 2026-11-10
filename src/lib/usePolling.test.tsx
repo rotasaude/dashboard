@@ -4,7 +4,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { act, cleanup, renderHook } from "@testing-library/react";
 import { usePolling } from "./usePolling";
 
-beforeEach(() => vi.useFakeTimers());
+beforeEach(() => { vi.useFakeTimers(); });
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 it("um pedido por vez: o próximo só depois da resposta e do intervalo", async () => {

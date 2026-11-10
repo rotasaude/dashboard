@@ -67,7 +67,7 @@ export function PendingPanel({ period, onClose, canFix = false }: { period: Bill
       {query.isError && <p role="alert" style={alert}>{billingError(query.error)}</p>}
       {query.isSuccess && groups.length === 0 && <EmptyState title="nenhuma pendência nesta competência" />}
       {groups.map((g) => {
-        const info = fixInfo(g.fix);
+        const info = fixInfo(g.fix, g.items);
         return (
           <section key={g.fix} aria-label={info.title} style={box}>
             <strong>{`${info.title} · ${g.items.length}`}</strong>

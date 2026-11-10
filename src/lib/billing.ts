@@ -299,8 +299,12 @@ const FIX_INFO: Record<string, { title: string; hint: string }> = {
 };
 export const FIX_ORDER = [ "professional", "patient", "establishment", "procedure" ];
 
-export function fixInfo(fix: string): { title: string; hint: string } {
-  return FIX_INFO[fix] ?? { title: fix, hint: "" };
+export function fixInfo(fix: string, items: Pick<PendingItem, "procedure_id" | "urgency_encounter_id">[] = []): { title: string; hint: string } {
+  const info = FIX_INFO[fix] ?? { title: fix, hint: "" };
+  // Pendência da urgência (Q12) não é de quem fatura: o grupo só dela diz o da recepção da UPA; o misto soma a frase à dica normal.
+  const urgency = items.filter(isUrgencyPending).length;
+  if (urgency === 0) return info;
+  return { ...info, hint: urgency === items.length ? URGENCY_IDENTIFY_HINT : `${info.hint}; ${URGENCY_IDENTIFY_HINT}` };
 }
 
 // Motivos que o faturista corrige pela pendência (PATCH /billing/patients/:id/demographics).

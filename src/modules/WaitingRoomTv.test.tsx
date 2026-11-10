@@ -127,6 +127,18 @@ it("chamada sem local: a linha do local some", async () => {
   expect(current.textContent).not.toMatch(/null|—/);
 });
 
+it("enquanto conecta e com o painel desligado, o título é fixo, nunca um h1 vazio", async () => {
+  localStorage.setItem("waitingRoom.displayToken", "tok-abc");
+  vi.mocked(api.fetchWaitingRoomBoard).mockImplementation(() => new Promise(() => undefined));
+  render(<WaitingRoomTv />);
+  expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Painel de chamada");
+  cleanup();
+  vi.mocked(api.fetchWaitingRoomBoard).mockRejectedValue(new ApiError(403, { error: "feature_disabled", feature: "waiting_room_display" }, "x"));
+  render(<WaitingRoomTv />);
+  expect(await screen.findByText(WAITING_ROOM_DISABLED)).not.toBeNull();
+  expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Painel de chamada");
+});
+
 it("sem tempos (unidade não mostra): a seção some; sem chamadas: 'Aguarde ser chamado pela sua senha.'", async () => {
   localStorage.setItem("waitingRoom.displayToken", "tok-abc");
   vi.mocked(api.fetchWaitingRoomBoard).mockResolvedValue(board({ calls: [], wait_times: null }));

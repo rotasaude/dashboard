@@ -75,7 +75,7 @@ export function ConsultationWorkspace(props: Props) {
   const dentalOffered = kinds.includes("dental");
   // Enquanto as opções carregam, a consulta comum continua à mão, como hoje; carregadas, só o que o api oferece.
   const generalOffered = !options.data || kinds.includes("general");
-  // Com `urgency`, só o tipo da urgência (Q10: na UPA o api oferece só `urgency` ao 225*).
+  // Com `urgency`, o tipo da urgência (Q10: na UPA o api ACRESCENTA `urgency` aos tipos do CBO).
   const urgencyOffered = !options.data || kinds.includes("urgency");
   // Nenhum tipo oferecido (o api recusaria qualquer início): uma linha no lugar dos botões.
   const noKindReason = props.urgency

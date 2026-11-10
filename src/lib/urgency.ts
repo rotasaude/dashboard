@@ -121,6 +121,11 @@ export const TICKET_PREFIX_TEXT = "o prefixo tem de 1 a 3 letras maiúsculas, se
 export const DESCRIPTION_TEXT = "descreva a pessoa (de 10 a 500 caracteres): sexo e idade aparentes, sinais, onde foi encontrada";
 export const COMPLAINT_TEXT = "a queixa tem de 3 a 500 caracteres";
 export const PAIN_TEXT = "informe a dor (0 a 10)";
+export const JUSTIFICATION_TEXT = "a justificativa tem de 10 a 500 caracteres";
+export const DESTINATION_TEXT = "o destino tem de 3 a 200 caracteres";
+export const VACANCY_TEXT = "o pedido de vaga tem até 500 caracteres";
+export const RETURN_DAYS_TEXT = "o retorno vai de 1 a 90 dias";
+export const RETURN_REASON_TEXT = "o motivo do retorno tem de 3 a 300 caracteres";
 export const REASON_TEXT = "o motivo tem de 10 a 500 caracteres";
 const DISPLAY_REVOKED = "esta TV foi desligada pela administração — peça um código novo";
 // Q25: o encounter_open da identificação (o paciente real já tem um walk_in aberto na UPA). Quem identifica passa como override.
@@ -200,12 +205,12 @@ const FIELD_TEXT: [ RegExp, string ][] = [
   [ /^complaint$/, COMPLAINT_TEXT ],
   [ /^pain_scale$/, PAIN_TEXT ],
   [ /^color$/, "escolha uma das cinco cores" ],
-  [ /^justification$/, "a justificativa tem de 10 a 500 caracteres" ],
+  [ /^justification$/, JUSTIFICATION_TEXT ],
   [ /^kind$/, "escolha o desfecho" ],
-  [ /^destination$/, "o destino tem de 3 a 200 caracteres" ],
-  [ /^vacancy_request$/, "o pedido de vaga tem até 500 caracteres" ],
-  [ /^return_guidance\.days$/, "o retorno vai de 1 a 90 dias" ],
-  [ /^return_guidance\.reason$/, "o motivo do retorno tem de 3 a 300 caracteres" ],
+  [ /^destination$/, DESTINATION_TEXT ],
+  [ /^vacancy_request$/, VACANCY_TEXT ],
+  [ /^return_guidance\.days$/, RETURN_DAYS_TEXT ],
+  [ /^return_guidance\.reason$/, RETURN_REASON_TEXT ],
   [ /^return_guidance$/, URGENCY_ERRORS.return_guidance_required ],
   [ /^reason$/, REASON_TEXT ],
   [ /^name$/, "confira o nome" ],
@@ -367,13 +372,13 @@ export function outcomeProblems(d: OutcomeDraft, ctx: OutcomeContext): Problem[]
   }
   if (kind === "transferred") {
     if (d.destination.trim() === "") out.push({ path: "destination", text: URGENCY_ERRORS.destination_required });
-    else if (!within(d.destination, 3, 200)) out.push({ path: "destination", text: "o destino tem de 3 a 200 caracteres" });
-    if (chars(d.vacancyRequest) > 500) out.push({ path: "vacancy_request", text: "o pedido de vaga tem até 500 caracteres" });
+    else if (!within(d.destination, 3, 200)) out.push({ path: "destination", text: DESTINATION_TEXT });
+    if (chars(d.vacancyRequest) > 500) out.push({ path: "vacancy_request", text: VACANCY_TEXT });
   }
   if (kind === "discharged_to_primary_care") {
     const days = d.returnDays.trim();
-    if (!/^\d{1,2}$/.test(days) || Number(days) < 1 || Number(days) > 90) out.push({ path: "return_guidance.days", text: "o retorno vai de 1 a 90 dias" });
-    if (!within(d.returnReason, 3, 300)) out.push({ path: "return_guidance.reason", text: "o motivo do retorno tem de 3 a 300 caracteres" });
+    if (!/^\d{1,2}$/.test(days) || Number(days) < 1 || Number(days) > 90) out.push({ path: "return_guidance.days", text: RETURN_DAYS_TEXT });
+    if (!within(d.returnReason, 3, 300)) out.push({ path: "return_guidance.reason", text: RETURN_REASON_TEXT });
   }
   if (kind === "registered_in_error" && !within(d.reason, 10, 500)) out.push({ path: "reason", text: REASON_TEXT });
   return out;
