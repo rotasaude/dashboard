@@ -1,0 +1,75 @@
+/* A TV da sala de espera (módulo 32a, F-32.5): tela inteira, fora do shell, legível a 5 m em 1280×720 e 1920×1080. Tipografia
+   pela largura (clamp), duas colunas a partir de 1280 px e uma abaixo. Só variáveis do tema; o foco é o global (:focus-visible). */
+
+.tv {
+  min-height: 100vh; display: flex; flex-direction: column; gap: clamp(16px, 2vw, 40px);
+  padding: clamp(16px, 2.5vw, 56px); background: var(--bg); color: var(--ink); font-family: var(--font-sans);
+}
+.tv p, .tv h1, .tv h2, .tv ul { margin: 0; }
+
+.tv-head { display: flex; align-items: center; gap: clamp(12px, 2vw, 40px); }
+.tv-unit { flex: 1; font-size: clamp(24px, 2.6vw, 52px); font-weight: 700; line-height: 1.15; }
+.tv-clock { font-family: var(--font-mono); font-size: clamp(24px, 2.6vw, 52px); color: var(--ink2); }
+
+.tv-button {
+  min-height: 44px; padding: 8px 20px; border-radius: 8px; font-size: clamp(16px, 1.3vw, 24px); font-weight: 600;
+  background: var(--accent); color: var(--on-accent);
+}
+.tv-button:disabled { opacity: .6; cursor: progress; }
+
+.tv-notice {
+  padding: 12px 20px; border-radius: 8px; font-size: clamp(20px, 1.8vw, 36px);
+  background: var(--warn-bg); color: var(--ink); border: 2px solid var(--warn);
+}
+.tv-message { margin: auto; text-align: center; font-size: clamp(28px, 3.2vw, 60px); color: var(--ink2); }
+
+.tv-grid { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr); gap: clamp(16px, 2vw, 40px); }
+
+.tv-current {
+  display: flex; flex-direction: column; justify-content: center; gap: clamp(8px, 1vw, 24px);
+  padding: clamp(20px, 3vw, 64px); border-radius: 16px; background: var(--panel); border: 2px solid var(--rule);
+}
+.tv-current-kind { font-size: clamp(24px, 2.4vw, 48px); color: var(--ink2); }
+.tv-current-ticket {
+  font-family: var(--font-mono); font-size: clamp(72px, 12vw, 220px); font-weight: 700; line-height: 1; overflow-wrap: anywhere;
+}
+.tv-current-prefix { font-family: var(--font-sans); font-size: clamp(28px, 3.2vw, 60px); font-weight: 600; color: var(--ink2); }
+.tv-current-location { font-size: clamp(40px, 6vw, 110px); font-weight: 700; line-height: 1.1; overflow-wrap: anywhere; }
+.tv-current-time { font-size: clamp(20px, 1.8vw, 36px); color: var(--ink2); }
+.tv-empty { font-size: clamp(40px, 6vw, 110px); font-weight: 700; line-height: 1.1; }
+
+.tv-side { display: flex; flex-direction: column; gap: clamp(16px, 2vw, 40px); }
+.tv-panel {
+  display: flex; flex-direction: column; gap: clamp(8px, 1vw, 20px);
+  padding: clamp(16px, 2vw, 40px); border-radius: 16px; background: var(--panel); border: 2px solid var(--rule);
+}
+.tv-panel-title { font-size: clamp(24px, 2.4vw, 48px); font-weight: 700; }
+.tv-list { list-style: none; padding: 0; display: flex; flex-direction: column; gap: clamp(6px, .8vw, 16px); }
+.tv-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px clamp(12px, 1.6vw, 32px); }
+.tv-prev-ticket { font-family: var(--font-mono); font-size: clamp(28px, 3.2vw, 60px); font-weight: 700; }
+.tv-prev-location { font-size: clamp(28px, 3.2vw, 60px); overflow-wrap: anywhere; }
+.tv-prev-meta { font-size: clamp(18px, 1.5vw, 30px); color: var(--ink2); }
+
+.tv-chip {
+  display: inline-flex; align-items: center; padding: 4px 16px; border-radius: 999px; font-weight: 700;
+  font-size: clamp(24px, 2.4vw, 48px); border: 2px solid currentColor;
+}
+.tv-wait { font-size: clamp(28px, 3.2vw, 60px); font-weight: 600; }
+.tv-priority { font-size: clamp(20px, 1.8vw, 36px); color: var(--ink2); }
+
+.tv-foot { font-size: clamp(16px, 1.3vw, 24px); color: var(--ink3); }
+
+.tv-pairing { align-items: center; justify-content: center; }
+.tv-pairing-form { width: 100%; max-width: 640px; display: flex; flex-direction: column; gap: 16px; }
+.tv-pairing-title { font-size: clamp(28px, 3.2vw, 56px); font-weight: 700; }
+.tv-pairing-label { font-size: clamp(20px, 1.8vw, 32px); font-weight: 600; }
+.tv-pairing-input {
+  min-height: 44px; padding: 8px 16px; font-family: var(--font-mono); font-size: clamp(32px, 4vw, 72px); letter-spacing: .2em;
+  background: var(--panel); color: var(--ink); border: 2px solid var(--rule2); border-radius: 8px;
+}
+.tv-pairing-problem { font-size: clamp(18px, 1.5vw, 28px); color: var(--down); }
+.tv-pairing-hint { font-size: clamp(16px, 1.3vw, 24px); color: var(--ink2); }
+
+@media (min-width: 1280px) {
+  .tv-grid { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
+}
