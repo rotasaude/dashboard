@@ -7,19 +7,24 @@ import { cleanup, screen, within } from "@testing-library/react";
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const real = await importOriginal<typeof import("../../lib/api")>();
-  return { ...real, getPeriodPending: vi.fn() };
+  // fetchCurrentSession: o AuthProvider do renderWithProviders lê a sessão; sem o mock, o fetch real de "/session"
+  // rejeita depois do teste (erro não tratado que derruba o vitest na CI com tudo verde).
+  return { ...real, fetchCurrentSession: vi.fn(), getPeriodPending: vi.fn() };
 });
 
 import * as api from "../../lib/api";
 import type { PendingItem } from "../../lib/api";
 import { PendingPanel } from "./PendingPanel";
 import { renderWithProviders } from "../../test/campaignFixtures";
-import { pending, period } from "../../test/billingFixtures";
+import { billingUser, pending, period } from "../../test/billingFixtures";
 import { URGENCY_IDENTIFY_HINT, URGENCY_PENDING_TAG, pendingKey, reasonLabel, sourceLabel } from "../../lib/billing";
 
 const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
-beforeEach(() => { mocked(api.getPeriodPending).mockReset(); });
+beforeEach(() => {
+  mocked(api.getPeriodPending).mockReset();
+  mocked(api.fetchCurrentSession).mockReset().mockResolvedValue(billingUser());
+});
 
 const urgency = (id: string): PendingItem => pending({
   procedure_id: null, urgency_encounter_id: id, reasons: [ "patient_unidentified" ], fix: "patient", late: false,
