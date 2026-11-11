@@ -3,7 +3,8 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 vi.mock("../../lib/api", async (orig) => ({
-  ...(await orig<typeof import("../../lib/api")>()), lookupUrgencyPerson: vi.fn(), createUrgencyArrival: vi.fn(), getUrgencyQueue: vi.fn()
+  ...(await orig<typeof import("../../lib/api")>()), lookupUrgencyPerson: vi.fn(), createUrgencyArrival: vi.fn(), getUrgencyQueue: vi.fn(),
+  getUrgencyObservation: vi.fn()
 }));
 
 import * as api from "../../lib/api";
@@ -15,6 +16,7 @@ afterEach(cleanup);
 beforeEach(() => {
   vi.mocked(api.lookupUrgencyPerson).mockReset(); vi.mocked(api.createUrgencyArrival).mockReset();
   vi.mocked(api.getUrgencyQueue).mockReset().mockResolvedValue(queue({ awaiting_classification: [], by_color: [], in_care: [] }));
+  vi.mocked(api.getUrgencyObservation).mockReset().mockResolvedValue({ beds: [], waiting_bed: [] });
 });
 
 function mount(roles = [ "citizen_verifier" ], links: api.ProfessionalLink[] = [], linksLoading = false) {

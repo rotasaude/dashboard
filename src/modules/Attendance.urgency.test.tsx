@@ -5,7 +5,7 @@ import { renderWithProviders } from "../test/campaignFixtures";
 vi.mock("../lib/api", async (orig) => ({ ...(await orig<typeof import("../lib/api")>()), fetchCurrentSession: vi.fn(), listActiveUnits: vi.fn(),
   getMyProfessional: vi.fn(), listAllUnits: vi.fn(), listVerifications: vi.fn(), listUnitRequests: vi.fn(), getUnitAgenda: vi.fn(),
   listUnassignedRequests: vi.fn(), listPendingErasures: vi.fn(), listAppointmentTypes: vi.fn(), listUnitQueue: vi.fn(),
-  listScreeningQueue: vi.fn(), getUrgencyQueue: vi.fn(), listCounterReferrals: vi.fn() }));
+  listScreeningQueue: vi.fn(), getUrgencyQueue: vi.fn(), getUrgencyObservation: vi.fn(), listCounterReferrals: vi.fn() }));
 
 import * as api from "../lib/api";
 import { currentUnitKey } from "../lib/attendance";
@@ -42,6 +42,7 @@ beforeEach(() => {
   vi.mocked(api.listUnitQueue).mockResolvedValue({ waiting: [], in_care: [] });
   vi.mocked(api.listScreeningQueue).mockResolvedValue([]);
   vi.mocked(api.getUrgencyQueue).mockResolvedValue(queue({ awaiting_classification: [], by_color: [], in_care: [] }));
+  vi.mocked(api.getUrgencyObservation).mockResolvedValue({ beds: [], waiting_bed: [] });
   vi.mocked(api.listCounterReferrals).mockResolvedValue([ counterReferral() ]);
 });
 

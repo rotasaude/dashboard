@@ -1,8 +1,9 @@
 // A mesa da UPA dentro do Atendimento (módulo 32a; contrato §4–§7, §14 Q15): numa UPA com `urgency_care`, ela toma o lugar do
 // check-in, da escuta, da fila, dos pedidos e da agenda do 13. Os painéis saem do papel de quem usa NESTA UPA (urgencyRoles):
 // - recepção (`citizen_verifier`): a chegada (ArrivalForm) e, depois dela, a senha para entregar (TicketCard);
-// - a fila da urgência (UrgencyQueue, para todos os papéis da UPA); as ações dela e os painéis de classificação, chamada, desfecho
-//   e identificação (Tasks 7–10) entram aqui, e `queueRef.current.refresh()` relê a fila depois de cada ação;
+// - a fila da urgência (UrgencyQueue, para todos os papéis da UPA, o técnico 3222 inclusive: só lê); as ações dela e os painéis de
+//   classificação, chamada, desfecho e identificação (Tasks 7–10) entram aqui, e `queueRef.current.refresh()` relê a fila depois de cada ação;
+// - o mapa da observação (ObservationMap, 32b F-32.7) entre a fila e os provisórios; o desfecho (closeCare/closeLeaving) o relê;
 // - enfermagem 2235: "Classificar"/"Reclassificar" abre a classificação de risco (ClassificationForm) num painel acima da fila.
 // - chamada (F-32.5, contrato §6, §14 Q7): com `waiting_room_display`, o local da chamada (lembrado na sessão) fica no topo da fila e
 //   vai em cada chamada. A enfermagem chama para a classificação; o médico 225 chama para o atendimento quem já foi classificado
@@ -41,6 +42,7 @@ import { OutcomeForm, type OutcomeTarget } from "./OutcomeForm";
 import { PROVISIONAL_KEY, ProvisionalEncounters, arrivalLabel } from "./ProvisionalEncounters";
 import { UrgencyCare } from "./UrgencyCare";
 import { TicketCard } from "./TicketCard";
+import { ObservationMap, type ObservationMapHandle } from "./ObservationMap";
 import { UrgencyQueue, type QueueActions, type UrgencyQueueHandle } from "./UrgencyQueue";
 
 export const NO_UPA_ROLE = "seu papel não atua nesta UPA";
@@ -163,6 +165,7 @@ export interface UrgencyDeskProps {
 export function UrgencyDesk({ unit, user, links, linksLoading = false, onGoToSecurity }: UrgencyDeskProps) {
   const roles = urgencyRoles(user, links, unit.id);
   const queueRef = useRef<UrgencyQueueHandle>(null);
+  const mapRef = useRef<ObservationMapHandle>(null);
   const queryClient = useQueryClient();
   // A senha da última chegada; "Próxima chegada" volta ao formulário com o foco no documento.
   const [ arrival, setArrival ] = useState<UrgencyArrival | null>(null);
@@ -251,11 +254,12 @@ export function UrgencyDesk({ unit, user, links, linksLoading = false, onGoToSec
   const closeCare = (notice?: string) => {
     if (care) queryClient.removeQueries({ queryKey: [ URGENCY_DETAIL_KEY, care.encounter_id ] });
     setCare(null);
-    if (notice) { setNotice(notice); queueRef.current?.refresh(); }
+    // O desfecho fecha a estadia no api (contrato §4): o mapa relê junto com a fila.
+    if (notice) { setNotice(notice); queueRef.current?.refresh(); mapRef.current?.refresh(); }
   };
   const closeLeaving = (notice?: string) => {
     setLeaving(null);
-    if (notice) { setNotice(notice); queueRef.current?.refresh(); }
+    if (notice) { setNotice(notice); queueRef.current?.refresh(); mapRef.current?.refresh(); }
   };
   // A descrição do provisório sai do cache ao fechar; identificado, a fila e a lista de provisórios (se aberta) releem.
   const openIdentify = (next: Identifying) => {
@@ -333,7 +337,7 @@ export function UrgencyDesk({ unit, user, links, linksLoading = false, onGoToSec
     </>
   ) : null;
 
-  if (!roles.reception && !roles.nurse && !roles.doctor) {
+  if (!roles.mapReader) {
     if (linksLoading) return <p className="mono" style={{ margin: 0, fontSize: 10.5, color: "var(--ink3)" }}>{LINKS_LOADING}</p>;
     return <EmptyState title={NO_UPA_ROLE} />;
   }
@@ -366,6 +370,7 @@ export function UrgencyDesk({ unit, user, links, linksLoading = false, onGoToSec
       )}
       {callError && <p role="alert" style={{ margin: 0, fontSize: 12.5, color: "var(--down)" }}>{callError}</p>}
       <UrgencyQueue ref={queueRef} unit={unit} roles={roles} actions={actions} toolbar={toolbar} />
+      <ObservationMap ref={mapRef} unit={unit} roles={roles} />
       {roles.identify && (
         <ProvisionalEncounters unit={unit}
           onIdentify={(item) => openIdentify({ encounterId: item.encounter_id, label: arrivalLabel(item), from: "list" })} />

@@ -8,7 +8,7 @@ import { QueryClient, QueryClientProvider, focusManager, onlineManager } from "@
 
 vi.mock("../../lib/api", async (orig) => ({
   ...(await orig<typeof import("../../lib/api")>()),
-  getUrgencyEncounter: vi.fn(), lookupUrgencyPerson: vi.fn(), identifyUrgencyPatient: vi.fn(), getUrgencyQueue: vi.fn(),
+  getUrgencyEncounter: vi.fn(), lookupUrgencyPerson: vi.fn(), identifyUrgencyPatient: vi.fn(), getUrgencyQueue: vi.fn(), getUrgencyObservation: vi.fn(),
   listProvisionalEncounters: vi.fn(), createUrgencyArrival: vi.fn(), listCallLocations: vi.fn()
 }));
 
@@ -35,6 +35,7 @@ beforeEach(() => {
   vi.mocked(api.identifyUrgencyPatient).mockReset(); vi.mocked(api.listProvisionalEncounters).mockReset();
   vi.mocked(api.getUrgencyQueue).mockReset().mockResolvedValue(queue({ awaiting_classification: [], by_color: [], in_care: [] }));
   vi.mocked(api.listCallLocations).mockReset().mockResolvedValue({ items: [], location_required: false });
+  vi.mocked(api.getUrgencyObservation).mockReset().mockResolvedValue({ beds: [], waiting_bed: [] });
 });
 
 const client = () => new QueryClient({ defaultOptions: { queries: { retry: false } } });

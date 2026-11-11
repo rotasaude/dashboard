@@ -7,7 +7,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 vi.mock("../../lib/api", async (orig) => ({
   ...(await orig<typeof import("../../lib/api")>()),
-  getUrgencyEncounter: vi.fn(), suggestUrgencyColor: vi.fn(), classifyUrgency: vi.fn(), getUrgencyQueue: vi.fn()
+  getUrgencyEncounter: vi.fn(), suggestUrgencyColor: vi.fn(), classifyUrgency: vi.fn(), getUrgencyQueue: vi.fn(),
+  getUrgencyObservation: vi.fn()
 }));
 
 import * as api from "../../lib/api";
@@ -28,6 +29,7 @@ beforeEach(() => {
   vi.mocked(api.suggestUrgencyColor).mockReset();
   vi.mocked(api.classifyUrgency).mockReset();
   vi.mocked(api.getUrgencyQueue).mockReset();
+  vi.mocked(api.getUrgencyObservation).mockReset().mockResolvedValue({ beds: [], waiting_bed: [] });
 });
 
 const onDone = vi.fn();

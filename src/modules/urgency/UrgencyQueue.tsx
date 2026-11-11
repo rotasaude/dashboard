@@ -21,6 +21,7 @@ import { waitLabel } from "../../lib/screening";
 import {
   NO_CLINICAL_IN_LIST, URGENCY_COLOR_TONE, URGENCY_QUEUE_POLL_MS, colorLabel, maxWaitLabel, urgencyError, type UrgencyRoles
 } from "../../lib/urgency";
+import { alertText, hoursText } from "../../lib/urgencyObservation";
 import { usePolling } from "../../lib/usePolling";
 import { DataTable, type Column } from "../../components/DataTable";
 import { Panel } from "../../components/Panel";
@@ -38,7 +39,8 @@ export interface QueueActions {
   onLeft?(row: UrgencyWaitingRow | UrgencyInCareRow): void;
 }
 export interface UrgencyQueueHandle { refresh(): void }
-export type QueueRoles = Pick<UrgencyRoles, "reception" | "nurse" | "doctor">;
+// O técnico 3222 lê a fila (api-shapes D2/Q2), sem nenhuma ação dela.
+export type QueueRoles = Pick<UrgencyRoles, "reception" | "nurse" | "doctor"> & { technician?: boolean };
 export interface UrgencyQueueProps { unit: HealthUnit; roles: QueueRoles; actions: QueueActions; toolbar?: ReactNode }
 
 const LAST_CALL_KIND = { classification: "classificação", care: "atendimento" } as const;
@@ -58,7 +60,11 @@ const safeColor = (r: UrgencyColorRow): UrgencyColorRow => ({
 });
 const safeInCare = (r: UrgencyInCareRow): UrgencyInCareRow => ({
   ...safeWaiting(r), color: r.color ?? null, max_wait_minutes: r.max_wait_minutes ?? null, called_at: r.called_at ?? null,
-  called_by_name: r.called_by_name ?? null, consultation_id: r.consultation_id ?? null, consultation_status: r.consultation_status ?? null
+  called_by_name: r.called_by_name ?? null, consultation_id: r.consultation_id ?? null, consultation_status: r.consultation_status ?? null,
+  // 32b: leito, horas e alerta, nada mais (o que o api mandar a mais não passa).
+  observation: r.observation
+    ? { bed_label: r.observation.bed_label, hours: r.observation.hours, alert: r.observation.alert === "near_limit" || r.observation.alert === "over_limit" ? r.observation.alert : null }
+    : null
 });
 
 // Recusa que não passa sozinha: parar de pedir. Lista fechada — todo o resto (401, 408, 425, 429, 5xx, rede) segue tentando.
@@ -80,6 +86,14 @@ const lastCallText = (c: UrgencyLastCall | null) =>
 const waitCell = (r: UrgencyColorRow) => (r.overdue
   ? <span style={{ color: "var(--down)" }}>{`${waitLabel(r.waited_minutes)} · passou do tempo (${maxWaitLabel(r.max_wait_minutes)})`}</span>
   : waitLabel(r.waited_minutes));
+
+// "Obs 1 · 21 h em observação · perto de 24 h em observação": o alerta sempre por texto; sem observação, "—".
+const observationCell = (r: UrgencyInCareRow) => {
+  const o = r.observation;
+  if (!o) return "—";
+  const text = [ o.bed_label, hoursText(o.hours), alertText(o.alert) ].filter(Boolean).join(" · ");
+  return o.alert === "over_limit" ? <span style={{ color: "var(--down)" }}>{text}</span> : text;
+};
 
 type Btn = { label: string; onClick(): void } | false | undefined | null;
 
@@ -112,7 +126,7 @@ export const UrgencyQueue = forwardRef<UrgencyQueueHandle, UrgencyQueueProps>(fu
   // Parado = a última leitura foi uma recusa definitiva (403/404/422) que ninguém mandou tentar de novo: o fetcher nulo desliga o
   // timer. "Tentar de novo"/refresh() dispensa essa recusa, e o fetcher volta (lê na hora); a próxima resposta decide de novo.
   const [ dismissed, setDismissed ] = useState<unknown>(null);
-  const hasRole = roles.reception || roles.nurse || roles.doctor;
+  const hasRole = roles.reception || roles.nurse || roles.doctor || roles.technician === true;
   const [ lastError, setLastError ] = useState<unknown>(null);
   const stopped = stopsPolling(lastError) && lastError !== dismissed;
   const polling = usePolling<UrgencyQueueData>(hasRole && !stopped ? () => getUrgencyQueue(unit.id) : null, URGENCY_QUEUE_POLL_MS, unit.id);
@@ -167,6 +181,7 @@ export const UrgencyQueue = forwardRef<UrgencyQueueHandle, UrgencyQueueProps>(fu
     { label: "Espera desde a chegada", w: "1fr", render: (r) => waitLabel(r.waited_minutes) },
     { label: "Chamado por", w: "1.2fr", render: (r) => [ r.called_by_name, r.called_at && fmtHourMinute(r.called_at) ].filter(Boolean).join(" · ") || "—" },
     { label: "Consulta", w: "0.9fr", render: (r) => (r.consultation_status ? CONSULTATION_TEXT[r.consultation_status] ?? "—" : "—") },
+    { label: "Observação", w: "1.2fr", render: observationCell },
     { label: "", w: "auto", align: "right", card: "actions", render: (r) => rowButtons(who(r), [
       onOpenCare && roles.doctor && { label: "Atender", onClick: () => onOpenCare(r) },
       recall(r), identify(r), onLeft && { label: "Saiu sem atendimento", onClick: () => onLeft(r) }

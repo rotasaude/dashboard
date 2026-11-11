@@ -6,7 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createRef, type Ref } from "react";
 
 vi.mock("../../lib/api", async (orig) => ({
-  ...(await orig<typeof import("../../lib/api")>()), getUrgencyQueue: vi.fn(),
+  ...(await orig<typeof import("../../lib/api")>()), getUrgencyQueue: vi.fn(), getUrgencyObservation: vi.fn(),
   listCallLocations: vi.fn(), callForClassification: vi.fn(), callAttendance: vi.fn(), callNext: vi.fn(), recallAttendance: vi.fn()
 }));
 // O painel do atendimento médico tem o próprio teste (UrgencyCare.test.tsx); aqui só a chamada.
@@ -19,12 +19,16 @@ import {
   DOCTOR_LINK, NOW32, NURSE_LINK, UPA, callLocation, colorRow, encounter, inCareRow, patientRef, queue, unidentifiedRef, urgencyUser,
   waitingRow
 } from "../../test/urgencyFixtures";
+import { TECH_LINK, observationMap } from "../../test/urgencyObservationFixtures";
 import { UrgencyDesk } from "./UrgencyDesk";
 import { UrgencyQueue, type UrgencyQueueHandle, type UrgencyQueueProps } from "./UrgencyQueue";
 
 afterEach(cleanup);
 // Com chaves: o retorno do beforeEach vira teardown no vitest (e a função mockada seria chamada).
-beforeEach(() => { vi.mocked(api.getUrgencyQueue).mockReset(); });
+beforeEach(() => {
+  vi.mocked(api.getUrgencyQueue).mockReset();
+  vi.mocked(api.getUrgencyObservation).mockReset().mockResolvedValue({ beds: [], waiting_bed: [] });
+});
 
 type MountProps = Partial<Omit<UrgencyQueueProps, "roles">> & { roles: UrgencyQueueProps["roles"] };
 
@@ -407,5 +411,73 @@ describe("chamada", () => {
     expect(screen.queryByLabelText("Local da chamada")).toBeNull();
     expect(screen.queryByRole("button", { name: /^Chamar/ })).toBeNull();
     expect(api.listCallLocations).not.toHaveBeenCalled();
+  });
+});
+
+describe("coluna Observação (32b)", () => {
+  const inCareRegion = async () => screen.findByRole("region", { name: "Em atendimento" });
+
+  it("mostra leito, horas e alerta por texto; sem observação, '—'; campo extra não aparece", async () => {
+    vi.mocked(api.getUrgencyQueue).mockResolvedValue(queue({ in_care: [
+      inCareRow({ observation: { bed_label: "Obs 1", hours: 21, alert: "near_limit", medication: "morfina" } as never }),
+      inCareRow({ encounter_id: "en8", attendance_id: "at8", ticket: "U-070", observation: null })
+    ] }));
+    mount({ roles: { reception: false, nurse: true, doctor: false } });
+    const region = await inCareRegion();
+    expect(within(region).getByRole("columnheader", { name: "Observação" })).not.toBeNull();
+    expect(within(region).getByText("Obs 1 · 21 h em observação · perto de 24 h em observação")).not.toBeNull();
+    expect(within(region).getAllByText("—").length).toBeGreaterThan(0);
+    expect(screen.queryByText(/morfina/)).toBeNull();
+  });
+
+  it("sem alerta, só leito e horas", async () => {
+    vi.mocked(api.getUrgencyQueue).mockResolvedValue(queue({ in_care: [ inCareRow({ observation: { bed_label: "Obs 2", hours: 3, alert: null } }) ] }));
+    mount({ roles: { reception: true, nurse: false, doctor: false } });
+    expect(within(await inCareRegion()).getByText("Obs 2 · 3 h em observação")).not.toBeNull();
+  });
+
+  it("o técnico lê a fila", async () => {
+    vi.mocked(api.getUrgencyQueue).mockResolvedValue(queue());
+    mount({ roles: { reception: false, nurse: false, doctor: false, technician: true } });
+    await screen.findByRole("region", { name: "Em atendimento" });
+    expect(vi.mocked(api.getUrgencyQueue)).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("mesa: o mapa e o técnico (32b)", () => {
+  function mountDesk(links: api.ProfessionalLink[]) {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={client}>
+      <UrgencyDesk unit={UPA} user={urgencyUser([ "health_professional" ])} links={links} />
+    </QueryClientProvider>);
+  }
+
+  it("o técnico 3222 vê o mapa e a fila, sem 'seu papel não atua nesta UPA' e sem ação de escrita", async () => {
+    vi.mocked(api.getUrgencyQueue).mockResolvedValue(queue());
+    vi.mocked(api.getUrgencyObservation).mockResolvedValue(observationMap());
+    mountDesk([ TECH_LINK ]);
+    expect(await screen.findByRole("region", { name: "Observação" })).not.toBeNull();
+    expect(await screen.findByRole("region", { name: "Obs 1" })).not.toBeNull();
+    expect(screen.getByRole("region", { name: "Fila da urgência" })).not.toBeNull();
+    expect(screen.queryByText("seu papel não atua nesta UPA")).toBeNull();
+    expect(screen.queryByRole("button", { name: /Colocar em observação|Trocar de leito|Encerrar observação|Classificar|Chamar/ })).toBeNull();
+  });
+
+  it("fila recusada com 403 cbo_not_allowed mostra a frase e o mapa continua", async () => {
+    vi.mocked(api.getUrgencyQueue).mockRejectedValue(new ApiError(403, { error: "cbo_not_allowed" }, "x"));
+    vi.mocked(api.getUrgencyObservation).mockResolvedValue(observationMap());
+    mountDesk([ TECH_LINK ]);
+    expect(await screen.findByText("seu CBO não permite esta etapa na UPA")).not.toBeNull();
+    expect(await screen.findByRole("region", { name: "Obs 1" })).not.toBeNull();
+  });
+
+  it("enfermagem: o mapa fica entre a fila e a lista, com o botão de entrada", async () => {
+    vi.mocked(api.getUrgencyQueue).mockResolvedValue(queue());
+    vi.mocked(api.getUrgencyObservation).mockResolvedValue(observationMap());
+    mountDesk([ NURSE_LINK ]);
+    await screen.findByRole("region", { name: "Obs 1" });
+    const regions = screen.getAllByRole("region").map((r) => r.getAttribute("aria-label"));
+    expect(regions.indexOf("Fila da urgência")).toBeLessThan(regions.indexOf("Observação"));
+    expect(screen.getByRole("button", { name: "Colocar em observação no Obs 2" })).not.toBeNull();
   });
 });

@@ -6,7 +6,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 
 vi.mock("../../lib/api", async (orig) => ({
   ...(await orig<typeof import("../../lib/api")>()),
-  fetchCurrentSession: vi.fn(), getUrgencyQueue: vi.fn(), listCallLocations: vi.fn(), callAttendance: vi.fn(), callNext: vi.fn(),
+  fetchCurrentSession: vi.fn(), getUrgencyQueue: vi.fn(), getUrgencyObservation: vi.fn(), listCallLocations: vi.fn(), callAttendance: vi.fn(), callNext: vi.fn(),
   getUrgencyEncounter: vi.fn(), recordUrgencyOutcome: vi.fn(), getAttendanceRecord: vi.fn(), getConsultationOptions: vi.fn(),
   startConsultation: vi.fn(), saveConsultationDraft: vi.fn(), finalizeConsultation: vi.fn(), getConsultation: vi.fn(),
   getConsultationProblems: vi.fn()
@@ -37,6 +37,7 @@ afterEach(cleanup);
 beforeEach(() => {
   for (const fn of mocks) vi.mocked(fn as ReturnType<typeof vi.fn>).mockReset();
   sessionStorage.clear();
+  vi.mocked(api.getUrgencyObservation).mockResolvedValue({ beds: [], waiting_bed: [] });
   vi.mocked(api.getAttendanceRecord).mockResolvedValue(recordFixture());
   vi.mocked(api.getConsultationOptions).mockResolvedValue({ ...optionsFixture(), kinds: [ "urgency" ] });
   vi.mocked(api.getConsultationProblems).mockResolvedValue([ problem() ]);
