@@ -90,7 +90,7 @@ describe("PrescriptionPanel", () => {
     const send = screen.getByRole("button", { name: "Emitir prescrição" });
     fireEvent.click(send); fireEvent.click(send);
     await waitFor(() => expect(issueCalls()).toEqual([ [ "en3", [ { catalog_item_id: "cat-dipirona", dose: "0.5", dose_unit: "g",
-      route: "intravenous", frequency: { kind: "interval", interval_hours: 6 } } ] ] ]));
+      route: "intravenous", frequency: { kind: "interval", interval_hours: 6 } } ], null ] ]));
     expect(await screen.findByText("Prescrição emitida (versão 1).")).not.toBeNull();
   });
 
@@ -356,5 +356,36 @@ describe("PrescriptionPanel", () => {
     mountPanel(observedEncounter());
     await suspendActive();
     expect(document.activeElement).toBe(screen.getByText("Prescrição suspensa."));
+  });
+
+  it("o corpo declara a ativa esperada: null ao prescrever, o id da versão aberta ao alterar (Q16)", async () => {
+    vi.mocked(api.issueUrgencyPrescription).mockResolvedValue(prescription({ id: "pr2", version: 2 }));
+    mountPanel(observedEncounter());
+    fireEvent.click(screen.getByRole("button", { name: "Alterar prescrição" }));
+    fireEvent.click(screen.getByRole("button", { name: "Emitir versão 2" }));
+    await waitFor(() => expect(issueCalls()).toHaveLength(1));
+    expect(issueCalls()[0][2]).toBe("pr1");
+  });
+
+  it("409 prescription_changed ao prescrever e ao alterar: frase, formulário fechado, uma releitura (Q16)", async () => {
+    vi.mocked(api.searchUrgencyMedication).mockResolvedValue([ hit() ]);
+    vi.mocked(api.issueUrgencyPrescription).mockRejectedValue(new ApiError(409, { error: "prescription_changed" }, "x"));
+    const phrase = "a prescrição foi alterada por outra pessoa enquanto o formulário estava aberto — confira a versão ativa";
+    const a = mountPanel(observedEncounter({ prescription: null }));
+    fireEvent.click(screen.getByRole("button", { name: "Prescrever" }));
+    await fillNew();
+    fireEvent.click(screen.getByRole("button", { name: "Emitir prescrição" }));
+    expect(await screen.findByText(phrase)).not.toBeNull();
+    expect(screen.queryByLabelText("Dose do item 1")).toBeNull();
+    expect(a.onChanged).toHaveBeenCalledTimes(1);
+    expect(issueCalls()[0][2]).toBeNull();
+    cleanup();
+    const b = mountPanel(observedEncounter());
+    fireEvent.click(screen.getByRole("button", { name: "Alterar prescrição" }));
+    fireEvent.click(screen.getByRole("button", { name: "Emitir versão 2" }));
+    expect(await screen.findByText(phrase)).not.toBeNull();
+    expect(screen.queryByLabelText("Dose do item 1")).toBeNull();
+    expect(b.onChanged).toHaveBeenCalledTimes(1);
+    expect(issueCalls()[1][2]).toBe("pr1");
   });
 });

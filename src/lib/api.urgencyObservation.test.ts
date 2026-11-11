@@ -66,8 +66,10 @@ describe("cliente da urgência: observação, prescrição e checagem (módulo 3
       catalog_item_id: "cat-dipirona", dose: "1", dose_unit: "g" as const, route: "intravenous" as const,
       frequency: { kind: "interval" as const, interval_hours: 6 }
     } ];
-    expect((await issueUrgencyPrescription("en3", items)).version).toBe(1);
-    expect(lastCall()).toEqual({ url: "/urgency/encounters/en3/prescriptions", method: "POST", body: { items } });
+    expect((await issueUrgencyPrescription("en3", items, null)).version).toBe(1);
+    expect(lastCall()).toEqual({ url: "/urgency/encounters/en3/prescriptions", method: "POST", body: { items, expected_active_id: null } });
+    await issueUrgencyPrescription("en3", items, "pr1");
+    expect(lastCall()).toEqual({ url: "/urgency/encounters/en3/prescriptions", method: "POST", body: { items, expected_active_id: "pr1" } });
     respond({ prescription: prescription({ status: "suspended" }) });
     expect((await suspendUrgencyPrescription("pr1", "reação alérgica após a dose")).status).toBe("suspended");
     expect(lastCall()).toEqual({ url: "/urgency/prescriptions/pr1/suspend", method: "POST", body: { reason: "reação alérgica após a dose" } });
@@ -103,7 +105,7 @@ describe("cliente da urgência: observação, prescrição e checagem (módulo 3
 
   it("recusa do api vira ApiError com o código e os problemas", async () => {
     failNext(422, { error: "invalid_request", path: "items.0.dose", problems: [ { path: "items.0.dose", error: "invalid_request" } ] });
-    await expect(issueUrgencyPrescription("en3", [])).rejects.toBeInstanceOf(ApiError);
+    await expect(issueUrgencyPrescription("en3", [], null)).rejects.toBeInstanceOf(ApiError);
   });
 
   it("faltas da UPA: local e estado na URL, cursor, limite; nota no corpo", async () => {

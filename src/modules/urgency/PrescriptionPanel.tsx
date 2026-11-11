@@ -151,7 +151,7 @@ export function PrescriptionPanel({ encounter, unit, consultationStarted, onChan
     setShown([]);
     try {
       const alter = openedFrom !== null;
-      const issued = await issueUrgencyPrescription(encounter.id, prescriptionBody(final));
+      const issued = await issueUrgencyPrescription(encounter.id, prescriptionBody(final), openedFrom);
       setOverride({ kind: "issued", prescription: issued });
       setRows(null);
       setNotice(alter ? revisedNotice(issued.version) : issuedNotice(issued.version));
@@ -159,6 +159,11 @@ export function PrescriptionPanel({ encounter, unit, consultationStarted, onChan
     } catch (err) {
       const code = errorCode(err);
       if (code === "encounter_closed" && onEncounterClosed) { closed(); return; }
+      if (code === "prescription_changed") {
+        // Outra pessoa mudou a ativa: fecha o formulário, mostra a frase e relê uma vez.
+        setRows(null); setShown([]); setNotice(URGENCY_ERRORS.prescription_changed); onChanged();
+        return;
+      }
       setShown(urgencyRefusals(err).map((r) => ({ path: r.path, text: r.text })));
       if (code === "prescription_not_active" || code === "encounter_closed" || code === "consultation_required") onChanged();
     } finally {

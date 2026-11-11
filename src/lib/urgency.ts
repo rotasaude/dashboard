@@ -217,6 +217,7 @@ export const URGENCY_ERRORS: Record<string, string> = {
   not_in_observation: "este paciente já não está em observação",
   consultation_required: "inicie a consulta de urgência antes de prescrever",
   catalog_item_invalid: "este medicamento saiu do catálogo — escolha outro",
+  prescription_changed: "a prescrição foi alterada por outra pessoa enquanto o formulário estava aberto — confira a versão ativa",
   prescription_not_active: "esta prescrição não é mais a ativa — a tela foi atualizada",
   slot_invalid: "este horário não está no aprazamento — a tela foi atualizada",
   slot_taken: "este horário já foi checado — a tela foi atualizada",

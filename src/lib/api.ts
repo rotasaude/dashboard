@@ -6931,9 +6931,11 @@ export async function searchUrgencyMedication(query: string): Promise<UrgencyMed
   const b = await jsonFetch<{ items?: UrgencyMedicationHit[] }>(urgencyPath("medication_search"), urgencyWrite("POST", { query }));
   return b.items ?? [];
 }
-export async function issueUrgencyPrescription(encounterId: string, items: UrgencyPrescriptionItemInput[]): Promise<UrgencyPrescription> {
+// `expectedActiveId` (Q16) vai SEMPRE no corpo: null declara uma prescrição nova (sem versão ativa), um id declara a alteração
+// dessa versão; se a ativa mudou, o api recusa com 409 prescription_changed e nada é gravado.
+export async function issueUrgencyPrescription(encounterId: string, items: UrgencyPrescriptionItemInput[], expectedActiveId: string | null): Promise<UrgencyPrescription> {
   return (await jsonFetch<{ prescription: UrgencyPrescription }>(
-    urgencyPath("encounters", encounterId, "prescriptions"), urgencyWrite("POST", { items }))).prescription;
+    urgencyPath("encounters", encounterId, "prescriptions"), urgencyWrite("POST", { items, expected_active_id: expectedActiveId }))).prescription;
 }
 export async function suspendUrgencyPrescription(prescriptionId: string, reason: string): Promise<UrgencyPrescription> {
   return (await jsonFetch<{ prescription: UrgencyPrescription }>(
