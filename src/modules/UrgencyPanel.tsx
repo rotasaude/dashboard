@@ -42,6 +42,12 @@ export function minutesText(t: UrgencyTime): string {
   return t === null ? "—" : `${t} min`;
 }
 
+// Horas da observação (1 casa, vírgula): "lt5" vira "menos de 5" e nulo "—".
+export function hoursText(t: UrgencyTime): string {
+  if (t === "lt5") return SMALL_COUNT;
+  return t === null ? "—" : `${String(t).replace(".", ",")} h`;
+}
+
 // "over de count"; o % só com os dois em número e count > 0 (com "lt5", a conta revelaria o número escondido).
 export function overText(o: UrgencyOverMaxWait | undefined): string {
   if (!o || o.count === 0) return "—";
@@ -161,6 +167,15 @@ function DashboardView({ data, scope }: { data: UrgencyDashboard; scope: string 
           hint={`encerrados no mês: ${countLabel(data.stay.count)}`} />
         <StatTile label="Permanência · p90" value={minutesText(data.stay.p90_minutes)} />
       </section>
+      {data.observation && (
+        <section aria-label="Observação" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 12 }}>
+          <StatTile label="Encontros com observação" value={countLabel(data.observation.stays)} />
+          <StatTile label="Observação · mais de 24 h" value={countLabel(data.observation.over_24h)} />
+          <StatTile label="Observação · mediana" value={hoursText(data.observation.median_hours)} />
+          <StatTile label="Observação · p90" value={hoursText(data.observation.p90_hours)} />
+          <StatTile label="Leito-hora no mês" value={hoursText(data.observation.bed_hours)} />
+        </section>
+      )}
       <p style={muted}>{PANEL_SMALL_NOTE}</p>
       <p style={muted}>{PANEL_SCOPE_NOTE}</p>
       <Panel title="Tempos por cor" sub="cor da 1ª classificação na porta; cor vigente na chamada ao médico">

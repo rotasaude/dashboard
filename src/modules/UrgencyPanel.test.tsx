@@ -100,4 +100,38 @@ describe("painel da urgência", () => {
     fireEvent.change(screen.getByLabelText("Mês"), { target: { value: "2026-09" } });
     expect((await screen.findByRole("alert")).textContent).toBe("escolha o mês");
   });
+
+  describe("observação (32b)", () => {
+    const obs = (o: NonNullable<api.UrgencyDashboard["observation"]>) =>
+      vi.mocked(api.getUrgencyDashboard).mockResolvedValue(dashboard({ observation: o }));
+
+    it("mostra o bloco com números de uma casa e vírgula", async () => {
+      obs({ stays: 12, over_24h: 3, median_hours: 9.5, p90_hours: 22, bed_hours: 140.3 });
+      mount();
+      const block = await screen.findByRole("region", { name: "Observação" });
+      expect(within(block).getByText("12")).not.toBeNull();
+      expect(within(block).getByText("3")).not.toBeNull();
+      expect(within(block).getByText("9,5 h")).not.toBeNull();
+      expect(within(block).getByText("22 h")).not.toBeNull();
+      expect(within(block).getByText("140,3 h")).not.toBeNull();
+    });
+    it("de 1 a 4 estadias o bloco inteiro é 'menos de 5'", async () => {
+      obs({ stays: "lt5", over_24h: "lt5", median_hours: "lt5", p90_hours: "lt5", bed_hours: "lt5" });
+      mount();
+      const block = await screen.findByRole("region", { name: "Observação" });
+      expect(within(block).getAllByText("menos de 5").length).toBe(5);
+    });
+    it("sem estadias: contagens 0 e o resto em traço", async () => {
+      obs({ stays: 0, over_24h: 0, median_hours: null, p90_hours: null, bed_hours: null });
+      mount();
+      const block = await screen.findByRole("region", { name: "Observação" });
+      expect(within(block).getAllByText("0").length).toBe(2);
+      expect(within(block).getAllByText("—").length).toBe(3);
+    });
+    it("sem o bloco (api do 32a), o painel segue igual", async () => {
+      mount();
+      await screen.findByRole("table", { name: "Tempos por cor" });
+      expect(screen.queryByRole("region", { name: "Observação" })).toBeNull();
+    });
+  });
 });
