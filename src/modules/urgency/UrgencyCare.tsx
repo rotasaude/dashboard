@@ -4,15 +4,17 @@
 // desfecho da urgência. Finalizar a consulta não encerra o atendimento: o desfecho encerra, e então o painel fecha, a mesa relê a
 // fila e mostra o aviso (sem texto clínico). O detalhe é lido pelo id do encontro (nunca vai na URL) e sai do cache ao fechar.
 // Cada leitura do detalhe grava trilha: lido ao abrir, ao finalizar e quando o api recusa o desfecho por estado desatualizado.
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getUrgencyEncounter, type HealthUnit, type UrgencyInCareRow } from "../../lib/api";
 import { NOMINAL_QUERY, URGENCY_DETAIL_KEY, URGENCY_ERRORS, urgencyError } from "../../lib/urgency";
 import { useReveal } from "../../lib/useReveal";
+import { ActionButton } from "../../components/ActionButton";
 import { Panel } from "../../components/Panel";
 import { ConsultationWorkspace } from "../consultation/ConsultationWorkspace";
 import { EncounterSummary } from "./EncounterSummary";
 import { OutcomeForm } from "./OutcomeForm";
+import { MedicationPanel } from "./MedicationPanel";
 import { PrescriptionPanel } from "./PrescriptionPanel";
 
 export const FINALIZED_NOTICE = "Consulta finalizada. Registre o desfecho da urgência.";
@@ -35,6 +37,14 @@ export function UrgencyCare({ row, unit, units, onClosed, onGoToSecurity }: Urge
   // Finalizada nesta tela: o desfecho já libera os tipos que esperam a consulta, mesmo antes de o detalhe relido chegar.
   const [ finalizedHere, setFinalizedHere ] = useState(false);
   const encounter = detail.data;
+  // A medicação lê o aprazamento (grava trilha): só quando a pessoa abre.
+  const [ medicationOpen, setMedicationOpen ] = useState(false);
+  const medicationButton = useRef<HTMLSpanElement>(null);
+  const wasOpen = useRef(false);
+  useEffect(() => {
+    if (wasOpen.current && !medicationOpen) medicationButton.current?.querySelector("button")?.focus();
+    wasOpen.current = medicationOpen;
+  }, [ medicationOpen ]);
   const target = encounter && (finalizedHere ? { ...encounter, consultation_status: "finalized" as const } : encounter);
 
   return (
@@ -54,6 +64,12 @@ export function UrgencyCare({ row, unit, units, onClosed, onGoToSecurity }: Urge
               onEncounterClosed={() => onClosed(URGENCY_ERRORS.encounter_closed)}
               consultationStarted={target.consultation_id !== null && target.consultation_status !== "discarded"} />
           )}
+          {target?.prescription?.status === "active" && (medicationOpen ? (
+            <MedicationPanel target={{ encounterId: row.encounter_id, ticket: row.ticket, patientName: row.patient.name ?? "sem nome" }}
+              onClose={() => setMedicationOpen(false)} onEncounterClosed={() => onClosed(URGENCY_ERRORS.encounter_closed)} />
+          ) : (
+            <span ref={medicationButton}><ActionButton variant="secondary" onClick={() => setMedicationOpen(true)}>Abrir medicação</ActionButton></span>
+          ))}
           {target && (
             <OutcomeForm encounter={target} doctor onRecorded={(_e, notice) => onClosed(notice)}
               onStale={() => void detail.refetch()} onEncounterClosed={() => onClosed(URGENCY_ERRORS.encounter_closed)} />

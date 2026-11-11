@@ -42,7 +42,8 @@ import { OutcomeForm, type OutcomeTarget } from "./OutcomeForm";
 import { PROVISIONAL_KEY, ProvisionalEncounters, arrivalLabel } from "./ProvisionalEncounters";
 import { UrgencyCare } from "./UrgencyCare";
 import { TicketCard } from "./TicketCard";
-import { ObservationMap, type ObservationMapHandle } from "./ObservationMap";
+import { MedicationPanel } from "./MedicationPanel";
+import { ObservationMap, type MedicationTarget, type ObservationMapHandle } from "./ObservationMap";
 import { UrgencyQueue, type QueueActions, type UrgencyQueueHandle } from "./UrgencyQueue";
 
 export const NO_UPA_ROLE = "seu papel não atua nesta UPA";
@@ -188,6 +189,8 @@ export function UrgencyDesk({ unit, user, links, linksLoading = false, onGoToSec
   const [ care, setCare ] = useState<UrgencyInCareRow | null>(null);
   const [ leaving, setLeaving ] = useState<Leaving | null>(null);
   const [ identifying, setIdentifying ] = useState<Identifying | null>(null);
+  // O painel de medicação (F-32.8): um por vez, aberto pelo mapa ou pela fila; lê só o aprazamento, nunca o detalhe do encontro.
+  const [ medication, setMedication ] = useState<MedicationTarget | null>(null);
 
   // O aviso some sozinho (timer limpo ao desmontar ou ao trocar o aviso).
   useEffect(() => {
@@ -257,6 +260,10 @@ export function UrgencyDesk({ unit, user, links, linksLoading = false, onGoToSec
     // O desfecho fecha a estadia no api (contrato §4): o mapa relê junto com a fila.
     if (notice) { setNotice(notice); queueRef.current?.refresh(); mapRef.current?.refresh(); }
   };
+  const closeMedication = (notice?: string) => {
+    setMedication(null);
+    if (notice) { setNotice(notice); queueRef.current?.refresh(); mapRef.current?.refresh(); }
+  };
   const closeLeaving = (notice?: string) => {
     setLeaving(null);
     if (notice) { setNotice(notice); queueRef.current?.refresh(); mapRef.current?.refresh(); }
@@ -299,6 +306,9 @@ export function UrgencyDesk({ unit, user, links, linksLoading = false, onGoToSec
         return `${label(row.ticket)} chamada para o atendimento${atLocation(location.nameOf(loc))}`;
       }),
       onOpenCare: (row) => openCare(row)
+    } satisfies QueueActions : {}),
+    ...(roles.medication ? {
+      onMedication: (row) => { setNotice(null); setMedication({ encounterId: row.encounter_id, ticket: row.ticket, patientName: row.patient.name ?? "sem nome" }); }
     } satisfies QueueActions : {}),
     ...(roles.outcomeDesk ? {
       // A linha em atendimento traz o estado da consulta (Q30 e consultation_in_progress); a de espera ainda não tem consulta.
@@ -364,13 +374,18 @@ export function UrgencyDesk({ unit, user, links, linksLoading = false, onGoToSec
       {care && (
         <UrgencyCare key={care.encounter_id} row={care} unit={unit} units={[ unit ]} onClosed={closeCare} onGoToSecurity={onGoToSecurity} />
       )}
+      {medication && (
+        <MedicationPanel key={medication.encounterId} target={medication} onClose={() => closeMedication()}
+          onEncounterClosed={() => closeMedication(URGENCY_ERRORS.encounter_closed)} />
+      )}
       {leaving && <LeavingPanel key={leaving.target.id} leaving={leaving} doctor={false} onClosed={closeLeaving} />}
       {identifying && (
         <IdentifyPanel key={identifying.encounterId} target={identifying} onIdentified={closeIdentify} onClose={() => closeIdentify()} />
       )}
       {callError && <p role="alert" style={{ margin: 0, fontSize: 12.5, color: "var(--down)" }}>{callError}</p>}
       <UrgencyQueue ref={queueRef} unit={unit} roles={roles} actions={actions} toolbar={toolbar} />
-      <ObservationMap ref={mapRef} unit={unit} roles={roles} />
+      <ObservationMap ref={mapRef} unit={unit} roles={roles}
+        onMedication={roles.medication ? (t) => { setNotice(null); setMedication(t); } : undefined} />
       {roles.identify && (
         <ProvisionalEncounters unit={unit}
           onIdentify={(item) => openIdentify({ encounterId: item.encounter_id, label: arrivalLabel(item), from: "list" })} />

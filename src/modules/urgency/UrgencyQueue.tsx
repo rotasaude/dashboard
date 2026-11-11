@@ -37,6 +37,8 @@ export interface QueueActions {
   onIdentify?(row: UrgencyWaitingRow): void;
   // Q10: a saída de balcão vale em qualquer estado antes do fechamento (também em quem já está em atendimento).
   onLeft?(row: UrgencyWaitingRow | UrgencyInCareRow): void;
+  // 32b F-32.8: aprazamento e checagem de quem está em atendimento (enfermagem, técnico 3222 e médico).
+  onMedication?(row: UrgencyInCareRow): void;
 }
 export interface UrgencyQueueHandle { refresh(): void }
 // O técnico 3222 lê a fila (api-shapes D2/Q2), sem nenhuma ação dela.
@@ -141,7 +143,7 @@ export const UrgencyQueue = forwardRef<UrgencyQueueHandle, UrgencyQueueProps>(fu
   const awaiting = (data?.awaiting_classification ?? []).map(safeWaiting);
   const byColor = (data?.by_color ?? []).map(safeColor);
   const inCare = (data?.in_care ?? []).map(safeInCare);
-  const { onClassify, onCallClassification, onCallCare, onRecall, onOpenCare, onIdentify, onLeft } = actions;
+  const { onClassify, onCallClassification, onCallCare, onRecall, onOpenCare, onIdentify, onLeft, onMedication } = actions;
   // A13: a nova chamada repete o tipo da última; chama de novo quem faz aquele tipo (nunca a recepção).
   const canRecall = (c: UrgencyLastCall | null) => !!c && ((c.kind === "classification" && roles.nurse) || (c.kind === "care" && roles.doctor));
   const recall = (r: UrgencyWaitingRow): Btn => onRecall && canRecall(r.last_call) && { label: "Chamar de novo", onClick: () => onRecall({ attendance_id: r.attendance_id, ticket: r.ticket }) };
@@ -184,6 +186,7 @@ export const UrgencyQueue = forwardRef<UrgencyQueueHandle, UrgencyQueueProps>(fu
     { label: "Observação", w: "1.2fr", render: observationCell },
     { label: "", w: "auto", align: "right", card: "actions", render: (r) => rowButtons(who(r), [
       onOpenCare && roles.doctor && { label: "Atender", onClick: () => onOpenCare(r) },
+      onMedication && (roles.nurse || roles.technician === true || roles.doctor) && { label: "Medicação", onClick: () => onMedication(r) },
       recall(r), identify(r), onLeft && { label: "Saiu sem atendimento", onClick: () => onLeft(r) }
     ]) }
   ];

@@ -61,7 +61,7 @@ function isKept(r: Row): boolean {
 
 const LOCAL = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
 // "2026-11-10T15:00" (hora do navegador) → ISO com o fuso do navegador.
-function withOffset(local: string): string {
+export function withOffset(local: string): string {
   const t = local.trim();
   if (!LOCAL.test(t)) return t;
   const d = new Date(t);

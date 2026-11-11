@@ -9,7 +9,7 @@ vi.mock("../../lib/api", async (orig) => ({
   fetchCurrentSession: vi.fn(), getUrgencyQueue: vi.fn(), getUrgencyObservation: vi.fn(), listCallLocations: vi.fn(), callAttendance: vi.fn(), callNext: vi.fn(),
   getUrgencyEncounter: vi.fn(), recordUrgencyOutcome: vi.fn(), getAttendanceRecord: vi.fn(), getConsultationOptions: vi.fn(),
   startConsultation: vi.fn(), saveConsultationDraft: vi.fn(), finalizeConsultation: vi.fn(), getConsultation: vi.fn(),
-  getConsultationProblems: vi.fn()
+  getConsultationProblems: vi.fn(), getMedicationSchedule: vi.fn()
 }));
 vi.mock("../consultation/PatientPanel", () => ({ PatientPanel: () => <span>prontuário (dublê)</span> }));
 vi.mock("../consultation/ConsultationView", () => ({
@@ -19,6 +19,7 @@ vi.mock("../billing/ProceduresPanel", () => ({ ProceduresPanel: () => <section a
 
 import * as api from "../../lib/api";
 import { ApiError, type UrgencyEncounter, type UrgencyInCareRow } from "../../lib/api";
+import { observedEncounter, schedule as scheduleFixture } from "../../test/urgencyObservationFixtures";
 import { renderWithProviders } from "../../test/campaignFixtures";
 import { consultation as consultationFixture, finalized, options as optionsFixture, problem, record as recordFixture } from "../../test/consultationFixtures";
 import {
@@ -89,6 +90,22 @@ describe("atendimento médico", () => {
     fireEvent.click(screen.getByRole("button", { name: "Finalizar consulta" }));
     // O select "Desfecho" do 13 (OutcomeFields) não aparece na finalização.
     expect(within(screen.getByRole("region", { name: "Finalizar consulta" })).queryByLabelText("Desfecho")).toBeNull();
+  });
+
+  it("com prescrição ativa, a medicação abre sob demanda: o aprazamento só é lido no clique", async () => {
+    vi.mocked(api.getMedicationSchedule).mockReset().mockResolvedValue(scheduleFixture());
+    await mountCare(inCareRow({ consultation_id: null }), observedEncounter());
+    const open = await screen.findByRole("button", { name: "Abrir medicação" });
+    expect(api.getMedicationSchedule).not.toHaveBeenCalled();
+    fireEvent.click(open);
+    expect(await screen.findByRole("heading", { name: "Medicação — U-038" })).not.toBeNull();
+    await waitFor(() => expect(vi.mocked(api.getMedicationSchedule).mock.calls).toEqual([ [ "en3" ] ]));
+  });
+
+  it("sem prescrição ativa, não há botão de medicação no atendimento", async () => {
+    await mountCare(inCareRow({ consultation_id: null }), observedEncounter({ prescription: null }));
+    await screen.findByRole("region", { name: "Prescrição da urgência" });
+    expect(screen.queryByRole("button", { name: "Abrir medicação" })).toBeNull();
   });
 
   it("CBO sem urgência: a frase no lugar do botão, e nenhum botão de consulta comum", async () => {
