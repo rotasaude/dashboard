@@ -6,6 +6,7 @@ import { useState, type CSSProperties, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { searchUrgencyMedication, URGENCY_DOSE_UNITS, type UrgencyDoseUnit, type UrgencyMedicationHit } from "../../lib/api";
 import { ROUTES, ROUTE_LABEL } from "../../lib/clinicalDocuments";
+import { fmtHourMinute } from "../../lib/format";
 import { urgencyError } from "../../lib/urgency";
 import type { ItemDraft } from "../../lib/urgencyObservation";
 import { useDebouncedValue } from "../../lib/useDebouncedValue";
@@ -39,7 +40,7 @@ function MedicationPicker({ label, unitId, onPick }: { label: string; unitId: st
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
       <label style={labelStyle}>
         {label}
-        <input value={text} style={inputStyle} onChange={(e) => setText(e.target.value)} />
+        <input value={text} maxLength={60} style={inputStyle} onChange={(e) => setText(e.target.value)} />
       </label>
       {typed.length > 0 && typed.length < MIN_CHARS && <small style={hint}>digite pelo menos {MIN_CHARS} caracteres</small>}
       {show && query.isPending && <small className="mono" style={hint}>buscando…</small>}
@@ -68,9 +69,11 @@ export interface PrescriptionItemFieldsProps {
   onRemove?(): void;
   problems: Problem[];
   unitId: string;
+  // Item mantido da ativa: a primeira dose que vai ao api ("" = agora). Só para mostrar; o envio recalcula.
+  keptAt?: string;
 }
 
-export function PrescriptionItemFields({ index, draft, onChange, onRemove, problems, unitId }: PrescriptionItemFieldsProps) {
+export function PrescriptionItemFields({ index, draft, onChange, onRemove, problems, unitId, keptAt }: PrescriptionItemFieldsProps) {
   const n = index + 1;
   const field = (label: string, input: ReactNode) => <label style={labelStyle}>{label}{input}</label>;
   const marks = controlledText(draft.item?.controlled_list);
@@ -117,9 +120,15 @@ export function PrescriptionItemFields({ index, draft, onChange, onRemove, probl
         {draft.kind === "if_needed" && field(`Máximo por dia do item ${n}`,
           <input value={draft.maxPerDay} inputMode="numeric" style={{ ...inputStyle, maxWidth: 110 }} onChange={(e) => onChange({ maxPerDay: e.target.value })} />)}
       </div>
-      {field(`Primeira dose (opcional) do item ${n}`,
-        <input type="datetime-local" value={toLocalInput(draft.firstDoseAt)} style={{ ...inputStyle, maxWidth: 240 }} onChange={(e) => onChange({ firstDoseAt: e.target.value })} />)}
-      <small style={hint}>Vazio = agora. Vai de 1 hora atrás até 24 horas à frente.</small>
+      {keptAt === undefined ? (
+        <>
+          {field(`Primeira dose (opcional) do item ${n}`,
+            <input type="datetime-local" value={toLocalInput(draft.firstDoseAt)} style={{ ...inputStyle, maxWidth: 240 }} onChange={(e) => onChange({ firstDoseAt: e.target.value })} />)}
+          <small style={hint}>Vazio = agora. Vai de 1 hora atrás até 24 horas à frente.</small>
+        </>
+      ) : (
+        <small style={hint}>{keptAt === "" ? "Primeira dose: agora." : `Mantém a grade: próxima ${fmtHourMinute(keptAt)}.`}</small>
+      )}
       {field(`Orientação (opcional) do item ${n}`,
         <textarea value={draft.instructions} rows={2} maxLength={500} style={inputStyle} onChange={(e) => onChange({ instructions: e.target.value })} />)}
       {field(`Quantidade do estoque por dose do item ${n}`,

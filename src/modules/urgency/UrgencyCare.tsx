@@ -51,6 +51,7 @@ export function UrgencyCare({ row, unit, units, onClosed, onGoToSecurity }: Urge
           {/* A prescrição interna (32b): a chave só vem com acesso clínico (Q9); sem ela, a tela é a do 32a. */}
           {target && target.prescription !== undefined && (
             <PrescriptionPanel encounter={target} unit={unit} onChanged={() => void detail.refetch()}
+              onEncounterClosed={() => onClosed(URGENCY_ERRORS.encounter_closed)}
               consultationStarted={target.consultation_id !== null && target.consultation_status !== "discarded"} />
           )}
           {target && (

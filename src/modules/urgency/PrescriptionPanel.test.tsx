@@ -28,15 +28,17 @@ beforeEach(() => {
   vi.mocked(api.suspendUrgencyPrescription).mockReset();
 });
 
-function mountPanel(encounter: UrgencyEncounter, o: { consultationStarted?: boolean; onChanged?: () => void } = {}) {
+function mountPanel(encounter: UrgencyEncounter, o: { consultationStarted?: boolean; onChanged?: () => void; onEncounterClosed?: () => void } = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const onChanged = o.onChanged ?? vi.fn();
-  render(
+  const tree = (e: UrgencyEncounter) => (
     <QueryClientProvider client={client}>
-      <PrescriptionPanel encounter={encounter} unit={UPA} consultationStarted={o.consultationStarted ?? true} onChanged={onChanged} />
+      <PrescriptionPanel encounter={e} unit={UPA} consultationStarted={o.consultationStarted ?? true} onChanged={onChanged}
+        onEncounterClosed={o.onEncounterClosed} />
     </QueryClientProvider>
   );
-  return { onChanged };
+  const view = render(tree(encounter));
+  return { onChanged, rerender: (e: UrgencyEncounter) => view.rerender(tree(e)), unmount: view.unmount };
 }
 async function pickMedication(label: string, term: string, resultName: string) {
   fireEvent.change(screen.getByLabelText(label), { target: { value: term } });
@@ -224,5 +226,135 @@ describe("PrescriptionPanel", () => {
     fireEvent.click(screen.getByRole("radio", { name: "Se necessário (item 1)" }));
     expect(screen.getByLabelText("Máximo por dia do item 1")).not.toBeNull();
     expect(screen.queryByLabelText("Intervalo em horas do item 1")).toBeNull();
+  });
+
+  async function fillNew() {
+    await pickMedication("Medicamento do item 1", "dipi", DIPIRONA);
+    fireEvent.change(screen.getByLabelText("Dose do item 1"), { target: { value: "1" } });
+    fireEvent.change(screen.getByLabelText("Unidade da dose do item 1"), { target: { value: "g" } });
+  }
+  async function suspendActive() {
+    fireEvent.click(screen.getByRole("button", { name: "Suspender prescrição" }));
+    fireEvent.change(screen.getByLabelText("Motivo da suspensão"), { target: { value: "reação alérgica leve" } });
+    fireEvent.click(screen.getByRole("button", { name: "Suspender" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+    await screen.findByText("Prescrição suspensa.");
+  }
+
+  it("depois de suspender, prescrever de novo mostra o aviso de prescrição nova, não de substituição (I1)", async () => {
+    vi.mocked(api.searchUrgencyMedication).mockResolvedValue([ hit() ]);
+    vi.mocked(api.suspendUrgencyPrescription).mockResolvedValue(prescription({ status: "suspended" }));
+    vi.mocked(api.issueUrgencyPrescription).mockResolvedValue(prescription({ id: "pr2", version: 2, supersedes_id: "pr1" }));
+    mountPanel(observedEncounter());
+    await suspendActive();
+    expect(screen.getByText("Sem prescrição ativa")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Prescrever" }));
+    await fillNew();
+    fireEvent.click(screen.getByRole("button", { name: "Emitir prescrição" }));
+    expect(await screen.findByText("Prescrição emitida (versão 2).")).not.toBeNull();
+    expect(screen.queryByText(/ficou substituída/)).toBeNull();
+  });
+
+  it("até o detalhe alcançar, a tela mostra a versão emitida e 'Alterar' abre os itens dela (I2)", async () => {
+    vi.mocked(api.issueUrgencyPrescription).mockResolvedValue(prescription({ id: "pr2", version: 2, supersedes_id: "pr1",
+      items: [ prescriptionItem({ id: "pi9", dose: "7" }) ] }));
+    const { rerender } = mountPanel(observedEncounter());
+    fireEvent.click(screen.getByRole("button", { name: "Alterar prescrição" }));
+    fireEvent.click(screen.getByRole("button", { name: "Emitir versão 2" }));
+    await screen.findByText("Versão 2 ativa; a versão 1 ficou substituída.");
+    expect(screen.getByText(/Versão 2 ativa · prescrita/)).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Alterar prescrição" }));
+    expect((screen.getByLabelText("Dose do item 1") as HTMLInputElement).value).toBe("7");
+    expect(screen.getByRole("button", { name: "Emitir versão 3" })).not.toBeNull();
+    // O detalhe alcança: o painel passa a ler dele, sem fechar o formulário.
+    rerender(observedEncounter({ prescription: prescription({ id: "pr2", version: 2, items: [ prescriptionItem({ id: "pi9", dose: "7" }) ] }) }));
+    expect(screen.getByRole("button", { name: "Emitir versão 3" })).not.toBeNull();
+  });
+
+  it("suspensa, a tela mostra 'Sem prescrição ativa' mesmo com o detalhe velho (I2)", async () => {
+    vi.mocked(api.suspendUrgencyPrescription).mockResolvedValue(prescription({ status: "suspended" }));
+    mountPanel(observedEncounter());
+    await suspendActive();
+    expect(screen.getByText("Sem prescrição ativa")).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Alterar prescrição" })).toBeNull();
+  });
+
+  it("outro fluxo muda a ativa com o formulário aberto: fecha com o aviso (I2)", () => {
+    const { rerender } = mountPanel(observedEncounter());
+    fireEvent.click(screen.getByRole("button", { name: "Alterar prescrição" }));
+    expect(screen.getByLabelText("Dose do item 1")).not.toBeNull();
+    rerender(observedEncounter({ prescription: prescription({ id: "pr5", version: 5 }) }));
+    expect(screen.queryByLabelText("Dose do item 1")).toBeNull();
+    expect(screen.getByText("a prescrição mudou enquanto o formulário estava aberto — confira a versão ativa")).not.toBeNull();
+  });
+
+  it("item mantido mostra a primeira dose que vai ao api; trocar o medicamento a solta da grade (M1, M2)", async () => {
+    vi.useFakeTimers({ toFake: [ "Date" ] });
+    vi.setSystemTime(new Date("2026-11-10T14:20:00-03:00"));
+    vi.mocked(api.searchUrgencyMedication).mockResolvedValue([ hit({ catalog_item_id: "cat-outro", name: "Cetoprofeno", strength: null, dosage_form: null }) ]);
+    vi.mocked(api.issueUrgencyPrescription).mockResolvedValue(prescription({ id: "pr2", version: 2 }));
+    mountPanel(observedEncounter());
+    fireEvent.click(screen.getByRole("button", { name: "Alterar prescrição" }));
+    expect(screen.getByText(/Mantém a grade: próxima 14:00/)).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Trocar o medicamento do item 1" }));
+    expect(screen.queryByText(/Mantém a grade/)).toBeNull();
+    await pickMedication("Medicamento do item 1", "ceto", "Cetoprofeno");
+    fireEvent.click(screen.getByRole("button", { name: "Emitir versão 2" }));
+    await waitFor(() => expect(issueCalls()).toHaveLength(1));
+    expect(issueCalls()[0][1][0]).toMatchObject({ catalog_item_id: "cat-outro" });
+    expect(issueCalls()[0][1][0]).not.toHaveProperty("first_dose_at");
+  });
+
+  it("encounter_closed na emissão e na suspensão chama onEncounterClosed; consultation_required relê (M3)", async () => {
+    vi.mocked(api.issueUrgencyPrescription).mockRejectedValueOnce(new ApiError(409, { error: "encounter_closed" }, "x"));
+    vi.mocked(api.suspendUrgencyPrescription).mockRejectedValueOnce(new ApiError(409, { error: "encounter_closed" }, "x"));
+    const onEncounterClosed = vi.fn();
+    mountPanel(observedEncounter(), { onEncounterClosed });
+    fireEvent.click(screen.getByRole("button", { name: "Alterar prescrição" }));
+    fireEvent.click(screen.getByRole("button", { name: "Emitir versão 2" }));
+    await waitFor(() => expect(onEncounterClosed).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Suspender prescrição" }));
+    fireEvent.change(screen.getByLabelText("Motivo da suspensão"), { target: { value: "reação alérgica leve" } });
+    fireEvent.click(screen.getByRole("button", { name: "Suspender" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+    await waitFor(() => expect(onEncounterClosed).toHaveBeenCalledTimes(2));
+  });
+
+  it("consultation_required relê o detalhe (M3)", async () => {
+    vi.mocked(api.issueUrgencyPrescription).mockRejectedValue(new ApiError(422, { error: "consultation_required" }, "x"));
+    const { onChanged } = mountPanel(observedEncounter());
+    fireEvent.click(screen.getByRole("button", { name: "Alterar prescrição" }));
+    fireEvent.click(screen.getByRole("button", { name: "Emitir versão 2" }));
+    await waitFor(() => expect(onChanged).toHaveBeenCalled());
+  });
+
+  it("depois de desmontado, nenhuma releitura dispara (M4)", async () => {
+    let reject!: (e: unknown) => void;
+    vi.mocked(api.suspendUrgencyPrescription).mockReturnValue(new Promise((_r, rej) => { reject = rej; }));
+    const { onChanged, unmount } = mountPanel(observedEncounter());
+    fireEvent.click(screen.getByRole("button", { name: "Suspender prescrição" }));
+    fireEvent.change(screen.getByLabelText("Motivo da suspensão"), { target: { value: "reação alérgica leve" } });
+    fireEvent.click(screen.getByRole("button", { name: "Suspender" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+    unmount();
+    reject(new ApiError(422, { error: "prescription_not_active" }, "x"));
+    await Promise.resolve(); await Promise.resolve();
+    expect(onChanged).not.toHaveBeenCalled();
+  });
+
+  it("a busca limita o termo a 60 caracteres (M5) e o foco vai ao primeiro campo e ao aviso (M6)", async () => {
+    vi.mocked(api.suspendUrgencyPrescription).mockResolvedValue(prescription({ status: "suspended" }));
+    mountPanel(observedEncounter({ prescription: null }));
+    fireEvent.click(screen.getByRole("button", { name: "Prescrever" }));
+    const search = screen.getByLabelText("Medicamento do item 1") as HTMLInputElement;
+    expect(search.maxLength).toBe(60);
+    expect(document.activeElement).toBe(search);
+    fireEvent.click(screen.getByRole("button", { name: "Adicionar item" }));
+    expect(document.activeElement).toBe(screen.getByLabelText("Medicamento do item 2"));
+    cleanup();
+    mountPanel(observedEncounter());
+    await suspendActive();
+    expect(document.activeElement).toBe(screen.getByText("Prescrição suspensa."));
   });
 });

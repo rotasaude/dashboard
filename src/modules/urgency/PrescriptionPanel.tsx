@@ -6,7 +6,7 @@
 // - A primeira dose digitada vai com o fuso do navegador (nunca sem offset). Controlado de qualquer lista é aceito (P1).
 // - Suspender pede o motivo (10 a 500) e a confirmação; a suspensa não volta, prescreve-se de novo.
 // - Nada clínico (medicamento, motivo, termo da busca) em URL, console ou armazenamento do navegador.
-import { useRef, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import {
   errorCode, issueUrgencyPrescription, suspendUrgencyPrescription, type HealthUnit, type UrgencyEncounter, type UrgencyPrescription,
   type UrgencyPrescriptionItem
@@ -30,6 +30,7 @@ export const NO_ACTIVE_PRESCRIPTION = "Sem prescrição ativa";
 export const issuedNotice = (version: number): string => `Prescrição emitida (versão ${version}).`;
 export const revisedNotice = (version: number): string => `Versão ${version} ativa; a versão ${version - 1} ficou substituída.`;
 export const SUSPENDED_NOTICE = "Prescrição suspensa.";
+export const CHANGED_WHILE_OPEN = "a prescrição mudou enquanto o formulário estava aberto — confira a versão ativa";
 export const UNNAMED_PRESCRIBER = "profissional sem nome registrado";
 
 export interface PrescriptionPanelProps {
@@ -38,11 +39,25 @@ export interface PrescriptionPanelProps {
   consultationStarted: boolean;
   // Relê o detalhe do encontro (a mudança vale também quando o api diz que a ativa mudou).
   onChanged(): void;
+  // 409 encounter_closed: outra pessoa encerrou; quem monta fecha o painel e relê a fila (como no desfecho).
+  onEncounterClosed?(): void;
   // Só o médico prescreve; o painel de atendimento já é do médico (padrão true).
   doctor?: boolean;
 }
 
 type Row = { key: number; draft: ItemDraft; original: UrgencyPrescriptionItem | null };
+// O que a tela mostra até o detalhe relido alcançar a resposta: a emitida, ou "suspensa" (nenhuma ativa).
+type Shown = { kind: "issued"; prescription: UrgencyPrescription } | { kind: "suspended"; id: string };
+
+// Item mantido: o mesmo medicamento e a mesma frequência da ativa, com a primeira dose original (a grade).
+function isKept(r: Row): boolean {
+  const o = r.original;
+  if (!o) return false;
+  const f = o.frequency;
+  return r.draft.firstDoseAt === o.first_dose_at && r.draft.item?.catalog_item_id === o.catalog_item?.catalog_item_id
+    && r.draft.kind === f.kind && r.draft.intervalHours === (f.interval_hours === null ? "" : String(f.interval_hours))
+    && r.draft.maxPerDay === (f.max_per_day === null ? "" : String(f.max_per_day));
+}
 
 const LOCAL = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
 // "2026-11-10T15:00" (hora do navegador) → ISO com o fuso do navegador.
@@ -56,8 +71,26 @@ function withOffset(local: string): string {
   return `${t}:00${off >= 0 ? "+" : "-"}${p(Math.trunc(off / 60))}:${p(off % 60)}`;
 }
 
-export function PrescriptionPanel({ encounter, unit, consultationStarted, onChanged, doctor = true }: PrescriptionPanelProps) {
-  const active = encounter.prescription ?? null;
+export function PrescriptionPanel({ encounter, unit, consultationStarted, onChanged: onChangedProp, onEncounterClosed, doctor = true }: PrescriptionPanelProps) {
+  const [ override, setOverride ] = useState<Shown | null>(null);
+  const fromDetail = encounter.prescription ?? null;
+  // A resposta do api vale até o detalhe relido chegar nela; "Alterar" abre o que está na tela, nunca o detalhe velho.
+  const active: UrgencyPrescription | null = override?.kind === "issued" && fromDetail?.id !== override.prescription.id ? override.prescription
+    : override?.kind === "suspended" && fromDetail?.id === override.id ? null : fromDetail;
+  const activeId = active?.id ?? null;
+  useEffect(() => {
+    if (override?.kind === "issued" && fromDetail?.id === override.prescription.id) setOverride(null);
+    if (override?.kind === "suspended" && fromDetail?.id !== override.id) setOverride(null);
+  }, [ override, fromDetail?.id ]);
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  // Nenhuma releitura (grava trilha) depois que o painel saiu da tela.
+  const onChanged = () => { if (mounted.current) onChangedProp(); };
+  const closed = () => { if (mounted.current) onEncounterClosed?.(); };
+  const sectionRef = useRef<HTMLElement | null>(null);
+  const noticeRef = useRef<HTMLParagraphElement | null>(null);
+  const focusItem = useRef<number | null>(null);
+  const [ openedFrom, setOpenedFrom ] = useState<string | null>(null);
   const keys = useRef(0);
   const newRow = (draft: ItemDraft = emptyItemDraft(), original: UrgencyPrescriptionItem | null = null): Row => ({ key: keys.current++, draft, original });
   const [ rows, setRows ] = useState<Row[] | null>(null);
@@ -70,20 +103,39 @@ export function PrescriptionPanel({ encounter, unit, consultationStarted, onChan
 
   const nextVersion = (active?.version ?? 0) + 1;
   const open = (from: UrgencyPrescription | null) => {
-    setNotice(null); setShown([]); setSuspending(false);
+    setNotice(null); setShown([]); setSuspending(false); setOpenedFrom(activeId); focusItem.current = 0;
     setRows(from ? from.items.map((it) => newRow(itemDraftFrom(it), it)) : [ newRow() ]);
   };
   const patchRow = (key: number, patch: Partial<ItemDraft>) => {
-    setRows((rs) => rs && rs.map((r) => (r.key === key ? { ...r, draft: { ...r.draft, ...patch } } : r)));
+    setRows((rs) => rs && rs.map((r) => {
+      if (r.key !== key) return r;
+      const next = { ...r, draft: { ...r.draft, ...patch } };
+      // Trocou o medicamento ou a frequência: deixa de ser o item mantido e a primeira dose passa a ser a que a pessoa escolher.
+      return isKept(r) && !isKept(next) && !("firstDoseAt" in patch) ? { ...next, draft: { ...next.draft, firstDoseAt: "" } } : next;
+    }));
     setShown([]);
   };
+  // Outro fluxo mudou a ativa com o formulário aberto: fecha, para não emitir sobre uma versão que não é a da tela.
+  useEffect(() => {
+    if (rows !== null && activeId !== openedFrom) { setRows(null); setShown([]); setNotice(CHANGED_WHILE_OPEN); }
+  }, [ activeId, openedFrom, rows ]);
+  useEffect(() => {
+    if (rows === null || focusItem.current === null) return;
+    const group = sectionRef.current?.querySelector(`[aria-label="Item ${focusItem.current + 1}"]`);
+    group?.querySelector<HTMLElement>("input, select, textarea, button")?.focus();
+    focusItem.current = null;
+  }, [ rows ]);
+  useEffect(() => { if (notice) noticeRef.current?.focus(); }, [ notice ]);
+
+  const given = (o: UrgencyPrescriptionItem) =>
+    (encounter.administrations ?? []).some((a) => a.prescription_item_id === o.id && a.status === "administered");
 
   // A primeira dose de cada item no instante do envio: o item mantido e não mexido segue a grade original; o digitado leva o fuso.
   function drafts(now: Date): ItemDraft[] {
-    return (rows ?? []).map(({ draft, original }) => {
-      if (original && draft.firstDoseAt === original.first_dose_at) {
-        const given = (encounter.administrations ?? []).some((a) => a.prescription_item_id === original.id && a.status === "administered");
-        return { ...draft, firstDoseAt: keptFirstDoseAt(original, now, { given }) ?? "" };
+    return (rows ?? []).map((row) => {
+      const { draft, original } = row;
+      if (original && isKept(row)) {
+        return { ...draft, firstDoseAt: keptFirstDoseAt(original, now, { given: given(original) }) ?? "" };
       }
       return { ...draft, firstDoseAt: withOffset(draft.firstDoseAt) };
     });
@@ -98,14 +150,17 @@ export function PrescriptionPanel({ encounter, unit, consultationStarted, onChan
     sending.current = true;
     setShown([]);
     try {
+      const alter = openedFrom !== null;
       const issued = await issueUrgencyPrescription(encounter.id, prescriptionBody(final));
+      setOverride({ kind: "issued", prescription: issued });
       setRows(null);
-      setNotice(issued.version > 1 ? revisedNotice(issued.version) : issuedNotice(issued.version));
+      setNotice(alter ? revisedNotice(issued.version) : issuedNotice(issued.version));
       onChanged();
     } catch (err) {
-      setShown(urgencyRefusals(err).map((r) => ({ path: r.path, text: r.text })));
       const code = errorCode(err);
-      if (code === "prescription_not_active" || code === "encounter_closed") onChanged();
+      if (code === "encounter_closed" && onEncounterClosed) { closed(); return; }
+      setShown(urgencyRefusals(err).map((r) => ({ path: r.path, text: r.text })));
+      if (code === "prescription_not_active" || code === "encounter_closed" || code === "consultation_required") onChanged();
     } finally {
       sending.current = false;
     }
@@ -116,10 +171,12 @@ export function PrescriptionPanel({ encounter, unit, consultationStarted, onChan
     setSuspendError(null);
     try {
       await suspendUrgencyPrescription(active.id, reason.trim());
+      setOverride({ kind: "suspended", id: active.id });
       setSuspending(false); setReason("");
       setNotice(SUSPENDED_NOTICE);
       onChanged();
     } catch (err) {
+      if (errorCode(err) === "encounter_closed" && onEncounterClosed) { closed(); return; }
       setSuspendError(urgencyRefusals(err)[0]?.text ?? URGENCY_ERRORS.invalid_request);
       if (errorCode(err) === "prescription_not_active") onChanged();
     }
@@ -129,9 +186,9 @@ export function PrescriptionPanel({ encounter, unit, consultationStarted, onChan
   const general = shown.filter((p) => !/^items\.\d+(\.|$)/.test(p.path));
 
   return (
-    <section aria-label="Prescrição da urgência" style={section}>
+    <section ref={sectionRef} aria-label="Prescrição da urgência" style={section}>
       <h3 style={heading}>Prescrição</h3>
-      {notice && <p role="status" style={{ margin: 0, fontSize: 12.5, fontWeight: 600 }}>{notice}</p>}
+      {notice && <p ref={noticeRef} tabIndex={-1} role="status" style={{ margin: 0, fontSize: 12.5, fontWeight: 600 }}>{notice}</p>}
 
       {rows === null && (
         <>
@@ -165,11 +222,12 @@ export function PrescriptionPanel({ encounter, unit, consultationStarted, onChan
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           {rows.map((r, i) => (
             <PrescriptionItemFields key={r.key} index={i} draft={r.draft} unitId={unit.id} problems={itemProblems(i)}
+              keptAt={isKept(r) && r.original ? (keptFirstDoseAt(r.original, new Date(), { given: given(r.original) }) ?? "") : undefined}
               onChange={(patch) => patchRow(r.key, patch)}
               onRemove={rows.length > 1 ? () => { setRows(rows.filter((x) => x.key !== r.key)); setShown([]); } : undefined} />
           ))}
           {rows.length < MAX_ITEMS && (
-            <div><button type="button" style={secondaryButtonStyle} onClick={() => { setRows([ ...rows, newRow() ]); setShown([]); }}>Adicionar item</button></div>
+            <div><button type="button" style={secondaryButtonStyle} onClick={() => { focusItem.current = rows.length; setRows([ ...rows, newRow() ]); setShown([]); }}>Adicionar item</button></div>
           )}
           <p style={muted}>{REVISION_NOTE}</p>
           {general.length > 0 && (
