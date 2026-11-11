@@ -13,6 +13,7 @@ import { Panel } from "../../components/Panel";
 import { ConsultationWorkspace } from "../consultation/ConsultationWorkspace";
 import { EncounterSummary } from "./EncounterSummary";
 import { OutcomeForm } from "./OutcomeForm";
+import { PrescriptionPanel } from "./PrescriptionPanel";
 
 export const FINALIZED_NOTICE = "Consulta finalizada. Registre o desfecho da urgência.";
 
@@ -47,6 +48,11 @@ export function UrgencyCare({ row, unit, units, onClosed, onGoToSecurity }: Urge
             onClose={() => onClosed()}
             onFinalized={() => { setFinalizedHere(true); void detail.refetch(); }} />
           {finalizedHere && <p role="status" style={{ margin: 0, fontSize: 12.5, fontWeight: 600 }}>{FINALIZED_NOTICE}</p>}
+          {/* A prescrição interna (32b): a chave só vem com acesso clínico (Q9); sem ela, a tela é a do 32a. */}
+          {target && target.prescription !== undefined && (
+            <PrescriptionPanel encounter={target} unit={unit} onChanged={() => void detail.refetch()}
+              consultationStarted={target.consultation_id !== null && target.consultation_status !== "discarded"} />
+          )}
           {target && (
             <OutcomeForm encounter={target} doctor onRecorded={(_e, notice) => onClosed(notice)}
               onStale={() => void detail.refetch()} onEncounterClosed={() => onClosed(URGENCY_ERRORS.encounter_closed)} />

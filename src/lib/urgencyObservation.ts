@@ -152,7 +152,8 @@ export function keptFirstDoseAt(item: Pick<UrgencyPrescriptionItem, "first_dose_
 
 // ─── Prescrição ─────────────────────────────────────────────────────────────
 export type ItemDraft = {
-  item: { catalog_item_id: string; name: string } | null;
+  // `controlled_list` e `stock_unit` só servem à tela (marca do controlado; unidade da baixa); nunca vão ao api.
+  item: { catalog_item_id: string; name: string; controlled_list?: string; stock_unit?: string } | null;
   dose: string; doseUnit: UrgencyDoseUnit | ""; route: UrgencyPrescriptionItemInput["route"];
   kind: FrequencyKind; intervalHours: string; maxPerDay: string;
   // Vazia = "agora" (o api assume). Ao alterar, carrega a primeira dose do item original (D18).
@@ -165,7 +166,10 @@ export const emptyItemDraft = (): ItemDraft => ({
 export function itemDraftFrom(item: UrgencyPrescriptionItem): ItemDraft {
   const q = parseDecimal(item.stock_quantity_per_dose);
   return {
-    item: item.catalog_item ? { catalog_item_id: item.catalog_item.catalog_item_id, name: item.catalog_item.name } : null,
+    item: item.catalog_item ? {
+      catalog_item_id: item.catalog_item.catalog_item_id, name: item.catalog_item.name,
+      ...(item.controlled_list ? { controlled_list: item.controlled_list } : {}), ...(item.stock_unit ? { stock_unit: item.stock_unit } : {})
+    } : null,
     dose: item.dose, doseUnit: item.dose_unit, route: item.route, kind: item.frequency.kind,
     intervalHours: item.frequency.interval_hours === null ? "" : String(item.frequency.interval_hours),
     maxPerDay: item.frequency.max_per_day === null ? "" : String(item.frequency.max_per_day),
