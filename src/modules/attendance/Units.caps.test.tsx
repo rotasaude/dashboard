@@ -131,4 +131,21 @@ describe("Units — CAPS e telefone (módulo 31)", () => {
   it("a frase de unit_has_attendances é genérica: não nomeia o CAPS", () => {
     expect(PSY_ERRORS.unit_has_attendances).not.toMatch(/CAPS/);
   });
+
+  it.each([ "deactivate", "kind" ])("409 upa_has_beds (%s) vira a frase da urgência", async (via) => {
+    const UPA = { id: "up1", name: "UPA Boqueirão", kind: "upa", active: true };
+    mocked(api.listAllUnits).mockResolvedValue([ UBS, UPA ]);
+    const refusal = new ApiError(409, { error: "upa_has_beds" }, "x");
+    mocked(api.setUnitActive).mockRejectedValue(refusal);
+    mocked(api.updateUnit).mockRejectedValue(refusal);
+    renderUnits();
+    if (via === "deactivate") {
+      const row = (await screen.findByText("UPA Boqueirão")).closest("[role=row]") as HTMLElement;
+      fireEvent.click(within(row).getByRole("button", { name: /Desativar/ }));
+    } else {
+      await editRow("UPA Boqueirão");
+      save();
+    }
+    expect((await screen.findByRole("alert")).textContent).toBe("esta UPA tem leitos de observação ativos — desative os leitos antes");
+  });
 });

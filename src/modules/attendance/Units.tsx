@@ -5,6 +5,7 @@ import {
 } from "../../lib/api";
 import { CAPS_UNIT_KIND, CEO_UNIT_KIND, HEALTH_MANAGEMENT_UNIT_KIND, UNIT_KINDS, attendanceError } from "../../lib/attendance";
 import { modalityLabel, psyError } from "../../lib/psychosocial";
+import { urgencyError } from "../../lib/urgency";
 import { NEIGHBORHOODS_KEY } from "../../lib/territory";
 import { EMPTY_ADDRESS_FIELDS, addressFieldsFrom, addressPayload, formatAddress } from "../../lib/unitAddress";
 import { Panel } from "../../components/Panel";
@@ -23,7 +24,13 @@ import { DrainUnitPanel } from "./DrainUnitPanel";
 const KIND_LABEL: Record<string, string> = Object.fromEntries([ ...UNIT_KINDS, CEO_UNIT_KIND, HEALTH_MANAGEMENT_UNIT_KIND, CAPS_UNIT_KIND ].map((k) => [ k.value, k.label ]));
 // Módulo 31 (P34, P53): recusas do cadastro que são do CAPS ou do telefone; a frase vem da lib do módulo (genérica, sem nome de CAPS).
 const CAPS_UNIT_ERRORS = [ "unit_has_caps_records", "caps_has_beds", "unit_has_attendances", "invalid_phone", "caps_modality_mismatch", "invalid_service_classification" ];
-const unitError = (err: unknown): string => (CAPS_UNIT_ERRORS.includes(errorCode(err) ?? "") ? psyError(err) : attendanceError(err));
+// Módulo 32b: desativar a UPA, ou trocar o tipo dela, com leito de observação ativo (409 upa_has_beds).
+const URGENCY_UNIT_ERRORS = [ "upa_has_beds" ];
+const unitError = (err: unknown): string => {
+  const code = errorCode(err) ?? "";
+  if (URGENCY_UNIT_ERRORS.includes(code)) return urgencyError(err);
+  return CAPS_UNIT_ERRORS.includes(code) ? psyError(err) : attendanceError(err);
+};
 
 // O que o módulo 31 acrescenta ao corpo da unidade: telefone só quando mudou (vazio apaga: null); no CAPS, modalidade e classificação
 // (vazia = null) vão sempre; a unidade que deixou de ser CAPS apaga as duas. Sem nada a mandar, o corpo é o de sempre.

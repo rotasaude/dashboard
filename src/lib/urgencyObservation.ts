@@ -280,3 +280,8 @@ export function administrationBody(
   }
   return out;
 }
+
+// ─── Cadastro de leitos (F-32.7) ────────────────────────────────────────────
+export const BED_ADDED = "Leito adicionado ao mapa da observação.";
+export const BED_DEACTIVATED = "Leito desativado.";
+export const BED_REACTIVATED = "Leito reativado.";
