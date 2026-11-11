@@ -76,7 +76,8 @@ export const locationKindLabel = (code: string): string => KIND_LABEL[code] ?? c
 
 const MOVEMENT_LABEL: Record<string, string> = {
   opening: "abertura", receipt: "entrada por nota", donation: "doação", transfer_out: "saída por transferência",
-  transfer_in: "entrada por transferência", dispensing: "dispensação", loss: "perda", expiry: "vencimento", adjustment: "ajuste", return: "devolução"
+  transfer_in: "entrada por transferência", dispensing: "dispensação", loss: "perda", expiry: "vencimento", adjustment: "ajuste", return: "devolução",
+  administration: "administração na UPA"
 };
 export const movementLabel = (code: string): string => MOVEMENT_LABEL[code] ?? code;
 
@@ -84,7 +85,7 @@ export const movementLabel = (code: string): string => MOVEMENT_LABEL[code] ?? c
 // aparece pelo id no api e nunca por nome de paciente). Tipo novo aparece cru.
 const DOCUMENT_LABEL: Record<string, string> = {
   dispensation: "dispensação", transfer: "transferência", invoice: "nota fiscal", receipt: "nota fiscal", donation: "doação",
-  adjustment: "ajuste", opening: "abertura", return: "devolução", entry: "entrada"
+  adjustment: "ajuste", opening: "abertura", return: "devolução", entry: "entrada", urgency_administration: "administração na UPA"
 };
 export function movementDocument(doc: StockMovement["document"] | undefined): string {
   if (!doc) return "—";
@@ -591,13 +592,15 @@ const ERRORS: Record<string, string> = {
   cpf_or_reason_required: "informe o CPF ou o motivo de não ter CPF",
   invalid_patient: "confira os dados do paciente novo",
   mfa_required: "o código do autenticador não valeu — digite o código atual",
-  missing_role: PHARMACY_NO_ROLE
+  missing_role: PHARMACY_NO_ROLE,
+  already_reconciled: "esta falta já foi conciliada por outra pessoa — a lista foi atualizada"
 };
 
 const PATH_RULES: [ RegExp, string ][] = [
   [ /^prescriber(\.|$)/, "confira os dados do profissional da receita: nome, conselho, UF e número" ],
   [ /^issued_on/, "data da receita inválida — confira" ],
   [ /notification_number/, "número da notificação inválido — confira" ],
+  [ /^note$/, "a nota tem de 10 a 500 caracteres" ],
   [ /quantity/, QUANTITY_TEXT ],
   [ /package/, "embalagem inválida — confira unidades por embalagem e embalagens" ],
   [ /lot_number/, "número do lote inválido — confira" ],

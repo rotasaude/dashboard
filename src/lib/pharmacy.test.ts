@@ -517,3 +517,13 @@ describe("extrato e posição: rótulos, documento e ordem da página", () => {
     expect(list).toEqual([ c, a, a2 ]);
   });
 });
+
+describe("32b: administração na UPA e conciliação", () => {
+  it("rótulos e erro", () => {
+    expect(movementLabel("administration")).toBe("administração na UPA");
+    expect(movementDocument({ type: "urgency_administration", id: "x", number: null } as never)).toBe("administração na UPA");
+    expect(pharmacyError(new ApiError(409, { error: "already_reconciled" }, "x")))
+      .toBe("esta falta já foi conciliada por outra pessoa — a lista foi atualizada");
+    expect(pharmacyError(new ApiError(422, { error: "invalid_request", path: "note" }, "x"))).toBe("a nota tem de 10 a 500 caracteres");
+  });
+});

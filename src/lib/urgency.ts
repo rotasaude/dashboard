@@ -51,9 +51,19 @@ export const isUpa = (unit: { kind: string }): boolean => unit.kind === "upa";
 // Q2: só o enfermeiro (2235*) classifica; o técnico (3222) recebe cbo_not_allowed. O médico é 225*.
 const NURSE_CBO = /^2235/;
 const DOCTOR_CBO = /^225/;
+// 32b (contrato §1): o técnico checa a medicação e lê o mapa; continua fora da classificação (Q2).
+const TECH_CBO = /^3222/;
 
 export type UrgencyRoles = {
   reception: boolean; nurse: boolean; doctor: boolean;
+  // 32b: vínculo ativo 3222* (lê mapa, fila e aprazamento; checa; nunca o detalhe do encontro).
+  technician: boolean;
+  // 32b: entrada, troca e saída do leito (= nurse || doctor).
+  observation: boolean;
+  // 32b: checagem da medicação (= nurse || technician || doctor).
+  medication: boolean;
+  // 32b: lê o mapa de observação (= reception || nurse || technician || doctor).
+  mapReader: boolean;
   // A8: só a recepção identifica o provisório.
   identify: boolean;
   // Q10/Q25: quem registra ao menos os desfechos de balcão (DESK_OUTCOMES).
@@ -68,7 +78,11 @@ export function urgencyRoles(user: SessionLike, links: ProfessionalLink[], unitI
   const reception = roles.includes("citizen_verifier");
   const nurse = active.some((l) => NURSE_CBO.test(l.cbo_code));
   const doctor = active.some((l) => DOCTOR_CBO.test(l.cbo_code));
-  return { reception, nurse, doctor, identify: reception, outcomeDesk: reception || nurse || doctor };
+  const technician = active.some((l) => TECH_CBO.test(l.cbo_code));
+  return {
+    reception, nurse, doctor, technician, identify: reception, outcomeDesk: reception || nurse || doctor,
+    observation: nurse || doctor, medication: nurse || technician || doctor, mapReader: reception || nurse || technician || doctor
+  };
 }
 
 // ─── Cores ──────────────────────────────────────────────────────────────────
@@ -192,12 +206,45 @@ export const URGENCY_ERRORS: Record<string, string> = {
   // E7: token trocado duas vezes ou desconhecido — a TV pareia de novo.
   invalid_token: DISPLAY_REVOKED,
   not_found: "não encontrado — atualize a tela",
-  invalid_request: "confira os campos destacados"
+  invalid_request: "confira os campos destacados",
+  // 32b (api-shapes §4): leitos, observação, prescrição e checagem.
+  bed_label_taken: "já existe um leito com este rótulo nesta UPA",
+  bed_occupied: "este leito está ocupado — encerre a observação ou troque o paciente de leito antes",
+  upa_has_beds: "esta UPA tem leitos de observação ativos — desative os leitos antes",
+  bed_unavailable: "este leito está inativo ou é de outra unidade — o mapa foi atualizado",
+  bed_taken: "outra pessoa ocupou este leito agora — o mapa foi atualizado",
+  not_in_observation: "este paciente já não está em observação",
+  consultation_required: "inicie a consulta de urgência antes de prescrever",
+  catalog_item_invalid: "este medicamento saiu do catálogo — escolha outro",
+  prescription_not_active: "esta prescrição não é mais a ativa — a tela foi atualizada",
+  slot_invalid: "este horário não está no aprazamento — a tela foi atualizada",
+  slot_taken: "este horário já foi checado — a tela foi atualizada",
+  slot_not_due: "este horário ainda não chegou — checagem só até 60 minutos antes",
+  max_per_day_reached: "já foram dadas todas as doses permitidas nas últimas 24 h",
+  stock_deduction_disabled: "a baixa de estoque está desligada — registre sem lote",
+  lot_invalid: "o lote escolhido está vencido, sem saldo ou é de outro item — escolha outro",
+  already_reconciled: "esta falta já foi conciliada por outra pessoa — a lista foi atualizada",
+  catalog_unavailable: "o catálogo de medicamentos está indisponível — tente de novo em instantes",
+  // Q8 (19a): o adendo de outro médico da UPA só vale com o encontro aberto.
+  not_author: "só o autor ou um médico da UPA com o encontro aberto escreve na consulta",
+  out_of_context: "o encontro foi fechado — o prontuário não abre mais por aqui",
+  not_finalized: "finalize a consulta antes de escrever o adendo",
+  invalid_limit: "o tamanho da página é inválido — recarregue a lista",
+  invalid_cursor: "a página pedida é inválida — recarregue a lista"
 };
 
 // `invalid_request` pelo `path` do api (preflight §B).
 const VITAL_TEXT = new Map(VITALS.map((v) => [ v.key as string, `${v.label}: valor fora do plausível — confira` ]));
-const FIELD_TEXT: [ RegExp, string ][] = [
+const ITEM_FIELD_TEXT: Record<string, string> = {
+  catalog_item_id: "o medicamento", dose: "a dose", dose_unit: "a unidade da dose", route: "a via", frequency: "a frequência",
+  first_dose_at: "a primeira dose", instructions: "a orientação", stock_quantity_per_dose: "a quantidade por dose"
+};
+const itemFieldText = (m: RegExpExecArray): string => {
+  const field = (m[2] ?? "").split(".")[0];
+  const what = Object.prototype.hasOwnProperty.call(ITEM_FIELD_TEXT, field) ? ITEM_FIELD_TEXT[field] : "o item";
+  return `item ${Number(m[1]) + 1}: confira ${what}`;
+};
+const FIELD_TEXT: [ RegExp, string | ((m: RegExpExecArray) => string) ][] = [
   [ /^(patient|patient_id)$/, "escolha o paciente" ],
   [ /^health_unit_id$/, "escolha a unidade" ],
   [ /^new_patient(\.|$)/, "confira os dados do paciente novo" ],
@@ -215,7 +262,17 @@ const FIELD_TEXT: [ RegExp, string ][] = [
   [ /^reason$/, REASON_TEXT ],
   [ /^name$/, "confira o nome" ],
   [ /^show_wait_times$/, URGENCY_ERRORS.invalid_show_wait_times ],
-  [ /^month$/, "escolha o mês" ]
+  [ /^month$/, "escolha o mês" ],
+  // 32b: o api manda `items.<n>.<campo>` (ponto, nunca colchete); aceita o colchete por tolerância.
+  [ /^bed_id$/, "escolha o leito" ],
+  [ /^label$/, "o rótulo tem de 1 a 20 caracteres" ],
+  [ /^items$/, "a prescrição tem de 1 a 20 itens" ],
+  [ /^items(?:\.|\[)(\d+)\]?(?:\.(.+))?$/, itemFieldText ],
+  [ /^scheduled_at$/, "escolha o horário" ],
+  [ /^administered_at$/, "confira o horário da administração" ],
+  [ /^stock_lot_id$/, "escolha o lote" ],
+  [ /^stock_quantity$/, "confira a quantidade" ],
+  [ /^query$/, "a busca tem de 2 a 60 caracteres" ]
 ];
 
 const SAFE_CODE = /^[a-z][a-z0-9_]{0,63}$/;
@@ -226,7 +283,11 @@ function codeText(code: string, path: string, status: number, overrides: Record<
   if (code === "invalid_request") {
     const vital = /^vital_signs\.(.+)$/.exec(path);
     if (vital) return VITAL_TEXT.get(vital[1]) ?? "confira os sinais vitais";
-    return FIELD_TEXT.find(([ re ]) => re.test(path))?.[1] ?? URGENCY_ERRORS.invalid_request;
+    for (const [ re, text ] of FIELD_TEXT) {
+      const m = re.exec(path);
+      if (m) return typeof text === "function" ? text(m) : text;
+    }
+    return URGENCY_ERRORS.invalid_request;
   }
   if (has(URGENCY_ERRORS, code)) return URGENCY_ERRORS[code];
   if (code === "") return `recusado pelo servidor (${status})`;

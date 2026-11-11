@@ -10,6 +10,7 @@ import {
   writeCallLocation, type OutcomeDraft
 } from "./urgency";
 import { DOCTOR_LINK, NURSE_LINK, UBS, UPA, patientRef, urgencyUser } from "../test/urgencyFixtures";
+import { TECH_LINK } from "../test/urgencyObservationFixtures";
 
 afterEach(() => { vi.restoreAllMocks(); sessionStorage.clear(); });
 
@@ -25,9 +26,18 @@ const EVERY_CONTRACT_CODE = [
   "cpf_or_reason_required", "citizen_not_verified", "too_many_requests", "invalid_unit", "missing_role", "not_called", "already_closed",
   "call_location_name_taken", "invalid_show_wait_times", "not_caller", "not_in_care", "not_found",
   // Task 5 carry: Patients::CreateTyped recusa `new_patient.<campo>`.
-  "invalid_patient"
+  "invalid_patient",
+  // 32b (api-shapes §4): os códigos reais do api; `label_taken` do plano é `bed_label_taken` (409) no api.
+  "bed_label_taken", "bed_occupied", "upa_has_beds", "bed_unavailable", "bed_taken", "not_in_observation", "consultation_required",
+  "catalog_item_invalid", "prescription_not_active", "slot_invalid", "slot_not_due", "slot_taken", "max_per_day_reached",
+  "stock_deduction_disabled", "lot_invalid", "already_reconciled", "catalog_unavailable", "not_author", "out_of_context",
+  "not_finalized", "invalid_limit", "invalid_cursor"
 ];
 const err = (status: number, body: unknown) => new ApiError(status, body, "x");
+const NO_ROLES = {
+  reception: false, nurse: false, doctor: false, technician: false, identify: false, outcomeDesk: false,
+  observation: false, medication: false, mapReader: false
+};
 
 describe("frases das recusas", () => {
   it("todo código do contrato tem frase própria", () => {
@@ -97,15 +107,18 @@ describe("frases das recusas", () => {
 describe("portões e papéis", () => {
   it("papéis pelo CBO do vínculo ativo na unidade (Q2: só 2235 classifica)", () => {
     const u = urgencyUser([ "health_professional" ]);
-    expect(urgencyRoles(u, [ NURSE_LINK ], "upa1")).toEqual({ reception: false, nurse: true, doctor: false, identify: false, outcomeDesk: true });
+    expect(urgencyRoles(u, [ NURSE_LINK ], "upa1")).toEqual({ ...NO_ROLES, nurse: true, outcomeDesk: true, observation: true, medication: true, mapReader: true });
     expect(urgencyRoles(u, [ { ...NURSE_LINK, cbo_code: "322205" } ], "upa1").nurse).toBe(false);
-    expect(urgencyRoles(u, [ DOCTOR_LINK ], "upa1")).toEqual({ reception: false, nurse: false, doctor: true, identify: false, outcomeDesk: true });
+    expect(urgencyRoles(u, [ DOCTOR_LINK ], "upa1")).toEqual({ ...NO_ROLES, doctor: true, outcomeDesk: true, observation: true, medication: true, mapReader: true });
+    // 32b (Q2): o técnico 3222* lê o mapa e checa; continua fora da classificação e do desfecho.
+    expect(urgencyRoles(u, [ TECH_LINK ], "upa1")).toEqual({ ...NO_ROLES, technician: true, medication: true, mapReader: true });
+    expect(urgencyRoles(u, [ { ...TECH_LINK, ended_at: "2026-10-01" } ], "upa1")).toEqual(NO_ROLES);
     expect(urgencyRoles(u, [ { ...DOCTOR_LINK, ended_at: "2026-10-01" } ], "upa1").doctor).toBe(false);
     expect(urgencyRoles(u, [ DOCTOR_LINK ], "ubs1").doctor).toBe(false);
     // Vínculo sem o papel não conta.
     expect(urgencyRoles(urgencyUser([ "analyst" ]), [ DOCTOR_LINK ], "upa1").doctor).toBe(false);
     expect(urgencyRoles(urgencyUser([ "citizen_verifier" ]), [], "upa1"))
-      .toEqual({ reception: true, nurse: false, doctor: false, identify: true, outcomeDesk: true });
+      .toEqual({ ...NO_ROLES, reception: true, identify: true, outcomeDesk: true, mapReader: true });
     expect(urgencyRoles(urgencyUser([ "municipal_admin" ]), [], "upa1").outcomeDesk).toBe(false);
   });
 
@@ -312,5 +325,27 @@ describe("local lembrado, prefixo, código e nomes", () => {
     expect(locationNameProblem("  ")).toBe("o nome tem de 1 a 40 caracteres");
     expect(locationNameProblem("x".repeat(41))).toBe("o nome tem de 1 a 40 caracteres");
     expect(locationNameProblem("x".repeat(60), 60)).toBeNull();
+  });
+});
+
+describe("frases do 32b por path", () => {
+  it("item da prescrição pelo path do api (items.<n>.<campo>)", () => {
+    const at = (path: string) => urgencyError(err(422, { error: "invalid_request", path }));
+    expect(at("items.2.dose")).toBe("item 3: confira a dose");
+    expect(at("items.0.frequency.interval_hours")).toBe("item 1: confira a frequência");
+    expect(at("items.1.first_dose_at")).toBe("item 2: confira a primeira dose");
+    expect(at("items.1.catalog_item_id")).toBe("item 2: confira o medicamento");
+    expect(at("items.3.surprise")).toBe("item 4: confira o item");
+    expect(at("items.3")).toBe("item 4: confira o item");
+    expect(at("items")).toBe("a prescrição tem de 1 a 20 itens");
+    expect(at("bed_id")).toBe("escolha o leito");
+    expect(at("label")).toBe("o rótulo tem de 1 a 20 caracteres");
+    expect(at("scheduled_at")).toBe("escolha o horário");
+    expect(at("stock_lot_id")).toBe("escolha o lote");
+  });
+  it("nenhum código novo cai em 'recusado pelo servidor'", () => {
+    for (const code of EVERY_CONTRACT_CODE) {
+      expect(urgencyError(err(422, { error: code })), code).not.toMatch(/^recusado pelo servidor/);
+    }
   });
 });
