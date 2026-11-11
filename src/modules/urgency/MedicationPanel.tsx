@@ -18,7 +18,7 @@ import { useReveal } from "../../lib/useReveal";
 import { ActionButton } from "../../components/ActionButton";
 import { Panel } from "../../components/Panel";
 import { Tag } from "../../components/Tag";
-import { secondaryButtonStyle } from "../../components/formStyles";
+import { disabledButtonStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { AdministrationForm } from "./AdministrationForm";
 import type { MedicationTarget } from "./ObservationMap";
 import { controlledText } from "./PrescriptionItemFields";
@@ -36,6 +36,8 @@ export interface MedicationPanelProps {
   onClose(): void;
   // 409 encounter_closed: quem monta fecha o painel e relê a fila e o mapa.
   onEncounterClosed(): void;
+  // `prescribed_at` da versão ativa, quando se sabe (o atendimento médico); do mapa e da fila vem vazio.
+  prescribedAt?: string;
 }
 
 // Escape dentro de um campo não fecha nada.
@@ -48,15 +50,18 @@ const who = (a: UrgencyAdministration) => a.by.name ?? UNNAMED_CHECKER;
 type Open = { itemId: string; slot: string | null };
 type Notice = { kind: "status" | "alert"; text: string };
 
-export function MedicationPanel({ target, now: nowProp, onClose, onEncounterClosed }: MedicationPanelProps) {
+export function MedicationPanel({ target, now: nowProp, onClose, onEncounterClosed, prescribedAt }: MedicationPanelProps) {
   const queryClient = useQueryClient();
   const ref = useReveal<HTMLDivElement>(true);
   // Quem abriu (lido antes de o foco ir ao título): recebe o foco de volta ao fechar.
   const [ opener ] = useState<Element | null>(() => document.activeElement);
   const key = [ MEDICATION_SCHEDULE_KEY, target.encounterId ];
   const query = useQuery({ queryKey: key, queryFn: () => getMedicationSchedule(target.encounterId), ...NOMINAL_QUERY });
-  // Sai do cache ao fechar (o aprazamento é nominal).
-  useEffect(() => () => { queryClient.removeQueries({ queryKey: [ MEDICATION_SCHEDULE_KEY, target.encounterId ] }); }, [ queryClient, target.encounterId ]);
+  // Nenhuma releitura (grava trilha) depois que o painel saiu da tela, nem por resposta que chega tarde.
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  // Uma checagem em voo não pode ficar sem painel: Fechar e Escape esperam.
+  const [ busy, setBusy ] = useState(false);
   const [ open, setOpen ] = useState<Open | null>(null);
   const [ notice, setNotice ] = useState<Notice | null>(null);
   // Checagens desta sessão que ficaram com falta de estoque (o aprazamento relido não diz isso).
@@ -65,10 +70,13 @@ export function MedicationPanel({ target, now: nowProp, onClose, onEncounterClos
   useEffect(() => { if (notice) noticeRef.current?.focus(); }, [ notice ]);
 
   const close = () => {
+    if (busy) return;
     onClose();
+    // O aprazamento é nominal: sai do cache ao fechar.
+    queryClient.removeQueries({ queryKey: key });
     if (opener instanceof HTMLElement && opener.isConnected) opener.focus();
   };
-  const reload = () => { void query.refetch(); };
+  const reload = () => { if (mounted.current) void query.refetch(); };
   const recorded = (r: UrgencyAdministrationResult) => {
     setOpen(null);
     if (r.shortfall) {
@@ -95,7 +103,7 @@ export function MedicationPanel({ target, now: nowProp, onClose, onEncounterClos
   return (
     <div ref={ref} onKeyDown={(e) => { if (e.key === "Escape" && !inField(e.target)) { e.stopPropagation(); close(); } }}>
       <Panel title={`Medicação — ${target.ticket ?? "sem senha"}`} sub="aprazamento das próximas 24 h · a checagem não pode ser alterada"
-        right={<button type="button" style={secondaryButtonStyle} onClick={close}>Fechar</button>}>
+        right={<button type="button" aria-disabled={busy || undefined} style={busy ? disabledButtonStyle : secondaryButtonStyle} onClick={close}>Fechar</button>}>
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           <p style={muted}>{target.patientName}</p>
           {notice && <p ref={noticeRef} tabIndex={-1} role={notice.kind} style={{ margin: 0, fontSize: 12.5, fontWeight: 600, color: notice.kind === "alert" ? "var(--down)" : undefined }}>{notice.text}</p>}
@@ -103,7 +111,7 @@ export function MedicationPanel({ target, now: nowProp, onClose, onEncounterClos
           {query.isError && <p role="alert" style={{ margin: 0, fontSize: 12.5, color: "var(--down)" }}>{urgencyError(query.error)}</p>}
           {data && data.prescription_id === null && <p style={muted}>{NO_ACTIVE_SCHEDULE}</p>}
           {data && data.items.map((it) => (
-            <ItemSection key={it.item_id} item={it} now={now} pending={pending} stockDeduction={data.stock_deduction}
+            <ItemSection key={it.item_id} item={it} now={now} pending={pending} stockDeduction={data.stock_deduction} prescribedAt={prescribedAt} onBusyChange={setBusy}
               open={openValid && open?.itemId === it.item_id ? open : null}
               onOpen={(slot) => { setNotice(null); setOpen({ itemId: it.item_id, slot }); }}
               onCancel={() => setOpen(null)} onRecorded={recorded} onStale={stale} onEncounterClosed={onEncounterClosed} />
@@ -120,12 +128,13 @@ export function MedicationPanel({ target, now: nowProp, onClose, onEncounterClos
 }
 
 interface ItemProps {
+  prescribedAt?: string; onBusyChange(busy: boolean): void;
   item: ScheduleItem; now: Date; pending: ReadonlySet<string>; stockDeduction: boolean; open: Open | null;
   onOpen(slot: string | null): void; onCancel(): void; onRecorded(r: UrgencyAdministrationResult): void;
   onStale(text: string): void; onEncounterClosed(): void;
 }
 
-function ItemSection({ item, now, pending, stockDeduction, open, onOpen, onCancel, onRecorded, onStale, onEncounterClosed }: ItemProps) {
+function ItemSection({ prescribedAt, onBusyChange, item, now, pending, stockDeduction, open, onOpen, onCancel, onRecorded, onStale, onEncounterClosed }: ItemProps) {
   const label = item.catalog_item?.name ?? "medicamento fora do catálogo";
   const marks = item.controlled ? controlledText(item.controlled_list) : null;
   const route = Object.prototype.hasOwnProperty.call(ROUTE_LABEL, item.route) ? ROUTE_LABEL[item.route] : item.route;
@@ -167,7 +176,7 @@ function ItemSection({ item, now, pending, stockDeduction, open, onOpen, onCance
           )}
           {open && open.slot === null && (
             <AdministrationForm item={item} slot={null} stockDeduction={stockDeduction} now={now} onRecorded={onRecorded}
-              onStale={onStale} onCancel={onCancel} onEncounterClosed={onEncounterClosed} />
+              onStale={onStale} onCancel={onCancel} onEncounterClosed={onEncounterClosed} prescribedAt={prescribedAt} onBusyChange={onBusyChange} />
           )}
         </>
       ) : (
@@ -187,7 +196,7 @@ function ItemSection({ item, now, pending, stockDeduction, open, onOpen, onCance
                 </span>
                 {open && open.slot === s.scheduled_at && (
                   <AdministrationForm item={item} slot={s.scheduled_at} stockDeduction={stockDeduction} now={now} onRecorded={onRecorded}
-                    onStale={onStale} onCancel={onCancel} onEncounterClosed={onEncounterClosed} />
+                    onStale={onStale} onCancel={onCancel} onEncounterClosed={onEncounterClosed} prescribedAt={prescribedAt} onBusyChange={onBusyChange} />
                 )}
               </li>
             );

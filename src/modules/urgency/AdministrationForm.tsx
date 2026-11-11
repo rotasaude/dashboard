@@ -16,13 +16,14 @@ import {
   administrationBody, administrationProblems, type AdministrationContext, type AdministrationDraft
 } from "../../lib/urgencyObservation";
 import { ConfirmButton } from "../../components/ConfirmButton";
-import { inputStyle, secondaryButtonStyle } from "../../components/formStyles";
+import { disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { withOffset } from "./PrescriptionPanel";
 
 export const STATUS_CHOICES: { value: AdministrationStatus; label: string }[] = [
   { value: "administered", label: "Administrado" }, { value: "not_administered", label: "Não administrado" }, { value: "refused", label: "Recusado" }
 ];
-export const CHECK_IMMUTABLE_QUESTION = "A checagem não pode ser alterada. Confirmar?";
+export const checkQuestion = (label: string, slot: string | null): string =>
+  `A checagem de ${label}${slot ? ` das ${fmtHourMinute(slot)}` : ""} não pode ser alterada. Confirmar?`;
 export const CHOOSE_STATUS = "escolha a situação da dose";
 export const FEFO_NOTE = "o lote sai pelo que vence primeiro, no estoque da UPA";
 // Recusas que mudam o que a tela sabe: a tela relê e mostra a frase.
@@ -44,9 +45,13 @@ export interface AdministrationFormProps {
   onStale(text: string): void;
   onCancel(): void;
   onEncounterClosed?(): void;
+  // A checagem está sendo enviada: quem monta não fecha o painel até acabar.
+  onBusyChange?(busy: boolean): void;
+  // `prescribed_at` da versão, quando quem monta o conhece (o aprazamento não o traz); "" = desconhecido (o api confere).
+  prescribedAt?: string;
 }
 
-export function AdministrationForm({ item, slot, stockDeduction, now, onRecorded, onStale, onCancel, onEncounterClosed }: AdministrationFormProps) {
+export function AdministrationForm({ item, slot, stockDeduction, now, onRecorded, onStale, onCancel, onEncounterClosed, onBusyChange, prescribedAt = "" }: AdministrationFormProps) {
   const lots = item.lots ?? [];
   const defaultLotId = lots[0]?.id ?? "";
   const [ status, setStatus ] = useState<AdministrationStatus | "">("");
@@ -56,6 +61,8 @@ export function AdministrationForm({ item, slot, stockDeduction, now, onRecorded
   const [ administeredAt, setAdministeredAt ] = useState("");
   const [ error, setError ] = useState<string | null>(null);
   const sending = useRef(false);
+  const [ busy, setBusy ] = useState(false);
+  const setSending = (b: boolean) => { sending.current = b; setBusy(b); onBusyChange?.(b); };
   const hintId = useId();
   // Depois de uma releitura o lote escolhido pode ter saído da lista: volta ao primeiro.
   const effectiveLot = lots.some((l) => l.id === lotId) ? lotId : defaultLotId;
@@ -63,7 +70,7 @@ export function AdministrationForm({ item, slot, stockDeduction, now, onRecorded
   const target = { itemId: item.item_id, kind: item.frequency.kind, slot };
   // `prescribed_at` não vem no aprazamento: o api confere o limite de baixo.
   const context = (at: Date): AdministrationContext =>
-    ({ stockDeduction, defaultLotId, defaultQuantity: item.stock_quantity_per_dose, now: at, prescribedAt: "" });
+    ({ stockDeduction, defaultLotId, defaultQuantity: item.stock_quantity_per_dose, now: at, prescribedAt });
   const draft = (): AdministrationDraft => ({
     status: status || "administered", reason, lotId: effectiveLot, quantity, administeredAt: withOffset(administeredAt)
   });
@@ -78,7 +85,7 @@ export function AdministrationForm({ item, slot, stockDeduction, now, onRecorded
     const d = draft();
     const found = administrationProblems(d, context(at), target);
     if (found.length > 0) { setError(found[0].text); return; }
-    sending.current = true;
+    setSending(true);
     setError(null);
     try {
       onRecorded(await recordAdministration(administrationBody(d, context(at), target)));
@@ -89,7 +96,7 @@ export function AdministrationForm({ item, slot, stockDeduction, now, onRecorded
       if (STALE.has(code ?? "")) onStale(text);
       else setError(text);
     } finally {
-      sending.current = false;
+      setSending(false);
     }
   }
 
@@ -142,8 +149,8 @@ export function AdministrationForm({ item, slot, stockDeduction, now, onRecorded
         </>
       )}
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "flex-start" }}>
-        <ConfirmButton label="Registrar checagem" question={CHECK_IMMUTABLE_QUESTION} disabledReason={blocked} onConfirm={send} />
-        <button type="button" style={secondaryButtonStyle} onClick={onCancel}>Cancelar</button>
+        <ConfirmButton label="Registrar checagem" question={checkQuestion(label, slot)} disabledReason={blocked} onConfirm={send} />
+        <button type="button" style={busy ? disabledButtonStyle : secondaryButtonStyle} aria-disabled={busy || undefined} onClick={() => { if (!busy) onCancel(); }}>Cancelar</button>
       </div>
       {error && <p role="alert" style={{ margin: 0, fontSize: 12, color: "var(--down)" }}>{error}</p>}
     </div>

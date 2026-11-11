@@ -34,10 +34,10 @@ function client() {
 }
 function mountPanel(props: Partial<React.ComponentProps<typeof MedicationPanel>> = {}) {
   const onClose = vi.fn(); const onEncounterClosed = vi.fn();
-  render(<QueryClientProvider client={client()}>
+  const { unmount } = render(<QueryClientProvider client={client()}>
     <MedicationPanel target={TARGET} now={NOW32B} onClose={onClose} onEncounterClosed={onEncounterClosed} {...props} />
   </QueryClientProvider>);
-  return { onClose, onEncounterClosed };
+  return { onClose, onEncounterClosed, unmount };
 }
 const scheduleCalls = () => vi.mocked(api.getMedicationSchedule).mock.calls.length;
 const apiError = (status: number, body: unknown) => new ApiError(status, body, "x");
@@ -91,7 +91,7 @@ describe("MedicationPanel (F-32.8)", () => {
     await openCheck();
     fireEvent.click(screen.getByRole("radio", { name: "Administrado" }));
     fireEvent.click(screen.getByRole("button", { name: "Registrar checagem" }));
-    expect(screen.getByText("A checagem não pode ser alterada. Confirmar?")).not.toBeNull();
+    expect(screen.getByText("A checagem de Dipirona 500 mg/mL solução injetável das 14:00 não pode ser alterada. Confirmar?")).not.toBeNull();
     const yes = screen.getByRole("button", { name: "Confirmar" });
     fireEvent.click(yes); fireEvent.click(yes);
     await waitFor(() => expect(vi.mocked(api.recordAdministration).mock.calls).toEqual([ [ {
@@ -109,7 +109,7 @@ describe("MedicationPanel (F-32.8)", () => {
     fireEvent.change(screen.getByLabelText("Motivo"), { target: { value: "não quis" } });
     fireEvent.click(screen.getByRole("button", { name: "Registrar checagem" }));
     expect(screen.getByText("o motivo tem de 10 a 500 caracteres")).not.toBeNull();
-    expect(screen.queryByText("A checagem não pode ser alterada. Confirmar?")).toBeNull();
+    expect(screen.queryByText("A checagem de Dipirona 500 mg/mL solução injetável das 14:00 não pode ser alterada. Confirmar?")).toBeNull();
     expect(api.recordAdministration).not.toHaveBeenCalled();
     fireEvent.change(screen.getByLabelText("Motivo"), { target: { value: "  paciente não quis tomar  " } });
     fireEvent.click(screen.getByRole("button", { name: "Registrar checagem" }));
@@ -250,6 +250,59 @@ describe("MedicationPanel (F-32.8)", () => {
     expect(document.activeElement).toBe(opener);
     opener.remove();
     expect(window.localStorage.length + window.sessionStorage.length).toBe(0);
+  });
+
+  async function pendingSend() {
+    let release!: (r: api.UrgencyAdministrationResult) => void;
+    vi.mocked(api.recordAdministration).mockReturnValue(new Promise((res) => { release = res; }));
+    await openCheck();
+    fireEvent.click(screen.getByRole("radio", { name: "Administrado" }));
+    fireEvent.click(screen.getByRole("button", { name: "Registrar checagem" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+    await waitFor(() => expect(api.recordAdministration).toHaveBeenCalledTimes(1));
+    return release;
+  }
+
+  it("com a checagem em voo, Fechar e Escape não fecham; Cancelar do formulário também trava", async () => {
+    vi.mocked(api.getMedicationSchedule).mockResolvedValue(schedule());
+    const { onClose } = mountPanel();
+    const release = await pendingSend();
+    fireEvent.click(screen.getByRole("button", { name: "Fechar" }));
+    fireEvent.keyDown(screen.getByRole("heading", { name: "Medicação — U-038" }), { key: "Escape" });
+    fireEvent.keyDown(screen.getByText(/^A checagem de .* Confirmar\?$/), { key: "Escape" });
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Fechar" }).getAttribute("aria-disabled")).toBe("true");
+    release({ administration: administration(), shortfall: null });
+    await waitFor(() => expect(screen.getByRole("button", { name: "Fechar" }).getAttribute("aria-disabled")).toBeNull());
+    fireEvent.keyDown(screen.getByRole("heading", { name: "Medicação — U-038" }), { key: "Escape" });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("resposta depois de desmontar não lê o aprazamento", async () => {
+    vi.mocked(api.getMedicationSchedule).mockResolvedValue(schedule());
+    const { unmount } = mountPanel();
+    const release = await pendingSend();
+    unmount();
+    release({ administration: administration(), shortfall: null });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(scheduleCalls()).toBe(1);
+  });
+
+  it("stock_deduction_disabled relê, mantém o formulário e some com os campos de estoque", async () => {
+    vi.mocked(api.getMedicationSchedule).mockResolvedValueOnce(schedule({ stock_deduction: true, items: [ scheduleItem({ lots }) ] }))
+      .mockResolvedValue(schedule({ stock_deduction: false }));
+    vi.mocked(api.recordAdministration).mockRejectedValue(apiError(422, { error: "stock_deduction_disabled", path: "stock_lot_id" }));
+    mountPanel();
+    await openCheck();
+    fireEvent.click(screen.getByRole("radio", { name: "Administrado" }));
+    fireEvent.change(screen.getByLabelText("Lote"), { target: { value: "lot-b" } });
+    fireEvent.click(screen.getByRole("button", { name: "Registrar checagem" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+    expect(await screen.findByText(/^a baixa de estoque está desligada/)).not.toBeNull();
+    await waitFor(() => expect(scheduleCalls()).toBe(2));
+    await waitFor(() => expect(screen.queryByLabelText("Lote")).toBeNull());
+    expect(screen.queryByLabelText(/^Quantidade/)).toBeNull();
+    expect((screen.getByRole("radio", { name: "Administrado" }) as HTMLInputElement).checked).toBe(true);
   });
 
   it("o técnico abre pelo mapa; o painel não lê o detalhe do encontro", async () => {

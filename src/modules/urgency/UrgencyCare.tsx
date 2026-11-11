@@ -66,7 +66,7 @@ export function UrgencyCare({ row, unit, units, onClosed, onGoToSecurity }: Urge
           )}
           {target?.prescription?.status === "active" && (medicationOpen ? (
             <MedicationPanel target={{ encounterId: row.encounter_id, ticket: row.ticket, patientName: row.patient.name ?? "sem nome" }}
-              onClose={() => setMedicationOpen(false)} onEncounterClosed={() => onClosed(URGENCY_ERRORS.encounter_closed)} />
+              prescribedAt={target.prescription.prescribed_at} onClose={() => setMedicationOpen(false)} onEncounterClosed={() => onClosed(URGENCY_ERRORS.encounter_closed)} />
           ) : (
             <span ref={medicationButton}><ActionButton variant="secondary" onClick={() => setMedicationOpen(true)}>Abrir medicação</ActionButton></span>
           ))}

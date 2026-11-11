@@ -42,6 +42,7 @@ import { OutcomeForm, type OutcomeTarget } from "./OutcomeForm";
 import { PROVISIONAL_KEY, ProvisionalEncounters, arrivalLabel } from "./ProvisionalEncounters";
 import { UrgencyCare } from "./UrgencyCare";
 import { TicketCard } from "./TicketCard";
+import { MEDICATION_SCHEDULE_KEY } from "../../lib/urgencyObservation";
 import { MedicationPanel } from "./MedicationPanel";
 import { ObservationMap, type MedicationTarget, type ObservationMapHandle } from "./ObservationMap";
 import { UrgencyQueue, type QueueActions, type UrgencyQueueHandle } from "./UrgencyQueue";
@@ -260,7 +261,13 @@ export function UrgencyDesk({ unit, user, links, linksLoading = false, onGoToSec
     // O desfecho fecha a estadia no api (contrato §4): o mapa relê junto com a fila.
     if (notice) { setNotice(notice); queueRef.current?.refresh(); mapRef.current?.refresh(); }
   };
+  // Trocar de paciente ou fechar tira o aprazamento (nominal) do cache.
+  const openMedication = (t: MedicationTarget) => {
+    queryClient.removeQueries({ queryKey: [ MEDICATION_SCHEDULE_KEY ] });
+    setNotice(null); setMedication(t);
+  };
   const closeMedication = (notice?: string) => {
+    queryClient.removeQueries({ queryKey: [ MEDICATION_SCHEDULE_KEY ] });
     setMedication(null);
     if (notice) { setNotice(notice); queueRef.current?.refresh(); mapRef.current?.refresh(); }
   };
@@ -308,7 +315,7 @@ export function UrgencyDesk({ unit, user, links, linksLoading = false, onGoToSec
       onOpenCare: (row) => openCare(row)
     } satisfies QueueActions : {}),
     ...(roles.medication ? {
-      onMedication: (row) => { setNotice(null); setMedication({ encounterId: row.encounter_id, ticket: row.ticket, patientName: row.patient.name ?? "sem nome" }); }
+      onMedication: (row) => openMedication({ encounterId: row.encounter_id, ticket: row.ticket, patientName: row.patient.name ?? "sem nome" })
     } satisfies QueueActions : {}),
     ...(roles.outcomeDesk ? {
       // A linha em atendimento traz o estado da consulta (Q30 e consultation_in_progress); a de espera ainda não tem consulta.
@@ -385,7 +392,7 @@ export function UrgencyDesk({ unit, user, links, linksLoading = false, onGoToSec
       {callError && <p role="alert" style={{ margin: 0, fontSize: 12.5, color: "var(--down)" }}>{callError}</p>}
       <UrgencyQueue ref={queueRef} unit={unit} roles={roles} actions={actions} toolbar={toolbar} />
       <ObservationMap ref={mapRef} unit={unit} roles={roles}
-        onMedication={roles.medication ? (t) => { setNotice(null); setMedication(t); } : undefined} />
+        onMedication={roles.medication ? openMedication : undefined} />
       {roles.identify && (
         <ProvisionalEncounters unit={unit}
           onIdentify={(item) => openIdentify({ encounterId: item.encounter_id, label: arrivalLabel(item), from: "list" })} />
