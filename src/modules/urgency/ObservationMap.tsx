@@ -48,7 +48,7 @@ const STARTED = "Paciente em observação.";
 const CHANGED = "Leito trocado.";
 const ENDED = "Observação encerrada.";
 // A recusa que mostra que o mapa já mudou: relê na hora e fecha o formulário.
-const MAP_CHANGED = new Set([ "bed_taken", "bed_unavailable", "not_in_care", "not_in_observation", "encounter_closed", "already_closed" ]);
+const MAP_CHANGED = new Set([ "bed_taken", "observation_changed", "bed_unavailable", "not_in_care", "not_in_observation", "encounter_closed", "already_closed" ]);
 // 422 invalid_request com path bed_id: o leito já não existe ou mudou de unidade, o mesmo que bed_unavailable.
 const bedPathRefusal = (err: unknown): boolean =>
   err instanceof ApiError && err.status === 422 && errorCode(err) === "invalid_request"
@@ -285,12 +285,12 @@ export const ObservationMap = forwardRef<ObservationMapHandle, ObservationMapPro
       const target = nowBeds.find((x) => x.bed_id === chosen);
       if (!here?.stay || here.stay.stay_id !== form.stayId || !form.encounterId) return stale();
       if (!target || !target.active || target.stay) { choose(""); setNotice(MAP_STALE); return; }
-      void write(() => startObservation(form.encounterId as string, chosen), CHANGED, true);
+      void write(() => startObservation(form.encounterId as string, chosen, form.stayId), CHANGED, true);
       return;
     }
     if (!here || !here.active || here.stay) return stale();
     if (!nowWaiting.some((w) => w.encounter_id === chosen)) { choose(""); setNotice(MAP_STALE); return; }
-    void write(() => startObservation(chosen, form.bedId), STARTED, true);
+    void write(() => startObservation(chosen, form.bedId, null), STARTED, true);
   };
   const end = (stay: ObservationStayRef) => write(() => endObservation(stay.encounter_id), ENDED, false);
 

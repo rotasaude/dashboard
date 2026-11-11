@@ -88,7 +88,7 @@ describe("ObservationMap", () => {
     fireEvent.change(select, { target: { value: "en4" } });
     const send = screen.getByRole("button", { name: "Confirmar entrada" });
     fireEvent.click(send); fireEvent.click(send);
-    await waitFor(() => expect(vi.mocked(api.startObservation).mock.calls).toEqual([ [ "en4", "b2" ] ]));
+    await waitFor(() => expect(vi.mocked(api.startObservation).mock.calls).toEqual([ [ "en4", "b2", null ] ]));
     expect(await screen.findByText("Paciente em observação.")).not.toBeNull();
     await waitFor(() => expect(calls()).toBe(2));
     expect(screen.queryByLabelText("Paciente em atendimento")).toBeNull();
@@ -141,7 +141,7 @@ describe("ObservationMap", () => {
     expect(within(select).getAllByRole("option").map((o) => o.textContent).filter((t) => /Obs/.test(t ?? ""))).toEqual([ "Obs 2" ]);
     fireEvent.change(select, { target: { value: "b2" } });
     fireEvent.click(screen.getByRole("button", { name: "Confirmar troca" }));
-    await waitFor(() => expect(vi.mocked(api.startObservation).mock.calls).toEqual([ [ "en3", "b2" ] ]));
+    await waitFor(() => expect(vi.mocked(api.startObservation).mock.calls).toEqual([ [ "en3", "b2", "st1" ] ]));
     expect(await screen.findByText("Leito trocado.")).not.toBeNull();
   });
 
@@ -315,6 +315,26 @@ describe("ObservationMap", () => {
         await waitFor(() => expect(calls()).toBe(2));
         expect(screen.queryByLabelText("Paciente em atendimento")).toBeNull();
       }
+    });
+
+    it("409 observation_changed na entrada e na troca: frase, formulário fechado e o mapa relido", async () => {
+      vi.mocked(api.startObservation).mockRejectedValue(new ApiError(409, { error: "observation_changed" }, "x"));
+      const phrase = "o paciente mudou de leito enquanto a tela estava aberta — o mapa foi atualizado";
+      vi.mocked(api.getUrgencyObservation).mockResolvedValue(observationMap());
+      mountMap(roles({ doctor: true }));
+      fireEvent.click(await screen.findByRole("button", { name: "Colocar em observação no Obs 2" }));
+      fireEvent.change(screen.getByLabelText("Paciente em atendimento"), { target: { value: "en4" } });
+      fireEvent.click(screen.getByRole("button", { name: "Confirmar entrada" }));
+      expect(await screen.findByText(phrase)).not.toBeNull();
+      await waitFor(() => expect(calls()).toBe(2));
+      expect(screen.queryByLabelText("Paciente em atendimento")).toBeNull();
+
+      fireEvent.click(await screen.findByRole("button", { name: "Trocar de leito de U-038" }));
+      fireEvent.change(screen.getByLabelText("Novo leito"), { target: { value: "b2" } });
+      fireEvent.click(screen.getByRole("button", { name: "Confirmar troca" }));
+      await waitFor(() => expect(vi.mocked(api.startObservation).mock.calls[1]).toEqual([ "en3", "b2", "st1" ]));
+      await waitFor(() => expect(calls()).toBe(3));
+      expect(screen.queryByLabelText("Novo leito")).toBeNull();
     });
 
     it("leito inativo com estadia aberta fica no grupo 'Leitos inativos', sem entrada", async () => {

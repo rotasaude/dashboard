@@ -6914,9 +6914,12 @@ export function getUrgencyObservation(unitId: string): Promise<UrgencyObservatio
 }
 
 // ── Observação: entrada, troca e saída devolvem o detalhe do encontro, não a estadia ──
-export async function startObservation(encounterId: string, bedId: string): Promise<UrgencyEncounter> {
+// `expectedStayId` (Q15) vai SEMPRE no corpo: null declara uma entrada (sem estadia aberta), um id declara a troca a partir dessa
+// estadia; se o leito do paciente já mudou, o api recusa com 409 observation_changed e nada é gravado.
+export async function startObservation(encounterId: string, bedId: string, expectedStayId: string | null): Promise<UrgencyEncounter> {
   return (await jsonFetch<{ encounter: UrgencyEncounter }>(
-    urgencyPath("encounters", encounterId, "observation"), urgencyWrite("POST", { bed_id: bedId }))).encounter;
+    urgencyPath("encounters", encounterId, "observation"),
+    urgencyWrite("POST", { bed_id: bedId, expected_stay_id: expectedStayId }))).encounter;
 }
 export async function endObservation(encounterId: string): Promise<UrgencyEncounter> {
   return (await jsonFetch<{ encounter: UrgencyEncounter }>(

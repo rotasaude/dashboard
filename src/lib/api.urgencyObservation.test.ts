@@ -52,8 +52,10 @@ describe("cliente da urgência: observação, prescrição e checagem (módulo 3
 
   it("entrada, troca e saída da observação devolvem o detalhe do encontro", async () => {
     respond({ encounter: observedEncounter() });
-    expect((await startObservation("en3", "b2")).observation?.current?.bed_label).toBe("Obs 1");
-    expect(lastCall()).toEqual({ url: "/urgency/encounters/en3/observation", method: "POST", body: { bed_id: "b2" } });
+    expect((await startObservation("en3", "b2", null)).observation?.current?.bed_label).toBe("Obs 1");
+    expect(lastCall()).toEqual({ url: "/urgency/encounters/en3/observation", method: "POST", body: { bed_id: "b2", expected_stay_id: null } });
+    await startObservation("en3", "b3", "st1");
+    expect(lastCall()).toEqual({ url: "/urgency/encounters/en3/observation", method: "POST", body: { bed_id: "b3", expected_stay_id: "st1" } });
     expect((await endObservation("en3")).id).toBe("en3");
     expect(lastCall()).toEqual({ url: "/urgency/encounters/en3/observation/end", method: "POST", body: {} });
   });

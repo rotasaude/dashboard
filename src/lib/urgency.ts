@@ -213,6 +213,7 @@ export const URGENCY_ERRORS: Record<string, string> = {
   upa_has_beds: "esta UPA tem leitos de observação ativos — desative os leitos antes",
   bed_unavailable: "este leito está inativo ou é de outra unidade — o mapa foi atualizado",
   bed_taken: "outra pessoa ocupou este leito agora — o mapa foi atualizado",
+  observation_changed: "o paciente mudou de leito enquanto a tela estava aberta — o mapa foi atualizado",
   not_in_observation: "este paciente já não está em observação",
   consultation_required: "inicie a consulta de urgência antes de prescrever",
   catalog_item_invalid: "este medicamento saiu do catálogo — escolha outro",

@@ -28,7 +28,7 @@ const EVERY_CONTRACT_CODE = [
   // Task 5 carry: Patients::CreateTyped recusa `new_patient.<campo>`.
   "invalid_patient",
   // 32b (api-shapes §4): os códigos reais do api; `label_taken` do plano é `bed_label_taken` (409) no api.
-  "bed_label_taken", "bed_occupied", "upa_has_beds", "bed_unavailable", "bed_taken", "not_in_observation", "consultation_required",
+  "bed_label_taken", "bed_occupied", "upa_has_beds", "bed_unavailable", "bed_taken", "observation_changed", "not_in_observation", "consultation_required",
   "catalog_item_invalid", "prescription_not_active", "slot_invalid", "slot_not_due", "slot_taken", "max_per_day_reached",
   "stock_deduction_disabled", "lot_invalid", "already_reconciled", "catalog_unavailable", "not_author", "out_of_context",
   "not_finalized", "invalid_limit", "invalid_cursor"
