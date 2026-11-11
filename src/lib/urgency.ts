@@ -222,7 +222,7 @@ export const URGENCY_ERRORS: Record<string, string> = {
   slot_not_due: "este horário ainda não chegou — checagem só até 60 minutos antes",
   max_per_day_reached: "já foram dadas todas as doses permitidas nas últimas 24 h",
   stock_deduction_disabled: "a baixa de estoque está desligada — registre sem lote",
-  lot_invalid: "o lote escolhido está vencido, sem saldo ou é de outro item — escolha outro",
+  lot_invalid: "lote inválido para esta checagem (vencido, bloqueado, de outro item ou de outro local) — escolha outro",
   already_reconciled: "esta falta já foi conciliada por outra pessoa — a lista foi atualizada",
   catalog_unavailable: "o catálogo de medicamentos está indisponível — tente de novo em instantes",
   // Q8 (19a): o adendo de outro médico da UPA só vale com o encontro aberto.

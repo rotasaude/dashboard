@@ -25,6 +25,10 @@ const ADMINISTERED_AHEAD_MS = 5 * 60_000;
 // Q4: a primeira dose vai de agora − 1 h até agora + 24 h.
 const FIRST_DOSE_BEHIND_MS = 60 * 60_000;
 const FIRST_DOSE_AHEAD_MS = 24 * 60 * 60_000;
+// O api confere contra o próprio "agora", que é posterior ao da tela: a tela recusa (e o keptFirstDoseAt evita) o que estiver a
+// menos de 1 min do piso, para que nenhum horário cruze o piso durante o envio. Quem chama passa o `now` do momento do envio.
+export const FIRST_DOSE_FLOOR_MARGIN_MS = 60_000;
+const firstDoseFloor = (now: Date): number => now.getTime() - FIRST_DOSE_BEHIND_MS + FIRST_DOSE_FLOOR_MARGIN_MS;
 
 // ─── Frases fixas ───────────────────────────────────────────────────────────
 export const BED_FREE = "leito livre";
@@ -127,6 +131,7 @@ function formatLike(ms: number, reference: string): string {
   return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}T${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}${zone}`;
 }
 
+// `now` = o instante do envio (não o da abertura da tela).
 // D18a: o api recusa `first_dose_at` < agora − 1 h. Ao alterar a prescrição, o item mantido volta com a primeira dose da PRÓPRIA
 // grade (original + k·intervalo) que cai na janela. Retorna null quando o campo deve ser omitido (o api usa "agora"):
 //  - interval: o menor horário original + k·intervalo ≥ agora − 1 h (mantém o original se ele ainda cabe);
@@ -134,7 +139,7 @@ function formatLike(ms: number, reference: string): string {
 export function keptFirstDoseAt(item: Pick<UrgencyPrescriptionItem, "first_dose_at" | "frequency">, now: Date, opts: { given?: boolean } = {}): string | null {
   const first = Date.parse(item.first_dose_at);
   if (Number.isNaN(first)) return null;
-  const floor = now.getTime() - FIRST_DOSE_BEHIND_MS;
+  const floor = firstDoseFloor(now);
   const { kind, interval_hours } = item.frequency;
   if (kind === "interval" && interval_hours && interval_hours > 0) {
     const step = interval_hours * 3_600_000;
@@ -185,7 +190,7 @@ export function prescriptionProblems(drafts: ItemDraft[], now?: Date): Problem[]
     if (d.kind === "if_needed" && wholeIn(d.maxPerDay, 1, 24) === null) at("frequency.max_per_day", "o máximo por dia vai de 1 a 24");
     if (d.firstDoseAt.trim() !== "") {
       const t = instant(d.firstDoseAt);
-      const bad = t === null || (now !== undefined && (t < now.getTime() - FIRST_DOSE_BEHIND_MS || t > now.getTime() + FIRST_DOSE_AHEAD_MS));
+      const bad = t === null || (now !== undefined && (t < firstDoseFloor(now) || t > now.getTime() + FIRST_DOSE_AHEAD_MS));
       if (bad) at("first_dose_at", "a primeira dose vai de 1 hora atrás até 24 horas à frente");
     }
     if (chars(d.instructions) > 500) at("instructions", "a orientação tem até 500 caracteres");
@@ -222,15 +227,19 @@ export type AdministrationContext = {
   // Padrão do aprazamento: o primeiro lote FEFO e a quantidade por dose do item; só o que mudar vai ao api.
   defaultLotId: string; defaultQuantity: string; now: Date;
   // `prescribed_at` da versão: dose dada antes de a versão nascer não entra nela.
-  prescribedAt?: string;
+  prescribedAt: string;
 };
 
 const stockChanged = (d: AdministrationDraft, ctx: AdministrationContext) =>
   ctx.stockDeduction && d.status === "administered"
   && { lot: d.lotId !== "" && d.lotId !== ctx.defaultLotId, quantity: parseDecimal(d.quantity) !== parseDecimal(ctx.defaultQuantity) || decimalText(d.quantity, 5, 2) === null };
 
-export function administrationProblems(d: AdministrationDraft, ctx: AdministrationContext): Problem[] {
+export type AdministrationTarget = { itemId: string; kind: FrequencyKind; slot: string | null };
+
+// `target` (opcional) confere o horário: once/interval exigem `scheduled_at`; if_needed não o aceita.
+export function administrationProblems(d: AdministrationDraft, ctx: AdministrationContext, target?: AdministrationTarget): Problem[] {
   const out: Problem[] = [];
+  if (target && target.kind !== "if_needed" && !target.slot) out.push({ path: "scheduled_at", text: "escolha o horário a checar" });
   if (d.status !== "administered") {
     const p = reasonProblem(d.reason);
     if (p) out.push({ path: "reason", text: p });
@@ -238,8 +247,8 @@ export function administrationProblems(d: AdministrationDraft, ctx: Administrati
   }
   if (d.administeredAt.trim() !== "") {
     const t = instant(d.administeredAt);
-    const from = ctx.prescribedAt ? Date.parse(ctx.prescribedAt) : null;
-    if (t === null || t > ctx.now.getTime() + ADMINISTERED_AHEAD_MS || (from !== null && !Number.isNaN(from) && t < from)) {
+    const from = Date.parse(ctx.prescribedAt);
+    if (t === null || t > ctx.now.getTime() + ADMINISTERED_AHEAD_MS || (!Number.isNaN(from) && t < from)) {
       out.push({ path: "administered_at", text: "o horário da administração não pode passar de 5 minutos à frente nem ser anterior a esta prescrição" });
     }
   }
@@ -253,10 +262,11 @@ export function administrationProblems(d: AdministrationDraft, ctx: Administrati
 // `scheduled_at` só com horário (if_needed não aceita); `reason` só fora de administrado; `administered_at` só se informado;
 // estoque só com o interruptor, administrado e valor diferente do padrão.
 export function administrationBody(
-  d: AdministrationDraft, ctx: AdministrationContext, target: { itemId: string; slot: string | null }
+  d: AdministrationDraft, ctx: AdministrationContext, target: AdministrationTarget
 ): UrgencyAdministrationInput {
+  if (target.kind !== "if_needed" && !target.slot) throw new Error("administrationBody: horário não escolhido");
   const out: UrgencyAdministrationInput = { prescription_item_id: target.itemId, status: d.status };
-  if (target.slot) out.scheduled_at = target.slot;
+  if (target.kind !== "if_needed" && target.slot) out.scheduled_at = target.slot;
   if (d.status !== "administered") {
     out.reason = d.reason.trim();
     return out;

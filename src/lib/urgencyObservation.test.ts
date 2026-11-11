@@ -86,7 +86,9 @@ describe("prescrição", () => {
     expect(paths({ quantityPerDose: "2,5" })).toEqual([]);
     // api: de agora − 1 h até agora + 24 h (agora = 14h).
     expect(paths({ firstDoseAt: "2026-11-10T12:59" })).toEqual([ "items.0.first_dose_at" ]);
-    expect(paths({ firstDoseAt: "2026-11-10T13:00" })).toEqual([]);
+    expect(paths({ firstDoseAt: "2026-11-10T13:00" })).toEqual([ "items.0.first_dose_at" ]);
+    // Piso com margem = 13:01 (inclusive).
+    expect(paths({ firstDoseAt: "2026-11-10T13:01" })).toEqual([]);
     expect(paths({ firstDoseAt: "2026-11-11T14:00" })).toEqual([]);
     expect(paths({ firstDoseAt: "2026-11-11T14:01" })).toEqual([ "items.0.first_dose_at" ]);
     expect(paths({ firstDoseAt: "lixo" })).toEqual([ "items.0.first_dose_at" ]);
@@ -124,10 +126,15 @@ describe("D18a: primeira dose do item mantido ao alterar a prescrição (api: ag
   // agora 14:00 -03:00 → limite inferior 13:00.
   it.each([
     [ "interval ainda na janela: mantém", item("interval", "2026-11-10T13:30:00-03:00", 6), "2026-11-10T13:30:00-03:00" ],
-    [ "interval no limite exato (13:00): mantém", item("interval", "2026-11-10T13:00:00-03:00", 6), "2026-11-10T13:00:00-03:00" ],
+    [ "interval no piso do api (13:00:00): dentro da margem, vai à próxima da grade", item("interval", "2026-11-10T13:00:00-03:00", 6), "2026-11-10T19:00:00-03:00" ],
+    [ "interval piso + 30 s: ainda dentro da margem", item("interval", "2026-11-10T13:00:30-03:00", 6), "2026-11-10T19:00:30-03:00" ],
+    [ "interval piso + 61 s: mantém", item("interval", "2026-11-10T13:01:01-03:00", 6), "2026-11-10T13:01:01-03:00" ],
+    [ "once no piso: omite", item("once", "2026-11-10T13:00:00-03:00"), null ],
+    [ "once piso + 30 s: omite", item("once", "2026-11-10T13:00:30-03:00"), null ],
+    [ "once piso + 61 s: mantém", item("once", "2026-11-10T13:01:01-03:00"), "2026-11-10T13:01:01-03:00" ],
     [ "interval 8h/6h: próximo da grade é 14h", item("interval", "2026-11-10T08:00:00-03:00", 6), "2026-11-10T14:00:00-03:00" ],
     [ "interval 8h/4h: 12h cai fora, 16h entra", item("interval", "2026-11-10T08:00:00-03:00", 4), "2026-11-10T16:00:00-03:00" ],
-    [ "interval 1h: grade de hora em hora, 13h", item("interval", "2026-11-09T20:00:00-03:00", 1), "2026-11-10T13:00:00-03:00" ],
+    [ "interval 1h: 13h cai na margem, 14h", item("interval", "2026-11-09T20:00:00-03:00", 1), "2026-11-10T14:00:00-03:00" ],
     [ "interval dias atrás, 24h: mesmo horário de hoje", item("interval", "2026-11-07T15:00:00-03:00", 24), "2026-11-10T15:00:00-03:00" ],
     [ "once na janela: mantém", item("once", "2026-11-10T13:10:00-03:00"), "2026-11-10T13:10:00-03:00" ],
     [ "once já vencido: não reagenda", item("once", "2026-11-10T08:00:00-03:00"), null ],
@@ -149,7 +156,7 @@ describe("D18a: primeira dose do item mantido ao alterar a prescrição (api: ag
 });
 
 describe("checagem", () => {
-  const ctx = { stockDeduction: true, defaultLotId: "lot-a", defaultQuantity: "1", now: NOW32B };
+  const ctx = { stockDeduction: true, defaultLotId: "lot-a", defaultQuantity: "1", now: NOW32B, prescribedAt: "2026-11-10T08:00:00-03:00" };
   const d = (o: Partial<AdministrationDraft> = {}): AdministrationDraft =>
     ({ status: "administered", reason: "", lotId: "lot-a", quantity: "1", administeredAt: "", ...o });
   it("motivo fora de administrado (10 a 500)", () => {
@@ -164,7 +171,14 @@ describe("checagem", () => {
     expect(administrationProblems(d({ administeredAt: "2026-11-10T14:06" }), ctx).map((p) => p.path)).toEqual([ "administered_at" ]);
     expect(administrationProblems(d({ administeredAt: "lixo" }), ctx).map((p) => p.path)).toEqual([ "administered_at" ]);
     const withVersion = { ...ctx, prescribedAt: "2026-11-10T10:00:00-03:00" };
+    expect(administrationProblems(d({ administeredAt: "2026-11-10T07:59" }), ctx).map((p) => p.path)).toEqual([ "administered_at" ]);
     expect(administrationProblems(d({ administeredAt: "2026-11-10T09:59" }), withVersion).map((p) => p.path)).toEqual([ "administered_at" ]);
+  });
+  it("once/interval sem horário: problema no scheduled_at e corpo recusado", () => {
+    const none = { itemId: "pi1", kind: "interval" as const, slot: null };
+    expect(administrationProblems(d(), ctx, none).map((p) => p.path)).toEqual([ "scheduled_at" ]);
+    expect(administrationProblems(d(), ctx, { ...none, kind: "if_needed" })).toEqual([]);
+    expect(() => administrationBody(d(), ctx, none)).toThrow();
   });
   it("quantidade de estoque: até 2 casas, só com a baixa ligada", () => {
     expect(administrationProblems(d({ quantity: "0" }), ctx).map((p) => p.path)).toEqual([ "stock_quantity" ]);
@@ -172,13 +186,14 @@ describe("checagem", () => {
     expect(administrationProblems(d({ quantity: "lixo" }), { ...ctx, stockDeduction: false })).toEqual([]);
   });
   it("corpo: estoque só com o interruptor e só o que mudou; motivo só fora de administrado", () => {
-    const slot = { itemId: "pi1", slot: "2026-11-10T14:00:00-03:00" };
+    const slot = { itemId: "pi1", kind: "interval" as const, slot: "2026-11-10T14:00:00-03:00" };
+    const prn = { itemId: "pi1", kind: "if_needed" as const, slot: null };
     expect(administrationBody(d(), ctx, slot)).toEqual({ prescription_item_id: "pi1", scheduled_at: "2026-11-10T14:00:00-03:00", status: "administered" });
-    expect(administrationBody(d({ lotId: "lot-b", quantity: "2" }), ctx, { itemId: "pi1", slot: null }))
+    expect(administrationBody(d({ lotId: "lot-b", quantity: "2" }), ctx, prn))
       .toEqual({ prescription_item_id: "pi1", status: "administered", stock_lot_id: "lot-b", stock_quantity: "2" });
-    expect(administrationBody(d({ quantity: "2,5" }), ctx, { itemId: "pi1", slot: null }))
+    expect(administrationBody(d({ quantity: "2,5" }), ctx, prn))
       .toEqual({ prescription_item_id: "pi1", status: "administered", stock_quantity: "2.5" });
-    expect(administrationBody(d({ lotId: "lot-b", quantity: "2" }), { ...ctx, stockDeduction: false }, { itemId: "pi1", slot: null }))
+    expect(administrationBody(d({ lotId: "lot-b", quantity: "2" }), { ...ctx, stockDeduction: false }, prn))
       .toEqual({ prescription_item_id: "pi1", status: "administered" });
     // Recusa: motivo vai, estoque e horário da administração não.
     expect(administrationBody(d({ status: "refused", reason: "  o paciente não quis  ", lotId: "lot-b", quantity: "2", administeredAt: "2026-11-10T14:00" }), ctx, slot))
