@@ -11,7 +11,8 @@ export type FeatureKey =
   | "municipal_lab" | "lab_hl7_inbound" | "fake_middleware" | "lab_quality_control" | "lab_inventory"
   | "procedure_billing" | "care_lines" | "territory_registry" | "surveillance" | "care_regulation"
   | "pharmacy" | "dental_care" | "vaccination" | "rnds_immunization" | "rnds_mock"
-  | "sanitary_transport" | "tfd" | "psychosocial_care" | "urgency_care" | "waiting_room_display";
+  | "sanitary_transport" | "tfd" | "psychosocial_care" | "urgency_care" | "waiting_room_display"
+  | "urgency_stock_deduction";
 
 export const FEATURE_DISABLED_MESSAGE = "esta funcionalidade está desligada para a cidade";
 
@@ -57,7 +58,9 @@ const FEATURE_LABEL: Record<string, string> = {
   psychosocial_care: "Atenção psicossocial (CAPS)",
   // Módulo 32a (ADR 0050): urgency_care exige clinical_record; waiting_room_display é independente
   urgency_care: "Urgência (UPA)",
-  waiting_room_display: "Painel de chamada na sala de espera (TV)"
+  waiting_room_display: "Painel de chamada na sala de espera (TV)",
+  // Módulo 32b (ADR 0050): exige urgency_care e pharmacy
+  urgency_stock_deduction: "Baixa de estoque na medicação da UPA"
 };
 
 export function sessionFeatures(user: { features?: unknown } | null | undefined): string[] {

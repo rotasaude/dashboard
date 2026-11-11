@@ -135,3 +135,11 @@ describe("módulo 32a", () => {
     expect(hasFeature({ features: [ "urgency_care" ] }, "waiting_room_display")).toBe(false);
   });
 });
+
+describe("módulo 32b", () => {
+  it("urgency_stock_deduction tem nome (o mesmo do maintenance) e vem da sessão", () => {
+    expect(featureLabel("urgency_stock_deduction")).toBe("Baixa de estoque na medicação da UPA");
+    expect(hasFeature({ features: [ "urgency_stock_deduction" ] }, "urgency_stock_deduction")).toBe(true);
+    expect(hasFeature({ features: [ "urgency_care" ] }, "urgency_stock_deduction")).toBe(false);
+  });
+});

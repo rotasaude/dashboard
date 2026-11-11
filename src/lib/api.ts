@@ -2405,6 +2405,8 @@ export interface TimelineEntry {
   status_label?: string | null;
   // Divergência D2: nulo (ou tipo sem tela) = a entrada não abre detalhe.
   detail_ref: TimelineDetailRef | null;
+  // Módulo 32b: só nas entradas "urgency" (inteiro; nulo sem observação). O summary já traz "observação N h".
+  observation_hours?: number | null;
 }
 export interface TimelinePerson { display_name: string; partial: boolean; patient_id: string | null }
 export interface TimelinePage { person: TimelinePerson; entries: TimelineEntry[]; next_before: string | null }
@@ -4940,7 +4942,9 @@ export interface ReturnInput { location_id: string; dispensation_item_id: string
 
 // D15: contagens do local (as listas da tela vêm da posição). `in_transit` conta TRANSFERÊNCIAS enviadas para o local (não quantidade);
 // `expiring` não inclui os vencidos (têm contagem própria).
-export interface PharmacyAlerts { expiring: number; expired: number; below_minimum: number; in_transit: number; pending_adjustments: number }
+export interface PharmacyAlerts { expiring: number; expired: number; below_minimum: number; in_transit: number; pending_adjustments: number;
+  // Módulo 32b: faltas abertas da baixa de estoque da UPA (6ª chave).
+  urgency_shortfalls?: number }
 // P3: o api cria o paciente do par validado; a farmácia não tem cadastro territorial.
 export interface PharmacyPerson extends TerritoryPerson { has_cpf: boolean; cns_masked: string | null }
 
@@ -5053,6 +5057,19 @@ export function approveAdjustment(id: string): Promise<StockAdjustment> {
 
 export function rejectAdjustment(id: string, reason: string): Promise<StockAdjustment> {
   return jsonFetch<StockAdjustment>(phPath("adjustments", id, "reject"), phWrite("POST", { reason }));
+}
+
+// ── Faltas da baixa de estoque da UPA (módulo 32b; pharmacy) ──
+// `location_id` opcional (sem ele, só o almoxarife do central, que vê todas); ordem sempre da mais nova para a mais antiga.
+export async function listUrgencyShortfalls(
+  q: { locationId?: string | null; state: ShortfallState; before?: string | null }
+): Promise<UrgencyShortfallPage> {
+  const b = await jsonFetch<{ items?: UrgencyShortfall[]; next_before?: string | null }>(
+    withQuery(phPath("urgency_shortfalls"), phParams([ [ "location_id", q.locationId ], [ "state", q.state ] ], q.before)));
+  return { items: b.items ?? [], next_before: b.next_before ?? null };
+}
+export async function reconcileUrgencyShortfall(id: string, note: string): Promise<UrgencyShortfall> {
+  return (await jsonFetch<{ shortfall: UrgencyShortfall }>(phPath("urgency_shortfalls", id, "reconcile"), phWrite("POST", { note }))).shortfall;
 }
 
 export async function listAdjustments(q: { locationId: string; status?: string | null; before?: string | null }): Promise<AdjustmentPage> {
@@ -6571,6 +6588,8 @@ export interface UrgencyColorRow extends UrgencyWaitingRow {
 export interface UrgencyInCareRow extends UrgencyWaitingRow {
   color: UrgencyColor | null; max_wait_minutes: number | null; called_at: string | null; called_by_name: string | null;
   consultation_id: string | null; consultation_status: UrgencyConsultationStatus | null;
+  // Módulo 32b: leito e horas, quando o encontro está em observação.
+  observation?: UrgencyInCareObservation | null;
 }
 export interface UrgencyQueue {
   awaiting_classification: UrgencyWaitingRow[]; by_color: UrgencyColorRow[]; in_care: UrgencyInCareRow[];
@@ -6612,6 +6631,11 @@ export interface UrgencyEncounter {
   patient: UrgencyPatientRef; color: UrgencyColor | null; max_wait_minutes: number | null; overdue: boolean;
   first_classified_at: string | null; classifications: UrgencyClassificationView[];
   consultation_id: string | null; consultation_status: UrgencyConsultationStatus | null; outcome: UrgencyOutcomeView | null;
+  // Módulo 32b: `observation` vem sempre (recepção inclusive); `prescription` (só a versão ativa) e `administrations`
+  // (48 h) só com acesso clínico (Q9): sem ele as chaves nem existem.
+  observation?: UrgencyObservationBlock;
+  prescription?: UrgencyPrescription | null;
+  administrations?: UrgencyDetailAdministration[];
 }
 export interface UrgencyCall { id: string; kind: CallKind; ticket: string | null; location: string | null; called_at: string }
 // Identificação (só a recepção): paciente existente (fusão) ou novo, com a conferência de duplicado (Q23).
@@ -6648,6 +6672,10 @@ export interface UrgencyDashboard {
   // Evasão = só left_without_care (Q28).
   evasion: { before_classification: UrgencyCount; after_classification: UrgencyCount };
   stay: { count: UrgencyCount; median_minutes: UrgencyTime; p90_minutes: UrgencyTime };
+  // Módulo 32b (Q10/A30): horas com 1 casa; de 1 a 4 estadias o bloco inteiro vem "lt5" (bed_hours inclusive); 0 estadias: nulos.
+  observation?: {
+    stays: UrgencyCount; over_24h: UrgencyCount; median_hours: UrgencyTime; p90_hours: UrgencyTime; bed_hours: UrgencyTime;
+  };
 }
 // Retornos pedidos à UBS (D10, Q20): nunca o motivo.
 export interface CounterReferral {
@@ -6763,4 +6791,159 @@ export function pairWaitingRoomDisplay(code: string): Promise<{ display_token: s
 // 401 display_revoked ou invalid_token → parear de novo.
 export function fetchWaitingRoomBoard(token: string): Promise<WaitingRoomBoard> {
   return displayFetch(waitingRoomPath("board"), { headers: { Accept: "application/json", "X-Display-Token": token } });
+}
+
+// ─── Urgência — observação, prescrição e checagem (módulo 32b; ADR 0050; contrato 2026-11-10 §2–§9) ───
+// Formas REAIS do api (api-shapes.md da Task 0, que vale sobre o plano D1–D19). Na URL só ids, unidade, local, estado
+// e cursor: nome, CPF, CNS, medicamento, motivo e nota vão sempre no corpo. Listas desembrulham `{ items }`; o mapa
+// e o aprazamento chegam sem embrulho. Os campos opcionais do corpo só entram quando existem: o api recusa chave
+// desconhecida (422 invalid_request) e recusa `stock_*` com a baixa de estoque desligada.
+export type ObservationAlert = "near_limit" | "over_limit" | null;
+export type BedStayEndKind = "bed_change" | "observation_ended" | "outcome";
+export type FrequencyKind = "once" | "interval" | "if_needed";
+export type UrgencyPrescriptionStatus = "active" | "superseded" | "suspended" | "ended";
+export type AdministrationStatus = "administered" | "not_administered" | "refused";
+export type ShortfallCause = "no_location" | "insufficient_balance" | "lot_unavailable";
+export type ShortfallState = "open" | "reconciled";
+// Domínio fechado do api (catalog.rb DOSE_UNITS).
+export const URGENCY_DOSE_UNITS = [
+  "mg", "mcg", "g", "mL", "UI", "mEq", "gota", "comprimido", "capsula", "ampola", "frasco", "jato", "aplicacao", "sache"
+] as const;
+export type UrgencyDoseUnit = typeof URGENCY_DOSE_UNITS[number];
+
+// Leitos (só municipal_admin; escrita com step-up). `occupied` vem do api.
+export interface UrgencyBed { id: string; health_unit_id: string; label: string; active: boolean; occupied: boolean }
+export interface UrgencyBedInput { health_unit_id: string; label: string; active?: boolean }
+export interface UrgencyBedPatch { label?: string; active?: boolean }
+
+// Mapa da observação (sem trilha; polling). `hours` é inteiro, desde a PRIMEIRA entrada do encontro.
+export interface ObservationStayRef {
+  stay_id: string; encounter_id: string; ticket: string | null; patient: UrgencyPatientRef; started_at: string;
+  hours: number; alert: ObservationAlert;
+}
+export interface ObservationBed { bed_id: string; label: string; active: boolean; stay: ObservationStayRef | null }
+// Sem `attendance_id` (o api não manda).
+export interface ObservationWaiting { encounter_id: string; ticket: string | null; patient: UrgencyPatientRef; called_at: string | null }
+export interface UrgencyObservationMap { beds: ObservationBed[]; waiting_bed: ObservationWaiting[] }
+export interface UrgencyInCareObservation { bed_label: string; hours: number; alert: ObservationAlert }
+
+// Detalhe do encontro: a estadia é plana e o bloco traz `current`.
+export interface UrgencyStay {
+  stay_id: string; bed_id: string; bed_label: string; started_at: string; ended_at: string | null;
+  end_kind: BedStayEndKind | null; started_by: { name: string | null }; ended_by: { name: string | null } | null;
+}
+export interface UrgencyObservationBlock { current: UrgencyStay | null; stays: UrgencyStay[]; hours: number; alert: ObservationAlert }
+
+// <item> da farmácia (Pharmacy::Json): `name` é o rótulo do catálogo; `catmat_code` é número.
+export interface UrgencyCatalogItem {
+  catalog_item_id: string; catmat_code: number; name: string; unit: string; dispensing_unit: string;
+  controlled: boolean; controlled_list: string | null;
+}
+// Saída: as 3 chaves sempre presentes. Entrada: `interval_hours` só e sempre em interval, `max_per_day` só e sempre em if_needed.
+export interface UrgencyFrequency { kind: FrequencyKind; interval_hours: number | null; max_per_day: number | null }
+export interface UrgencyFrequencyInput { kind: FrequencyKind; interval_hours?: number; max_per_day?: number }
+export interface UrgencyPrescriptionItem {
+  id: string; position: number; catalog_item: UrgencyCatalogItem | null; controlled: boolean; controlled_list: string | null;
+  dose: string; dose_unit: UrgencyDoseUnit; route: MedicationRoute; frequency: UrgencyFrequency; first_dose_at: string;
+  instructions: string | null; stock_quantity_per_dose: string; stock_unit: string;
+}
+export interface UrgencyPrescription {
+  id: string; encounter_id: string; version: number; status: UrgencyPrescriptionStatus; supersedes_id: string | null;
+  prescribed_at: string; prescribed_by: { name: string | null; cbo_code: string }; status_changed_at: string | null;
+  suspension_reason: string | null; items: UrgencyPrescriptionItem[];
+}
+// `dose` e `stock_quantity_per_dose` são TEXTO decimal (número JSON volta 422). Dose até 5 inteiros e 3 casas; estoque até 2 casas.
+export interface UrgencyPrescriptionItemInput {
+  catalog_item_id: string; dose: string; dose_unit: UrgencyDoseUnit; route: MedicationRoute; frequency: UrgencyFrequencyInput;
+  first_dose_at?: string; instructions?: string; stock_quantity_per_dose?: string;
+}
+// POST /urgency/medication_search: o termo só no corpo (2 a 60 caracteres).
+export interface UrgencyMedicationHit {
+  catalog_item_id: string; catmat_code: number; name: string; strength: string | null; dosage_form: string | null;
+  unit: string | null; controlled_list: string | null;
+}
+
+// Checagem. No detalhe, cada uma traz também o item e o medicamento.
+export interface UrgencyAdministration {
+  id: string; status: AdministrationStatus; scheduled_at: string | null; administered_at: string | null; reason: string | null;
+  stock_lot: { id: string; lot_number: string; expires_on: string } | null; stock_quantity: string | null;
+  recorded_at: string; by: { name: string | null; cbo_code: string };
+}
+export interface UrgencyDetailAdministration extends UrgencyAdministration {
+  prescription_item_id: string; catalog_item: UrgencyCatalogItem | null; controlled: boolean;
+}
+export interface ScheduleSlot { scheduled_at: string; administration: UrgencyAdministration | null }
+export interface ScheduleLot { id: string; lot_number: string; expires_on: string; balance: string }
+// Item da prescrição + `item_id`; `recent` e `remaining` só em if_needed; `lots` só com a baixa utilizável.
+export interface ScheduleItem extends UrgencyPrescriptionItem {
+  item_id: string; slots: ScheduleSlot[]; recent: UrgencyAdministration[] | null; remaining: number | null;
+  last_administration: UrgencyAdministration | null; lots?: ScheduleLot[];
+}
+// Sem versão ativa: `prescription_id: null`, `items: []` e sem `version`.
+export interface UrgencyMedicationSchedule {
+  prescription_id: string | null; version?: number; stock_deduction: boolean; items: ScheduleItem[];
+}
+export interface UrgencyAdministrationInput {
+  prescription_item_id: string; scheduled_at?: string; status: AdministrationStatus; reason?: string; administered_at?: string;
+  stock_lot_id?: string; stock_quantity?: string;
+}
+export interface UrgencyAdministrationResult { administration: UrgencyAdministration; shortfall: { cause: ShortfallCause } | null }
+
+// Faltas da baixa (farmácia). `created_at`, `administered_at` e `reconciled_at` em UTC.
+export interface UrgencyShortfall {
+  shortfall_id: string; created_at: string; stock_location_id: string | null; catalog_item: UrgencyCatalogItem; quantity: string;
+  cause: ShortfallCause; administration: { administered_at: string | null; ticket: string | null };
+  reconciled_at: string | null; reconciled_by: { name: string | null } | null;
+}
+export interface UrgencyShortfallPage { items: UrgencyShortfall[]; next_before: string | null }
+
+// ── Leitos e mapa ──
+export async function listUrgencyBeds(unitId: string): Promise<UrgencyBed[]> {
+  const b = await jsonFetch<{ items?: UrgencyBed[] }>(withQuery(urgencyPath("beds"), urgencyQuery({ health_unit_id: unitId })));
+  return b.items ?? [];
+}
+export async function createUrgencyBed(i: UrgencyBedInput): Promise<UrgencyBed> {
+  return (await jsonFetch<{ bed: UrgencyBed }>(urgencyPath("beds"), urgencyWrite("POST", i))).bed;
+}
+export async function updateUrgencyBed(id: string, p: UrgencyBedPatch): Promise<UrgencyBed> {
+  return (await jsonFetch<{ bed: UrgencyBed }>(urgencyPath("beds", id), urgencyWrite("PATCH", p))).bed;
+}
+// Sem trilha no api; serve ao polling.
+export function getUrgencyObservation(unitId: string): Promise<UrgencyObservationMap> {
+  return jsonFetch<UrgencyObservationMap>(withQuery(urgencyPath("observation"), urgencyQuery({ health_unit_id: unitId })));
+}
+
+// ── Observação: entrada, troca e saída devolvem o detalhe do encontro, não a estadia ──
+export async function startObservation(encounterId: string, bedId: string): Promise<UrgencyEncounter> {
+  return (await jsonFetch<{ encounter: UrgencyEncounter }>(
+    urgencyPath("encounters", encounterId, "observation"), urgencyWrite("POST", { bed_id: bedId }))).encounter;
+}
+export async function endObservation(encounterId: string): Promise<UrgencyEncounter> {
+  return (await jsonFetch<{ encounter: UrgencyEncounter }>(
+    urgencyPath("encounters", encounterId, "observation", "end"), urgencyWrite("POST"))).encounter;
+}
+
+// ── Prescrição interna ──
+export async function searchUrgencyMedication(query: string): Promise<UrgencyMedicationHit[]> {
+  const b = await jsonFetch<{ items?: UrgencyMedicationHit[] }>(urgencyPath("medication_search"), urgencyWrite("POST", { query }));
+  return b.items ?? [];
+}
+export async function issueUrgencyPrescription(encounterId: string, items: UrgencyPrescriptionItemInput[]): Promise<UrgencyPrescription> {
+  return (await jsonFetch<{ prescription: UrgencyPrescription }>(
+    urgencyPath("encounters", encounterId, "prescriptions"), urgencyWrite("POST", { items }))).prescription;
+}
+export async function suspendUrgencyPrescription(prescriptionId: string, reason: string): Promise<UrgencyPrescription> {
+  return (await jsonFetch<{ prescription: UrgencyPrescription }>(
+    urgencyPath("prescriptions", prescriptionId, "suspend"), urgencyWrite("POST", { reason }))).prescription;
+}
+
+// ── Aprazamento e checagem ──
+// Grava trilha no api (recurso `medication_schedule`).
+export function getMedicationSchedule(encounterId: string): Promise<UrgencyMedicationSchedule> {
+  return jsonFetch<UrgencyMedicationSchedule>(urgencyPath("encounters", encounterId, "medication_schedule"));
+}
+export function recordAdministration(i: UrgencyAdministrationInput): Promise<UrgencyAdministrationResult> {
+  const body: Record<string, unknown> = {};
+  for (const [ key, value ] of Object.entries(i)) if (value !== undefined) body[key] = value;
+  return jsonFetch<UrgencyAdministrationResult>(urgencyPath("administrations"), urgencyWrite("POST", body));
 }
