@@ -59,7 +59,8 @@ export const DISCARD_QUESTION = "A classificação em andamento não foi enviada
 export const PRE_URGENCY_CALLED = "é um atendimento de antes da urgência: abra “Atendimentos de antes da urgência”, abaixo.";
 
 // A saída sem atendimento aberta por uma linha da fila: o bastante para o desfecho de balcão (sem o detalhe).
-type Leaving = { target: OutcomeTarget; ticket: string | null };
+// A linha em atendimento traz o leito da observação: o desfecho de balcão também fecha a estadia (Q9), e o aviso diz qual.
+type Leaving = { target: OutcomeTarget; ticket: string | null; bedLabel?: string | null };
 
 // Escape dentro de um campo não fecha nada (quem digita pode estar só saindo de uma sugestão do navegador).
 const inField = (el: EventTarget) => el instanceof HTMLElement && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName);
@@ -124,7 +125,7 @@ function LeavingPanel({ leaving, doctor, onClosed }: { leaving: Leaving; doctor:
       <Panel title={`Saída — ${leaving.ticket ?? "sem senha"}`} sub="saída sem atendimento · registro por engano"
         right={<button type="button" style={secondaryButtonStyle} onClick={() => onClosed()}>Cancelar</button>}>
         <div style={{ padding: 16 }}>
-          <OutcomeForm encounter={leaving.target} doctor={doctor} onRecorded={(_e, notice) => onClosed(notice)}
+          <OutcomeForm encounter={leaving.target} doctor={doctor} inObservation={leaving.bedLabel ? { bedLabel: leaving.bedLabel } : null} onRecorded={(_e, notice) => onClosed(notice)}
             onEncounterClosed={() => onClosed(URGENCY_ERRORS.encounter_closed)} />
         </div>
       </Panel>
@@ -322,7 +323,7 @@ export function UrgencyDesk({ unit, user, links, linksLoading = false, onGoToSec
       // A consulta aberta do médico continua aberta (os dois painéis convivem).
       onLeft: (row) => setLeaving({
         target: { id: row.encounter_id, patient: row.patient, consultation_status: "consultation_status" in row ? row.consultation_status : null },
-        ticket: row.ticket
+        ticket: row.ticket, bedLabel: "observation" in row ? row.observation?.bed_label ?? null : null
       })
     } satisfies QueueActions : {}),
     ...(roles.identify ? {

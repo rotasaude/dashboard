@@ -4,10 +4,11 @@
 import { useState, type CSSProperties } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
-  addAddendum, type Addendum, type Consultation, type ConsultationOptions, type EvaluatedProblem, type ExamRequest, type PatientProblem
+  addAddendum, errorCode, type Addendum, type Consultation, type ConsultationOptions, type EvaluatedProblem, type ExamRequest, type PatientProblem
 } from "../../lib/api";
 import { addendumChanges, addendumProblem, consultationError, examsProblem, problemsWithConsultationAdds } from "../../lib/consultation";
 import { dentalApiProblems, dentalError } from "../../lib/dental";
+import { urgencyError } from "../../lib/urgency";
 import { todayInCity } from "../../lib/campaigns";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { ProblemsEditor } from "./ProblemsEditor";
@@ -25,11 +26,13 @@ interface Props {
   unitId?: string;
   // Módulo 21a: prioridade dos exames novos (exam_tracking); os já pedidos ficam só para leitura (A33).
   examPriority?: boolean;
+  // Módulo 32b (Q8/Q13): quem evolve não é a autora; a recusa do api diz que o encontro fechou, não "só quem escreveu".
+  evolving?: boolean;
   onDone(addendum: Addendum): void;
   onCancel(): void;
 }
 
-export function AddendumForm({ consultation, options, patientProblems, loadPatientProblems, searchDelayMs, unitId, examPriority, onDone, onCancel }: Props) {
+export function AddendumForm({ consultation, options, patientProblems, loadPatientProblems, searchDelayMs, unitId, examPriority, evolving, onDone, onCancel }: Props) {
   const full = useQuery({
     queryKey: [ "consultationProblems", consultation.id ], queryFn: () => loadPatientProblems!(),
     enabled: !!loadPatientProblems, gcTime: 0, staleTime: 0, retry: false
@@ -83,6 +86,8 @@ export function AddendumForm({ consultation, options, patientProblems, loadPatie
           setPlanKey((k) => k + 1);
         }
         setError(all.length > 1 || stale.length > 0 ? all.map((p) => p.text).join("; ") : dentalError(err));
+      } else if (evolving && (errorCode(err) === "not_author" || errorCode(err) === "out_of_context")) {
+        setError(urgencyError(err));
       } else setError(consultationError(err));
     } finally {
       setBusy(false);

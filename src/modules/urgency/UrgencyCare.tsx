@@ -6,18 +6,49 @@
 // Cada leitura do detalhe grava trilha: lido ao abrir, ao finalizar e quando o api recusa o desfecho por estado desatualizado.
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { getUrgencyEncounter, type HealthUnit, type UrgencyInCareRow } from "../../lib/api";
+import {
+  getAttendanceRecord, getConsultationOptions, getUrgencyEncounter, type HealthUnit, type UrgencyEncounter, type UrgencyInCareRow
+} from "../../lib/api";
+import { OPTIONS_KEY, RECORD_KEY, consultationError } from "../../lib/consultation";
+import { useAuth } from "../../lib/auth";
 import { NOMINAL_QUERY, URGENCY_DETAIL_KEY, URGENCY_ERRORS, urgencyError } from "../../lib/urgency";
 import { useReveal } from "../../lib/useReveal";
 import { ActionButton } from "../../components/ActionButton";
 import { Panel } from "../../components/Panel";
 import { ConsultationWorkspace } from "../consultation/ConsultationWorkspace";
+import { ConsultationLoader } from "../consultation/ConsultationView";
+import { ObservationSummary } from "./ObservationSummary";
 import { EncounterSummary } from "./EncounterSummary";
 import { OutcomeForm } from "./OutcomeForm";
 import { MedicationPanel } from "./MedicationPanel";
 import { PrescriptionPanel } from "./PrescriptionPanel";
 
 export const FINALIZED_NOTICE = "Consulta finalizada. Registre o desfecho da urgência.";
+export const EVOLUTION_NEEDS_FINALIZED = "A evolução é um adendo da consulta: finalize a consulta antes.";
+
+// Evolução (Q8/Q13): o adendo da consulta de urgência finalizada, por qualquer médico (225*) com vínculo ativo nesta UPA enquanto o
+// atendimento está aberto. O api não manda "pode evoluir": a tela deriva (médico, encontro não fechado, consulta finalizada) e abre
+// a consulta pelo id (nunca por "iniciar consulta", que dá 409 not_caller a quem não chamou). Os rascunhos de regulação ficam com a
+// autora (o adendo de outro médico não os promove): a tela não promete outra coisa.
+function Evolution({ encounter, onClosedByApi }: { encounter: UrgencyEncounter; onClosedByApi(): void }) {
+  const { user } = useAuth();
+  const [ open, setOpen ] = useState(false);
+  // O prontuário é o mesmo do painel da consulta (mesma chave): sem nova leitura, que gravaria trilha.
+  const record = useQuery({
+    queryKey: [ RECORD_KEY, encounter.attendance_id ], queryFn: () => getAttendanceRecord(encounter.attendance_id),
+    gcTime: 0, staleTime: 60_000, enabled: open
+  });
+  const options = useQuery({ queryKey: [ OPTIONS_KEY, user?.id ?? null ], queryFn: getConsultationOptions, staleTime: 5 * 60_000, enabled: open });
+  if (encounter.state === "closed" || !encounter.consultation_id) return null;
+  if (encounter.consultation_status !== "finalized") return <p style={{ margin: 0, fontSize: 12, color: "var(--ink3)" }}>{EVOLUTION_NEEDS_FINALIZED}</p>;
+  if (!open) return <div><ActionButton variant="secondary" onClick={() => setOpen(true)}>Registrar evolução (adendo)</ActionButton></div>;
+  if (record.isError) return <p role="alert" style={{ margin: 0, fontSize: 12.5, color: "var(--down)" }}>{consultationError(record.error)}</p>;
+  if (!record.data) return <p className="mono" style={{ margin: 0, fontSize: 10.5, color: "var(--ink3)" }}>carregando…</p>;
+  return (
+    <ConsultationLoader id={encounter.consultation_id} options={options.data ?? null} patientProblems={record.data.problems}
+      unitId={encounter.health_unit_id} evolve onClose={() => setOpen(false)} onOpeningRequired={onClosedByApi} endOnOutOfContext />
+  );
+}
 
 export interface UrgencyCareProps {
   row: UrgencyInCareRow;
@@ -54,6 +85,11 @@ export function UrgencyCare({ row, unit, units, onClosed, onGoToSecurity }: Urge
           {detail.isPending && <p className="mono" style={{ margin: 0, fontSize: 10.5, color: "var(--ink3)" }}>carregando…</p>}
           {detail.isError && <p role="alert" style={{ margin: 0, fontSize: 12.5, color: "var(--down)" }}>{urgencyError(detail.error)}</p>}
           {encounter && <EncounterSummary encounter={encounter} />}
+          {encounter?.observation && <ObservationSummary block={encounter.observation} administrations={encounter.administrations ?? []} />}
+          {encounter?.observation && (
+            <Evolution encounter={finalizedHere ? { ...encounter, consultation_status: "finalized" } : encounter}
+              onClosedByApi={() => onClosed(URGENCY_ERRORS.encounter_closed)} />
+          )}
           <ConsultationWorkspace attendanceId={row.attendance_id} unit={unit} units={units} urgency onGoToSecurity={onGoToSecurity}
             onClose={() => onClosed()}
             onFinalized={() => { setFinalizedHere(true); void detail.refetch(); }} />
@@ -71,7 +107,8 @@ export function UrgencyCare({ row, unit, units, onClosed, onGoToSecurity }: Urge
             <span ref={medicationButton}><ActionButton variant="secondary" onClick={() => setMedicationOpen(true)}>Abrir medicação</ActionButton></span>
           ))}
           {target && (
-            <OutcomeForm encounter={target} doctor onRecorded={(_e, notice) => onClosed(notice)}
+            <OutcomeForm encounter={target} doctor inObservation={target.observation?.current ? { bedLabel: target.observation.current.bed_label } : null}
+              prescriptionActive={target.prescription?.status === "active"} onRecorded={(_e, notice) => onClosed(notice)}
               onStale={() => void detail.refetch()} onEncounterClosed={() => onClosed(URGENCY_ERRORS.encounter_closed)} />
           )}
         </div>

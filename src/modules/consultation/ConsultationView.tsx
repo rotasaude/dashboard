@@ -36,6 +36,9 @@ export interface ConsultationViewProps {
   signatureSettled?: boolean;
   // Administrador: leitura sem Imprimir e sem Adendo, mesmo que o id coincida.
   readOnly?: boolean;
+  // Módulo 32b (Q8/Q13): outro médico (225*) da UPA evolui a consulta de urgência finalizada por um adendo, enquanto o atendimento
+  // está aberto; só o botão Adendo é liberado (imprimir, regulação e TFD seguem da autora). O api confere a janela.
+  evolve?: boolean;
   // Unidade do atendimento: o adendo odontológico lê só o plano dela; sem ela, os planos abertos de todas as unidades.
   unitId?: string;
   searchDelayMs?: number;
@@ -67,6 +70,7 @@ export function ConsultationView(props: ConsultationViewProps) {
   // (não na leitura administrativa, que é só do registro).
   const examTracking = hasFeature(user, "exam_tracking") && !props.readOnly && c.status === "finalized";
   // dashboard#14: "veja Pendentes" só para quem assina esta consulta (a autora com assinatura digital).
+  const canAddend = isAuthor || (!!props.evolve && !props.readOnly && c.status === "finalized");
   const linkToPending = isAuthor && canSign(user);
   const [ adding, setAdding ] = useState(false);
   const [ printing, setPrinting ] = useState(false);
@@ -181,7 +185,7 @@ export function ConsultationView(props: ConsultationViewProps) {
             Imprimir
           </button>
         )}
-        {isAuthor && !adding && (
+        {canAddend && !adding && (
           <button type="button" style={secondaryButtonStyle} onClick={() => setAdding(true)}>Adendo</button>
         )}
         {showTfd && !tfdOpen && (
@@ -198,7 +202,7 @@ export function ConsultationView(props: ConsultationViewProps) {
       {adding && (
         <AddendumForm consultation={c} options={options} unitId={props.unitId} patientProblems={props.patientProblems}
           loadPatientProblems={props.loadPatientProblems}
-          searchDelayMs={props.searchDelayMs} examPriority={hasFeature(user, "exam_tracking")}
+          searchDelayMs={props.searchDelayMs} examPriority={hasFeature(user, "exam_tracking")} evolving={!isAuthor && canAddend}
           onDone={(addendum) => {
             setAdding(false);
             // Os rascunhos seguiram (ou não) com o adendo: relê a peça e troca os avisos pelos dele (vazio se tudo foi).

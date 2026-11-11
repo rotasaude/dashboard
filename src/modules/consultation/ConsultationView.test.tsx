@@ -98,6 +98,20 @@ describe("ConsultationView", () => {
     expect(screen.queryByRole("button", { name: "Adendo" })).toBeNull();
   });
 
+  it("evolve (32b, Q8/Q13): outro médico ganha só o Adendo, sem Imprimir", async () => {
+    sessionAs("us9");
+    wrap(<ConsultationView consultation={finalized()} options={options()} patientProblems={[]} evolve onAddendumAdded={vi.fn()} onClose={vi.fn()} />);
+    expect(await screen.findByRole("button", { name: "Adendo" })).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Imprimir" })).toBeNull();
+  });
+
+  it("evolve não vale para consulta em rascunho nem com readOnly", async () => {
+    sessionAs("us9");
+    wrap(<ConsultationView consultation={finalized()} options={options()} patientProblems={[]} evolve readOnly onAddendumAdded={vi.fn()} onClose={vi.fn()} />);
+    await settled();
+    expect(screen.queryByRole("button", { name: "Adendo" })).toBeNull();
+  });
+
   it("readOnly esconde Imprimir e Adendo mesmo para a autora", async () => {
     wrap(<ConsultationView consultation={finalized()} options={options()} patientProblems={[]} readOnly onAddendumAdded={vi.fn()} onClose={vi.fn()} />);
     await settled();
