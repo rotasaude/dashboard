@@ -39,6 +39,8 @@ export interface ConsultationViewProps {
   // Módulo 32b (Q8/Q13): outro médico (225*) da UPA evolui a consulta de urgência finalizada por um adendo, enquanto o atendimento
   // está aberto; só o botão Adendo é liberado (imprimir, regulação e TFD seguem da autora). O api confere a janela.
   evolve?: boolean;
+  // Módulo 32b: o api recusou o adendo de quem evolve (403 not_author/out_of_context): a tela de cima relê o atendimento.
+  onEvolveRefused?(): void;
   // Unidade do atendimento: o adendo odontológico lê só o plano dela; sem ela, os planos abertos de todas as unidades.
   unitId?: string;
   searchDelayMs?: number;
@@ -69,8 +71,9 @@ export function ConsultationView(props: ConsultationViewProps) {
   // Módulo 21a: na consulta finalizada, cada exame com a situação de agora
   // (não na leitura administrativa, que é só do registro).
   const examTracking = hasFeature(user, "exam_tracking") && !props.readOnly && c.status === "finalized";
-  // dashboard#14: "veja Pendentes" só para quem assina esta consulta (a autora com assinatura digital).
+  // Adendo: a autora, ou (32b, Q8/Q13) outro médico da UPA em contexto, só na consulta finalizada.
   const canAddend = isAuthor || (!!props.evolve && !props.readOnly && c.status === "finalized");
+  // dashboard#14: "veja Pendentes" só para quem assina esta consulta (a autora com assinatura digital).
   const linkToPending = isAuthor && canSign(user);
   const [ adding, setAdding ] = useState(false);
   const [ printing, setPrinting ] = useState(false);
@@ -202,7 +205,7 @@ export function ConsultationView(props: ConsultationViewProps) {
       {adding && (
         <AddendumForm consultation={c} options={options} unitId={props.unitId} patientProblems={props.patientProblems}
           loadPatientProblems={props.loadPatientProblems}
-          searchDelayMs={props.searchDelayMs} examPriority={hasFeature(user, "exam_tracking")} evolving={!isAuthor && canAddend}
+          searchDelayMs={props.searchDelayMs} examPriority={hasFeature(user, "exam_tracking")} evolving={!isAuthor && canAddend} onRefused={props.onEvolveRefused}
           onDone={(addendum) => {
             setAdding(false);
             // Os rascunhos seguiram (ou não) com o adendo: relê a peça e troca os avisos pelos dele (vazio se tudo foi).

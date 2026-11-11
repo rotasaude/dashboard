@@ -105,7 +105,7 @@ describe("ConsultationView", () => {
     expect(screen.queryByRole("button", { name: "Imprimir" })).toBeNull();
   });
 
-  it("evolve não vale para consulta em rascunho nem com readOnly", async () => {
+  it("evolve não vale com readOnly", async () => {
     sessionAs("us9");
     wrap(<ConsultationView consultation={finalized()} options={options()} patientProblems={[]} evolve readOnly onAddendumAdded={vi.fn()} onClose={vi.fn()} />);
     await settled();

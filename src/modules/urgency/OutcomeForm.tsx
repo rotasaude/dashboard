@@ -31,6 +31,8 @@ export interface OutcomeFormProps {
   // 32b (Q9): o desfecho fecha a estadia aberta e encerra a prescrição ativa no mesmo ato (quem faz é o api); a tela só avisa.
   inObservation?: { bedLabel: string } | null;
   prescriptionActive?: boolean;
+  // A fila não sabe da prescrição: o aviso diz "se houver".
+  prescriptionMaybe?: boolean;
 }
 
 // As recusas de estado que pedem reler o detalhe (nunca em foco nem ao abrir: cada leitura grava trilha).
@@ -46,8 +48,9 @@ export const RETURN_NOTE = "O motivo fica para a equipe (linha do tempo profissi
 const RETURN_NOTICE = "A UBS de referência do paciente vê o retorno na lista dela, se o paciente tiver equipe.";
 
 // "O desfecho encerra a observação no Obs 1 e a prescrição ativa." (só a parte que existe).
-export function closesNotice(inObservation: { bedLabel: string } | null | undefined, prescriptionActive: boolean | undefined): string | null {
+export function closesNotice(inObservation: { bedLabel: string } | null | undefined, prescriptionActive: boolean | undefined, maybe = false): string | null {
   const parts = [ inObservation ? `a observação no ${inObservation.bedLabel}` : null, prescriptionActive ? "a prescrição ativa" : null ].filter(Boolean);
+  if (maybe && inObservation && !prescriptionActive) parts.push("a prescrição ativa, se houver");
   return parts.length > 0 ? `O desfecho encerra ${parts.join(" e ")}.` : null;
 }
 
@@ -60,7 +63,7 @@ export function outcomeNotice(kind: UrgencyOutcomeKind): string {
 type Shown = { path: string; text: string };
 const FIELD_PATHS = [ "destination", "vacancy_request", "return_guidance.days", "return_guidance.reason", "reason" ];
 
-export function OutcomeForm({ encounter, doctor, onRecorded, onStale, onEncounterClosed, inObservation, prescriptionActive }: OutcomeFormProps) {
+export function OutcomeForm({ encounter, doctor, onRecorded, onStale, onEncounterClosed, inObservation, prescriptionActive, prescriptionMaybe }: OutcomeFormProps) {
   const ids = useId();
   const [ draft, setDraft ] = useState<OutcomeDraft>(EMPTY);
   // Os problemas aparecem depois da primeira tentativa (a do motivo do engano, sob o botão de confirmar, desde o começo).
@@ -80,7 +83,7 @@ export function OutcomeForm({ encounter, doctor, onRecorded, onStale, onEncounte
   const problems = outcomeProblems({ ...draft, kind }, ctx);
   const set = (patch: Partial<OutcomeDraft>) => { setDraft((d) => ({ ...d, ...patch })); setShown([]); };
   const fieldText = (path: string) => shown.find((p) => p.path === path)?.text ?? null;
-  const closes = closesNotice(inObservation, prescriptionActive);
+  const closes = closesNotice(inObservation, prescriptionActive, prescriptionMaybe);
   const general = shown.filter((p) => !FIELD_PATHS.includes(p.path));
 
   async function submit() {

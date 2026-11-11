@@ -4,14 +4,22 @@
 // no detalhe clínico, nunca no mapa. Nome nulo cai no fallback.
 import type { CSSProperties } from "react";
 import type { UrgencyDetailAdministration, UrgencyObservationBlock, UrgencyStay } from "../../lib/api";
-import { fmtDateTime, fmtHourMinute } from "../../lib/format";
+import { cityDateFormat, fmtHourMinute } from "../../lib/format";
+import { todayInCity } from "../../lib/campaigns";
 import { adminStatusLabel, alertText, alertTone, endKindLabel, hoursText } from "../../lib/urgencyObservation";
 import { Tag } from "../../components/Tag";
 
 const NO_NAME = "sem nome";
+// A hora de hoje é só hh:mm; a de outro dia leva a data (dd/mm hh:mm).
+const DAY_MONTH: Intl.DateTimeFormatOptions = { day: "2-digit", month: "2-digit" };
+function when(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime()) || todayInCity(d) === todayInCity()) return fmtHourMinute(iso);
+  return `${cityDateFormat(DAY_MONTH).format(d)} ${fmtHourMinute(iso)}`;
+}
 
 const stayLine = (s: UrgencyStay): string => {
-  const parts = [ s.bed_label, `${fmtHourMinute(s.started_at)}–${s.ended_at ? fmtHourMinute(s.ended_at) : ""}` ];
+  const parts = [ s.bed_label, `${when(s.started_at)}–${s.ended_at ? when(s.ended_at) : ""}` ];
   if (s.end_kind) parts.push(endKindLabel(s.end_kind));
   return parts.join(" · ");
 };
@@ -34,7 +42,7 @@ export function ObservationSummary({ block, administrations }: { block: UrgencyO
           {alert && <Tag tone={alertTone(block.alert)}>{alert}</Tag>}
         </p>
       ) : lastEnd ? (
-        <p style={{ margin: 0, fontSize: 12.5 }}>{`Saiu da observação às ${fmtHourMinute(lastEnd)} · ${hoursText(block.hours)}`}</p>
+        <p style={{ margin: 0, fontSize: 12.5 }}>{`Saiu da observação às ${when(lastEnd)} · ${hoursText(block.hours)}`}</p>
       ) : (
         <p style={muted}>Fora da observação.</p>
       )}
@@ -49,7 +57,7 @@ export function ObservationSummary({ block, administrations }: { block: UrgencyO
           <ul aria-label="Checagens das últimas 48 h" style={list}>
             {checks.map((a) => (
               <li key={a.id} style={{ color: "var(--ink2)" }}>
-                {`${fmtDateTime(whenOf(a))} · ${a.catalog_item?.name ?? "medicamento"} · ${adminStatusLabel(a.status)} por ${a.by.name ?? NO_NAME}`}
+                {`${when(whenOf(a))} · ${a.catalog_item?.name ?? "medicamento"} · ${adminStatusLabel(a.status)} por ${a.by.name ?? NO_NAME}`}
                 {a.reason && <span style={{ display: "block", whiteSpace: "pre-wrap" }}>{a.reason}</span>}
               </li>
             ))}

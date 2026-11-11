@@ -10,18 +10,23 @@ vi.mock("../../lib/api", async (orig) => ({
   startConsultation: vi.fn(), getConsultation: vi.fn(), getConsultationProblems: vi.fn()
 }));
 vi.mock("../consultation/PatientPanel", () => ({ PatientPanel: () => <span>prontuário (dublê)</span> }));
-// O dublê do carregador mostra o que o painel entrega: o id da consulta e a licença de adendo.
+// O dublê do carregador (a leitura real é do ConsultationLoader, testada no 19a) mostra o que o painel entrega: o id da consulta,
+// a licença de adendo e os dois retornos que o painel escuta (adendo registrado; recusa 403 not_author/out_of_context do adendo).
 vi.mock("../consultation/ConsultationView", () => ({
   ConsultationView: () => <span>consulta finalizada (dublê)</span>,
-  ConsultationLoader: (p: { id: string; evolve?: boolean }) => (
-    <section aria-label="Adendo" data-consultation={p.id}>{p.evolve ? "adendo liberado" : "somente leitura"}</section>
+  ConsultationLoader: (p: { id: string; evolve?: boolean; onAddendumAdded?(a: unknown): void; onEvolveRefused?(): void }) => (
+    <section aria-label="Adendo" data-consultation={p.id}>
+      <span>{p.evolve ? "adendo liberado" : "somente leitura"}</span>
+      <button type="button" onClick={() => p.onAddendumAdded?.({})}>dublê: adendo registrado</button>
+      <button type="button" onClick={() => p.onEvolveRefused?.()}>dublê: adendo recusado</button>
+    </section>
   )
 }));
 vi.mock("../billing/ProceduresPanel", () => ({ ProceduresPanel: () => null }));
 
 import * as api from "../../lib/api";
 import type { UrgencyEncounter, UrgencyInCareRow } from "../../lib/api";
-import { detailAdministration, observationBlock, observedEncounter, prescription, stay } from "../../test/urgencyObservationFixtures";
+import { NOW32B, detailAdministration, observationBlock, observedEncounter, prescription, stay } from "../../test/urgencyObservationFixtures";
 import { renderWithProviders } from "../../test/campaignFixtures";
 import { options as optionsFixture, problem, record as recordFixture } from "../../test/consultationFixtures";
 import { DOCTOR_LINK, UPA, inCareRow, queue, receptionEncounter, urgencyUser } from "../../test/urgencyFixtures";
@@ -29,8 +34,11 @@ import { OutcomeForm } from "./OutcomeForm";
 import { UrgencyDesk } from "./UrgencyDesk";
 
 const FEATURES = [ "urgency_care", "clinical_record" ];
-afterEach(cleanup);
+afterEach(() => { cleanup(); vi.useRealTimers(); });
 beforeEach(() => {
+  // Só o relógio: "hoje" é segunda 2026-11-10 (as horas de outro dia levam a data).
+  vi.useFakeTimers({ toFake: [ "Date" ] });
+  vi.setSystemTime(NOW32B);
   for (const fn of [ api.fetchCurrentSession, api.getUrgencyQueue, api.listCallLocations, api.getUrgencyEncounter, api.recordUrgencyOutcome,
     api.getAttendanceRecord, api.getConsultationOptions, api.startConsultation, api.getConsultation, api.getConsultationProblems ]) {
     vi.mocked(fn as ReturnType<typeof vi.fn>).mockReset();
@@ -73,6 +81,17 @@ describe("observação no atendimento", () => {
     expect(within(block).queryByText(/perto de 24 h|mais de 24 h/)).toBeNull();
   });
 
+  it("horas de outro dia levam a data (dd/mm hh:mm); as de hoje, só a hora", async () => {
+    await mountCare(observedEncounter({ observation: observationBlock({ current: stay({ started_at: "2026-11-09T22:00:00-03:00" }),
+      stays: [ stay({ stay_id: "st0", bed_id: "b2", bed_label: "Obs 2", started_at: "2026-11-09T20:00:00-03:00", ended_at: "2026-11-09T22:00:00-03:00", end_kind: "bed_change" }),
+        stay({ stay_id: "st00", bed_id: "b3", bed_label: "Obs 3", started_at: "2026-11-09T23:00:00-03:00", ended_at: "2026-11-10T01:00:00-03:00", end_kind: "bed_change" }) ] }),
+      administrations: [ detailAdministration({ administered_at: "2026-11-09T23:30:00-03:00" }) ] }));
+    const block = await screen.findByRole("region", { name: "Observação do paciente" });
+    expect(within(block).getByText("Obs 2 · 09/11 20:00–09/11 22:00 · troca de leito")).not.toBeNull();
+    expect(within(block).getByText("Obs 3 · 09/11 23:00–01:00 · troca de leito")).not.toBeNull();
+    expect(within(block).getByText(/^09\/11 23:30 · /)).not.toBeNull();
+  });
+
   it("o motivo de uma checagem não feita aparece só aqui, com a quebra de linha preservada; nome nulo cai no fallback", async () => {
     await mountCare(observedEncounter({ administrations: [ detailAdministration({ status: "refused", administered_at: null, reason: "recusou\nvia oral", by: { name: null, cbo_code: "223505" } }) ] }));
     const block = await screen.findByRole("region", { name: "Observação do paciente" });
@@ -96,14 +115,47 @@ describe("evolução pelo adendo (Q8/Q13)", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Registrar evolução (adendo)" }));
     const adendo = await screen.findByRole("region", { name: "Adendo" });
     expect(adendo.getAttribute("data-consultation")).toBe("co1");
-    expect(adendo.textContent).toBe("adendo liberado");
+    expect(within(adendo).getByText("adendo liberado")).not.toBeNull();
     expect(api.startConsultation).not.toHaveBeenCalled();
   });
 
-  it("sem consulta finalizada: a frase manda finalizar a consulta antes", async () => {
+  it("consulta em rascunho de quem chamou: não manda o outro médico finalizar", async () => {
     await mountCare(observedEncounter({ consultation_status: "draft" }));
-    expect(await screen.findByText("A evolução é um adendo da consulta: finalize a consulta antes.")).not.toBeNull();
+    expect(await screen.findByText("A consulta ainda não foi finalizada: a evolução entra como adendo depois que quem atende a finalizar.")).not.toBeNull();
     expect(screen.queryByRole("button", { name: "Registrar evolução (adendo)" })).toBeNull();
+  });
+  it("consulta descartada: frase própria", async () => {
+    await mountCare(observedEncounter({ consultation_status: "discarded" }));
+    expect(await screen.findByText("A consulta de urgência foi descartada: não há consulta para evoluir.")).not.toBeNull();
+  });
+
+  it("adendo registrado: relê o prontuário e o detalhe", async () => {
+    await mountCare(observedEncounter());
+    fireEvent.click(await screen.findByRole("button", { name: "Registrar evolução (adendo)" }));
+    await screen.findByRole("region", { name: "Adendo" });
+    const records = vi.mocked(api.getAttendanceRecord).mock.calls.length;
+    const details = vi.mocked(api.getUrgencyEncounter).mock.calls.length;
+    fireEvent.click(screen.getByRole("button", { name: "dublê: adendo registrado" }));
+    await waitFor(() => expect(vi.mocked(api.getAttendanceRecord).mock.calls.length).toBeGreaterThan(records));
+    await waitFor(() => expect(vi.mocked(api.getUrgencyEncounter).mock.calls.length).toBeGreaterThan(details));
+  });
+
+  it("abrir a evolução depois não relê o prontuário (cada leitura grava trilha)", async () => {
+    await mountCare(observedEncounter());
+    await waitFor(() => expect(api.getAttendanceRecord).toHaveBeenCalledTimes(1));
+    fireEvent.click(await screen.findByRole("button", { name: "Registrar evolução (adendo)" }));
+    await screen.findByRole("region", { name: "Adendo" });
+    expect(api.getAttendanceRecord).toHaveBeenCalledTimes(1);
+  });
+
+  it("adendo recusado (403): relê o detalhe e, se o encontro fechou, fecha o painel", async () => {
+    await mountCare(observedEncounter());
+    fireEvent.click(await screen.findByRole("button", { name: "Registrar evolução (adendo)" }));
+    await screen.findByRole("region", { name: "Adendo" });
+    vi.mocked(api.getUrgencyEncounter).mockResolvedValue(observedEncounter({ state: "closed" }));
+    fireEvent.click(screen.getByRole("button", { name: "dublê: adendo recusado" }));
+    await waitFor(() => expect(screen.queryByRole("region", { name: "Adendo" })).toBeNull());
+    expect(await screen.findByText(/o encontro foi fechado|encerrad/i)).not.toBeNull();
   });
 
   it("nada de texto clínico nem do paciente na URL ou no armazenamento", async () => {
@@ -132,6 +184,10 @@ describe("o desfecho encerra a observação e a prescrição", () => {
     cleanup();
     renderOutcome({ prescriptionActive: true });
     expect(screen.getByText("O desfecho encerra a prescrição ativa.")).not.toBeNull();
+  });
+  it("saída pela fila (sem o detalhe): a prescrição entra como 'se houver'", () => {
+    render(<OutcomeForm encounter={outcomeEnc()} doctor={false} inObservation={{ bedLabel: "Obs 1" }} prescriptionMaybe onRecorded={vi.fn()} />);
+    expect(screen.getByText("O desfecho encerra a observação no Obs 1 e a prescrição ativa, se houver.")).not.toBeNull();
   });
   it("sem nenhum dos dois: a tela é a do 32a", () => {
     renderOutcome({});

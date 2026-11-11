@@ -1,6 +1,7 @@
 // src/modules/consultation/AddendumForm.tsx
 // Adendo (módulo 19; spec §4; ADR 0031): só acréscimo, com motivo, podendo
-// mudar problemas, condutas e exames. Só a autora faz adendo.
+// mudar problemas, condutas e exames. Faz adendo a autora ou, na consulta de urgência finalizada (módulo 32b, Q8/Q13), outro médico
+// da UPA em contexto (`evolving`).
 import { useState, type CSSProperties } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -28,11 +29,13 @@ interface Props {
   examPriority?: boolean;
   // Módulo 32b (Q8/Q13): quem evolve não é a autora; a recusa do api diz que o encontro fechou, não "só quem escreveu".
   evolving?: boolean;
+  // A recusa de quem evolve: quem monta relê o atendimento (o encontro pode ter fechado).
+  onRefused?(): void;
   onDone(addendum: Addendum): void;
   onCancel(): void;
 }
 
-export function AddendumForm({ consultation, options, patientProblems, loadPatientProblems, searchDelayMs, unitId, examPriority, evolving, onDone, onCancel }: Props) {
+export function AddendumForm({ consultation, options, patientProblems, loadPatientProblems, searchDelayMs, unitId, examPriority, evolving, onRefused, onDone, onCancel }: Props) {
   const full = useQuery({
     queryKey: [ "consultationProblems", consultation.id ], queryFn: () => loadPatientProblems!(),
     enabled: !!loadPatientProblems, gcTime: 0, staleTime: 0, retry: false
@@ -88,6 +91,7 @@ export function AddendumForm({ consultation, options, patientProblems, loadPatie
         setError(all.length > 1 || stale.length > 0 ? all.map((p) => p.text).join("; ") : dentalError(err));
       } else if (evolving && (errorCode(err) === "not_author" || errorCode(err) === "out_of_context")) {
         setError(urgencyError(err));
+        onRefused?.();
       } else setError(consultationError(err));
     } finally {
       setBusy(false);

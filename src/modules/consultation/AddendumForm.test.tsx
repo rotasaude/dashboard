@@ -134,15 +134,17 @@ describe("AddendumForm", () => {
       .toBe("só quem escreveu a consulta pode editá-la, imprimi-la ou fazer adendo");
   });
 
-  it("evolving: 403 not_author/out_of_context diz que o encontro fechou", async () => {
+  it("evolving: 403 not_author/out_of_context diz a frase e avisa quem monta para reler o atendimento", async () => {
     mocked(api.addAddendum).mockRejectedValue(new ApiError(403, { error: "not_author" }, "403"));
+    const onRefused = vi.fn();
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(<QueryClientProvider client={client}><AddendumForm consultation={finalized()} options={options()} patientProblems={[]}
-      searchDelayMs={0} evolving onDone={vi.fn()} onCancel={vi.fn()} /></QueryClientProvider>);
+      searchDelayMs={0} evolving onRefused={onRefused} onDone={vi.fn()} onCancel={vi.fn()} /></QueryClientProvider>);
     text("Motivo do adendo", "evolução do plantão");
     text("Texto do adendo", "Paciente estável.");
     fireEvent.click(screen.getByRole("button", { name: "Registrar adendo" }));
     expect((await screen.findByRole("alert")).textContent).toBe("só o autor ou um médico da UPA com o encontro aberto escreve na consulta");
+    expect(onRefused).toHaveBeenCalled();
   });
 
   it("mudar só condutas não tira a justificativa CID-10 existente do exame", async () => {

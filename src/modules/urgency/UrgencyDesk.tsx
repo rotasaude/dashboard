@@ -125,7 +125,7 @@ function LeavingPanel({ leaving, doctor, onClosed }: { leaving: Leaving; doctor:
       <Panel title={`Saída — ${leaving.ticket ?? "sem senha"}`} sub="saída sem atendimento · registro por engano"
         right={<button type="button" style={secondaryButtonStyle} onClick={() => onClosed()}>Cancelar</button>}>
         <div style={{ padding: 16 }}>
-          <OutcomeForm encounter={leaving.target} doctor={doctor} inObservation={leaving.bedLabel ? { bedLabel: leaving.bedLabel } : null} onRecorded={(_e, notice) => onClosed(notice)}
+          <OutcomeForm encounter={leaving.target} doctor={doctor} inObservation={leaving.bedLabel ? { bedLabel: leaving.bedLabel } : null} prescriptionMaybe onRecorded={(_e, notice) => onClosed(notice)}
             onEncounterClosed={() => onClosed(URGENCY_ERRORS.encounter_closed)} />
         </div>
       </Panel>
