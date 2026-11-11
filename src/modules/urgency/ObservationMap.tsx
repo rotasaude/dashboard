@@ -10,7 +10,7 @@
 //   (bed_taken, bed_unavailable, not_in_care, not_in_observation, encounter_closed), o mapa relê na hora e o formulário fecha.
 //   O desfecho da urgência fecha a estadia pelo api; a mesa pede `refresh()` depois dele.
 // - Recepção e técnico 3222 só leem; o técnico (e quem checa) vê "Medicação", que a mesa liga ao aprazamento.
-import { forwardRef, useImperativeHandle, useMemo, useRef, useState, type CSSProperties } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
   ApiError, endObservation, errorCode, getUrgencyObservation, startObservation,
   type ObservationAlert, type ObservationBed, type ObservationStayRef, type ObservationWaiting, type HealthUnit,
@@ -20,7 +20,7 @@ import { fmtHourMinute } from "../../lib/format";
 import {
   NO_CLINICAL_IN_MAP, NO_UPA_BEDS, URGENCY_OBSERVATION_POLL_MS, alertText, alertTone, hoursText
 } from "../../lib/urgencyObservation";
-import { urgencyError, type UrgencyRoles } from "../../lib/urgency";
+import { URGENCY_ERRORS, urgencyError, type UrgencyRoles } from "../../lib/urgency";
 import { usePolling } from "../../lib/usePolling";
 import { ConfirmButton } from "../../components/ConfirmButton";
 import { Panel } from "../../components/Panel";
@@ -42,12 +42,17 @@ export interface ObservationMapProps {
 export const NO_NAME = "sem nome";
 export const NO_IDENTIFICATION = "sem identificação";
 export const NO_WAITING_FOR_BED = "ninguém em atendimento sem leito";
+export const MAP_STALE = "o mapa foi atualizado — confira o leito";
 export const END_QUESTION = "O paciente volta ao atendimento, sem leito. Confirmar?";
 const STARTED = "Paciente em observação.";
 const CHANGED = "Leito trocado.";
 const ENDED = "Observação encerrada.";
 // A recusa que mostra que o mapa já mudou: relê na hora e fecha o formulário.
 const MAP_CHANGED = new Set([ "bed_taken", "bed_unavailable", "not_in_care", "not_in_observation", "encounter_closed", "already_closed" ]);
+// 422 invalid_request com path bed_id: o leito já não existe ou mudou de unidade, o mesmo que bed_unavailable.
+const bedPathRefusal = (err: unknown): boolean =>
+  err instanceof ApiError && err.status === 422 && errorCode(err) === "invalid_request"
+  && (err.body as { path?: unknown } | null)?.path === "bed_id";
 
 // ─── Linhas campo a campo ───────────────────────────────────────────────────
 const safePatient = (p: UrgencyPatientRef): UrgencyPatientRef =>
@@ -75,7 +80,9 @@ const cards: CSSProperties = { display: "flex", flexWrap: "wrap", gap: 12 };
 const card: CSSProperties = { ...box, flex: "1 1 240px", minWidth: 0 };
 const formBox: CSSProperties = { display: "flex", flexDirection: "column", gap: 8, paddingTop: 8, borderTop: "1px solid var(--rule)" };
 
-type Form = { kind: "enter" | "change"; bedId: string; seq: number };
+// `stayId`/`encounterId` (troca): a estadia que estava no leito quando o formulário abriu. O mesmo POST faz a entrada e a troca,
+// então um encontro velho moveria um paciente de verdade: a troca só segue se o leito ainda tem ESTA estadia.
+type Form = { kind: "enter" | "change"; bedId: string; seq: number; stayId: string | null; encounterId: string | null; chosen: string };
 
 // ─── O cartão do leito ──────────────────────────────────────────────────────
 interface CardProps {
@@ -86,15 +93,15 @@ interface CardProps {
   freeBeds: ObservationBed[];
   waiting: ObservationWaiting[];
   problem: string | null;
-  onOpen(kind: Form["kind"], bedId: string): void;
+  onOpen(kind: Form["kind"], bed: ObservationBed): void;
+  onChoose(value: string): void;
   onCancel(): void;
-  onSubmit(encounterId: string, bedId: string): void;
+  onSubmit(chosen: string): void;
   onEnd(stay: ObservationStayRef): Promise<void>;
   onMedication?(target: MedicationTarget): void;
 }
 
-function BedCard({ bed, roles, busy, form, freeBeds, waiting, problem, onOpen, onCancel, onSubmit, onEnd, onMedication }: CardProps) {
-  const [ chosen, setChosen ] = useState("");
+function BedCard({ bed, roles, busy, form, freeBeds, waiting, problem, onOpen, onChoose, onCancel, onSubmit, onEnd, onMedication }: CardProps) {
   const { stay } = bed;
   const mine = form && (stay ? form.kind === "change" && form.bedId === bed.bed_id : form.kind === "enter" && form.bedId === bed.bed_id) ? form : null;
   const lock = busy ? { "aria-disabled": true as const, style: disabledButtonStyle } : null;
@@ -104,18 +111,38 @@ function BedCard({ bed, roles, busy, form, freeBeds, waiting, problem, onOpen, o
   const secondary = (on: () => void, label: string, aria?: string) => (
     <button type="button" aria-label={aria} {...(lock ?? { style: secondaryButtonStyle })} onClick={() => { if (!busy) on(); }}>{label}</button>
   );
-  const open = (kind: Form["kind"]) => { setChosen(""); onOpen(kind, bed.bed_id); };
+  const open = (kind: Form["kind"]) => onOpen(kind, bed);
+  const chosen = mine?.chosen ?? "";
+  const sectionRef = useRef<HTMLElement>(null);
+  const headingRef = useRef<HTMLParagraphElement>(null);
+  const selectRef = useRef<HTMLSelectElement>(null);
+  const enterRef = useRef<HTMLSpanElement>(null);
+  const changeRef = useRef<HTMLSpanElement>(null);
+  const wasOpen = useRef(false);
+  const kind = mine?.kind;
+  // Foco: abre dentro do campo; ao fechar, volta ao botão que abriu (ou ao título, se o botão já não existe).
+  useEffect(() => {
+    if (mine) selectRef.current?.focus();
+    else if (wasOpen.current) {
+      const at = document.activeElement;
+      if (!at || at === document.body || sectionRef.current?.contains(at)) {
+        const trigger = (stay ? changeRef : enterRef).current?.querySelector<HTMLButtonElement>("button");
+        (trigger ?? headingRef.current)?.focus();
+      }
+    }
+    wasOpen.current = !!mine;
+  }, [ kind, mine !== null ]);
   const alert = stay ? alertText(stay.alert) : null;
   const ref = stay ? refOf(stay.ticket, stay.patient) : "";
 
   return (
-    <section aria-label={bed.label} style={card}>
-      <p style={title}>{bed.label}</p>
+    <section ref={sectionRef} aria-label={bed.label} style={card}>
+      <p ref={headingRef} tabIndex={-1} style={title}>{bed.label}</p>
       {!stay ? (
         <>
           <div style={row}><Tag tone="ok">livre</Tag></div>
           {roles.observation && bed.active && !mine && (
-            <div style={row}>{primary(() => open("enter"), "Colocar em observação", `Colocar em observação no ${bed.label}`)}</div>
+            <div style={row}><span ref={enterRef}>{primary(() => open("enter"), "Colocar em observação", `Colocar em observação no ${bed.label}`)}</span></div>
           )}
         </>
       ) : (
@@ -131,7 +158,7 @@ function BedCard({ bed, roles, busy, form, freeBeds, waiting, problem, onOpen, o
           </div>
           {(roles.observation || (roles.medication && onMedication)) && !mine && (
             <div style={row}>
-              {roles.observation && secondary(() => open("change"), "Trocar de leito", `Trocar de leito de ${ref}`)}
+              {roles.observation && <span ref={changeRef}>{secondary(() => open("change"), "Trocar de leito", `Trocar de leito de ${ref}`)}</span>}
               {roles.observation && <ConfirmButton label={`Encerrar observação de ${ref}`} question={END_QUESTION} onConfirm={() => onEnd(stay)} />}
               {roles.medication && onMedication && secondary(
                 () => onMedication({ encounterId: stay.encounter_id, ticket: stay.ticket, patientName: nameOf(stay.patient) }),
@@ -145,13 +172,11 @@ function BedCard({ bed, roles, busy, form, freeBeds, waiting, problem, onOpen, o
         <form style={formBox} onSubmit={(e) => {
           e.preventDefault();
           if (busy) return;
-          const encounterId = stay ? stay.encounter_id : chosen;
-          const bedId = stay ? chosen : bed.bed_id;
-          if (encounterId && bedId) onSubmit(encounterId, bedId);
+          if (chosen) onSubmit(chosen);
         }}>
           {stay ? (
             <label style={fieldLabel}>Novo leito
-              <select style={inputStyle} value={chosen} onChange={(e) => setChosen(e.target.value)}>
+              <select ref={selectRef} style={inputStyle} value={chosen} onChange={(e) => onChoose(e.target.value)}>
                 <option value="">Escolha o leito</option>
                 {freeBeds.filter((b) => b.bed_id !== bed.bed_id).map((b) => <option key={b.bed_id} value={b.bed_id}>{b.label}</option>)}
               </select>
@@ -160,7 +185,7 @@ function BedCard({ bed, roles, busy, form, freeBeds, waiting, problem, onOpen, o
             <p style={muted}>{NO_WAITING_FOR_BED}</p>
           ) : (
             <label style={fieldLabel}>Paciente em atendimento
-              <select style={inputStyle} value={chosen} onChange={(e) => setChosen(e.target.value)}>
+              <select ref={selectRef} style={inputStyle} value={chosen} onChange={(e) => onChoose(e.target.value)}>
                 <option value="">Escolha o paciente</option>
                 {waiting.map((w) => <option key={w.encounter_id} value={w.encounter_id}>{whoText(w.ticket, w.patient)}</option>)}
               </select>
@@ -208,7 +233,24 @@ export const ObservationMap = forwardRef<ObservationMapHandle, ObservationMapPro
   const freeBeds = active.filter((b) => !b.stay);
 
   const closeForm = () => { seqRef.current += 1; setForm(null); setProblem(null); };
-  const open = (kind: Form["kind"], bedId: string) => { seqRef.current += 1; setNotice(null); setProblem(null); setForm({ kind, bedId, seq: seqRef.current }); };
+  const open = (kind: Form["kind"], bed: ObservationBed) => {
+    seqRef.current += 1; setNotice(null); setProblem(null);
+    setForm({ kind, bedId: bed.bed_id, seq: seqRef.current, stayId: bed.stay?.stay_id ?? null, encounterId: bed.stay?.encounter_id ?? null, chosen: "" });
+  };
+  const choose = (chosen: string) => setForm((f) => (f ? { ...f, chosen } : f));
+
+  // O mapa mais recente (a conferência do envio lê daqui, não da renderização que abriu o formulário).
+  const latest = useRef<{ beds: ObservationBed[]; waiting: ObservationWaiting[] }>({ beds: [], waiting: [] });
+  latest.current = { beds, waiting };
+  // Cada leitura confere o formulário aberto: o leito sumiu, ficou ocupado (entrada) ou trocou de estadia (troca) → fecha e avisa;
+  // a seleção de quem saiu de "sem leito" cai.
+  useEffect(() => {
+    if (!form || data === undefined) return;
+    const b = beds.find((x) => x.bed_id === form.bedId);
+    const stale = !b || (form.kind === "change" ? !b.stay || b.stay.stay_id !== form.stayId : !b.active || !!b.stay);
+    if (stale) { closeForm(); setNotice(MAP_STALE); return; }
+    if (form.kind === "enter" && form.chosen && !waiting.some((w) => w.encounter_id === form.chosen)) choose("");
+  }, [ data ]);
 
   // Um envio por vez (ref + estado). `onOk` é a frase de sucesso; a resposta de um formulário já fechado não fecha o de outro leito.
   async function write(run: () => Promise<unknown>, onOk: string, fromForm: boolean): Promise<void> {
@@ -223,8 +265,8 @@ export const ObservationMap = forwardRef<ObservationMapHandle, ObservationMapPro
     } catch (err) {
       const code = errorCode(err) ?? "";
       const text = urgencyError(err);
-      if (MAP_CHANGED.has(code)) {
-        setNotice(text);
+      if (MAP_CHANGED.has(code) || bedPathRefusal(err)) {
+        setNotice(bedPathRefusal(err) ? URGENCY_ERRORS.bed_unavailable : text);
         if (fromForm && seqRef.current === seq) closeForm();
         refresh();
       } else if (fromForm && seqRef.current === seq) setProblem(text);
@@ -233,8 +275,23 @@ export const ObservationMap = forwardRef<ObservationMapHandle, ObservationMapPro
       busyRef.current = false; setBusy(false);
     }
   }
-  const submit = (encounterId: string, bedId: string) =>
-    void write(() => startObservation(encounterId, bedId), form?.kind === "change" ? CHANGED : STARTED, true);
+  // Reconfere no mapa mais recente antes de enviar: o mesmo POST faz a entrada e a troca, e um id velho moveria outro paciente.
+  const submit = (chosen: string) => {
+    if (!form || busyRef.current) return;
+    const { beds: nowBeds, waiting: nowWaiting } = latest.current;
+    const here = nowBeds.find((x) => x.bed_id === form.bedId);
+    const stale = (): void => { closeForm(); setNotice(MAP_STALE); };
+    if (form.kind === "change") {
+      const target = nowBeds.find((x) => x.bed_id === chosen);
+      if (!here?.stay || here.stay.stay_id !== form.stayId || !form.encounterId) return stale();
+      if (!target || !target.active || target.stay) { choose(""); setNotice(MAP_STALE); return; }
+      void write(() => startObservation(form.encounterId as string, chosen), CHANGED, true);
+      return;
+    }
+    if (!here || !here.active || here.stay) return stale();
+    if (!nowWaiting.some((w) => w.encounter_id === chosen)) { choose(""); setNotice(MAP_STALE); return; }
+    void write(() => startObservation(chosen, form.bedId), STARTED, true);
+  };
   const end = (stay: ObservationStayRef) => write(() => endObservation(stay.encounter_id), ENDED, false);
 
   const hhmm = (ms: number) => fmtHourMinute(new Date(ms).toISOString());
@@ -243,7 +300,7 @@ export const ObservationMap = forwardRef<ObservationMapHandle, ObservationMapPro
 
   const renderCard = (b: ObservationBed) => (
     <BedCard key={b.bed_id} bed={b} roles={roles} busy={busy} form={form} freeBeds={freeBeds} waiting={waiting} problem={problem}
-      onOpen={open} onCancel={closeForm} onSubmit={submit} onEnd={end} onMedication={onMedication} />
+      onOpen={open} onChoose={choose} onCancel={closeForm} onSubmit={submit} onEnd={end} onMedication={onMedication} />
   );
 
   return (

@@ -63,7 +63,7 @@ const safeInCare = (r: UrgencyInCareRow): UrgencyInCareRow => ({
   called_by_name: r.called_by_name ?? null, consultation_id: r.consultation_id ?? null, consultation_status: r.consultation_status ?? null,
   // 32b: leito, horas e alerta, nada mais (o que o api mandar a mais não passa).
   observation: r.observation
-    ? { bed_label: r.observation.bed_label, hours: r.observation.hours, alert: r.observation.alert === "near_limit" || r.observation.alert === "over_limit" ? r.observation.alert : null }
+    ? { bed_label: r.observation.bed_label, hours: Number.isFinite(r.observation.hours) ? r.observation.hours : 0, alert: r.observation.alert === "near_limit" || r.observation.alert === "over_limit" ? r.observation.alert : null }
     : null
 });
 
