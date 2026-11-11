@@ -1,6 +1,6 @@
 // PharmacyAlerts — alertas da farmácia (módulo 27a; F-27.7; contrato §5). Tela de CONSULTA: o `LocationPick` aceita qualquer local
 // (o almoxarife do central vê também os alheios, com `roles: []`); os atalhos para as telas de ação só aparecem onde `locationRoles`
-// dá o papel. As cinco CONTAGENS (GET /pharmacy/alerts) não gravam trilha e não têm dado pessoal, então o react-query pode relê-las
+// dá o papel. As CONTAGENS (GET /pharmacy/alerts) não gravam trilha e não têm dado pessoal, então o react-query pode relê-las
 // (como o AlertsPanel do 21c); nada de temporizador próprio. As LISTAS saem da POSIÇÃO (filtros expiring / below_minimum), não do
 // endpoint de contagem: lidas ao abrir (STATIC_QUERY, sem releitura), só a primeira página, na ordem do nome do item (H10).
 // Contagens são do local escolhido; "Todos os locais" (só o almoxarife do central) troca apenas as listas. Unidade: `dispensing_unit`.
@@ -49,7 +49,7 @@ function Body({ location }: { location: PharmacyLocation }) {
   return (
     <div style={stack}>
       <p className="mono" style={muted}>{`Local: ${location.name}`}</p>
-      <Counts location={location} canTransfers={roles.pharmacist || roles.assistant || roles.keeper} canAdjustments={roles.pharmacist || roles.keeper} />
+      <Counts location={location} canTransfers={roles.pharmacist || roles.assistant || roles.keeper} canAdjustments={roles.pharmacist || roles.keeper} canShortfalls={roles.pharmacist || roles.keeper} />
       {canAll && (
         <div style={row}>
           <label style={checkLabel}>
@@ -65,7 +65,7 @@ function Body({ location }: { location: PharmacyLocation }) {
   );
 }
 
-function Counts({ location, canTransfers, canAdjustments }: { location: PharmacyLocation; canTransfers: boolean; canAdjustments: boolean }) {
+function Counts({ location, canTransfers, canAdjustments, canShortfalls }: { location: PharmacyLocation; canTransfers: boolean; canAdjustments: boolean; canShortfalls: boolean }) {
   const alerts = useQuery({
     queryKey: [ PH_ALERTS_KEY, location.id ], queryFn: () => getPharmacyAlerts(location.id), retry: false, refetchInterval: PHARMACY_ALERTS_REFRESH_MS
   });
@@ -80,6 +80,7 @@ function Counts({ location, canTransfers, canAdjustments }: { location: Pharmacy
           {line(`Abaixo do mínimo: ${data.below_minimum}`)}
           {line(`Transferências em trânsito: ${data.in_transit}`, canTransfers && <a href={screenLink("pharmacy-transfers")}>Transferências</a>)}
           {line(`Ajustes aguardando aprovação: ${data.pending_adjustments}`, canAdjustments && <a href={screenLink("pharmacy-adjustments")}>Inventário e ajustes</a>)}
+          {data.urgency_shortfalls !== undefined && line(`Faltas da UPA: ${data.urgency_shortfalls}`, canShortfalls && <a href={screenLink("pharmacy-urgency-shortfalls")}>Faltas da UPA</a>)}
         </ul>
       )}
     </Panel>

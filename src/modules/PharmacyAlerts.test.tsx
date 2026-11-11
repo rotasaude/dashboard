@@ -130,4 +130,16 @@ describe("PharmacyAlerts", () => {
     expect(await screen.findByText("Vencendo: 2")).not.toBeNull();
     await waitFor(() => expect(within(screen.getByRole("region", { name: "Abaixo do mínimo" })).getByRole("alert")).not.toBeNull());
   });
+
+  it("Faltas da UPA: a contagem com o atalho; sem a chave (api do 27a), nada", async () => {
+    mocked(api.getPharmacyAlerts).mockResolvedValue(phAlerts({ urgency_shortfalls: 2 }));
+    renderWithProviders(<PharmacyAlerts />);
+    expect(await screen.findByText("Faltas da UPA: 2")).not.toBeNull();
+    expect(screen.getByRole("link", { name: "Faltas da UPA" }).getAttribute("href")).toContain("pharmacy-urgency-shortfalls");
+    cleanup();
+    mocked(api.getPharmacyAlerts).mockResolvedValue(phAlerts());
+    renderWithProviders(<PharmacyAlerts />);
+    expect(await screen.findByText("Vencendo: 2")).not.toBeNull();
+    expect(screen.queryByText(/Faltas da UPA/)).toBeNull();
+  });
 });
