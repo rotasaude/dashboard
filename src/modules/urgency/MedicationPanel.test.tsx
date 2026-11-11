@@ -11,6 +11,7 @@ vi.mock("../../lib/api", async (orig) => ({
 
 import * as api from "../../lib/api";
 import { ApiError } from "../../lib/api";
+import { MEDICATION_SCHEDULE_KEY } from "../../lib/urgencyObservation";
 import { UPA, inCareRow, queue, urgencyUser } from "../../test/urgencyFixtures";
 import {
   NOW32B, TECH_LINK, administration, observationMap, prescriptionItem, schedule, scheduleItem
@@ -330,5 +331,23 @@ describe("MedicationPanel (F-32.8)", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Medicação U-038" }));
     expect(await screen.findByRole("heading", { name: "Medicação — U-038" })).not.toBeNull();
     expect(api.getUrgencyEncounter).not.toHaveBeenCalled();
+  });
+  it("trocar de paciente tira do cache só o aprazamento do anterior (nunca a chave inteira)", async () => {
+    vi.mocked(api.getUrgencyQueue).mockResolvedValue(queue({ awaiting_classification: [], by_color: [], in_care: [
+      inCareRow(), inCareRow({ encounter_id: "en4", attendance_id: "at4", ticket: "U-039" }) ] }));
+    vi.mocked(api.getUrgencyObservation).mockResolvedValue({ beds: [], waiting_bed: [] });
+    vi.mocked(api.getMedicationSchedule).mockResolvedValue(schedule());
+    const qc = client();
+    qc.setQueryData([ MEDICATION_SCHEDULE_KEY, "outro" ], schedule());
+    render(<QueryClientProvider client={qc}>
+      <UrgencyDesk unit={UPA} user={urgencyUser([ "health_professional" ])} links={[ TECH_LINK ]} />
+    </QueryClientProvider>);
+    fireEvent.click(await screen.findByRole("button", { name: "Medicação U-038" }));
+    await screen.findByRole("heading", { name: "Medicação — U-038" });
+    await waitFor(() => expect(qc.getQueryData([ MEDICATION_SCHEDULE_KEY, "en3" ])).toBeDefined());
+    fireEvent.click(screen.getByRole("button", { name: "Medicação U-039" }));
+    await screen.findByRole("heading", { name: "Medicação — U-039" });
+    expect(qc.getQueryData([ MEDICATION_SCHEDULE_KEY, "en3" ])).toBeUndefined();
+    expect(qc.getQueryData([ MEDICATION_SCHEDULE_KEY, "outro" ])).toBeDefined();
   });
 });

@@ -1,13 +1,14 @@
 // Observação no atendimento da UPA (módulo 32b, F-32.7; contrato §4–§5, Q8/Q13): o bloco da observação no painel, a evolução pelo
 // adendo (a consulta abre pelo id, nunca por startConsultation) e o aviso de que o desfecho encerra a estadia e a prescrição.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 
+const cb = vi.hoisted(() => ({ added: undefined as undefined | (() => void), refused: undefined as undefined | (() => void) }));
 vi.mock("../../lib/api", async (orig) => ({
   ...(await orig<typeof import("../../lib/api")>()),
   fetchCurrentSession: vi.fn(), getUrgencyQueue: vi.fn(), getUrgencyObservation: vi.fn(), listCallLocations: vi.fn(),
   getUrgencyEncounter: vi.fn(), recordUrgencyOutcome: vi.fn(), getAttendanceRecord: vi.fn(), getConsultationOptions: vi.fn(),
-  startConsultation: vi.fn(), getConsultation: vi.fn(), getConsultationProblems: vi.fn()
+  getMedicationSchedule: vi.fn(), startConsultation: vi.fn(), getConsultation: vi.fn(), getConsultationProblems: vi.fn()
 }));
 vi.mock("../consultation/PatientPanel", () => ({ PatientPanel: () => <span>prontuário (dublê)</span> }));
 // O dublê do carregador (a leitura real é do ConsultationLoader, testada no 19a) mostra o que o painel entrega: o id da consulta,
@@ -15,11 +16,13 @@ vi.mock("../consultation/PatientPanel", () => ({ PatientPanel: () => <span>pront
 vi.mock("../consultation/ConsultationView", () => ({
   ConsultationView: () => <span>consulta finalizada (dublê)</span>,
   ConsultationLoader: (p: { id: string; evolve?: boolean; onAddendumAdded?(a: unknown): void; onEvolveRefused?(): void }) => (
+    // Guarda os retornos para um adendo cuja resposta chega depois de o painel sair da tela.
+    (cb.added = () => p.onAddendumAdded?.({}), cb.refused = () => p.onEvolveRefused?.(),
     <section aria-label="Adendo" data-consultation={p.id}>
       <span>{p.evolve ? "adendo liberado" : "somente leitura"}</span>
       <button type="button" onClick={() => p.onAddendumAdded?.({})}>dublê: adendo registrado</button>
       <button type="button" onClick={() => p.onEvolveRefused?.()}>dublê: adendo recusado</button>
-    </section>
+    </section>)
   )
 }));
 vi.mock("../billing/ProceduresPanel", () => ({ ProceduresPanel: () => null }));
@@ -40,7 +43,7 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: [ "Date" ] });
   vi.setSystemTime(NOW32B);
   for (const fn of [ api.fetchCurrentSession, api.getUrgencyQueue, api.listCallLocations, api.getUrgencyEncounter, api.recordUrgencyOutcome,
-    api.getAttendanceRecord, api.getConsultationOptions, api.startConsultation, api.getConsultation, api.getConsultationProblems ]) {
+    api.getAttendanceRecord, api.getConsultationOptions, api.getMedicationSchedule, api.startConsultation, api.getConsultation, api.getConsultationProblems ]) {
     vi.mocked(fn as ReturnType<typeof vi.fn>).mockReset();
   }
   sessionStorage.clear();
@@ -213,3 +216,61 @@ describe("o desfecho encerra a observação e a prescrição", () => {
   });
 });
 
+
+describe("nenhuma releitura depois que o painel fechou", () => {
+  const rowB = inCareRow({ encounter_id: "en4", attendance_id: "at4", ticket: "U-039", consultation_id: null, consultation_status: null });
+  let closedA = false;
+  async function switchToB(refusedA = false) {
+    closedA = false;
+    const rowA = inCareRow({ consultation_id: "co1", consultation_status: "finalized" });
+    const user = urgencyUser([ "health_professional" ], FEATURES);
+    vi.mocked(api.fetchCurrentSession).mockResolvedValue(user);
+    vi.mocked(api.getUrgencyQueue).mockResolvedValue(queue({ awaiting_classification: [], by_color: [], in_care: [ rowA, rowB ] }));
+    vi.mocked(api.getUrgencyEncounter).mockImplementation(async (id: string) =>
+      id === "en3" ? observedEncounter({ state: closedA ? "closed" : "in_care" }) : observedEncounter({ id: "en4", attendance_id: "at4", consultation_id: null, consultation_status: null }));
+    renderWithProviders(<UrgencyDesk unit={UPA} user={user} links={[ DOCTOR_LINK ]} />);
+    fireEvent.click(await screen.findByRole("button", { name: `Atender ${rowA.ticket}` }));
+    fireEvent.click(await screen.findByRole("button", { name: "Registrar evolução (adendo)" }));
+    await screen.findByRole("region", { name: "Adendo" });
+    const { added, refused } = cb;
+    fireEvent.click(screen.getByRole("button", { name: `Atender ${rowB.ticket}` }));
+    await screen.findByRole("heading", { name: "Atendimento — U-039" });
+    await waitFor(() => expect(vi.mocked(api.getUrgencyEncounter).mock.calls.some(([ id ]) => id === "en4")).toBe(true));
+    vi.mocked(api.getUrgencyEncounter).mockClear();
+    closedA = refusedA;
+    return { added: added!, refused: refused! };
+  }
+
+  it("adendo que responde depois de trocar de paciente: não relê o encontro anterior e o painel novo segue aberto", async () => {
+    const { added } = await switchToB();
+    await act(async () => { added(); await Promise.resolve(); });
+    await new Promise((r) => setTimeout(r, 30));
+    expect(vi.mocked(api.getUrgencyEncounter).mock.calls.filter(([ id ]) => id === "en3")).toHaveLength(0);
+    expect(screen.getByRole("heading", { name: "Atendimento — U-039" })).not.toBeNull();
+  });
+
+  it("adendo recusado depois de trocar de paciente (encontro anterior fechado): o painel novo segue aberto", async () => {
+    const { refused } = await switchToB(true);
+    await act(async () => { refused(); await Promise.resolve(); });
+    await new Promise((r) => setTimeout(r, 30));
+    expect(vi.mocked(api.getUrgencyEncounter).mock.calls.filter(([ id ]) => id === "en3")).toHaveLength(0);
+    expect(screen.getByRole("heading", { name: "Atendimento — U-039" })).not.toBeNull();
+    expect(screen.queryByText(/o encontro foi fechado|encerrad/i)).toBeNull();
+  });
+});
+
+describe("medicação presa à versão da prescrição", () => {
+  it("a prescrição nova (Alterar) fecha o painel da medicação e não relê o aprazamento sozinha", async () => {
+    vi.mocked(api.getMedicationSchedule).mockResolvedValue({ items: [] } as never);
+    await mountCare(observedEncounter({ prescription: prescription({ id: "pr1" }) }));
+    fireEvent.click(await screen.findByRole("button", { name: "Registrar evolução (adendo)" }));
+    await screen.findByRole("region", { name: "Adendo" });
+    fireEvent.click(await screen.findByRole("button", { name: "Abrir medicação" }));
+    await waitFor(() => expect(api.getMedicationSchedule).toHaveBeenCalledTimes(1));
+    vi.mocked(api.getUrgencyEncounter).mockResolvedValue(observedEncounter({ prescription: prescription({ id: "pr2", version: 2 }) }));
+    await act(async () => { cb.added!(); await Promise.resolve(); });
+    expect(await screen.findByRole("button", { name: "Abrir medicação" })).not.toBeNull();
+    await new Promise((r) => setTimeout(r, 30));
+    expect(api.getMedicationSchedule).toHaveBeenCalledTimes(1);
+  });
+});

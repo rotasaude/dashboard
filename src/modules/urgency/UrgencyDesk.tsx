@@ -256,19 +256,23 @@ export function UrgencyDesk({ unit, user, links, linksLoading = false, onGoToSec
   };
   const openCare = (row: UrgencyInCareRow) => { setLeaving(null); setCare(row); };
   // Fechar o atendimento ou a saída; com o desfecho registrado, o aviso (só o tipo) e a fila relida.
-  const closeCare = (notice?: string) => {
-    if (care) queryClient.removeQueries({ queryKey: [ URGENCY_DETAIL_KEY, care.encounter_id ] });
+  // Só fecha o painel do encontro que pediu: um retorno tardio do anterior não fecha o atual.
+  const careRef = useRef(care);
+  careRef.current = care;
+  const closeCare = (encounterId: string, notice?: string) => {
+    if (careRef.current?.encounter_id !== encounterId) return;
+    queryClient.removeQueries({ queryKey: [ URGENCY_DETAIL_KEY, encounterId ] });
     setCare(null);
     // O desfecho fecha a estadia no api (contrato §4): o mapa relê junto com a fila.
     if (notice) { setNotice(notice); queueRef.current?.refresh(); mapRef.current?.refresh(); }
   };
   // Trocar de paciente ou fechar tira o aprazamento (nominal) do cache.
   const openMedication = (t: MedicationTarget) => {
-    queryClient.removeQueries({ queryKey: [ MEDICATION_SCHEDULE_KEY ] });
+    if (medication) queryClient.removeQueries({ queryKey: [ MEDICATION_SCHEDULE_KEY, medication.encounterId ] });
     setNotice(null); setMedication(t);
   };
   const closeMedication = (notice?: string) => {
-    queryClient.removeQueries({ queryKey: [ MEDICATION_SCHEDULE_KEY ] });
+    if (medication) queryClient.removeQueries({ queryKey: [ MEDICATION_SCHEDULE_KEY, medication.encounterId ] });
     setMedication(null);
     if (notice) { setNotice(notice); queueRef.current?.refresh(); mapRef.current?.refresh(); }
   };
@@ -380,7 +384,7 @@ export function UrgencyDesk({ unit, user, links, linksLoading = false, onGoToSec
           onKeep={() => setAsked(null)} />
       )}
       {care && (
-        <UrgencyCare key={care.encounter_id} row={care} unit={unit} units={[ unit ]} onClosed={closeCare} onGoToSecurity={onGoToSecurity} />
+        <UrgencyCare key={care.encounter_id} row={care} unit={unit} units={[ unit ]} onClosed={(n) => closeCare(care.encounter_id, n)} onGoToSecurity={onGoToSecurity} />
       )}
       {medication && (
         <MedicationPanel key={medication.encounterId} target={medication} onClose={() => closeMedication()}

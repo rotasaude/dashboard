@@ -69,6 +69,9 @@ export interface UrgencyCareProps {
 
 export function UrgencyCare({ row, unit, units, onClosed, onGoToSecurity }: UrgencyCareProps) {
   const ref = useReveal<HTMLDivElement>(true);
+  // Nenhuma releitura (grava trilha) nem fechamento depois que o painel saiu da tela, nem por resposta que chega tarde.
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const detail = useQuery({
     // Cada leitura grava trilha: nada de nova tentativa, foco ou reconexão (NOMINAL_QUERY); só a releitura pedida.
     queryKey: [ URGENCY_DETAIL_KEY, row.encounter_id ], queryFn: () => getUrgencyEncounter(row.encounter_id), ...NOMINAL_QUERY
@@ -77,13 +80,21 @@ export function UrgencyCare({ row, unit, units, onClosed, onGoToSecurity }: Urge
   const [ finalizedHere, setFinalizedHere ] = useState(false);
   const encounter = detail.data;
   // A medicação lê o aprazamento (grava trilha): só quando a pessoa abre.
-  const [ medicationOpen, setMedicationOpen ] = useState(false);
+  // Guarda a versão da prescrição para a qual foi aberta: outra versão (Alterar) ou nenhuma fecha o painel no mesmo render
+  // (sem montar o painel da versão nova, que leria o aprazamento sozinho).
+  const [ medicationFor, setMedicationFor ] = useState<string | null>(null);
+  const prescriptionId = detail.data?.prescription?.id ?? null;
+  const medicationOpen = medicationFor !== null && medicationFor === prescriptionId;
+  const setMedicationOpen = (open: boolean) => setMedicationFor(open ? prescriptionId : null);
   const medicationButton = useRef<HTMLSpanElement>(null);
   const wasOpen = useRef(false);
   useEffect(() => {
     if (wasOpen.current && !medicationOpen) medicationButton.current?.querySelector("button")?.focus();
     wasOpen.current = medicationOpen;
   }, [ medicationOpen ]);
+  // Toda releitura do detalhe passa por aqui; a resposta só fecha o painel se ele ainda é este.
+  const reread = (): Promise<UrgencyEncounter | undefined> =>
+    mounted.current ? detail.refetch().then((r) => r.data) : Promise.resolve(undefined);
   const target = encounter && (finalizedHere ? { ...encounter, consultation_status: "finalized" as const } : encounter);
 
   return (
@@ -97,20 +108,20 @@ export function UrgencyCare({ row, unit, units, onClosed, onGoToSecurity }: Urge
           {encounter?.observation && (
             <Evolution encounter={finalizedHere ? { ...encounter, consultation_status: "finalized" } : encounter}
               onClosedByApi={() => onClosed(URGENCY_ERRORS.encounter_closed)}
-              onRefused={() => void detail.refetch().then((r) => { if (r.data?.state === "closed") onClosed(URGENCY_ERRORS.encounter_closed); })} />
+              onRefused={() => void reread().then((d) => { if (mounted.current && d?.state === "closed") onClosed(URGENCY_ERRORS.encounter_closed); })} />
           )}
           <ConsultationWorkspace attendanceId={row.attendance_id} unit={unit} units={units} urgency onGoToSecurity={onGoToSecurity}
             onClose={() => onClosed()}
-            onFinalized={() => { setFinalizedHere(true); void detail.refetch(); }} />
+            onFinalized={() => { setFinalizedHere(true); void reread(); }} />
           {finalizedHere && <p role="status" style={{ margin: 0, fontSize: 12.5, fontWeight: 600 }}>{FINALIZED_NOTICE}</p>}
           {/* A prescrição interna (32b): a chave só vem com acesso clínico (Q9); sem ela, a tela é a do 32a. */}
           {target && target.prescription !== undefined && (
-            <PrescriptionPanel encounter={target} unit={unit} onChanged={() => void detail.refetch()}
+            <PrescriptionPanel encounter={target} unit={unit} onChanged={() => void reread()}
               onEncounterClosed={() => onClosed(URGENCY_ERRORS.encounter_closed)}
               consultationStarted={target.consultation_id !== null && target.consultation_status !== "discarded"} />
           )}
           {target?.prescription?.status === "active" && (medicationOpen ? (
-            <MedicationPanel target={{ encounterId: row.encounter_id, ticket: row.ticket, patientName: row.patient.name ?? "sem nome" }}
+            <MedicationPanel key={target.prescription.id} target={{ encounterId: row.encounter_id, ticket: row.ticket, patientName: row.patient.name ?? "sem nome" }}
               prescribedAt={target.prescription.prescribed_at} onClose={() => setMedicationOpen(false)} onEncounterClosed={() => onClosed(URGENCY_ERRORS.encounter_closed)} />
           ) : (
             <span ref={medicationButton}><ActionButton variant="secondary" onClick={() => setMedicationOpen(true)}>Abrir medicação</ActionButton></span>
@@ -118,7 +129,7 @@ export function UrgencyCare({ row, unit, units, onClosed, onGoToSecurity }: Urge
           {target && (
             <OutcomeForm encounter={target} doctor inObservation={target.observation?.current ? { bedLabel: target.observation.current.bed_label } : null}
               prescriptionActive={target.prescription?.status === "active"} onRecorded={(_e, notice) => onClosed(notice)}
-              onStale={() => void detail.refetch()} onEncounterClosed={() => onClosed(URGENCY_ERRORS.encounter_closed)} />
+              onStale={() => void reread()} onEncounterClosed={() => onClosed(URGENCY_ERRORS.encounter_closed)} />
           )}
         </div>
       </Panel>
