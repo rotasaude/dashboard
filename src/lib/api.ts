@@ -5107,7 +5107,9 @@ export async function getPharmacyAlerts(locationId: string): Promise<PharmacyAle
   const b = await jsonFetch<Partial<PharmacyAlerts>>(withQuery(phPath("alerts"), new URLSearchParams({ location_id: locationId })));
   return {
     expiring: b.expiring ?? 0, expired: b.expired ?? 0, below_minimum: b.below_minimum ?? 0,
-    in_transit: b.in_transit ?? 0, pending_adjustments: b.pending_adjustments ?? 0
+    in_transit: b.in_transit ?? 0, pending_adjustments: b.pending_adjustments ?? 0,
+    // Módulo 32b: só quando o api a manda (o api do 27a não tem a chave e a linha não aparece).
+    ...(typeof b.urgency_shortfalls === "number" ? { urgency_shortfalls: b.urgency_shortfalls } : {})
   };
 }
 

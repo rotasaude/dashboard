@@ -141,6 +141,16 @@ describe("cliente da farmácia (contrato §3–§9)", () => {
     expect([ urlOf(2).pathname, urlOf(2).search ]).toEqual([ "/pharmacy/alerts", "?location_id=l2" ]);
   });
 
+  it("alertas do 32b: urgency_shortfalls passa adiante (inclusive 0); o api do 27a sem a chave não a inventa", async () => {
+    fetchMock.mockReset()
+      .mockImplementationOnce(() => ok({ expiring: 0, expired: 0, below_minimum: 0, in_transit: 0, pending_adjustments: 0, urgency_shortfalls: 3 }))
+      .mockImplementationOnce(() => ok({ expiring: 0, urgency_shortfalls: 0 }))
+      .mockImplementationOnce(() => ok({ expiring: 1 }));
+    expect((await getPharmacyAlerts("l2")).urgency_shortfalls).toBe(3);
+    expect((await getPharmacyAlerts("l2")).urgency_shortfalls).toBe(0);
+    expect("urgency_shortfalls" in (await getPharmacyAlerts("l2"))).toBe(false);
+  });
+
   it("nada sensível na URL: código, CPF, nome, receita, motivo e notificação só no corpo", async () => {
     await lookupPrescriptions({ location_id: "l2", short_code: "ABCDE23456" });
     await lookupPharmacyPerson("12345678909");
