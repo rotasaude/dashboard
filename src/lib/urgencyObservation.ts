@@ -131,12 +131,23 @@ function formatLike(ms: number, reference: string): string {
   return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}T${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}${zone}`;
 }
 
+// Marcador de "este item não entra na versão nova". Distinto de null (= omitir o campo = o api assume "agora").
+export const DROPPED = "drop" as const;
+export type KeptFirstDose = string | null | typeof DROPPED;
+
+// Ao alterar, dose única já administrada fica de fora da versão nova (reagendá-la daria a dose de novo).
+export const droppedOnAlter = (item: Pick<UrgencyPrescriptionItem, "frequency">, given: boolean): boolean =>
+  given && item.frequency.kind === "once";
+
 // `now` = o instante do envio (não o da abertura da tela).
 // D18a: o api recusa `first_dose_at` < agora − 1 h. Ao alterar a prescrição, o item mantido volta com a primeira dose da PRÓPRIA
-// grade (original + k·intervalo) que cai na janela. Retorna null quando o campo deve ser omitido (o api usa "agora"):
+// grade (original + k·intervalo) que cai na janela. Retorno:
+//  - DROPPED ("drop"): once já administrado; o chamador NÃO o leva à versão nova (nunca vira "agora");
+//  - null: omitir o campo (o api usa "agora"); só para item que ainda deve a dose;
 //  - interval: o menor horário original + k·intervalo ≥ agora − 1 h (mantém o original se ele ainda cabe);
-//  - once / if_needed: mantém o original só se ainda cabe na janela; senão omite (once já dado nunca é reagendado: `given`).
-export function keptFirstDoseAt(item: Pick<UrgencyPrescriptionItem, "first_dose_at" | "frequency">, now: Date, opts: { given?: boolean } = {}): string | null {
+//  - once (não dado) / if_needed: mantém o original só se ainda cabe na janela; senão null.
+export function keptFirstDoseAt(item: Pick<UrgencyPrescriptionItem, "first_dose_at" | "frequency">, now: Date, opts: { given?: boolean } = {}): KeptFirstDose {
+  if (droppedOnAlter(item, opts.given === true)) return DROPPED;
   const first = Date.parse(item.first_dose_at);
   if (Number.isNaN(first)) return null;
   const floor = firstDoseFloor(now);
@@ -146,7 +157,6 @@ export function keptFirstDoseAt(item: Pick<UrgencyPrescriptionItem, "first_dose_
     const k = first >= floor ? 0 : Math.ceil((floor - first) / step);
     return formatLike(first + k * step, item.first_dose_at);
   }
-  if (kind === "once" && opts.given) return null;
   return first >= floor ? item.first_dose_at : null;
 }
 

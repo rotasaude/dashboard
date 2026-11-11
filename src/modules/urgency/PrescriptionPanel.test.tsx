@@ -12,7 +12,7 @@ vi.mock("../../lib/api", async (orig) => ({
 import * as api from "../../lib/api";
 import { ApiError, type UrgencyEncounter, type UrgencyMedicationHit } from "../../lib/api";
 import { UPA } from "../../test/urgencyFixtures";
-import { catalogItem, observedEncounter, prescription, prescriptionItem } from "../../test/urgencyObservationFixtures";
+import { catalogItem, detailAdministration, observedEncounter, prescription, prescriptionItem } from "../../test/urgencyObservationFixtures";
 import { PrescriptionPanel } from "./PrescriptionPanel";
 
 const hit = (o: Partial<UrgencyMedicationHit> = {}): UrgencyMedicationHit => ({
@@ -387,5 +387,54 @@ describe("PrescriptionPanel", () => {
     expect(screen.queryByLabelText("Dose do item 1")).toBeNull();
     expect(b.onChanged).toHaveBeenCalledTimes(1);
     expect(issueCalls()[1][2]).toBe("pr1");
+  });
+  describe("alterar com dose única (F-P1)", () => {
+    const NOW = "2026-11-10T14:20:00-03:00";
+    const interval = prescriptionItem({ id: "pi-int", position: 1 });
+    const once = (o = {}) => prescriptionItem({ id: "pi-once", position: 2, catalog_item: catalogItem({ catalog_item_id: "cat-losartana", name: "Losartana 50 mg" }),
+      dose: "50", dose_unit: "mg", route: "oral", frequency: { kind: "once", interval_hours: null, max_per_day: null },
+      first_dose_at: "2026-11-09T19:25:00-03:00", ...o });
+    const enc = (items: ReturnType<typeof prescriptionItem>[], administrations: ReturnType<typeof detailAdministration>[]) =>
+      observedEncounter({ prescription: prescription({ items }), administrations });
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: [ "Date" ] });
+      vi.setSystemTime(new Date(NOW));
+      vi.mocked(api.issueUrgencyPrescription).mockResolvedValue(prescription({ id: "pr2", version: 2 }));
+    });
+
+    it("dose única já administrada fica fora do formulário, com aviso, e não vai no corpo", async () => {
+      mountPanel(enc([ interval, once() ], [ detailAdministration({ id: "ad9", prescription_item_id: "pi-once", administered_at: "2026-11-09T19:25:00-03:00" }) ]));
+      fireEvent.click(screen.getByRole("button", { name: "Alterar prescrição" }));
+      expect(screen.getByText(/Dose única já administrada, fora da nova versão: Losartana 50 mg \(09\/11 19:25\)\./)).not.toBeNull();
+      expect(screen.queryByLabelText("Dose do item 2")).toBeNull();
+      expect(screen.queryByText(/Primeira dose: agora/)).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Emitir versão 2" }));
+      await waitFor(() => expect(issueCalls()).toHaveLength(1));
+      const body = issueCalls()[0][1];
+      expect(body).toHaveLength(1);
+      expect(body[0].catalog_item_id).toBe("cat-dipirona");
+      expect(JSON.stringify(body)).not.toContain("cat-losartana");
+    });
+
+    it("hoje mostra só hh:mm; todos os itens fora: abre sem itens, com o aviso", () => {
+      mountPanel(enc([ once({ first_dose_at: "2026-11-10T09:05:00-03:00" }) ], [ detailAdministration({ prescription_item_id: "pi-once", administered_at: "2026-11-10T09:05:00-03:00" }) ]));
+      fireEvent.click(screen.getByRole("button", { name: "Alterar prescrição" }));
+      expect(screen.getByText(/fora da nova versão: Losartana 50 mg \(09:05\)\./)).not.toBeNull();
+      expect(screen.queryByLabelText("Dose do item 1")).toBeNull();
+      expect(screen.getByRole("button", { name: "Adicionar item" })).not.toBeNull();
+    });
+
+    it("dose única ainda não dada é mantida (dose devida: primeira dose agora)", async () => {
+      mountPanel(enc([ interval, once() ], []));
+      fireEvent.click(screen.getByRole("button", { name: "Alterar prescrição" }));
+      expect(screen.queryByText(/fora da nova versão/)).toBeNull();
+      expect(screen.getByLabelText("Dose do item 2")).not.toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Emitir versão 2" }));
+      await waitFor(() => expect(issueCalls()).toHaveLength(1));
+      const body = issueCalls()[0][1];
+      expect(body).toHaveLength(2);
+      expect(body[1]).toMatchObject({ catalog_item_id: "cat-losartana" });
+      expect(body[1]).not.toHaveProperty("first_dose_at");
+    });
   });
 });

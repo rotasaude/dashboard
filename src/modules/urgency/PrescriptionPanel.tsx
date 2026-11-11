@@ -12,11 +12,11 @@ import {
   type UrgencyPrescriptionItem
 } from "../../lib/api";
 import { ROUTE_LABEL } from "../../lib/clinicalDocuments";
-import { fmtDateTime, fmtHourMinute } from "../../lib/format";
+import { cityDateFormat, fmtDateTime, fmtHourMinute } from "../../lib/format";
 import type { Problem } from "../../lib/pharmacy";
 import { URGENCY_ERRORS, urgencyRefusals } from "../../lib/urgency";
 import {
-  MAX_ITEMS, emptyItemDraft, frequencyText, itemDraftFrom, keptFirstDoseAt, prescriptionBody, prescriptionProblems, reasonProblem, type ItemDraft
+  MAX_ITEMS, DROPPED, droppedOnAlter, emptyItemDraft, frequencyText, itemDraftFrom, keptFirstDoseAt, type KeptFirstDose, prescriptionBody, prescriptionProblems, reasonProblem, type ItemDraft
 } from "../../lib/urgencyObservation";
 import { ActionButton } from "../../components/ActionButton";
 import { ConfirmButton } from "../../components/ConfirmButton";
@@ -71,6 +71,23 @@ export function withOffset(local: string): string {
   return `${t}:00${off >= 0 ? "+" : "-"}${p(Math.trunc(off / 60))}:${p(off % 60)}`;
 }
 
+const keptText = (k: KeptFirstDose): string => (k === DROPPED || k === null ? "" : k);
+
+// "hh:mm" se foi hoje (na cidade), senão "dd/mm hh:mm".
+function whenText(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const day = (x: Date) => cityDateFormat({ year: "numeric", month: "2-digit", day: "2-digit" }, "en-CA").format(x);
+  if (day(d) === day(new Date())) return fmtHourMinute(iso);
+  const dm = cityDateFormat({ day: "2-digit", month: "2-digit" }).format(d);
+  return `${dm} ${fmtHourMinute(iso)}`;
+}
+export const droppedNotice = (item: UrgencyPrescriptionItem, at: string | null): string => {
+  const w = whenText(at);
+  return `Dose única já administrada, fora da nova versão: ${item.catalog_item?.name ?? "item"}${w ? ` (${w})` : ""}.`;
+};
+
 export function PrescriptionPanel({ encounter, unit, consultationStarted, onChanged: onChangedProp, onEncounterClosed, doctor = true }: PrescriptionPanelProps) {
   const [ override, setOverride ] = useState<Shown | null>(null);
   const fromDetail = encounter.prescription ?? null;
@@ -95,16 +112,26 @@ export function PrescriptionPanel({ encounter, unit, consultationStarted, onChan
   const newRow = (draft: ItemDraft = emptyItemDraft(), original: UrgencyPrescriptionItem | null = null): Row => ({ key: keys.current++, draft, original });
   const [ rows, setRows ] = useState<Row[] | null>(null);
   const [ shown, setShown ] = useState<Problem[]>([]);
+  // Doses únicas já administradas, deixadas de fora da versão que está sendo aberta.
+  const [ dropped, setDropped ] = useState<string[]>([]);
   const [ notice, setNotice ] = useState<string | null>(null);
   const [ suspending, setSuspending ] = useState(false);
   const [ reason, setReason ] = useState("");
   const [ suspendError, setSuspendError ] = useState<string | null>(null);
   const sending = useRef(false);
 
+  const given = (o: UrgencyPrescriptionItem) =>
+    (encounter.administrations ?? []).some((a) => a.prescription_item_id === o.id && a.status === "administered");
+  const administeredAt = (o: UrgencyPrescriptionItem): string | null =>
+    (encounter.administrations ?? []).filter((a) => a.prescription_item_id === o.id && a.status === "administered")
+      .map((a) => a.administered_at ?? a.scheduled_at).filter((x): x is string => !!x).sort().pop() ?? null;
+
   const nextVersion = (active?.version ?? 0) + 1;
   const open = (from: UrgencyPrescription | null) => {
     setNotice(null); setShown([]); setSuspending(false); setOpenedFrom(activeId); focusItem.current = 0;
-    setRows(from ? from.items.map((it) => newRow(itemDraftFrom(it), it)) : [ newRow() ]);
+    const out = from ? from.items.filter((it) => droppedOnAlter(it, given(it))) : [];
+    setDropped(out.map((it) => droppedNotice(it, administeredAt(it))));
+    setRows(from ? from.items.filter((it) => !out.includes(it)).map((it) => newRow(itemDraftFrom(it), it)) : [ newRow() ]);
   };
   const patchRow = (key: number, patch: Partial<ItemDraft>) => {
     setRows((rs) => rs && rs.map((r) => {
@@ -127,15 +154,15 @@ export function PrescriptionPanel({ encounter, unit, consultationStarted, onChan
   }, [ rows ]);
   useEffect(() => { if (notice) noticeRef.current?.focus(); }, [ notice ]);
 
-  const given = (o: UrgencyPrescriptionItem) =>
-    (encounter.administrations ?? []).some((a) => a.prescription_item_id === o.id && a.status === "administered");
 
   // A primeira dose de cada item no instante do envio: o item mantido e não mexido segue a grade original; o digitado leva o fuso.
   function drafts(now: Date): ItemDraft[] {
     return (rows ?? []).map((row) => {
       const { draft, original } = row;
       if (original && isKept(row)) {
-        return { ...draft, firstDoseAt: keptFirstDoseAt(original, now, { given: given(original) }) ?? "" };
+        const kept = keptFirstDoseAt(original, now, { given: given(original) });
+        // DROPPED não chega aqui (a linha não é aberta); se chegasse, "" = "agora" seria justamente o bug.
+        return { ...draft, firstDoseAt: kept === DROPPED || kept === null ? "" : kept };
       }
       return { ...draft, firstDoseAt: withOffset(draft.firstDoseAt) };
     });
@@ -225,9 +252,14 @@ export function PrescriptionPanel({ encounter, unit, consultationStarted, onChan
 
       {rows !== null && (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {dropped.length > 0 && (
+            <ul aria-label="doses únicas fora da nova versão" role="status" style={{ margin: 0, paddingLeft: 18, fontSize: 12.5, fontWeight: 600 }}>
+              {dropped.map((d) => <li key={d}>{d}</li>)}
+            </ul>
+          )}
           {rows.map((r, i) => (
             <PrescriptionItemFields key={r.key} index={i} draft={r.draft} unitId={unit.id} problems={itemProblems(i)}
-              keptAt={isKept(r) && r.original ? (keptFirstDoseAt(r.original, new Date(), { given: given(r.original) }) ?? "") : undefined}
+              keptAt={isKept(r) && r.original ? keptText(keptFirstDoseAt(r.original, new Date(), { given: given(r.original) })) : undefined}
               onChange={(patch) => patchRow(r.key, patch)}
               onRemove={rows.length > 1 ? () => { setRows(rows.filter((x) => x.key !== r.key)); setShown([]); } : undefined} />
           ))}

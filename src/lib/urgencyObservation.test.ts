@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   ADMIN_STATUSES, CHECK_AHEAD_MINUTES, FREQUENCY_KINDS, MAX_ITEMS, adminStatusLabel, administrationBody, administrationProblems,
   alertText, alertTone, bedLabelProblem, canCheck, emptyItemDraft, endKindLabel, frequencyText, hoursText, itemDraftFrom,
-  keptFirstDoseAt, parseDecimal, prescriptionBody, prescriptionProblems, reasonProblem, shortfallCauseLabel, slotState,
+  droppedOnAlter, keptFirstDoseAt, parseDecimal, prescriptionBody, prescriptionProblems, reasonProblem, shortfallCauseLabel, slotState,
   type AdministrationDraft, type ItemDraft
 } from "./urgencyObservation";
 import type { ObservationAlert } from "./api";
@@ -143,8 +143,21 @@ describe("D18a: primeira dose do item mantido ao alterar a prescrição (api: ag
   ])("%s", (_name, it_, expected) => {
     expect(keptFirstDoseAt(it_, NOW32B)).toBe(expected);
   });
-  it("once já administrado nunca é reagendado, mesmo na janela", () => {
-    expect(keptFirstDoseAt(item("once", "2026-11-10T13:10:00-03:00"), NOW32B, { given: true })).toBeNull();
+  it("once já administrado sai da versão nova: marcador 'drop', nunca o 'agora' (null), esteja na janela ou não", () => {
+    expect(keptFirstDoseAt(item("once", "2026-11-10T13:10:00-03:00"), NOW32B, { given: true })).toBe("drop");
+    expect(keptFirstDoseAt(item("once", "2026-11-09T19:25:00-03:00"), NOW32B, { given: true })).toBe("drop");
+  });
+  it("once ainda não dado, no passado: 'agora' (null), a dose segue devida", () => {
+    expect(keptFirstDoseAt(item("once", "2026-11-09T19:25:00-03:00"), NOW32B, { given: false })).toBeNull();
+    expect(keptFirstDoseAt(item("once", "2026-11-09T19:25:00-03:00"), NOW32B)).toBeNull();
+  });
+  it("interval e if_needed dados continuam na grade; só o once dado cai (droppedOnAlter)", () => {
+    expect(keptFirstDoseAt(item("interval", "2026-11-10T13:30:00-03:00", 6), NOW32B, { given: true })).toBe("2026-11-10T13:30:00-03:00");
+    expect(keptFirstDoseAt(item("if_needed", "2026-11-10T13:10:00-03:00"), NOW32B, { given: true })).toBe("2026-11-10T13:10:00-03:00");
+    expect(droppedOnAlter(item("once", "2026-11-10T13:10:00-03:00"), true)).toBe(true);
+    expect(droppedOnAlter(item("once", "2026-11-10T13:10:00-03:00"), false)).toBe(false);
+    expect(droppedOnAlter(item("interval", "2026-11-10T13:10:00-03:00", 6), true)).toBe(false);
+    expect(droppedOnAlter(item("if_needed", "2026-11-10T13:10:00-03:00"), true)).toBe(false);
   });
   it("mantém o fuso do original e passa na validação do corpo", () => {
     // Agora = 17h UTC; piso 16h UTC; grade 8h, 14h, 20h UTC.
