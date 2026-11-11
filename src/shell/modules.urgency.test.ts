@@ -17,6 +17,15 @@ describe("menu da urgência (módulo 32a)", () => {
     expect(ids(urgencyUser([ "municipal_admin" ], [ "urgency_care", "clinical_record" ]))).not.toContain("waiting-room-settings");
     expect(ids(urgencyUser([ "analyst" ]))).not.toContain("waiting-room-settings");
   });
+  it("leitos de observação só do admin, com urgency_care e clinical_record (sem depender do waiting_room_display)", () => {
+    expect(ids(urgencyUser([ "municipal_admin" ], [ "urgency_care", "clinical_record" ]))).toContain("urgency-beds");
+    expect(ids(urgencyUser([ "municipal_admin" ], [ "waiting_room_display" ]))).not.toContain("urgency-beds");
+    expect(ids(urgencyUser([ "analyst" ]))).not.toContain("urgency-beds");
+    expect(ids(urgencyUser([ "health_professional" ]))).not.toContain("urgency-beds");
+    expect(CATALOG.screens["urgency-beds"].description).toBe("Leitos da observação da UPA, com step-up");
+    const items = NAV_GROUPS.find((g) => g.label === "Urgência")!.items.map((i) => i.id);
+    expect(items).toEqual([ "urgency-panel", "waiting-room-settings", "urgency-beds" ]);
+  });
   it("o grupo some inteiro sem nada visível e tem ícone e descrição no catálogo", () => {
     expect(navGroupsFor(urgencyUser([ "citizen_verifier" ])).some((g) => g.label === "Urgência")).toBe(false);
     expect(CATALOG.groups["Urgência"].description).toBe("UPA: tempos por cor, desfechos e o painel de chamada da sala de espera");

@@ -32,7 +32,7 @@ export type ModuleId =
   | "surveillance-queue" | "surveillance-negatives" | "surveillance-reports" | "surveillance-panel" | "surveillance-diseases"
   | "regulation-queue" | "regulation-returned" | "regulation-offers" | "regulation-settings"
   | "pharmacy-dispensing" | "pharmacy-external" | "pharmacy-transfers" | "pharmacy-entries" | "pharmacy-stock" | "pharmacy-adjustments"
-  | "pharmacy-alerts" | "pharmacy-admin"
+  | "pharmacy-alerts" | "pharmacy-urgency-shortfalls" | "pharmacy-admin"
   | "vaccination-room" | "vaccination-pending" | "vaccination-stock" | "vaccination-cold-chain" | "vaccination-summary" | "vaccination-panel"
   | "vaccination-admin"
   | "dental-prosthesis" | "dental-ceo-goals" | "dental-indicators" | "dental-admin"
@@ -40,7 +40,7 @@ export type ModuleId =
   | "transport-settings" | "tfd-queue" | "tfd-my-cases"
   | "caps-reception" | "caps-today" | "caps-enrollments" | "caps-groups" | "caps-beds" | "caps-matrix" | "caps-raas" | "caps-panel"
   | "caps-settings"
-  | "urgency-panel" | "waiting-room-settings";
+  | "urgency-panel" | "waiting-room-settings" | "urgency-beds";
 
 export interface NavItem { id: ModuleId; label: string; icon: string; }
 export interface NavGroupDef { label: string; items: NavItem[]; }
@@ -109,6 +109,7 @@ export const NAV_GROUPS: NavGroupDef[] = [
     { id: "pharmacy-stock", label: "Posição e extrato", icon: "▦" },
     { id: "pharmacy-adjustments", label: "Inventário e ajustes", icon: "±" },
     { id: "pharmacy-alerts", label: "Alertas da farmácia", icon: "⚠" },
+    { id: "pharmacy-urgency-shortfalls", label: "Faltas da UPA", icon: "⚠" },
     { id: "pharmacy-admin", label: "Locais e configurações", icon: "⚙" }
   ]},
   { label: "Vacinação", items: [
@@ -152,7 +153,8 @@ export const NAV_GROUPS: NavGroupDef[] = [
   ]},
   { label: "Urgência", items: [
     { id: "urgency-panel", label: "Painel da urgência", icon: "▦" },
-    { id: "waiting-room-settings", label: "Senhas, locais e TVs", icon: "▭" }
+    { id: "waiting-room-settings", label: "Senhas, locais e TVs", icon: "▭" },
+    { id: "urgency-beds", label: "Leitos de observação", icon: "▭" }
   ]},
   { label: "Exames", items: [
     { id: "exam-acknowledgements", label: "Resultados aguardando ciência", icon: "⚑" },
@@ -431,6 +433,9 @@ export function navGroupsFor(
       if (item.id === "pharmacy-transfers" || item.id === "pharmacy-stock" || item.id === "pharmacy-alerts") {
         return phOn && (isPharmacist || isPharmacyAssistant || isStockKeeper);
       }
+      // Módulo 32b: leitos da observação são do admin com urgency_care (D1); faltas da UPA, do farmacêutico e do almoxarife com
+      // pharmacy, mesmo com a baixa desligada (contrato §7).
+      if (item.id === "pharmacy-urgency-shortfalls") return phOn && (isPharmacist || isStockKeeper);
       if (item.id === "pharmacy-entries") return phOn && (isStockKeeper || isPharmacist);
       if (item.id === "pharmacy-adjustments") return phOn && (isPharmacist || isStockKeeper);
       if (item.id === "pharmacy-admin") return phOn && isAdmin;
@@ -459,6 +464,7 @@ export function navGroupsFor(
         || item.id === "caps-beds" || item.id === "caps-matrix") return psyOn && psy.staff;
       if (item.id === "urgency-panel") return urgOn && (isAdmin || isAnalyst);
       if (item.id === "waiting-room-settings") return wrOn && isAdmin;
+      if (item.id === "urgency-beds") return urgOn && isAdmin;
       if (item.id === "integrations" || item.id === "cnes") return canIntegrations;
       if (item.id === "production") return canProduction;
       return true;

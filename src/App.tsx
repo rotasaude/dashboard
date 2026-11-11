@@ -59,6 +59,8 @@ import { PharmacyEntries } from "./modules/PharmacyEntries";
 import { PharmacyStock } from "./modules/PharmacyStock";
 import { PharmacyAdjustments } from "./modules/PharmacyAdjustments";
 import { PharmacyAlerts } from "./modules/PharmacyAlerts";
+import { PharmacyUrgencyShortfalls } from "./modules/PharmacyUrgencyShortfalls";
+import { UrgencyBedsSettings } from "./modules/UrgencyBedsSettings";
 import { PharmacyAdmin } from "./modules/PharmacyAdmin";
 import { VaccinationRoom } from "./modules/VaccinationRoom";
 import { VaccinationPending } from "./modules/VaccinationPending";
@@ -377,6 +379,7 @@ export function renderModule(active: ModuleId, setActive: (id: ModuleId) => void
     case "pharmacy-stock": return <PharmacyStock />;
     case "pharmacy-adjustments": return <PharmacyAdjustments onGoToSecurity={() => setActive("security")} />;
     case "pharmacy-alerts": return <PharmacyAlerts />;
+    case "pharmacy-urgency-shortfalls": return <PharmacyUrgencyShortfalls />;
     case "pharmacy-admin": return <PharmacyAdmin onGoToSecurity={() => setActive("security")} />;
     case "vaccination-room": return <VaccinationRoom onGoToSecurity={() => setActive("security")} />;
     case "vaccination-pending": return <VaccinationPending />;
@@ -409,6 +412,7 @@ export function renderModule(active: ModuleId, setActive: (id: ModuleId) => void
     case "caps-panel": return <CapsPanel />;
     case "caps-settings": return <CapsSettings onGoToSecurity={() => setActive("security")} />;
     case "urgency-panel": return <UrgencyPanel />;
+    case "urgency-beds": return <UrgencyBedsSettings onGoToSecurity={() => setActive("security")} />;
     case "waiting-room-settings": return <WaitingRoomSettings onGoToSecurity={() => setActive("security")} />;
     default:               return <Placeholder title={labelFor(active)} />;
   }

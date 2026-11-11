@@ -9,12 +9,19 @@ const itemsOf = (groups: ReturnType<typeof navGroupsFor>) => groups.find((g) => 
 describe("grupo Farmácia (módulo 27a)", () => {
   it("cada papel vê o seu", () => {
     expect(itemsOf(navGroupsFor(user([ "pharmacist" ])))).toEqual([
-      "pharmacy-dispensing", "pharmacy-external", "pharmacy-transfers", "pharmacy-entries", "pharmacy-stock", "pharmacy-adjustments", "pharmacy-alerts" ]);
+      "pharmacy-dispensing", "pharmacy-external", "pharmacy-transfers", "pharmacy-entries", "pharmacy-stock", "pharmacy-adjustments", "pharmacy-alerts", "pharmacy-urgency-shortfalls" ]);
     expect(itemsOf(navGroupsFor(user([ "pharmacy_assistant" ])))).toEqual([
       "pharmacy-dispensing", "pharmacy-external", "pharmacy-transfers", "pharmacy-stock", "pharmacy-alerts" ]);
     expect(itemsOf(navGroupsFor(user([ "stock_keeper" ])))).toEqual([
-      "pharmacy-transfers", "pharmacy-entries", "pharmacy-stock", "pharmacy-adjustments", "pharmacy-alerts" ]);
+      "pharmacy-transfers", "pharmacy-entries", "pharmacy-stock", "pharmacy-adjustments", "pharmacy-alerts", "pharmacy-urgency-shortfalls" ]);
     expect(itemsOf(navGroupsFor(user([ "municipal_admin" ])))).toEqual([ "pharmacy-admin" ]);
+  });
+  it("faltas da UPA: farmacêutico e almoxarife, sem exigir urgency_stock_deduction nem urgency_care", () => {
+    expect(itemsOf(navGroupsFor(user([ "pharmacist" ], [ "pharmacy" ])))).toContain("pharmacy-urgency-shortfalls");
+    expect(itemsOf(navGroupsFor(user([ "pharmacy_assistant" ])))).not.toContain("pharmacy-urgency-shortfalls");
+    expect(itemsOf(navGroupsFor(user([ "municipal_admin" ])))).not.toContain("pharmacy-urgency-shortfalls");
+    expect(itemsOf(navGroupsFor(user([ "stock_keeper" ], [ "clinical_record" ])))).toEqual([]);
+    expect(CATALOG.screens["pharmacy-urgency-shortfalls"].description).toBe("Medicação dada na UPA sem saldo no estoque");
   });
   it("some sem o interruptor, para outros papéis e para o operador", () => {
     expect(itemsOf(navGroupsFor(user([ "pharmacist", "stock_keeper", "municipal_admin" ], [ "clinical_record" ])))).toEqual([]);

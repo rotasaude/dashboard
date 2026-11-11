@@ -14,7 +14,7 @@ import {
   IconBuildingWarehouse, IconPrescription, IconFilePlus, IconTransfer, IconTruckLoading, IconListSearch, IconScale, IconAlertTriangle, IconBuildingCog,
   IconDental, IconDentalBroken,
   IconBus, IconCalendarRepeat, IconUserX, IconCar, IconSteeringWheel,
-  IconBrain, IconAmbulance, IconDeviceTv, IconDoorEnter, IconCalendarEvent, IconBed, IconShare, IconFileReport, IconUserHeart,
+  IconBrain, IconAmbulance, IconDeviceTv, IconDoorEnter, IconCalendarEvent, IconBed, IconBedFlat, IconPillOff, IconShare, IconFileReport, IconUserHeart,
   IconVaccine, IconNeedle, IconCloudUpload, IconVaccineBottle, IconTemperatureSnow, IconCalendarMonth, IconReportMedical, IconFridge
 } from "@tabler/icons-react";
 import type { Catalog } from "./types";
@@ -148,6 +148,8 @@ export const CATALOG: Catalog = {
     "caps-raas": { icon: IconFileReport, description: "Pendências, fechamento, remessa e fichas espelho" },
     "caps-panel": { icon: IconChartBar, description: "Matrículas, PTS, ações, leitos e RAAS do mês" },
     "caps-settings": { icon: IconSettings, description: "Leitos, limite de noites e prazo do PTS" },
+    "urgency-beds": { icon: IconBedFlat, description: "Leitos da observação da UPA, com step-up" },
+    "pharmacy-urgency-shortfalls": { icon: IconPillOff, description: "Medicação dada na UPA sem saldo no estoque" },
     "urgency-panel": { icon: IconChartBar, description: "Tempos por cor, fora do tempo, desfechos e evasão" },
     "waiting-room-settings": { icon: IconDeviceTv, description: "Locais de chamada e TVs da sala de espera" },
     "campaigns": { icon: IconSpeakerphone, description: "Criar e enviar campanhas por SMS" },
