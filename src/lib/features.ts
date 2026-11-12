@@ -12,7 +12,7 @@ export type FeatureKey =
   | "procedure_billing" | "care_lines" | "territory_registry" | "surveillance" | "care_regulation"
   | "pharmacy" | "dental_care" | "vaccination" | "rnds_immunization" | "rnds_mock"
   | "sanitary_transport" | "tfd" | "psychosocial_care" | "urgency_care" | "waiting_room_display"
-  | "urgency_stock_deduction";
+  | "urgency_stock_deduction" | "ombudsman" | "ombudsman_anonymous_web";
 
 export const FEATURE_DISABLED_MESSAGE = "esta funcionalidade está desligada para a cidade";
 
@@ -60,7 +60,10 @@ const FEATURE_LABEL: Record<string, string> = {
   urgency_care: "Urgência (UPA)",
   waiting_room_display: "Painel de chamada na sala de espera (TV)",
   // Módulo 32b (ADR 0050): exige urgency_care e pharmacy
-  urgency_stock_deduction: "Baixa de estoque na medicação da UPA"
+  urgency_stock_deduction: "Baixa de estoque na medicação da UPA",
+  // Módulo 33 (ADR 0051): ombudsman sem pré-requisito; ombudsman_anonymous_web exige ombudsman. Os nomes do maintenance (Q38).
+  ombudsman: "Ouvidoria do SUS",
+  ombudsman_anonymous_web: "Denúncia anônima sem login (canal do cidadão)"
 };
 
 export function sessionFeatures(user: { features?: unknown } | null | undefined): string[] {

@@ -28,6 +28,8 @@ import react from "@vitejs/plugin-react";
 //   /psychosocial → CAPS (módulo 31: acolhimento, matrícula, PTS, ações, leitos, RAAS, matriciamento, painel)
 //   /urgency → urgência na UPA (módulo 32a: chegada, classificação de risco, fila por cor, desfecho, retornos à UBS, painel)
 //   /waiting_room → TV da sala de espera (módulo 32a: TVs do admin, pareamento e painel da TV, sem cookie)
+//   /ombudsman → ouvidoria (módulo 33: caixa, manifestação, ponto de resposta, configuração, painel, relatório anual)
+//   /departments → setores da secretaria (módulo 33)
 //   /signature  → assinatura digital (módulo 19b). O prestador devolve a pessoa a
 //                 /dashboard/signature/callback (base do Vite), que NÃO casa com este
 //                 prefixo: o retorno é do dashboard, e só o POST /signature/oauth/callback vai ao api.
@@ -105,7 +107,10 @@ export default defineConfig({
       "^/psychosocial(/|$)": proxy(TARGET),
       // Módulo 32a: urgência (UPA) e TV da sala de espera. Regex como os vizinhos.
       "^/urgency(/|$)": proxy(TARGET),
-      "^/waiting_room(/|$)": proxy(TARGET)
+      "^/waiting_room(/|$)": proxy(TARGET),
+      // Módulo 33: ouvidoria (inclui /ombudsman/files/:token) e setores da secretaria. Regex como os vizinhos.
+      "^/ombudsman(/|$)": proxy(TARGET),
+      "^/departments(/|$)": proxy(TARGET)
     }
   }
 });

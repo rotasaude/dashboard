@@ -143,3 +143,12 @@ describe("módulo 32b", () => {
     expect(hasFeature({ features: [ "urgency_care" ] }, "urgency_stock_deduction")).toBe(false);
   });
 });
+
+describe("módulo 33", () => {
+  it("ombudsman e ombudsman_anonymous_web têm os nomes do maintenance (Q38) e vêm da sessão", () => {
+    expect(featureLabel("ombudsman")).toBe("Ouvidoria do SUS");
+    expect(featureLabel("ombudsman_anonymous_web")).toBe("Denúncia anônima sem login (canal do cidadão)");
+    expect(hasFeature({ features: [ "ombudsman" ] }, "ombudsman")).toBe(true);
+    expect(hasFeature({ features: [ "ombudsman" ] }, "ombudsman_anonymous_web")).toBe(false);
+  });
+});

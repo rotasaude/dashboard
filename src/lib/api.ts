@@ -1,6 +1,7 @@
 // Cliente HTTP do dashboard. Read API /admin/api/* (envelope { data, as_of })
 // + sessão /session. credentials: "include" (cookie HttpOnly, ADR-0022).
 import type { DraftCandidate, OpenDraft } from "./consultationDrafts";
+import type { SmallCount } from "./types";
 const BASE = import.meta.env.VITE_ADMIN_API_BASE || "/admin/api";
 const SESSION_BASE = import.meta.env.VITE_SESSION_BASE || "/session";
 
@@ -6953,4 +6954,443 @@ export function recordAdministration(i: UrgencyAdministrationInput): Promise<Urg
   const body: Record<string, unknown> = {};
   for (const [ key, value ] of Object.entries(i)) if (value !== undefined) body[key] = value;
   return jsonFetch<UrgencyAdministrationResult>(urgencyPath("administrations"), urgencyWrite("POST", body));
+}
+
+// ─── Ouvidoria (módulo 33; ADR 0051; contrato 2026-11-11 §5–§7, §11) ───
+// Na URL só ids, os filtros da Caixa (`state[]`, `color[]`, `kind[]`, `channel[]`, `subject_id`, `health_unit_id`, `q` =
+// protocolo), o cursor, `from`/`to` do painel e o ano do relatório; CPF, nome, contato, texto, extrato, resposta, motivo e
+// justificativa vão no corpo (busca de pessoa por POST, Q6). Formas do api real (api-shapes.md), não as do plano: listas em
+// `{ items }` (Caixa e ponto de resposta paginados em 50 com `next_before`, sem `limit`, Q23); detalhe com `can` e sem
+// `cycle_started_on`; `options` com `health_units`, assuntos em árvore e `professionals` (D8 recusada); anexo do detalhe só
+// `{ id, uploaded_by }`, e o upload manda `anexo-N.<ext>`, nunca o nome real (Q2); cancelamento e ações do respondente com o
+// `expected_state` do encaminhamento (Q33); painel com partições em objeto e `total` (Q53–Q55). O api recusa chave desconhecida
+// e texto opcional vazio: campo opcional vazio não vai. Toda escrita leva corpo (`{}` sem campo; sem ele, 415).
+
+const OMBUDSMAN_BASE = import.meta.env.VITE_OMBUDSMAN_BASE || "/ombudsman";
+const DEPARTMENTS_BASE = import.meta.env.VITE_DEPARTMENTS_BASE || "/departments";
+const ombPath = (...parts: string[]) => [ OMBUDSMAN_BASE, ...parts.map(encodeURIComponent) ].join("/");
+const depPath = (...parts: string[]) => [ DEPARTMENTS_BASE, ...parts.map(encodeURIComponent) ].join("/");
+const ombWrite = (method: "POST" | "PATCH", body: unknown = {}): RequestInit => ({ method, body: JSON.stringify(body) });
+// Query das listas, na ordem dada: lista vira `chave[]` repetida (vazia não vai, Q51); escalar só preenchido.
+function ombListQuery(params: Record<string, readonly string[] | string | null | undefined>): URLSearchParams {
+  const p = new URLSearchParams();
+  for (const [ key, value ] of Object.entries(params)) {
+    if (Array.isArray(value)) for (const v of value) p.append(`${key}[]`, v);
+    else if (typeof value === "string" && value.trim() !== "") p.set(key, value.trim());
+  }
+  return p;
+}
+// Tira as chaves opcionais vazias (undefined, null, "", só espaços ou lista vazia); o texto que vai, vai aparado.
+function ombCompact<T extends object>(body: T, keys: (keyof T)[]): T {
+  const out = { ...body };
+  for (const key of keys) {
+    const v = out[key] as unknown;
+    if (typeof v === "string") {
+      const trimmed = v.trim();
+      if (trimmed === "") delete out[key];
+      else (out as Record<keyof T, unknown>)[key] = trimmed;
+    } else if (v === undefined || v === null || (Array.isArray(v) && v.length === 0)) delete out[key];
+  }
+  return out;
+}
+async function ombItems<T>(url: string): Promise<T[]> {
+  return (await jsonFetch<{ items?: T[] }>(url)).items ?? [];
+}
+async function ombPage<T>(url: string): Promise<{ items: T[]; next_before: string | null }> {
+  const b = await jsonFetch<{ items?: T[]; next_before?: string | null }>(url);
+  return { items: b.items ?? [], next_before: b.next_before ?? null };
+}
+
+export type OmbudsmanKind = "complaint" | "report" | "praise" | "suggestion" | "request";
+export type IdentificationMode = "identified" | "preserved" | "anonymous";
+export type OmbudsmanChannel = "web" | "in_person" | "phone" | "ouvidorsus";
+// A equipe registra só pelos três últimos (o `web` é do cidadão).
+export type OmbudsmanStaffChannel = Exclude<OmbudsmanChannel, "web">;
+export type ManifestationState = "received" | "in_analysis" | "forwarded" | "awaiting_complement" | "answered" | "archived";
+// `null` nos estados finais.
+export type DeadlineColor = "green" | "yellow" | "red" | "paused";
+export type ArchiveReason =
+  | "duplicate" | "no_complement" | "lack_of_clarity" | "lack_of_civility" | "improper" | "loss_of_object" | "forwarded_elsewhere";
+// Só em `complaint`, `request` e `report`.
+export type Resolution = "resolved" | "not_resolved";
+export type ForwardingState = "pending" | "replied" | "declined" | "cancelled";
+// O detalhe só traz o pedido pendente.
+export type ReopenRequestState = "pending";
+export type OmbudsmanActionName =
+  | "classify" | "forward" | "request_complement" | "complement" | "extend" | "interim_response" | "final_response"
+  | "archive" | "reopen" | "change_resolution";
+
+export interface OmbudsmanRef { id: string; name: string }
+export interface OmbudsmanSubjectRef { id: string; name: string; parent: OmbudsmanRef | null }
+export interface OmbudsmanDestination { kind: "department" | "health_unit"; id: string; name: string }
+
+export interface OmbudsmanListItem {
+  id: string;
+  protocol: string;
+  kind: OmbudsmanKind;
+  identification_mode: IdentificationMode;
+  channel: OmbudsmanChannel;
+  state: ManifestationState;
+  subject: OmbudsmanSubjectRef | null;
+  // Unidade REFERIDA na manifestação.
+  health_unit: OmbudsmanRef | null;
+  urgent: boolean;
+  received_at: string;
+  // Sempre presente, também nos estados finais.
+  due_on: string;
+  color: DeadlineColor | null;
+  pending_forwardings: number;
+}
+export interface OmbudsmanPage { items: OmbudsmanListItem[]; next_before: string | null }
+export interface OmbudsmanListQuery {
+  state?: string[];
+  color?: string[];
+  kind?: string[];
+  channel?: string[];
+  subject_id?: string | null;
+  health_unit_id?: string | null;
+  // Só o protocolo (`AAAA-NNNNNN`) ou o prefixo `AAAA-` (Q51): a tela confere antes.
+  q?: string;
+  before?: string | null;
+}
+
+// `identified`: o que o api manda; `contact` só existe sem cidadão ligado (Q24, Q57).
+export interface OmbudsmanIdentitySummary {
+  name: string | null;
+  cpf_masked: string | null;
+  phone_masked: string | null;
+  contact?: string | null;
+}
+export interface OmbudsmanEvent {
+  id: string;
+  kind: string;
+  actor: "staff" | "citizen" | "system";
+  // Só da equipe.
+  actor_name: string | null;
+  at: string;
+  // A chave só existe quando há texto.
+  text?: string;
+  data: Record<string, unknown>;
+  visible_to_citizen: boolean;
+}
+export interface OmbudsmanForwarding {
+  id: string;
+  destination: OmbudsmanDestination;
+  extract: string;
+  state: ForwardingState;
+  due_on: string;
+  // `null` fora de `pending`.
+  color: DeadlineColor | null;
+  extended: boolean;
+  created_at: string;
+  // As quatro só existem quando preenchidas; `reply` também traz o motivo do `declined` (Q9).
+  extension_reason?: string;
+  reply?: string;
+  replied_at?: string;
+  replied_by_name?: string;
+}
+// Só isso (Q2): sem nome, tipo nem data. A tela mostra "Anexo N".
+export interface OmbudsmanAttachment { id: string; uploaded_by: "citizen" | "staff" }
+export interface OmbudsmanReopenRequest {
+  id: string;
+  cycle: number;
+  state: ReopenRequestState;
+  reason: string;
+  created_at: string;
+  decision_text?: string;
+  decided_at?: string;
+}
+// O que quem lê pode fazer agora (json.rb:59-81).
+export interface OmbudsmanCan {
+  classify: boolean;
+  forward: boolean;
+  cancel_forwarding: boolean;
+  request_complement: boolean;
+  complement: boolean;
+  extend: boolean;
+  interim_response: boolean;
+  final_response: boolean;
+  archive: boolean;
+  reopen: boolean;
+  change_resolution: boolean;
+  decide_reopen: boolean;
+  open_identity: boolean;
+  record_identity_consent: boolean;
+}
+export interface OmbudsmanManifestation extends OmbudsmanListItem {
+  body: string;
+  ouvidorsus_number: string | null;
+  referred_professional: OmbudsmanRef | null;
+  cycle: number;
+  extended: boolean;
+  extension_reason: string | null;
+  complement_used: boolean;
+  complement_requested_at: string | null;
+  complement_due_on: string | null;
+  resolution: Resolution | null;
+  archive_reason: ArchiveReason | null;
+  duplicate_of: { id: string; protocol: string } | null;
+  external_body_name: string | null;
+  concluded_at: string | null;
+  // `preserved` e `anonymous` chegam como a string "preserved"; a tela lê campo a campo.
+  identity: OmbudsmanIdentitySummary | "preserved";
+  identity_available: boolean;
+  events: OmbudsmanEvent[];
+  forwardings: OmbudsmanForwarding[];
+  attachments: OmbudsmanAttachment[];
+  reopen_request: OmbudsmanReopenRequest | null;
+  can: OmbudsmanCan;
+}
+// `POST …/identity` (só ouvidor, com justificativa): fica no estado do diálogo, nunca em cache. `full_name` = nome civil,
+// nulo no par declarado (Q50).
+export interface OmbudsmanFullIdentity {
+  name: string | null;
+  full_name: string | null;
+  cpf: string | null;
+  phone: string | null;
+  manifestant_name: string | null;
+  manifestant_contact: string | null;
+  manifestant_cpf: string | null;
+}
+// `GET /ombudsman/options` (Q7): só ativos; profissionais com as unidades do vínculo (a tela filtra pela unidade, D8).
+export interface OmbudsmanOptions {
+  subjects: { id: string; name: string; children: OmbudsmanRef[] }[];
+  departments: (OmbudsmanRef & { has_active_responder: boolean })[];
+  health_units: (OmbudsmanRef & { kind: string; has_active_responder: boolean })[];
+  professionals: (OmbudsmanRef & { health_unit_ids: string[] })[];
+}
+// `GET /ombudsman/subjects` (configuração): árvore de dois níveis, com os inativos; `children` só no primeiro nível.
+export interface OmbudsmanSubject {
+  id: string;
+  name: string;
+  active: boolean;
+  children?: { id: string; name: string; active: boolean }[];
+}
+// Só par verificado (Q58); sem ele, `null`.
+export interface OmbudsmanPerson { citizen_id: string; name: string; cpf_masked: string }
+// Registro pela equipe (contrato §5; api-shapes §3.1): ou `citizen_id`, ou `manifestant_*`; nada disso na anônima.
+// Campo opcional vazio não vai.
+export interface NewManifestationInput {
+  kind: OmbudsmanKind;
+  identification_mode: IdentificationMode;
+  channel: OmbudsmanStaffChannel;
+  // Só no canal `ouvidorsus`.
+  ouvidorsus_number?: string | null;
+  citizen_id?: string | null;
+  manifestant_name?: string | null;
+  manifestant_contact?: string | null;
+  manifestant_cpf?: string | null;
+  body: string;
+  health_unit_id?: string | null;
+  attachment_ids?: string[];
+}
+export interface OmbudsmanCreated { id: string; protocol: string; due_on: string }
+export interface OmbudsmanReceipt { protocol: string; kind: OmbudsmanKind; received_at: string; due_on: string; channel: OmbudsmanChannel }
+// Nunca protocolo, identidade, texto original, assunto ou anexos.
+export interface OmbudsmanInboxItem {
+  id: string;
+  destination: OmbudsmanDestination;
+  extract: string;
+  due_on: string;
+  color: DeadlineColor | null;
+  state: ForwardingState;
+  created_at: string;
+  extended: boolean;
+  reply?: string;
+}
+export interface OmbudsmanInboxPage { items: OmbudsmanInboxItem[]; next_before: string | null }
+export interface Department { id: string; name: string; active: boolean }
+export interface OmbudsmanResponder {
+  id: string;
+  user: { id: string; email: string; name: string };
+  destination: OmbudsmanDestination;
+  active: boolean;
+}
+export interface ResponderCandidate { id: string; name: string; email: string }
+export interface OmbudsmanSettings {
+  response_days: number;
+  extension_days: number;
+  urgent_days: number;
+  complement_days: number;
+  forwarding_days: number;
+  forwarding_extension_days: number;
+  warning_days: number;
+  anonymous_daily_cap: number;
+}
+// Painel (api-shapes §2.7). Célula = número ou `{ suppressed: true }`; zero também pode vir escondido (Q54); `total` sempre
+// à mostra; taxa e média `null` = sem denominador; a satisfação pode vir toda escondida (Q55).
+export type OmbudsmanSubjectCount =
+  | { id: string; name: string; unclassified?: false; count: SmallCount }
+  // Sempre o último (Q49).
+  | { id: null; name: null; unclassified: true; count: SmallCount };
+export interface OmbudsmanDashboard {
+  period: { from: string; to: string };
+  total: number;
+  by_kind: Record<OmbudsmanKind, SmallCount> & { total: number };
+  by_channel: Record<OmbudsmanChannel, SmallCount> & { total: number };
+  by_state: Record<ManifestationState, SmallCount> & { total: number };
+  by_subject: OmbudsmanSubjectCount[];
+  by_health_unit: { id: string; name: string; count: SmallCount }[];
+  on_time_rate: SmallCount | null;
+  avg_days_to_conclude: SmallCount | null;
+  resolution_rate: SmallCount | null;
+  satisfaction: {
+    responses: SmallCount;
+    met: { yes: SmallCount; partly: SmallCount; no: SmallCount };
+    clear: { yes: SmallCount; no: SmallCount };
+    avg_score: SmallCount | null;
+  };
+}
+// Por profissional (só ouvidor): sem supressão, por nome.
+export interface ProfessionalPanelRow { professional: OmbudsmanRef; by_kind: Record<OmbudsmanKind, number>; total: number }
+// Sem `published_by` (Q35); textos nulos quando não gravados; rascunho = painel vivo do ano, publicado = snapshot.
+export interface OmbudsmanAnnualReport {
+  year: number;
+  state: "draft" | "published";
+  recurring_problems: string | null;
+  actions_taken: string | null;
+  notes: string | null;
+  numbers: OmbudsmanDashboard;
+  published_at: string | null;
+}
+
+// ── Caixa, detalhe, registro e ações ──
+export function listOmbudsmanManifestations(q: OmbudsmanListQuery): Promise<OmbudsmanPage> {
+  return ombPage<OmbudsmanListItem>(withQuery(ombPath("manifestations"), ombListQuery({
+    state: q.state, color: q.color, kind: q.kind, channel: q.channel,
+    subject_id: q.subject_id, health_unit_id: q.health_unit_id, q: q.q, before: q.before
+  })));
+}
+export function getOmbudsmanManifestation(id: string): Promise<OmbudsmanManifestation> {
+  return jsonFetch<OmbudsmanManifestation>(ombPath("manifestations", id));
+}
+export function createOmbudsmanManifestation(i: NewManifestationInput): Promise<OmbudsmanCreated> {
+  return jsonFetch<OmbudsmanCreated>(ombPath("manifestations"), ombWrite("POST", ombCompact(i, [
+    "ouvidorsus_number", "citizen_id", "manifestant_name", "manifestant_contact", "manifestant_cpf", "health_unit_id", "attachment_ids"
+  ])));
+}
+export function getOmbudsmanReceipt(id: string): Promise<OmbudsmanReceipt> {
+  return jsonFetch<OmbudsmanReceipt>(ombPath("manifestations", id, "receipt"));
+}
+// D9: o corpo é o da ação (api-shapes §3.2), sempre com o `expected_state` lido; responde com o detalhe.
+export function runOmbudsmanAction(
+  id: string, action: OmbudsmanActionName, body: Record<string, unknown> & { expected_state: ManifestationState }
+): Promise<OmbudsmanManifestation> {
+  return jsonFetch<OmbudsmanManifestation>(ombPath("manifestations", id, action), ombWrite("POST", body));
+}
+// Q33: `expected_state` do ENCAMINHAMENTO (o que a tela leu, em geral "pending").
+export function cancelOmbudsmanForwarding(id: string, expectedState: ForwardingState): Promise<OmbudsmanManifestation> {
+  return jsonFetch<OmbudsmanManifestation>(ombPath("forwardings", id, "cancel"), ombWrite("POST", { expected_state: expectedState }));
+}
+export function decideReopenRequest(id: string, i: { decision: "accept" | "reject"; text: string }): Promise<OmbudsmanManifestation> {
+  return jsonFetch<OmbudsmanManifestation>(ombPath("reopen_requests", id, "decide"), ombWrite("POST", i));
+}
+
+// ── Identidade e anexos ──
+export function revealOmbudsmanIdentity(id: string, justification: string): Promise<OmbudsmanFullIdentity> {
+  return jsonFetch<OmbudsmanFullIdentity>(ombPath("manifestations", id, "identity"), ombWrite("POST", { justification }));
+}
+export function recordIdentityConsent(id: string, i: { granted: boolean; text: string }): Promise<OmbudsmanManifestation> {
+  return jsonFetch<OmbudsmanManifestation>(ombPath("manifestations", id, "identity_consent"), ombWrite("POST", i));
+}
+const OMB_FILE_EXT: Record<string, string> = { "application/pdf": "pdf", "image/jpeg": "jpg", "image/png": "png" };
+// Q2: o api exige `filename`, mas o nome real pode trazer o nome da pessoa: vai `anexo-<n>.<ext>` (n = posição na tela).
+export async function uploadOmbudsmanAttachment(file: File, n: number): Promise<{ id: string }> {
+  const data = await readBase64(file);
+  const filename = `anexo-${n}.${OMB_FILE_EXT[file.type] ?? "bin"}`;
+  return jsonFetch<{ id: string }>(ombPath("attachments"), ombWrite("POST", { filename, content_type: file.type, data }));
+}
+// Endereço curto (5 min, preso ao usuário). Justificativa só fora do `identified` (lá o api a ignora).
+export async function getOmbudsmanAttachmentUrl(id: string, justification?: string): Promise<string> {
+  const body = justification === undefined ? {} : { justification };
+  return (await jsonFetch<{ url: string; expires_at: string }>(ombPath("attachments", id, "link"), ombWrite("POST", body))).url;
+}
+// O arquivo do endereço curto (GET /ombudsman/files/<token>); 410 `link_expired` depois de 5 min. O nome do
+// Content-Disposition não é usado pela tela. Com VITE_OMBUDSMAN_BASE, vai pela mesma base das outras chamadas.
+export function fetchOmbudsmanFile(url: string): Promise<SignatureFile> {
+  return binaryFetch(url.replace(/^\/ombudsman(?=\/)/, OMBUDSMAN_BASE), "application/pdf,image/jpeg,image/png");
+}
+
+// ── Busca de pessoa e opções ──
+export async function lookupOmbudsmanPerson(cpf: string): Promise<OmbudsmanPerson | null> {
+  return (await jsonFetch<OmbudsmanPerson | null>(ombPath("person_lookup"), ombWrite("POST", { cpf }))) ?? null;
+}
+export function getOmbudsmanOptions(): Promise<OmbudsmanOptions> {
+  return jsonFetch<OmbudsmanOptions>(ombPath("options"));
+}
+
+// ── Ponto de resposta (Q33, Q48: responde com o item do inbox) ──
+export function listOmbudsmanInbox(q: { before?: string | null } = {}): Promise<OmbudsmanInboxPage> {
+  return ombPage<OmbudsmanInboxItem>(withQuery(ombPath("inbox"), ombListQuery({ before: q.before })));
+}
+export function replyOmbudsmanInbox(id: string, expectedState: ForwardingState, body: string): Promise<OmbudsmanInboxItem> {
+  return jsonFetch<OmbudsmanInboxItem>(ombPath("inbox", id, "reply"), ombWrite("POST", { expected_state: expectedState, body }));
+}
+export function declineOmbudsmanInbox(id: string, expectedState: ForwardingState, reason: string): Promise<OmbudsmanInboxItem> {
+  return jsonFetch<OmbudsmanInboxItem>(ombPath("inbox", id, "decline"), ombWrite("POST", { expected_state: expectedState, reason }));
+}
+export function extendOmbudsmanInbox(id: string, expectedState: ForwardingState, reason: string): Promise<OmbudsmanInboxItem> {
+  return jsonFetch<OmbudsmanInboxItem>(ombPath("inbox", id, "extend"), ombWrite("POST", { expected_state: expectedState, reason }));
+}
+
+// ── Configuração: setores (sem o portão da ouvidoria, Q12), respondentes, assuntos e prazos ──
+export function listDepartments(): Promise<Department[]> {
+  return ombItems<Department>(depPath());
+}
+export function createDepartment(name: string): Promise<Department> {
+  return jsonFetch<Department>(depPath(), ombWrite("POST", { name }));
+}
+export function updateDepartment(id: string, i: { name: string; active: boolean }): Promise<Department> {
+  return jsonFetch<Department>(depPath(id), ombWrite("PATCH", i));
+}
+export function listOmbudsmanResponders(): Promise<OmbudsmanResponder[]> {
+  return ombItems<OmbudsmanResponder>(ombPath("responders"));
+}
+export function listResponderCandidates(): Promise<ResponderCandidate[]> {
+  return ombItems<ResponderCandidate>(ombPath("responder_candidates"));
+}
+export function createOmbudsmanResponder(
+  i: { user_id: string } & ({ department_id: string } | { health_unit_id: string })
+): Promise<OmbudsmanResponder> {
+  return jsonFetch<OmbudsmanResponder>(ombPath("responders"), ombWrite("POST", i));
+}
+export function updateOmbudsmanResponder(id: string, i: { active: boolean }): Promise<OmbudsmanResponder> {
+  return jsonFetch<OmbudsmanResponder>(ombPath("responders", id), ombWrite("PATCH", i));
+}
+export function listOmbudsmanSubjects(): Promise<OmbudsmanSubject[]> {
+  return ombItems<OmbudsmanSubject>(ombPath("subjects"));
+}
+// Sem pai = assunto de primeiro nível (`parent_id` não vai).
+export function createOmbudsmanSubject(i: { name: string; parent_id: string | null }): Promise<OmbudsmanSubject> {
+  return jsonFetch<OmbudsmanSubject>(ombPath("subjects"), ombWrite("POST", ombCompact(i, [ "parent_id" ])));
+}
+// O pai não muda.
+export function updateOmbudsmanSubject(id: string, i: { name: string; active: boolean }): Promise<OmbudsmanSubject> {
+  return jsonFetch<OmbudsmanSubject>(ombPath("subjects", id), ombWrite("PATCH", i));
+}
+export function getOmbudsmanSettings(): Promise<OmbudsmanSettings> {
+  return jsonFetch<OmbudsmanSettings>(ombPath("settings"));
+}
+export function updateOmbudsmanSettings(s: OmbudsmanSettings): Promise<OmbudsmanSettings> {
+  return jsonFetch<OmbudsmanSettings>(ombPath("settings"), ombWrite("PATCH", s));
+}
+
+// ── Painel e relatório anual ──
+export function getOmbudsmanDashboard(q: { from: string; to: string }): Promise<OmbudsmanDashboard> {
+  return jsonFetch<OmbudsmanDashboard>(withQuery(ombPath("dashboard"), ombListQuery({ from: q.from, to: q.to })));
+}
+export function getOmbudsmanProfessionalsPanel(q: { from: string; to: string }): Promise<ProfessionalPanelRow[]> {
+  return ombItems<ProfessionalPanelRow>(withQuery(ombPath("dashboard", "professionals"), ombListQuery({ from: q.from, to: q.to })));
+}
+export function getAnnualReport(year: number): Promise<OmbudsmanAnnualReport> {
+  return jsonFetch<OmbudsmanAnnualReport>(ombPath("annual_reports", String(year)));
+}
+export function updateAnnualReport(
+  year: number, i: { recurring_problems: string; actions_taken: string; notes: string }
+): Promise<OmbudsmanAnnualReport> {
+  return jsonFetch<OmbudsmanAnnualReport>(ombPath("annual_reports", String(year)), ombWrite("PATCH", i));
+}
+// Só ano encerrado (Q27: `year_not_closed`); já publicado → 409 `already_published`.
+export function publishAnnualReport(year: number): Promise<OmbudsmanAnnualReport> {
+  return jsonFetch<OmbudsmanAnnualReport>(ombPath("annual_reports", String(year), "publish"), ombWrite("POST"));
 }
