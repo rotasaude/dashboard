@@ -2,7 +2,7 @@
 // (10–4000). Corpo `{ expected_state, resolution, text }`.
 import { useState } from "react";
 import type { Resolution } from "../../../lib/api";
-import { textActionProblems } from "../../../lib/ombudsman";
+import { resolutionLabel, textActionProblems } from "../../../lib/ombudsman";
 import { fieldLabel, form, row } from "../../exams/styles";
 import { useActionForm, type ActionFormProps } from "../useManifestationAction";
 import { FrozenTextArea } from "./ExtractField";
@@ -29,7 +29,8 @@ export function ResolutionForm({ m, run, onDone, onClose }: ActionFormProps) {
         call: () => run("change_resolution", { resolution, text }), ok: onDone, stale: () => {}
       });
     }}>
-      <p ref={f.titleRef} tabIndex={-1} style={formTitle}>{m.resolution ? "Resolutividade atual: " + (m.resolution === "resolved" ? "resolvida" : "não resolvida") : "Alterar resolutividade"}</p>
+      <p ref={f.titleRef} tabIndex={-1} style={formTitle}>Alterar resolutividade</p>
+      {m.resolution && <p style={{ margin: 0, fontSize: 12, color: "var(--ink2)" }}>{`Resolutividade atual: ${resolutionLabel(m.resolution)}`}</p>}
       {f.top((path) => OWN.includes(path))}
       <fieldset style={{ border: 0, padding: 0, margin: 0 }} {...aria("resolution")} aria-label="Resolutividade">
         <div style={row}>{choice("resolved", "resolvida")}{choice("not_resolved", "não resolvida")}</div>

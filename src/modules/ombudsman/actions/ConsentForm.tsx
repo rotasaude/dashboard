@@ -1,9 +1,9 @@
 // Consentimento do cidadão para revelar a identidade fora da ouvidoria (F-33.7): consentiu ou não, e como foi dado (10–4000,
 // texto congelado). Rota própria; a resposta é o detalhe, que não traz identidade. Anônima sem dado → 422 `no_identity`.
-// Tela velha: a frase sobe ao painel (`onStale`) e o detalhe é relido uma vez.
+// Essa rota não leva `expected_state`: não há tela velha a tratar.
 import { useState } from "react";
 import { recordIdentityConsent, type OmbudsmanManifestation } from "../../../lib/api";
-import { MANIFESTATION_CHANGED, isChanged, ombudsmanRefusals, textActionProblems } from "../../../lib/ombudsman";
+import { ombudsmanRefusals, textActionProblems } from "../../../lib/ombudsman";
 import { fieldLabel, form, row } from "../../exams/styles";
 import { useFormProblems } from "../../psychosocial/useFormProblems";
 import { FrozenTextArea } from "./ExtractField";
@@ -12,10 +12,10 @@ import { FormButtons, formTitle } from "./TextActionForm";
 const PHRASE = "o texto tem de ter de 10 a 4000 caracteres";
 const OWN = [ "text", "granted" ];
 
-export function ConsentForm({ id, onChanged, onStale, onClose }: {
-  id: string; onChanged(next: OmbudsmanManifestation | null): void; onStale(text: string): void; onClose(): void;
+export function ConsentForm({ id, onChanged, onClose }: {
+  id: string; onChanged(next: OmbudsmanManifestation | null): void; onClose(): void;
 }) {
-  const f = useFormProblems({ refusals: (err) => ombudsmanRefusals(err, { fields: { text: PHRASE } }).map((r) => ({ ...r, participantIndex: null })), isStale: isChanged });
+  const f = useFormProblems({ refusals: (err) => ombudsmanRefusals(err, { fields: { text: PHRASE } }).map((r) => ({ ...r, participantIndex: null })) });
   const [ granted, setGranted ] = useState<boolean | null>(null);
   const [ text, setText ] = useState("");
   const { aria, errNode, busy } = f;
@@ -35,8 +35,7 @@ export function ConsentForm({ id, onChanged, onStale, onClose }: {
       void f.submit(ev, {
         check,
         call: () => recordIdentityConsent(id, { granted: granted as boolean, text }),
-        ok: (next) => { onChanged(next); onClose(); },
-        stale: () => { onStale(MANIFESTATION_CHANGED); onChanged(null); onClose(); }
+        ok: (next) => { onChanged(next); onClose(); }
       });
     }}>
       <p ref={f.titleRef} tabIndex={-1} style={formTitle}>Consentimento do cidadão para revelar a identidade</p>

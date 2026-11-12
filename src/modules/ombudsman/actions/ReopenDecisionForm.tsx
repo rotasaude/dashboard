@@ -40,7 +40,7 @@ export function ReopenDecisionForm({ requestId, onChanged, onStale }: {
         check,
         call: () => decideReopenRequest(requestId, { decision: decision as Decision, text }),
         ok: (next) => onChanged(next),
-        stale: (phrase) => { onStale(phrase === OMBUDSMAN_ERRORS.already_decided ? phrase : MANIFESTATION_CHANGED); onChanged(null); }
+        stale: (_phrase, err) => { onStale(errorCode(err) === "already_decided" ? OMBUDSMAN_ERRORS.already_decided : MANIFESTATION_CHANGED); onChanged(null); }
       });
     }}>
       <p ref={f.titleRef} tabIndex={-1} style={formTitle}>Decidir o pedido</p>

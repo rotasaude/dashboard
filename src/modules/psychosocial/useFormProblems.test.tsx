@@ -61,7 +61,7 @@ describe("useFormProblems(opts)", () => {
     const isStale = vi.fn(() => true);
     render(<Sender opts={{ refusals, isStale }} onStale={stale} />);
     fireEvent.click(screen.getByRole("button", { name: "Enviar" }));
-    await waitFor(() => expect(stale).toHaveBeenCalledWith("frase do tradutor"));
+    await waitFor(() => expect(stale).toHaveBeenCalledWith("frase do tradutor", expect.anything()));
     expect(refusals).toHaveBeenCalled();
     expect(isStale).toHaveBeenCalled();
   });

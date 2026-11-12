@@ -109,16 +109,14 @@ function ReopenRequest({ m, roles, onChanged, onStale }: {
 }
 
 // Consentimento do cidadão para revelar a identidade fora da ouvidoria: só o ouvidor, em qualquer modo com alguém a identificar.
-function Consent({ m, roles, onChanged, onStale }: {
-  m: OmbudsmanManifestation; roles: OmbudsmanRoles; onChanged(next: OmbudsmanManifestation | null): void; onStale(text: string): void;
-}) {
+function Consent({ m, roles, onChanged }: { m: OmbudsmanManifestation; roles: OmbudsmanRoles; onChanged(next: OmbudsmanManifestation | null): void }) {
   const [ open, setOpen ] = useState(false);
   useEffect(() => setOpen(false), [ m.id ]);
   if (!roles.lead || !m.can.record_identity_consent) return null;
   return (
     <Panel title="Consentimento de identificação">
       {open
-        ? <ConsentForm id={m.id} onChanged={onChanged} onStale={onStale} onClose={() => setOpen(false)} />
+        ? <ConsentForm id={m.id} onChanged={onChanged} onClose={() => setOpen(false)} />
         : <button type="button" style={buttonStyle} onClick={() => setOpen(true)}>Registrar consentimento do cidadão</button>}
     </Panel>
   );
@@ -141,7 +139,7 @@ export function ManifestationView({ id, roles, onBack }: { id: string; roles: Om
   // Resposta de uma ação = o detalhe novo; `null` = tela velha: uma releitura, nenhum reenvio.
   const onChanged = (next: OmbudsmanManifestation | null) => {
     if (liveId.current !== id) return;
-    if (next) queryClient.setQueryData([ OMB_DETAIL_KEY, id ], next);
+    if (next) { queryClient.setQueryData([ OMB_DETAIL_KEY, id ], next); setLeadNotice(null); }
     else void detail.refetch();
     void queryClient.invalidateQueries({ queryKey: [ OMB_LIST_KEY ] });
   };
@@ -174,7 +172,7 @@ export function ManifestationView({ id, roles, onBack }: { id: string; roles: Om
           <Data m={m} />
           <ActionsPanel key={m.id} m={m} roles={roles} onChanged={onChanged} />
           <IdentityBlock m={m} roles={roles} onReveal={openIdentityDialog} />
-          <Consent m={m} roles={roles} onChanged={onChanged} onStale={setLeadNotice} />
+          <Consent m={m} roles={roles} onChanged={onChanged} />
           <Panel title="Texto da manifestação"><p style={body}>{m.body}</p></Panel>
           <Timeline events={m.events} />
           <Forwardings m={m} roles={roles} onCancel={cancelForwarding} />

@@ -6,6 +6,7 @@ import type { FormEvent } from "react";
 import type { ArchiveReason } from "../../../lib/api";
 import { OFFERED_ARCHIVE_REASONS, archiveProblems, archiveReasonLabel } from "../../../lib/ombudsman";
 import type { PsyRefusal } from "../../../lib/psychosocial";
+import { FrozenTextNotice } from "../../../components/FrozenTextNotice";
 import { ConfirmButton } from "../../../components/ConfirmButton";
 import { secondaryButtonStyle, inputStyle } from "../../../components/formStyles";
 import { fieldLabel, form, row } from "../../exams/styles";
@@ -65,9 +66,11 @@ export function ArchiveForm({ run, onDone, onClose }: ActionFormProps) {
         <>
           <label style={fieldLabel}>
             Órgão
-            <input value={body} style={inputStyle} maxLength={120} {...aria("external_body_name")}
+            <input value={body} style={inputStyle} maxLength={120} aria-invalid={aria("external_body_name")["aria-invalid"]}
+              aria-describedby={[ `${f.fid("body")}-frozen`, aria("external_body_name")["aria-describedby"] ].filter(Boolean).join(" ")}
               onChange={(ev) => { f.clear("external_body_name"); setBody(ev.target.value); }} />
           </label>
+          <FrozenTextNotice id={`${f.fid("body")}-frozen`} />
           {errNode("external_body_name")}
         </>
       )}

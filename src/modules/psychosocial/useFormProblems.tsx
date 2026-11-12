@@ -16,7 +16,7 @@ export type FormSend<T> = {
   check?(): Problem[];
   call(): Promise<T>;
   ok(result: T): void;
-  stale?(text: string): void;
+  stale?(text: string, err: unknown): void;
   // Recusa do api → problemas na tela (padrão: path e frase de cada recusa).
   refused?(refusals: PsyRefusal[]): Problem[];
 };
@@ -82,7 +82,7 @@ export function useFormProblems(opts: FormProblemsOptions = {}) {
     } catch (err) {
       if (!alive.current) return;
       const refusals = translate(err);
-      if (o.stale && staleOf(err)) { o.stale(refusals[0].text); return; }
+      if (o.stale && staleOf(err)) { o.stale(refusals[0].text, err); return; }
       show(o.refused ? o.refused(refusals) : refusals.map((r) => ({ path: r.path, text: r.text })));
     } finally {
       sending.current = false;

@@ -44,6 +44,52 @@ describe("ações do ouvidor", () => {
     expect((await screen.findByRole("button", { name: "Prorrogar prazo" }) as HTMLButtonElement).disabled).toBe(true);
   });
 
+  it("prorrogar: 422 already_extended mostra a frase no formulário", async () => {
+    vi.mocked(api.runOmbudsmanAction).mockRejectedValueOnce(new ApiError(422, { error: "already_extended" }, "x"));
+    mount(manifestation(), LEAD);
+    fireEvent.click(await screen.findByRole("button", { name: "Prorrogar prazo" }));
+    fireEvent.change(screen.getByLabelText("Justificativa (vai ao cidadão)"), { target: { value: "Aguardamos o inventário da farmácia central." } });
+    fireEvent.click(screen.getByRole("button", { name: "Prorrogar" }));
+    expect(await screen.findByText(OMBUDSMAN_ERRORS.already_extended)).not.toBeNull();
+  });
+
+  it("ação do ouvidor com 409 manifestation_changed: frase, uma releitura, nenhum reenvio", async () => {
+    vi.mocked(api.runOmbudsmanAction).mockRejectedValue(new ApiError(409, { error: "manifestation_changed" }, "x"));
+    mount(manifestation(), LEAD);
+    fireEvent.click(await screen.findByRole("button", { name: "Prorrogar prazo" }));
+    fireEvent.change(screen.getByLabelText("Justificativa (vai ao cidadão)"), { target: { value: "Aguardamos o inventário da farmácia central." } });
+    fireEvent.click(screen.getByRole("button", { name: "Prorrogar" }));
+    expect(await screen.findByText(MANIFESTATION_CHANGED)).not.toBeNull();
+    await waitFor(() => expect(api.getOmbudsmanManifestation).toHaveBeenCalledTimes(2));
+    expect(api.runOmbudsmanAction).toHaveBeenCalledTimes(1);
+  });
+
+  it("clique duplo em Confirmar envia o arquivamento uma vez só", async () => {
+    vi.mocked(api.runOmbudsmanAction).mockImplementation(() => new Promise(() => {}));
+    mount(manifestation(), LEAD);
+    fireEvent.click(await screen.findByRole("button", { name: "Arquivar" }));
+    fireEvent.change(screen.getByLabelText("Motivo"), { target: { value: "improper" } });
+    fireEvent.click(screen.getByRole("button", { name: "Arquivar agora" }));
+    const confirm = screen.getByRole("button", { name: "Confirmar" });
+    fireEvent.click(confirm);
+    fireEvent.click(confirm);
+    await waitFor(() => expect(api.runOmbudsmanAction).toHaveBeenCalledTimes(1));
+  });
+
+  it("a frase do aviso some na próxima ação que dá certo", async () => {
+    vi.mocked(api.decideReopenRequest).mockRejectedValueOnce(new ApiError(409, { error: "already_decided" }, "x"));
+    mount(answered(), LEAD);
+    fireEvent.click(await screen.findByLabelText("Recusar"));
+    fireEvent.change(screen.getByLabelText("Texto ao cidadão"), { target: { value: TEXT } });
+    fireEvent.click(screen.getByRole("button", { name: "Decidir pedido" }));
+    expect(await screen.findByText(OMBUDSMAN_ERRORS.already_decided)).not.toBeNull();
+    vi.mocked(api.decideReopenRequest).mockResolvedValue(manifestation({ state: "in_analysis", cycle: 2 }));
+    fireEvent.click(await screen.findByLabelText("Aceitar"));
+    fireEvent.change(screen.getByLabelText("Texto interno (não vai ao cidadão)"), { target: { value: TEXT } });
+    fireEvent.click(screen.getByRole("button", { name: "Decidir pedido" }));
+    await waitFor(() => expect(screen.queryByText(OMBUDSMAN_ERRORS.already_decided)).toBeNull());
+  });
+
   it("o técnico não vê as ações do ouvidor", async () => {
     mount(manifestation({ state: "answered", color: null, concluded_at: "2026-11-10T10:00:00-03:00" }));
     await screen.findByRole("heading", { name: /2026-000123/ });
@@ -80,6 +126,7 @@ describe("ações do ouvidor", () => {
     fireEvent.click(screen.getByRole("button", { name: "Arquivar agora" }));
     fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
     expect(await screen.findByText("informe o órgão para onde foi encaminhada (até 120 caracteres)")).not.toBeNull();
+    expectFrozenNotice(screen.getByLabelText("Órgão"));
     fireEvent.change(screen.getByLabelText("Órgão"), { target: { value: "Secretaria Estadual de Saúde" } });
     fireEvent.click(screen.getByRole("button", { name: "Arquivar agora" }));
     fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
@@ -104,6 +151,7 @@ describe("ações do ouvidor", () => {
     mount(manifestation({ state: "answered", color: null, resolution: "resolved" }), LEAD);
     fireEvent.click(await screen.findByRole("button", { name: "Reabrir" }));
     const field = screen.getByLabelText("Justificativa (opcional)");
+    expectFrozenNotice(field);
     fireEvent.change(field, { target: { value: "curta" } });
     fireEvent.click(screen.getByRole("button", { name: "Reabrir agora" }));
     expect(api.runOmbudsmanAction).not.toHaveBeenCalled();
@@ -128,6 +176,9 @@ describe("ações do ouvidor", () => {
     fireEvent.click(screen.getByRole("button", { name: "Salvar resolutividade" }));
     expect(api.runOmbudsmanAction).not.toHaveBeenCalled();
     fireEvent.click(screen.getByLabelText("não resolvida"));
+    expectFrozenNotice(screen.getByLabelText("Justificativa"));
+    expect(screen.getByText("Alterar resolutividade", { selector: "p" })).not.toBeNull();
+    expect(screen.getByText("Resolutividade atual: resolvida")).not.toBeNull();
     fireEvent.change(screen.getByLabelText("Justificativa"), { target: { value: "A falta voltou na semana seguinte." } });
     fireEvent.click(screen.getByRole("button", { name: "Salvar resolutividade" }));
     await waitFor(() => expect(vi.mocked(api.runOmbudsmanAction).mock.calls[0])
