@@ -4,6 +4,7 @@
 // As ações (`ActionsPanel`) entram na Task 6; o diálogo de identidade e de anexo protegido, na Task 8.
 import { useQuery } from "@tanstack/react-query";
 import { getOmbudsmanManifestation, type OmbudsmanAttachment, type OmbudsmanManifestation } from "../../lib/api";
+import { fmtDay } from "../../lib/careLines";
 import { fmtDateTime } from "../../lib/format";
 import {
   NOMINAL_QUERY, OMB_DETAIL_KEY, archiveReasonLabel, channelLabel, kindLabel, modeLabel, ombudsmanError, resolutionLabel, stateLabel,
@@ -20,11 +21,8 @@ import { Forwardings } from "./Forwardings";
 import { IdentityBlock } from "./IdentityBlock";
 import { Timeline } from "./Timeline";
 
-// "2026-11-30" → "30/11/2026", sem passar por Date (sem fuso).
-const fmtDay = (iso: string | null | undefined): string => {
-  const d = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso ?? "");
-  return d ? `${d[3]}/${d[2]}/${d[1]}` : "—";
-};
+// O detalhe só traz o pedido pendente; outro código aparece cru.
+const reopenStateLabel = (s: string): string => (s === "pending" ? "pendente" : s);
 const body = { margin: 0, whiteSpace: "pre-wrap" } as const;
 
 function channelText(m: OmbudsmanManifestation): string {
@@ -86,7 +84,7 @@ function ReopenRequest({ m }: { m: OmbudsmanManifestation }) {
     <Panel title="Pedido de reabertura">
       <div style={stack}>
         <div style={grid}>
-          <KeyValue k="Estado" v="pendente" mono={false} />
+          <KeyValue k="Estado" v={reopenStateLabel(r.state)} mono={false} />
           <KeyValue k="Pedido em" v={fmtDateTime(r.created_at)} />
           <KeyValue k="Ciclo" v={String(r.cycle)} />
         </div>
@@ -99,6 +97,7 @@ function ReopenRequest({ m }: { m: OmbudsmanManifestation }) {
   );
 }
 
+// `now` fica na assinatura (a Caixa o passa), mas a cor do prazo é do api: não ligue um relógio local aqui.
 export function ManifestationView({ id, roles, onBack }: { id: string; roles: OmbudsmanRoles; now?: Date; onBack(): void }) {
   const detail = useQuery({ queryKey: [ OMB_DETAIL_KEY, id ], queryFn: () => getOmbudsmanManifestation(id), ...NOMINAL_QUERY });
   const m = detail.data;

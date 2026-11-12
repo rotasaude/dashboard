@@ -84,12 +84,13 @@ export function can33(m: Omit<OmbudsmanManifestation, "can">, lead = true): Ombu
   };
 }
 
+// Máscaras no formato do api (`CitizenIdentity::Cpf.mask` / `Phone.mask`): `***.NNN.NNN-**` e `(**) *****-NNNN`.
 // Detalhe visto pelo ouvidor; `can` segue o estado (passe `can` para outro leitor, ex.: `can33(m, false)`).
 export const manifestation = (o: Partial<OmbudsmanManifestation> = {}): OmbudsmanManifestation => {
   const m: Omit<OmbudsmanManifestation, "can"> = {
     ...listItem(), ouvidorsus_number: null,
     body: "Fui à UBS Centro três vezes e não havia losartana. Preciso do remédio para a pressão.",
-    identity: { name: "Maria Lima", cpf_masked: "***.***.***-25", phone_masked: "(41) *****-1234" }, identity_available: true,
+    identity: { name: "Maria Lima", cpf_masked: "***.982.247-**", phone_masked: "(**) *****-1234" }, identity_available: true,
     referred_professional: null, cycle: 1, extended: false, extension_reason: null, complement_used: false,
     complement_requested_at: null, complement_due_on: null, resolution: null, archive_reason: null, duplicate_of: null,
     external_body_name: null, concluded_at: null,

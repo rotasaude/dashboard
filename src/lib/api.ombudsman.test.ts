@@ -98,8 +98,8 @@ describe("cliente da ouvidoria (módulo 33)", () => {
   });
 
   it("registro pela equipe: só os campos preenchidos, aparados; busca de pessoa por POST, null sem par verificado", async () => {
-    stub({ citizen_id: "c1", name: "Maria Lima", cpf_masked: "***.***.***-25" });
-    expect(await lookupOmbudsmanPerson("52998224725")).toEqual({ citizen_id: "c1", name: "Maria Lima", cpf_masked: "***.***.***-25" });
+    stub({ citizen_id: "c1", name: "Maria Lima", cpf_masked: "***.982.247-**" });
+    expect(await lookupOmbudsmanPerson("52998224725")).toEqual({ citizen_id: "c1", name: "Maria Lima", cpf_masked: "***.982.247-**" });
     expect(last()).toMatchObject({ url: "/ombudsman/person_lookup", init: { method: "POST" } });
     expect(bodyOf()).toEqual({ cpf: "52998224725" });
     stub("null");

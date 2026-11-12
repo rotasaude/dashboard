@@ -11,7 +11,13 @@ import { ManifestationView } from "./ManifestationView";
 vi.mock("../../lib/api", async (orig) => ({ ...(await orig<typeof api>()), fetchCurrentSession: vi.fn(),
   getOmbudsmanManifestation: vi.fn(), getOmbudsmanAttachmentUrl: vi.fn(), fetchOmbudsmanFile: vi.fn(),
   revealOmbudsmanIdentity: vi.fn() }));
-afterEach(() => { cleanup(); vi.clearAllMocks(); vi.restoreAllMocks(); });
+// O jsdom não tem `URL.createObjectURL`/`revokeObjectURL`: o teste os põe e devolve o original ao fim.
+const ORIGINAL_URL = { create: URL.createObjectURL, revoke: URL.revokeObjectURL };
+afterEach(() => {
+  cleanup(); vi.clearAllMocks(); vi.restoreAllMocks();
+  URL.createObjectURL = ORIGINAL_URL.create;
+  URL.revokeObjectURL = ORIGINAL_URL.revoke;
+});
 
 function mount(m: OmbudsmanManifestation, roles = [ "ombudsman_staff" ]) {
   const user = ombudsmanUser(roles);
@@ -43,8 +49,8 @@ describe("detalhe da manifestação", () => {
     expect(screen.getByText("Reclamação")).not.toBeNull();
     expect(screen.getByText("Identificada")).not.toBeNull();
     expect(screen.getByText("Maria Lima")).not.toBeNull();
-    expect(screen.getByText("***.***.***-25")).not.toBeNull();
-    expect(screen.getByText("(41) *****-1234")).not.toBeNull();
+    expect(screen.getByText("***.982.247-**")).not.toBeNull();
+    expect(screen.getByText("(**) *****-1234")).not.toBeNull();
     expect(screen.getByText(/não havia losartana/)).not.toBeNull();
     expect(screen.getByText("Atendimento › Demora")).not.toBeNull();
     expect(screen.getByText("UBS Centro")).not.toBeNull();
@@ -55,7 +61,7 @@ describe("detalhe da manifestação", () => {
   });
 
   it("identificada: lê campo a campo — CPF e telefone inteiros nunca aparecem; contato digitado aparece sem máscara", async () => {
-    mount({ ...manifestation({ identity: { name: "Maria Lima", cpf_masked: null, phone_masked: "(41) *****-1234",
+    mount({ ...manifestation({ identity: { name: "Maria Lima", cpf_masked: null, phone_masked: "(**) *****-1234",
       contact: "(41) 3333-4444", cpf: "529.982.247-25", phone: "(41) 99876-1234", full_name: "Joana Prado Lima" } as never }),
       manifestant_cpf: "529.982.247-25" } as never);
     expect(await screen.findByText("Maria Lima")).not.toBeNull();
@@ -77,14 +83,14 @@ describe("detalhe da manifestação", () => {
   });
 
   it("preservada e anônima: identidade em objeto por engano também não aparece", async () => {
-    mount(preserved({ ...LEAK, identity: { ...LEAK, cpf_masked: "***.***.***-25", phone_masked: "(41) *****-1234",
+    mount(preserved({ ...LEAK, identity: { ...LEAK, cpf_masked: "***.982.247-**", phone_masked: "(**) *****-1234",
       contact: "joana@exemplo.com" } } as never), [ "ombudsman" ]);
     expect(await screen.findByText(IDENTITY_PRESERVED)).not.toBeNull();
     expect(screen.queryByText(LEAKED)).toBeNull();
     expect(screen.queryByText(/\*\*\*/)).toBeNull();
     cleanup();
     mount(preserved({ identification_mode: "anonymous", identity_available: false, ...LEAK,
-      identity: { ...LEAK, cpf_masked: "***.***.***-25" } } as never), [ "ombudsman" ]);
+      identity: { ...LEAK, cpf_masked: "***.982.247-**" } } as never), [ "ombudsman" ]);
     expect(await screen.findByText(ANONYMOUS_NO_IDENTITY)).not.toBeNull();
     expect(screen.queryByText(LEAKED)).toBeNull();
     expect(screen.queryByText(/\*\*\*/)).toBeNull();
@@ -165,6 +171,25 @@ describe("detalhe da manifestação", () => {
     expect(api.getOmbudsmanAttachmentUrl).toHaveBeenCalledTimes(1);
   });
 
+  it("duplo clique em \"Abrir anexo\" faz uma chamada só e o botão fica desabilitado enquanto corre", async () => {
+    const { open } = installWindow();
+    let release: (url: string) => void = () => {};
+    vi.mocked(api.getOmbudsmanAttachmentUrl).mockImplementation(() => new Promise<string>((r) => { release = r; }));
+    vi.mocked(api.fetchOmbudsmanFile).mockResolvedValue({ blob: new Blob([ "x" ]), filename: null });
+    mount(manifestation({ attachments: [ { id: "a1", uploaded_by: "citizen" }, { id: "a2", uploaded_by: "staff" } ] }));
+    const button = await screen.findByRole("button", { name: "Abrir anexo 1" }) as HTMLButtonElement;
+    fireEvent.click(button);
+    fireEvent.click(button);
+    expect(api.getOmbudsmanAttachmentUrl).toHaveBeenCalledTimes(1);
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(button.disabled).toBe(true);
+    // O outro anexo segue livre.
+    expect((screen.getByRole("button", { name: "Abrir anexo 2" }) as HTMLButtonElement).disabled).toBe(false);
+    release("/ombudsman/files/tok1");
+    await waitFor(() => expect(button.disabled).toBe(false));
+    expect(api.fetchOmbudsmanFile).toHaveBeenCalledTimes(1);
+  });
+
   it("endereço vencido (410 link_expired): a frase, e a janela fecha", async () => {
     const { win } = installWindow();
     vi.mocked(api.getOmbudsmanAttachmentUrl).mockResolvedValue("/ombudsman/files/tok1");
@@ -214,6 +239,13 @@ describe("detalhe da manifestação", () => {
     const panel = await screen.findByRole("region", { name: "Pedido de reabertura" });
     expect(within(panel).getByText("O remédio continua em falta.")).not.toBeNull();
     expect(within(panel).getByText("pendente")).not.toBeNull();
+    cleanup();
+    // Estado desconhecido aparece cru.
+    mount(manifestation({ state: "answered", color: null, reopen_request: { id: "r1", cycle: 1, state: "brand_new_state" as never,
+      reason: "O remédio continua em falta.", created_at: "2026-11-10T09:00:00-03:00" } }), [ "ombudsman" ]);
+    const raw = await screen.findByRole("region", { name: "Pedido de reabertura" });
+    expect(within(raw).getByText("brand_new_state")).not.toBeNull();
+    expect(within(raw).queryByText("pendente")).toBeNull();
   });
 
   it("erro na leitura mostra a frase", async () => {
