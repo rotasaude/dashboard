@@ -136,6 +136,8 @@ export function ManifestationView({ id, roles, onBack }: { id: string; roles: Om
   // Frase da decisão do pedido e do consentimento quando a tela estava velha: o formulário some com o detalhe novo.
   const [ leadNotice, setLeadNotice ] = useState<string | null>(null);
   const [ dialog, setDialog ] = useState<DialogOpen | null>(null);
+  // Respostas de ação aceitas: o aviso do cancelamento sai na mesma tela em que o formulário fecha (ver `Forwardings`).
+  const [ changes, setChanges ] = useState(0);
   useEffect(() => { setLeadNotice(null); setDialog(null); }, [ id ]);
   useEffect(() => {
     liveId.current = id;
@@ -144,7 +146,7 @@ export function ManifestationView({ id, roles, onBack }: { id: string; roles: Om
   // Resposta de uma ação = o detalhe novo; `null` = tela velha: uma releitura, nenhum reenvio.
   const onChanged = (next: OmbudsmanManifestation | null) => {
     if (liveId.current !== id) return;
-    if (next) { queryClient.setQueryData([ OMB_DETAIL_KEY, id ], next); setLeadNotice(null); }
+    if (next) { queryClient.setQueryData([ OMB_DETAIL_KEY, id ], next); setLeadNotice(null); setChanges((c) => c + 1); }
     else void detail.refetch();
     void queryClient.invalidateQueries({ queryKey: [ OMB_LIST_KEY ] });
   };
@@ -180,7 +182,7 @@ export function ManifestationView({ id, roles, onBack }: { id: string; roles: Om
           <Consent m={m} roles={roles} onChanged={onChanged} />
           <Panel title="Texto da manifestação"><p style={body}>{m.body}</p></Panel>
           <Timeline events={m.events} />
-          <Forwardings m={m} roles={roles} onCancel={cancelForwarding} />
+          <Forwardings m={m} roles={roles} onCancel={cancelForwarding} changes={changes} />
           <Attachments m={m} roles={roles} onProtected={openProtectedAttachment} />
           {leadNotice && <p role="alert" style={alert}>{leadNotice}</p>}
           <ReopenRequest m={m} roles={roles} onChanged={onChanged} onStale={setLeadNotice} />

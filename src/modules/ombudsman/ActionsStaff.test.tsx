@@ -3,6 +3,7 @@
 // mostram a frase, releem uma vez e não reenviam (dois técnicos na mesma manifestação).
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { useState } from "react";
+import { notifyManager } from "@tanstack/react-query";
 import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { renderWithProviders } from "../../test/campaignFixtures";
 import { expectFrozenNotice } from "../../test/frozenNotice";
@@ -232,6 +233,33 @@ describe("ações do técnico", () => {
     await waitFor(() => expect(api.cancelOmbudsmanForwarding).toHaveBeenCalledWith("f1", "pending"));
     expect(api.cancelOmbudsmanForwarding).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(screen.queryByRole("button", { name: "Cancelar encaminhamento" })).toBeNull());
+  });
+
+  // O TanStack avisa a tela do detalhe novo num `setTimeout` (`notifyManager`); o formulário fecha por estado do React, antes.
+  // Com o aviso atrasado de propósito, a frase do cancelamento não pode sobrar na tela do formulário já fechado.
+  it("a frase do cancelamento sai junto com o formulário da ação seguinte, mesmo com o aviso do cache atrasado", async () => {
+    notifyManager.setScheduler((cb) => { setTimeout(cb, 40); });
+    try {
+      vi.mocked(api.getOmbudsmanManifestation)
+        .mockResolvedValueOnce(manifestation({ state: "forwarded", pending_forwardings: 1, forwardings: [ forwarding() ] }))
+        .mockResolvedValueOnce(manifestation({ forwardings: [ forwarding({ state: "replied", color: null, reply: "Estoque chega dia 12." }) ] }));
+      vi.mocked(api.cancelOmbudsmanForwarding).mockRejectedValue(new ApiError(409, { error: "forwarding_changed" }, "x"));
+      mount(manifestation());
+      fireEvent.click(await screen.findByRole("button", { name: "Cancelar encaminhamento" }));
+      fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+      expect(await screen.findByText("Estoque chega dia 12.")).not.toBeNull();
+      expect(screen.getByText(MANIFESTATION_CHANGED)).not.toBeNull();
+      vi.mocked(api.runOmbudsmanAction).mockResolvedValue(manifestation({
+        forwardings: [ forwarding({ state: "replied", color: null, reply: "Estoque chega dia 12." }) ], urgent: true
+      }));
+      await sendInterim("Estamos verificando com a farmácia e retornamos.");
+      await waitFor(() => expect(screen.queryByLabelText("Texto ao cidadão")).toBeNull());
+      expect(screen.queryByText(MANIFESTATION_CHANGED)).toBeNull();
+      expect(await screen.findByText("urgente")).not.toBeNull();
+    } finally {
+      // O padrão do TanStack (`systemSetTimeoutZero`).
+      notifyManager.setScheduler((cb) => { setTimeout(cb, 0); });
+    }
   });
 
   it("cancelar com 409 forwarding_changed: a frase da tela velha e uma releitura; a frase sai na mudança seguinte", async () => {

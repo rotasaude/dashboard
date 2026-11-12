@@ -3,6 +3,9 @@
 // vierem preenchidas. A equipe cancela o pendente ("Cancelar encaminhamento", confirmação em dois passos): `onCancel` manda o
 // estado lido do encaminhamento (Q33) e devolve a frase da recusa (e se o detalhe vai ser relido), ou `null`; 409
 // `forwarding_changed` relê lá fora. A frase fica durante a releitura que ela causou e sai na mudança seguinte do detalhe.
+// `changes` conta as respostas de ação aceitas (vem de quem chama, por estado do React): a frase só vale na contagem em que
+// nasceu. O detalhe novo chega pelo cache, que o TanStack avisa num `setTimeout`; sem a contagem, o formulário da ação seguinte
+// fechava antes e a frase velha sobrava na tela até o aviso.
 import { useEffect, useRef, useState } from "react";
 import type { ForwardingState, OmbudsmanForwarding, OmbudsmanManifestation } from "../../lib/api";
 import { fmtDateTime } from "../../lib/format";
@@ -48,10 +51,15 @@ function ForwardingItem({ f, onCancel }: { f: OmbudsmanForwarding; onCancel?(): 
 // `reread`: o detalhe vai ser relido por causa desta recusa — a frase sobrevive a essa releitura.
 export type CancelOutcome = { text: string; reread: boolean } | null;
 
-export function Forwardings({ m, roles, onCancel }: {
-  m: OmbudsmanManifestation; roles?: OmbudsmanRoles; onCancel?(f: OmbudsmanForwarding): Promise<CancelOutcome>;
+type Notice = { text: string; reread: boolean; changes: number };
+
+export function Forwardings({ m, roles, onCancel, changes = 0 }: {
+  m: OmbudsmanManifestation; roles?: OmbudsmanRoles; onCancel?(f: OmbudsmanForwarding): Promise<CancelOutcome>; changes?: number;
 }) {
-  const [ notice, setNotice ] = useState<CancelOutcome>(null);
+  const [ notice, setNotice ] = useState<Notice | null>(null);
+  const changesRef = useRef(changes);
+  changesRef.current = changes;
+  const shown = notice && notice.changes === changes ? notice : null;
   const seen = useRef(m);
   useEffect(() => {
     if (seen.current === m) return;
@@ -62,12 +70,16 @@ export function Forwardings({ m, roles, onCancel }: {
   return (
     <Panel title="Encaminhamentos">
       <div style={{ ...stack, gap: 8 }}>
-        {notice && <p role="alert" style={alert}>{notice.text}</p>}
+        {shown && <p role="alert" style={alert}>{shown.text}</p>}
         {m.forwardings.length === 0 ? <p style={muted}>nenhum encaminhamento</p> : (
           <ul style={{ ...stack, gap: 8, margin: 0, padding: 0, listStyle: "none" }}>
             {m.forwardings.map((f) => (
               <ForwardingItem key={f.id} f={f} onCancel={cancellable(f) && onCancel
-                ? async () => { setNotice(null); setNotice(await onCancel(f)); } : undefined} />
+                ? async () => {
+                  setNotice(null);
+                  const out = await onCancel(f);
+                  setNotice(out && { ...out, changes: changesRef.current });
+                } : undefined} />
             ))}
           </ul>
         )}
