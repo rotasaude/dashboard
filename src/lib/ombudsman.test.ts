@@ -4,7 +4,7 @@ import {
   ACTIONS_BY_STATE, ANONYMOUS_INTERNAL, COLOR_TONE, EXTRACT_NOTICE, MANIFESTATION_CHANGED, OMBUDSMAN_DISABLED, OMBUDSMAN_ERRORS,
   OMBUDSMAN_NO_ROLE, OMB_LIST_KEY, NOMINAL_QUERY, STATIC_QUERY, archiveProblems, archiveReasonLabel, attachmentProblems, availableActions,
   blockedReason, canIssueReceipt, canSeeIdentityButton, canUseOmbudsman, colorLabel, destinationLabel, eventKindLabel, finalResponseProblems,
-  forwardProblems, isChanged, kindLabel, nameProblem, needsResolution, newManifestationProblems, ombudsmanError, ombudsmanRefusals,
+  forwardProblems, isChanged, justificationOk, kindLabel, nameProblem, needsResolution, newManifestationProblems, ombudsmanError, ombudsmanRefusals,
   ombudsmanRoles, reportTextProblems, settingsProblems, textActionProblems, type NewDraft
 } from "./ombudsman";
 import { manifestation, ombudsmanUser, options, preserved, settings33 } from "../test/ombudsmanFixtures";
@@ -176,6 +176,18 @@ describe("registro pela equipe", () => {
 });
 
 describe("ações com texto", () => {
+  it("justificativa de identidade e de anexo: 10–500 code points depois do strip (Q8)", () => {
+    expect(justificationOk("x".repeat(9))).toBe(false);
+    expect(justificationOk("x".repeat(10))).toBe(true);
+    expect(justificationOk("x".repeat(500))).toBe(true);
+    expect(justificationOk("x".repeat(501))).toBe(false);
+    expect(justificationOk("   " + "x".repeat(9) + "   ")).toBe(false);
+    // Emoji = 1 code point (2 unidades UTF-16): 9 não bastam, 10 bastam; 500 cabem, 501 não.
+    expect(justificationOk("😀".repeat(9))).toBe(false);
+    expect(justificationOk("😀".repeat(10))).toBe(true);
+    expect(justificationOk("😀".repeat(500))).toBe(true);
+    expect(justificationOk("😀".repeat(501))).toBe(false);
+  });
   it("encaminhar", () => {
     expect(forwardProblems({ destination: null, extract: "x".repeat(19) }, options()).map((p) => p.path)).toEqual([ "destination", "extract" ]);
     expect(forwardProblems({ destination: { kind: "department", id: "dep2" }, extract: "x".repeat(20) }, options())[0].text)

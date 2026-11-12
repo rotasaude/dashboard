@@ -2,16 +2,22 @@
 // a sessão e aberto numa janela nova por um endereço `blob:` — nada do conteúdo passa pela URL da aplicação. Molde de
 // `printDocument`: a janela abre NO CLIQUE (antes de qualquer await), senão o navegador a trata como pop-up; bloqueada, nem o
 // endereço é pedido (o pedido grava trilha no api). 410 `link_expired` e outras recusas voltam como a frase de quem chama.
+// `cancelled` (opcional): quem chama desistiu no meio (fechou o diálogo) — a janela fecha e o arquivo não abre.
 import { fetchOmbudsmanFile } from "../../lib/api";
 import { POPUP_BLOCKED } from "../documents/printDocument";
 
 const FILE_URL_TTL_MS = 60_000;
 
-export async function openFile(getUrl: () => Promise<string>, errorText: (err: unknown) => string): Promise<string | null> {
+export async function openFile(
+  getUrl: () => Promise<string>, errorText: (err: unknown) => string, cancelled: () => boolean = () => false
+): Promise<string | null> {
   const win = window.open("", "_blank");
   if (!win) return POPUP_BLOCKED;
   try {
-    const { blob } = await fetchOmbudsmanFile(await getUrl());
+    const link = await getUrl();
+    if (cancelled()) { win.close(); return null; }
+    const { blob } = await fetchOmbudsmanFile(link);
+    if (cancelled()) { win.close(); return null; }
     const url = URL.createObjectURL(blob);
     win.location.href = url;
     setTimeout(() => URL.revokeObjectURL(url), FILE_URL_TTL_MS);

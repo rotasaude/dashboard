@@ -69,6 +69,8 @@ describe("identidade com justificativa", () => {
     expect(within(dialog).getByText("529.982.247-25")).not.toBeNull();
     expect(within(dialog).getByText("(41) 99876-1234")).not.toBeNull();
     expect(within(dialog).getByText("Este acesso foi registrado com a sua justificativa.")).not.toBeNull();
+    // Depois de ver, o foco vai para "Fechar" (o anel de foco do tema continua valendo: nada de outline zerado).
+    await waitFor(() => expect(document.activeElement?.textContent).toBe("Fechar"));
     expect(api.revealOmbudsmanIdentity).toHaveBeenCalledTimes(1);
     expect(vi.mocked(api.revealOmbudsmanIdentity).mock.calls[0]).toEqual([ "m2", "conferir se é o mesmo autor da denúncia 2026-000101" ]);
     // Nada no cache (consultas e mutações), nada em storage, nada no console.
@@ -115,7 +117,7 @@ describe("identidade com justificativa", () => {
     expect(api.revealOmbudsmanIdentity).not.toHaveBeenCalled();
   });
 
-  it("registro sem cidadão: mostra os manifestant_* e os vazios como 'não informado'; sem nome civil, sem a linha", async () => {
+  it("registro sem cidadão: mostra os manifestant_* e os vazios como 'não informado', inclusive o nome civil", async () => {
     vi.mocked(api.revealOmbudsmanIdentity).mockResolvedValue(fullIdentity({ name: null, full_name: null, cpf: null, phone: null,
       manifestant_name: "José Alves", manifestant_contact: "(41) 3333-0000" }));
     mountView(preserved({ channel: "phone" }), [ "ombudsman" ]);
@@ -123,7 +125,9 @@ describe("identidade com justificativa", () => {
     expect(await within(dialog).findByText("José Alves")).not.toBeNull();
     expect(within(dialog).getByText("(41) 3333-0000")).not.toBeNull();
     expect(within(dialog).getAllByText("não informado").length).toBeGreaterThan(0);
-    expect(within(dialog).queryByText("Nome civil")).toBeNull();
+    // O par "Nome civil" está lá, com "não informado" (overrides T8).
+    const civil = within(dialog).getByText("Nome civil").parentElement!;
+    expect(within(civil).getByText("não informado")).not.toBeNull();
   });
 
   it("identificada: o ouvidor também abre (Q50) e vê CPF e telefone sem máscara só no diálogo", async () => {
@@ -184,6 +188,7 @@ describe("identidade com justificativa", () => {
     renderWithProviders(<StrictMode><ManifestationView id="m2" roles={ombudsmanRoles(user)} now={NOW33} onBack={() => {}} /></StrictMode>);
     const dialog = await reveal("conferir se é o mesmo autor da denúncia");
     expect(await within(dialog).findByText("Joana Prado")).not.toBeNull();
+    expect(api.revealOmbudsmanIdentity).toHaveBeenCalledTimes(1);
   });
 
   it("o técnico nunca vê o botão, mesmo com o can aberto", async () => {
@@ -232,6 +237,28 @@ describe("anexo protegido com justificativa", () => {
     mountView(preserved({ attachments: [ att ] }), [ "ombudsman_staff" ]);
     expect(await screen.findByText("anexo protegido — só o ouvidor abre")).not.toBeNull();
     expect(screen.queryByRole("button", { name: /Abrir anexo/ })).toBeNull();
+  });
+
+  it("fechar com o link em voo: o arquivo não abre quando a resposta chega; a janela fecha", async () => {
+    const win = installWindow();
+    const link = deferred<string>();
+    vi.mocked(api.getOmbudsmanAttachmentUrl).mockReturnValue(link.promise);
+    vi.mocked(api.fetchOmbudsmanFile).mockResolvedValue({ blob: new Blob([ "x" ]), filename: null });
+    mountView(preserved({ attachments: [ att ] }), [ "ombudsman" ]);
+    fireEvent.click(await screen.findByRole("button", { name: "Abrir anexo 1 (justificar)" }));
+    const dialog = screen.getByRole("dialog", { name: "Abrir anexo protegido" });
+    fireEvent.change(within(dialog).getByLabelText(FIELD), { target: { value: "ver a foto da sala citada na denúncia" } });
+    fireEvent.click(goButton(dialog, "Abrir anexo"));
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    await act(async () => { link.resolve("/ombudsman/files/tok9"); await link.promise; });
+    await waitFor(() => expect(win.close).toHaveBeenCalled());
+    expect(win.location.href).toBe("");
+    expect(api.fetchOmbudsmanFile).not.toHaveBeenCalled();
+    expect(URL.createObjectURL).not.toHaveBeenCalled();
+    // Reabrir depois não é fechado por uma resposta velha.
+    fireEvent.click(screen.getByRole("button", { name: "Abrir anexo 1 (justificar)" }));
+    expect(screen.getByRole("dialog", { name: "Abrir anexo protegido" })).not.toBeNull();
   });
 
   it("recusa do link: a frase no diálogo, que fica aberto; a janela fecha", async () => {

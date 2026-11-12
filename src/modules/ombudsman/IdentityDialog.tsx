@@ -2,8 +2,9 @@
 // aqui (`can.open_identity`; anexo fora do `identified`); sem step-up (U4): a justificativa (10–500, Q8) fica na trilha do api.
 // - `identity`: `revealOmbudsmanIdentity` chamado direto (sem useQuery/useMutation): a identidade fica SÓ no `useState` deste
 //   diálogo — nunca no cache, em storage ou no console — e sai junto com ele ao fechar (o pai o desmonta). Reabrir = novo
-//   diálogo, nova justificativa, nova chamada. Lida campo a campo; nulo → "não informado"; "Nome civil" só quando vem (Q50).
-// - `attachment`: `openFile` com a justificativa no corpo do link; deu certo, o diálogo fecha.
+//   diálogo, nova justificativa, nova chamada. Lida campo a campo; nulo → "não informado", inclusive o "Nome civil" (Q50).
+// - `attachment`: `openFile` com a justificativa no corpo do link; deu certo, o diálogo fecha. Fechado com o link em voo, o
+//   arquivo não abre (a janela já aberta no clique é fechada).
 // Um envio por vez (`busy` + ref); resposta que chega depois de fechar é ignorada. Recusa pela frase de `ombudsmanError`, sem eco.
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { getOmbudsmanAttachmentUrl, revealOmbudsmanIdentity, type OmbudsmanAttachment, type OmbudsmanFullIdentity } from "../../lib/api";
@@ -34,11 +35,10 @@ const heading = { margin: 0, fontSize: 15, fontWeight: 600 } as const;
 const shown = (v: string | null): string => (typeof v === "string" && v.trim() !== "" ? v : NOT_INFORMED);
 
 function IdentityFields({ identity: r }: { identity: OmbudsmanFullIdentity }) {
-  const civil = typeof r.full_name === "string" && r.full_name.trim() !== "" ? r.full_name : null;
   return (
     <div style={grid}>
       <KeyValue k="Nome" v={shown(r.name)} mono={false} />
-      {civil && <KeyValue k="Nome civil" v={civil} mono={false} />}
+      <KeyValue k="Nome civil" v={shown(r.full_name)} mono={false} />
       <KeyValue k="CPF" v={shown(r.cpf)} />
       <KeyValue k="Telefone" v={shown(r.phone)} />
       <KeyValue k="Nome informado" v={shown(r.manifestant_name)} mono={false} />
@@ -58,13 +58,14 @@ export function IdentityDialog({ manifestationId, scope, attachment, returnFocus
   const [ busy, setBusy ] = useState(false);
   const inFlight = useRef(false);
   const alive = useRef(true);
-  const resultRef = useRef<HTMLDivElement | null>(null);
+  const closeRef = useRef<HTMLButtonElement | null>(null);
   // Montado de novo (StrictMode) volta a valer; desmontado, a resposta em voo não grava nada.
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   // Fechar (botão ou Escape) zera o que foi lido antes de o pai desmontar o diálogo.
   const close = () => { setIdentity(null); setJustification(""); onClose(); };
   const ref = useDialog<HTMLDivElement>(true, close, returnFocusTo);
-  useEffect(() => { if (identity) resultRef.current?.focus(); }, [ identity ]);
+  // Depois de ver, o foco vai para "Fechar" (o campo some; o anel de foco do tema vale).
+  useEffect(() => { if (identity) closeRef.current?.focus(); }, [ identity ]);
 
   const label = scope === "identity" ? "Ver identidade" : "Abrir anexo protegido";
   const submitText = scope === "identity" ? "Ver identidade" : "Abrir anexo";
@@ -86,7 +87,8 @@ export function IdentityDialog({ manifestationId, scope, attachment, returnFocus
         setJustification("");
       } else if (attachment) {
         // `window.open` acontece dentro de `openFile`, antes do primeiro await: ainda no gesto do envio.
-        const failed = await openFile(() => getOmbudsmanAttachmentUrl(attachment.id, justification), (err) => ombudsmanError(err));
+        const failed = await openFile(() => getOmbudsmanAttachmentUrl(attachment.id, justification), (err) => ombudsmanError(err),
+          () => !alive.current);
         if (!alive.current) return;
         if (failed) setError(failed);
         else onClose();
@@ -104,10 +106,10 @@ export function IdentityDialog({ manifestationId, scope, attachment, returnFocus
       <div ref={ref} role="dialog" aria-modal="true" aria-label={label} style={panel}>
         <p style={heading}>{label}</p>
         {identity ? (
-          <div ref={resultRef} tabIndex={-1} style={{ display: "flex", flexDirection: "column", gap: 12, outline: "none" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <IdentityFields identity={identity} />
             <p role="status" style={muted}>{ACCESS_RECORDED}</p>
-            <div style={row}><button type="button" style={secondaryButtonStyle} onClick={close}>Fechar</button></div>
+            <div style={row}><button ref={closeRef} type="button" style={secondaryButtonStyle} onClick={close}>Fechar</button></div>
           </div>
         ) : (
           <form style={form} noValidate onSubmit={(ev) => void submit(ev)}>
