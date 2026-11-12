@@ -1,20 +1,25 @@
 // Detalhe da manifestação (módulo 33; F-33.5, F-33.7): dados, identidade por modo, texto, linha do tempo, encaminhamentos,
 // anexos e o pedido de reabertura pendente. Leitura nominal (`NOMINAL_QUERY`, gcTime 0): ao sair, o detalhe sai do cache. Cada
 // campo é lido pelo nome — o detalhe nunca é espalhado na tela, e a identidade é do `IdentityBlock`. Nada em storage.
-// As ações (`ActionsPanel`) entram na Task 6; o diálogo de identidade e de anexo protegido, na Task 8.
-import { useQuery } from "@tanstack/react-query";
-import { getOmbudsmanManifestation, type OmbudsmanAttachment, type OmbudsmanManifestation } from "../../lib/api";
+// As ações da equipe (`ActionsPanel`, cancelamento do encaminhamento) respondem com o detalhe, que vai direto ao cache (sem nova
+// leitura) e invalida a Caixa; tela velha relê o detalhe uma vez. O diálogo de identidade e de anexo protegido entra na Task 8.
+import { useQueryClient, useQuery } from "@tanstack/react-query";
+import {
+  cancelOmbudsmanForwarding, errorCode, getOmbudsmanManifestation,
+  type OmbudsmanAttachment, type OmbudsmanForwarding, type OmbudsmanManifestation
+} from "../../lib/api";
 import { fmtDay } from "../../lib/careLines";
 import { fmtDateTime } from "../../lib/format";
 import {
-  NOMINAL_QUERY, OMB_DETAIL_KEY, archiveReasonLabel, channelLabel, kindLabel, modeLabel, ombudsmanError, resolutionLabel, stateLabel,
-  type OmbudsmanRoles
+  NOMINAL_QUERY, OMB_DETAIL_KEY, OMB_LIST_KEY, archiveReasonLabel, channelLabel, isChanged, kindLabel, modeLabel, ombudsmanError,
+  resolutionLabel, stateLabel, type OmbudsmanRoles
 } from "../../lib/ombudsman";
 import { KeyValue } from "../../components/KeyValue";
 import { Panel } from "../../components/Panel";
 import { Tag } from "../../components/Tag";
 import { secondaryButtonStyle } from "../../components/formStyles";
 import { alert, grid, muted, row, stack, title } from "../exams/styles";
+import { ActionsPanel } from "./ActionsPanel";
 import { Attachments } from "./Attachments";
 import { DeadlineTag } from "./DeadlineTag";
 import { Forwardings } from "./Forwardings";
@@ -101,6 +106,23 @@ function ReopenRequest({ m }: { m: OmbudsmanManifestation }) {
 export function ManifestationView({ id, roles, onBack }: { id: string; roles: OmbudsmanRoles; now?: Date; onBack(): void }) {
   const detail = useQuery({ queryKey: [ OMB_DETAIL_KEY, id ], queryFn: () => getOmbudsmanManifestation(id), ...NOMINAL_QUERY });
   const m = detail.data;
+  const queryClient = useQueryClient();
+  // Resposta de uma ação = o detalhe novo; `null` = tela velha: uma releitura, nenhum reenvio.
+  const onChanged = (next: OmbudsmanManifestation | null) => {
+    if (next) queryClient.setQueryData([ OMB_DETAIL_KEY, id ], next);
+    else void detail.refetch();
+    void queryClient.invalidateQueries({ queryKey: [ OMB_LIST_KEY ] });
+  };
+  // Cancelamento com o estado lido do encaminhamento (Q33). Encaminhamento que mudou ou sumiu: frase e releitura.
+  const cancelForwarding = async (f: OmbudsmanForwarding): Promise<string | null> => {
+    try {
+      onChanged(await cancelOmbudsmanForwarding(f.id, f.state));
+      return null;
+    } catch (err) {
+      if (isChanged(err) || errorCode(err) === "not_found") onChanged(null);
+      return ombudsmanError(err);
+    }
+  };
   // Ganchos do diálogo da Task 8 (identidade e anexo protegido, com justificativa). Aqui nada chama `/identity` nem o anexo.
   const openIdentityDialog = () => {};
   const openProtectedAttachment = (_a: OmbudsmanAttachment) => {};
@@ -116,11 +138,11 @@ export function ManifestationView({ id, roles, onBack }: { id: string; roles: Om
             {m.urgent && <Tag tone="down">urgente</Tag>}
           </div>
           <Data m={m} />
-          {/* ActionsPanel (Task 6) entra aqui. */}
+          <ActionsPanel key={m.id} m={m} roles={roles} onChanged={onChanged} />
           <IdentityBlock m={m} roles={roles} onReveal={openIdentityDialog} />
           <Panel title="Texto da manifestação"><p style={body}>{m.body}</p></Panel>
           <Timeline events={m.events} />
-          <Forwardings m={m} />
+          <Forwardings m={m} roles={roles} onCancel={cancelForwarding} />
           <Attachments m={m} roles={roles} onProtected={openProtectedAttachment} />
           <ReopenRequest m={m} />
         </>

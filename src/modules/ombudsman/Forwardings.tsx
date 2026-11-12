@@ -1,12 +1,15 @@
 // Encaminhamentos da manifestação (módulo 33; Q9, Q33): destino, extrato, estado, prazo (só no pendente) e, quando existem, a
 // prorrogação, a resposta e quem respondeu. No `declined`, `reply` é o motivo da recusa. As chaves opcionais só são lidas se
-// vierem preenchidas. O cancelamento do pendente entra na Task 6.
+// vierem preenchidas. A equipe cancela o pendente ("Cancelar encaminhamento", confirmação em dois passos): `onCancel` manda o
+// estado lido do encaminhamento (Q33) e devolve a frase da recusa, ou `null`; 409 `forwarding_changed` relê lá fora.
+import { useState } from "react";
 import type { ForwardingState, OmbudsmanForwarding, OmbudsmanManifestation } from "../../lib/api";
 import { fmtDateTime } from "../../lib/format";
-import { destinationLabel, forwardingStateLabel } from "../../lib/ombudsman";
+import { destinationLabel, forwardingStateLabel, type OmbudsmanRoles } from "../../lib/ombudsman";
+import { ConfirmButton } from "../../components/ConfirmButton";
 import { Panel } from "../../components/Panel";
 import { Tag } from "../../components/Tag";
-import { box, muted, row, stack } from "../exams/styles";
+import { alert, box, muted, row, stack } from "../exams/styles";
 import { DeadlineTag } from "./DeadlineTag";
 
 const STATE_TONE: Record<ForwardingState, string | undefined> = { pending: "info", replied: "ok", declined: "down", cancelled: undefined };
@@ -14,7 +17,7 @@ const filled = (v: unknown): v is string => typeof v === "string" && v !== "";
 const label = { margin: 0, fontSize: 11, color: "var(--ink3)" } as const;
 const body = { margin: 0, whiteSpace: "pre-wrap" } as const;
 
-function ForwardingItem({ f }: { f: OmbudsmanForwarding }) {
+function ForwardingItem({ f, onCancel }: { f: OmbudsmanForwarding; onCancel?(): Promise<void> }) {
   const by = [ filled(f.replied_by_name) ? `respondido por ${f.replied_by_name}` : null, filled(f.replied_at) ? fmtDateTime(f.replied_at) : null ]
     .filter(Boolean).join(" · ");
   return (
@@ -31,18 +34,34 @@ function ForwardingItem({ f }: { f: OmbudsmanForwarding }) {
       {filled(f.extension_reason) && <><p style={label}>Motivo da prorrogação</p><p style={body}>{f.extension_reason}</p></>}
       {filled(f.reply) && <><p style={label}>{f.state === "declined" ? "Motivo da recusa" : "Resposta"}</p><p style={body}>{f.reply}</p></>}
       {by && <p className="mono" style={muted}>{by}</p>}
+      {onCancel && (
+        <div style={row}>
+          <ConfirmButton label="Cancelar encaminhamento" variant="danger" onConfirm={onCancel}
+            question="Cancelar este encaminhamento? O destino deixa de poder respondê-lo." />
+        </div>
+      )}
     </li>
   );
 }
 
-export function Forwardings({ m }: { m: OmbudsmanManifestation }) {
+export function Forwardings({ m, roles, onCancel }: {
+  m: OmbudsmanManifestation; roles?: OmbudsmanRoles; onCancel?(f: OmbudsmanForwarding): Promise<string | null>;
+}) {
+  const [ notice, setNotice ] = useState<string | null>(null);
+  const cancellable = (f: OmbudsmanForwarding) => !!onCancel && !!roles?.staff && m.can.cancel_forwarding && f.state === "pending";
   return (
     <Panel title="Encaminhamentos">
-      {m.forwardings.length === 0 ? <p style={muted}>nenhum encaminhamento</p> : (
-        <ul style={{ ...stack, gap: 8, margin: 0, padding: 0, listStyle: "none" }}>
-          {m.forwardings.map((f) => <ForwardingItem key={f.id} f={f} />)}
-        </ul>
-      )}
+      <div style={{ ...stack, gap: 8 }}>
+        {notice && <p role="alert" style={alert}>{notice}</p>}
+        {m.forwardings.length === 0 ? <p style={muted}>nenhum encaminhamento</p> : (
+          <ul style={{ ...stack, gap: 8, margin: 0, padding: 0, listStyle: "none" }}>
+            {m.forwardings.map((f) => (
+              <ForwardingItem key={f.id} f={f} onCancel={cancellable(f) && onCancel
+                ? async () => { setNotice(null); setNotice(await onCancel(f)); } : undefined} />
+            ))}
+          </ul>
+        )}
+      </div>
     </Panel>
   );
 }

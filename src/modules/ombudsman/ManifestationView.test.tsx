@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { renderWithProviders } from "../../test/campaignFixtures";
-import { NOW33, can33, event, forwarding, manifestation, ombudsmanUser, preserved } from "../../test/ombudsmanFixtures";
+import { NOW33, can33, event, forwarding, manifestation, ombudsmanUser, options, preserved } from "../../test/ombudsmanFixtures";
 import * as api from "../../lib/api";
 import { ApiError, type OmbudsmanManifestation } from "../../lib/api";
 import { ANONYMOUS_NO_IDENTITY, IDENTITY_PRESERVED, OMBUDSMAN_ERRORS, OMB_DETAIL_KEY, ombudsmanRoles } from "../../lib/ombudsman";
@@ -10,7 +10,7 @@ import { ManifestationView } from "./ManifestationView";
 
 vi.mock("../../lib/api", async (orig) => ({ ...(await orig<typeof api>()), fetchCurrentSession: vi.fn(),
   getOmbudsmanManifestation: vi.fn(), getOmbudsmanAttachmentUrl: vi.fn(), fetchOmbudsmanFile: vi.fn(),
-  revealOmbudsmanIdentity: vi.fn() }));
+  revealOmbudsmanIdentity: vi.fn(), getOmbudsmanOptions: vi.fn() }));
 // O jsdom não tem `URL.createObjectURL`/`revokeObjectURL`: o teste os põe e devolve o original ao fim.
 const ORIGINAL_URL = { create: URL.createObjectURL, revoke: URL.revokeObjectURL };
 afterEach(() => {
@@ -23,6 +23,8 @@ function mount(m: OmbudsmanManifestation, roles = [ "ombudsman_staff" ]) {
   const user = ombudsmanUser(roles);
   vi.mocked(api.fetchCurrentSession).mockResolvedValue(user);
   vi.mocked(api.getOmbudsmanManifestation).mockResolvedValue(m);
+  // O painel de ações (Task 6) lê as opções para a equipe.
+  vi.mocked(api.getOmbudsmanOptions).mockResolvedValue(options());
   return renderWithProviders(<ManifestationView id={m.id} roles={ombudsmanRoles(user)} now={NOW33} onBack={() => {}} />);
 }
 // O que o api manda a um técnico (sem os poderes do ouvidor).
