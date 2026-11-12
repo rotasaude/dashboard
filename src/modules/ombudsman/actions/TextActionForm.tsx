@@ -1,4 +1,4 @@
-// Molde das ações de um texto (pedido de complemento, complemento recebido, respostas intermediária e conclusiva): o texto
+// Molde das ações de um texto (pedido de complemento, complemento recebido, respostas intermediária e conclusiva, prorrogação): o texto
 // (10–4000, Q8) com o aviso de texto congelado e, na conclusiva dos tipos que a pedem, "Resolvida?". Os problemas saem todos
 // de uma vez antes do envio; a recusa do api volta com a frase do campo (`fields`). Sem duplo envio (`busy` + ref).
 import { useState } from "react";
@@ -14,7 +14,7 @@ export const formTitle = { margin: 0, fontSize: 13, fontWeight: 600 } as const;
 const OWN = [ "text", "resolution" ];
 
 export function TextActionForm({ m, run, onDone, onClose, action, title, label, submit, textPhrase, notice }: ActionFormProps & {
-  action: Extract<OmbudsmanActionName, "request_complement" | "complement" | "interim_response" | "final_response">;
+  action: Extract<OmbudsmanActionName, "request_complement" | "complement" | "interim_response" | "final_response" | "extend">;
   title: string; label: string; submit: string; textPhrase: string; notice?: string;
 }) {
   const f = useActionForm({ text: textPhrase });

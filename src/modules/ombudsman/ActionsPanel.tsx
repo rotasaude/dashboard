@@ -4,7 +4,7 @@
 // formulário aberto continua aberto, com o que foi digitado, só se a ação ainda couber no estado novo; senão fecha. Com uma
 // chamada em voo, as outras ações ficam desabilitadas (nada de uma segunda escrita com o mesmo estado). Só classificar e
 // encaminhar esperam as opções; as ações de texto abrem sem elas.
-// As ações do ouvidor (prorrogar, arquivar, reabrir, resolutividade) entram na Task 7.
+// As ações do ouvidor (prorrogar, arquivar, reabrir, resolutividade) seguem o mesmo molde; a ordem dos botões é a de `availableActions`.
 import { useEffect, useId, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getOmbudsmanOptions, type OmbudsmanActionName, type OmbudsmanManifestation, type OmbudsmanOptions } from "../../lib/api";
@@ -12,16 +12,21 @@ import { OMB_OPTIONS_KEY, STATIC_QUERY, availableActions, blockedReason, ombudsm
 import { Panel } from "../../components/Panel";
 import { buttonStyle, disabledButtonStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { alert, muted, row, stack } from "../exams/styles";
+import { ArchiveForm } from "./actions/ArchiveForm";
 import { ClassifyForm } from "./actions/ClassifyForm";
 import { ComplementForm } from "./actions/ComplementForm";
+import { ExtendForm } from "./actions/ExtendForm";
 import { ForwardForm } from "./actions/ForwardForm";
+import { ReopenForm } from "./actions/ReopenForm";
 import { RequestComplementForm } from "./actions/RequestComplementForm";
+import { ResolutionForm } from "./actions/ResolutionForm";
 import { ResponseForm } from "./actions/ResponseForm";
 import { useManifestationAction, type RunAction } from "./useManifestationAction";
 
 const LABELS: Partial<Record<OmbudsmanActionName, string>> = {
   classify: "Classificar", forward: "Encaminhar", request_complement: "Pedir complemento", complement: "Registrar complemento recebido",
-  interim_response: "Resposta intermediária", final_response: "Resposta conclusiva"
+  interim_response: "Resposta intermediária", final_response: "Resposta conclusiva", extend: "Prorrogar prazo", archive: "Arquivar",
+  reopen: "Reabrir", change_resolution: "Alterar resolutividade"
 };
 // Precisam de `GET /ombudsman/options` (assuntos, unidades, setores, profissionais).
 const NEEDS_OPTIONS: OmbudsmanActionName[] = [ "classify", "forward" ];
@@ -89,6 +94,10 @@ function ActionForm({ action, m, run, options, onDone, onClose }: {
     case "complement": return <ComplementForm {...p} />;
     case "interim_response": return <ResponseForm {...p} final={false} />;
     case "final_response": return <ResponseForm {...p} final />;
+    case "extend": return <ExtendForm {...p} />;
+    case "archive": return <ArchiveForm {...p} />;
+    case "reopen": return <ReopenForm {...p} />;
+    case "change_resolution": return <ResolutionForm {...p} />;
     default: return null;
   }
 }

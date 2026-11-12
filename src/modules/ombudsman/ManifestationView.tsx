@@ -3,7 +3,7 @@
 // campo é lido pelo nome — o detalhe nunca é espalhado na tela, e a identidade é do `IdentityBlock`. Nada em storage.
 // As ações da equipe (`ActionsPanel`, cancelamento do encaminhamento) respondem com o detalhe, que vai direto ao cache (sem nova
 // leitura) e invalida a Caixa; tela velha relê o detalhe uma vez. O diálogo de identidade e de anexo protegido entra na Task 8.
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import {
   cancelOmbudsmanForwarding, errorCode, getOmbudsmanManifestation,
@@ -18,7 +18,7 @@ import {
 import { KeyValue } from "../../components/KeyValue";
 import { Panel } from "../../components/Panel";
 import { Tag } from "../../components/Tag";
-import { secondaryButtonStyle } from "../../components/formStyles";
+import { buttonStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { alert, grid, muted, row, stack, title } from "../exams/styles";
 import { ActionsPanel } from "./ActionsPanel";
 import { Attachments } from "./Attachments";
@@ -26,6 +26,8 @@ import { DeadlineTag } from "./DeadlineTag";
 import { Forwardings, type CancelOutcome } from "./Forwardings";
 import { IdentityBlock } from "./IdentityBlock";
 import { Timeline } from "./Timeline";
+import { ConsentForm } from "./actions/ConsentForm";
+import { ReopenDecisionForm } from "./actions/ReopenDecisionForm";
 
 // O detalhe só traz o pedido pendente; outro código aparece cru.
 const reopenStateLabel = (s: string): string => (s === "pending" ? "pendente" : s);
@@ -83,7 +85,9 @@ function Data({ m }: { m: OmbudsmanManifestation }) {
   );
 }
 
-function ReopenRequest({ m }: { m: OmbudsmanManifestation }) {
+function ReopenRequest({ m, roles, onChanged, onStale }: {
+  m: OmbudsmanManifestation; roles: OmbudsmanRoles; onChanged(next: OmbudsmanManifestation | null): void; onStale(text: string): void;
+}) {
   const r = m.reopen_request;
   if (!r) return null;
   return (
@@ -98,7 +102,24 @@ function ReopenRequest({ m }: { m: OmbudsmanManifestation }) {
           <p style={muted}>Motivo</p>
           <p style={body}>{r.reason}</p>
         </div>
+        {roles.lead && m.can.decide_reopen && <ReopenDecisionForm key={r.id} requestId={r.id} onChanged={onChanged} onStale={onStale} />}
       </div>
+    </Panel>
+  );
+}
+
+// Consentimento do cidadão para revelar a identidade fora da ouvidoria: só o ouvidor, em qualquer modo com alguém a identificar.
+function Consent({ m, roles, onChanged, onStale }: {
+  m: OmbudsmanManifestation; roles: OmbudsmanRoles; onChanged(next: OmbudsmanManifestation | null): void; onStale(text: string): void;
+}) {
+  const [ open, setOpen ] = useState(false);
+  useEffect(() => setOpen(false), [ m.id ]);
+  if (!roles.lead || !m.can.record_identity_consent) return null;
+  return (
+    <Panel title="Consentimento de identificação">
+      {open
+        ? <ConsentForm id={m.id} onChanged={onChanged} onStale={onStale} onClose={() => setOpen(false)} />
+        : <button type="button" style={buttonStyle} onClick={() => setOpen(true)}>Registrar consentimento do cidadão</button>}
     </Panel>
   );
 }
@@ -110,6 +131,9 @@ export function ManifestationView({ id, roles, onBack }: { id: string; roles: Om
   const queryClient = useQueryClient();
   // A manifestação que está na tela; resposta que chega depois de sair (ou de trocar de id) não grava nem relê.
   const liveId = useRef<string | null>(id);
+  // Frase da decisão do pedido e do consentimento quando a tela estava velha: o formulário some com o detalhe novo.
+  const [ leadNotice, setLeadNotice ] = useState<string | null>(null);
+  useEffect(() => setLeadNotice(null), [ id ]);
   useEffect(() => {
     liveId.current = id;
     return () => { liveId.current = null; };
@@ -150,11 +174,13 @@ export function ManifestationView({ id, roles, onBack }: { id: string; roles: Om
           <Data m={m} />
           <ActionsPanel key={m.id} m={m} roles={roles} onChanged={onChanged} />
           <IdentityBlock m={m} roles={roles} onReveal={openIdentityDialog} />
+          <Consent m={m} roles={roles} onChanged={onChanged} onStale={setLeadNotice} />
           <Panel title="Texto da manifestação"><p style={body}>{m.body}</p></Panel>
           <Timeline events={m.events} />
           <Forwardings m={m} roles={roles} onCancel={cancelForwarding} />
           <Attachments m={m} roles={roles} onProtected={openProtectedAttachment} />
-          <ReopenRequest m={m} />
+          {leadNotice && <p role="alert" style={alert}>{leadNotice}</p>}
+          <ReopenRequest m={m} roles={roles} onChanged={onChanged} onStale={setLeadNotice} />
         </>
       )}
     </div>
