@@ -312,7 +312,7 @@ export function useOmbudsmanHandoff(active: ModuleId): OmbudsmanHandoff {
   return useMemo(() => ({ manifestationId, openManifestation: setManifestationId }), [ manifestationId ]);
 }
 
-export function renderModule(active: ModuleId, setActive: (id: ModuleId) => void, caps: CapsHandoff = NO_CAPS_HANDOFF, _omb: OmbudsmanHandoff = NO_OMB_HANDOFF) {
+export function renderModule(active: ModuleId, setActive: (id: ModuleId) => void, caps: CapsHandoff = NO_CAPS_HANDOFF, omb: OmbudsmanHandoff = NO_OMB_HANDOFF) {
   switch (active) {
     case "overview":       return <Overview onNavigate={setActive} />;
     case "ingestion":      return <Ingestion />;
@@ -429,7 +429,7 @@ export function renderModule(active: ModuleId, setActive: (id: ModuleId) => void
     case "caps-raas": return <CapsRaas onGoToSecurity={() => setActive("security")} />;
     case "caps-panel": return <CapsPanel />;
     case "caps-settings": return <CapsSettings onGoToSecurity={() => setActive("security")} />;
-    case "ombudsman-manifestations": return <OmbudsmanManifestations />;
+    case "ombudsman-manifestations": return <OmbudsmanManifestations initialId={omb.manifestationId} />;
     case "ombudsman-new": return <OmbudsmanNew />;
     case "ombudsman-replies": return <OmbudsmanReplies />;
     case "ombudsman-panel": return <OmbudsmanPanel />;

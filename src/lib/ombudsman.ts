@@ -38,6 +38,7 @@ export const ANONYMOUS_INTERNAL = "Denúncia anônima: a conclusão fica interna
 export const MANIFESTATION_CHANGED = "a manifestação mudou enquanto a tela estava aberta — os dados foram relidos; confira antes de repetir";
 export const PUBLIC_REPORT_NOTICE = "Este texto será publicado no site da cidade. Não escreva nome, CPF nem detalhe que identifique alguém.";
 export const NO_RECEIPT_ANONYMOUS = "A denúncia anônima não tem comprovante.";
+export const PROTOCOL_QUERY_TEXT = "use o protocolo AAAA-NNNNNN ou só o ano AAAA-";
 const OFFLINE = "não foi possível falar com o servidor — tente de novo";
 const SESSION_EXPIRED = "sessão expirada — entre de novo";
 const NOT_AVAILABLE = "esta ação não está disponível agora";
@@ -175,7 +176,7 @@ const FIELD_TEXT: [ RegExp, string ][] = [
   [ /^(recurring_problems|actions_taken|notes)$/, REPORT_TEXT ],
   [ /^state$/, "estado inválido" ],
   [ /^color$/, "cor de prazo inválida" ],
-  [ /^q$/, "use o protocolo AAAA-NNNNNN ou só o ano AAAA-" ],
+  [ /^q$/, PROTOCOL_QUERY_TEXT ],
   [ /^before$/, "a lista mudou — ela será lida do início" ],
   [ /^(response_days|extension_days|urgent_days|complement_days|forwarding_days|forwarding_extension_days|warning_days)$/, DAYS_TEXT ],
   [ /^anonymous_daily_cap$/, "o teto diário vai de 1 a 1000" ]
@@ -239,6 +240,9 @@ export const ombudsmanError = (err: unknown, ctx?: RefusalContext): string => om
 // A tela está velha: outro usuário mexeu (409), ou a ação já não cabe no estado (422). Quem chama relê uma vez e não reenvia.
 export const isChanged = (err: unknown): boolean =>
   [ "manifestation_changed", "forwarding_changed", "invalid_transition" ].includes(errorCode(err) ?? "");
+
+// ─── Filtro de protocolo da Caixa (Q51): só `AAAA-NNNNNN` (6 a 12 dígitos) ou o prefixo `AAAA-`; outro texto não sai da tela ───
+export const isProtocolQuery = (q: string): boolean => /^\d{4}-(\d{6,12})?$/.test(q.trim());
 
 // ─── Matriz de ações (§2) ───────────────────────────────────────────────────
 const ACTION_ORDER: OmbudsmanActionName[] = [
