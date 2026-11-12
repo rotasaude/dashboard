@@ -132,6 +132,7 @@ export const OMBUDSMAN_ERRORS: Record<string, string> = {
   attachment_limit: "até 3 anexos",
   attachment_type: "o anexo tem de ser PDF, JPEG ou PNG",
   attachment_too_large: "cada anexo tem até 10 MB",
+  justification_range: "escreva a justificativa (de 10 a 500 caracteres)",
   destination_inactive: "este destino foi desativado"
 };
 
@@ -155,7 +156,7 @@ const FIELD_TEXT: [ RegExp, string ][] = [
   [ /^reason$/, "informe o motivo (de 10 a 4000 caracteres; no arquivamento, escolha um da lista)" ],
   [ /^(duplicate_of_id|duplicate_of_protocol)$/, SOURCE_NOT_FOUND ],
   [ /^external_body_name$/, "informe o órgão para onde foi encaminhada (até 120 caracteres)" ],
-  [ /^justification$/, "escreva a justificativa (de 10 a 500 caracteres)" ],
+  [ /^justification$/, OMBUDSMAN_ERRORS.justification_range ],
   [ /^granted$/, "informe se o cidadão consentiu" ],
   [ /^decision$/, "escolha aceitar ou recusar" ],
   [ /^channel$/, "escolha o canal: presencial, telefone ou OuvidorSUS" ],
@@ -287,6 +288,9 @@ export const canIssueReceipt = (m: Pick<OmbudsmanManifestation, "identification_
 // Code points depois do strip, como o api (Q8): um emoji conta 1.
 const len = (v: string): number => [ ...v.trim() ].length;
 const outside = (v: string, min: number, max: number): boolean => len(v) < min || len(v) > max;
+
+// Justificativa de abrir a identidade ou o anexo protegido (Q8; `catalog.rb`): 10–500 code points depois do strip.
+export const justificationOk = (v: string): boolean => !outside(v, 10, 500);
 
 export type NewDraft = {
   kind: OmbudsmanKind;

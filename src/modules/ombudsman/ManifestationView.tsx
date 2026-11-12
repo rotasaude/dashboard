@@ -2,7 +2,8 @@
 // anexos e o pedido de reabertura pendente. Leitura nominal (`NOMINAL_QUERY`, gcTime 0): ao sair, o detalhe sai do cache. Cada
 // campo é lido pelo nome — o detalhe nunca é espalhado na tela, e a identidade é do `IdentityBlock`. Nada em storage.
 // As ações da equipe (`ActionsPanel`, cancelamento do encaminhamento) respondem com o detalhe, que vai direto ao cache (sem nova
-// leitura) e invalida a Caixa; tela velha relê o detalhe uma vez. O diálogo de identidade e de anexo protegido entra na Task 8.
+// leitura) e invalida a Caixa; tela velha relê o detalhe uma vez. Identidade e anexo protegido abrem no `IdentityDialog`, com
+// justificativa; a identidade fica só no estado do diálogo (nunca no cache do detalhe).
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import {
@@ -25,6 +26,7 @@ import { Attachments } from "./Attachments";
 import { DeadlineTag } from "./DeadlineTag";
 import { Forwardings, type CancelOutcome } from "./Forwardings";
 import { IdentityBlock } from "./IdentityBlock";
+import { IdentityDialog } from "./IdentityDialog";
 import { Timeline } from "./Timeline";
 import { ConsentForm } from "./actions/ConsentForm";
 import { ReopenDecisionForm } from "./actions/ReopenDecisionForm";
@@ -32,6 +34,8 @@ import { ReopenDecisionForm } from "./actions/ReopenDecisionForm";
 // O detalhe só traz o pedido pendente; outro código aparece cru.
 const reopenStateLabel = (s: string): string => (s === "pending" ? "pendente" : s);
 const body = { margin: 0, whiteSpace: "pre-wrap" } as const;
+// Diálogo aberto: o escopo, o anexo (no protegido) e o botão que abriu (o foco volta para ele).
+type DialogOpen = { scope: "identity"; attachment?: undefined; opener: HTMLElement } | { scope: "attachment"; attachment: OmbudsmanAttachment; opener: HTMLElement };
 
 function channelText(m: OmbudsmanManifestation): string {
   return m.channel === "ouvidorsus" && m.ouvidorsus_number ? `${channelLabel(m.channel)} nº ${m.ouvidorsus_number}` : channelLabel(m.channel);
@@ -131,7 +135,8 @@ export function ManifestationView({ id, roles, onBack }: { id: string; roles: Om
   const liveId = useRef<string | null>(id);
   // Frase da decisão do pedido e do consentimento quando a tela estava velha: o formulário some com o detalhe novo.
   const [ leadNotice, setLeadNotice ] = useState<string | null>(null);
-  useEffect(() => setLeadNotice(null), [ id ]);
+  const [ dialog, setDialog ] = useState<DialogOpen | null>(null);
+  useEffect(() => { setLeadNotice(null); setDialog(null); }, [ id ]);
   useEffect(() => {
     liveId.current = id;
     return () => { liveId.current = null; };
@@ -155,9 +160,9 @@ export function ManifestationView({ id, roles, onBack }: { id: string; roles: Om
       return { text: ombudsmanError(err), reread: false };
     }
   };
-  // Ganchos do diálogo da Task 8 (identidade e anexo protegido, com justificativa). Aqui nada chama `/identity` nem o anexo.
-  const openIdentityDialog = () => {};
-  const openProtectedAttachment = (_a: OmbudsmanAttachment) => {};
+  // Abrir o diálogo não chama nada: `/identity` e o link do anexo só saem do envio da justificativa.
+  const openIdentityDialog = (opener: HTMLElement) => setDialog({ scope: "identity", opener });
+  const openProtectedAttachment = (a: OmbudsmanAttachment, opener: HTMLElement) => setDialog({ scope: "attachment", attachment: a, opener });
   return (
     <div style={stack}>
       <div style={row}><button type="button" style={secondaryButtonStyle} onClick={onBack}>Voltar à caixa</button></div>
@@ -179,6 +184,10 @@ export function ManifestationView({ id, roles, onBack }: { id: string; roles: Om
           <Attachments m={m} roles={roles} onProtected={openProtectedAttachment} />
           {leadNotice && <p role="alert" style={alert}>{leadNotice}</p>}
           <ReopenRequest m={m} roles={roles} onChanged={onChanged} onStale={setLeadNotice} />
+          {dialog && roles.lead && (
+            <IdentityDialog manifestationId={m.id} scope={dialog.scope} attachment={dialog.attachment} returnFocusTo={dialog.opener}
+              onClose={() => setDialog(null)} />
+          )}
         </>
       )}
     </div>

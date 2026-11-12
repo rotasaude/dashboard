@@ -2,7 +2,7 @@
 // - `identified`: só `name`, `cpf_masked`, `phone_masked` (mostrados só se vierem mascarados) e, quando a chave existir, `contact`
 //   (o digitado pela equipe, sem máscara, para retornar a ligação). CPF e telefone inteiros não saem do detalhe.
 // - `preserved` e `anonymous`: só a frase, seja o que for que o api mande em `identity` ou no topo do detalhe.
-// O ouvidor abre a identidade em qualquer modo (`can.open_identity`, Q50) pelo botão; o diálogo com justificativa é da Task 8.
+// O ouvidor abre a identidade em qualquer modo (`can.open_identity`, Q50) pelo botão, que abre o `IdentityDialog` (justificativa).
 import type { OmbudsmanManifestation } from "../../lib/api";
 import { ANONYMOUS_NO_IDENTITY, IDENTITY_PRESERVED, canSeeIdentityButton, type OmbudsmanRoles } from "../../lib/ombudsman";
 import { KeyValue } from "../../components/KeyValue";
@@ -22,11 +22,11 @@ function identifiedFields(m: OmbudsmanManifestation): Shown | null {
   return { name: text(r.name), cpf: masked(r.cpf_masked), phone: masked(r.phone_masked), contact: text(r.contact) };
 }
 
-export function IdentityBlock({ m, roles, onReveal }: { m: OmbudsmanManifestation; roles: OmbudsmanRoles; onReveal(): void }) {
+export function IdentityBlock({ m, roles, onReveal }: { m: OmbudsmanManifestation; roles: OmbudsmanRoles; onReveal(opener: HTMLElement): void }) {
   const shown = identifiedFields(m);
   const phrase = m.identification_mode === "anonymous" && !m.identity_available ? ANONYMOUS_NO_IDENTITY : IDENTITY_PRESERVED;
   const button = canSeeIdentityButton(m, roles)
-    ? <button type="button" style={secondaryButtonStyle} onClick={onReveal}>Ver identidade</button>
+    ? <button type="button" style={secondaryButtonStyle} onClick={(ev) => onReveal(ev.currentTarget)}>Ver identidade</button>
     : undefined;
   return (
     <Panel title="Identidade" right={button}>
