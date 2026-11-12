@@ -15,7 +15,7 @@ import {
   IconDental, IconDentalBroken,
   IconBus, IconCalendarRepeat, IconUserX, IconCar, IconSteeringWheel,
   IconBrain, IconAmbulance, IconDeviceTv, IconDoorEnter, IconCalendarEvent, IconBed, IconBedFlat, IconPillOff, IconShare, IconFileReport, IconUserHeart,
-  IconVaccine, IconNeedle, IconCloudUpload, IconVaccineBottle, IconTemperatureSnow, IconCalendarMonth, IconReportMedical, IconFridge
+  IconMessageReport, IconMailForward, IconSitemap, IconVaccine, IconNeedle, IconCloudUpload, IconVaccineBottle, IconTemperatureSnow, IconCalendarMonth, IconReportMedical, IconFridge
 } from "@tabler/icons-react";
 import type { Catalog } from "./types";
 
@@ -37,6 +37,7 @@ export const CATALOG: Catalog = {
     "TFD": { icon: IconGavel, description: "Laudo, comissão, ajuda de custo e prestação de contas" },
     "CAPS": { icon: IconBrain, description: "Atenção psicossocial: acolhimento, PTS, grupos, leitos e RAAS" },
     "Urgência": { icon: IconAmbulance, description: "UPA: tempos por cor, desfechos e o painel de chamada da sala de espera" },
+    "Ouvidoria": { icon: IconMessageReport, description: "Manifestações do cidadão, encaminhamentos, prazos e relatório anual" },
     "Farmácia": { icon: IconBuildingWarehouse, description: "Almoxarifado, farmácia da unidade, dispensação e alertas" },
     "Vacinação": { icon: IconVaccine, description: "Sala de vacina, caderneta, envio à RNDS, estoque e cadeia de frio" },
     "Exames":      { icon: IconMicroscope, description: "Pedidos, resultados e prestadores" },
@@ -148,6 +149,13 @@ export const CATALOG: Catalog = {
     "caps-raas": { icon: IconFileReport, description: "Pendências, fechamento, remessa e fichas espelho" },
     "caps-panel": { icon: IconChartBar, description: "Matrículas, PTS, ações, leitos e RAAS do mês" },
     "caps-settings": { icon: IconSettings, description: "Leitos, limite de noites e prazo do PTS" },
+    "ombudsman-manifestations": { icon: IconInbox, description: "Manifestações por estado e cor de prazo" },
+    "ombudsman-new": { icon: IconFilePlus, description: "Registro presencial, por telefone ou do OuvidorSUS, com comprovante" },
+    "ombudsman-replies": { icon: IconMailForward, description: "Encaminhamentos do seu setor ou unidade" },
+    "ombudsman-panel": { icon: IconChartBar, description: "Volume, prazos, resolutividade e satisfação" },
+    "ombudsman-annual-report": { icon: IconFileReport, description: "Relatório de gestão anual para publicar" },
+    "ombudsman-settings": { icon: IconSettings, description: "Respondentes, assuntos e prazos" },
+    "departments": { icon: IconSitemap, description: "Setores da secretaria que recebem encaminhamentos" },
     "urgency-beds": { icon: IconBedFlat, description: "Leitos da observação da UPA, com step-up" },
     "pharmacy-urgency-shortfalls": { icon: IconPillOff, description: "Medicação dada na UPA sem saldo no estoque" },
     "urgency-panel": { icon: IconChartBar, description: "Tempos por cor, fora do tempo, desfechos e evasão" },

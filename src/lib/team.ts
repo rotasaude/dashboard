@@ -105,11 +105,15 @@ export const INVITE_ROLES: { role: string; label: string }[] = [
   // Módulo 31 (ADR 0049): o prontuário do CAPS é fechado à equipe lotada — privilegiadas (step-up para conceder).
   { role: "psychosocial_staff", label: "Equipe do CAPS" },
   { role: "psychosocial_lead", label: "Coordenação do CAPS" },
+  // Módulo 33 (ADR 0051): o ouvidor e a equipe leem texto de saúde e identidade — privilegiados (step-up para conceder); o ponto de resposta não (U3, Q31).
+  { role: "ombudsman", label: "Ouvidor" },
+  { role: "ombudsman_staff", label: "Equipe da ouvidoria" },
+  { role: "ombudsman_responder", label: "Ponto de resposta da ouvidoria" },
   { role: "municipal_admin", label: "Administrador municipal" }
 ];
 
 // Membership::PRIVILEGED_ROLES: conceder OU convidar exige step-up.
-const PRIVILEGED_ROLES = new Set([ "municipal_admin", REVIEWER_ROLE, VERIFIER_ROLE, PROFESSIONAL_ROLE, CAMPAIGN_MANAGER_ROLE, "exam_regulator", "lab_staff", "lab_releaser", "billing_clerk", "surveillance", "care_regulator", "pharmacist", "pharmacy_assistant", "transport_dispatcher", "tfd_committee", "psychosocial_staff", "psychosocial_lead" ]);
+const PRIVILEGED_ROLES = new Set([ "municipal_admin", REVIEWER_ROLE, VERIFIER_ROLE, PROFESSIONAL_ROLE, CAMPAIGN_MANAGER_ROLE, "exam_regulator", "lab_staff", "lab_releaser", "billing_clerk", "surveillance", "care_regulator", "pharmacist", "pharmacy_assistant", "transport_dispatcher", "tfd_committee", "psychosocial_staff", "psychosocial_lead", "ombudsman", "ombudsman_staff" ]);
 
 export function isPrivilegedRole(role: string): boolean {
   return PRIVILEGED_ROLES.has(role);

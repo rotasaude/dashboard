@@ -14,6 +14,7 @@ import { canUseVaccination } from "../lib/vaccination";
 import { canUseTransport, isDriverOnly, transportRoles } from "../lib/transport";
 import { canUseTfd } from "../lib/tfd";
 import { canUsePsychosocial, psychosocialRoles } from "../lib/psychosocial";
+import { canUseOmbudsman, ombudsmanRoles } from "../lib/ombudsman";
 import { canUseUrgency, canUseWaitingRoom } from "../lib/urgency";
 export type ModuleId =
   | "overview" | "ingestion" | "conversations" | "consent"
@@ -40,6 +41,7 @@ export type ModuleId =
   | "transport-settings" | "tfd-queue" | "tfd-my-cases"
   | "caps-reception" | "caps-today" | "caps-enrollments" | "caps-groups" | "caps-beds" | "caps-matrix" | "caps-raas" | "caps-panel"
   | "caps-settings"
+  | "ombudsman-manifestations" | "ombudsman-new" | "ombudsman-replies" | "ombudsman-panel" | "ombudsman-annual-report" | "ombudsman-settings" | "departments"
   | "urgency-panel" | "waiting-room-settings" | "urgency-beds";
 
 export interface NavItem { id: ModuleId; label: string; icon: string; }
@@ -155,6 +157,15 @@ export const NAV_GROUPS: NavGroupDef[] = [
     { id: "urgency-panel", label: "Painel da urgência", icon: "▦" },
     { id: "waiting-room-settings", label: "Senhas, locais e TVs", icon: "▭" },
     { id: "urgency-beds", label: "Leitos de observação", icon: "▭" }
+  ]},
+  { label: "Ouvidoria", items: [
+    { id: "ombudsman-manifestations", label: "Caixa da ouvidoria", icon: "☰" },
+    { id: "ombudsman-new", label: "Nova manifestação", icon: "✎" },
+    { id: "ombudsman-replies", label: "Respostas à ouvidoria", icon: "↩" },
+    { id: "ombudsman-panel", label: "Painel da ouvidoria", icon: "▦" },
+    { id: "ombudsman-annual-report", label: "Relatório anual", icon: "▤" },
+    { id: "ombudsman-settings", label: "Configuração da ouvidoria", icon: "⚙" },
+    { id: "departments", label: "Setores da secretaria", icon: "⌂" }
   ]},
   { label: "Exames", items: [
     { id: "exam-acknowledgements", label: "Resultados aguardando ciência", icon: "⚑" },
@@ -357,6 +368,9 @@ export function navGroupsFor(
   // `waiting_room_display` e são do admin. A mesa da UPA fica dentro de Atendimento (contrato §14 Q15).
   const urgOn = canUseUrgency(user);
   const wrOn = canUseWaitingRoom(user);
+  // Módulo 33 (ADR 0051): ombudsman na sessão; o respondente sem ombudsman_staff só responde (contrato §6)
+  const ombOn = canUseOmbudsman(user);
+  const omb = ombudsmanRoles(user);
   return NAV_GROUPS.filter((group) => {
     if (group.label === "Conta") return !user?.operator;
     if (group.label === "Equipe") return isAdmin;
@@ -465,6 +479,11 @@ export function navGroupsFor(
       if (item.id === "urgency-panel") return urgOn && (isAdmin || isAnalyst);
       if (item.id === "waiting-room-settings") return wrOn && isAdmin;
       if (item.id === "urgency-beds") return urgOn && isAdmin;
+      if (item.id === "ombudsman-manifestations" || item.id === "ombudsman-new" || item.id === "ombudsman-panel") return ombOn && omb.staff;
+      if (item.id === "ombudsman-replies") return ombOn && omb.responder;
+      if (item.id === "ombudsman-annual-report" || item.id === "ombudsman-settings") return ombOn && omb.lead;
+      // Q12: /departments não tem o portão da ouvidoria — o admin cadastra os setores com o interruptor desligado também.
+      if (item.id === "departments") return isAdmin;
       if (item.id === "integrations" || item.id === "cnes") return canIntegrations;
       if (item.id === "production") return canProduction;
       return true;

@@ -36,9 +36,10 @@ describe("grupo Cadastro territorial (módulo 24a)", () => {
     expect(labels.indexOf("Transporte")).toBe(labels.indexOf("Saúde bucal") + 1);
     expect(labels.indexOf("TFD")).toBe(labels.indexOf("Transporte") + 1);
     expect(labels.indexOf("CAPS")).toBe(labels.indexOf("TFD") + 1);
-    // O 32a pôs a Urgência depois do CAPS, e é a Urgência que antecede Exames.
+    // O 32a pôs a Urgência depois do CAPS; o 33 pôs a Ouvidoria depois dela, e é a Ouvidoria que antecede Exames.
     expect(labels.indexOf("Urgência")).toBe(labels.indexOf("CAPS") + 1);
-    expect(labels.indexOf("Exames")).toBe(labels.indexOf("Urgência") + 1);
+    expect(labels.indexOf("Ouvidoria")).toBe(labels.indexOf("Urgência") + 1);
+    expect(labels.indexOf("Exames")).toBe(labels.indexOf("Ouvidoria") + 1);
     expect(CATALOG.groups["Cadastro territorial"].description).toBe("Microáreas, domicílios, famílias e cadastro individual");
     expect(CATALOG.screens["registry-status"].description).toBe("Vencidos, a vencer e quem falta cadastrar");
     expect(CATALOG.screens["territory-team"].description).toBe("Domicílios, famílias e moradores por microárea");

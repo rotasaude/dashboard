@@ -82,6 +82,13 @@ import { TransportPanel } from "./modules/TransportPanel";
 import { TransportSettings } from "./modules/TransportSettings";
 import { TfdQueue } from "./modules/TfdQueue";
 import { TfdMyCases } from "./modules/TfdMyCases";
+import { OmbudsmanManifestations } from "./modules/OmbudsmanManifestations";
+import { OmbudsmanNew } from "./modules/OmbudsmanNew";
+import { OmbudsmanReplies } from "./modules/OmbudsmanReplies";
+import { OmbudsmanPanel } from "./modules/OmbudsmanPanel";
+import { OmbudsmanAnnualReport } from "./modules/OmbudsmanAnnualReport";
+import { OmbudsmanSettings } from "./modules/OmbudsmanSettings";
+import { Departments } from "./modules/Departments";
 import { CapsReception } from "./modules/CapsReception";
 import { CapsToday } from "./modules/CapsToday";
 import { CapsEnrollments } from "./modules/CapsEnrollments";
@@ -239,6 +246,7 @@ function ShellInner({ initialModule }: { initialModule?: ModuleId }) {
   // return_to só aceita ids de tela).
   const active: ModuleId = route.kind === "screen" ? route.id : "overview";
   const caps = useCapsHandoff(active);
+  const omb = useOmbudsmanHandoff(active);
 
   let content;
   if (route.kind === "home") content = (
@@ -252,7 +260,7 @@ function ShellInner({ initialModule }: { initialModule?: ModuleId }) {
   else if (route.kind === "group") {
     const group = groups.find((g) => g.slug === route.slug);
     content = group ? <GroupCards group={group} catalog={CATALOG} go={goShell} /> : null;
-  } else content = renderModule(route.id, navigate, caps);
+  } else content = renderModule(route.id, navigate, caps, omb);
 
   return (
     <Shell
@@ -294,7 +302,17 @@ export function useCapsHandoff(active: ModuleId): CapsHandoff {
   return useMemo(() => ({ enrollment, openEnrollment: setEnrollment }), [ enrollment ]);
 }
 
-export function renderModule(active: ModuleId, setActive: (id: ModuleId) => void, caps: CapsHandoff = NO_CAPS_HANDOFF) {
+// A manifestação aberta pelo registro, que a Caixa mostra ao entrar (módulo 33). Só o id (não é dado pessoal), só em memória.
+export type OmbudsmanHandoff = { manifestationId: string | null; openManifestation(id: string): void };
+const NO_OMB_HANDOFF: OmbudsmanHandoff = { manifestationId: null, openManifestation: () => {} };
+
+export function useOmbudsmanHandoff(active: ModuleId): OmbudsmanHandoff {
+  const [ manifestationId, setManifestationId ] = useState<string | null>(null);
+  useEffect(() => { if (active !== "ombudsman-manifestations") setManifestationId(null); }, [ active ]);
+  return useMemo(() => ({ manifestationId, openManifestation: setManifestationId }), [ manifestationId ]);
+}
+
+export function renderModule(active: ModuleId, setActive: (id: ModuleId) => void, caps: CapsHandoff = NO_CAPS_HANDOFF, _omb: OmbudsmanHandoff = NO_OMB_HANDOFF) {
   switch (active) {
     case "overview":       return <Overview onNavigate={setActive} />;
     case "ingestion":      return <Ingestion />;
@@ -411,6 +429,13 @@ export function renderModule(active: ModuleId, setActive: (id: ModuleId) => void
     case "caps-raas": return <CapsRaas onGoToSecurity={() => setActive("security")} />;
     case "caps-panel": return <CapsPanel />;
     case "caps-settings": return <CapsSettings onGoToSecurity={() => setActive("security")} />;
+    case "ombudsman-manifestations": return <OmbudsmanManifestations />;
+    case "ombudsman-new": return <OmbudsmanNew />;
+    case "ombudsman-replies": return <OmbudsmanReplies />;
+    case "ombudsman-panel": return <OmbudsmanPanel />;
+    case "ombudsman-annual-report": return <OmbudsmanAnnualReport />;
+    case "ombudsman-settings": return <OmbudsmanSettings />;
+    case "departments": return <Departments />;
     case "urgency-panel": return <UrgencyPanel />;
     case "urgency-beds": return <UrgencyBedsSettings onGoToSecurity={() => setActive("security")} />;
     case "waiting-room-settings": return <WaitingRoomSettings onGoToSecurity={() => setActive("security")} />;
