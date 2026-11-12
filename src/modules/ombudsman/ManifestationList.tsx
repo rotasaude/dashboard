@@ -8,7 +8,7 @@ import {
   type OmbudsmanChannel, type OmbudsmanKind, type OmbudsmanListItem, type OmbudsmanPage, type OmbudsmanRef, type OmbudsmanSubjectRef
 } from "../../lib/api";
 import {
-  OMBUDSMAN_ERRORS, OMB_LIST_KEY, OMB_OPTIONS_KEY, STATIC_QUERY, channelLabel, kindLabel, modeLabel, ombudsmanRefusals, stateLabel
+  OMBUDSMAN_ERRORS, OMB_LIST_KEY, OMB_OPTIONS_KEY, STATIC_QUERY, channelLabel, isCursorError, kindLabel, modeLabel, ombudsmanRefusals, stateLabel
 } from "../../lib/ombudsman";
 import { fmtDay } from "../../lib/signature";
 import { DataTable } from "../../components/DataTable";
@@ -36,7 +36,6 @@ const toPage = (p: OmbudsmanPage): RowPage => ({ items: p.items.map(toRow), next
 
 const subjectText = (s: OmbudsmanSubjectRef | null): string => (s ? (s.parent ? `${s.parent.name} › ${s.name}` : s.name) : "—");
 const pendingText = (n: number): string => `${n} ${n === 1 ? "encaminhamento pendente" : "encaminhamentos pendentes"}`;
-const isCursorError = (err: unknown): boolean => ombudsmanRefusals(err).some((r) => r.code === "invalid_cursor" || r.path === "before");
 
 export function ManifestationList({ onOpen }: { onOpen(id: string): void }) {
   const queryClient = useQueryClient();

@@ -235,6 +235,8 @@ export function ombudsmanRefusals(err: unknown, ctx: RefusalContext = {}): Refus
   const path = safePath(body?.path);
   return [ { path, code, text: codeText(code, path, err.status, ctx.fields) } ];
 }
+// Cursor `before` recusado (a lista mudou entre as páginas): quem lista recomeça do início (Caixa e caixa do respondente).
+export const isCursorError = (err: unknown): boolean => ombudsmanRefusals(err).some((r) => r.code === "invalid_cursor" || r.path === "before");
 
 export const ombudsmanError = (err: unknown, ctx?: RefusalContext): string => ombudsmanRefusals(err, ctx)[0].text;
 

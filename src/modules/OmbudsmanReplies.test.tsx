@@ -57,6 +57,23 @@ describe("respostas à ouvidoria", () => {
     expect(screen.queryByRole("button", { name: "Carregar mais" })).toBeNull();
   });
 
+  it("cursor recusado (invalid_cursor) em Carregar mais: a frase e a leitura recomeça do início", async () => {
+    vi.mocked(api.listOmbudsmanInbox)
+      .mockResolvedValueOnce(page([ inboxItem({ id: "p1", extract: "Extrato pendente um" }) ], "velho"))
+      .mockRejectedValueOnce(new ApiError(422, { error: "invalid_cursor" }, "x"))
+      .mockResolvedValue(page([ inboxItem({ id: "p9", extract: "Extrato relido do início" }) ]));
+    mount();
+    await screen.findByText("Extrato pendente um");
+    fireEvent.click(screen.getByRole("button", { name: "Carregar mais" }));
+    expect(await screen.findByText("Extrato relido do início")).not.toBeNull();
+    expect(screen.getByText(OMBUDSMAN_ERRORS.invalid_cursor)).not.toBeNull();
+    const calls = vi.mocked(api.listOmbudsmanInbox).mock.calls;
+    expect(calls[1]).toEqual([ { before: "velho" } ]);
+    expect(calls[calls.length - 1]).toEqual([ {} ]);
+    expect(screen.queryByText("Extrato pendente um")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Carregar mais" })).toBeNull();
+  });
+
   it("sem encaminhamentos: frase de vazio", async () => {
     vi.mocked(api.listOmbudsmanInbox).mockResolvedValue(page([]));
     mount();

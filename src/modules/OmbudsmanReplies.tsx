@@ -1,11 +1,12 @@
 // Tela "Respostas à ouvidoria" (módulo 33; F-33.5): a caixa do ponto de resposta (`ombudsman_responder`). Só destino, extrato,
 // prazo e estado: cada item é montado campo a campo na leitura, então protocolo, texto original, assunto, identidade e anexos nunca
 // entram no cache nem na tela, mesmo que o api um dia mande. O cache é de páginas (50, cursor `before`); o api ordena por data e a
-// tela separa os pendentes (primeiro), sem reordenar dentro de cada grupo. Nada em storage.
-import { useState } from "react";
+// tela separa os pendentes (primeiro), sem reordenar dentro de cada grupo. Cursor recusado em "Carregar mais": a frase fica e a
+// leitura recomeça do início, como na Caixa. Nada em storage.
+import { useEffect, useState } from "react";
 import { useInfiniteQuery, useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import { listOmbudsmanInbox, type OmbudsmanInboxItem } from "../lib/api";
-import { NOMINAL_QUERY, OMBUDSMAN_ERRORS, OMB_INBOX_KEY, ombudsmanRefusals } from "../lib/ombudsman";
+import { NOMINAL_QUERY, OMBUDSMAN_ERRORS, OMB_INBOX_KEY, isCursorError, ombudsmanRefusals } from "../lib/ombudsman";
 import { buttonStyle, secondaryButtonStyle } from "../components/formStyles";
 import { EmptyState } from "../components/EmptyState";
 import { alert, muted, row, stack } from "./exams/styles";
@@ -28,6 +29,8 @@ function toItem(i: OmbudsmanInboxItem): OmbudsmanInboxItem {
 function Inbox() {
   const queryClient = useQueryClient();
   const [ stale, setStale ] = useState(false);
+  // A frase do cursor perdido fica até a pessoa pedir a próxima página de novo; a leitura já recomeçou.
+  const [ cursorNotice, setCursorNotice ] = useState(false);
   const inbox = useInfiniteQuery({
     queryKey: [ OMB_INBOX_KEY ],
     queryFn: async ({ pageParam }): Promise<InboxPage> => {
@@ -40,6 +43,12 @@ function Inbox() {
   });
   const items = (inbox.data?.pages ?? []).flatMap((p) => p.items);
   const shown = [ ...items.filter((i) => i.state === "pending"), ...items.filter((i) => i.state !== "pending") ];
+  const cursorLost = inbox.isError && isCursorError(inbox.error);
+  useEffect(() => {
+    if (!cursorLost) return;
+    setCursorNotice(true);
+    void queryClient.resetQueries({ queryKey: [ OMB_INBOX_KEY ] });
+  }, [ cursorLost, queryClient ]);
 
   // O item novo troca o antigo dentro da página em que estava.
   const done = (next: OmbudsmanInboxItem) => {
@@ -59,8 +68,9 @@ function Inbox() {
     <div style={stack}>
       <p style={muted}>{NO_CONTACT}</p>
       {stale && <p role="alert" style={alert}>{OMBUDSMAN_ERRORS.forwarding_changed}</p>}
+      {cursorNotice && <p role="alert" style={alert}>{OMBUDSMAN_ERRORS.invalid_cursor}</p>}
       {inbox.isPending && <p className="mono" style={muted}>carregando…</p>}
-      {inbox.isError && (
+      {inbox.isError && !cursorLost && (
         <div style={row}>
           <p role="alert" style={alert}>{ombudsmanRefusals(inbox.error)[0].text}</p>
           {!inbox.data && <button type="button" style={secondaryButtonStyle} onClick={() => void inbox.refetch()}>Tentar de novo</button>}
@@ -70,7 +80,7 @@ function Inbox() {
       {shown.map((i) => <ReplyCard key={i.id} item={i} onDone={done} onStale={gone} />)}
       {inbox.data && inbox.hasNextPage && (
         <div style={row}>
-          <button type="button" style={buttonStyle} disabled={inbox.isFetchingNextPage} onClick={() => void inbox.fetchNextPage()}>
+          <button type="button" style={buttonStyle} disabled={inbox.isFetchingNextPage} onClick={() => { setCursorNotice(false); void inbox.fetchNextPage(); }}>
             {inbox.isFetchingNextPage ? "Carregando…" : "Carregar mais"}
           </button>
         </div>
