@@ -127,7 +127,7 @@ describe("configuração da ouvidoria: assuntos", () => {
   });
 
   it("renomeia e desativa/reativa sem mandar o pai; reativa o que estava desativado", async () => {
-    vi.mocked(api.updateOmbudsmanSubject).mockImplementation(async (id, i) => ({ id, name: i.name, active: i.active }));
+    vi.mocked(api.updateOmbudsmanSubject).mockImplementation(async (id, i) => ({ id, name: "x", active: true, ...i }));
     mount();
     fireEvent.click(await screen.findByRole("button", { name: "Renomear Transporte" }));
     const input = screen.getByLabelText("Novo nome de Transporte");
@@ -136,13 +136,13 @@ describe("configuração da ouvidoria: assuntos", () => {
     expect(api.updateOmbudsmanSubject).not.toHaveBeenCalled();
     fireEvent.change(input, { target: { value: "Transporte sanitário" } });
     fireEvent.click(screen.getByRole("button", { name: "Salvar nome" }));
-    await waitFor(() => expect(api.updateOmbudsmanSubject).toHaveBeenCalledWith("s6", { name: "Transporte sanitário", active: true }));
+    await waitFor(() => expect(api.updateOmbudsmanSubject).toHaveBeenCalledWith("s6", { name: "Transporte sanitário" }));
     fireEvent.click(await screen.findByRole("button", { name: "Desativar Demora" }));
     fireEvent.click(await screen.findByRole("button", { name: "Confirmar" }));
-    await waitFor(() => expect(api.updateOmbudsmanSubject).toHaveBeenCalledWith("s11", { name: "Demora", active: false }));
+    await waitFor(() => expect(api.updateOmbudsmanSubject).toHaveBeenCalledWith("s11", { active: false }));
     fireEvent.click(screen.getByRole("button", { name: "Reativar Antigo" }));
     fireEvent.click(await screen.findByRole("button", { name: "Confirmar" }));
-    await waitFor(() => expect(api.updateOmbudsmanSubject).toHaveBeenCalledWith("s9", { name: "Antigo", active: true }));
+    await waitFor(() => expect(api.updateOmbudsmanSubject).toHaveBeenCalledWith("s9", { active: true }));
   });
 
   it("recusa ao desativar aparece na tela", async () => {

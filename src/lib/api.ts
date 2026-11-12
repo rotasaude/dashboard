@@ -7340,7 +7340,8 @@ export function listDepartments(): Promise<Department[]> {
 export function createDepartment(name: string): Promise<Department> {
   return jsonFetch<Department>(depPath(), ombWrite("POST", { name }));
 }
-export function updateDepartment(id: string, i: { name: string; active: boolean }): Promise<Department> {
+// Só a chave que muda (o api aceita cada uma sozinha): mandar a outra lida antes desfaria a mudança de outra pessoa.
+export function updateDepartment(id: string, i: { name: string } | { active: boolean }): Promise<Department> {
   return jsonFetch<Department>(depPath(id), ombWrite("PATCH", i));
 }
 export function listOmbudsmanResponders(): Promise<OmbudsmanResponder[]> {
@@ -7365,7 +7366,7 @@ export function createOmbudsmanSubject(i: { name: string; parent_id: string | nu
   return jsonFetch<OmbudsmanSubject>(ombPath("subjects"), ombWrite("POST", ombCompact(i, [ "parent_id" ])));
 }
 // O pai não muda.
-export function updateOmbudsmanSubject(id: string, i: { name: string; active: boolean }): Promise<OmbudsmanSubject> {
+export function updateOmbudsmanSubject(id: string, i: { name: string } | { active: boolean }): Promise<OmbudsmanSubject> {
   return jsonFetch<OmbudsmanSubject>(ombPath("subjects", id), ombWrite("PATCH", i));
 }
 export function getOmbudsmanSettings(): Promise<OmbudsmanSettings> {

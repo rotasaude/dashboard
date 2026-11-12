@@ -174,9 +174,11 @@ describe("cliente da ouvidoria (módulo 33)", () => {
     expect(last()).toMatchObject({ url: "/departments", init: { method: "POST" } });
     expect(bodyOf()).toEqual({ name: "Ouvidoria" });
     stub({ id: "d1", name: "Ouvidoria", active: false });
-    await updateDepartment("d1", { name: "Ouvidoria", active: false });
+    await updateDepartment("d1", { active: false });
     expect(last()).toMatchObject({ url: "/departments/d1", init: { method: "PATCH" } });
-    expect(bodyOf()).toEqual({ name: "Ouvidoria", active: false });
+    expect(bodyOf()).toEqual({ active: false });
+    await updateDepartment("d1", { name: "Ouvidoria geral" });
+    expect(bodyOf()).toEqual({ name: "Ouvidoria geral" });
 
     const responder = { id: "r1", user: { id: "u2", email: "ana@curitiba.demo", name: "Ana Souza" },
       destination: { kind: "department", id: "dep1", name: "Assistência Farmacêutica" }, active: true };
@@ -203,9 +205,11 @@ describe("cliente da ouvidoria (módulo 33)", () => {
     expect(bodyOf()).toEqual({ name: "Medicamentos" });
     await createOmbudsmanSubject({ name: "Falta", parent_id: "s7" });
     expect(bodyOf()).toEqual({ name: "Falta", parent_id: "s7" });
-    await updateOmbudsmanSubject("s7", { name: "Medicamentos", active: false });
+    await updateOmbudsmanSubject("s7", { active: false });
     expect(last()).toMatchObject({ url: "/ombudsman/subjects/s7", init: { method: "PATCH" } });
-    expect(bodyOf()).toEqual({ name: "Medicamentos", active: false });
+    expect(bodyOf()).toEqual({ active: false });
+    await updateOmbudsmanSubject("s7", { name: "Remédios" });
+    expect(bodyOf()).toEqual({ name: "Remédios" });
   });
 
   it("prazos, painel e relatório pelos caminhos do contrato §7 e §11", async () => {

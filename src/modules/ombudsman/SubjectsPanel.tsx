@@ -56,18 +56,19 @@ function SubjectRow({ s, child, onChanged, msg }: {
   s: Item; child: boolean; onChanged(): void; msg: ReturnType<typeof useActionMessage>;
 }) {
   const [ renaming, setRenaming ] = useState(false);
-  const save = async (name: string, active: boolean) => { await updateOmbudsmanSubject(s.id, { name, active }); onChanged(); };
+  // Só a chave que muda: o nome ou a situação lidos antes não vão junto (desfariam a mudança de outra pessoa).
+  const save = async (change: { name: string } | { active: boolean }) => { await updateOmbudsmanSubject(s.id, change); onChanged(); };
   const toggle = async () => {
     msg.start();
     try {
-      await save(s.name, !s.active);
+      await save({ active: !s.active });
       msg.ok(s.active ? "Assunto desativado." : "Assunto reativado.");
     } catch (err) { msg.fail(ombudsmanError(err)); }
   };
   return (
     <li style={{ ...row, marginLeft: child ? 24 : 0, justifyContent: "space-between" }}>
       {renaming ? (
-        <RenameInline name={s.name} onSave={(name) => save(name, s.active)} onClose={() => setRenaming(false)} />
+        <RenameInline name={s.name} onSave={(name) => save({ name })} onClose={() => setRenaming(false)} />
       ) : (
         <>
           <span style={row}>

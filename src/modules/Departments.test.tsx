@@ -31,7 +31,7 @@ describe("setores da secretaria", () => {
     expect(api.createDepartment).toHaveBeenCalledWith("assistência farmacêutica");
     fireEvent.click(screen.getByRole("button", { name: "Desativar Assistência Farmacêutica" }));
     fireEvent.click(await screen.findByRole("button", { name: "Confirmar" }));
-    await waitFor(() => expect(api.updateDepartment).toHaveBeenCalledWith("dep1", { name: "Assistência Farmacêutica", active: false }));
+    await waitFor(() => expect(api.updateDepartment).toHaveBeenCalledWith("dep1", { active: false }));
     expect(screen.queryByRole("button", { name: /Apagar|Excluir/ })).toBeNull();
   });
 
@@ -72,7 +72,7 @@ describe("setores da secretaria", () => {
   });
 
   it("renomeia (1 caractere não sai) e reativa setor desativado", async () => {
-    vi.mocked(api.updateDepartment).mockImplementation(async (id, i) => ({ id, ...i }));
+    vi.mocked(api.updateDepartment).mockImplementation(async (id, i) => ({ id, name: "x", active: true, ...i }));
     mount(ombudsmanUser([ "municipal_admin" ]), [ DEP1, { id: "dep3", name: "Vigilância", active: false } ]);
     fireEvent.click(await screen.findByRole("button", { name: "Renomear Assistência Farmacêutica" }));
     const input = screen.getByLabelText("Novo nome de Assistência Farmacêutica");
@@ -81,10 +81,10 @@ describe("setores da secretaria", () => {
     expect(api.updateDepartment).not.toHaveBeenCalled();
     fireEvent.change(input, { target: { value: "Farmácia central" } });
     fireEvent.click(screen.getByRole("button", { name: "Salvar nome" }));
-    await waitFor(() => expect(api.updateDepartment).toHaveBeenCalledWith("dep1", { name: "Farmácia central", active: true }));
+    await waitFor(() => expect(api.updateDepartment).toHaveBeenCalledWith("dep1", { name: "Farmácia central" }));
     fireEvent.click(await screen.findByRole("button", { name: "Reativar Vigilância" }));
     fireEvent.click(await screen.findByRole("button", { name: "Confirmar" }));
-    await waitFor(() => expect(api.updateDepartment).toHaveBeenCalledWith("dep3", { name: "Vigilância", active: true }));
+    await waitFor(() => expect(api.updateDepartment).toHaveBeenCalledWith("dep3", { active: true }));
   });
 
   it("sem o papel de admin, a frase e nenhuma leitura", async () => {

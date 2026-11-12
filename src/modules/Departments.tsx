@@ -47,7 +47,7 @@ function DepartmentName({ d, onChanged, msg }: { d: Department; onChanged(): voi
   const [ renaming, setRenaming ] = useState(false);
   if (renaming) {
     return <RenameInline name={d.name} onClose={() => setRenaming(false)}
-      onSave={async (name) => { await updateDepartment(d.id, { name, active: d.active }); onChanged(); }} />;
+      onSave={async (name) => { await updateDepartment(d.id, { name }); onChanged(); }} />;
   }
   return (
     <span style={row}>
@@ -69,7 +69,7 @@ function Body() {
   const toggle = async (d: Department) => {
     msg.start();
     try {
-      await updateDepartment(d.id, { name: d.name, active: !d.active });
+      await updateDepartment(d.id, { active: !d.active });
       changed();
       msg.ok(d.active ? "Setor desativado." : "Setor reativado.");
     } catch (err) { msg.fail(ombudsmanError(err)); }
