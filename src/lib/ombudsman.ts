@@ -136,20 +136,22 @@ export const OMBUDSMAN_ERRORS: Record<string, string> = {
 
 // `invalid_request` por `path` (molde do FIELD_TEXT do CAPS). Path fora da lista: "recusado pelo servidor (invalid_request)".
 const TEXT_RANGE = "o texto tem de ter de 10 a 4000 caracteres";
+const REPORT_TEXT = "cada texto do relatório tem até 8000 caracteres";
 const DAYS_TEXT = "o prazo vai de 1 a 120 dias";
 const SOURCE_NOT_FOUND = "protocolo da manifestação original não encontrado";
 const FIELD_TEXT: [ RegExp, string ][] = [
   [ /^expected_state$/, "a tela está desatualizada — feche e abra de novo" ],
   [ /^subject_id$/, "escolha o assunto" ],
   [ /^kind$/, "tipo não aceito aqui (a denúncia anônima só vale para denúncia)" ],
-  [ /^health_unit_id$/, "escolha uma unidade ativa" ],
+  [ /^health_unit_id$/, "escolha uma unidade ativa (no encaminhamento, escolha só um destino: setor ou unidade)" ],
   [ /^professional_id$/, "escolha um profissional com vínculo ativo na unidade" ],
   [ /^urgent$/, "marque se é urgente ou não" ],
   [ /^department_id$/, "escolha um destino: um setor ou uma unidade" ],
   [ /^extract$/, "o extrato tem de ter de 20 a 4000 caracteres" ],
   [ /^text$/, TEXT_RANGE ],
   [ /^resolution$/, "informe se foi resolvida (só em reclamação, solicitação e denúncia)" ],
-  [ /^reason$/, "escolha o motivo do arquivamento" ],
+  // `reason` e `body` têm outro sentido nas rotas do respondente e do cancelamento: a frase é neutra, e cada formulário pode trocá-la (`fields`).
+  [ /^reason$/, "informe o motivo (de 10 a 4000 caracteres; no arquivamento, escolha um da lista)" ],
   [ /^(duplicate_of_id|duplicate_of_protocol)$/, SOURCE_NOT_FOUND ],
   [ /^external_body_name$/, "informe o órgão para onde foi encaminhada (até 120 caracteres)" ],
   [ /^justification$/, "escreva a justificativa (de 10 a 500 caracteres)" ],
@@ -158,7 +160,7 @@ const FIELD_TEXT: [ RegExp, string ][] = [
   [ /^channel$/, "escolha o canal: presencial, telefone ou OuvidorSUS" ],
   [ /^ouvidorsus_number$/, "informe o número do OuvidorSUS (até 40 caracteres)" ],
   [ /^identification_mode$/, "escolha como a pessoa quer ser identificada" ],
-  [ /^body$/, "o texto da manifestação tem de ter de 20 a 4000 caracteres" ],
+  [ /^body$/, "o texto tem de ter de 10 a 4000 caracteres (20 a 4000 na manifestação)" ],
   [ /^citizen_id$/, "este cidadão não pode ser ligado — registre nome e contato na manifestação" ],
   [ /^manifestant_name$/, "o nome tem de ter de 2 a 120 caracteres" ],
   [ /^manifestant_contact$/, "o contato tem de ter de 1 a 120 caracteres" ],
@@ -170,7 +172,7 @@ const FIELD_TEXT: [ RegExp, string ][] = [
   [ /^active$/, "informe se está ativo ou não" ],
   [ /^parent_id$/, "escolha um assunto de primeiro nível" ],
   [ /^user_id$/, "escolha uma pessoa da lista" ],
-  [ /^(recurring_problems|actions_taken|notes)$/, "cada texto do relatório tem até 8000 caracteres" ],
+  [ /^(recurring_problems|actions_taken|notes)$/, REPORT_TEXT ],
   [ /^state$/, "estado inválido" ],
   [ /^color$/, "cor de prazo inválida" ],
   [ /^q$/, "use o protocolo AAAA-NNNNNN ou só o ano AAAA-" ],
@@ -187,8 +189,13 @@ const safePath = (v: unknown): string => (typeof v === "string" && PATH_FORMAT.t
 const bodyOf = (err: unknown): Record<string, unknown> | null =>
   err instanceof ApiError && err.body && typeof err.body === "object" ? (err.body as Record<string, unknown>) : null;
 
-function codeText(code: string, path: string, status: number): string {
-  if (code === "invalid_request") return FIELD_TEXT.find(([ re ]) => re.test(path))?.[1] ?? OMBUDSMAN_ERRORS.invalid_request;
+export type RefusalContext = { fields?: Record<string, string> };
+
+function codeText(code: string, path: string, status: number, fields?: Record<string, string>): string {
+  if (code === "invalid_request") {
+    if (fields && Object.prototype.hasOwnProperty.call(fields, path)) return fields[path];
+    return FIELD_TEXT.find(([ re ]) => re.test(path))?.[1] ?? OMBUDSMAN_ERRORS.invalid_request;
+  }
   if (Object.prototype.hasOwnProperty.call(OMBUDSMAN_ERRORS, code)) return OMBUDSMAN_ERRORS[code];
   if (code === "" && status === 404) return OMBUDSMAN_ERRORS.not_found;
   return `recusado pelo servidor (${code || status})`;
@@ -203,7 +210,7 @@ function disabledText(err: ApiError): string | null {
 }
 
 // Todas as recusas, traduzidas: uma por `problems[]` (chave `error`, ou `code` por tolerância); sem `problems`, a do topo.
-export function ombudsmanRefusals(err: unknown): Refusal[] {
+export function ombudsmanRefusals(err: unknown, ctx: RefusalContext = {}): Refusal[] {
   if (!(err instanceof ApiError)) return [ { path: "", code: "", text: OFFLINE } ];
   const disabled = disabledText(err);
   if (disabled) return [ { path: "", code: "feature_disabled", text: disabled } ];
@@ -220,14 +227,14 @@ export function ombudsmanRefusals(err: unknown): Refusal[] {
     if (!given) return [];
     const c = safeCode(given);
     const path = safePath(row.path);
-    return c ? [ { path, code: c, text: codeText(c, path, err.status) } ] : [ { path, code: "", text: "recusado pelo servidor" } ];
+    return c ? [ { path, code: c, text: codeText(c, path, err.status, ctx.fields) } ] : [ { path, code: "", text: "recusado pelo servidor" } ];
   });
   if (mapped.length > 0) return mapped;
   const path = safePath(body?.path);
-  return [ { path, code, text: codeText(code, path, err.status) } ];
+  return [ { path, code, text: codeText(code, path, err.status, ctx.fields) } ];
 }
 
-export const ombudsmanError = (err: unknown): string => ombudsmanRefusals(err)[0].text;
+export const ombudsmanError = (err: unknown, ctx?: RefusalContext): string => ombudsmanRefusals(err, ctx)[0].text;
 
 // A tela está velha: outro usuário mexeu (409), ou a ação já não cabe no estado (422). Quem chama relê uma vez e não reenvia.
 export const isChanged = (err: unknown): boolean =>
@@ -273,7 +280,8 @@ export const canSeeIdentityButton = (m: OmbudsmanManifestation, roles: Ombudsman
 export const canIssueReceipt = (m: Pick<OmbudsmanManifestation, "identification_mode">): boolean => m.identification_mode !== "anonymous";
 
 // ─── Validações locais (os `path` são os do api; todos os problemas de uma vez) ───
-const len = (v: string): number => v.trim().length;
+// Code points depois do strip, como o api (Q8): um emoji conta 1.
+const len = (v: string): number => [ ...v.trim() ].length;
 const outside = (v: string, min: number, max: number): boolean => len(v) < min || len(v) > max;
 
 export type NewDraft = {
@@ -343,10 +351,11 @@ export function forwardProblems(d: ForwardDraft, options: OmbudsmanOptions): Pro
 
 export type TextDraft = { text: string; resolution?: Resolution | null };
 
-// Pedido de complemento, complemento, prorrogação, intermediária, reabertura e mudança de resolutividade: todo texto de ação é 10–4000.
+// Pedido de complemento, complemento, prorrogação, intermediária, reabertura (opcional) e mudança de resolutividade: todo texto de ação é 10–4000.
 export function textActionProblems(action: OmbudsmanActionName, d: TextDraft): Problem[] {
   const out: Problem[] = [];
-  if (outside(d.text, 10, 4000)) out.push({ path: "text", text: TEXT_RANGE });
+  // Reabrir: texto opcional, como no api; se vier, 10–4000.
+  if (action === "reopen" ? len(d.text) > 0 && outside(d.text, 10, 4000) : outside(d.text, 10, 4000)) out.push({ path: "text", text: TEXT_RANGE });
   if (action === "change_resolution" && !d.resolution) out.push({ path: "resolution", text: codeText("invalid_request", "resolution", 422) });
   return out;
 }
@@ -387,5 +396,5 @@ export function nameProblem(name: string): string | null {
 export function reportTextProblems(r: { recurring_problems: string; actions_taken: string; notes: string }): Problem[] {
   return (Object.keys(r) as (keyof typeof r)[])
     .filter((k) => len(r[k]) > 8000)
-    .map((k) => ({ path: k, text: "o texto tem até 8000 caracteres" }));
+    .map((k) => ({ path: k, text: REPORT_TEXT }));
 }

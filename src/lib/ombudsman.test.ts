@@ -62,6 +62,18 @@ describe("frases de erro", () => {
     expect(ombudsmanError(err(422, body("q")))).toBe("use o protocolo AAAA-NNNNNN ou só o ano AAAA-");
     expect(ombudsmanError(err(422, body("zzz_new")))).toBe("recusado pelo servidor (invalid_request)");
     expect(ombudsmanError(err(422, body("response_days")))).toBe("o prazo vai de 1 a 120 dias");
+    expect(ombudsmanError(err(422, body("notes")))).toBe(reportTextProblems({ recurring_problems: "", actions_taken: "", notes: "x".repeat(8001) })[0].text);
+  });
+  it("frases por campo podem ser trocadas pela tela (responder e cancelar usam body/reason de outro jeito)", () => {
+    const reply = err(422, { error: "invalid_request", path: "body", problems: [ { error: "invalid_request", path: "body" } ] });
+    const reason = err(422, { error: "invalid_request", path: "reason", problems: [ { error: "invalid_request", path: "reason" } ] });
+    // sem contexto, as frases são neutras (não falam em manifestação nem em arquivamento)
+    expect(ombudsmanError(reply)).toMatch(/10 a 4000/);
+    expect(ombudsmanError(reason)).toMatch(/10 a 4000/);
+    expect(ombudsmanRefusals(reply, { fields: { body: "a resposta tem de ter de 10 a 4000 caracteres" } })[0].text).toBe("a resposta tem de ter de 10 a 4000 caracteres");
+    expect(ombudsmanRefusals(reason, { fields: { reason: "o motivo tem de ter de 10 a 4000 caracteres" } })[0].text).toBe("o motivo tem de ter de 10 a 4000 caracteres");
+    expect(ombudsmanRefusals(reason, { fields: { body: "x" } })[0].text).toBe(ombudsmanError(reason));
+    expect(ombudsmanError(err(422, { error: "invalid_request", path: "health_unit_id" }))).toMatch(/só um destino/);
   });
   it("ombudsmanRefusals: todas de uma vez, com path; sem problems, a do topo; sem eco de texto", () => {
     const r = ombudsmanRefusals(err(422, { error: "invalid_request", path: "text", problems: [
@@ -172,13 +184,31 @@ describe("ações com texto", () => {
     expect(forwardProblems({ destination: { kind: "health_unit", id: "gone" }, extract: "x".repeat(20) }, options())[0].text).toBe(OMBUDSMAN_ERRORS.destination_inactive);
   });
   it("texto das ações: 10–4000 para todas", () => {
-    for (const a of [ "request_complement", "complement", "extend", "interim_response", "reopen" ] as const) {
+    for (const a of [ "request_complement", "complement", "extend", "interim_response" ] as const) {
       expect(textActionProblems(a, { text: "x".repeat(9) }).map((p) => p.path), a).toEqual([ "text" ]);
       expect(textActionProblems(a, { text: "x".repeat(4001) }).map((p) => p.path), a).toEqual([ "text" ]);
       expect(textActionProblems(a, { text: " ".repeat(5) + "x".repeat(10) + " ".repeat(5) }), a).toEqual([]);
     }
     expect(textActionProblems("change_resolution", { text: "x".repeat(10), resolution: null }).map((p) => p.path)).toEqual([ "resolution" ]);
     expect(textActionProblems("change_resolution", { text: "x".repeat(10), resolution: "resolved" })).toEqual([]);
+  });
+  it("reabrir: o texto é opcional; se vier, 10–4000", () => {
+    expect(textActionProblems("reopen", { text: "" })).toEqual([]);
+    expect(textActionProblems("reopen", { text: "   " })).toEqual([]);
+    expect(textActionProblems("reopen", { text: "x".repeat(9) }).map((p) => p.path)).toEqual([ "text" ]);
+    expect(textActionProblems("reopen", { text: "x".repeat(4001) }).map((p) => p.path)).toEqual([ "text" ]);
+    expect(textActionProblems("reopen", { text: "x".repeat(10) })).toEqual([]);
+  });
+  it("contam-se code points, não unidades UTF-16 (Q8)", () => {
+    const e = "😀";
+    expect(textActionProblems("extend", { text: e.repeat(10) })).toEqual([]);
+    expect(textActionProblems("extend", { text: e.repeat(9) }).map((p) => p.path)).toEqual([ "text" ]);
+    expect(textActionProblems("extend", { text: e.repeat(4000) })).toEqual([]);
+    expect(textActionProblems("extend", { text: e.repeat(4001) }).map((p) => p.path)).toEqual([ "text" ]);
+    expect(archiveProblems({ reason: "forwarded_elsewhere", duplicateOfId: null, externalBodyName: e.repeat(120) })).toEqual([]);
+    expect(archiveProblems({ reason: "forwarded_elsewhere", duplicateOfId: null, externalBodyName: e.repeat(121) }).map((p) => p.path)).toEqual([ "external_body_name" ]);
+    expect(nameProblem(e.repeat(2))).toBeNull();
+    expect(nameProblem(e.repeat(80))).toBeNull();
   });
   it("conclusiva: resolutividade só onde cabe", () => {
     expect(finalResponseProblems({ text: "x".repeat(20), resolution: null }, "complaint").map((p) => p.path)).toEqual([ "resolution" ]);
