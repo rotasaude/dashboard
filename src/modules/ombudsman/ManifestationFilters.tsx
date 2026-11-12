@@ -80,7 +80,7 @@ export function ManifestationFilters({ options, onApply }: { options: OmbudsmanO
         </label>
         <label style={fieldLabel}>
           Protocolo
-          <input style={inputStyle} value={q} placeholder="AAAA-NNNNNN" maxLength={20} onChange={(e) => setQ(e.target.value)} />
+          <input style={inputStyle} value={q} placeholder="AAAA-NNNNNN" onChange={(e) => setQ(e.target.value)} />
         </label>
       </div>
       {problem && <p role="alert" style={alert}>{problem}</p>}

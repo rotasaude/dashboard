@@ -172,7 +172,7 @@ export function NewManifestationForm({ onCreated }: { onCreated(c: CreatedManife
         <>
           <label style={fieldLabel}>
             Número do OuvidorSUS
-            <input value={number} maxLength={40} style={inputStyle} autoComplete="off" disabled={busy} {...aria("ouvidorsus_number")}
+            <input value={number} style={inputStyle} autoComplete="off" disabled={busy} {...aria("ouvidorsus_number")}
               onChange={(ev) => { f.clear("ouvidorsus_number"); setNumber(ev.target.value); }} />
           </label>
           {errNode("ouvidorsus_number")}

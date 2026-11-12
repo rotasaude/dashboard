@@ -217,6 +217,20 @@ describe("nova manifestação", () => {
     expect(vi.mocked(api.uploadOmbudsmanAttachment).mock.calls).toEqual([ [ pdf, 1 ] ]);
   });
 
+  it("número do OuvidorSUS com 41 caracteres é recusado, sem cortar o que foi digitado", async () => {
+    mount();
+    await fillBasics({ kind: "complaint", channel: "OuvidorSUS" });
+    await fillPerson();
+    const long = "1".repeat(41);
+    const input = screen.getByLabelText("Número do OuvidorSUS") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: long } });
+    fireEvent.click(screen.getByRole("button", { name: "Registrar manifestação" }));
+    expect(await screen.findByText("informe o número do OuvidorSUS (até 40 caracteres)")).not.toBeNull();
+    expect(api.createOmbudsmanManifestation).not.toHaveBeenCalled();
+    expect(input.value).toBe(long);
+    expect(input.hasAttribute("maxlength")).toBe(false);
+  });
+
   it("anexo removido não sobe; recusa de um anexo para tudo, sem registrar", async () => {
     vi.mocked(api.uploadOmbudsmanAttachment)
       .mockResolvedValueOnce({ id: "a1" })

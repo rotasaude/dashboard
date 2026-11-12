@@ -76,6 +76,20 @@ describe("caixa da ouvidoria", () => {
     expect(vi.mocked(api.listOmbudsmanManifestations)).toHaveBeenCalledTimes(1);
   });
 
+  it("protocolo longo demais é recusado com a frase, sem cortar o que foi digitado", async () => {
+    vi.mocked(api.listOmbudsmanManifestations).mockResolvedValue(page());
+    mount();
+    await screen.findByText("2026-000123");
+    const long = "2026-" + "1".repeat(16);
+    const input = screen.getByLabelText("Protocolo") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: long } });
+    fireEvent.click(screen.getByRole("button", { name: "Filtrar" }));
+    expect(screen.getByText("use o protocolo AAAA-NNNNNN ou só o ano AAAA-")).not.toBeNull();
+    expect(vi.mocked(api.listOmbudsmanManifestations)).toHaveBeenCalledTimes(1);
+    expect(input.value).toBe(long);
+    expect(input.hasAttribute("maxlength")).toBe(false);
+  });
+
   it("aceita o prefixo do ano; outro texto nunca sai do formulário", async () => {
     vi.mocked(api.listOmbudsmanManifestations).mockResolvedValue(page());
     mount();

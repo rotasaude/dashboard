@@ -134,6 +134,36 @@ describe("ações do ouvidor", () => {
       .toEqual({ expected_state: "in_analysis", reason: "forwarded_elsewhere", external_body_name: "Secretaria Estadual de Saúde" }));
   });
 
+  it("arquivar: protocolo longo demais é recusado na tela, sem cortar o que foi digitado", async () => {
+    mount(manifestation(), LEAD);
+    fireEvent.click(await screen.findByRole("button", { name: "Arquivar" }));
+    fireEvent.change(screen.getByLabelText("Motivo"), { target: { value: "duplicate" } });
+    const long = "2026-" + "1".repeat(13);
+    const input = screen.getByLabelText("Protocolo da manifestação original") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: long } });
+    fireEvent.click(screen.getByRole("button", { name: "Arquivar agora" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Confirmar" }));
+    expect(await screen.findByText("informe o protocolo da manifestação original, como 2026-000100")).not.toBeNull();
+    expect(api.runOmbudsmanAction).not.toHaveBeenCalled();
+    expect(input.value).toBe(long);
+    expect(input.hasAttribute("maxlength")).toBe(false);
+  });
+
+  it("arquivar: órgão com 121 caracteres é recusado na tela, sem cortar o que foi digitado", async () => {
+    mount(manifestation(), LEAD);
+    fireEvent.click(await screen.findByRole("button", { name: "Arquivar" }));
+    fireEvent.change(screen.getByLabelText("Motivo"), { target: { value: "forwarded_elsewhere" } });
+    const long = "ó".repeat(121);
+    const input = screen.getByLabelText("Órgão") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: long } });
+    fireEvent.click(screen.getByRole("button", { name: "Arquivar agora" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Confirmar" }));
+    expect(await screen.findByText("informe o órgão para onde foi encaminhada (até 120 caracteres)")).not.toBeNull();
+    expect(api.runOmbudsmanAction).not.toHaveBeenCalled();
+    expect(input.value).toBe(long);
+    expect(input.hasAttribute("maxlength")).toBe(false);
+  });
+
   it("arquivar: a recusa do api de duplicate_of_id cai no campo do protocolo", async () => {
     vi.mocked(api.runOmbudsmanAction).mockRejectedValueOnce(new ApiError(422, { error: "invalid_request", path: "duplicate_of_id" }, "x"));
     mount(manifestation(), LEAD);

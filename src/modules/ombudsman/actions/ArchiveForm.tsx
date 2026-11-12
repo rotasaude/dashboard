@@ -56,7 +56,7 @@ export function ArchiveForm({ run, onDone, onClose }: ActionFormProps) {
         <>
           <label style={fieldLabel}>
             Protocolo da manifestação original
-            <input value={protocol} style={inputStyle} inputMode="numeric" maxLength={17} {...aria("duplicate_of_protocol")}
+            <input value={protocol} style={inputStyle} inputMode="numeric" {...aria("duplicate_of_protocol")}
               onChange={(ev) => { f.clear("duplicate_of_protocol"); setProtocol(ev.target.value); }} />
           </label>
           {errNode("duplicate_of_protocol")}
@@ -66,7 +66,7 @@ export function ArchiveForm({ run, onDone, onClose }: ActionFormProps) {
         <>
           <label style={fieldLabel}>
             Órgão
-            <input value={body} style={inputStyle} maxLength={120} aria-invalid={aria("external_body_name")["aria-invalid"]}
+            <input value={body} style={inputStyle} aria-invalid={aria("external_body_name")["aria-invalid"]}
               aria-describedby={[ `${f.fid("body")}-frozen`, aria("external_body_name")["aria-describedby"] ].filter(Boolean).join(" ")}
               onChange={(ev) => { f.clear("external_body_name"); setBody(ev.target.value); }} />
           </label>
