@@ -30,7 +30,12 @@ export function fieldErrors(problems: Problem[], path: string, id: string): Reac
   return <div id={id} style={{ display: "flex", flexDirection: "column", gap: 2 }}>{texts.map((t) => <p key={t} role="alert" style={alert}>{t}</p>)}</div>;
 }
 
-export function useFormProblems() {
+// `opts` troca o tradutor das recusas e o critério de tela velha (a ouvidoria passa os dela); sem `opts`, vale o do CAPS.
+export type FormProblemsOptions = { refusals?(err: unknown): PsyRefusal[]; isStale?(err: unknown): boolean };
+
+export function useFormProblems(opts: FormProblemsOptions = {}) {
+  const translate = opts.refusals ?? psyRefusals;
+  const staleOf = opts.isStale ?? ((err: unknown) => isStale(err) || errorCode(err) === "already_closed");
   const uid = useId();
   const [ problems, setProblems ] = useState<Problem[]>([]);
   const [ busy, setBusy ] = useState(false);
@@ -76,8 +81,8 @@ export function useFormProblems() {
       if (alive.current) o.ok(result);
     } catch (err) {
       if (!alive.current) return;
-      const refusals = psyRefusals(err);
-      if (o.stale && (isStale(err) || errorCode(err) === "already_closed")) { o.stale(refusals[0].text); return; }
+      const refusals = translate(err);
+      if (o.stale && staleOf(err)) { o.stale(refusals[0].text); return; }
       show(o.refused ? o.refused(refusals) : refusals.map((r) => ({ path: r.path, text: r.text })));
     } finally {
       sending.current = false;
