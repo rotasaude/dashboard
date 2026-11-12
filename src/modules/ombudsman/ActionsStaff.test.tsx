@@ -179,6 +179,48 @@ describe("ações do técnico", () => {
     expect(api.runOmbudsmanAction).toHaveBeenCalledTimes(1);
   });
 
+  it("classificar depois do 409: o que o colega gravou e A não tocou segue a releitura e não vai no corpo", async () => {
+    const mine = manifestation({ state: "received" });
+    const theirs = manifestation({ state: "in_analysis", kind: "suggestion", urgent: true,
+      subject: { id: "s12", name: "Conduta de profissional", parent: { id: "s1", name: "Atendimento" } },
+      health_unit: { id: "upa1", name: "UPA Boqueirão" }, referred_professional: { id: "p2", name: "Beatriz Rocha" } });
+    vi.mocked(api.runOmbudsmanAction).mockRejectedValueOnce(new ApiError(409, { error: "manifestation_changed" }, "x"))
+      .mockResolvedValueOnce(theirs);
+    vi.mocked(api.getOmbudsmanManifestation).mockResolvedValueOnce(mine).mockResolvedValueOnce(theirs);
+    mount(mine);
+    fireEvent.click(await screen.findByRole("button", { name: "Classificar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Salvar classificação" }));
+    expect(await screen.findByText(MANIFESTATION_CHANGED)).not.toBeNull();
+    await waitFor(() => expect(api.getOmbudsmanManifestation).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect((screen.getByLabelText("Unidade") as HTMLSelectElement).value).toBe("upa1"));
+    expect((screen.getByLabelText("Subassunto") as HTMLSelectElement).value).toBe("s12");
+    expect((screen.getByLabelText("Tipo") as HTMLSelectElement).value).toBe("suggestion");
+    expect((screen.getByLabelText("Profissional") as HTMLSelectElement).value).toBe("p2");
+    expect((screen.getByLabelText("Urgente") as HTMLInputElement).checked).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Salvar classificação" }));
+    await waitFor(() => expect(api.runOmbudsmanAction).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(api.runOmbudsmanAction).mock.calls[1]).toEqual([ "m1", "classify", { expected_state: "in_analysis", subject_id: "s12" } ]);
+  });
+
+  it("classificar depois do 409: o campo que A mudou continua o dele e vai no corpo contra o detalhe novo", async () => {
+    const mine = manifestation({ state: "received" });
+    const theirs = manifestation({ state: "in_analysis", urgent: true, health_unit: { id: "upa1", name: "UPA Boqueirão" } });
+    vi.mocked(api.runOmbudsmanAction).mockRejectedValueOnce(new ApiError(409, { error: "manifestation_changed" }, "x"))
+      .mockResolvedValueOnce(theirs);
+    vi.mocked(api.getOmbudsmanManifestation).mockResolvedValueOnce(mine).mockResolvedValueOnce(theirs);
+    mount(mine);
+    fireEvent.click(await screen.findByRole("button", { name: "Classificar" }));
+    fireEvent.change(screen.getByLabelText("Unidade"), { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: "Salvar classificação" }));
+    await waitFor(() => expect(api.getOmbudsmanManifestation).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect((screen.getByLabelText("Urgente") as HTMLInputElement).checked).toBe(true));
+    expect((screen.getByLabelText("Unidade") as HTMLSelectElement).value).toBe("");
+    fireEvent.click(screen.getByRole("button", { name: "Salvar classificação" }));
+    await waitFor(() => expect(api.runOmbudsmanAction).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(api.runOmbudsmanAction).mock.calls[1])
+      .toEqual([ "m1", "classify", { expected_state: "in_analysis", subject_id: "s11", health_unit_id: null } ]);
+  });
+
   it("sucesso: o detalhe vem da resposta (sem nova leitura) e o formulário fecha", async () => {
     vi.mocked(api.runOmbudsmanAction).mockResolvedValue(manifestation({ state: "in_analysis" }));
     mount(manifestation());
