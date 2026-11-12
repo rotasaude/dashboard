@@ -10,6 +10,7 @@ import {
 import {
   OMBUDSMAN_ERRORS, OMB_LIST_KEY, OMB_OPTIONS_KEY, STATIC_QUERY, channelLabel, kindLabel, modeLabel, ombudsmanRefusals, stateLabel
 } from "../../lib/ombudsman";
+import { fmtDay } from "../../lib/signature";
 import { DataTable } from "../../components/DataTable";
 import { Tag } from "../../components/Tag";
 import { buttonStyle, secondaryButtonStyle } from "../../components/formStyles";
@@ -34,10 +35,6 @@ type RowPage = { items: Row[]; next_before: string | null };
 const toPage = (p: OmbudsmanPage): RowPage => ({ items: p.items.map(toRow), next_before: p.next_before });
 
 const subjectText = (s: OmbudsmanSubjectRef | null): string => (s ? (s.parent ? `${s.parent.name} › ${s.name}` : s.name) : "—");
-const receivedDay = (iso: string): string => {
-  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
-  return m ? `${m[3]}/${m[2]}/${m[1]}` : "";
-};
 const pendingText = (n: number): string => `${n} ${n === 1 ? "encaminhamento pendente" : "encaminhamentos pendentes"}`;
 const isCursorError = (err: unknown): boolean => ombudsmanRefusals(err).some((r) => r.code === "invalid_cursor" || r.path === "before");
 
@@ -81,7 +78,7 @@ export function ManifestationList({ onOpen }: { onOpen(id: string): void }) {
         <DataTable<Row>
           label="Manifestações"
           cols={[
-            { label: "Protocolo", w: "1.2fr", card: "title", render: (r) => <span>{r.protocol}<br /><span style={muted}>{receivedDay(r.received_at)}</span></span> },
+            { label: "Protocolo", w: "1.2fr", card: "title", render: (r) => <span>{r.protocol}<br /><span style={muted}>{fmtDay(r.received_at)}</span></span> },
             { label: "Tipo", w: "1.4fr", render: (r) => `${kindLabel(r.kind)} · ${modeLabel(r.identification_mode)} · ${channelLabel(r.channel)}` },
             { label: "Estado", w: "1.2fr", render: (r) => stateLabel(r.state) },
             { label: "Assunto", w: "1.4fr", render: (r) => subjectText(r.subject) },

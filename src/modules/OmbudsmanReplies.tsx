@@ -49,10 +49,10 @@ function Inbox() {
       ...old, pages: old.pages.map((p) => ({ ...p, items: p.items.map((i) => (i.id === clean.id ? clean : i)) }))
     });
   };
-  // O encaminhamento mudou ou saiu do destino: a frase fica e a lista é lida de novo, do início, uma vez.
+  // O encaminhamento mudou ou saiu do destino: a frase fica e a lista é relida uma vez, sem desmontar os outros cartões.
   const gone = () => {
     setStale(true);
-    void queryClient.resetQueries({ queryKey: [ OMB_INBOX_KEY ] });
+    void inbox.refetch();
   };
 
   return (

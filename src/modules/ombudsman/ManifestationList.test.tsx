@@ -112,6 +112,13 @@ describe("caixa da ouvidoria", () => {
     expect(screen.getByText("a lista mudou — ela será lida do início")).not.toBeNull();
   });
 
+  it("o dia de recebimento vem do fuso da cidade", async () => {
+    vi.mocked(api.listOmbudsmanManifestations).mockResolvedValue(page({ items: [ listItem({ received_at: "2026-11-12T01:30:00Z" }) ] }));
+    mount();
+    const row = (await screen.findByText("2026-000123")).closest("[role='row']") as HTMLElement;
+    expect(within(row).getByText("11/11/2026")).not.toBeNull();
+  });
+
   it("lista vazia", async () => {
     vi.mocked(api.listOmbudsmanManifestations).mockResolvedValue(page({ items: [] }));
     mount();

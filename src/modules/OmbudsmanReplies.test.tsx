@@ -180,3 +180,72 @@ describe("respostas à ouvidoria", () => {
     expect(api.listOmbudsmanInbox).not.toHaveBeenCalled();
   });
 });
+
+describe("ajustes da revisão", () => {
+  it("o dia vem do fuso da cidade: 01:30Z de 12/11 é 11/11", async () => {
+    vi.mocked(api.listOmbudsmanInbox).mockResolvedValue(page([ inboxItem({ created_at: "2026-11-12T01:30:00Z" }) ]));
+    mount();
+    expect(await screen.findByRole("article", { name: "Encaminhamento de 11/11/2026" })).not.toBeNull();
+    expect(screen.getByText("recebido em 11/11/2026")).not.toBeNull();
+  });
+
+  it("o aviso de texto congelado também está na prorrogação", async () => {
+    vi.mocked(api.listOmbudsmanInbox).mockResolvedValue(page([ inboxItem() ]));
+    mount();
+    fireEvent.click(await screen.findByRole("button", { name: "Prorrogar prazo" }));
+    expectFrozenNotice(screen.getByLabelText("Motivo da prorrogação"));
+  });
+
+  it("item da segunda página é trocado dentro dela", async () => {
+    vi.mocked(api.listOmbudsmanInbox)
+      .mockResolvedValueOnce(page([ inboxItem({ id: "p1", extract: "Extrato da página um" }) ], "2026-11-01T00:00:00Z"))
+      .mockResolvedValueOnce(page([ inboxItem({ id: "p2", extract: "Extrato da página dois" }) ]));
+    vi.mocked(api.replyOmbudsmanInbox).mockResolvedValue(inboxItem({ id: "p2", extract: "Extrato da página dois", state: "replied", color: null, reply: REPLY }));
+    mount();
+    await screen.findByText("Extrato da página um");
+    fireEvent.click(screen.getByRole("button", { name: "Carregar mais" }));
+    const second = (await screen.findByText("Extrato da página dois")).closest("article") as HTMLElement;
+    fireEvent.click(within(second).getByRole("button", { name: "Responder à ouvidoria" }));
+    fireEvent.change(within(second).getByLabelText("Resposta à ouvidoria"), { target: { value: REPLY } });
+    fireEvent.click(within(second).getByRole("button", { name: "Enviar resposta" }));
+    expect(await screen.findByText("respondido")).not.toBeNull();
+    expect(screen.getByText("Extrato da página um")).not.toBeNull();
+    expect(screen.getByText("Resposta enviada")).not.toBeNull();
+    expect(screen.getByText(REPLY)).not.toBeNull();
+    expect(api.listOmbudsmanInbox).toHaveBeenCalledTimes(2);
+  });
+
+  it("a recusa mostra o rótulo do motivo", async () => {
+    vi.mocked(api.listOmbudsmanInbox).mockResolvedValue(page([ inboxItem({ state: "declined", color: null, reply: "Quem cuida é a central." }) ]));
+    mount();
+    expect(await screen.findByText("Motivo da recusa")).not.toBeNull();
+  });
+
+  it("depois de already_extended o botão Prorrogar prazo some", async () => {
+    vi.mocked(api.listOmbudsmanInbox).mockResolvedValue(page([ inboxItem() ]));
+    vi.mocked(api.extendOmbudsmanInbox).mockRejectedValue(new ApiError(422, { error: "already_extended" }, "x"));
+    mount();
+    fireEvent.click(await screen.findByRole("button", { name: "Prorrogar prazo" }));
+    fireEvent.change(screen.getByLabelText("Motivo da prorrogação"), { target: { value: "Aguardamos o inventário da central." } });
+    fireEvent.click(screen.getByRole("button", { name: "Prorrogar" }));
+    await screen.findByText(OMBUDSMAN_ERRORS.already_extended);
+    expect(screen.queryByRole("button", { name: "Prorrogar prazo" })).toBeNull();
+  });
+
+  it("stale no primeiro cartão relê sem desmontar o texto digitado no segundo", async () => {
+    vi.mocked(api.listOmbudsmanInbox)
+      .mockResolvedValueOnce(page([ inboxItem(), inboxItem({ id: "f2", extract: "Outro extrato" }) ]))
+      .mockResolvedValueOnce(page([ inboxItem({ id: "f2", extract: "Outro extrato" }) ]));
+    vi.mocked(api.replyOmbudsmanInbox).mockRejectedValue(new ApiError(409, { error: "forwarding_changed" }, "x"));
+    mount();
+    const [ first, second ] = await screen.findAllByRole("article");
+    fireEvent.click(within(second).getByRole("button", { name: "Responder à ouvidoria" }));
+    fireEvent.change(within(second).getByLabelText("Resposta à ouvidoria"), { target: { value: "Texto ainda em edição aqui." } });
+    fireEvent.click(within(first).getByRole("button", { name: "Responder à ouvidoria" }));
+    fireEvent.change(within(first).getByLabelText("Resposta à ouvidoria"), { target: { value: REPLY } });
+    fireEvent.click(within(first).getByRole("button", { name: "Enviar resposta" }));
+    await waitFor(() => expect(api.listOmbudsmanInbox).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.getAllByRole("article")).toHaveLength(1));
+    expect((screen.getByLabelText("Resposta à ouvidoria") as HTMLTextAreaElement).value).toBe("Texto ainda em edição aqui.");
+  });
+});

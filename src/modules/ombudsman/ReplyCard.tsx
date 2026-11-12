@@ -7,6 +7,7 @@ import { useState } from "react";
 import { ApiError, declineOmbudsmanInbox, extendOmbudsmanInbox, replyOmbudsmanInbox, type OmbudsmanInboxItem } from "../../lib/api";
 import { destinationLabel, forwardingStateLabel, isChanged, ombudsmanRefusals, textActionProblems } from "../../lib/ombudsman";
 import { buttonStyle, secondaryButtonStyle } from "../../components/formStyles";
+import { fmtDay as day } from "../../lib/signature";
 import { Tag } from "../../components/Tag";
 import { box, form, muted, row } from "../exams/styles";
 import { useFormProblems } from "../psychosocial/useFormProblems";
@@ -17,14 +18,10 @@ import { DeadlineTag } from "./DeadlineTag";
 const STATE_TONE = { pending: "info", replied: "ok", declined: "down", cancelled: undefined } as const;
 const REPLY_PHRASE = "a resposta tem de ter de 10 a 4000 caracteres";
 const REASON_PHRASE = "o motivo tem de ter de 10 a 4000 caracteres";
-const day = (iso: string): string => {
-  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
-  return m ? `${m[3]}/${m[2]}/${m[1]}` : "";
-};
 const gone = (err: unknown): boolean => err instanceof ApiError && err.status === 404;
 
 type Kind = "reply" | "decline" | "extend";
-type FormProps = { item: OmbudsmanInboxItem; onDone(next: OmbudsmanInboxItem): void; onStale(): void; onClose(): void };
+type FormProps = { item: OmbudsmanInboxItem; onExtendUsed(): void; onDone(next: OmbudsmanInboxItem): void; onStale(): void; onClose(): void };
 
 const CONFIG = {
   reply: { path: "body", title: "Responder à ouvidoria", label: "Resposta à ouvidoria", submit: "Enviar resposta", phrase: REPLY_PHRASE,
@@ -35,7 +32,7 @@ const CONFIG = {
     send: extendOmbudsmanInbox }
 } as const;
 
-function ReplyForm({ kind, item, onDone, onStale, onClose }: FormProps & { kind: Kind }) {
+function ReplyForm({ kind, item, onExtendUsed, onDone, onStale, onClose }: FormProps & { kind: Kind }) {
   const c = CONFIG[kind];
   const f = useFormProblems({
     refusals: (err) => ombudsmanRefusals(err, { fields: { [c.path]: c.phrase } }).map((r) => ({ ...r, participantIndex: null })),
@@ -50,7 +47,10 @@ function ReplyForm({ kind, item, onDone, onStale, onClose }: FormProps & { kind:
         call: () => c.send(item.id, item.state, text),
         ok: onDone,
         stale: onStale,
-        refused: (refusals) => refusals.map((r) => ({ path: r.path === c.path ? "text" : r.path, text: r.text }))
+        refused: (refusals) => {
+          if (kind === "extend" && refusals.some((r) => r.code === "already_extended")) onExtendUsed();
+          return refusals.map((r) => ({ path: r.path === c.path ? "text" : r.path, text: r.text }));
+        }
       });
     }}>
       <p ref={f.titleRef} tabIndex={-1} style={formTitle}>{c.title}</p>
@@ -66,6 +66,8 @@ function ReplyForm({ kind, item, onDone, onStale, onClose }: FormProps & { kind:
 export function ReplyCard({ item, onDone, onStale }: { item: OmbudsmanInboxItem; onDone(next: OmbudsmanInboxItem): void; onStale(): void }) {
   const [ open, setOpen ] = useState<Kind | null>(null);
   const pending = item.state === "pending";
+  // Depois de `already_extended` o botão some até a releitura trazer `extended`.
+  const [ used, setUsed ] = useState(false);
   return (
     <article aria-label={`Encaminhamento de ${day(item.created_at)}`} style={box}>
       <div style={row}>
@@ -76,16 +78,21 @@ export function ReplyCard({ item, onDone, onStale }: { item: OmbudsmanInboxItem;
       </div>
       <p className="mono" style={muted}>{`recebido em ${day(item.created_at)}`}</p>
       <p style={{ margin: 0, whiteSpace: "pre-wrap" }}>{item.extract}</p>
-      {item.reply && <p style={{ margin: 0, whiteSpace: "pre-wrap" }}>{item.reply}</p>}
+      {item.reply && (
+        <>
+          <p style={{ margin: 0, fontSize: 11, color: "var(--ink3)" }}>{item.state === "declined" ? "Motivo da recusa" : "Resposta enviada"}</p>
+          <p style={{ margin: 0, whiteSpace: "pre-wrap" }}>{item.reply}</p>
+        </>
+      )}
       {pending && (
         <div style={row}>
           <button type="button" style={buttonStyle} onClick={() => setOpen("reply")}>Responder à ouvidoria</button>
           <button type="button" style={secondaryButtonStyle} onClick={() => setOpen("decline")}>Não é do nosso destino</button>
-          {!item.extended && <button type="button" style={secondaryButtonStyle} onClick={() => setOpen("extend")}>Prorrogar prazo</button>}
+          {!item.extended && !used && <button type="button" style={secondaryButtonStyle} onClick={() => setOpen("extend")}>Prorrogar prazo</button>}
         </div>
       )}
       {open && (
-        <ReplyForm key={open} kind={open} item={item} onClose={() => setOpen(null)} onStale={onStale}
+        <ReplyForm key={open} kind={open} item={item} onClose={() => setOpen(null)} onExtendUsed={() => setUsed(true)} onStale={onStale}
           onDone={(next) => { setOpen(null); onDone(next); }} />
       )}
     </article>
