@@ -1,7 +1,8 @@
 // Anexos da ouvidoria (módulo 33; Q2, D17): PDF, JPEG ou PNG, até 10 MB, até 3. A lista mostra "Anexo N (tipo)", nunca o nome do
 // arquivo (pode trazer o nome da pessoa); o upload manda `anexo-N.<ext>` (cliente). Escolha recusada não entra na lista e diz
 // por quê. Os arquivos sobem um a um antes do registro; o id de um arquivo já subido é reaproveitado se o registro falhar e a
-// pessoa tentar de novo (o api aceita anexo órfão do mesmo usuário; subir de novo gastaria o limite de 20/h).
+// pessoa tentar de novo (o api aceita anexo órfão do mesmo usuário; subir de novo gastaria o limite de 20/h), salvo quando a
+// recusa é do próprio `attachment_ids` (`forgetUploadsOn`).
 import { useId, useState } from "react";
 import { uploadOmbudsmanAttachment } from "../../lib/api";
 import { attachmentProblems } from "../../lib/ombudsman";
@@ -17,6 +18,12 @@ const ATTACHMENT_PATHS = [ "attachment_ids", "filename", "content_type", "data" 
 const ATTACHMENT_CODES = [ "invalid_file", "too_many_attachments" ];
 export const isAttachmentRefusal = (r: { path: string; code: string }): boolean =>
   ATTACHMENT_PATHS.includes(r.path) || ATTACHMENT_CODES.includes(r.code);
+
+// 422 `attachment_ids` no registro: os ids guardados já não valem (não são mais órfãos ou não são deste usuário). Esquecê-los
+// faz a próxima tentativa subir os arquivos de novo, em vez de repetir a mesma recusa.
+export function forgetUploadsOn(refusals: { path: string }[], uploaded: Map<File, string>): void {
+  if (refusals.some((r) => r.path === "attachment_ids")) uploaded.clear();
+}
 
 // Sobe na ordem da tela (n = posição); a primeira recusa para tudo (quem chama não registra).
 export async function uploadAll(files: File[], uploaded: Map<File, string>): Promise<string[]> {

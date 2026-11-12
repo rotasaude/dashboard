@@ -20,7 +20,7 @@ import { buttonStyle, disabledButtonStyle, inputStyle } from "../../components/f
 import { checkLabel, fieldLabel, fieldset, form, legend, muted, row } from "../exams/styles";
 import { useActionForm } from "./useManifestationAction";
 import { FrozenTextArea } from "./actions/ExtractField";
-import { AttachmentPicker, isAttachmentRefusal, uploadAll } from "./AttachmentPicker";
+import { AttachmentPicker, forgetUploadsOn, isAttachmentRefusal, uploadAll } from "./AttachmentPicker";
 import { EMPTY_PERSON, PersonPick, type PersonValue } from "./PersonPick";
 import type { CreatedManifestation } from "./Receipt";
 
@@ -121,6 +121,7 @@ export function NewManifestationForm({ onCreated }: { onCreated(c: CreatedManife
         },
         ok: (res) => onCreated({ ...res, identification_mode: mode }),
         refused: (refusals) => {
+          forgetUploadsOn(refusals, uploaded.current);
           // Q60: o cidadão não pode ser ligado — voltam os campos informados (vazios), com o CPF digitado.
           if (refusals.some((r) => r.path === "citizen_id")) setPerson((p) => ({ ...p, person: null, name: "", contact: "", missed: false }));
           return refusals.map((r) => ({ path: isAttachmentRefusal(r) ? "attachments" : r.path, text: r.text }));

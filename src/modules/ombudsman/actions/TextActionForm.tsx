@@ -10,7 +10,7 @@ import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } fr
 import { fieldLabel, form, row } from "../../exams/styles";
 import { useActionForm, type ActionFormProps } from "../useManifestationAction";
 import { FrozenTextArea } from "./ExtractField";
-import { AttachmentPicker, isAttachmentRefusal, uploadAll } from "../AttachmentPicker";
+import { AttachmentPicker, forgetUploadsOn, isAttachmentRefusal, uploadAll } from "../AttachmentPicker";
 
 export const formTitle = { margin: 0, fontSize: 13, fontWeight: 600 } as const;
 const OWN = [ "text", "resolution", "attachments" ];
@@ -44,7 +44,10 @@ export function TextActionForm({ m, run, onDone, onClose, action, title, label, 
     <form ref={f.formRef} aria-label={title} style={form} noValidate onSubmit={(ev) => {
       void f.submit(ev, {
         check, call, ok: onDone, stale: () => {},
-        refused: (refusals) => refusals.map((r) => ({ path: isAttachmentRefusal(r) ? "attachments" : r.path, text: r.text }))
+        refused: (refusals) => {
+          forgetUploadsOn(refusals, uploaded.current);
+          return refusals.map((r) => ({ path: isAttachmentRefusal(r) ? "attachments" : r.path, text: r.text }));
+        }
       });
     }}>
       <p ref={f.titleRef} tabIndex={-1} style={formTitle}>{title}</p>

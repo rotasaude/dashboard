@@ -264,11 +264,51 @@ describe("nova manifestação", () => {
 
   it("janela bloqueada: a frase, e nada impresso", async () => {
     vi.mocked(api.createOmbudsmanManifestation).mockResolvedValue(created());
-    vi.spyOn(window, "open").mockReturnValue(null);
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+    const print = vi.spyOn(window, "print").mockImplementation(() => {});
     mount();
     await registerSimple();
     await clickPrint();
     expect(await screen.findByText(POPUP_BLOCKED)).not.toBeNull();
+    expect(open.mock.calls).toEqual([ [ "", "_blank" ] ]);
+    // Nada foi impresso: nem a própria tela, nem o comprovante em outra janela.
+    expect(print).not.toHaveBeenCalled();
+    expect(document.body.textContent).not.toContain("Guarde este número");
+  });
+
+  it("comprovante não lido: a frase e o botão de ler de novo; relido, imprime", async () => {
+    vi.mocked(api.createOmbudsmanManifestation).mockResolvedValue(created());
+    const { doc, win } = fakeWindow();
+    mount();
+    vi.mocked(api.getOmbudsmanReceipt).mockRejectedValueOnce(new ApiError(429, { error: "too_many_requests" }, "x"));
+    await registerSimple();
+    expect(await screen.findByText(OMBUDSMAN_ERRORS.too_many_requests)).not.toBeNull();
+    expect((screen.getByRole("button", { name: "Imprimir comprovante" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Ler o comprovante de novo" }));
+    await waitFor(() => expect(screen.queryByText(OMBUDSMAN_ERRORS.too_many_requests)).toBeNull());
+    expect(screen.queryByRole("button", { name: "Ler o comprovante de novo" })).toBeNull();
+    await clickPrint();
+    await waitFor(() => expect(doc.body.textContent).toContain("2026-000130"));
+    expect(win.print).toHaveBeenCalledTimes(1);
+    expect(api.getOmbudsmanReceipt).toHaveBeenCalledTimes(2);
+  });
+
+  it("anexo recusado no registro (422 attachment_ids): a nova tentativa sobe o arquivo de novo e manda o id novo", async () => {
+    vi.mocked(api.uploadOmbudsmanAttachment).mockResolvedValueOnce({ id: "a1" }).mockResolvedValueOnce({ id: "a2" });
+    vi.mocked(api.createOmbudsmanManifestation)
+      .mockRejectedValueOnce(new ApiError(422, { error: "invalid_request", path: "attachment_ids" }, "x"))
+      .mockResolvedValueOnce(created());
+    mount();
+    await fillBasics({ kind: "complaint", channel: "Presencial" });
+    await fillPerson();
+    const pdf = new File([ "%PDF" ], "a.pdf", { type: "application/pdf" });
+    fireEvent.change(screen.getByLabelText("Anexos"), { target: { files: [ pdf ] } });
+    fireEvent.click(screen.getByRole("button", { name: "Registrar manifestação" }));
+    expect(await screen.findByText("anexo inválido — suba o arquivo de novo")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Registrar manifestação" }));
+    await waitFor(() => expect(api.createOmbudsmanManifestation).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(api.createOmbudsmanManifestation).mock.calls.map((c) => c[0].attachment_ids)).toEqual([ [ "a1" ], [ "a2" ] ]);
+    expect(vi.mocked(api.uploadOmbudsmanAttachment).mock.calls).toEqual([ [ pdf, 1 ], [ pdf, 1 ] ]);
   });
 
   it("Abrir a manifestação leva à Caixa pelo handoff", async () => {
