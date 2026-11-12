@@ -4,7 +4,7 @@
 // encerrado (Q27: o corrente fica desabilitado com o motivo) e só com o rascunho salvo; publicado, tudo só leitura e "Publicado em
 // <data>" (não há `published_by`, Q35). 409 `report_published`/`already_published`: a frase e uma releitura, sem reenvio. A
 // impressão leva só os números e os três textos gravados (POPUP_BLOCKED se o navegador bloquear). Nada em storage.
-import { useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { errorCode, getAnnualReport, publishAnnualReport, updateAnnualReport, type OmbudsmanAnnualReport as Report } from "../lib/api";
 import { todayInCity } from "../lib/campaigns";
@@ -33,6 +33,7 @@ const FIELDS: { key: keyof Texts; label: string }[] = [
 const PUBLISH_QUESTION = "Publicar? Depois de publicado, o relatório não muda.";
 const SAVE_FIRST = "salve o rascunho antes de publicar";
 const SAVE_FIRST_PRINT = "salve o rascunho antes de imprimir";
+const SAVE_FIRST_YEAR = "salve o rascunho antes de trocar de ano";
 const DRAFT_SAVED = "Rascunho salvo.";
 const STALE_CODES = [ "report_published", "already_published" ];
 const isStale = (err: unknown) => STALE_CODES.includes(errorCode(err) ?? "");
@@ -47,7 +48,9 @@ const numberCols: Column<[ string, string ]>[] = [
   { label: "Valor", w: "1fr", align: "right", render: (r) => <span className="mono">{r[1]}</span> }
 ];
 
-function ReportBody({ r, closed, onSaved, onStale }: { r: Report; closed: boolean; onSaved(next: Report): void; onStale(text: string): void }) {
+function ReportBody({ r, closed, onSaved, onStale, onDirty }: {
+  r: Report; closed: boolean; onSaved(next: Report): void; onStale(text: string): void; onDirty(dirty: boolean): void;
+}) {
   const f = useFormProblems({ refusals: (err) => ombudsmanRefusals(err).map((x) => ({ ...x, participantIndex: null })), isStale });
   const saved = textsOf(r);
   const [ draft, setDraft ] = useState<Texts>(saved);
@@ -59,9 +62,14 @@ function ReportBody({ r, closed, onSaved, onStale }: { r: Report; closed: boolea
   const noticeId = f.fid("public-notice");
   const set = (key: keyof Texts, value: string) => { f.clear(key); setDone(false); setDraft((d) => ({ ...d, [key]: value })); };
   const own = (path: string) => FIELDS.some((x) => x.key === path);
+  // O ano não troca com edição por salvar (ela se perderia sem aviso).
+  useEffect(() => { onDirty(dirty); }, [ dirty, onDirty ]);
+  useEffect(() => () => onDirty(false), [ onDirty ]);
 
   async function publish() {
     setPublishError(null);
+    // Texto mudado depois de abrir a pergunta: o api publicaria o gravado e a edição sumiria.
+    if (dirty || f.busy) { setPublishError(SAVE_FIRST); return; }
     try {
       onSaved(await publishAnnualReport(r.year));
     } catch (err) {
@@ -134,6 +142,8 @@ function ReportScreen({ currentYear }: { currentYear: number }) {
   // O anterior é o publicável (Q27); o corrente fica como rascunho.
   const [ year, setYear ] = useState(currentYear - 1);
   const [ notice, setNotice ] = useState<string | null>(null);
+  const [ dirty, setDirty ] = useState(false);
+  const yearReasonId = useId();
   const report = useQuery({ queryKey: [ OMB_REPORT_KEY, year ], queryFn: () => getAnnualReport(year), ...STATIC_QUERY });
   const r = report.data;
   return (
@@ -141,10 +151,12 @@ function ReportScreen({ currentYear }: { currentYear: number }) {
       <div style={row}>
         <label style={fieldLabel}>
           Ano
-          <select value={year} style={inputStyle} onChange={(e) => { setNotice(null); setYear(Number(e.target.value)); }}>
+          <select value={year} style={inputStyle} disabled={dirty} aria-describedby={dirty ? yearReasonId : undefined}
+            onChange={(e) => { if (dirty) return; setNotice(null); setYear(Number(e.target.value)); }}>
             {[ currentYear - 1, currentYear ].map((y) => <option key={y} value={y}>{y}</option>)}
           </select>
         </label>
+        {dirty && <p id={yearReasonId} style={muted}>{SAVE_FIRST_YEAR}</p>}
       </div>
       {notice && <p role="alert" style={alert}>{notice}</p>}
       {report.isPending && <p className="mono" style={muted}>carregando…</p>}
@@ -153,7 +165,7 @@ function ReportScreen({ currentYear }: { currentYear: number }) {
         // Mudou o estado (publicado) ou o ano: o formulário recomeça do que o api mandou.
         <ReportBody key={`${r.year}-${r.state}`} r={r} closed={r.year < currentYear}
           onSaved={(next) => { setNotice(null); queryClient.setQueryData([ OMB_REPORT_KEY, next.year ], next); }}
-          onStale={(text) => { setNotice(text); void report.refetch(); }} />
+          onStale={(text) => { setNotice(text); void report.refetch(); }} onDirty={setDirty} />
       )}
     </div>
   );

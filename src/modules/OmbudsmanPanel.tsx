@@ -3,15 +3,15 @@
 // resolutividade e satisfação. A supressão é do api (api-shapes §2.7; Q28, Q53–Q55): célula escondida aparece "< 5" (inclusive o
 // zero escondido), taxa ou média escondida "oculto", e `null` (sem caso) "—". A tela nunca soma células, nunca calcula taxa a partir
 // das partes e nunca deduz um valor escondido. A aba "Por profissional" é só do ouvidor e só é lida ao abrir. Nada em storage.
-import { useState, type CSSProperties } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useId, useState, type CSSProperties } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   getOmbudsmanDashboard, getOmbudsmanProfessionalsPanel,
   type OmbudsmanDashboard, type OmbudsmanKind, type ProfessionalPanelRow
 } from "../lib/api";
 import { todayInCity } from "../lib/campaigns";
 import { fmtDay } from "../lib/careLines";
-import { fmtNumber, fmtPercent } from "../lib/format";
+import { fmtNumber } from "../lib/format";
 import { HIDDEN_LABEL, SUPPRESSED_LABEL, fmtCount, isSuppressed } from "../lib/smallCount";
 import type { SmallCount } from "../lib/types";
 import { OMB_DASHBOARD_KEY, STATIC_QUERY, channelLabel, kindLabel, ombudsmanError, stateLabel } from "../lib/ombudsman";
@@ -28,10 +28,10 @@ export const PANEL_SUPPRESSED_NOTE =
 const UNCLASSIFIED = "sem assunto";
 const KINDS: OmbudsmanKind[] = [ "complaint", "report", "praise", "suggestion", "request" ];
 
-// Taxa e média: escondida → "oculto"; `null` → "—"; número → o formato do valor.
+// Taxa (`fmtCount(v, "%")`) e média: escondida → "oculto"; `null` → "—"; número → o formato do valor.
 const hiddenOr = (v: SmallCount | null, fmt: (n: number) => string): string =>
   isSuppressed(v) ? HIDDEN_LABEL : typeof v === "number" ? fmt(v) : "—";
-const rateText = (v: SmallCount | null): string => hiddenOr(v, (n) => fmtPercent(n));
+const rateText = (v: SmallCount | null): string => fmtCount(v, "%");
 const daysText = (v: SmallCount | null): string => hiddenOr(v, (n) => `${fmtNumber(n)} dias`);
 const scoreText = (v: SmallCount | null): string => hiddenOr(v, (n) => `${fmtNumber(n)} de 5`);
 
@@ -158,6 +158,10 @@ function PanelBody({ lead, today }: { lead: boolean; today: string }) {
   const [ applied, setApplied ] = useState<Period>(initial);
   const [ problem, setProblem ] = useState<string | null>(null);
   const [ tab, setTab ] = useState<Tab>("summary");
+  const queryClient = useQueryClient();
+  const uid = useId();
+  const tabId = (key: Tab) => `${uid}-tab-${key}`;
+  const panelId = `${uid}-panel`;
   const panel = useQuery({
     queryKey: [ OMB_DASHBOARD_KEY, applied.from, applied.to ],
     queryFn: () => getOmbudsmanDashboard(applied), ...STATIC_QUERY
@@ -167,8 +171,8 @@ function PanelBody({ lead, today }: { lead: boolean; today: string }) {
     const found = periodProblem(draft);
     setProblem(found);
     if (found) return;
-    // Mesmo período: a chave não muda, então "Atualizar" relê à mão.
-    if (draft.from === applied.from && draft.to === applied.to) void panel.refetch();
+    // Mesmo período: a chave não muda, então "Atualizar" relê à mão o resumo e, se aberto, o recorte por profissional.
+    if (draft.from === applied.from && draft.to === applied.to) void queryClient.refetchQueries({ queryKey: [ OMB_DASHBOARD_KEY ], type: "active" });
     else setApplied(draft);
   }
 
@@ -191,19 +195,22 @@ function PanelBody({ lead, today }: { lead: boolean; today: string }) {
         {tabs.map((t) => {
           const active = t.key === tab;
           return (
-            <button key={t.key} type="button" role="tab" aria-selected={active} className="mono" style={active ? tabActive : tabIdle}
+            <button key={t.key} id={tabId(t.key)} type="button" role="tab" aria-selected={active} aria-controls={active ? panelId : undefined}
+              className="mono" style={active ? tabActive : tabIdle}
               onClick={() => setTab(t.key)}>{t.label}</button>
           );
         })}
       </div>
-      {tab === "summary" && (
-        <>
-          {panel.isPending && <p className="mono" style={muted}>carregando…</p>}
-          {panel.isError && <p role="alert" style={alert}>{ombudsmanError(panel.error)}</p>}
-          {panel.data && <Summary d={panel.data} />}
-        </>
-      )}
-      {tab === "professionals" && lead && <ByProfessional period={applied} />}
+      <div role="tabpanel" id={panelId} aria-labelledby={tabId(tab)} style={stack}>
+        {tab === "summary" && (
+          <>
+            {panel.isPending && <p className="mono" style={muted}>carregando…</p>}
+            {panel.isError && <p role="alert" style={alert}>{ombudsmanError(panel.error)}</p>}
+            {panel.data && <Summary d={panel.data} />}
+          </>
+        )}
+        {tab === "professionals" && lead && <ByProfessional period={applied} />}
+      </div>
     </div>
   );
 }
@@ -216,6 +223,7 @@ export function OmbudsmanPanel({ now }: { now?: Date } = {}) {
   );
 }
 
+// Mesmos estilos das abas de SurveillanceQueue/RegulationQueue (cópias locais lá também; nenhum é exportado).
 const tabList: CSSProperties = { display: "flex", flexWrap: "wrap", gap: 4 };
 const tabBase: CSSProperties = { padding: "4px 11px", borderRadius: 6, cursor: "pointer", fontSize: 11, fontWeight: 600, letterSpacing: 0.3 };
 const tabIdle: CSSProperties = { ...tabBase, border: "1px solid var(--rule2)", background: "transparent", color: "var(--ink2)" };

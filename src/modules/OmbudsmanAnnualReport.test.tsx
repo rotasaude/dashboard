@@ -103,8 +103,38 @@ describe("relatório anual da ouvidoria", () => {
     expect(api.publishAnnualReport).toHaveBeenCalledTimes(1);
   });
 
+  it("texto mudado com a pergunta de publicar aberta: não publica, pede para salvar", async () => {
+    vi.mocked(api.getAnnualReport).mockResolvedValue(annualReport());
+    mount();
+    fireEvent.click(await screen.findByRole("button", { name: "Publicar relatório de 2025" }));
+    fireEvent.change(screen.getByLabelText("Observações"), { target: { value: "Texto novo ainda não salvo." } });
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+    expect(await screen.findByRole("alert")).not.toBeNull();
+    expect(screen.getByRole("alert").textContent).toBe("salve o rascunho antes de publicar");
+    expect(api.publishAnnualReport).not.toHaveBeenCalled();
+    expect((screen.getByLabelText("Observações") as HTMLTextAreaElement).value).toBe("Texto novo ainda não salvo.");
+  });
+
+  it("com rascunho não salvo, o ano não troca (com o motivo)", async () => {
+    vi.mocked(api.getAnnualReport).mockImplementation(async (year) => annualReport({ year }));
+    mount();
+    fireEvent.change(await screen.findByLabelText("Problemas recorrentes"), { target: { value: "Fila na farmácia." } });
+    const select = screen.getByLabelText("Ano") as HTMLSelectElement;
+    expect(select.disabled).toBe(true);
+    expect(describedTexts(select)).toContain("salve o rascunho antes de trocar de ano");
+    fireEvent.change(select, { target: { value: "2026" } });
+    expect(api.getAnnualReport).toHaveBeenCalledTimes(1);
+    expect((screen.getByLabelText("Problemas recorrentes") as HTMLTextAreaElement).value).toBe("Fila na farmácia.");
+    fireEvent.change(screen.getByLabelText("Problemas recorrentes"), { target: { value: "" } });
+    expect(select.disabled).toBe(false);
+  });
+
   it("imprimir: números com '< 5' e os três textos; nada pessoal", async () => {
-    vi.mocked(api.getAnnualReport).mockResolvedValue(annualReport({ recurring_problems: "Falta de medicamentos." }));
+    // Campos que o api não manda (nome, CPF, profissional) nunca vão à folha: ela só lê os números e os três textos.
+    const stray = { published_by: { name: "Rita Prado", cpf: "123.456.789-09" } };
+    const report = annualReport({ recurring_problems: "Falta de medicamentos." });
+    vi.mocked(api.getAnnualReport).mockResolvedValue({ ...report, ...stray,
+      numbers: { ...report.numbers, by_professional: [ { professional: { id: "p1", name: "Dr. Caio" }, total: 3 } ] } } as never);
     const doc = document.implementation.createHTMLDocument("");
     const open = vi.spyOn(window, "open").mockReturnValue({ document: doc, print: vi.fn(), focus: vi.fn(), close: vi.fn() } as never);
     mount();
@@ -116,6 +146,8 @@ describe("relatório anual da ouvidoria", () => {
     expect(text).toContain(SUPPRESSED_LABEL);
     for (const title of [ "Problemas recorrentes", "Providências adotadas", "Observações" ]) expect(text).toContain(title);
     expect(text).toContain("Total de manifestações42");
+    const html = doc.documentElement.outerHTML;
+    for (const personal of [ "Rita Prado", "123.456.789-09", "12345678909", "Dr. Caio" ]) expect(html).not.toContain(personal);
   });
 
   it("janela de impressão bloqueada: a frase", async () => {

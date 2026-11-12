@@ -87,6 +87,44 @@ describe("painel da ouvidoria", () => {
     await waitFor(() => expect(api.getOmbudsmanDashboard).toHaveBeenLastCalledWith({ from: "2026-01-01", to: "2026-11-11" }));
   });
 
+  it("sem início ou fim: a frase, e nada sai", async () => {
+    vi.mocked(api.getOmbudsmanDashboard).mockResolvedValue(dashboard33());
+    mount();
+    await screen.findByText("42");
+    fireEvent.change(screen.getByLabelText("De"), { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: "Atualizar" }));
+    expect(screen.getByText("informe o início e o fim")).not.toBeNull();
+    expect(api.getOmbudsmanDashboard).toHaveBeenCalledTimes(1);
+  });
+
+  it("abas com tabpanel ligado à aba ativa", async () => {
+    vi.mocked(api.getOmbudsmanDashboard).mockResolvedValue(dashboard33());
+    vi.mocked(api.getOmbudsmanProfessionalsPanel).mockResolvedValue([]);
+    mount(ombudsmanUser([ "ombudsman" ]));
+    await screen.findByText("42");
+    const summary = screen.getByRole("tab", { name: "Resumo" });
+    const panel = screen.getByRole("tabpanel");
+    expect(summary.getAttribute("aria-controls")).toBe(panel.id);
+    expect(panel.getAttribute("aria-labelledby")).toBe(summary.id);
+    fireEvent.click(screen.getByRole("tab", { name: "Por profissional" }));
+    const prof = screen.getByRole("tab", { name: "Por profissional" });
+    expect(screen.getByRole("tabpanel").getAttribute("aria-labelledby")).toBe(prof.id);
+    expect(prof.getAttribute("aria-controls")).toBe(screen.getByRole("tabpanel").id);
+  });
+
+  it("'Atualizar' no mesmo período relê também o recorte por profissional aberto", async () => {
+    vi.mocked(api.getOmbudsmanDashboard).mockResolvedValue(dashboard33());
+    vi.mocked(api.getOmbudsmanProfessionalsPanel).mockResolvedValue([]);
+    mount(ombudsmanUser([ "ombudsman" ]));
+    await screen.findByText("42");
+    fireEvent.click(screen.getByRole("tab", { name: "Por profissional" }));
+    await screen.findByText("nenhum profissional referido no período");
+    expect(api.getOmbudsmanProfessionalsPanel).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "Atualizar" }));
+    await waitFor(() => expect(api.getOmbudsmanProfessionalsPanel).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(api.getOmbudsmanDashboard).toHaveBeenCalledTimes(2));
+  });
+
   it("invalid_period do api vira a frase", async () => {
     vi.mocked(api.getOmbudsmanDashboard).mockRejectedValue(new ApiError(422, { error: "invalid_period" }, "x"));
     mount();
