@@ -8,7 +8,7 @@ import {
   type OmbudsmanChannel, type OmbudsmanKind, type OmbudsmanListItem, type OmbudsmanPage, type OmbudsmanRef, type OmbudsmanSubjectRef
 } from "../../lib/api";
 import {
-  OMB_LIST_KEY, OMB_OPTIONS_KEY, STATIC_QUERY, channelLabel, kindLabel, modeLabel, ombudsmanRefusals, stateLabel
+  OMBUDSMAN_ERRORS, OMB_LIST_KEY, OMB_OPTIONS_KEY, STATIC_QUERY, channelLabel, kindLabel, modeLabel, ombudsmanRefusals, stateLabel
 } from "../../lib/ombudsman";
 import { DataTable } from "../../components/DataTable";
 import { Tag } from "../../components/Tag";
@@ -44,6 +44,8 @@ const isCursorError = (err: unknown): boolean => ombudsmanRefusals(err).some((r)
 export function ManifestationList({ onOpen }: { onOpen(id: string): void }) {
   const queryClient = useQueryClient();
   const [ filters, setFilters ] = useState<ListFilters>({});
+  // A frase do cursor perdido fica até a pessoa agir de novo (Filtrar ou Carregar mais); a leitura já recomeçou.
+  const [ cursorNotice, setCursorNotice ] = useState(false);
   const options = useQuery({ queryKey: [ OMB_OPTIONS_KEY ], queryFn: getOmbudsmanOptions, ...STATIC_QUERY });
   const list = useInfiniteQuery({
     queryKey: [ OMB_LIST_KEY, filters ],
@@ -57,17 +59,20 @@ export function ManifestationList({ onOpen }: { onOpen(id: string): void }) {
 
   // Cursor recusado (a lista mudou): a frase aparece e a leitura recomeça do início.
   useEffect(() => {
-    if (cursorLost) void queryClient.resetQueries({ queryKey: [ OMB_LIST_KEY ] });
+    if (!cursorLost) return;
+    setCursorNotice(true);
+    void queryClient.resetQueries({ queryKey: [ OMB_LIST_KEY ] });
   }, [ cursorLost, queryClient ]);
 
   return (
     <div style={stack}>
-      <ManifestationFilters options={options.data} onApply={setFilters} />
+      <ManifestationFilters options={options.data} onApply={(f) => { setCursorNotice(false); setFilters(f); }} />
+      {cursorNotice && <p role="alert" style={alert}>{OMBUDSMAN_ERRORS.invalid_cursor}</p>}
       {list.isPending && <p className="mono" style={muted}>carregando…</p>}
-      {list.isError && (
+      {list.isError && !cursorLost && (
         <div style={row}>
           <p role="alert" style={alert}>{ombudsmanRefusals(list.error)[0].text}</p>
-          {!cursorLost && !list.data && (
+          {!list.data && (
             <button type="button" style={secondaryButtonStyle} onClick={() => void list.refetch()}>Tentar de novo</button>
           )}
         </div>
@@ -101,7 +106,7 @@ export function ManifestationList({ onOpen }: { onOpen(id: string): void }) {
       )}
       {list.data && list.hasNextPage && (
         <div style={row}>
-          <button type="button" style={buttonStyle} disabled={list.isFetchingNextPage} onClick={() => void list.fetchNextPage()}>
+          <button type="button" style={buttonStyle} disabled={list.isFetchingNextPage} onClick={() => { setCursorNotice(false); void list.fetchNextPage(); }}>
             {list.isFetchingNextPage ? "Carregando…" : "Carregar mais"}
           </button>
         </div>

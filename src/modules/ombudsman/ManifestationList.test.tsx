@@ -109,6 +109,7 @@ describe("caixa da ouvidoria", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Carregar mais" }));
     expect(await screen.findByText("2026-000200")).not.toBeNull();
     expect(lastCall().before).toBeNull();
+    expect(screen.getByText("a lista mudou — ela será lida do início")).not.toBeNull();
   });
 
   it("lista vazia", async () => {

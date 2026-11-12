@@ -7,7 +7,7 @@ import { OmbudsmanGate } from "./ombudsman/OmbudsmanGate";
 import { ManifestationList } from "./ombudsman/ManifestationList";
 import { ManifestationView } from "./ombudsman/ManifestationView";
 
-export function OmbudsmanManifestations({ initialId = null, now }: { initialId?: string | null; now?: Date; onGoToSecurity?: () => void }) {
+export function OmbudsmanManifestations({ initialId = null, now }: { initialId?: string | null; now?: Date }) {
   const queryClient = useQueryClient();
   const [ openId, setOpenId ] = useState<string | null>(initialId);
   useEffect(() => { if (initialId) setOpenId(initialId); }, [ initialId ]);
