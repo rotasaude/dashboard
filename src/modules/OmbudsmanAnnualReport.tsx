@@ -79,7 +79,10 @@ function ReportBody({ r, closed, onSaved, onStale, onDirty }: {
   }
   function print() {
     const rows: [ string, string ][] = [ [ "Situação", published ? publishedText(r) : "rascunho" ], ...numbersRows(r.numbers) ];
-    setPrintError(printSheet(sheetTitle(r.year), rows, FIELDS.map(({ key, label }) => ({ title: label, text: saved[key] || "—" }))));
+    // A nota da supressão (Q61) vai logo depois dos números, como na tela.
+    setPrintError(printSheet(sheetTitle(r.year), rows, [
+      { title: "", text: PANEL_SUPPRESSED_NOTE }, ...FIELDS.map(({ key, label }) => ({ title: label, text: saved[key] || "—" }))
+    ]));
   }
 
   return (

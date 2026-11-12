@@ -6,7 +6,6 @@ import { renderWithProviders } from "../test/campaignFixtures";
 import { NOW33, annualReport, ombudsmanUser } from "../test/ombudsmanFixtures";
 import * as api from "../lib/api";
 import { ApiError, type SessionUser } from "../lib/api";
-import { SUPPRESSED_LABEL } from "../lib/smallCount";
 import { OMBUDSMAN_ERRORS, OMBUDSMAN_NO_ROLE, PUBLIC_REPORT_NOTICE } from "../lib/ombudsman";
 import { POPUP_BLOCKED } from "./documents/printDocument";
 import { OmbudsmanAnnualReport } from "./OmbudsmanAnnualReport";
@@ -14,6 +13,7 @@ import { OmbudsmanAnnualReport } from "./OmbudsmanAnnualReport";
 vi.mock("../lib/api", async (orig) => ({ ...(await orig<typeof api>()), fetchCurrentSession: vi.fn(), getAnnualReport: vi.fn(),
   updateAnnualReport: vi.fn(), publishAnnualReport: vi.fn() }));
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.resetAllMocks(); });
+const NOTE = "Contagens pequenas, e as que permitiriam deduzi-las, aparecem como 'oculto'.";
 
 function mount(user: SessionUser = ombudsmanUser([ "ombudsman" ])) {
   vi.mocked(api.fetchCurrentSession).mockResolvedValue(user);
@@ -129,7 +129,7 @@ describe("relatório anual da ouvidoria", () => {
     expect(select.disabled).toBe(false);
   });
 
-  it("imprimir: números com '< 5' e os três textos; nada pessoal", async () => {
+  it("imprimir: números com 'oculto', a nota da Q61 e os três textos; nunca '< 5'; nada pessoal", async () => {
     // Campos que o api não manda (nome, CPF, profissional) nunca vão à folha: ela só lê os números e os três textos.
     const stray = { published_by: { name: "Rita Prado", cpf: "123.456.789-09" } };
     const report = annualReport({ recurring_problems: "Falta de medicamentos." });
@@ -137,16 +137,26 @@ describe("relatório anual da ouvidoria", () => {
       numbers: { ...report.numbers, by_professional: [ { professional: { id: "p1", name: "Dr. Caio" }, total: 3 } ] } } as never);
     const doc = document.implementation.createHTMLDocument("");
     const open = vi.spyOn(window, "open").mockReturnValue({ document: doc, print: vi.fn(), focus: vi.fn(), close: vi.fn() } as never);
-    mount();
+    const { container } = mount();
     fireEvent.click(await screen.findByRole("button", { name: "Imprimir" }));
     expect(open).toHaveBeenCalledWith("", "_blank");
+    // Na tela: "oculto" na célula escondida, a nota nova e nenhum "< 5".
+    const praise = screen.getByText("Tipo: Elogio").closest("[role='row']") as HTMLElement;
+    expect(praise.textContent).toContain("oculto");
+    expect(screen.getByText(NOTE)).not.toBeNull();
+    expect(container.innerHTML).not.toContain("&lt; 5");
+    expect(container.textContent).not.toContain("< 5");
     const text = doc.body.textContent ?? "";
     expect(text).toContain("Relatório de gestão da Ouvidoria da Saúde — 2025");
     expect(text).toContain("Falta de medicamentos.");
-    expect(text).toContain(SUPPRESSED_LABEL);
+    expect(text).toContain("Tipo: Elogiooculto");
+    expect(text).toContain(NOTE);
+    expect(text).not.toContain("< 5");
     for (const title of [ "Problemas recorrentes", "Providências adotadas", "Observações" ]) expect(text).toContain(title);
     expect(text).toContain("Total de manifestações42");
     const html = doc.documentElement.outerHTML;
+    expect(html).not.toContain("&lt; 5");
+    expect(html).not.toContain("< 5");
     for (const personal of [ "Rita Prado", "123.456.789-09", "12345678909", "Dr. Caio" ]) expect(html).not.toContain(personal);
   });
 

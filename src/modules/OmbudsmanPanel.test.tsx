@@ -1,4 +1,4 @@
-// Painel da ouvidoria (módulo 33; F-33.9): totais com supressão do api ("< 5" e "oculto"), período, e o recorte por profissional
+// Painel da ouvidoria (módulo 33; F-33.9): totais com supressão do api (sempre "oculto", Q61), período, e o recorte por profissional
 // só para o ouvidor. A tela nunca recalcula nem deduz um valor escondido.
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
@@ -6,7 +6,6 @@ import { renderWithProviders } from "../test/campaignFixtures";
 import { NOW33, dashboard33, ombudsmanUser } from "../test/ombudsmanFixtures";
 import * as api from "../lib/api";
 import { ApiError, type SessionUser } from "../lib/api";
-import { HIDDEN_LABEL, SUPPRESSED_LABEL } from "../lib/smallCount";
 import { OMBUDSMAN_ERRORS, OMBUDSMAN_NO_ROLE } from "../lib/ombudsman";
 import { OmbudsmanPanel, numbersRows } from "./OmbudsmanPanel";
 
@@ -15,6 +14,8 @@ vi.mock("../lib/api", async (orig) => ({ ...(await orig<typeof api>()), fetchCur
 afterEach(() => { cleanup(); vi.resetAllMocks(); });
 
 const HIDDEN = { suppressed: true } as const;
+const OCULTO = "oculto";
+const NOTE = "Contagens pequenas, e as que permitiriam deduzi-las, aparecem como 'oculto'.";
 
 function mount(user: SessionUser = ombudsmanUser([ "ombudsman_staff" ])) {
   vi.mocked(api.fetchCurrentSession).mockResolvedValue(user);
@@ -25,12 +26,12 @@ const tile = (label: string) => screen.getByText(label).parentElement!.parentEle
 const rowOf = (scope: HTMLElement, label: string) => within(scope).getByText(label).closest("[role='row']") as HTMLElement;
 
 describe("painel da ouvidoria", () => {
-  it("totais com '< 5' e 'oculto', nunca zero no lugar do suprimido", async () => {
+  it("totais com 'oculto', nunca zero nem '< 5' no lugar do suprimido; a nota da Q61", async () => {
     vi.mocked(api.getOmbudsmanDashboard).mockResolvedValue(dashboard33({ resolution_rate: HIDDEN }));
-    mount();
+    const { container } = mount();
     expect(await screen.findByText("42")).not.toBeNull();
     const praise = screen.getByText("Elogio").closest("[role='row']") as HTMLElement;
-    expect(within(praise).getByText(SUPPRESSED_LABEL)).not.toBeNull();
+    expect(within(praise).getByText(OCULTO)).not.toBeNull();
     expect(tile("Resolutividade").textContent).toMatch(/oculto/);
     expect(tile("Respondidas no prazo").textContent).toMatch(/85\s?%/);
     expect(screen.getByText(/17,4 dias/)).not.toBeNull();
@@ -40,10 +41,12 @@ describe("painel da ouvidoria", () => {
     const names = within(subjects).getAllByRole("row").slice(1).map((r) => r.querySelector("[role='cell']")!.textContent);
     expect(names).toEqual([ "Atendimento", "Transporte", "sem assunto" ]);
     expect(within(rowOf(screen.getByRole("region", { name: "Por unidade" }), "UBS Centro")).getByText("12")).not.toBeNull();
-    expect(screen.getByText(/taxas e médias calculadas sobre elas aparecem como “oculto”/)).not.toBeNull();
+    expect(screen.getByText(NOTE)).not.toBeNull();
+    expect(container.textContent).not.toContain("< 5");
+    expect(container.textContent).not.toMatch(/de 1 a 4/);
   });
 
-  it("zero escondido mostra '< 5'; taxa sem caso mostra '—'", async () => {
+  it("zero escondido mostra 'oculto'; taxa sem caso mostra '—'", async () => {
     vi.mocked(api.getOmbudsmanDashboard).mockResolvedValue(dashboard33({
       by_channel: { web: 28, in_person: 6, phone: 8, ouvidorsus: HIDDEN, total: 42 },
       on_time_rate: null
@@ -51,24 +54,25 @@ describe("painel da ouvidoria", () => {
     mount();
     await screen.findByText("42");
     const ouvidorsus = rowOf(screen.getByRole("region", { name: "Por canal" }), "OuvidorSUS");
-    expect(within(ouvidorsus).getByText(SUPPRESSED_LABEL)).not.toBeNull();
+    expect(within(ouvidorsus).getByText(OCULTO)).not.toBeNull();
     expect(within(ouvidorsus).queryByText("0")).toBeNull();
     expect(tile("Respondidas no prazo").textContent).toMatch(/—/);
   });
 
-  it("satisfação toda escondida (Q55): '< 5' e 'oculto' sem quebrar", async () => {
+  it("satisfação toda escondida (Q55): tudo 'oculto', inclusive as respostas, sem quebrar", async () => {
     vi.mocked(api.getOmbudsmanDashboard).mockResolvedValue(dashboard33({
       by_state: { received: 5, in_analysis: 10, forwarded: 7, awaiting_complement: 0, answered: HIDDEN, archived: HIDDEN, total: 42 },
       on_time_rate: HIDDEN, avg_days_to_conclude: HIDDEN, resolution_rate: HIDDEN,
       satisfaction: { responses: HIDDEN, met: { yes: HIDDEN, partly: HIDDEN, no: HIDDEN }, clear: { yes: HIDDEN, no: HIDDEN }, avg_score: HIDDEN }
     }));
-    mount();
+    const { container } = mount();
     await screen.findByText("42");
     const sat = screen.getByRole("region", { name: "Satisfação" });
-    expect(within(rowOf(sat, "Pesquisas respondidas")).getByText(SUPPRESSED_LABEL)).not.toBeNull();
-    expect(within(rowOf(sat, "Demanda atendida: sim")).getByText(SUPPRESSED_LABEL)).not.toBeNull();
-    expect(within(rowOf(sat, "Resposta clara: não")).getByText(SUPPRESSED_LABEL)).not.toBeNull();
-    expect(within(rowOf(sat, "Nota média")).getByText(HIDDEN_LABEL)).not.toBeNull();
+    expect(within(rowOf(sat, "Pesquisas respondidas")).getByText(OCULTO)).not.toBeNull();
+    expect(within(rowOf(sat, "Demanda atendida: sim")).getByText(OCULTO)).not.toBeNull();
+    expect(within(rowOf(sat, "Resposta clara: não")).getByText(OCULTO)).not.toBeNull();
+    expect(within(rowOf(sat, "Nota média")).getByText(OCULTO)).not.toBeNull();
+    expect(container.textContent).not.toContain("< 5");
     expect(tile("Tempo médio até a conclusão").textContent).toMatch(/oculto/);
     expect(tile("Tempo médio até a conclusão").textContent).not.toMatch(/dias/);
   });
@@ -163,11 +167,12 @@ describe("numbersRows", () => {
     const rows = numbersRows(dashboard33({ resolution_rate: HIDDEN }));
     const get = (k: string) => rows.find(([ key ]) => key === k)?.[1];
     expect(get("Total de manifestações")).toBe("42");
-    expect(get("Tipo: Elogio")).toBe(SUPPRESSED_LABEL);
+    expect(get("Tipo: Elogio")).toBe(OCULTO);
     expect(get("Canal: OuvidorSUS")).toBe("0");
     expect(get("Assunto: sem assunto")).toBe("15");
     expect(get("Unidade: UBS Centro")).toBe("12");
-    expect(get("Resolutividade")).toBe(HIDDEN_LABEL);
+    expect(get("Resolutividade")).toBe(OCULTO);
+    expect(rows.some(([ , v ]) => v.includes("< 5"))).toBe(false);
     expect(get("Tempo médio até a conclusão")).toBe("17,4 dias");
     expect(get("Nota média")).toBe("4,1 de 5");
     expect(rows.some(([ k ]) => /total/i.test(k) && k !== "Total de manifestações")).toBe(false);

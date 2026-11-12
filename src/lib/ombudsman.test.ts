@@ -5,8 +5,9 @@ import {
   OMBUDSMAN_NO_ROLE, OMB_LIST_KEY, NOMINAL_QUERY, STATIC_QUERY, archiveProblems, archiveReasonLabel, attachmentProblems, availableActions,
   blockedReason, canIssueReceipt, canSeeIdentityButton, canUseOmbudsman, colorLabel, destinationLabel, eventKindLabel, finalResponseProblems,
   forwardProblems, isChanged, justificationOk, kindLabel, nameProblem, needsResolution, newManifestationProblems, ombudsmanError, ombudsmanRefusals,
-  ombudsmanRoles, reportTextProblems, settingsProblems, textActionProblems, type NewDraft
+  OMB_HIDDEN, OMB_SUPPRESSED_NOTE, ombCount, ombudsmanRoles, reportTextProblems, settingsProblems, textActionProblems, type NewDraft
 } from "./ombudsman";
+import { SUPPRESSED_LABEL, fmtCount } from "./smallCount";
 import { manifestation, ombudsmanUser, options, preserved, settings33 } from "../test/ombudsmanFixtures";
 
 // A lista do api (api-shapes §4); `invalid_request` sem path cai na frase genérica.
@@ -288,5 +289,24 @@ describe("rótulos", () => {
     expect(OMB_LIST_KEY).toBe("ombudsmanList");
     expect(NOMINAL_QUERY).toBeTruthy();
     expect(STATIC_QUERY).toBeTruthy();
+  });
+});
+
+describe("célula suprimida do painel e do relatório anual (Q61)", () => {
+  it("toda célula escondida é 'oculto' (contagem e taxa), nunca '< 5'; o resto segue o formato", () => {
+    expect(OMB_HIDDEN).toBe("oculto");
+    expect(ombCount({ suppressed: true })).toBe("oculto");
+    expect(ombCount({ suppressed: true }, "%")).toBe("oculto");
+    expect(ombCount(12)).toBe("12");
+    expect(ombCount(0)).toBe("0");
+    expect(ombCount(null)).toBe("—");
+    expect(ombCount(85, "%")).toMatch(/^85\s?%$/);
+    expect(OMB_SUPPRESSED_NOTE).toBe("Contagens pequenas, e as que permitiriam deduzi-las, aparecem como 'oculto'.");
+    expect(OMB_SUPPRESSED_NOTE).not.toContain("< 5");
+  });
+
+  it("o formatador comum dos outros módulos continua com '< 5'", () => {
+    expect(SUPPRESSED_LABEL).toBe("< 5");
+    expect(fmtCount({ suppressed: true })).toBe("< 5");
   });
 });

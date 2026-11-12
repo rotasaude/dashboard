@@ -12,7 +12,10 @@ import {
 import { isValidCpf } from "./attendance";
 import { NOMINAL_QUERY, STATIC_QUERY } from "./careLines";
 import { featureDisabledKey, featureLabel, hasFeature } from "./features";
+import { fmtNumber, fmtPercent } from "./format";
 import type { Problem, Refusal } from "./pharmacy";
+import { isSuppressed } from "./smallCount";
+import type { SmallCount } from "./types";
 
 export { NOMINAL_QUERY, STATIC_QUERY };
 
@@ -407,4 +410,14 @@ export function reportTextProblems(r: { recurring_problems: string; actions_take
   return (Object.keys(r) as (keyof typeof r)[])
     .filter((k) => len(r[k]) > 8000)
     .map((k) => ({ path: k, text: REPORT_TEXT }));
+}
+
+// Célula suprimida do painel e do relatório anual (Q61): sempre "oculto", nunca "< 5". Pela supressão complementar (Q53–Q55) a
+// célula escondida pode ser um zero ou qualquer valor que permitiria deduzir outra; "< 5" afirmaria "de 1 a 4", e isso vai ao
+// relatório público. Só neste módulo: `fmtCount`/`SUPPRESSED_LABEL` de `smallCount` seguem como estão para os outros.
+export const OMB_HIDDEN = "oculto";
+export const OMB_SUPPRESSED_NOTE = "Contagens pequenas, e as que permitiriam deduzi-las, aparecem como 'oculto'.";
+export function ombCount(v: SmallCount | null | undefined, unit?: "%"): string {
+  if (isSuppressed(v)) return OMB_HIDDEN;
+  return unit === "%" ? fmtPercent(v) : fmtNumber(v);
 }

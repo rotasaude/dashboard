@@ -1,8 +1,9 @@
 // Tela "Painel da ouvidoria" (módulo 33; F-33.9): da equipe (`staff`). Período "De"/"Até" (padrão: do dia 1 do mês até hoje, no fuso
 // da cidade), que só vai ao api no "Atualizar". Totais por tipo, canal, estado, assunto e unidade; no prazo, tempo médio,
-// resolutividade e satisfação. A supressão é do api (api-shapes §2.7; Q28, Q53–Q55): célula escondida aparece "< 5" (inclusive o
-// zero escondido), taxa ou média escondida "oculto", e `null` (sem caso) "—". A tela nunca soma células, nunca calcula taxa a partir
-// das partes e nunca deduz um valor escondido. A aba "Por profissional" é só do ouvidor e só é lida ao abrir. Nada em storage.
+// resolutividade e satisfação. A supressão é do api (api-shapes §2.7; Q28, Q53–Q55): toda célula escondida — contagem (inclusive o
+// zero escondido e as respostas da satisfação), taxa ou média — aparece "oculto" (Q61, nunca "< 5"), e `null` (sem caso) "—".
+// A tela nunca soma células, nunca calcula taxa a partir das partes e nunca deduz um valor escondido. A aba "Por profissional" é
+// só do ouvidor e só é lida ao abrir. Nada em storage.
 import { useId, useState, type CSSProperties } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -12,9 +13,11 @@ import {
 import { todayInCity } from "../lib/campaigns";
 import { fmtDay } from "../lib/careLines";
 import { fmtNumber } from "../lib/format";
-import { HIDDEN_LABEL, SUPPRESSED_LABEL, fmtCount, isSuppressed } from "../lib/smallCount";
+import { isSuppressed } from "../lib/smallCount";
 import type { SmallCount } from "../lib/types";
-import { OMB_DASHBOARD_KEY, STATIC_QUERY, channelLabel, kindLabel, ombudsmanError, stateLabel } from "../lib/ombudsman";
+import {
+  OMB_DASHBOARD_KEY, OMB_HIDDEN, OMB_SUPPRESSED_NOTE, STATIC_QUERY, channelLabel, kindLabel, ombCount, ombudsmanError, stateLabel
+} from "../lib/ombudsman";
 import { DataTable, type Column } from "../components/DataTable";
 import { KpiGrid } from "../components/KpiGrid";
 import { Panel } from "../components/Panel";
@@ -23,15 +26,15 @@ import { buttonStyle, inputStyle } from "../components/formStyles";
 import { alert, fieldLabel, muted, row, stack } from "./exams/styles";
 import { OmbudsmanGate } from "./ombudsman/OmbudsmanGate";
 
-export const PANEL_SUPPRESSED_NOTE =
-  `Contagens de 1 a 4 aparecem como “${SUPPRESSED_LABEL}”; taxas e médias calculadas sobre elas aparecem como “${HIDDEN_LABEL}”. Sem caso, “—”.`;
+// A nota da Q61, a mesma na tela, no relatório anual e na impressão dele.
+export const PANEL_SUPPRESSED_NOTE = OMB_SUPPRESSED_NOTE;
 const UNCLASSIFIED = "sem assunto";
 const KINDS: OmbudsmanKind[] = [ "complaint", "report", "praise", "suggestion", "request" ];
 
-// Taxa (`fmtCount(v, "%")`) e média: escondida → "oculto"; `null` → "—"; número → o formato do valor.
+// Taxa (`ombCount(v, "%")`) e média: escondida → "oculto"; `null` → "—"; número → o formato do valor.
 const hiddenOr = (v: SmallCount | null, fmt: (n: number) => string): string =>
-  isSuppressed(v) ? HIDDEN_LABEL : typeof v === "number" ? fmt(v) : "—";
-const rateText = (v: SmallCount | null): string => fmtCount(v, "%");
+  isSuppressed(v) ? OMB_HIDDEN : typeof v === "number" ? fmt(v) : "—";
+const rateText = (v: SmallCount | null): string => ombCount(v, "%");
 const daysText = (v: SmallCount | null): string => hiddenOr(v, (n) => `${fmtNumber(n)} dias`);
 const scoreText = (v: SmallCount | null): string => hiddenOr(v, (n) => `${fmtNumber(n)} de 5`);
 
@@ -51,19 +54,19 @@ type SatRow = { key: string; label: string; value: string };
 const satisfactionRows = (d: OmbudsmanDashboard): SatRow[] => {
   const s = d.satisfaction;
   return [
-    { key: "responses", label: "Pesquisas respondidas", value: fmtCount(s.responses) },
-    { key: "met-yes", label: "Demanda atendida: sim", value: fmtCount(s.met.yes) },
-    { key: "met-partly", label: "Demanda atendida: em parte", value: fmtCount(s.met.partly) },
-    { key: "met-no", label: "Demanda atendida: não", value: fmtCount(s.met.no) },
-    { key: "clear-yes", label: "Resposta clara: sim", value: fmtCount(s.clear.yes) },
-    { key: "clear-no", label: "Resposta clara: não", value: fmtCount(s.clear.no) },
+    { key: "responses", label: "Pesquisas respondidas", value: ombCount(s.responses) },
+    { key: "met-yes", label: "Demanda atendida: sim", value: ombCount(s.met.yes) },
+    { key: "met-partly", label: "Demanda atendida: em parte", value: ombCount(s.met.partly) },
+    { key: "met-no", label: "Demanda atendida: não", value: ombCount(s.met.no) },
+    { key: "clear-yes", label: "Resposta clara: sim", value: ombCount(s.clear.yes) },
+    { key: "clear-no", label: "Resposta clara: não", value: ombCount(s.clear.no) },
     { key: "avg", label: "Nota média", value: scoreText(s.avg_score) }
   ];
 };
 
 // Os números como pares rótulo/valor: o painel e a impressão do relatório anual usam os mesmos, só com o que o api mandou.
 export function numbersRows(d: OmbudsmanDashboard): [ string, string ][] {
-  const counts = (prefix: string, rows: CountRow[]): [ string, string ][] => rows.map((r) => [ `${prefix}: ${r.label}`, fmtCount(r.count) ]);
+  const counts = (prefix: string, rows: CountRow[]): [ string, string ][] => rows.map((r) => [ `${prefix}: ${r.label}`, ombCount(r.count) ]);
   return [
     [ "Período", `${fmtDay(d.period.from)} a ${fmtDay(d.period.to)}` ],
     [ "Total de manifestações", fmtNumber(d.total) ],
@@ -81,7 +84,7 @@ export function numbersRows(d: OmbudsmanDashboard): [ string, string ][] {
 
 const countCols = (first: string): Column<CountRow>[] => [
   { label: first, w: "2fr", card: "title", render: (r) => r.label },
-  { label: "Manifestações", w: "1fr", align: "right", render: (r) => <span className="mono">{fmtCount(r.count)}</span> }
+  { label: "Manifestações", w: "1fr", align: "right", render: (r) => <span className="mono">{ombCount(r.count)}</span> }
 ];
 const satCols: Column<SatRow>[] = [
   { label: "Pergunta", w: "2fr", card: "title", render: (r) => r.label },
