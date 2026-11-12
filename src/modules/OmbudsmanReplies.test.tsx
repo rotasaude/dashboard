@@ -153,6 +153,22 @@ describe("respostas à ouvidoria", () => {
     expect(api.listOmbudsmanInbox).toHaveBeenCalledTimes(2);
   });
 
+  it("409 e a releitura traz o mesmo encaminhamento cancelado: o formulário fecha, o texto some e não há segunda chamada", async () => {
+    vi.mocked(api.listOmbudsmanInbox).mockResolvedValueOnce(page([ inboxItem() ]))
+      .mockResolvedValueOnce(page([ inboxItem({ state: "cancelled", color: null }) ]));
+    vi.mocked(api.replyOmbudsmanInbox).mockRejectedValue(new ApiError(409, { error: "forwarding_changed" }, "x"));
+    const { container } = mount();
+    await sendReply(REPLY);
+    expect(await screen.findByText(OMBUDSMAN_ERRORS.forwarding_changed)).not.toBeNull();
+    await waitFor(() => expect(api.listOmbudsmanInbox).toHaveBeenCalledTimes(2));
+    await screen.findByText("cancelado");
+    expect(screen.queryByLabelText("Resposta à ouvidoria")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Enviar resposta" })).toBeNull();
+    expect(container.textContent).not.toContain(REPLY);
+    expect(screen.getByText(OMBUDSMAN_ERRORS.forwarding_changed)).not.toBeNull();
+    expect(api.replyOmbudsmanInbox).toHaveBeenCalledTimes(1);
+  });
+
   it("encaminhamento que saiu do destino (404): a mesma frase e uma releitura", async () => {
     vi.mocked(api.listOmbudsmanInbox).mockResolvedValueOnce(page([ inboxItem() ])).mockResolvedValueOnce(page([]));
     vi.mocked(api.declineOmbudsmanInbox).mockRejectedValue(new ApiError(404, { error: "not_found" }, "x"));

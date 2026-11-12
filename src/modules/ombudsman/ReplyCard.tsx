@@ -2,7 +2,8 @@
 // além (o item já chega sem protocolo, texto, assunto, identidade e anexos). No pendente: responder (10–4000), "Não é do nosso
 // destino" (motivo 10–4000) e "Prorrogar prazo" (motivo 10–4000, uma vez só: some quando `extended`). Uma ação aberta por vez (escolher outra troca o formulário).
 // Toda chamada leva o estado lido (`item.state`, Q33). Tela velha (409 `forwarding_changed`, 422 `invalid_transition`, 404 de
-// encaminhamento que saiu do destino): `onStale()` relê a lista uma vez e o texto não é reenviado. Sem duplo envio (`useFormProblems`).
+// encaminhamento que saiu do destino): `onStale()` relê a lista uma vez e o texto não é reenviado. O formulário só existe no
+// pendente: a caixa do api também lista os cancelados e respondidos, e o cartão relido assim fecha o formulário (e o texto digitado). Sem duplo envio (`useFormProblems`).
 import { useState } from "react";
 import { ApiError, declineOmbudsmanInbox, extendOmbudsmanInbox, replyOmbudsmanInbox, type OmbudsmanInboxItem } from "../../lib/api";
 import { destinationLabel, forwardingStateLabel, isChanged, ombudsmanRefusals, textActionProblems } from "../../lib/ombudsman";
@@ -91,7 +92,7 @@ export function ReplyCard({ item, onDone, onStale }: { item: OmbudsmanInboxItem;
           {!item.extended && !used && <button type="button" style={secondaryButtonStyle} onClick={() => setOpen("extend")}>Prorrogar prazo</button>}
         </div>
       )}
-      {open && (
+      {open && pending && (
         <ReplyForm key={open} kind={open} item={item} onClose={() => setOpen(null)} onExtendUsed={() => setUsed(true)} onStale={onStale}
           onDone={(next) => { setOpen(null); onDone(next); }} />
       )}
