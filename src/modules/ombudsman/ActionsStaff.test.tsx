@@ -2,13 +2,16 @@
 // registrar complemento, respostas intermediária e conclusiva. Todo corpo leva `expected_state`; 409/`invalid_transition`
 // mostram a frase, releem uma vez e não reenviam (dois técnicos na mesma manifestação).
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { useState } from "react";
+import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { renderWithProviders } from "../../test/campaignFixtures";
 import { expectFrozenNotice } from "../../test/frozenNotice";
 import { NOW33, forwarding, manifestation, ombudsmanUser, options, preserved } from "../../test/ombudsmanFixtures";
 import * as api from "../../lib/api";
 import { ApiError, type OmbudsmanManifestation } from "../../lib/api";
-import { ANONYMOUS_INTERNAL, EXTRACT_NOTICE, MANIFESTATION_CHANGED, OMBUDSMAN_ERRORS, ombudsmanRoles } from "../../lib/ombudsman";
+import {
+  ANONYMOUS_INTERNAL, EXTRACT_NOTICE, MANIFESTATION_CHANGED, OMBUDSMAN_ERRORS, OMB_DETAIL_KEY, ombudsmanRoles, type OmbudsmanRoles
+} from "../../lib/ombudsman";
 import { ManifestationView } from "./ManifestationView";
 
 vi.mock("../../lib/api", async (orig) => ({ ...(await orig<typeof api>()), fetchCurrentSession: vi.fn(), getOmbudsmanManifestation: vi.fn(),
@@ -22,6 +25,25 @@ function mount(m: OmbudsmanManifestation, roles = [ "ombudsman_staff" ]) {
   vi.mocked(api.getOmbudsmanManifestation).mockResolvedValue(m);
   return renderWithProviders(<ManifestationView id={m.id} roles={ombudsmanRoles(user)} now={NOW33} onBack={() => {}} />);
 }
+// A Caixa: "Voltar à caixa" desmonta o detalhe, como em OmbudsmanManifestations.
+function Host({ m, roles }: { m: OmbudsmanManifestation; roles: OmbudsmanRoles }) {
+  const [ open, setOpen ] = useState(true);
+  return open ? <ManifestationView id={m.id} roles={roles} now={NOW33} onBack={() => setOpen(false)} /> : <p>caixa</p>;
+}
+function mountHost(m: OmbudsmanManifestation) {
+  const user = ombudsmanUser([ "ombudsman_staff" ]);
+  vi.mocked(api.fetchCurrentSession).mockResolvedValue(user);
+  vi.mocked(api.getOmbudsmanOptions).mockResolvedValue(options());
+  vi.mocked(api.getOmbudsmanManifestation).mockResolvedValue(m);
+  return renderWithProviders(<Host m={m} roles={ombudsmanRoles(user)} />);
+}
+function deferred<T>() {
+  let resolve!: (v: T) => void;
+  let reject!: (e: unknown) => void;
+  const promise = new Promise<T>((ok, fail) => { resolve = ok; reject = fail; });
+  return { promise, resolve, reject };
+}
+const tick = () => new Promise((r) => setTimeout(r, 20));
 async function forward(dest: string, text: string) {
   fireEvent.click(await screen.findByRole("button", { name: "Encaminhar" }));
   fireEvent.change(screen.getByLabelText("Destino"), { target: { value: dest } });
@@ -140,7 +162,7 @@ describe("ações do técnico", () => {
     vi.mocked(api.runOmbudsmanAction).mockRejectedValue(new ApiError(422, { error: "invalid_transition" }, "x"));
     mount(manifestation());
     await forward("department:dep1", "Usuária relata falta de losartana na farmácia da UBS Centro.");
-    expect(await screen.findByText(OMBUDSMAN_ERRORS.invalid_transition)).not.toBeNull();
+    expect(await screen.findByText(MANIFESTATION_CHANGED)).not.toBeNull();
     await waitFor(() => expect(api.getOmbudsmanManifestation).toHaveBeenCalledTimes(2));
     expect(api.runOmbudsmanAction).toHaveBeenCalledTimes(1);
   });
@@ -212,7 +234,7 @@ describe("ações do técnico", () => {
     await waitFor(() => expect(screen.queryByRole("button", { name: "Cancelar encaminhamento" })).toBeNull());
   });
 
-  it("cancelar com 409 forwarding_changed: frase do encaminhamento e uma releitura", async () => {
+  it("cancelar com 409 forwarding_changed: a frase da tela velha e uma releitura; a frase sai na mudança seguinte", async () => {
     vi.mocked(api.getOmbudsmanManifestation)
       .mockResolvedValueOnce(manifestation({ state: "forwarded", pending_forwardings: 1, forwardings: [ forwarding() ] }))
       .mockResolvedValueOnce(manifestation({ forwardings: [ forwarding({ state: "replied", color: null, reply: "Estoque chega dia 12." }) ] }));
@@ -220,10 +242,77 @@ describe("ações do técnico", () => {
     mount(manifestation());
     fireEvent.click(await screen.findByRole("button", { name: "Cancelar encaminhamento" }));
     fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
-    expect(await screen.findByText(OMBUDSMAN_ERRORS.forwarding_changed)).not.toBeNull();
+    expect(await screen.findByText(MANIFESTATION_CHANGED)).not.toBeNull();
     await waitFor(() => expect(api.getOmbudsmanManifestation).toHaveBeenCalledTimes(2));
     expect(await screen.findByText("Estoque chega dia 12.")).not.toBeNull();
+    expect(screen.getByText(MANIFESTATION_CHANGED)).not.toBeNull(); // a releitura que ela causou não a apaga
     expect(api.cancelOmbudsmanForwarding).toHaveBeenCalledTimes(1);
+    vi.mocked(api.runOmbudsmanAction).mockResolvedValue(manifestation({
+      forwardings: [ forwarding({ state: "replied", color: null, reply: "Estoque chega dia 12." }) ], urgent: true
+    }));
+    await sendInterim("Estamos verificando com a farmácia e retornamos.");
+    await waitFor(() => expect(screen.queryByLabelText("Texto ao cidadão")).toBeNull());
+    expect(screen.queryByText(MANIFESTATION_CHANGED)).toBeNull();
+  });
+
+  it("sair da tela com a ação em voo: a resposta atrasada não grava o detalhe no cache", async () => {
+    const d = deferred<OmbudsmanManifestation>();
+    vi.mocked(api.runOmbudsmanAction).mockReturnValue(d.promise);
+    const { client } = mountHost(manifestation());
+    const setData = vi.spyOn(client, "setQueryData");
+    await sendInterim("Estamos verificando com a farmácia e retornamos.");
+    fireEvent.click(screen.getByRole("button", { name: "Voltar à caixa" }));
+    expect(screen.getByText("caixa")).not.toBeNull();
+    await act(async () => { await tick(); d.resolve(manifestation({ urgent: true })); await tick(); });
+    expect(setData).not.toHaveBeenCalled();
+    expect(client.getQueryData([ OMB_DETAIL_KEY, "m1" ])).toBeUndefined();
+    expect(api.getOmbudsmanManifestation).toHaveBeenCalledTimes(1);
+  });
+
+  it("sair da tela com a ação em voo: o 409 atrasado não relê", async () => {
+    const d = deferred<OmbudsmanManifestation>();
+    vi.mocked(api.runOmbudsmanAction).mockReturnValue(d.promise);
+    mountHost(manifestation());
+    await sendInterim("Estamos verificando com a farmácia e retornamos.");
+    fireEvent.click(screen.getByRole("button", { name: "Voltar à caixa" }));
+    await act(async () => { await tick(); d.reject(new ApiError(409, { error: "manifestation_changed" }, "x")); await tick(); });
+    expect(api.getOmbudsmanManifestation).toHaveBeenCalledTimes(1);
+  });
+
+  it("sair da tela com o cancelamento em voo: a resposta atrasada não grava nem relê", async () => {
+    const d = deferred<OmbudsmanManifestation>();
+    vi.mocked(api.cancelOmbudsmanForwarding).mockReturnValue(d.promise);
+    const { client } = mountHost(manifestation({ state: "forwarded", pending_forwardings: 1, forwardings: [ forwarding() ] }));
+    const setData = vi.spyOn(client, "setQueryData");
+    fireEvent.click(await screen.findByRole("button", { name: "Cancelar encaminhamento" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Voltar à caixa" }));
+    await act(async () => { await tick(); d.reject(new ApiError(409, { error: "forwarding_changed" }, "x")); await tick(); });
+    expect(setData).not.toHaveBeenCalled();
+    expect(api.getOmbudsmanManifestation).toHaveBeenCalledTimes(1);
+  });
+
+  it("com uma ação em voo, as outras ações ficam desabilitadas", async () => {
+    const d = deferred<OmbudsmanManifestation>();
+    vi.mocked(api.runOmbudsmanAction).mockReturnValue(d.promise);
+    mount(manifestation());
+    await sendInterim("Estamos verificando com a farmácia e retornamos.");
+    for (const name of [ "Encaminhar", "Classificar", "Resposta conclusiva" ]) {
+      expect((screen.getByRole("button", { name }) as HTMLButtonElement).disabled).toBe(true);
+    }
+    await act(async () => { d.resolve(manifestation()); await tick(); });
+    expect((screen.getByRole("button", { name: "Encaminhar" }) as HTMLButtonElement).disabled).toBe(false);
+    expect(api.runOmbudsmanAction).toHaveBeenCalledTimes(1);
+  });
+
+  it("opções ainda carregando: só classificar e encaminhar esperam; as ações de texto abrem", async () => {
+    mount(manifestation());
+    vi.mocked(api.getOmbudsmanOptions).mockReturnValue(new Promise(() => {}));
+    fireEvent.click(await screen.findByRole("button", { name: "Resposta intermediária" }));
+    expect(screen.getByLabelText("Texto ao cidadão")).not.toBeNull();
+    expect(screen.getByText("carregando as opções…")).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Classificar" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Encaminhar" })).toBeNull();
   });
 
   it("o cancelamento não aparece para encaminhamento que não está pendente", async () => {

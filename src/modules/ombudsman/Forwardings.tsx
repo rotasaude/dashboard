@@ -1,8 +1,9 @@
 // Encaminhamentos da manifestação (módulo 33; Q9, Q33): destino, extrato, estado, prazo (só no pendente) e, quando existem, a
 // prorrogação, a resposta e quem respondeu. No `declined`, `reply` é o motivo da recusa. As chaves opcionais só são lidas se
 // vierem preenchidas. A equipe cancela o pendente ("Cancelar encaminhamento", confirmação em dois passos): `onCancel` manda o
-// estado lido do encaminhamento (Q33) e devolve a frase da recusa, ou `null`; 409 `forwarding_changed` relê lá fora.
-import { useState } from "react";
+// estado lido do encaminhamento (Q33) e devolve a frase da recusa (e se o detalhe vai ser relido), ou `null`; 409
+// `forwarding_changed` relê lá fora. A frase fica durante a releitura que ela causou e sai na mudança seguinte do detalhe.
+import { useEffect, useRef, useState } from "react";
 import type { ForwardingState, OmbudsmanForwarding, OmbudsmanManifestation } from "../../lib/api";
 import { fmtDateTime } from "../../lib/format";
 import { destinationLabel, forwardingStateLabel, type OmbudsmanRoles } from "../../lib/ombudsman";
@@ -44,15 +45,24 @@ function ForwardingItem({ f, onCancel }: { f: OmbudsmanForwarding; onCancel?(): 
   );
 }
 
+// `reread`: o detalhe vai ser relido por causa desta recusa — a frase sobrevive a essa releitura.
+export type CancelOutcome = { text: string; reread: boolean } | null;
+
 export function Forwardings({ m, roles, onCancel }: {
-  m: OmbudsmanManifestation; roles?: OmbudsmanRoles; onCancel?(f: OmbudsmanForwarding): Promise<string | null>;
+  m: OmbudsmanManifestation; roles?: OmbudsmanRoles; onCancel?(f: OmbudsmanForwarding): Promise<CancelOutcome>;
 }) {
-  const [ notice, setNotice ] = useState<string | null>(null);
+  const [ notice, setNotice ] = useState<CancelOutcome>(null);
+  const seen = useRef(m);
+  useEffect(() => {
+    if (seen.current === m) return;
+    seen.current = m;
+    setNotice((n) => (n?.reread ? { ...n, reread: false } : null));
+  }, [ m ]);
   const cancellable = (f: OmbudsmanForwarding) => !!onCancel && !!roles?.staff && m.can.cancel_forwarding && f.state === "pending";
   return (
     <Panel title="Encaminhamentos">
       <div style={{ ...stack, gap: 8 }}>
-        {notice && <p role="alert" style={alert}>{notice}</p>}
+        {notice && <p role="alert" style={alert}>{notice.text}</p>}
         {m.forwardings.length === 0 ? <p style={muted}>nenhum encaminhamento</p> : (
           <ul style={{ ...stack, gap: 8, margin: 0, padding: 0, listStyle: "none" }}>
             {m.forwardings.map((f) => (

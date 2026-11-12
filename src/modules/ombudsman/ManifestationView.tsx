@@ -3,6 +3,7 @@
 // campo é lido pelo nome — o detalhe nunca é espalhado na tela, e a identidade é do `IdentityBlock`. Nada em storage.
 // As ações da equipe (`ActionsPanel`, cancelamento do encaminhamento) respondem com o detalhe, que vai direto ao cache (sem nova
 // leitura) e invalida a Caixa; tela velha relê o detalhe uma vez. O diálogo de identidade e de anexo protegido entra na Task 8.
+import { useEffect, useRef } from "react";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import {
   cancelOmbudsmanForwarding, errorCode, getOmbudsmanManifestation,
@@ -11,7 +12,7 @@ import {
 import { fmtDay } from "../../lib/careLines";
 import { fmtDateTime } from "../../lib/format";
 import {
-  NOMINAL_QUERY, OMB_DETAIL_KEY, OMB_LIST_KEY, archiveReasonLabel, channelLabel, isChanged, kindLabel, modeLabel, ombudsmanError,
+  MANIFESTATION_CHANGED, NOMINAL_QUERY, OMB_DETAIL_KEY, OMB_LIST_KEY, archiveReasonLabel, channelLabel, isChanged, kindLabel, modeLabel, ombudsmanError,
   resolutionLabel, stateLabel, type OmbudsmanRoles
 } from "../../lib/ombudsman";
 import { KeyValue } from "../../components/KeyValue";
@@ -22,7 +23,7 @@ import { alert, grid, muted, row, stack, title } from "../exams/styles";
 import { ActionsPanel } from "./ActionsPanel";
 import { Attachments } from "./Attachments";
 import { DeadlineTag } from "./DeadlineTag";
-import { Forwardings } from "./Forwardings";
+import { Forwardings, type CancelOutcome } from "./Forwardings";
 import { IdentityBlock } from "./IdentityBlock";
 import { Timeline } from "./Timeline";
 
@@ -107,20 +108,29 @@ export function ManifestationView({ id, roles, onBack }: { id: string; roles: Om
   const detail = useQuery({ queryKey: [ OMB_DETAIL_KEY, id ], queryFn: () => getOmbudsmanManifestation(id), ...NOMINAL_QUERY });
   const m = detail.data;
   const queryClient = useQueryClient();
+  // A manifestação que está na tela; resposta que chega depois de sair (ou de trocar de id) não grava nem relê.
+  const liveId = useRef<string | null>(id);
+  useEffect(() => {
+    liveId.current = id;
+    return () => { liveId.current = null; };
+  }, [ id ]);
   // Resposta de uma ação = o detalhe novo; `null` = tela velha: uma releitura, nenhum reenvio.
   const onChanged = (next: OmbudsmanManifestation | null) => {
+    if (liveId.current !== id) return;
     if (next) queryClient.setQueryData([ OMB_DETAIL_KEY, id ], next);
     else void detail.refetch();
     void queryClient.invalidateQueries({ queryKey: [ OMB_LIST_KEY ] });
   };
-  // Cancelamento com o estado lido do encaminhamento (Q33). Encaminhamento que mudou ou sumiu: frase e releitura.
-  const cancelForwarding = async (f: OmbudsmanForwarding): Promise<string | null> => {
+  // Cancelamento com o estado lido do encaminhamento (Q33). Tela velha (409 `forwarding_changed`, 422 `invalid_transition`):
+  // MANIFESTATION_CHANGED e uma releitura; encaminhamento que sumiu (404): a frase dele e uma releitura.
+  const cancelForwarding = async (f: OmbudsmanForwarding): Promise<CancelOutcome> => {
     try {
       onChanged(await cancelOmbudsmanForwarding(f.id, f.state));
       return null;
     } catch (err) {
-      if (isChanged(err) || errorCode(err) === "not_found") onChanged(null);
-      return ombudsmanError(err);
+      if (isChanged(err)) { onChanged(null); return { text: MANIFESTATION_CHANGED, reread: true }; }
+      if (errorCode(err) === "not_found") { onChanged(null); return { text: ombudsmanError(err), reread: true }; }
+      return { text: ombudsmanError(err), reread: false };
     }
   };
   // Ganchos do diálogo da Task 8 (identidade e anexo protegido, com justificativa). Aqui nada chama `/identity` nem o anexo.

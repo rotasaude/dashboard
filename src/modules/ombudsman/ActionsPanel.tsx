@@ -1,7 +1,9 @@
 // Ações da equipe sobre a manifestação (módulo 33; F-33.5, F-33.6). Um botão por ação de `availableActions` (a matriz decide
 // o que aparece); o `can` do api decide se está habilitada, e o motivo do bloqueio fica escrito ao lado (`blockedReason`).
 // Uma ação aberta por vez. Tela velha (`useManifestationAction`): a frase fica no painel, o detalhe é relido uma vez e o
-// formulário aberto continua aberto, com o que foi digitado, só se a ação ainda couber no estado novo; senão fecha.
+// formulário aberto continua aberto, com o que foi digitado, só se a ação ainda couber no estado novo; senão fecha. Com uma
+// chamada em voo, as outras ações ficam desabilitadas (nada de uma segunda escrita com o mesmo estado). Só classificar e
+// encaminhar esperam as opções; as ações de texto abrem sem elas.
 // As ações do ouvidor (prorrogar, arquivar, reabrir, resolutividade) entram na Task 7.
 import { useEffect, useId, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -24,12 +26,15 @@ const LABELS: Partial<Record<OmbudsmanActionName, string>> = {
 // Precisam de `GET /ombudsman/options` (assuntos, unidades, setores, profissionais).
 const NEEDS_OPTIONS: OmbudsmanActionName[] = [ "classify", "forward" ];
 
-function ActionToggle({ label, open, reason, onOpen }: { label: string; open: boolean; reason: string | null; onOpen(): void }) {
+function ActionToggle({ label, open, reason, busy, onOpen }: {
+  label: string; open: boolean; reason: string | null; busy: boolean; onOpen(): void;
+}) {
   const reasonId = useId();
+  const off = !!reason || busy;
   return (
     <span style={{ display: "inline-flex", flexDirection: "column", gap: 4 }}>
-      <button type="button" disabled={!!reason} aria-expanded={open} aria-describedby={reason ? reasonId : undefined}
-        style={reason ? disabledButtonStyle : open ? buttonStyle : secondaryButtonStyle} onClick={onOpen}>{label}</button>
+      <button type="button" disabled={off} aria-expanded={open} aria-describedby={reason ? reasonId : undefined}
+        style={off ? disabledButtonStyle : open ? buttonStyle : secondaryButtonStyle} onClick={onOpen}>{label}</button>
       {reason && <p id={reasonId} style={{ margin: 0, fontSize: 12, color: "var(--ink2)" }}>{reason}</p>}
     </span>
   );
@@ -38,7 +43,7 @@ function ActionToggle({ label, open, reason, onOpen }: { label: string; open: bo
 export function ActionsPanel({ m, roles, onChanged }: {
   m: OmbudsmanManifestation; roles: OmbudsmanRoles; onChanged(next: OmbudsmanManifestation | null): void;
 }) {
-  const { run, changedNotice } = useManifestationAction(m, onChanged);
+  const { run, changedNotice, busy } = useManifestationAction(m, onChanged);
   const [ open, setOpen ] = useState<OmbudsmanActionName | null>(null);
   const actions = availableActions(m, roles).filter((a) => LABELS[a] !== undefined);
   const options = useQuery({ queryKey: [ OMB_OPTIONS_KEY ], queryFn: getOmbudsmanOptions, ...STATIC_QUERY, enabled: roles.staff });
@@ -47,7 +52,8 @@ export function ActionsPanel({ m, roles, onChanged }: {
   useEffect(() => { if (open !== null && shown === null) setOpen(null); }, [ open, shown ]);
 
   if (actions.length === 0 && !changedNotice) return null;
-  const waitOptions = actions.some((a) => NEEDS_OPTIONS.includes(a)) && options.isPending;
+  const waiting = (a: OmbudsmanActionName) => NEEDS_OPTIONS.includes(a) && options.isPending;
+  const toggles = actions.filter((a) => !waiting(a));
   const optionsError = options.isError ? ombudsmanError(options.error) : null;
   const reasonOf = (a: OmbudsmanActionName): string | null =>
     blockedReason(m, a) ?? (NEEDS_OPTIONS.includes(a) && optionsError ? optionsError : null);
@@ -57,14 +63,15 @@ export function ActionsPanel({ m, roles, onChanged }: {
     <Panel title="Ações">
       <div style={stack}>
         {changedNotice && <p role="alert" style={alert}>{changedNotice}</p>}
-        {waitOptions ? <p className="mono" style={muted}>carregando…</p> : actions.length > 0 && (
+        {toggles.length > 0 && (
           <div style={{ ...row, alignItems: "flex-start" }}>
-            {actions.map((a) => (
-              <ActionToggle key={a} label={LABELS[a] as string} open={shown === a} reason={reasonOf(a)} onOpen={() => setOpen(a)} />
+            {toggles.map((a) => (
+              <ActionToggle key={a} label={LABELS[a] as string} open={shown === a} reason={reasonOf(a)} busy={busy} onOpen={() => setOpen(a)} />
             ))}
           </div>
         )}
-        {shown && !waitOptions && <ActionForm action={shown} m={m} run={run} options={options.data} onDone={done} onClose={done} />}
+        {actions.some(waiting) && <p className="mono" style={muted}>carregando as opções…</p>}
+        {shown && <ActionForm action={shown} m={m} run={run} options={options.data} onDone={done} onClose={done} />}
       </div>
     </Panel>
   );
