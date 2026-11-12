@@ -79,6 +79,14 @@ describe("atalhos entre telas", () => {
     expect((renderModule("caps-enrollments", navigate) as ReactElement<Props>).props.initialEnrollment).toBeNull();
   });
 
+  it("ombudsman-new: Abrir a manifestação guarda o id e vai à Caixa", () => {
+    const navigate = vi.fn();
+    const omb = { manifestationId: null, openManifestation: vi.fn() };
+    (renderModule("ombudsman-new", navigate, undefined, omb) as ReactElement<{ onOpenManifestation(id: string): void }>).props.onOpenManifestation("m9");
+    expect(omb.openManifestation).toHaveBeenCalledWith("m9");
+    expect(navigate).toHaveBeenCalledWith("ombudsman-manifestations");
+  });
+
   it("a matrícula vale só para a ida a Usuários do CAPS: sair da tela a apaga", () => {
     const { result, rerender, unmount } = renderHook(({ active }: { active: ModuleId }) => useCapsHandoff(active),
       { initialProps: { active: "caps-reception" as ModuleId } });

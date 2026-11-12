@@ -16,7 +16,7 @@ import {
 import { ManifestationView } from "./ManifestationView";
 
 vi.mock("../../lib/api", async (orig) => ({ ...(await orig<typeof api>()), fetchCurrentSession: vi.fn(), getOmbudsmanManifestation: vi.fn(),
-  runOmbudsmanAction: vi.fn(), cancelOmbudsmanForwarding: vi.fn(), getOmbudsmanOptions: vi.fn() }));
+  runOmbudsmanAction: vi.fn(), cancelOmbudsmanForwarding: vi.fn(), getOmbudsmanOptions: vi.fn(), uploadOmbudsmanAttachment: vi.fn() }));
 afterEach(() => { cleanup(); vi.resetAllMocks(); });
 
 function mount(m: OmbudsmanManifestation, roles = [ "ombudsman_staff" ]) {
@@ -366,6 +366,29 @@ describe("ações do técnico", () => {
     fireEvent.click(screen.getByRole("button", { name: "Registrar" }));
     await waitFor(() => expect(vi.mocked(api.runOmbudsmanAction).mock.calls[0])
       .toEqual([ "m1", "complement", { expected_state: "awaiting_complement", text: "Por telefone: a falta foi nos dias 2, 4 e 9 de novembro." } ]));
+  });
+
+  it("complemento recebido com anexos: sobem antes (anexo-N), vão em attachment_ids; recusa do anexo não registra", async () => {
+    const TEXT = "Por telefone: a falta foi nos dias 2, 4 e 9 de novembro.";
+    vi.mocked(api.runOmbudsmanAction).mockResolvedValue(manifestation());
+    vi.mocked(api.uploadOmbudsmanAttachment)
+      .mockRejectedValueOnce(new ApiError(422, { error: "invalid_file" }, "x"))
+      .mockResolvedValueOnce({ id: "a7" });
+    mount(manifestation({ state: "awaiting_complement", color: "paused", complement_used: true }));
+    fireEvent.click(await screen.findByRole("button", { name: "Registrar complemento recebido" }));
+    fireEvent.change(screen.getByLabelText("Complemento recebido"), { target: { value: TEXT } });
+    fireEvent.change(screen.getByLabelText("Anexos do complemento"), { target: { files: [ new File([ "x" ], "a.gif", { type: "image/gif" }) ] } });
+    expect(screen.getByText(OMBUDSMAN_ERRORS.attachment_type)).not.toBeNull();
+    const pdf = new File([ "%PDF" ], "receita-jose.pdf", { type: "application/pdf" });
+    fireEvent.change(screen.getByLabelText("Anexos do complemento"), { target: { files: [ pdf ] } });
+    expect(screen.getByText("Anexo 1 (PDF)")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Registrar" }));
+    expect(await screen.findByText(OMBUDSMAN_ERRORS.invalid_file)).not.toBeNull();
+    expect(api.runOmbudsmanAction).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Registrar" }));
+    await waitFor(() => expect(vi.mocked(api.runOmbudsmanAction).mock.calls[0])
+      .toEqual([ "m1", "complement", { expected_state: "awaiting_complement", text: TEXT, attachment_ids: [ "a7" ] } ]));
+    expect(vi.mocked(api.uploadOmbudsmanAttachment).mock.calls).toEqual([ [ pdf, 1 ], [ pdf, 1 ] ]);
   });
 
   it("pedir complemento: texto ao cidadão com aviso; a recusa do api nomeia o campo", async () => {

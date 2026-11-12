@@ -1,25 +1,29 @@
 // Molde das ações de um texto (pedido de complemento, complemento recebido, respostas intermediária e conclusiva, prorrogação): o texto
-// (10–4000, Q8) com o aviso de texto congelado e, na conclusiva dos tipos que a pedem, "Resolvida?". Os problemas saem todos
+// (10–4000, Q8) com o aviso de texto congelado e, na conclusiva dos tipos que a pedem, "Resolvida?". Com `attachments` (o
+// complemento), os anexos sobem antes da ação e vão em `attachment_ids`; a recusa de um para tudo. Os problemas saem todos
 // de uma vez antes do envio; a recusa do api volta com a frase do campo (`fields`). Sem duplo envio (`busy` + ref).
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { OmbudsmanActionName, Resolution } from "../../../lib/api";
-import { finalResponseProblems, needsResolution, textActionProblems } from "../../../lib/ombudsman";
+import { attachmentProblems, finalResponseProblems, needsResolution, textActionProblems } from "../../../lib/ombudsman";
 import type { Problem } from "../../../lib/pharmacy";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../../components/formStyles";
 import { fieldLabel, form, row } from "../../exams/styles";
 import { useActionForm, type ActionFormProps } from "../useManifestationAction";
 import { FrozenTextArea } from "./ExtractField";
+import { AttachmentPicker, isAttachmentRefusal, uploadAll } from "../AttachmentPicker";
 
 export const formTitle = { margin: 0, fontSize: 13, fontWeight: 600 } as const;
-const OWN = [ "text", "resolution" ];
+const OWN = [ "text", "resolution", "attachments" ];
 
-export function TextActionForm({ m, run, onDone, onClose, action, title, label, submit, textPhrase, notice }: ActionFormProps & {
+export function TextActionForm({ m, run, onDone, onClose, action, title, label, submit, textPhrase, notice, attachments = false }: ActionFormProps & {
   action: Extract<OmbudsmanActionName, "request_complement" | "complement" | "interim_response" | "final_response" | "extend">;
-  title: string; label: string; submit: string; textPhrase: string; notice?: string;
+  title: string; label: string; submit: string; textPhrase: string; notice?: string; attachments?: boolean;
 }) {
   const f = useActionForm({ text: textPhrase });
   const [ text, setText ] = useState("");
   const [ resolution, setResolution ] = useState<Resolution | "">("");
+  const [ files, setFiles ] = useState<File[]>([]);
+  const uploaded = useRef(new Map<File, string>());
   const final = action === "final_response";
   const asksResolution = final && needsResolution(m.kind);
   const { aria, errNode, busy } = f;
@@ -28,13 +32,20 @@ export function TextActionForm({ m, run, onDone, onClose, action, title, label, 
   const check = (): Problem[] => {
     const draft = { text, resolution: resolution || null };
     const list = final ? finalResponseProblems(draft, m.kind) : textActionProblems(action, draft);
-    return list.map((p) => (p.path === "text" ? { ...p, text: textPhrase } : p));
+    return [ ...list.map((p) => (p.path === "text" ? { ...p, text: textPhrase } : p)), ...(attachments ? attachmentProblems(files) : []) ];
   };
   const body = (): Record<string, unknown> => (asksResolution ? { text, resolution } : { text });
+  const call = async () => {
+    const ids = attachments ? await uploadAll(files, uploaded.current) : [];
+    return run(action, ids.length > 0 ? { ...body(), attachment_ids: ids } : body());
+  };
 
   return (
     <form ref={f.formRef} aria-label={title} style={form} noValidate onSubmit={(ev) => {
-      void f.submit(ev, { check, call: () => run(action, body()), ok: onDone, stale: () => {} });
+      void f.submit(ev, {
+        check, call, ok: onDone, stale: () => {},
+        refused: (refusals) => refusals.map((r) => ({ path: isAttachmentRefusal(r) ? "attachments" : r.path, text: r.text }))
+      });
     }}>
       <p ref={f.titleRef} tabIndex={-1} style={formTitle}>{title}</p>
       {f.top((path) => OWN.includes(path))}
@@ -54,6 +65,13 @@ export function TextActionForm({ m, run, onDone, onClose, action, title, label, 
             </select>
           </label>
           {errNode("resolution")}
+        </>
+      )}
+      {attachments && (
+        <>
+          <AttachmentPicker label="Anexos do complemento" files={files} aria={aria("attachments")} disabled={busy}
+            onChange={(next) => { f.clear("attachments"); setFiles(next); }} />
+          {errNode("attachments")}
         </>
       )}
       <FormButtons busy={busy} submit={submit} onClose={onClose} />

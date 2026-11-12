@@ -430,7 +430,8 @@ export function renderModule(active: ModuleId, setActive: (id: ModuleId) => void
     case "caps-panel": return <CapsPanel />;
     case "caps-settings": return <CapsSettings onGoToSecurity={() => setActive("security")} />;
     case "ombudsman-manifestations": return <OmbudsmanManifestations initialId={omb.manifestationId} />;
-    case "ombudsman-new": return <OmbudsmanNew />;
+    case "ombudsman-new":
+      return <OmbudsmanNew onOpenManifestation={(id) => { omb.openManifestation(id); setActive("ombudsman-manifestations"); }} />;
     case "ombudsman-replies": return <OmbudsmanReplies />;
     case "ombudsman-panel": return <OmbudsmanPanel />;
     case "ombudsman-annual-report": return <OmbudsmanAnnualReport />;
