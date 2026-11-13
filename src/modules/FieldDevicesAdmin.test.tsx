@@ -66,4 +66,14 @@ describe("Aparelhos de campo da cidade", () => {
     expect(api.listAdminFieldDevices).toHaveBeenCalledTimes(2);
     expect(api.adminRevokeFieldDevice).toHaveBeenCalledTimes(1);
   });
+
+  it("403 missing_role: a frase exata no painel, que fica aberto, sem reler", async () => {
+    mocked(api.adminRevokeFieldDevice).mockRejectedValue(new ApiError(403, { error: "missing_role" }, "x"));
+    mount();
+    fireEvent.click(await screen.findByRole("button", { name: "Revogar Celular da Joana de Joana ACS" }));
+    confirm();
+    expect(await screen.findByText("seu papel não permite esta ação")).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Confirmar" })).not.toBeNull();
+    expect(api.listAdminFieldDevices).toHaveBeenCalledTimes(1);
+  });
 });

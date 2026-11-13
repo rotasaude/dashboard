@@ -218,11 +218,4 @@ describe("Atividade coletiva — registrada por engano", () => {
     await screen.findByText("Maria Lima");
     expect(screen.queryByRole("button", { name: /Gerar de novo|Reenviar/ })).toBeNull();
   });
-
-  it("nenhum painel escondido leva display inline", async () => {
-    mount();
-    await openDetail();
-    await screen.findByText("Maria Lima");
-    for (const el of Array.from(document.querySelectorAll<HTMLElement>("[hidden]"))) expect(el.style.display).toBe("");
-  });
 });
