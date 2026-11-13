@@ -4,7 +4,7 @@
 // recusa de novo (`collective_activities/rules.rb`). Aqui só se recusa antes o que ele recusaria, com o mesmo `path`.
 // Nenhuma frase repete dado enviado (nome, documento, texto). Os rótulos de "ficha não gerada" ficam em `production.ts`.
 import type {
-  CodeLabel, CollectiveActivityInput, CollectiveDomains, CollectiveField, CollectiveOptions, CollectiveParticipantInput, FieldRule, HomeVisitDomains, QuickPatient, VisitShift
+  CodeLabel, CollectiveActivityInput, CollectiveDomains, CollectiveField, CollectiveOptions, CollectiveParticipantInput, FieldRule, QuickPatient, VisitShift
 } from "./api";
 import { EMPTY_MEASURES, measurementsProblems, parseMeasure, quickPatientProblems, textProblem } from "./homeVisits";
 import type { Problem } from "./pharmacy";
@@ -21,6 +21,16 @@ export const IDENTIFIER_WARNING = "participante sem CPF e sem CNS entra na ficha
 // Q74: aviso, não bloqueio — a regra do api não muda; o que se perde é a ficha.
 export const TYPE_5_6_NOT_GENERATED = "nos tipos 5 e 6, a ficha desta atividade não será gerada enquanto algum participante estiver sem CPF e sem CNS";
 const FICHA_NEEDS_ID_TYPES = [ 5, 6 ];
+
+// Frases da tela (Task 11).
+export const NO_TEAM = "Você não está em nenhuma equipe";
+export const CANNOT_REGISTER_ACTIVITY = "seu CBO não registra atividade coletiva nas suas equipes";
+export const NO_CNS_PROFESSIONAL = "sem CNS no cadastro";
+export const OTHER_TEAM_PROFESSIONAL = "fora da equipe";
+export const LIST_MAX_TEXT = (max: number): string => `no máximo ${max} — desmarque um para escolher outro`;
+export const ACTIVITY_SAVED = "Atividade registrada.";
+export const REPLAYED_ACTIVITY = "Esta atividade já estava gravada.";
+export const ACTIVITY_NETWORK_RETRY = "não foi possível confirmar a gravação — tente de novo: a mesma atividade não é gravada duas vezes";
 
 export type ParticipantDraft = (
   | { kind: "patient"; patientId: string; displayName: string | null; hasCpf: boolean; hasCns: boolean }
@@ -72,6 +82,25 @@ export const needsProcedure = (domains: CollectiveDomains, practices: number[]):
   practices.some((p) => domains.rules.procedure_practices.includes(p));
 export const smokingAllowed = (domains: CollectiveDomains, practices: number[]): boolean =>
   practices.some((p) => domains.rules.smoking_practices.includes(p));
+
+// Toda troca de tipo, tema de reunião ou prática passa por aqui: o que a regra deixou de permitir sai do rascunho,
+// para a tela nunca guardar marcado o que não mostra (e o corpo levar só o que se vê).
+export function pruneActivityDraft(domains: CollectiveDomains, draft: ActivityDraft): ActivityDraft {
+  const type = draft.activityType;
+  const keep = (field: CollectiveField, list: number[]): number[] => (fieldRule(domains, type, field) === "forbidden" ? [] : list);
+  const meetingTopics = keep("meeting_topics", draft.meetingTopics);
+  const topics = offeredHealthTopics(domains, { activityType: type, meetingTopics }).map((t) => t.code);
+  const practices = offeredPractices(domains, type).map((p) => p.code);
+  const healthPractices = keep("health_practices", draft.healthPractices).filter((c) => practices.includes(c));
+  const smoking = smokingAllowed(domains, healthPractices);
+  return {
+    ...draft, meetingTopics, targetAudience: keep("target_audience", draft.targetAudience),
+    healthTopics: draft.healthTopics.filter((c) => topics.includes(c)), healthPractices,
+    procedureCode: needsProcedure(domains, healthPractices) ? draft.procedureCode : "",
+    participants: fieldRule(domains, type, "participants") === "forbidden"
+      ? [] : draft.participants.map((p) => (smoking || p.smoking === null ? p : { ...p, smoking: null }))
+  };
+}
 
 // ── Participantes ──
 export const participantWithoutId = (p: ParticipantDraft): boolean =>
@@ -169,7 +198,7 @@ export function activityProblems(draft: ActivityDraft, ctx: { options: Collectiv
   const seen: string[][] = [];
   const meas = domains.rules.participant_measurements;
   // Só peso e altura têm faixa aqui; a checagem da visita ignora as chaves em branco.
-  const asVisitDomains = { measurement_ranges: { weight_kg: meas.weight_kg, height_cm: meas.height_cm } } as unknown as HomeVisitDomains;
+  const ranges = { measurement_ranges: { weight_kg: meas.weight_kg, height_cm: meas.height_cm } };
   draft.participants.forEach((p, i) => {
     const at = `participants[${i}]`;
     const keys = participantKeys(p);
@@ -177,7 +206,7 @@ export function activityProblems(draft: ActivityDraft, ctx: { options: Collectiv
     seen.push(keys);
     if (p.kind === "new") for (const q of quickPatientProblems(p.patient, today)) add(`${at}.${q.path}`, q.text);
     // Medidas: a mesma checagem da visita (faixa e casas, vírgula ou ponto).
-    for (const m of measurementsProblems(asVisitDomains, { ...EMPTY_MEASURES, weight_kg: p.weight, height_cm: p.height })) {
+    for (const m of measurementsProblems(ranges, { ...EMPTY_MEASURES, weight_kg: p.weight, height_cm: p.height })) {
       add(`${at}.${m.path}`, m.text);
     }
     if (p.smoking && !smokingAllowed(domains, draft.healthPractices)) add(`${at}.smoking`, "tabagismo só com as práticas do Programa Nacional de Controle do Tabagismo");

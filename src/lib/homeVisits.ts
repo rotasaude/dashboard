@@ -212,7 +212,10 @@ const filled = (raw: string | undefined): boolean => (raw ?? "").trim() !== "";
 const rangeText = (min: number, max: number): string => `de ${String(min).replace(".", ",")} a ${String(max).replace(".", ",")}`;
 
 // Faixa, casas (a tela recusa o excesso que o api arredondaria, Q72) e os pares pressão e glicemia.
-export function measurementsProblems(domains: HomeVisitDomains, m: MeasureDraft): Problem[] {
+// A atividade coletiva passa só as faixas de peso e altura (as outras chaves vêm em branco e não são lidas).
+export function measurementsProblems(
+  domains: { measurement_ranges: Partial<HomeVisitDomains["measurement_ranges"]>; tipo_glicemia?: HomeVisitDomains["tipo_glicemia"] }, m: MeasureDraft
+): Problem[] {
   const out: Problem[] = [];
   const at = (key: MeasurementKey | "glucose_type", text: string) => out.push({ path: `measurements.${key}`, text });
   for (const key of MEASUREMENT_KEYS) {
@@ -220,6 +223,7 @@ export function measurementsProblems(domains: HomeVisitDomains, m: MeasureDraft)
     const range = domains.measurement_ranges[key];
     const value = parseMeasure(m[key]);
     if (value === null || value === undefined) { at(key, `${MEASURE_LABEL[key]}: informe um número`); continue; }
+    if (!range) continue;
     if (value < range.min || value > range.max) { at(key, `${MEASURE_LABEL[key]}: ${rangeText(range.min, range.max)}`); continue; }
     if (decimalsOf(m[key]) > range.decimals) {
       at(key, range.decimals === 0 ? `${MEASURE_LABEL[key]}: só número inteiro` : `${MEASURE_LABEL[key]}: até ${range.decimals} ${range.decimals === 1 ? "casa decimal" : "casas decimais"}`);
@@ -230,7 +234,7 @@ export function measurementsProblems(domains: HomeVisitDomains, m: MeasureDraft)
   if (filled(m.glucose_mg_dl) && !filled(m.glucose_type)) at("glucose_type", "escolha o tipo da glicemia");
   if (filled(m.glucose_type)) {
     if (!filled(m.glucose_mg_dl)) at("glucose_mg_dl", "informe também a glicemia");
-    if (!domains.tipo_glicemia.some((g) => String(g.code) === m.glucose_type.trim())) at("glucose_type", "escolha o tipo da glicemia da lista");
+    if (!(domains.tipo_glicemia ?? []).some((g) => String(g.code) === m.glucose_type.trim())) at("glucose_type", "escolha o tipo da glicemia da lista");
   }
   return out;
 }

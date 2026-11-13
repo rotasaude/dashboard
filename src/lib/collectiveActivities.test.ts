@@ -3,7 +3,8 @@ import type { QuickPatient } from "./api";
 import { COLLECTIVE_DOMAINS, TODAY24B, options } from "../test/homeVisitFixtures";
 import {
   IDENTIFIER_WARNING, TYPE_5_6_NOT_GENERATED, activityBody, activityProblems, activityWarnings, alteredCount, emptyActivityDraft, fieldRule,
-  healthTopicsAllowed, needsProcedure, offeredHealthTopics, offeredPractices, participantWithoutId, smokingAllowed, type ActivityDraft, type ParticipantDraft
+  healthTopicsAllowed, needsProcedure, offeredHealthTopics, offeredPractices, participantWithoutId, pruneActivityDraft, smokingAllowed, type ActivityDraft,
+  type ParticipantDraft
 } from "./collectiveActivities";
 
 const base = (o: Partial<ActivityDraft> = {}): ActivityDraft => ({ ...emptyActivityDraft(TODAY24B), teamId: "t1", shift: 1, ...o });
@@ -157,5 +158,52 @@ describe("activityBody", () => {
     expect(body.participants).toEqual([ { new_patient: fresh.kind === "new" ? fresh.patient : null, duplicates_reviewed: true, smoking: { quit: false, dropped_out: true } } ]);
     const noProc = activityBody(base({ activityType: 6, place: { kind: "text", text: "x" }, participantsCount: "3", targetAudience: [ 10 ], healthPractices: [ 20 ], procedureCode: "0101050046" }), COLLECTIVE_DOMAINS);
     expect(noProc).not.toHaveProperty("procedure_code");
+  });
+});
+
+// Revisão da Task 3: o limite e a regra vêm do dado; tipo sem regra; corpo com participantes proibidos.
+describe("regras trocadas no dado", () => {
+  const d = COLLECTIVE_DOMAINS;
+  it("list_max trocado: o limite segue o dado", () => {
+    const tight = { ...d, rules: { ...d.rules, list_max: { ...d.rules.list_max, target_audience: 1 } } };
+    expect(paths(ok({ targetAudience: [ 10, 12 ] }))).toEqual([]);
+    expect(paths(ok({ targetAudience: [ 10, 12 ] }), options({ domains: tight }))).toEqual([ "target_audience" ]);
+  });
+  it("tipo sem regra no by_type: tudo opcional", () => {
+    const { "4": _four, ...rest } = d.rules.by_type;
+    const noFour = { ...d, rules: { ...d.rules, by_type: rest } };
+    expect(fieldRule(noFour, 4, "target_audience")).toBe("optional");
+    expect(paths(ok({ targetAudience: [], healthTopics: [] }), options({ domains: noFour }))).toEqual([]);
+    expect(paths(ok({ targetAudience: [], healthTopics: [] }))).toEqual([ "target_audience", "health_topics" ]);
+  });
+  it("tipo que proíbe participantes: o corpo vai sem a lista", () => {
+    const noList = { ...d, rules: { ...d.rules, by_type: { ...d.rules.by_type, "4": { ...d.rules.by_type["4"], participants: "forbidden" as const } } } };
+    expect(activityBody(ok({ participantsCount: "1", participants: [ maria ] }), noList).participants).toEqual([]);
+    expect(paths(ok({ participantsCount: "1", participants: [ maria ] }), options({ domains: noList }))).toEqual([ "participants" ]);
+  });
+});
+
+describe("pruneActivityDraft", () => {
+  const d = COLLECTIVE_DOMAINS;
+  it("trocar o tipo limpa o que ficou proibido ou fora do tipo", () => {
+    const six = base({ activityType: 6, targetAudience: [ 10 ], healthTopics: [ 4 ], healthPractices: [ 2, 25, 30 ], procedureCode: "0101050046",
+      participants: [ { ...maria, smoking: { quit: true, dropped_out: false } } ] });
+    const toOne = pruneActivityDraft(d, { ...six, activityType: 1 });
+    expect(toOne).toMatchObject({ targetAudience: [], healthTopics: [], healthPractices: [], procedureCode: "" });
+    expect(toOne.participants[0].smoking).toBeNull();
+    const toFive = pruneActivityDraft(d, { ...six, activityType: 5 });
+    expect(toFive).toMatchObject({ targetAudience: [ 10 ], healthTopics: [ 4 ], healthPractices: [ 25, 30 ], procedureCode: "0101050046" });
+    expect(toFive.participants[0].smoking).toEqual({ quit: true, dropped_out: false });
+  });
+  it("tirar o tema de reunião da exceção limpa os temas para saúde; sem a 30, o procedimento", () => {
+    const meeting = base({ activityType: 1, meetingTopics: [ 6 ], healthTopics: [ 4 ] });
+    expect(pruneActivityDraft(d, meeting).healthTopics).toEqual([ 4 ]);
+    expect(pruneActivityDraft(d, { ...meeting, meetingTopics: [ 1 ] }).healthTopics).toEqual([]);
+    expect(pruneActivityDraft(d, base({ activityType: 5, healthPractices: [ 20 ], procedureCode: "0101050046" })).procedureCode).toBe("");
+  });
+  it("participantes proibidos pela regra saem do rascunho", () => {
+    const noList = { ...d, rules: { ...d.rules, by_type: { ...d.rules.by_type, "4": { ...d.rules.by_type["4"], participants: "forbidden" as const } } } };
+    expect(pruneActivityDraft(noList, ok({ participants: [ maria ] })).participants).toEqual([]);
+    expect(pruneActivityDraft(d, ok({ participants: [ maria ] })).participants).toEqual([ maria ]);
   });
 });
