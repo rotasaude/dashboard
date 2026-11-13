@@ -25,7 +25,8 @@ export type IdempotentSend<B, T> = {
 
 const NO_EVENT = { preventDefault: () => {} } as FormEvent;
 
-export function useIdempotentSubmit() {
+// `networkText`: a frase do envio pendurado (a da visita, por padrão; a atividade passa a dela).
+export function useIdempotentSubmit(opts: { networkText?: string } = {}) {
   const f = useFormProblems({ refusals: (err) => homeVisitRefusals(err).map((r) => ({ ...r, participantIndex: null })), isStale: () => false });
   const id = useClientUuid();
   const lock = useWriteLock();
@@ -55,7 +56,7 @@ export function useIdempotentSubmit() {
       },
       ok: (result) => { pending.current = null; setLocked(false); id.renew(); send.ok(result); },
       refused: (refusals) => {
-        if (network.current) return [ { path: "", text: NETWORK_RETRY } ];
+        if (network.current) return [ { path: "", text: opts.networkText ?? NETWORK_RETRY } ];
         return send.refused ? send.refused(refusals, lastErr.current) : refusals.map((r) => ({ path: r.path, text: r.text }));
       }
     });
