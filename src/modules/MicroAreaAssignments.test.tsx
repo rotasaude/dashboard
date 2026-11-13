@@ -75,7 +75,7 @@ describe("Atribuição de microáreas", () => {
     expect(api.createFieldAssignment).not.toHaveBeenCalled();
   });
 
-  it("409 already_assigned: frase e uma releitura, sem reenvio", async () => {
+  it("409 already_assigned: frase e uma releitura, sem reenvio; o painel fica aberto para outra escolha", async () => {
     reject(api.createFieldAssignment, 409, "already_assigned");
     mount();
     await fillAssign();
@@ -83,6 +83,8 @@ describe("Atribuição de microáreas", () => {
     expect(await screen.findByText(HOME_VISIT_ERRORS.already_assigned)).not.toBeNull();
     await waitFor(() => expect(api.listFieldAssignments).toHaveBeenCalledTimes(2));
     expect(api.createFieldAssignment).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "Confirmar" })).not.toBeNull();
+    expect(screen.getByLabelText("Microárea")).not.toBeNull();
   });
 
   it("422 cbo_not_allowed: frase do profissional escolhido, não a do 403", async () => {
@@ -129,14 +131,21 @@ describe("Atribuição de microáreas", () => {
     await waitFor(() => expect(api.listFieldAssignments).toHaveBeenCalledTimes(2));
   });
 
-  it("409 assignment_already_ended: frase e uma releitura", async () => {
+  it("409 assignment_already_ended: o painel fecha, a frase fica fora dele e a lista é relida uma vez", async () => {
     reject(api.endFieldAssignment, 409, "assignment_already_ended");
     mount();
     fireEvent.click(await screen.findByRole("button", { name: "Encerrar atribuição de Rui TACS na microárea 02" }));
     confirm();
     expect(await screen.findByText(HOME_VISIT_ERRORS.assignment_already_ended)).not.toBeNull();
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Confirmar" })).toBeNull());
+    expect(screen.queryByText(/deixa de baixar esta microárea/)).toBeNull();
     await waitFor(() => expect(api.listFieldAssignments).toHaveBeenCalledTimes(2));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(api.listFieldAssignments).toHaveBeenCalledTimes(2);
     expect(api.endFieldAssignment).toHaveBeenCalledTimes(1);
+    // A frase sai quando outra ação começa.
+    fireEvent.click(screen.getByRole("button", { name: "Atribuir microárea" }));
+    expect(screen.queryByText(HOME_VISIT_ERRORS.assignment_already_ended)).toBeNull();
   });
 
   it("cancelar fecha o painel sem gravar; só um painel por vez", async () => {

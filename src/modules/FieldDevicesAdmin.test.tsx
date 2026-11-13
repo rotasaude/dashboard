@@ -53,13 +53,17 @@ describe("Aparelhos de campo da cidade", () => {
     expect(api.getHomeVisitContext).not.toHaveBeenCalled();
   });
 
-  it("409 device_already_revoked: frase e uma releitura; missing_role tem frase", async () => {
+  it("409 device_already_revoked: o painel fecha, a frase fica fora dele e a lista é relida uma vez", async () => {
     mocked(api.adminRevokeFieldDevice).mockRejectedValue(new ApiError(409, { error: "device_already_revoked" }, "x"));
     mount();
     fireEvent.click(await screen.findByRole("button", { name: "Revogar Celular da Joana de Joana ACS" }));
     confirm();
     expect(await screen.findByText(HOME_VISIT_ERRORS.device_already_revoked)).not.toBeNull();
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Confirmar" })).toBeNull());
+    expect(screen.queryByRole("region", { name: "Revogar aparelho" })).toBeNull();
     await waitFor(() => expect(api.listAdminFieldDevices).toHaveBeenCalledTimes(2));
-    expect(HOME_VISIT_ERRORS.missing_role).not.toBe("");
+    await new Promise((r) => setTimeout(r, 0));
+    expect(api.listAdminFieldDevices).toHaveBeenCalledTimes(2);
+    expect(api.adminRevokeFieldDevice).toHaveBeenCalledTimes(1);
   });
 });

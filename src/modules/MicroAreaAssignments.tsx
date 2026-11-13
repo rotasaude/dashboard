@@ -2,6 +2,8 @@
 // Tela "Atribuição de microáreas" (módulo 24b, F-24.17, decisão 6A): só o enfermeiro da equipe (`can_assign`) vê a lista ativa e
 // atribui ou encerra. As duas ações pedem step-up (`SensitiveAction`) e uma por vez (`writeLock`). A lista é sem pessoa do cidadão
 // (`STATIC_QUERY`) e relida depois de cada ação; `already_assigned` e `assignment_already_ended` releem uma vez e nunca reenviam.
+// `assignment_already_ended` fecha o painel (a ação deixou de caber) e a frase fica fora dele; `already_assigned` deixa o painel
+// aberto, para escolher outra microárea ou outro profissional.
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -68,6 +70,8 @@ function TeamAssignments({ team, onGoToSecurity }: { team: HomeVisitTeam; onGoTo
   const [ action, setAction ] = useState<Action | null>(null);
   const [ microArea, setMicroArea ] = useState("");
   const [ professional, setProfessional ] = useState("");
+  // A frase de uma ação que deixou de caber (o painel já fechou).
+  const [ message, setMessage ] = useState<string | null>(null);
 
   const reread = () => queryClient.refetchQueries({ queryKey: key });
   // Uma releitura só, sem reenviar a gravação, quando o api diz que a lista que a tela tinha estava velha.
@@ -87,8 +91,13 @@ function TeamAssignments({ team, onGoToSecurity }: { team: HomeVisitTeam; onGoTo
     try { await createFieldAssignment({ micro_area_id: microArea, professional_id: professional }); } catch (err) { await rereadIfStale(err); throw err; }
   });
   const end = (a: FieldAssignment) => lock.run(async () => {
-    try { await endFieldAssignment(a.id); } catch (err) { await rereadIfStale(err); throw err; }
+    try { await endFieldAssignment(a.id); } catch (err) {
+      if (errorCode(err) === "assignment_already_ended") { setMessage(homeVisitError(err)); close(); }
+      await rereadIfStale(err);
+      throw err;
+    }
   });
+  const open = (a: Action) => { setMessage(null); setAction(a); };
 
   const cols: Column<FieldAssignment>[] = [
     { label: "Microárea", w: "1.2fr", card: "title", render: (a) => <strong>{`${a.micro_area.code} · ${a.micro_area.name}`}</strong> },
@@ -99,7 +108,7 @@ function TeamAssignments({ team, onGoToSecurity }: { team: HomeVisitTeam; onGoTo
     { label: "", w: "auto", card: "actions", render: (a) => (
       <button type="button" disabled={lock.busy || action !== null} style={lock.busy || action ? disabledButtonStyle : secondaryButtonStyle}
         aria-label={`Encerrar atribuição de ${a.professional.name} na microárea ${a.micro_area.code}`}
-        onClick={() => setAction({ kind: "end", assignment: a })}>Encerrar</button>
+        onClick={() => open({ kind: "end", assignment: a })}>Encerrar</button>
     ) }
   ];
 
@@ -107,7 +116,7 @@ function TeamAssignments({ team, onGoToSecurity }: { team: HomeVisitTeam; onGoTo
     <div style={stack}>
       {!action && (
         <div>
-          <button type="button" disabled={lock.busy} style={lock.busy ? disabledButtonStyle : buttonStyle} onClick={() => setAction({ kind: "assign" })}>Atribuir microárea</button>
+          <button type="button" disabled={lock.busy} style={lock.busy ? disabledButtonStyle : buttonStyle} onClick={() => open({ kind: "assign" })}>Atribuir microárea</button>
         </div>
       )}
       {action?.kind === "assign" && (
@@ -139,6 +148,7 @@ function TeamAssignments({ team, onGoToSecurity }: { team: HomeVisitTeam; onGoTo
           description={END_EFFECT} requiresStepUp onGoToSecurity={onGoToSecurity} run={() => end(action.assignment)} onDone={done} onCancel={close}
           translateError={translate} />
       )}
+      {message && <p role="alert" style={alert}>{message}</p>}
       {list.isError && <p role="alert" style={alert}>{homeVisitError(list.error)}</p>}
       {!list.data && !list.isError && <p role="status" style={muted}>Carregando…</p>}
       {list.data && <DataTable cols={cols} rows={list.data.items} rowKey={(a) => a.id} label="Atribuições ativas" empty="nenhuma microárea atribuída nesta equipe" />}

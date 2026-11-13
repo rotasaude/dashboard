@@ -1,6 +1,7 @@
 // src/modules/FieldDevicesAdmin.tsx
 // Tela "Aparelhos de campo da cidade" (módulo 24b, F-24.17; Q62): o administrador municipal lista os aparelhos da cidade, filtra por
 // pessoa (as do próprio resultado; `user_id` na URL do api) e revoga com step-up. Nunca depende do interruptor `home_visits`.
+// 409 `device_already_revoked`: a ação deixou de caber — o painel fecha, a frase fica fora dele e a lista é relida uma vez.
 import { useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { adminRevokeFieldDevice, listAdminFieldDevices, type AdminFieldDevice } from "../lib/api";
@@ -26,6 +27,7 @@ function Body({ onGoToSecurity }: { onGoToSecurity?(): void }) {
   const queryClient = useQueryClient();
   const [ userId, setUserId ] = useState("");
   const [ revoking, setRevoking ] = useState<AdminFieldDevice | null>(null);
+  const [ message, setMessage ] = useState<string | null>(null);
   const list = useQuery({ queryKey: [ FD_KEY, "admin", userId ], queryFn: () => listAdminFieldDevices(userId || undefined), ...STATIC_QUERY });
   // As pessoas do filtro vêm do próprio resultado e ficam, para o filtro não encolher depois de escolher uma.
   const people = useRef(new Map<string, string>());
@@ -36,7 +38,10 @@ function Body({ onGoToSecurity }: { onGoToSecurity?(): void }) {
     try {
       await adminRevokeFieldDevice(d.id);
     } catch (err) {
-      if (homeVisitRefusals(err)[0].code === "device_already_revoked") await reread();
+      if (homeVisitRefusals(err)[0].code === "device_already_revoked") {
+        setMessage(homeVisitError(err)); setRevoking(null);
+        await reread();
+      }
       throw err;
     }
   }
@@ -49,7 +54,7 @@ function Body({ onGoToSecurity }: { onGoToSecurity?(): void }) {
     { label: "Situação", w: "1.2fr", render: deviceStatusLabel },
     {
       label: "Ações", w: "9rem", card: "actions",
-      render: (d) => (d.status === "revoked" ? null : <ActionButton variant="danger" onClick={() => setRevoking(d)}>{`Revogar ${d.name} de ${d.user.name}`}</ActionButton>)
+      render: (d) => (d.status === "revoked" ? null : <ActionButton variant="danger" onClick={() => { setMessage(null); setRevoking(d); }}>{`Revogar ${d.name} de ${d.user.name}`}</ActionButton>)
     }
   ];
   const options = [ ...people.current.entries() ].sort((a, b) => a[1].localeCompare(b[1], "pt-BR"));
@@ -75,6 +80,7 @@ function Body({ onGoToSecurity }: { onGoToSecurity?(): void }) {
           translateError={homeVisitError}
         />
       )}
+      {message && <p role="alert" style={alert}>{message}</p>}
       {list.isError ? <p role="alert" style={alert}>{homeVisitError(list.error)}</p>
         : !list.data ? <p role="status" style={muted}>Carregando…</p>
         : <DataTable label="Aparelhos de campo da cidade" cols={cols} rows={list.data} rowKey={(d) => d.id} empty="nenhum aparelho na cidade" />}
