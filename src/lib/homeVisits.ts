@@ -33,7 +33,7 @@ export const NETWORK_RETRY = "não foi possível confirmar a gravação — tent
 export const DISCARD_UNCERTAIN_VISIT = "a visita pode já ter sido gravada — ao descartar, a folha é relida; confira antes de registrar de novo";
 export const UNCERTAIN_VISIT_REREAD = "a visita pode já ter sido gravada — a folha foi relida; confira antes de registrar de novo";
 // Sem equipe visível para quem usa (as telas de equipe da visita e a atividade coletiva).
-export const NO_TEAM = "nenhuma equipe encontrada para você";
+export const NO_TEAM = "Você não está em nenhuma equipe";
 // Uma gravação por vez na mesma tela (fechar o dia, retirar, registrar).
 export const WRITE_RUNNING = "aguarde: outra gravação desta tela está em curso";
 // Pré-voo 4.7.6 (ledger:L61): TACS que registra, mas ainda sem microárea atribuída.

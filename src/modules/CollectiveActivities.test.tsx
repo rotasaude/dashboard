@@ -80,7 +80,9 @@ describe("Atividade coletiva — lista", () => {
   it("sem equipe: a frase e nenhuma leitura de lista", async () => {
     mocked(api.getCollectiveOptions).mockResolvedValue(options({ teams: [] }));
     mount();
-    expect(await screen.findByText(NO_TEAM)).not.toBeNull();
+    // Q57(b), contrato §16: o texto literal, o mesmo em todas as telas do módulo.
+    expect(NO_TEAM).toBe("Você não está em nenhuma equipe");
+    expect(await screen.findByText("Você não está em nenhuma equipe")).not.toBeNull();
     expect(api.listCollectiveActivities).not.toHaveBeenCalled();
   });
 
