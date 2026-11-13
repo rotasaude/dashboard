@@ -8,7 +8,7 @@
 // `restart`: o 409 `duplicate_suspected` da gravação reabre com a frase e os candidatos do 409, sem nova busca.
 // `refusal`: recusa do api para a pessoa digitada (`new_patient.<campo>`) ou para a escolhida (`patient_id`).
 // `unidentifiedIds`: cadastros provisórios da urgência — o api os recusa (`patient_unidentified`), a tela nem os oferece.
-import { useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useMutation } from "@tanstack/react-query";
 import {
   findVisitDuplicates, lookupVisitPerson, type PatientSex, type PersonScope, type QuickPatient, type VisitCandidate, type VisitPerson
@@ -75,6 +75,10 @@ function ByDocument({ scope, unidentifiedIds, onChoose, onMissing, onNoDocument,
   const [ problem, setProblem ] = useState<string | null>(null);
   const [ found, setFound ] = useState<VisitPerson | null>(null);
   const seq = useRef(0);
+  // A busca abandonada (troca de modo, Cancelar, desmontagem) nunca reabre o registro rápido com o documento dela:
+  // o `onSuccess` da mutação roda mesmo depois de desmontar, então a resposta velha é descartada pelo `seq`.
+  useEffect(() => () => { seq.current += 1; }, []);
+  const abandon = (go: () => void) => () => { seq.current += 1; go(); };
   const lookup = useMutation({
     gcTime: 0,
     mutationFn: ({ digits }: { digits: string; n: number }) =>
@@ -110,8 +114,8 @@ function ByDocument({ scope, unidentifiedIds, onChoose, onMissing, onNoDocument,
       </label>
       <div style={row}>
         <button type="submit" style={lookup.isPending ? disabledButtonStyle : buttonStyle} disabled={lookup.isPending}>Buscar</button>
-        <button type="button" style={secondaryButtonStyle} onClick={onNoDocument}>Não tem o documento</button>
-        <button type="button" style={secondaryButtonStyle} onClick={onCancel}>Cancelar</button>
+        <button type="button" style={secondaryButtonStyle} onClick={abandon(onNoDocument)}>Não tem o documento</button>
+        <button type="button" style={secondaryButtonStyle} onClick={abandon(onCancel)}>Cancelar</button>
       </div>
       {problem && <p role="alert" style={alert}>{problem}</p>}
       {found && (

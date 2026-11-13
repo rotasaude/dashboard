@@ -170,6 +170,32 @@ describe("PersonPick", () => {
     expect(screen.getByLabelText("Motivo de não ter CPF").getAttribute("aria-invalid")).toBe("true");
   });
 
+  it("busca pendente abandonada ('Não tem o documento' ou 'Cancelar') nunca reabre o registro rápido com o documento", async () => {
+    let resolve!: (p: null) => void;
+    mocked(api.lookupVisitPerson).mockReturnValue(new Promise((r) => { resolve = r; }));
+    const onCancel = vi.fn();
+    mount({ onCancel });
+    typeIn("CPF ou CNS", "52998224725");
+    fireEvent.click(screen.getByRole("button", { name: "Buscar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Não tem o documento" }));
+    resolve(null);
+    await waitFor(() => expect(api.lookupVisitPerson).toHaveBeenCalledTimes(1));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(screen.queryByLabelText("CNS (opcional)")).toBeNull();
+    expect(screen.getByRole("button", { name: "Buscar possíveis duplicados" })).not.toBeNull();
+
+    cleanup();
+    mocked(api.lookupVisitPerson).mockReturnValue(new Promise((r) => { resolve = r; }));
+    mount({ onCancel });
+    typeIn("CPF ou CNS", "52998224725");
+    fireEvent.click(screen.getByRole("button", { name: "Buscar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+    expect(onCancel).toHaveBeenCalledTimes(1);
+    resolve(null);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(screen.queryByLabelText("CNS (opcional)")).toBeNull();
+  });
+
   it("pessoa sem identificação (urgência) não é escolhível e mostra a frase", async () => {
     mocked(api.lookupVisitPerson).mockResolvedValue(person({ patient_id: "pa5" }));
     const onChoose = vi.fn();
