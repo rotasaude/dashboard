@@ -12,7 +12,8 @@ import { buttonStyle, inputStyle, secondaryButtonStyle } from "../../components/
 import { alert, fieldLabel, form, row } from "../exams/styles";
 
 export interface QuickRefusal { path: string; text: string }
-export type QuickInitial = Partial<Pick<QuickPatient, "full_name" | "birth_date" | "mother_name" | "cpf" | "cns">>;
+// Com `sex` e `no_cpf_reason`, a pessoa digitada volta inteira quando o api recusa um campo dela (Q49/Q71).
+export type QuickInitial = Partial<Pick<QuickPatient, "full_name" | "birth_date" | "sex" | "mother_name" | "cpf" | "no_cpf_reason" | "cns">>;
 
 const PREFIX = "new_patient.";
 
@@ -21,10 +22,10 @@ export function QuickPatientForm({ initial, today, refusal, onDone, onCancel }: 
 }) {
   const [ fullName, setFullName ] = useState(initial.full_name ?? "");
   const [ birth, setBirth ] = useState(initial.birth_date ?? "");
-  const [ sex, setSex ] = useState("");
+  const [ sex, setSex ] = useState<string>(initial.sex ?? "");
   const [ mother, setMother ] = useState(initial.mother_name ?? "");
   const [ cpf, setCpf ] = useState(initial.cpf ? maskCpf(initial.cpf) : "");
-  const [ reason, setReason ] = useState("");
+  const [ reason, setReason ] = useState(initial.no_cpf_reason ?? "");
   const [ cns, setCns ] = useState(initial.cns ?? "");
   const [ shown, setShown ] = useState<QuickRefusal | null>(refusal ?? null);
   // A recusa nova do api (o pai troca `refusal`) substitui a mostrada.

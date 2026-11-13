@@ -1,33 +1,39 @@
 // src/modules/HomeVisitDay.tsx
-// Tela "Folha do dia" (módulo 24b, F-24.10): as folhas de hoje da equipe do profissional. A lista de hoje não traz pessoa nem grava
-// trilha; a folha ABERTA com visitas é lida por `getHomeVisitDay` (nominal: `NOMINAL_QUERY`, nunca relida sozinha). Folhas fechadas
-// de hoje aparecem como cartão com a situação da ficha. Releitura só por ação (409, retirada, fechamento), uma vez por vez.
-// A "Nova visita" (Task 7) entra aqui; `start` (atalho do "Quem visitar") é dela. Nada de dado pessoal em URL nem em storage.
-import { useState } from "react";
+// Tela "Folha do dia" (módulo 24b, F-24.10): as folhas de hoje da equipe do profissional e a "Nova visita". A lista de hoje não traz
+// pessoa nem grava trilha; a folha ABERTA com visitas é lida por `getHomeVisitDay` (nominal: `NOMINAL_QUERY`, nunca relida sozinha).
+// Folhas fechadas de hoje aparecem como cartão com a situação da ficha. Releitura só por ação (409, retirada, fechamento), uma vez.
+// "Nova visita" fica acima das folhas (também com "nenhuma folha hoje"); o atalho do "Quem visitar" (`start`, só em memória) abre o
+// formulário já com domicílio e pessoa. Uma gravação por vez na tela (`WriteLockProvider`). Nada de dado pessoal em URL nem em storage.
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { getHomeVisitContext, getHomeVisitDay, listHomeVisitDays, type HomeVisitContext, type HomeVisitDay as ApiDay } from "../lib/api";
 import {
-  HV_CANNOT_REGISTER, HV_CONTEXT_KEY, HV_DAY_KEY, HV_TODAY_KEY, NOMINAL_QUERY, STATIC_QUERY, homeVisitError
+  getHomeVisitContext, getHomeVisitDay, listHomeVisitDays, type HomeVisit, type HomeVisitContext, type HomeVisitDay as ApiDay, type HomeVisitTeam
+} from "../lib/api";
+import {
+  HV_CANNOT_REGISTER, HV_CONTEXT_KEY, HV_DAY_KEY, HV_TODAY_KEY, NOMINAL_QUERY, OTHER_DAY_TEXT, REPLAYED_VISIT, STATIC_QUERY, VISIT_SAVED, homeVisitError
 } from "../lib/homeVisits";
 import { HomeVisitGate } from "./homeVisits/HomeVisitGate";
 import { DaySheet } from "./homeVisits/DaySheet";
+import { VisitForm, type VisitSaved } from "./homeVisits/VisitForm";
+import { WriteLockProvider, useWriteLock } from "./homeVisits/writeLock";
 import type { VisitStart } from "./homeVisits/useVisitHandoff";
 import { EmptyState } from "../components/EmptyState";
 import { ActionButton } from "../components/ActionButton";
-import { fieldLabel, stack, alert, muted } from "./exams/styles";
+import { fieldLabel, stack, alert, muted, okText } from "./exams/styles";
 import { inputStyle } from "../components/formStyles";
 
-export function HomeVisitDay({ onGoToTeam }: { now?: Date; start?: VisitStart | null; onGoToTeam?(): void }) {
+export function HomeVisitDay({ now, start, onGoToTeam }: { now?: Date; start?: VisitStart | null; onGoToTeam?(): void }) {
   return (
     <HomeVisitGate title="Folha do dia" sub="visita domiciliar · visitas de hoje" feature="home_visits" allow={(r) => r.professional}>
-      {() => <DayBody onGoToTeam={onGoToTeam} />}
+      {() => <WriteLockProvider><DayBody now={now} start={start ?? null} onGoToTeam={onGoToTeam} /></WriteLockProvider>}
     </HomeVisitGate>
   );
 }
 
-function DayBody({ onGoToTeam }: { onGoToTeam?(): void }) {
+function DayBody({ now, start, onGoToTeam }: { now?: Date; start: VisitStart | null; onGoToTeam?(): void }) {
   const ctx = useQuery({ queryKey: [ HV_CONTEXT_KEY ], queryFn: getHomeVisitContext, ...STATIC_QUERY });
-  const [ picked, setPicked ] = useState<string | null>(null);
+  const [ picked, setPicked ] = useState<string | null>(start?.teamId ?? null);
+  useEffect(() => { if (start) setPicked(start.teamId); }, [ start ]);
   if (ctx.isError) return <p role="alert" style={alert}>{homeVisitError(ctx.error)}</p>;
   if (!ctx.data) return <p role="status" style={muted}>Carregando…</p>;
   const teams = ctx.data.teams.filter((t) => t.can_register);
@@ -50,22 +56,34 @@ function DayBody({ onGoToTeam }: { onGoToTeam?(): void }) {
           </select>
         </label>
       )}
-      <TodaySheets key={team.id} ctx={ctx.data} teamId={team.id} />
+      <TodaySheets key={team.id} ctx={ctx.data} team={team} now={now} start={start?.teamId === team.id ? start : null} />
     </div>
   );
 }
 
-function TodaySheets({ ctx, teamId }: { ctx: HomeVisitContext; teamId: string }) {
+const upsert = (list: HomeVisit[], v: HomeVisit): HomeVisit[] => (list.some((x) => x.id === v.id) ? list.map((x) => (x.id === v.id ? v : x)) : [ ...list, v ]);
+
+function TodaySheets({ ctx, team, now, start }: { ctx: HomeVisitContext; team: HomeVisitTeam; now?: Date; start: VisitStart | null }) {
   const queryClient = useQueryClient();
-  const listKey = [ HV_TODAY_KEY, teamId, ctx.today ];
+  const lock = useWriteLock();
+  const listKey = [ HV_TODAY_KEY, team.id, ctx.today ];
   const days = useQuery({
     queryKey: listKey,
-    queryFn: () => listHomeVisitDays({ team_id: teamId, from: ctx.today, to: ctx.today }),
+    queryFn: () => listHomeVisitDays({ team_id: team.id, from: ctx.today, to: ctx.today }),
     ...STATIC_QUERY
   });
+  // O formulário aberto (com o atalho que o abriu) e a frase do último registro.
+  const [ form, setForm ] = useState<{ start: VisitStart | null; n: number } | null>(start ? { start, n: 1 } : null);
+  const [ saved, setSaved ] = useState<string | null>(null);
+  // Cada atalho abre o formulário uma vez; voltar à tela sem atalho novo não reabre.
+  const consumed = useRef<VisitStart | null>(start);
+  useEffect(() => {
+    if (start && start !== consumed.current) { consumed.current = start; setSaved(null); setForm((f) => ({ start, n: (f?.n ?? 0) + 1 })); }
+  }, [ start ]);
+
   if (days.isError) return <p role="alert" style={alert}>{homeVisitError(days.error)}</p>;
   if (!days.data) return <p role="status" style={muted}>Carregando…</p>;
-  if (days.data.items.length === 0) return <EmptyState title="nenhuma folha hoje — a primeira visita abre a folha" />;
+  const items = days.data.items;
 
   // Releitura única, por ação: a folha e a lista de hoje. Com a folha devolvida pelo api (fechamento) ela é gravada no lugar.
   const changed = (id: string, updated?: ApiDay) => {
@@ -78,18 +96,46 @@ function TodaySheets({ ctx, teamId }: { ctx: HomeVisitContext; teamId: string })
       void queryClient.invalidateQueries({ queryKey: listKey });
     }
   };
+
+  // Depois de gravar (pré-voo 4.7.4): o `day` do POST não traz `visits` e pode ser outra folha. Folha na tela com as visitas no cache →
+  // o cartão entra no cache e os contadores e pendências vêm do `day`, sem reler. Senão → a lista de hoje é relida (sem trilha) e a
+  // frase diz em que folha a visita entrou.
+  function onSaved({ visit, day, replayed }: VisitSaved) {
+    setForm(null);
+    const { visits: _v, ...summary } = day;
+    const cached = queryClient.getQueryData<ApiDay>([ HV_DAY_KEY, day.id ]);
+    if (items.some((d) => d.id === day.id) && cached?.visits) {
+      queryClient.setQueryData<ApiDay>([ HV_DAY_KEY, day.id ], { ...cached, ...summary, visits: upsert(cached.visits, visit) });
+      queryClient.setQueryData(listKey, (old: typeof days.data | undefined) => old && ({ ...old, items: old.items.map((d) => (d.id === day.id ? summary : d)) }));
+      setSaved(replayed ? REPLAYED_VISIT : VISIT_SAVED);
+      return;
+    }
+    void queryClient.invalidateQueries({ queryKey: listKey });
+    setSaved([ replayed ? REPLAYED_VISIT : null, OTHER_DAY_TEXT(day) ].filter(Boolean).join(" "));
+  }
+
   return (
     <div style={stack}>
-      {days.data.items.map((d) => <TodaySheet key={d.id} summary={d} ctx={ctx} onChanged={(u) => changed(d.id, u)} />)}
+      {saved && <p role="status" style={okText}>{saved}</p>}
+      {form ? (
+        <VisitForm key={form.n} team={team} context={ctx} start={form.start} now={now} onSaved={onSaved} onClose={() => setForm(null)} />
+      ) : (
+        <div><ActionButton busy={lock.busy} onClick={() => { setSaved(null); setForm({ start: null, n: Date.now() }); }}>Nova visita</ActionButton></div>
+      )}
+      {items.length === 0
+        ? <EmptyState title="nenhuma folha hoje — a primeira visita abre a folha" />
+        : items.map((d) => <TodaySheet key={d.id} summary={d} ctx={ctx} onChanged={(u) => changed(d.id, u)} />)}
     </div>
   );
 }
 
 function TodaySheet({ summary, ctx, onChanged }: { summary: ApiDay; ctx: HomeVisitContext; onChanged(updated?: ApiDay): void }) {
-  const withVisits = summary.state === "open" && summary.visits_count + summary.withdrawn_count > 0;
+  const open = summary.state === "open";
+  const withVisits = open && summary.visits_count + summary.withdrawn_count > 0;
   const detail = useQuery({ queryKey: [ HV_DAY_KEY, summary.id ], queryFn: () => getHomeVisitDay(summary.id), enabled: withVisits, ...NOMINAL_QUERY });
   if (withVisits && detail.isError) return <p role="alert" style={alert}>{homeVisitError(detail.error)}</p>;
   if (withVisits && !detail.data) return <p role="status" style={muted}>Carregando a folha…</p>;
-  const day = withVisits && detail.data ? detail.data : summary;
+  // Folha aberta sem nenhuma visita: lista vazia (o texto de vazia), sem ler o detalhe.
+  const day = withVisits && detail.data ? detail.data : open ? { ...summary, visits: [] } : summary;
   return <DaySheet day={day} domains={ctx.domains} onChanged={onChanged} />;
 }

@@ -8,6 +8,7 @@ import { homeVisitRefusals, isDayStale, textProblem } from "../../lib/homeVisits
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { FrozenTextNotice } from "../../components/FrozenTextNotice";
 import { useFormProblems } from "../psychosocial/useFormProblems";
+import { useWriteLock } from "./writeLock";
 import { fieldLabel, form, row } from "../exams/styles";
 
 export function WithdrawForm({ visit, onDone, onClose, onStale }: {
@@ -15,12 +16,14 @@ export function WithdrawForm({ visit, onDone, onClose, onStale }: {
 }) {
   const f = useFormProblems({ refusals: (err) => homeVisitRefusals(err).map((r) => ({ ...r, participantIndex: null })), isStale: isDayStale });
   const [ reason, setReason ] = useState("");
+  const lock = useWriteLock();
+  const busy = f.busy || lock.busy;
   const noticeId = f.fid("notice");
   return (
     <form ref={f.formRef} noValidate style={form} aria-label="Retirar visita"
-      onSubmit={(ev) => f.submit(ev, {
+      onSubmit={(ev) => lock.held() ? ev.preventDefault() : f.submit(ev, {
         check: () => { const p = textProblem(reason, { min: 10, max: 500, path: "reason" }); return p ? [ p ] : []; },
-        call: () => withdrawHomeVisit(visit.id, reason.trim()),
+        call: () => lock.run(() => withdrawHomeVisit(visit.id, reason.trim())),
         ok: onDone,
         stale: (text) => onStale(text)
       })}>
@@ -33,9 +36,9 @@ export function WithdrawForm({ visit, onDone, onClose, onStale }: {
       {f.errNode("reason")}
       {f.top((p) => p === "reason")}
       <div style={row}>
-        <button type="submit" aria-disabled={f.busy || undefined} style={f.busy ? disabledButtonStyle : buttonStyle}>Retirar</button>
-        <button type="button" aria-disabled={f.busy || undefined} style={f.busy ? disabledButtonStyle : secondaryButtonStyle}
-          onClick={() => { if (!f.busy) onClose(); }}>Cancelar</button>
+        <button type="submit" aria-disabled={busy || undefined} style={busy ? disabledButtonStyle : buttonStyle}>Retirar</button>
+        <button type="button" aria-disabled={busy || undefined} style={busy ? disabledButtonStyle : secondaryButtonStyle}
+          onClick={() => { if (!busy) onClose(); }}>Cancelar</button>
       </div>
     </form>
   );

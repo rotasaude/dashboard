@@ -6,7 +6,8 @@ import {
   canUseHomeVisits, closedByLabel, dayStateLabel, duplicateParticipantText, emptyVisitDraft, familyVisitNotice, fichaLabel, glucoseTypeLabel,
   homeVisitError, homeVisitRefusals, hvRoles, isDayStale, isNetworkOrServer, isNonResidential, measurementsAllowed, measurementsAnyAllowed,
   measurementsProblems, occurredAt, originLabel, outcomeLabel, parseMeasure, propertyLabel, quickPatientProblems, reasonLabel, reasonsFor,
-  revokedReasonLabel, shiftLabel, shiftPreview, subjectLabel, textProblem, visitBody, visitProblems, whoReasonText, type VisitDraft
+  revokedReasonLabel, shiftLabel, shiftPreview, subjectLabel, textProblem, visitBody, visitProblems, whoReasonText, type VisitDraft,
+  offeredReasons, allowedMeasurements, pruneVisitDraft
 } from "./homeVisits";
 import { GENERATION_REASON } from "./production";
 import {
@@ -298,6 +299,65 @@ describe("visitProblems", () => {
     expect(visitProblems(converted, { ...ctx, household: h }).map((p) => p.path)).toEqual([ "reasons[1]" ]);
     const plain = inHousehold({ subject: "resident", person: { kind: "patient", patientId: "pa1", sex: "female" }, outcome: 1, reasons: [ 11, 5 ] });
     expect(visitProblems(plain, { ...ctx, household: h })).toEqual([]);
+  });
+});
+
+describe("o desfecho segue o dado do domínio (revisão da Task 2)", () => {
+  it("reasons_max e without_person_allowed_reasons mutados mudam a recusa e a oferta", () => {
+    const domains = { ...VISIT_DOMAINS, reasons_max: 2, without_person_allowed_reasons: [ 28 ] };
+    const p = visitProblems(inHousehold({ subject: "none", outcome: 1, reasons: [ 1, 27, 28 ] }), { ...ctx, domains, household: household({ has_active_family: false, families: [] }) });
+    expect(p.find((x) => x.path === "reasons")!.text).toBe("no máximo 2 motivos");
+    expect(p.map((x) => x.path)).toEqual(expect.arrayContaining([ "reasons[0]", "reasons[1]" ]));
+    expect(p.map((x) => x.path)).not.toContain("reasons[2]");
+    expect(reasonsFor(domains, { propertyType: "1", outcome: 1, sex: null, subject: "none", hasActiveFamily: true }).filter((r) => !r.disabled).map((r) => r.code))
+      .toEqual([ 28 ]);
+  });
+
+  it("uma faixa mutada em measurement_ranges muda a recusa", () => {
+    const domains = { ...VISIT_DOMAINS, measurement_ranges: { ...VISIT_DOMAINS.measurement_ranges, systolic: { min: 50, max: 200, decimals: 0 } } };
+    const m = { ...EMPTY_MEASURES, systolic: "250", diastolic: "80" };
+    expect(measurementsProblems(VISIT_DOMAINS, m)).toEqual([]);
+    expect(measurementsProblems(domains, m)).toEqual([ { path: "measurements.systolic", text: "pressão sistólica: de 50 a 200" } ]);
+  });
+
+  it("medida proibida sem o par: só a frase de 'não vale', nunca a do par", () => {
+    const refused = (m: Partial<typeof EMPTY_MEASURES>) =>
+      visitProblems(inHousehold({ subject: "none", outcome: 3, measurements: { ...EMPTY_MEASURES, ...m } }), ctx);
+    expect(refused({ systolic: "120" })).toEqual([ { path: "measurements.systolic", text: "esta medida não vale para esta visita" } ]);
+    expect(refused({ glucose_mg_dl: "110" })).toEqual([ { path: "measurements.glucose_mg_dl", text: "esta medida não vale para esta visita" } ]);
+    expect(refused({ glucose_type: "0" })).toEqual([ { path: "measurements.glucose_type", text: "esta medida não vale para esta visita" } ]);
+  });
+});
+
+describe("oferta e poda do rascunho (Task 7)", () => {
+  const maria = { kind: "patient", patientId: "pa1", sex: "female" } as const;
+  it("offeredReasons usa o sujeito depois da conversão (Q43: o sexo é o do responsável)", () => {
+    const d = inHousehold({ subject: "resident", person: maria, outcome: 1, reasons: [ 29 ] });
+    expect(offeredReasons(VISIT_DOMAINS, d, householdDetail()).find((r) => r.code === 5)!.disabled).toBe("não se aplica a pessoa do sexo masculino");
+    expect(offeredReasons(VISIT_DOMAINS, { ...d, reasons: [] }, householdDetail()).find((r) => r.code === 5)!.disabled).toBeNull();
+    expect(allowedMeasurements(VISIT_DOMAINS, inHousehold({ subject: "none", outcome: 1 }), household()).weight_kg).toBe(false);
+  });
+
+  it("poda: motivo e medida que deixaram de valer saem, com os rótulos do que saiu", () => {
+    const d = inHousehold({ subject: "resident", person: maria, outcome: 1, reasons: [ 29, 11 ],
+      measurements: { ...EMPTY_MEASURES, weight_kg: "70", systolic: "120", diastolic: "80" } });
+    expect(pruneVisitDraft(VISIT_DOMAINS, d, householdDetail())).toEqual({ draft: d, cleared: [] });
+    const refused = pruneVisitDraft(VISIT_DOMAINS, { ...d, outcome: 2 }, householdDetail());
+    expect(refused.draft.reasons).toEqual([]);
+    expect(refused.draft.measurements).toEqual(EMPTY_MEASURES);
+    expect(refused.cleared).toEqual([ "Visita periódica", "Pessoa com hipertensão", "peso (kg)", "pressão sistólica", "pressão diastólica" ]);
+    const none = pruneVisitDraft(VISIT_DOMAINS, { ...d, subject: "none", person: null }, householdDetail());
+    expect(none.draft.reasons).toEqual([]);
+    expect(none.draft.measurements.weight_kg).toBe("");
+    expect(none.draft.measurements.systolic).toBe("120");
+  });
+
+  it("poda: imóvel não residencial limpa pessoa e família", () => {
+    const d = draft({ place: { kind: "no_household", propertyType: "4", microAreaId: "ma1", outOfArea: false }, subject: "resident", person: maria,
+      familyId: null, outcome: 1, reasons: [ 35, 11 ] });
+    const out = pruneVisitDraft(VISIT_DOMAINS, d, null);
+    expect(out.draft).toMatchObject({ subject: null, person: null, familyId: null, reasons: [ 35 ] });
+    expect(out.cleared).toEqual([ "pessoa", "Pessoa com hipertensão" ]);
   });
 });
 

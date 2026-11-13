@@ -2,12 +2,12 @@
 // Uma folha do dia (módulo 24b): cabeçalho (data, "folha N", contagens, situação da ficha), pendências (`blockers`) em linguagem
 // simples, lista de cartões e "Fechar o dia". Reusada pelo detalhe da folha (Task 8). Sem `day.visits` (folha fechada lida pela
 // lista), só o cabeçalho. A folha nunca é relida sozinha: 409 `day_changed`/`day_closed`/`visit_changed` mostra a frase e pede
-// UMA releitura ao pai (`onChanged()`), sem reenviar.
+// UMA releitura ao pai (`onChanged()`), sem reenviar. Uma gravação por vez na tela (`useWriteLock`).
 import { useRef, useState } from "react";
 import { closeHomeVisitDay, type HomeVisit, type HomeVisitDay, type HomeVisitDomains } from "../../lib/api";
 import { fmtDay } from "../../lib/careLines";
 import { fmtHourMinute } from "../../lib/format";
-import { CLOSE_EFFECT, LEDI_EXPORT_OFF, blockerText, closedByLabel, dayStateLabel, fichaLabel, homeVisitRefusals, isDayStale } from "../../lib/homeVisits";
+import { CLOSE_EFFECT, LEDI_EXPORT_OFF, WRITE_RUNNING, blockerText, closedByLabel, dayStateLabel, fichaLabel, homeVisitRefusals, isDayStale } from "../../lib/homeVisits";
 import { useActionMessage } from "../../lib/useActionMessage";
 import { ActionMessage } from "../../components/ActionMessage";
 import { ConfirmButton } from "../../components/ConfirmButton";
@@ -16,12 +16,14 @@ import { Tag } from "../../components/Tag";
 import { box, list as listStyle, muted, row } from "../exams/styles";
 import { VisitCard } from "./VisitCard";
 import { WithdrawForm } from "./WithdrawForm";
+import { useWriteLock } from "./writeLock";
 
 const NO_VISITS = "nenhuma visita nesta folha ainda";
 
 // `onChanged(updated?)`: com a folha devolvida pelo api (fechamento) o pai a grava; sem ela, relê uma vez.
 export function DaySheet({ day, domains, onChanged }: { day: HomeVisitDay; domains: HomeVisitDomains; onChanged(updated?: HomeVisitDay): void }) {
   const msg = useActionMessage();
+  const lock = useWriteLock();
   const [ withdrawing, setWithdrawing ] = useState<string | null>(null);
   const [ closing, setClosing ] = useState(false);
   const sending = useRef(false);
@@ -31,10 +33,10 @@ export function DaySheet({ day, domains, onChanged }: { day: HomeVisitDay; domai
   const byId = new Map((visits ?? []).map((v) => [ v.id, v ]));
 
   async function close() {
-    if (sending.current) return;
+    if (sending.current || lock.held()) return;
     sending.current = true; setClosing(true); msg.start();
     try {
-      const updated = await closeHomeVisitDay(day.id);
+      const updated = await lock.run(() => closeHomeVisitDay(day.id));
       msg.ok("Dia fechado.");
       onChanged(updated);
     } catch (err) {
@@ -79,7 +81,7 @@ export function DaySheet({ day, domains, onChanged }: { day: HomeVisitDay; domai
         <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 10 }}>
           {visits.map((v: HomeVisit) => (
             <li key={v.id} style={{ border: "1px solid var(--rule)", borderRadius: 8, padding: 12, display: "flex", flexDirection: "column", gap: 10 }}>
-              <VisitCard visit={v} domains={domains} busy={closing}
+              <VisitCard visit={v} domains={domains} busy={closing || lock.busy}
                 canWithdraw={open && v.state === "recorded" && v.can_withdraw}
                 onWithdraw={() => { msg.start(); setWithdrawing(v.id); }} />
               {withdrawing === v.id && (
@@ -93,7 +95,7 @@ export function DaySheet({ day, domains, onChanged }: { day: HomeVisitDay; domai
       ))}
 
       {day.own && open && (
-        <div><ConfirmButton label="Fechar o dia" question={CLOSE_EFFECT} onConfirm={close} /></div>
+        <div><ConfirmButton label="Fechar o dia" question={CLOSE_EFFECT} onConfirm={close} disabledReason={lock.busy && !closing ? WRITE_RUNNING : null} /></div>
       )}
     </section>
   );

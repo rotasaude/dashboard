@@ -29,6 +29,15 @@ export const OTHER_DAY_TEXT = (d: { day: string; sequence: number }): string =>
   `Visita registrada na folha de ${fmtDay(d.day)}${d.sequence > 1 ? ` (complementar ${d.sequence})` : ""}`;
 export const CLOSE_EFFECT = "Depois de fechar, as visitas deste dia não mudam e a ficha de visita vai ao e-SUS.";
 export const NETWORK_RETRY = "não foi possível confirmar a gravação — tente de novo: a mesma visita não é gravada duas vezes";
+// Uma gravação por vez na mesma tela (fechar o dia, retirar, registrar).
+export const WRITE_RUNNING = "aguarde: outra gravação desta tela está em curso";
+// Pré-voo 4.7.6 (ledger:L61): TACS que registra, mas ainda sem microárea atribuída.
+export const NO_MICRO_AREA = "nenhuma microárea atribuída a você nesta equipe — o enfermeiro da equipe atribui";
+export const NON_RESIDENTIAL_NO_PERSON = "imóvel não residencial: sem dados de pessoa";
+export const RESPONSIBLE_EXITED = "responsável saiu — troque no Cadastro territorial";
+export const REASONS_MAX_TEXT = (max: number): string => `no máximo ${max} motivos — desmarque um para escolher outro`;
+export const NOTE_HINT = "Observação interna: não vai ao e-SUS nem ao cidadão.";
+export const VISIT_SAVED = "Visita registrada.";
 // Q50: a cidade desligou a exportação LEDI (a ficha sai `not_exported`).
 export const LEDI_EXPORT_OFF = "Exportação para o e-SUS desligada nesta cidade";
 // 422 `cbo_not_allowed` na atribuição de microárea é do profissional ESCOLHIDO (o 403 do mesmo código é de quem pede).
@@ -306,6 +315,44 @@ function effective(domains: HomeVisitDomains, draft: VisitDraft, household?: Dra
   return { subject: draft.subject, hasActiveFamily, sex: null };
 }
 
+// O que a tela oferece agora, já com a conversão em família (Q43): motivos (com o porquê dos indisponíveis) e medidas por chave.
+export function offeredReasons(domains: HomeVisitDomains, draft: VisitDraft, household?: DraftHousehold | null): OfferedReason[] {
+  const eff = effective(domains, draft, household);
+  return reasonsFor(domains, { propertyType: propertyOf(draft, household), outcome: draft.outcome, sex: eff.sex, subject: eff.subject, hasActiveFamily: eff.hasActiveFamily });
+}
+export function allowedMeasurements(domains: HomeVisitDomains, draft: VisitDraft, household?: DraftHousehold | null): Record<MeasurementKey, boolean> {
+  return measurementsAllowed(domains, { propertyType: propertyOf(draft, household), outcome: draft.outcome, subject: effective(domains, draft, household).subject });
+}
+
+// Depois de trocar imóvel, sujeito, pessoa ou desfecho: tira o que deixou de valer (sem perguntar) e diz o quê, por rótulo
+// (nunca dado pessoal). Imóvel não residencial limpa pessoa e família; motivo indisponível ou fora da oferta sai; medida
+// proibida sai (o tipo da glicemia segue a glicemia).
+export function pruneVisitDraft(domains: HomeVisitDomains, draft: VisitDraft, household?: DraftHousehold | null): { draft: VisitDraft; cleared: string[] } {
+  const cleared: string[] = [];
+  let next = draft;
+  const property = propertyOf(draft, household);
+  if (property !== "" && isNonResidential(domains, property) && (draft.person || draft.familyId || (draft.subject && draft.subject !== "none"))) {
+    next = { ...next, subject: null, person: null, familyId: null };
+    cleared.push("pessoa");
+  }
+  const offered = offeredReasons(domains, next, household);
+  const keep = next.reasons.filter((code) => offered.some((r) => r.code === code && !r.disabled));
+  if (keep.length !== next.reasons.length) {
+    cleared.push(...next.reasons.filter((c) => !keep.includes(c)).map((c) => reasonLabel(domains, c)));
+    next = { ...next, reasons: keep };
+  }
+  const allowed = allowedMeasurements(domains, next, household);
+  const measures = { ...next.measurements };
+  let measuresCleared = false;
+  for (const key of [ ...MEASUREMENT_KEYS, "glucose_type" as const ]) {
+    const ok = key === "glucose_type" ? allowed.glucose_mg_dl : allowed[key];
+    if (!ok && filled(measures[key])) { measures[key] = ""; cleared.push(MEASURE_LABEL[key]); measuresCleared = true; }
+  }
+  if (measuresCleared) next = { ...next, measurements: measures };
+  return { draft: cleared.length === 0 ? draft : next, cleared };
+}
+export const prunedText = (cleared: string[]): string => `Retirado por não valer para esta visita: ${cleared.join(", ")}.`;
+
 export type VisitContext = { domains: HomeVisitDomains; today: string; minDate: string; team: HomeVisitTeam; household?: DraftHousehold | null; now?: Date };
 
 // Code points depois do `trim` (o api conta assim).
@@ -377,7 +424,10 @@ export function visitProblems(draft: VisitDraft, ctx: VisitContext): Problem[] {
       if (filled(draft.measurements[key]) && !allowed[key]) { add(`measurements.${key}`, "esta medida não vale para esta visita"); refused.add(key); }
     }
     if (filled(draft.measurements.glucose_type) && !allowed.glucose_mg_dl) { add("measurements.glucose_type", "esta medida não vale para esta visita"); refused.add("glucose_type"); }
-    for (const p of measurementsProblems(domains, draft.measurements)) if (!refused.has(p.path.replace("measurements.", ""))) out.push(p);
+    // A medida recusada sai antes de conferir faixa e par: uma causa, uma frase (sem "informe também" do par que falta).
+    const rest = { ...draft.measurements };
+    for (const key of refused) rest[key as keyof MeasureDraft] = "";
+    out.push(...measurementsProblems(domains, rest));
   }
 
   const note = textProblem(draft.note, { min: 0, max: 500, path: "note" });
