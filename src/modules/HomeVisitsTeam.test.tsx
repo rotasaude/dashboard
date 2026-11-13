@@ -132,6 +132,25 @@ describe("Visitas da equipe", () => {
     expect(screen.getByText("Dashboard")).not.toBeNull();
   });
 
+  it("painel escondido: o [hidden] não leva display inline (senão continua visível)", async () => {
+    mocked(api.getHomeVisitContext).mockResolvedValue(context({ teams: [ nurseTeam() ] }));
+    mocked(api.listHomeVisitDays).mockResolvedValue({ items: [ closedDay() ], next_before: null });
+    mocked(api.listHomeVisits).mockResolvedValue({ items: [ visit() ], next_before: null });
+    mount();
+    const days = () => screen.getByRole("table", { name: "Folhas da equipe", hidden: true });
+    await screen.findByText(/ficha não gerada/);
+    expect(days().closest("[hidden]")).toBeNull();
+    fireEvent.click(screen.getByRole("tab", { name: "Visitas" }));
+    await screen.findByText("Maria Lima");
+    const hiddenDays = days().closest("[hidden]") as HTMLElement;
+    expect(hiddenDays).not.toBeNull();
+    expect(hiddenDays.style.display).toBe("");
+    fireEvent.click(screen.getByRole("button", { name: "Abrir visita das 09:15" }));
+    const hiddenVisits = screen.getByRole("table", { name: "Visitas da equipe", hidden: true }).closest("[hidden]") as HTMLElement;
+    expect(hiddenVisits).not.toBeNull();
+    expect(hiddenVisits.style.display).toBe("");
+  });
+
   it("403 out_of_scope vira frase; sem professionals no contexto, sem filtro de profissional", async () => {
     mocked(api.getHomeVisitContext).mockResolvedValue(context({ teams: [ acsTeam() ] }));
     mocked(api.listHomeVisitDays).mockRejectedValue(new ApiError(403, { error: "out_of_scope" }, "x"));

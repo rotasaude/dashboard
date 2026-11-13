@@ -161,11 +161,13 @@ function TeamPanel({ ctx, team }: { ctx: HomeVisitContext; team: HomeVisitTeam }
         </div>
       )}
 
-      <div hidden={detailOpen || tab !== "days"} style={stack}>
-        <PagedBody list={days}>{(items) => <DayList days={items} onOpen={setOpenDay} />}</PagedBody>
+      {/* `hidden` sem `style`: um display inline (como o do `stack`) anularia o [hidden] do navegador. */}
+      <div hidden={detailOpen || tab !== "days"}>
+        <div style={stack}><PagedBody list={days}>{(items) => <DayList days={items} onOpen={setOpenDay} />}</PagedBody></div>
       </div>
       {visitsOpened && (
-        <div hidden={detailOpen || tab !== "visits"} style={stack}>
+        <div hidden={detailOpen || tab !== "visits"}>
+          <div style={stack}>
           <p style={muted}>{COUNTS_NOTE}</p>
           {counts.isError
             ? <p role="alert" style={alert}>{homeVisitError(counts.error)}</p>
@@ -178,6 +180,7 @@ function TeamPanel({ ctx, team }: { ctx: HomeVisitContext; team: HomeVisitTeam }
               </div>
             )}
           <PagedBody list={visits}>{(items) => <VisitList visits={items} onOpen={setOpenVisit} />}</PagedBody>
+          </div>
         </div>
       )}
     </div>
