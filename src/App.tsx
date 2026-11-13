@@ -393,7 +393,7 @@ export function renderModule(active: ModuleId, setActive: (id: ModuleId) => void
     case "home-visit-day": return <HomeVisitDay start={visit.start} onGoToTeam={() => setActive("home-visits-team")} />;
     case "who-to-visit": return <WhoToVisit />;
     case "home-visits-team": return <HomeVisitsTeam />;
-    case "micro-area-assignments": return <MicroAreaAssignments />;
+    case "micro-area-assignments": return <MicroAreaAssignments onGoToSecurity={() => setActive("security")} />;
     case "collective-activities": return <CollectiveActivities />;
     case "field-devices": return <FieldDevices />;
     case "field-devices-admin": return <FieldDevicesAdmin />;
