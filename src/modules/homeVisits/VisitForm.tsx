@@ -5,7 +5,7 @@
 // (`useIdempotentSubmit`): o mesmo `client_uuid` no reenvio depois de rede/5xx, com os campos travados. A recusa do api cai no
 // campo do `path`; as da pessoa digitada reabrem o `PersonPick` (Q49/Q71; 409 `duplicate_suspected` com os candidatos do 409).
 // Dado pessoal só em estado local e no corpo do POST: nada em URL, storage ou mensagem.
-import { useEffect, useId, useState, type FormEvent } from "react";
+import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   getVisitHousehold, recordHomeVisit, type HomeVisit, type HomeVisitContext, type HomeVisitDay, type HomeVisitTeam, type VisitCandidate,
@@ -100,6 +100,17 @@ export function VisitForm({ team, context, start, now, onSaved, onClose, onHeld 
     setDraft(out.draft);
     setCleared(out.cleared.length > 0 ? prunedText(out.cleared) : null);
   }
+  // Os moradores chegaram (atalho, ou domicílio escolhido pelo resumo): o sexo da pessoa passa a ser conhecido e um motivo marcado
+  // antes pode ter deixado de valer. Poda uma vez por chegada, sem apagar a frase de uma poda anterior.
+  const pruned = useRef<unknown>(null);
+  useEffect(() => {
+    if (!detail.data || frozen || pruned.current === detail.data) return;
+    pruned.current = detail.data;
+    const out = pruneVisitDraft(domains, withSex(draft), detail.data);
+    if (out.cleared.length === 0) return;
+    setDraft(out.draft);
+    setCleared(prunedText(out.cleared));
+  });
   const withoutPerson = (d: VisitDraft): VisitDraft => ({ ...d, subject: null, person: null, familyId: null });
   const placeFor = (ma: string, propertyType: string) =>
     ({ kind: "no_household" as const, propertyType, microAreaId: ma === OUT_OF_AREA || ma === "" ? null : ma, outOfArea: ma === OUT_OF_AREA });

@@ -347,6 +347,20 @@ describe("Nova visita", () => {
     await waitFor(() => expect(team().disabled).toBe(false));
   });
 
+  it("motivo marcado antes dos moradores e que deixa de valer (5 para morador masculino) sai quando eles chegam", async () => {
+    let arrive: (v: unknown) => void = () => {};
+    mocked(api.getVisitHousehold).mockReturnValue(new Promise((r) => { arrive = r; }));
+    renderWithProviders(<HomeVisitDay now={NOW24B} start={{ teamId: "t1", microAreaId: "ma1", householdId: "h1", familyId: "f1", patientId: "pa2", displayName: "José Lima" }} />);
+    fireEvent.click(await screen.findByLabelText("Visita realizada"));
+    const gestante = () => screen.getByLabelText("Gestante") as HTMLInputElement;
+    fireEvent.click(gestante());
+    expect(gestante().checked).toBe(true);
+    arrive(householdDetail());
+    await waitFor(() => expect(gestante().checked).toBe(false));
+    expect(gestante().disabled).toBe(true);
+    expect(screen.getByText("Retirado por não valer para esta visita: Gestante.")).not.toBeNull();
+  });
+
   it("recusa do api com path cai no campo; o uuid é trocado", async () => {
     mocked(api.recordHomeVisit).mockRejectedValueOnce(new ApiError(422, { error: "visit_date_out_of_range", path: "occurred_at" }, "x"))
       .mockResolvedValueOnce({ visit: visit(), day: day(), replayed: false });

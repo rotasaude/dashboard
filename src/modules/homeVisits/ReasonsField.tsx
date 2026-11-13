@@ -1,6 +1,7 @@
 // src/modules/homeVisits/ReasonsField.tsx
 // Motivos da visita (módulo 24b): caixas por grupo do domínio (`fieldset` com `legend` = `group_label`), na ordem do domínio. Só com
-// visita realizada (quem chama decide). Indisponível fica desabilitado com o porquê ao lado; ao chegar em `reasons_max` (Q36) as
+// visita realizada (quem chama decide). Indisponível fica desabilitado com o porquê ao lado — salvo se já estiver marcado, para poder
+// desmarcá-lo (ex.: o sexo da pessoa só chegou depois da escolha); ao chegar em `reasons_max` (Q36) as
 // caixas não marcadas param. Recusa do api em `reasons[i]` marca a caixa do i-ésimo motivo escolhido; em `reasons`, o grupo todo.
 import type { ReactNode } from "react";
 import { REASONS_MAX_TEXT, type OfferedReason } from "../../lib/homeVisits";
@@ -36,7 +37,7 @@ export function ReasonsField({ offered, chosen, max, disabled, onToggle, aria, e
             return (
               <div key={r.code} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
                 <label style={checkLabel}>
-                  <input type="checkbox" checked={checked} disabled={disabled || !!r.disabled || (full && !checked)}
+                  <input type="checkbox" checked={checked} disabled={disabled || (!!r.disabled && !checked) || (full && !checked)}
                     aria-invalid={own["aria-invalid"]} aria-describedby={describedBy} onChange={() => onToggle(r.code)} />
                   {r.label}
                 </label>
