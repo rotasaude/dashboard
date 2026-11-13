@@ -11,7 +11,7 @@ import { muted, row } from "../exams/styles";
 export const NO_NAME = "pessoa sem nome no cadastro";
 const OUTCOME_TONE: Record<string, string> = { "1": "ok", "2": "info", "3": "neutral" };
 
-function personText(v: HomeVisit): string {
+export function personText(v: HomeVisit): string {
   if (v.subject === "none") return "imóvel sem pessoa";
   const name = v.patient?.display_name ?? NO_NAME;
   return v.subject === "family_responsible" ? `família — responsável ${name}` : name;
