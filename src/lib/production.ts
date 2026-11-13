@@ -60,7 +60,14 @@ export const GENERATION_REASON: Record<string, string> = {
   city_profile_incomplete: "perfil da cidade incompleto (UF ou código IBGE)",
   // Módulo 28 (saúde bucal): a ficha odontológica excede o que o LEDI aceita.
   too_many_procedure_codes: "procedimentos odontológicos com códigos diferentes demais para uma ficha",
-  quantity_exceeds_location_limit: "quantidade de procedimento acima do limite do local"
+  quantity_exceeds_location_limit: "quantidade de procedimento acima do limite do local",
+  // Módulo 24b (visita domiciliar e atividade coletiva): o que falta na origem da ficha de visita e da atividade.
+  siaps_deadline_passed: "prazo do SIAPS da competência já passou",
+  participant_without_identifier: "participante sem CPF e sem CNS",
+  participant_without_birth_date: "participante sem data de nascimento",
+  participant_without_sex: "participante sem sexo no cadastro",
+  participant_professional_without_cns: "profissional participante sem CNS",
+  place_without_cnes: "local da atividade sem CNES"
 };
 export const SOURCE_LABEL: Record<string, string> = { Screening: "escuta inicial", Consultation: "consulta" };
 
