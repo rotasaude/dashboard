@@ -62,7 +62,17 @@ export function ActivityForm({ options, onSaved, onClose }: { options: Collectiv
   const frozen = s.locked || s.busy;
   const type = draft.activityType;
   const team = teams.find((t) => t.id === draft.teamId) ?? null;
-  const update = (next: ActivityDraft) => setDraft(pruneActivityDraft(domains, next));
+  const update = (next: ActivityDraft) => {
+    const pruned = pruneActivityDraft(domains, next);
+    // A regra esvaziou a lista: os índices deixam de valer, como no "Retirar" — sem marca confirmável, seletor nem recusa velha.
+    if (pruned.participants.length !== next.participants.length) resetParticipantMarks();
+    setDraft(pruned);
+  };
+  function resetParticipantMarks() {
+    s.clear(...s.problems.filter((p) => p.path.startsWith("participants")).map((p) => p.path));
+    setConfirmable([]);
+    setPick(null);
+  }
   const openPick = (p: Omit<ParticipantPick, "n"> | null) => { if (!p) { setPick(null); return; } picks.current += 1; setPick({ ...p, n: picks.current }); };
   const clearParticipant = (i: number) =>
     s.clear(...s.problems.filter((p) => p.path === `participants[${i}]` || (p.path.startsWith(`participants[${i}].`) && !p.path.includes(".measurements."))).map((p) => p.path), "participants");
@@ -96,9 +106,8 @@ export function ActivityForm({ options, onSaved, onClose }: { options: Collectiv
   }
   function remove(index: number) {
     // Os índices mudam: as marcas dos participantes saem todas.
-    s.clear(...s.problems.filter((p) => p.path.startsWith("participants")).map((p) => p.path), "participants_count");
-    setConfirmable([]);
-    setPick(null);
+    resetParticipantMarks();
+    s.clear("participants_count");
     update({ ...draft, participants: draft.participants.filter((_, i) => i !== index) });
   }
 

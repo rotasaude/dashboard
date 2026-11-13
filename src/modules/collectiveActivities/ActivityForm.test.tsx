@@ -356,6 +356,25 @@ describe("Nova atividade coletiva — recusas do api", () => {
     expect(b).not.toBe(a);
   });
 
+  it("a lista esvaziada pela regra leva junto a marca confirmável: participantes novos não herdam 'É outra pessoa'", async () => {
+    const d = COLLECTIVE_DOMAINS;
+    mocked(api.getCollectiveOptions).mockResolvedValue(options({ domains: { ...d, rules: { ...d.rules,
+      by_type: { ...d.rules.by_type, "1": { ...d.rules.by_type["1"], participants: "forbidden" } } } } }));
+    mocked(api.recordCollectiveActivity).mockRejectedValueOnce(new ApiError(422, { error: "duplicate_participant", path: "participants[1]", confirmable: true }, "x"));
+    await fillType4WithNewParticipant();
+    await addNewParticipant("Ana Prada", "11144477735");
+    send();
+    expect(await screen.findByRole("button", { name: "É outra pessoa" })).not.toBeNull();
+    chooseType("1");
+    expect(screen.queryByRole("group", { name: /Participantes/ })).toBeNull();
+    chooseType("4");
+    await addNewParticipant("Beto Souza", "52998224725");
+    await addNewParticipant("Caio Lima", "11144477735");
+    expect(screen.getByRole("group", { name: "Participante 2 — Caio Lima" })).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "É outra pessoa" })).toBeNull();
+    expect(screen.queryByText(duplicateParticipantText(true))).toBeNull();
+  });
+
   it("422 duplicate_participant não confirmável: a frase, sem o botão", async () => {
     mocked(api.recordCollectiveActivity).mockRejectedValueOnce(new ApiError(422, { error: "duplicate_participant", path: "participants[1]", confirmable: false }, "x"));
     await fillType4WithNewParticipant();
