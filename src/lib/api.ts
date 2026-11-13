@@ -2,6 +2,7 @@
 // + sessão /session. credentials: "include" (cookie HttpOnly, ADR-0022).
 import type { DraftCandidate, OpenDraft } from "./consultationDrafts";
 import type { SmallCount } from "./types";
+import { addressLine } from "./territoryAddress";
 const BASE = import.meta.env.VITE_ADMIN_API_BASE || "/admin/api";
 const SESSION_BASE = import.meta.env.VITE_SESSION_BASE || "/session";
 
@@ -745,7 +746,7 @@ export interface Professional {
   user_id: string;
   email_address: string;
   professional_name: string;
-  // Nulos juntos: ACS (515105) e agente de endemias (515140) não têm conselho (módulo 24a).
+  // Nulos juntos: os CBOs de campo da Tabela 7 não têm conselho (módulo 24a).
   council: string | null;
   council_state: string | null;
   registration_number: string | null;
@@ -7394,4 +7395,384 @@ export function updateAnnualReport(
 // Só ano encerrado (Q27: `year_not_closed`); já publicado → 409 `already_published`.
 export function publishAnnualReport(year: number): Promise<OmbudsmanAnnualReport> {
   return jsonFetch<OmbudsmanAnnualReport>(ombPath("annual_reports", String(year), "publish"), ombWrite("POST"));
+}
+
+// ─── Visita domiciliar e atividade coletiva (módulo 24b; ADR 0052; contrato 2026-11-12 §5–§9.1) ───
+// Na URL só ids, datas, filtros codificados (`state[]`, `outcome[]`, `activity_type[]`, `reason[]`), cursor e limite;
+// pessoa, motivos, medidas, observação, temas, motivos de retirada e engano e o token vão só no corpo (busca de pessoa
+// por POST). Listas em `{ items, next_before }`, com o cursor opaco repassado como veio. Toda escrita leva corpo
+// (`{}` sem campo; sem ele, 415). Formas do api real (preflight-reconciliation §2), não as do plano: onde os dois
+// divergem, vale o api. Domicílios e moradores da visita vêm das rotas de leitura do 24a (Q11): nenhuma rota nova.
+
+const HOME_VISITS_BASE = import.meta.env.VITE_HOME_VISITS_BASE || "/home_visits";
+const COLLECTIVE_BASE = import.meta.env.VITE_COLLECTIVE_BASE || "/collective_activities";
+const FIELD_DEVICES_BASE = import.meta.env.VITE_FIELD_DEVICES_BASE || "/field_devices";
+const hvPath = (base: string, ...parts: string[]) => [ base, ...parts.map(encodeURIComponent) ].join("/");
+const hvWrite = (method: "POST", body: unknown = {}): RequestInit => ({ method, body: JSON.stringify(body) });
+
+export type VisitOutcome = 1 | 2 | 3;
+export type VisitShift = 1 | 2 | 3;
+export type VisitSubject = "resident" | "family_responsible" | "none";
+export type VisitOrigin = "dashboard" | "field_app";
+export type DayState = "open" | "closed";
+// Situação da ficha (contrato §6; `not_exported` = Q5): código desconhecido aparece cru, nunca some.
+export type FichaSituation =
+  | "open" | "empty" | "not_exported" | "not_generated" | "pending" | "sending" | "accepted" | "rejected" | "failed" | "correction_pending"
+  | (string & {});
+export type MicroAreaScope = "responsible" | "assigned" | "team";
+export type MeasurementKey = "weight_kg" | "height_cm" | "systolic" | "diastolic" | "temperature_c" | "glucose_mg_dl";
+export type CollectiveField = "meeting_topics" | "target_audience" | "health_topics" | "health_practices" | "participants";
+export type FieldRule = "required" | "forbidden" | "optional";
+
+// ── Domínios (D-1, D-2; Q13, Q34–Q40) ──
+export interface CodeLabel { code: number; label: string }
+export interface MeasurementRange { min: number; max: number; decimals: number }
+export interface HomeVisitDomains {
+  motivo_visita: (CodeLabel & { group: string; group_label: string })[];
+  desfecho: CodeLabel[]; turno: CodeLabel[]; tipo_glicemia: CodeLabel[];
+  // Tipo de imóvel em TEXTO, como o 24a grava (home_visits/json.rb:165-166).
+  tipo_de_imovel: { code: string; label: string }[];
+  non_residential_property_types: string[];
+  non_residential_reasons: number[];
+  male_forbidden_reasons: number[];
+  // Q34/Q40: sem pessoa só estes motivos; 29 e 34–37 levam o documento do responsável familiar.
+  without_person_allowed_reasons: number[];
+  responsible_document_reasons: number[];
+  reasons_max: number;
+  measurement_ranges: Record<MeasurementKey, MeasurementRange>;
+}
+export interface CollectiveDomains {
+  activity_types: CodeLabel[]; meeting_topics: CodeLabel[]; target_audience: CodeLabel[]; health_topics: CodeLabel[]; health_practices: CodeLabel[];
+  // Q37: procedimento SIGTAP só desta lista fechada, com o código em TEXTO.
+  procedures: { code: string; label: string }[];
+  rules: {
+    // Q36: tamanho máximo de cada lista.
+    list_max: Record<"meeting_topics" | "target_audience" | "health_topics" | "health_practices", number>;
+    by_type: Record<string, Record<CollectiveField, FieldRule>>;
+    health_topics_with_meeting_topic: number[];
+    practices_only_in_type: { type: number; practices: number[] }[];
+    procedure_practices: number[]; smoking_practices: number[];
+    participant_measurements: Record<"weight_kg" | "height_cm", MeasurementRange>;
+  };
+}
+
+// ── Contexto (§6; D-4, D-5) ──
+export interface VisitMicroArea { id: string; code: string; name: string; scope: MicroAreaScope }
+export interface HomeVisitTeam {
+  id: string; ine: string; name: string | null; cbo: string;
+  can_register: boolean; reads_whole_team: boolean; out_of_area_allowed: boolean; can_assign: boolean; can_register_device: boolean;
+  micro_areas: VisitMicroArea[];
+  professionals: { id: string; name: string; cbo: string }[];
+}
+export interface HomeVisitContext { today: string; min_date: string; teams: HomeVisitTeam[]; domains: HomeVisitDomains }
+
+// ── Visita e folha do dia (§6; D-4, D-12) ──
+export interface VisitMeasurements {
+  weight_kg?: number; height_cm?: number; systolic?: number; diastolic?: number; temperature_c?: number; glucose_mg_dl?: number; glucose_type?: number;
+}
+export interface VisitPatientRef { id: string; display_name: string | null; has_cpf: boolean; cns_masked: string | null }
+export interface HomeVisit {
+  id: string; client_uuid: string; day_id: string; occurred_at: string; shift: VisitShift; origin: VisitOrigin | string;
+  property_type: string; micro_area: { id: string; code: string } | null; out_of_area: boolean;
+  household: { id: string; address_short: string } | null; family_id: string | null;
+  subject: VisitSubject | string; patient: VisitPatientRef | null;
+  outcome: VisitOutcome; reasons: number[]; shared: boolean; measurements: VisitMeasurements | null;
+  state: "recorded" | "withdrawn" | string;
+  // `reason` e `name` podem vir nulos (só o dono e a equipe leem o motivo; profissional sem perfil).
+  withdrawn: { at: string; reason: string | null; by: { name: string | null } } | null;
+  recorded_by: { name: string | null };
+  // Só no GET /home_visits/:id.
+  note?: string | null;
+  can_withdraw: boolean;
+}
+export interface HomeVisitDay {
+  id: string; professional: { id: string; name: string }; team: { id: string; ine: string; name: string | null };
+  day: string; sequence: number; state: DayState | string; closed_at: string | null;
+  // Q6: `full` = folha cheia (99 visitas).
+  closed_by: "user" | "job" | "full" | (string & {}) | null;
+  visits_count: number; withdrawn_count: number; ficha: { status: FichaSituation; reasons: string[] };
+  blockers: { code: string; visit_id: string | null }[];
+  own: boolean;
+  // Q50: false = a exportação LEDI da cidade está desligada (a ficha sai `not_exported`).
+  ledi_export_enabled: boolean;
+  // Só no GET /home_visits/days/:id e nas listas que o trazem; o `day` do POST /home_visits NÃO traz.
+  visits?: HomeVisit[];
+}
+
+// ── Pessoa (§5; D-6, D-7) ──
+export interface QuickPatient {
+  full_name: string; birth_date: string; sex: PatientSex; mother_name?: string | null; cpf?: string | null; no_cpf_reason?: string | null; cns?: string | null;
+}
+export interface VisitPerson {
+  patient_id: string; display_name: string | null; birth_date: string | null; has_cpf: boolean; cns_masked: string | null; sex: PatientSex | null;
+}
+export interface VisitCandidate {
+  patient_id: string; display_name: string | null; birth_date: string | null; has_cpf: boolean; has_cns: boolean; sex: PatientSex | null;
+}
+export type PersonScope = "home_visits" | "collective_activities";
+export type PersonDoc = { cpf: string } | { cns: string };
+
+// ── Domicílio para a visita (Q11): forma de tela, montada por adaptador a partir de `Household` e `Registration` do 24a ──
+export interface VisitHousehold {
+  id: string; address_short: string; property_type: string; status: "active" | "inactive"; micro_area: { id: string; code: string };
+  // `sex` do responsável vem dos cadastros ativos (só no detalhe; na lista é null): a regra de 5 e 6 olha o sexo dele (Q35).
+  families: { id: string; responsible: { patient_id: string; display_name: string | null; sex: PatientSex | null }; moved_out: boolean; responsible_exited: boolean }[];
+  // Alguma família ainda mora aqui (Q44, Q51).
+  has_active_family: boolean;
+}
+export interface VisitHouseholdDetail extends VisitHousehold {
+  // `unidentified`: cadastro provisório da urgência, que o api recusa (Q41, `patient_unidentified`).
+  residents: { patient_id: string; display_name: string | null; sex: PatientSex | null; family_id: string | null; unidentified: boolean }[];
+}
+export interface VisitHouseholdPage { items: VisitHousehold[]; next_before: string | null }
+
+// ── Entrada e listas ──
+export interface HomeVisitInput {
+  client_uuid: string; team_id: string; occurred_at: string; household_id?: string; micro_area_id?: string; out_of_area?: boolean;
+  property_type?: string; subject: VisitSubject; patient_id?: string; new_patient?: QuickPatient; family_id?: string; duplicates_reviewed?: boolean;
+  outcome: VisitOutcome; reasons: number[]; shared: boolean; measurements?: VisitMeasurements; note?: string;
+}
+// `limit` (1–100) é opcional em todas as listas (field_list_query.rb:13-22).
+export interface HomeVisitDayQuery { team_id: string; professional_id?: string; from?: string; to?: string; state?: string[]; before?: string | null; limit?: number }
+export interface HomeVisitDayPage { items: HomeVisitDay[]; next_before: string | null }
+export interface HomeVisitQuery {
+  team_id: string; micro_area_id?: string; professional_id?: string; from?: string; to?: string; outcome?: number[]; before?: string | null; limit?: number;
+}
+export interface HomeVisitPage { items: HomeVisit[]; next_before: string | null }
+// A contagem só aceita estas chaves: `professional_id` e `outcome[]` dão 422 invalid_request (visits_controller.rb:21,86).
+export interface HomeVisitCounts { done: number; refused: number; absent: number; withdrawn: number }
+
+// ── Atribuição de microárea (§6) ──
+export interface FieldAssignment {
+  id: string; micro_area: { id: string; code: string; name: string };
+  // `cbo` nulo se o vínculo do profissional acabou; `ended_at` só depois do /end (home_visits/json.rb:15-20).
+  professional: { id: string; name: string; cbo: string | null };
+  assigned_at: string; assigned_by: { name: string | null }; ended_at?: string;
+}
+export interface FieldAssignmentList { items: FieldAssignment[]; candidates: { professional_id: string; name: string; cbo: string }[] }
+
+// ── Quem visitar (§8) ──
+export type WhoToVisitReason =
+  // Q60: `due_on` nulo = a prática nunca foi feita ("nunca feita").
+  | { code: "care_line"; care_line: string; practice: string; status: "overdue" | "due_soon"; due_on: string | null }
+  | { code: "registration_due"; status: "due_soon" | "expired"; due_on: string }
+  | { code: "never_visited" }
+  | { code: string };
+export interface WhoToVisitItem {
+  patient_id: string; display_name: string | null; age: number | null; household: { id: string; address_short: string } | null; family_id: string | null;
+  micro_area: { id: string; code: string }; last_visit_on: string | null; reasons: WhoToVisitReason[];
+}
+export interface WhoToVisitQuery { micro_area_id: string; reason?: string[]; before?: string | null; limit?: number }
+export interface WhoToVisitPage { items: WhoToVisitItem[]; next_before: string | null }
+export interface WhoToVisitCounts { care_line: number; registration_due: number; never_visited: number; people: number }
+
+// ── Atividade coletiva (§7; D-4, D-8, D-9, Q57) ──
+export interface CollectiveOptions {
+  today: string; min_date: string;
+  // Q57c: os profissionais vêm POR EQUIPE (quem registra fora o próprio usuário), os da equipe primeiro; não há lista na raiz.
+  teams: {
+    id: string; ine: string; name: string | null; cbo: string; can_register: boolean;
+    professionals: { id: string; name: string; cbo: string; has_cns: boolean; in_team: boolean }[];
+  }[];
+  units: { id: string; name: string; has_cnes: boolean }[];
+  domains: CollectiveDomains;
+}
+export interface CollectiveParticipant {
+  patient: VisitPatientRef; altered_evaluation: boolean;
+  measurements: { weight_kg?: number; height_cm?: number } | null; smoking: { quit: boolean; dropped_out: boolean } | null;
+}
+export interface CollectiveActivity {
+  id: string; client_uuid: string; team: { id: string; ine: string; name: string | null }; unit: { id: string; name: string };
+  held_on: string; shift: VisitShift; activity_type: number;
+  place: { health_unit: { id: string; name: string } } | { text: string };
+  participants_count: number;
+  // Derivado pelo api (participantes com avaliação alterada): só na resposta, nunca no corpo (Q38).
+  altered_count: number;
+  meeting_topics?: number[]; target_audience?: number[]; health_topics?: number[]; health_practices?: number[]; procedure_code?: string | null;
+  professionals: { id: string; name: string; cbo: string }[];
+  participants?: CollectiveParticipant[];
+  recorded_by: { name: string | null };
+  state: "recorded" | "mistaken" | string;
+  mistaken: { at: string; reason: string | null; by: { name: string | null } } | null;
+  ficha: { status: FichaSituation; reasons: string[] };
+  can_mark_mistaken: boolean;
+}
+// Q57a: a lista não traz estas chaves (elas não existem, não são null).
+export type CollectiveActivitySummary = Omit<CollectiveActivity,
+  "meeting_topics" | "target_audience" | "health_topics" | "health_practices" | "procedure_code" | "participants">;
+export type CollectiveParticipantInput =
+  ({ patient_id: string } | { new_patient: QuickPatient; duplicates_reviewed?: boolean })
+  & { altered_evaluation?: boolean; measurements?: { weight_kg?: number; height_cm?: number }; smoking?: { quit: boolean; dropped_out: boolean } };
+// Sem `altered_count`: o api o deriva e recusa a chave (Q38; collective_activities/rules.rb:46-49,90-92).
+export interface CollectiveActivityInput {
+  client_uuid: string; team_id: string; held_on: string; shift: VisitShift; activity_type: number;
+  place_health_unit_id?: string; place_text?: string; participants_count: number;
+  meeting_topics: number[]; target_audience: number[]; health_topics: number[]; health_practices: number[];
+  // Um dos códigos de `domains.procedures` (Q37).
+  procedure_code?: string;
+  professionals: { professional_id: string }[]; participants: CollectiveParticipantInput[];
+}
+export interface CollectiveQuery { team_id: string; from?: string; to?: string; activity_type?: number[]; state?: string[]; before?: string | null; limit?: number }
+export interface CollectivePage { items: CollectiveActivitySummary[]; next_before: string | null }
+
+// ── Aparelhos de campo (§9.1) ──
+export interface FieldDevice {
+  id: string; name: string; created_at: string; last_used_at: string | null;
+  status: "active" | "inactive" | "revoked" | (string & {});
+  revoked_at: string | null;
+  revoked_reason: "user" | "admin" | "membership_ended" | "user_disabled" | (string & {}) | null;
+}
+// O token e o QR só vêm nesta resposta, uma vez.
+export interface FieldDeviceCreated { device: FieldDevice; token: string; qr_payload: string }
+export interface AdminFieldDevice extends FieldDevice { user: { id: string; name: string } }
+
+// Query na ordem dada: escalar só preenchido; lista vira `chave[]` repetida (vazia não vai); nulo e vazio nunca vão.
+function hvQuery(params: Record<string, readonly (string | number)[] | string | number | null | undefined>): URLSearchParams {
+  const p = new URLSearchParams();
+  for (const [ key, value ] of Object.entries(params)) {
+    if (Array.isArray(value)) for (const v of value) p.append(`${key}[]`, String(v));
+    else if (typeof value === "number") p.set(key, String(value));
+    else if (typeof value === "string" && value !== "") p.set(key, value);
+  }
+  return p;
+}
+async function hvPage<T>(url: string): Promise<{ items: T[]; next_before: string | null }> {
+  const b = await jsonFetch<{ items?: T[]; next_before?: string | null }>(url);
+  return { items: b.items ?? [], next_before: b.next_before ?? null };
+}
+
+// ── Folha do dia e visitas ──
+export function getHomeVisitContext(): Promise<HomeVisitContext> {
+  return jsonFetch<HomeVisitContext>(hvPath(HOME_VISITS_BASE, "context"));
+}
+export function listHomeVisitDays(q: HomeVisitDayQuery): Promise<HomeVisitDayPage> {
+  return hvPage<HomeVisitDay>(withQuery(hvPath(HOME_VISITS_BASE, "days"), hvQuery({
+    team_id: q.team_id, professional_id: q.professional_id, from: q.from, to: q.to, state: q.state, before: q.before, limit: q.limit })));
+}
+export function getHomeVisitDay(id: string): Promise<HomeVisitDay> {
+  return jsonFetch<HomeVisitDay>(hvPath(HOME_VISITS_BASE, "days", id));
+}
+export function closeHomeVisitDay(id: string): Promise<HomeVisitDay> {
+  return jsonFetch<HomeVisitDay>(hvPath(HOME_VISITS_BASE, "days", id, "close"), hvWrite("POST", { expected_state: "open" }));
+}
+// 201 = gravou; 200 = o mesmo `client_uuid` já estava gravado (reenvio idempotente). O `day` do POST não traz `visits`.
+export async function recordHomeVisit(i: HomeVisitInput): Promise<{ visit: HomeVisit; day: HomeVisitDay; replayed: boolean }> {
+  const { body, status } = await jsonFetchWithStatus<{ visit: HomeVisit; day: HomeVisitDay }>(HOME_VISITS_BASE, hvWrite("POST", i));
+  return { visit: body.visit, day: body.day, replayed: status === 200 };
+}
+export function getHomeVisit(id: string): Promise<HomeVisit> {
+  return jsonFetch<HomeVisit>(hvPath(HOME_VISITS_BASE, id));
+}
+export function withdrawHomeVisit(id: string, reason: string): Promise<HomeVisit> {
+  return jsonFetch<HomeVisit>(hvPath(HOME_VISITS_BASE, id, "withdraw"), hvWrite("POST", { expected_state: "recorded", reason }));
+}
+export function listHomeVisits(q: HomeVisitQuery): Promise<HomeVisitPage> {
+  return hvPage<HomeVisit>(withQuery(HOME_VISITS_BASE, hvQuery({
+    team_id: q.team_id, micro_area_id: q.micro_area_id, professional_id: q.professional_id, from: q.from, to: q.to, outcome: q.outcome,
+    before: q.before, limit: q.limit })));
+}
+export function countHomeVisits(q: { team_id: string; micro_area_id?: string; from?: string; to?: string }): Promise<HomeVisitCounts> {
+  return jsonFetch<HomeVisitCounts>(withQuery(hvPath(HOME_VISITS_BASE, "count"), hvQuery({
+    team_id: q.team_id, micro_area_id: q.micro_area_id, from: q.from, to: q.to })));
+}
+
+// ── Domicílios da visita: adaptadores sobre as rotas de leitura do 24a (Q11) ──
+function visitHousehold(h: Household, residents?: VisitHouseholdDetail["residents"]): VisitHousehold {
+  const sexOf = (patientId: string) => residents?.find((r) => r.patient_id === patientId)?.sex ?? null;
+  return {
+    id: h.id, address_short: addressLine(h.address), property_type: h.property_type, status: h.status, micro_area: h.micro_area,
+    families: h.families.map((f) => ({
+      id: f.id, responsible: { patient_id: f.responsible.patient_id, display_name: f.responsible.display_name, sex: sexOf(f.responsible.patient_id) },
+      moved_out: f.moved_out, responsible_exited: f.responsible_exited })),
+    has_active_family: h.families.some((f) => !f.moved_out)
+  };
+}
+export async function listVisitHouseholds(microAreaId: string, before?: string | null): Promise<VisitHouseholdPage> {
+  const page = await listHouseholds({ microAreaId, before });
+  return { items: page.households.map((h) => visitHousehold(h)), next_before: page.next_before };
+}
+// Moradores = cadastros ativos do domicílio (o api só devolve os ativos que o usuário pode ler).
+export async function getVisitHousehold(id: string): Promise<VisitHouseholdDetail> {
+  const [ household, registrations ] = await Promise.all([ getHousehold(id), listRegistrations({ householdId: id }) ]);
+  const residents = registrations.map((r) => ({
+    patient_id: r.patient.id, display_name: r.patient.display_name, sex: r.patient.sex, family_id: r.family_id,
+    unidentified: r.patient.no_cpf_reason === "unidentified" }));
+  return { ...visitHousehold(household, residents), residents };
+}
+
+// ── Pessoa: busca e duplicados por POST, no escopo de quem chama ──
+// 404 person_not_found = ninguém (null); 409 citizen_not_verified sobe como erro (Q8).
+export async function lookupVisitPerson(scope: PersonScope, doc: PersonDoc): Promise<VisitPerson | null> {
+  try {
+    return await jsonFetch<VisitPerson>(hvPath(scope === "home_visits" ? HOME_VISITS_BASE : COLLECTIVE_BASE, "people", "lookup"), hvWrite("POST", doc));
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404 && errorCode(err) === "person_not_found") return null;
+    throw err;
+  }
+}
+export async function findVisitDuplicates(
+  scope: PersonScope, q: { full_name: string; birth_date: string; mother_name?: string | null }
+): Promise<VisitCandidate[]> {
+  const b = await jsonFetch<{ candidates?: VisitCandidate[] }>(
+    hvPath(scope === "home_visits" ? HOME_VISITS_BASE : COLLECTIVE_BASE, "people", "duplicates"), hvWrite("POST", q));
+  return b.candidates ?? [];
+}
+
+// ── Atribuição de microárea (criar e encerrar pedem step-up) ──
+export async function listFieldAssignments(teamId: string): Promise<FieldAssignmentList> {
+  const b = await jsonFetch<Partial<FieldAssignmentList>>(withQuery(hvPath(HOME_VISITS_BASE, "assignments"), hvQuery({ team_id: teamId })));
+  return { items: b.items ?? [], candidates: b.candidates ?? [] };
+}
+export function createFieldAssignment(i: { micro_area_id: string; professional_id: string }): Promise<FieldAssignment> {
+  return jsonFetch<FieldAssignment>(hvPath(HOME_VISITS_BASE, "assignments"), hvWrite("POST", i));
+}
+export function endFieldAssignment(id: string): Promise<FieldAssignment> {
+  return jsonFetch<FieldAssignment>(hvPath(HOME_VISITS_BASE, "assignments", id, "end"), hvWrite("POST"));
+}
+
+// ── Quem visitar (§8; nominal) ──
+export function listWhoToVisit(q: WhoToVisitQuery): Promise<WhoToVisitPage> {
+  return hvPage<WhoToVisitItem>(withQuery(hvPath(HOME_VISITS_BASE, "who_to_visit"), hvQuery({
+    micro_area_id: q.micro_area_id, reason: q.reason, before: q.before, limit: q.limit })));
+}
+export function countWhoToVisit(microAreaId: string): Promise<WhoToVisitCounts> {
+  return jsonFetch<WhoToVisitCounts>(withQuery(hvPath(HOME_VISITS_BASE, "who_to_visit", "count"), hvQuery({ micro_area_id: microAreaId })));
+}
+
+// ── Atividade coletiva ──
+export function getCollectiveOptions(): Promise<CollectiveOptions> {
+  return jsonFetch<CollectiveOptions>(hvPath(COLLECTIVE_BASE, "options"));
+}
+// O POST devolve a atividade pura; `replayed` = status 200 (o mesmo `client_uuid` já estava gravado).
+export async function recordCollectiveActivity(i: CollectiveActivityInput): Promise<{ activity: CollectiveActivity; replayed: boolean }> {
+  const { body, status } = await jsonFetchWithStatus<CollectiveActivity>(COLLECTIVE_BASE, hvWrite("POST", i));
+  return { activity: body, replayed: status === 200 };
+}
+export function listCollectiveActivities(q: CollectiveQuery): Promise<CollectivePage> {
+  return hvPage<CollectiveActivitySummary>(withQuery(COLLECTIVE_BASE, hvQuery({
+    team_id: q.team_id, from: q.from, to: q.to, activity_type: q.activity_type, state: q.state, before: q.before, limit: q.limit })));
+}
+export function getCollectiveActivity(id: string): Promise<CollectiveActivity> {
+  return jsonFetch<CollectiveActivity>(hvPath(COLLECTIVE_BASE, id));
+}
+export function markCollectiveMistaken(id: string, reason: string): Promise<CollectiveActivity> {
+  return jsonFetch<CollectiveActivity>(hvPath(COLLECTIVE_BASE, id, "mark_mistaken"), hvWrite("POST", { expected_state: "recorded", reason }));
+}
+
+// ── Aparelhos de campo (cadastrar e revogar pedem step-up; listar e revogar seguem abertos com home_visits desligado, Q62) ──
+export async function listFieldDevices(): Promise<FieldDevice[]> {
+  return (await jsonFetch<{ items?: FieldDevice[] }>(FIELD_DEVICES_BASE)).items ?? [];
+}
+export function registerFieldDevice(name: string): Promise<FieldDeviceCreated> {
+  return jsonFetch<FieldDeviceCreated>(FIELD_DEVICES_BASE, hvWrite("POST", { name }));
+}
+export async function revokeFieldDevice(id: string): Promise<FieldDevice> {
+  return (await jsonFetch<{ device: FieldDevice }>(hvPath(FIELD_DEVICES_BASE, id, "revoke"), hvWrite("POST"))).device;
+}
+export async function listAdminFieldDevices(userId?: string): Promise<AdminFieldDevice[]> {
+  const b = await jsonFetch<{ items?: AdminFieldDevice[] }>(withQuery(hvPath(FIELD_DEVICES_BASE, "admin"), hvQuery({ user_id: userId })));
+  return b.items ?? [];
+}
+export async function adminRevokeFieldDevice(id: string): Promise<AdminFieldDevice> {
+  return (await jsonFetch<{ device: AdminFieldDevice }>(hvPath(FIELD_DEVICES_BASE, "admin", id, "revoke"), hvWrite("POST"))).device;
 }

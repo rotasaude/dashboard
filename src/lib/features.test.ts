@@ -152,3 +152,12 @@ describe("módulo 33", () => {
     expect(hasFeature({ features: [ "ombudsman" ] }, "ombudsman_anonymous_web")).toBe(false);
   });
 });
+
+describe("módulo 24b", () => {
+  it("home_visits e collective_activities têm os rótulos curtos do contrato §1 e vêm da sessão", () => {
+    expect(featureLabel("home_visits")).toBe("Visita domiciliar e territorial");
+    expect(featureLabel("collective_activities")).toBe("Atividade coletiva");
+    expect(hasFeature({ features: [ "home_visits" ] }, "home_visits")).toBe(true);
+    expect(hasFeature({ features: [ "home_visits" ] }, "collective_activities")).toBe(false);
+  });
+});
