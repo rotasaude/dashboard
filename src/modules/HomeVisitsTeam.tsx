@@ -60,7 +60,7 @@ interface Filters { micro: string; professional: string; outcome: string; from: 
 type Page<T> = { items: T[]; next_before: string | null };
 
 // Lista paginada por cursor. A ordem é a do api. Cursor antigo (`invalid_cursor`) recomeça da primeira página, com a frase.
-function usePaged<T>(key: unknown[], fetchPage: (before: string | null) => Promise<Page<T>>, nominal: boolean, enabled: boolean) {
+export function usePaged<T>(key: unknown[], fetchPage: (before: string | null) => Promise<Page<T>>, nominal: boolean, enabled: boolean) {
   const queryClient = useQueryClient();
   const [ note, setNote ] = useState<string | null>(null);
   const q = useInfiniteQuery({
@@ -187,7 +187,7 @@ function TeamPanel({ ctx, team }: { ctx: HomeVisitContext; team: HomeVisitTeam }
   );
 }
 
-function PagedBody<T>({ list, children }: { list: ReturnType<typeof usePaged<T>>; children(items: T[]): React.ReactNode }) {
+export function PagedBody<T>({ list, children }: { list: ReturnType<typeof usePaged<T>>; children(items: T[]): React.ReactNode }) {
   if (list.error) return <p role="alert" style={alert}>{homeVisitError(list.error)}</p>;
   if (!list.items) return <p role="status" style={muted}>Carregando…</p>;
   return (

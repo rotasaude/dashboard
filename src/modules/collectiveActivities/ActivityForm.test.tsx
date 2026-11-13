@@ -8,7 +8,7 @@ vi.mock("../../lib/api", async (importOriginal) => {
   const real = await importOriginal<typeof import("../../lib/api")>();
   return {
     ...real, fetchCurrentSession: vi.fn(), getCollectiveOptions: vi.fn(), recordCollectiveActivity: vi.fn(), lookupVisitPerson: vi.fn(),
-    findVisitDuplicates: vi.fn()
+    findVisitDuplicates: vi.fn(), listCollectiveActivities: vi.fn()
   };
 });
 
@@ -23,12 +23,14 @@ import { COLLECTIVE_DOMAINS, activity, candidate, hvUser, options, person } from
 import { CollectiveActivities } from "../CollectiveActivities";
 
 const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
-const ALL = [ api.fetchCurrentSession, api.getCollectiveOptions, api.recordCollectiveActivity, api.lookupVisitPerson, api.findVisitDuplicates ];
+const ALL = [ api.fetchCurrentSession, api.getCollectiveOptions, api.recordCollectiveActivity, api.lookupVisitPerson, api.findVisitDuplicates, api.listCollectiveActivities ];
 afterEach(cleanup);
 beforeEach(() => {
   for (const f of ALL) mocked(f).mockReset();
   mocked(api.fetchCurrentSession).mockResolvedValue(hvUser());
   mocked(api.getCollectiveOptions).mockResolvedValue(options());
+  // A lista da tela (Task 12) abre junto do formulário; aqui ela não é o assunto.
+  mocked(api.listCollectiveActivities).mockResolvedValue({ items: [], next_before: null });
 });
 
 const body = (n = 0) => mocked(api.recordCollectiveActivity).mock.calls[n][0] as api.CollectiveActivityInput;
