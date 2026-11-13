@@ -265,7 +265,8 @@ export function VisitForm({ team, context, start, now, onSaved, onClose }: {
           {s.errNode("patient_id")}
           {s.errNode("family_id")}
           {personErrors.map((p) => <p key={p.path + p.text} role="alert" style={alert}>{p.text}</p>)}
-          {pick ? (
+          {/* Enviando ou travado (rede/5xx), o seletor sai: o reenvio leva a pessoa do primeiro envio e a tela não pode mostrar outra. */}
+          {pick && !frozen ? (
             <PersonPick key={pick.n} scope="home_visits" today={context.today} restart={pick.restart} initialNew={pick.initialNew} refusal={pick.refusal ?? null}
               unidentifiedIds={unidentifiedIds} onChoose={choosePerson} onCancel={() => setPick(null)} />
           ) : (

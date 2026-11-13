@@ -251,6 +251,26 @@ describe("Nova visita", () => {
     expect(body(1)).toEqual(body(0));
   });
 
+  it("seletor de pessoa aberto: na falha de rede ele some e não se troca a pessoa antes do reenvio", async () => {
+    mocked(api.recordHomeVisit).mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValueOnce({ visit: visit(), day: day({ visits: undefined }), replayed: false });
+    await openForm();
+    noHousehold("1");
+    fireEvent.click(screen.getByLabelText("Imóvel sem pessoa"));
+    fireEvent.click(screen.getByLabelText("Ausente"));
+    fireEvent.click(screen.getByRole("button", { name: "Buscar pessoa" }));
+    expect(screen.getByLabelText("CPF ou CNS")).not.toBeNull();
+    send();
+    expect(await screen.findByText(NETWORK_RETRY)).not.toBeNull();
+    expect(screen.queryByLabelText("CPF ou CNS")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Buscar" })).toBeNull();
+    expect((screen.getByRole("button", { name: "Buscar pessoa" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Tentar de novo" }));
+    await waitFor(() => expect(api.recordHomeVisit).toHaveBeenCalledTimes(2));
+    expect(body(1)).toEqual(body(0));
+    expect(body(1)).toMatchObject({ subject: "none" });
+  });
+
   it("5xx também trava e 'Descartar' fecha sem reenviar", async () => {
     mocked(api.recordHomeVisit).mockRejectedValueOnce(new ApiError(503, {}, "x"));
     await openForm();
