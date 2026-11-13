@@ -11,7 +11,7 @@ describe("vacina na linha do tempo (módulo 29; fecha api#71)", () => {
   it("filtro só com o interruptor; rótulos", () => {
     expect(timelineKinds(false, false, false, true).map((k) => k.key)).toContain("vaccination");
     expect(timelineKinds(true, true, true).map((k) => k.key)).not.toContain("vaccination");
-    expect(timelineKinds(true, true, true, true, true, true, true)).toEqual(TIMELINE_KINDS);
+    expect(timelineKinds(true, true, true, true, true, true, true, true, true)).toEqual(TIMELINE_KINDS);
     expect(timelineKindLabel("vaccination")).toBe("Vacina");
     expect([ statusLabel("active"), statusLabel("cancelled") ]).toEqual([ "aplicada", "cancelado" ]);
   });
