@@ -23,7 +23,7 @@ export const TYPE_5_6_NOT_GENERATED = "nos tipos 5 e 6, a ficha desta atividade 
 const FICHA_NEEDS_ID_TYPES = [ 5, 6 ];
 
 // Frases da tela (Task 11).
-export const NO_TEAM = "Você não está em nenhuma equipe";
+export { NO_TEAM } from "./homeVisits";
 // Descartar um envio pendurado (rede/5xx): o api pode ter gravado; a lista é relida uma vez para a atividade aparecer, se entrou.
 export const DISCARD_UNCERTAIN_ACTIVITY = "a atividade pode já ter sido gravada — ao descartar, a lista é relida; confira antes de registrar de novo";
 export const UNCERTAIN_ACTIVITY_REREAD = "a atividade pode já ter sido gravada — a lista foi relida; confira antes de registrar de novo";

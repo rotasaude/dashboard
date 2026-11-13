@@ -11,6 +11,7 @@ vi.mock("../lib/api", async (importOriginal) => {
 
 import * as api from "../lib/api";
 import { ApiError } from "../lib/api";
+import { NO_TEAM } from "../lib/collectiveActivities";
 import { HOME_VISIT_ERRORS, NOT_FOUND_REREAD } from "../lib/homeVisits";
 import { renderWithProviders } from "../test/campaignFixtures";
 import { expectFrozenNotice } from "../test/frozenNotice";
@@ -79,7 +80,7 @@ describe("Atividade coletiva — lista", () => {
   it("sem equipe: a frase e nenhuma leitura de lista", async () => {
     mocked(api.getCollectiveOptions).mockResolvedValue(options({ teams: [] }));
     mount();
-    expect(await screen.findByText("Você não está em nenhuma equipe")).not.toBeNull();
+    expect(await screen.findByText(NO_TEAM)).not.toBeNull();
     expect(api.listCollectiveActivities).not.toHaveBeenCalled();
   });
 

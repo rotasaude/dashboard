@@ -8,20 +8,20 @@
 // `PersonPick` dele (D-9; Q41/Q49/Q71), e o `duplicate_participant` confirmável oferece "É outra pessoa" (Q54).
 // Sem rascunho: fechar perde o que foi digitado (com confirmação se algo foi preenchido). Dado pessoal só em estado e no corpo.
 import { useId, useRef, useState, type FormEvent } from "react";
-import { recordCollectiveActivity, type CollectiveActivity, type CollectiveOptions, type VisitCandidate, type VisitShift } from "../../lib/api";
+import { recordCollectiveActivity, type CollectiveActivity, type CollectiveOptions, type VisitShift } from "../../lib/api";
 import {
   ACTIVITY_NETWORK_RETRY, DISCARD_UNCERTAIN_ACTIVITY, NO_CNS_PROFESSIONAL, OTHER_TEAM_PROFESSIONAL, activityBody, activityProblems, activityWarnings, alteredCount, emptyActivityDraft,
   fieldRule, healthTopicsAllowed, needsProcedure, offeredHealthTopics, offeredPractices, pruneActivityDraft, smokingAllowed, type ActivityDraft,
   type ParticipantDraft
 } from "../../lib/collectiveActivities";
-import { shiftLabel, type HomeVisitRefusal } from "../../lib/homeVisits";
+import { noCpfReasonPath, shiftLabel, type HomeVisitRefusal } from "../../lib/homeVisits";
 import type { Problem } from "../../lib/pharmacy";
 import { ConfirmButton } from "../../components/ConfirmButton";
 import { FrozenTextNotice } from "../../components/FrozenTextNotice";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { alert, checkLabel, fieldLabel, fieldset, form, legend, muted, row } from "../exams/styles";
-import type { PickedPerson } from "../homeVisits/PersonPick";
-import { useIdempotentSubmit } from "../homeVisits/useIdempotentSubmit";
+import { candidatesOf, type PickedPerson } from "../homeVisits/PersonPick";
+import { NO_EVENT, useIdempotentSubmit } from "../homeVisits/useIdempotentSubmit";
 import { CodeChecklist } from "./CodeChecklist";
 import { ParticipantsField, type ParticipantPatch, type ParticipantPick } from "./ParticipantsField";
 
@@ -29,16 +29,9 @@ export type ActivitySaved = { activity: CollectiveActivity; replayed: boolean };
 type ListKey = "meetingTopics" | "targetAudience" | "healthTopics" | "healthPractices";
 
 const SHIFTS: VisitShift[] = [ 1, 2, 3 ];
-const NO_EVENT = { preventDefault: () => {} } as FormEvent;
 const OWN = /^(team_id|held_on|shift|activity_type|place_health_unit_id|place_text|participants_count|procedure_code|meeting_topics|target_audience|health_topics|health_practices|professionals|participants)(\[|\.|$)/;
 const isOwn = (path: string) => OWN.test(path);
 const PARTICIPANT = /^participants\[(\d+)\](?:\.(.*))?$/;
-
-function candidatesOf(err: unknown): VisitCandidate[] {
-  const body = (err as { body?: unknown } | null)?.body;
-  const list = body && typeof body === "object" ? (body as { candidates?: unknown }).candidates : null;
-  return Array.isArray(list) ? (list as VisitCandidate[]) : [];
-}
 
 type Extras = Pick<ParticipantDraft, "altered" | "weight" | "height" | "smoking">;
 const NO_EXTRAS: Extras = { altered: false, weight: "", height: "", smoking: null };
@@ -116,8 +109,7 @@ export function ActivityForm({ options, onSaved, onClose }: { options: Collectiv
   function refused(refusals: HomeVisitRefusal[], err: unknown, sent: ActivityDraft): Problem[] {
     const out = refusals.map((r) => {
       const m = PARTICIPANT.exec(r.path);
-      const sub = m?.[2] ?? "";
-      const path = m && r.code === "cpf_or_reason_required" && !sub.startsWith("new_patient.") ? `participants[${m[1]}].new_patient.no_cpf_reason` : r.path;
+      const path = m ? noCpfReasonPath(r.code, r.path, `participants[${m[1]}].`) : r.path;
       return { path, text: r.text, code: r.code, confirmable: r.confirmable === true };
     });
     setConfirmable(out.flatMap((r) => {

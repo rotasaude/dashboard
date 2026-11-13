@@ -23,7 +23,8 @@ export type IdempotentSend<B, T> = {
   refused?(refusals: HomeVisitRefusal[], err: unknown): Problem[];
 };
 
-const NO_EVENT = { preventDefault: () => {} } as FormEvent;
+// Envio sem evento de formulário (reenvio, "É outra pessoa").
+export const NO_EVENT = { preventDefault: () => {} } as FormEvent;
 
 // `networkText`: a frase do envio pendurado (a da visita, por padrão; a atividade passa a dela).
 export function useIdempotentSubmit(opts: { networkText?: string } = {}) {

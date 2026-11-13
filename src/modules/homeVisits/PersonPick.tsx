@@ -32,6 +32,13 @@ const DOC_TEXT = "informe o CPF (11 dígitos) ou o CNS (15 dígitos)";
 export const candidateLine = (c: { display_name: string | null; birth_date: string | null; has_cpf: boolean }): string =>
   `${c.display_name ?? NO_NAME} · ${c.birth_date ? `nascido em ${fmtDay(c.birth_date)}` : "sem data de nascimento"} · ${c.has_cpf ? "com CPF" : "sem CPF"}`;
 
+// Os candidatos de um 409 `duplicate_suspected` da gravação (visita ou participante), para reabrir a busca sem buscar de novo.
+export function candidatesOf(err: unknown): VisitCandidate[] {
+  const body = (err as { body?: unknown } | null)?.body;
+  const list = body && typeof body === "object" ? (body as { candidates?: unknown }).candidates : null;
+  return Array.isArray(list) ? (list as VisitCandidate[]) : [];
+}
+
 const sameQuery = (a: Query | null, b: Query) => !!a && a.full_name === b.full_name && a.birth_date === b.birth_date && (a.mother_name ?? "") === (b.mother_name ?? "");
 
 export function PersonPick({ scope, today, onChoose, onCancel, restart, refusal, unidentifiedIds, initialNew }: {

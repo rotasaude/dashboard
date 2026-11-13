@@ -9,7 +9,7 @@ import {
   countHomeVisits, getHomeVisitContext, listHomeVisitDays, listHomeVisits, type HomeVisit, type HomeVisitContext, type HomeVisitDay, type HomeVisitTeam
 } from "../lib/api";
 import {
-  COUNT_QUERY, HV_CONTEXT_KEY, HV_COUNT_KEY, HV_DAYS_KEY, HV_VISITS_KEY, STATIC_QUERY, homeVisitError
+  COUNT_QUERY, HV_CONTEXT_KEY, HV_COUNT_KEY, HV_DAYS_KEY, HV_VISITS_KEY, NO_TEAM, STATIC_QUERY, homeVisitError
 } from "../lib/homeVisits";
 import { HomeVisitGate } from "./homeVisits/HomeVisitGate";
 import { DayDetail, DayList } from "./homeVisits/DayList";
@@ -21,7 +21,6 @@ import { StatTile } from "../components/StatTile";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../components/formStyles";
 import { alert, fieldLabel, muted, row, stack } from "./exams/styles";
 
-const NO_TEAM = "nenhuma equipe encontrada para você";
 const PERIOD_INVERTED = "o fim do período não pode ser antes do início";
 const COUNTS_NOTE = "Contagens da equipe no período — não seguem o filtro de profissional nem o de desfecho.";
 

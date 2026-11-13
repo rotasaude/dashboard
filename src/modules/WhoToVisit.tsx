@@ -9,7 +9,7 @@ import {
   countWhoToVisit, getHomeVisitContext, listWhoToVisit, type HomeVisitTeam, type MicroAreaScope, type VisitMicroArea, type WhoToVisitItem
 } from "../lib/api";
 import {
-  COUNT_QUERY, HV_CONTEXT_KEY, NO_MICRO_AREA, STATIC_QUERY, WHO_COUNT_KEY, WHO_KEY, fmtDay, homeVisitError, whoReasonText
+  COUNT_QUERY, HV_CONTEXT_KEY, NO_MICRO_AREA, NO_TEAM, STATIC_QUERY, WHO_COUNT_KEY, WHO_KEY, fmtDay, homeVisitError, whoReasonText
 } from "../lib/homeVisits";
 import { HomeVisitGate } from "./homeVisits/HomeVisitGate";
 import { PagedBody, usePaged } from "./homeVisits/usePaged";
@@ -21,7 +21,6 @@ import { buttonStyle, inputStyle, secondaryButtonStyle } from "../components/for
 import { alert, fieldLabel, muted, row, stack } from "./exams/styles";
 
 const PAGE = 50;
-const NO_TEAM = "nenhuma equipe encontrada para você";
 const SCOPE_TEXT: Record<MicroAreaScope, string> = { responsible: "sua", assigned: "atribuída", team: "da equipe" };
 const REASONS: { code: string; label: string }[] = [
   { code: "care_line", label: "Linhas de cuidado" }, { code: "registration_due", label: "Cadastro a vencer" }, { code: "never_visited", label: "Nunca visitadas" }

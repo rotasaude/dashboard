@@ -10,7 +10,7 @@ import {
   createFieldAssignment, endFieldAssignment, errorCode, getHomeVisitContext, listFieldAssignments, ApiError,
   type FieldAssignment, type HomeVisitTeam
 } from "../lib/api";
-import { ASSIGNEE_CBO_NOT_ALLOWED, HV_ASSIGNMENTS_KEY, HV_CONTEXT_KEY, STATIC_QUERY, fmtDay, homeVisitError } from "../lib/homeVisits";
+import { ASSIGNEE_CBO_NOT_ALLOWED, HV_ASSIGNMENTS_KEY, HV_CONTEXT_KEY, NO_TEAM, STATIC_QUERY, fmtDay, homeVisitError } from "../lib/homeVisits";
 import { HomeVisitGate } from "./homeVisits/HomeVisitGate";
 import { WriteLockProvider, useWriteLock } from "./homeVisits/writeLock";
 import { SensitiveAction } from "../components/SensitiveAction";
@@ -20,7 +20,6 @@ import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } fr
 import { alert, fieldLabel, muted, stack } from "./exams/styles";
 
 export const ONLY_NURSE = "só o enfermeiro da equipe atribui microáreas";
-const NO_TEAM = "nenhuma equipe encontrada para você";
 const PICK_BOTH = "escolha a microárea e o profissional";
 const END_EFFECT = "O aparelho dessa pessoa deixa de baixar esta microárea na próxima sincronização.";
 const ASSIGN_EFFECT = "A pessoa passa a ver e baixar esta microárea no aparelho de campo na próxima sincronização.";

@@ -8,13 +8,13 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
-  getVisitHousehold, recordHomeVisit, type HomeVisit, type HomeVisitContext, type HomeVisitDay, type HomeVisitTeam, type VisitCandidate,
-  type VisitHousehold, type VisitOutcome
+  getVisitHousehold, recordHomeVisit, type HomeVisit, type HomeVisitContext, type HomeVisitDay, type HomeVisitTeam, type VisitHousehold,
+  type VisitOutcome
 } from "../../lib/api";
 import { fmtHourMinute } from "../../lib/format";
 import {
   DISCARD_UNCERTAIN_VISIT, HOME_VISIT_ERRORS, HV_HOUSEHOLD_KEY, NOMINAL_QUERY, NON_RESIDENTIAL_NO_PERSON, NOTE_HINT, NO_MICRO_AREA, RESPONSIBLE_EXITED,
-  allowedMeasurements, emptyVisitDraft, familyVisitNotice, homeVisitError, isNonResidential, measurementsAnyAllowed, offeredReasons,
+  allowedMeasurements, emptyVisitDraft, familyVisitNotice, homeVisitError, isNonResidential, measurementsAnyAllowed, noCpfReasonPath, offeredReasons,
   prunedText, pruneVisitDraft, shiftPreview, visitBody, visitProblems, type DraftHousehold, type HomeVisitRefusal, type MeasureDraft, type VisitDraft
 } from "../../lib/homeVisits";
 import { NO_NAME } from "../../lib/territoryRegistry";
@@ -25,7 +25,7 @@ import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } fr
 import { alert, checkLabel, fieldLabel, fieldset, form, legend, muted, row } from "../exams/styles";
 import { MeasurementsField } from "./MeasurementsField";
 import { OUT_OF_AREA, PlacePick, type PlaceMode } from "./PlacePick";
-import { PersonPick, type PersonRestart, type PickedPerson } from "./PersonPick";
+import { PersonPick, candidatesOf, type PersonRestart, type PickedPerson } from "./PersonPick";
 import type { QuickInitial, QuickRefusal } from "./QuickPatientForm";
 import { ReasonsField } from "./ReasonsField";
 import { useIdempotentSubmit } from "./useIdempotentSubmit";
@@ -38,12 +38,6 @@ const NOTE_MAX = 500;
 const PERSON_CODES = [ "duplicate_suspected", "cpf_taken", "cns_taken", "invalid_patient", "cpf_or_reason_required", "invalid_cpf", "invalid_cns" ];
 const OWN = new Set([ "occurred_at", "household_id", "micro_area_id", "out_of_area", "property_type", "subject", "patient_id", "family_id", "outcome", "shared", "note" ]);
 const isOwn = (path: string) => OWN.has(path) || path === "reasons" || path.startsWith("reasons[") || path.startsWith("measurements.") || path.startsWith("new_patient");
-
-function candidatesOf(err: unknown): VisitCandidate[] {
-  const body = (err as { body?: unknown } | null)?.body;
-  const list = body && typeof body === "object" ? (body as { candidates?: unknown }).candidates : null;
-  return Array.isArray(list) ? (list as VisitCandidate[]) : [];
-}
 
 function initialDraft(context: HomeVisitContext, now: Date, start: VisitStart | null | undefined): VisitDraft {
   const d: VisitDraft = { ...emptyVisitDraft(), day: context.today, time: fmtHourMinute(now.toISOString()) };
@@ -164,8 +158,7 @@ export function VisitForm({ team, context, start, now, onSaved, onClose, onHeld 
 
   // Recusas do api: as da pessoa digitada reabrem o PersonPick com o que foi digitado; o resto vai ao campo do `path`.
   function refused(refusals: HomeVisitRefusal[], err: unknown): Problem[] {
-    const out = refusals.map((r) => ({
-      path: r.code === "cpf_or_reason_required" && !r.path.startsWith("new_patient.") ? "new_patient.no_cpf_reason" : r.path, text: r.text, code: r.code }));
+    const out = refusals.map((r) => ({ path: noCpfReasonPath(r.code, r.path), text: r.text, code: r.code }));
     const person = draft.person;
     const hit = out.find((r) => r.path.startsWith("new_patient") || PERSON_CODES.includes(r.code));
     if (person?.kind === "new" && hit) {
