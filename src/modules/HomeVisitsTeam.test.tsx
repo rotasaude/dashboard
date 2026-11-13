@@ -165,4 +165,18 @@ describe("Visitas da equipe", () => {
     mount();
     expect(await screen.findByText(HOME_VISITS_DISABLED)).not.toBeNull();
   });
+
+  it("403 feature_disabled nas contagens e na lista de visitas: a frase do interruptor uma vez só", async () => {
+    mocked(api.getHomeVisitContext).mockResolvedValue(context({ teams: [ nurseTeam() ] }));
+    mocked(api.listHomeVisitDays).mockResolvedValue({ items: [], next_before: null });
+    mocked(api.listHomeVisits).mockRejectedValue(new ApiError(403, { error: "feature_disabled" }, "x"));
+    mocked(api.countHomeVisits).mockRejectedValue(new ApiError(403, { error: "feature_disabled" }, "x"));
+    mount();
+    fireEvent.click(await screen.findByRole("tab", { name: "Visitas" }));
+    expect(await screen.findByText(HOME_VISITS_DISABLED)).not.toBeNull();
+    await waitFor(() => expect(api.countHomeVisits).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(api.listHomeVisits).toHaveBeenCalledTimes(1));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(screen.getAllByText(HOME_VISITS_DISABLED).length).toBe(1);
+  });
 });

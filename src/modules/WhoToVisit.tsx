@@ -3,13 +3,15 @@
 // nunca relida sozinha); as contagens (`COUNT_QUERY`) não trazem pessoa. Microárea e motivos só valem no "Atualizar". Os motivos vêm em
 // frase pronta (`whoReasonText`) — nunca CID nem condição. O atalho "Registrar visita" só aparece a quem registra na equipe e na microárea
 // (própria ou atribuída) e leva o alvo à "Folha do dia" só em memória (`onStartVisit`). Nada em storage; a URL só leva ids e o cursor.
-import { useState, type CSSProperties } from "react";
+// Interruptor desligado (403 `feature_disabled`) nas contagens ou na lista: uma frase só, acima das duas.
+import { useCallback, useEffect, useState, type CSSProperties } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   countWhoToVisit, getHomeVisitContext, listWhoToVisit, type HomeVisitTeam, type MicroAreaScope, type VisitMicroArea, type WhoToVisitItem
 } from "../lib/api";
 import {
-  COUNT_QUERY, HV_CONTEXT_KEY, NO_MICRO_AREA, NO_TEAM, STATIC_QUERY, WHO_COUNT_KEY, WHO_KEY, fmtDay, homeVisitError, whoReasonText
+  COUNT_QUERY, HV_CONTEXT_KEY, NO_MICRO_AREA, NO_TEAM, STATIC_QUERY, WHO_COUNT_KEY, WHO_KEY, fmtDay, homeVisitError, isFeatureOff,
+  whoReasonText
 } from "../lib/homeVisits";
 import { HomeVisitGate } from "./homeVisits/HomeVisitGate";
 import { PagedBody, usePaged } from "./homeVisits/usePaged";
@@ -65,6 +67,9 @@ function TeamPanel({ team, onStartVisit }: { team: HomeVisitTeam; onStartVisit?(
   const first = team.micro_areas[0]?.id ?? "";
   const [ draft, setDraft ] = useState<{ micro: string; reasons: string[] }>({ micro: first, reasons: [] });
   const [ applied, setApplied ] = useState(draft);
+  // Interruptor desligado visto pelas contagens ou pela lista: a frase do primeiro que viu, uma só.
+  const [ off, setOff ] = useState<string | null>(null);
+  const markOff = useCallback((text: string) => setOff((o) => o ?? text), []);
   if (team.micro_areas.length === 0) return <EmptyState title={NO_MICRO_AREA} />;
   const toggle = (code: string) => setDraft((d) => ({ ...d, reasons: d.reasons.includes(code) ? d.reasons.filter((c) => c !== code) : [ ...d.reasons, code ] }));
   const scope = team.micro_areas.find((m) => m.id === applied.micro)?.scope;
@@ -89,14 +94,25 @@ function TeamPanel({ team, onStartVisit }: { team: HomeVisitTeam; onStartVisit?(
         </fieldset>
         <button type="submit" style={buttonStyle}>Atualizar</button>
       </form>
-      <Counts micro={applied.micro} />
-      <List key={`${applied.micro}|${applied.reasons.join(",")}`} team={team} micro={applied.micro} reasons={applied.reasons} canRegister={canRegister} onStartVisit={onStartVisit} />
+      {off && <p role="alert" style={alert}>{off}</p>}
+      <Counts micro={applied.micro} onOff={markOff} />
+      <List key={`${applied.micro}|${applied.reasons.join(",")}`} team={team} micro={applied.micro} reasons={applied.reasons} canRegister={canRegister}
+        onStartVisit={onStartVisit} onOff={markOff} />
     </div>
   );
 }
 
-function Counts({ micro }: { micro: string }) {
+// Desligado: avisa o pai (que mostra a frase uma vez) e não mostra a dela.
+function useOff(err: unknown, onOff: (text: string) => void): boolean {
+  const off = isFeatureOff(err);
+  useEffect(() => { if (off) onOff(homeVisitError(err)); }, [ off, err, onOff ]);
+  return off;
+}
+
+function Counts({ micro, onOff }: { micro: string; onOff(text: string): void }) {
   const counts = useQuery({ queryKey: [ WHO_COUNT_KEY, micro ], queryFn: () => countWhoToVisit(micro), ...COUNT_QUERY });
+  const off = useOff(counts.error, onOff);
+  if (off) return null;
   if (counts.isError) return <p role="alert" style={alert}>{homeVisitError(counts.error)}</p>;
   return (
     <div style={tiles}>
@@ -108,13 +124,15 @@ function Counts({ micro }: { micro: string }) {
   );
 }
 
-function List({ team, micro, reasons, canRegister, onStartVisit }: {
-  team: HomeVisitTeam; micro: string; reasons: string[]; canRegister: boolean; onStartVisit?(start: VisitStart): void;
+function List({ team, micro, reasons, canRegister, onStartVisit, onOff }: {
+  team: HomeVisitTeam; micro: string; reasons: string[]; canRegister: boolean; onStartVisit?(start: VisitStart): void; onOff(text: string): void;
 }) {
   const list = usePaged<WhoToVisitItem>(
     [ WHO_KEY, micro, reasons ],
     (before) => listWhoToVisit({ micro_area_id: micro, ...(reasons.length > 0 && { reason: reasons }), ...(before && { before }), limit: PAGE }),
     true, true);
+  const off = useOff(list.error, onOff);
+  if (off) return null;
   const start = (i: WhoToVisitItem) => onStartVisit?.({
     teamId: team.id, microAreaId: i.micro_area.id, householdId: i.household?.id ?? null, familyId: i.family_id, patientId: i.patient_id, displayName: i.display_name
   });

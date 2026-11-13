@@ -92,4 +92,22 @@ describe("Quem visitar", () => {
     expect(await screen.findByText(HOME_VISITS_DISABLED)).not.toBeNull();
   });
 
+  it("interruptor desligado nas contagens e na lista: a frase uma vez só", async () => {
+    mocked(api.listWhoToVisit).mockRejectedValue(new ApiError(403, { error: "feature_disabled" }, "x"));
+    mocked(api.countWhoToVisit).mockRejectedValue(new ApiError(403, { error: "feature_disabled" }, "x"));
+    mount();
+    expect(await screen.findByText(HOME_VISITS_DISABLED)).not.toBeNull();
+    await waitFor(() => expect(api.countWhoToVisit).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(api.listWhoToVisit).toHaveBeenCalledTimes(1));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(screen.getAllByText(HOME_VISITS_DISABLED).length).toBe(1);
+  });
+
+  it("só as contagens desligadas: a frase aparece mesmo com a lista lida", async () => {
+    mocked(api.listWhoToVisit).mockResolvedValue({ items: [ whoItem() ], next_before: null });
+    mocked(api.countWhoToVisit).mockRejectedValue(new ApiError(403, { error: "feature_disabled" }, "x"));
+    mount();
+    expect(await screen.findByText(HOME_VISITS_DISABLED)).not.toBeNull();
+    expect(screen.getAllByText(HOME_VISITS_DISABLED).length).toBe(1);
+  });
 });

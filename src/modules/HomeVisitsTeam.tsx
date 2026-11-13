@@ -9,7 +9,7 @@ import {
   countHomeVisits, getHomeVisitContext, listHomeVisitDays, listHomeVisits, type HomeVisit, type HomeVisitContext, type HomeVisitDay, type HomeVisitTeam
 } from "../lib/api";
 import {
-  COUNT_QUERY, HV_CONTEXT_KEY, HV_COUNT_KEY, HV_DAYS_KEY, HV_VISITS_KEY, NO_TEAM, STATIC_QUERY, homeVisitError
+  COUNT_QUERY, HV_CONTEXT_KEY, HV_COUNT_KEY, HV_DAYS_KEY, HV_VISITS_KEY, NO_TEAM, STATIC_QUERY, homeVisitError, isFeatureOff
 } from "../lib/homeVisits";
 import { HomeVisitGate } from "./homeVisits/HomeVisitGate";
 import { DayDetail, DayList } from "./homeVisits/DayList";
@@ -91,6 +91,8 @@ function TeamPanel({ ctx, team }: { ctx: HomeVisitContext; team: HomeVisitTeam }
     enabled: visitsOpened && tab === "visits", ...COUNT_QUERY
   });
 
+  // Interruptor desligado nas contagens ou na lista de visitas: uma frase só, no lugar das duas.
+  const visitsOff = isFeatureOff(counts.error) || isFeatureOff(visits.error);
   const show = (t: "days" | "visits") => { setTab(t); if (t === "visits") setVisitsOpened(true); setOpenDay(null); setOpenVisit(null); };
   const back = () => { setOpenDay(null); setOpenVisit(null); };
 
@@ -146,20 +148,22 @@ function TeamPanel({ ctx, team }: { ctx: HomeVisitContext; team: HomeVisitTeam }
       </div>
       {visitsOpened && (
         <div hidden={detailOpen || tab !== "visits"}>
-          <div style={stack}>
-          <p style={muted}>{COUNTS_NOTE}</p>
-          {counts.isError
-            ? <p role="alert" style={alert}>{homeVisitError(counts.error)}</p>
-            : (
-              <div style={tiles}>
-                <StatTile label="Realizadas" value={counts.data?.done} />
-                <StatTile label="Recusadas" value={counts.data?.refused} />
-                <StatTile label="Ausentes" value={counts.data?.absent} />
-                <StatTile label="Retiradas" value={counts.data?.withdrawn} />
-              </div>
-            )}
-          <PagedBody list={visits}>{(items) => <VisitList visits={items} onOpen={setOpenVisit} />}</PagedBody>
-          </div>
+          {visitsOff ? <p role="alert" style={alert}>{homeVisitError(isFeatureOff(counts.error) ? counts.error : visits.error)}</p> : (
+            <div style={stack}>
+              <p style={muted}>{COUNTS_NOTE}</p>
+              {counts.isError
+                ? <p role="alert" style={alert}>{homeVisitError(counts.error)}</p>
+                : (
+                  <div style={tiles}>
+                    <StatTile label="Realizadas" value={counts.data?.done} />
+                    <StatTile label="Recusadas" value={counts.data?.refused} />
+                    <StatTile label="Ausentes" value={counts.data?.absent} />
+                    <StatTile label="Retiradas" value={counts.data?.withdrawn} />
+                  </div>
+                )}
+              <PagedBody list={visits}>{(items) => <VisitList visits={items} onOpen={setOpenVisit} />}</PagedBody>
+            </div>
+          )}
         </div>
       )}
     </div>

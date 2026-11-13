@@ -7,7 +7,7 @@ import { useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getHomeVisitContext, listFieldDevices, registerFieldDevice, revokeFieldDevice, type FieldDevice, type FieldDeviceCreated } from "../lib/api";
 import { useAuth } from "../lib/auth";
-import { FD_KEY, HV_CONTEXT_KEY, STATIC_QUERY, canUseHomeVisits, homeVisitError, homeVisitRefusals, revokedReasonLabel } from "../lib/homeVisits";
+import { FD_KEY, HV_CONTEXT_KEY, STATIC_QUERY, canUseHomeVisits, homeVisitError, homeVisitRefusals, isFeatureOff, revokedReasonLabel } from "../lib/homeVisits";
 import { fmtDateTime } from "../lib/format";
 import { HomeVisitGate } from "./homeVisits/HomeVisitGate";
 import { DeviceQrDialog } from "./homeVisits/DeviceQrDialog";
@@ -28,8 +28,6 @@ export const deviceStatusLabel = (d: FieldDevice): string => {
   if (d.status === "revoked") return d.revoked_reason ? `revogado: ${revokedReasonLabel(d.revoked_reason)}` : "revogado";
   return d.status === "active" ? "ativo" : d.status;
 };
-
-export const isFeatureOff = (err: unknown): boolean => homeVisitRefusals(err)[0].code === "feature_disabled";
 
 export function FieldDevices({ onGoToSecurity }: { onGoToSecurity?(): void }) {
   return (

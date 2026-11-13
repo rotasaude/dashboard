@@ -598,6 +598,8 @@ export const homeVisitError = (err: unknown): string => homeVisitRefusals(err)[0
 // Depois de uma recusa que fez a tela reler (fechar, retirar, engano): o `not_found` diz que releu; o resto, a frase do código.
 export const NOT_FOUND_REREAD = "não encontrado — os dados foram relidos";
 export const rereadText = (err: unknown): string => (errorCode(err) === "not_found" ? NOT_FOUND_REREAD : homeVisitError(err));
+// O interruptor desligado (403 `feature_disabled`), em qualquer leitura ou gravação do módulo.
+export const isFeatureOff = (err: unknown): boolean => !!err && homeVisitRefusals(err)[0].code === "feature_disabled";
 // Q71: `cpf_or_reason_required` fora de `new_patient.*` vai ao motivo de não ter CPF da pessoa digitada (`prefix`: o do participante).
 export const noCpfReasonPath = (code: string, path: string, prefix = ""): string =>
   code === "cpf_or_reason_required" && !path.startsWith(`${prefix}new_patient.`) ? `${prefix}new_patient.no_cpf_reason` : path;
