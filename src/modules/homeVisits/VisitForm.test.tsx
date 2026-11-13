@@ -271,6 +271,26 @@ describe("Nova visita", () => {
     expect(body(1)).toMatchObject({ subject: "none" });
   });
 
+  it("buscar pessoa dentro do formulário não envia a visita (o submit da busca não sobe ao da visita)", async () => {
+    mocked(api.lookupVisitPerson).mockResolvedValue({ patient_id: "pa9", display_name: "Ana Prado", birth_date: "1990-04-02", has_cpf: true, cns_masked: null, sex: "female" });
+    mocked(api.recordHomeVisit).mockResolvedValue({ visit: visit(), day: day(), replayed: false });
+    await openForm();
+    noHousehold("1");
+    fireEvent.click(screen.getByRole("button", { name: "Buscar pessoa" }));
+    fireEvent.change(screen.getByLabelText("CPF ou CNS"), { target: { value: "52998224725" } });
+    fireEvent.click(screen.getByRole("button", { name: "Buscar" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Escolher Ana Prado" }));
+    fireEvent.click(screen.getByLabelText("Ausente"));
+    // Rascunho válido; agora outra busca.
+    fireEvent.click(screen.getByRole("button", { name: "Buscar pessoa" }));
+    fireEvent.change(screen.getByLabelText("CPF ou CNS"), { target: { value: "52998224725" } });
+    fireEvent.click(screen.getByRole("button", { name: "Buscar" }));
+    await waitFor(() => expect(api.lookupVisitPerson).toHaveBeenCalledTimes(2));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(api.recordHomeVisit).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Registrar visita" })).not.toBeNull();
+  });
+
   it("5xx também trava e 'Descartar' fecha sem reenviar", async () => {
     mocked(api.recordHomeVisit).mockRejectedValueOnce(new ApiError(503, {}, "x"));
     await openForm();

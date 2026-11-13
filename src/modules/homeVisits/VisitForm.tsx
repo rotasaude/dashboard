@@ -166,6 +166,9 @@ export function VisitForm({ team, context, start, now, onSaved, onClose }: {
   }
 
   function submit(ev: FormEvent) {
+    // O submit das buscas de pessoa (PersonPick/QuickPatientForm, formulários dentro deste) sobe pela árvore do React: só o desta
+    // própria <form> envia a visita.
+    if (ev.target !== ev.currentTarget) { ev.preventDefault(); return; }
     void s.send(ev, {
       check: () => visitProblems(rules, { domains, today: context.today, minDate: context.min_date, team, household, now: now ?? new Date() }),
       body: () => ({ team_id: team.id, ...visitBody(draft) }),
