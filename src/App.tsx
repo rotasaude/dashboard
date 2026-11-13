@@ -41,6 +41,14 @@ import { CareLinesAdmin } from "./modules/CareLinesAdmin";
 import { CareLinesTeam } from "./modules/CareLinesTeam";
 import { CareLinesPreview } from "./modules/CareLinesPreview";
 import { TerritoryTeam } from "./modules/TerritoryTeam";
+import { HomeVisitDay } from "./modules/HomeVisitDay";
+import { HomeVisitsTeam } from "./modules/HomeVisitsTeam";
+import { MicroAreaAssignments } from "./modules/MicroAreaAssignments";
+import { WhoToVisit } from "./modules/WhoToVisit";
+import { CollectiveActivities } from "./modules/CollectiveActivities";
+import { FieldDevices } from "./modules/FieldDevices";
+import { FieldDevicesAdmin } from "./modules/FieldDevicesAdmin";
+import { NO_VISIT_HANDOFF, useVisitHandoff, type VisitHandoff } from "./modules/homeVisits/useVisitHandoff";
 import { RegistryStatus } from "./modules/RegistryStatus";
 import { TerritoryMicroAreas } from "./modules/TerritoryMicroAreas";
 import { SurveillanceQueue } from "./modules/SurveillanceQueue";
@@ -247,6 +255,7 @@ function ShellInner({ initialModule }: { initialModule?: ModuleId }) {
   const active: ModuleId = route.kind === "screen" ? route.id : "overview";
   const caps = useCapsHandoff(active);
   const omb = useOmbudsmanHandoff(active);
+  const visit = useVisitHandoff(active);
 
   let content;
   if (route.kind === "home") content = (
@@ -260,7 +269,7 @@ function ShellInner({ initialModule }: { initialModule?: ModuleId }) {
   else if (route.kind === "group") {
     const group = groups.find((g) => g.slug === route.slug);
     content = group ? <GroupCards group={group} catalog={CATALOG} go={goShell} /> : null;
-  } else content = renderModule(route.id, navigate, caps, omb);
+  } else content = renderModule(route.id, navigate, caps, omb, visit);
 
   return (
     <Shell
@@ -312,7 +321,7 @@ export function useOmbudsmanHandoff(active: ModuleId): OmbudsmanHandoff {
   return useMemo(() => ({ manifestationId, openManifestation: setManifestationId }), [ manifestationId ]);
 }
 
-export function renderModule(active: ModuleId, setActive: (id: ModuleId) => void, caps: CapsHandoff = NO_CAPS_HANDOFF, omb: OmbudsmanHandoff = NO_OMB_HANDOFF) {
+export function renderModule(active: ModuleId, setActive: (id: ModuleId) => void, caps: CapsHandoff = NO_CAPS_HANDOFF, omb: OmbudsmanHandoff = NO_OMB_HANDOFF, _visit: VisitHandoff = NO_VISIT_HANDOFF) {
   switch (active) {
     case "overview":       return <Overview onNavigate={setActive} />;
     case "ingestion":      return <Ingestion />;
@@ -381,6 +390,13 @@ export function renderModule(active: ModuleId, setActive: (id: ModuleId) => void
     case "territory-team": return <TerritoryTeam />;
     case "registry-status": return <RegistryStatus />;
     case "territory-micro-areas": return <TerritoryMicroAreas onGoToSecurity={() => setActive("security")} />;
+    case "home-visit-day": return <HomeVisitDay />;
+    case "who-to-visit": return <WhoToVisit />;
+    case "home-visits-team": return <HomeVisitsTeam />;
+    case "micro-area-assignments": return <MicroAreaAssignments />;
+    case "collective-activities": return <CollectiveActivities />;
+    case "field-devices": return <FieldDevices />;
+    case "field-devices-admin": return <FieldDevicesAdmin />;
     case "surveillance-queue": return <SurveillanceQueue />;
     case "surveillance-negatives": return <SurveillanceNegatives />;
     case "surveillance-reports": return <SurveillanceReports />;

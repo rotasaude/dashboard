@@ -18,7 +18,7 @@ describe("grupo Vigilância (módulo 25)", () => {
   });
   it("vem depois do Cadastro territorial, com ícone e descrição", () => {
     const labels = NAV_GROUPS.map((g) => g.label);
-    expect(labels.indexOf("Vigilância")).toBe(labels.indexOf("Cadastro territorial") + 1);
+    expect(labels.indexOf("Vigilância")).toBe(labels.indexOf("Visita e atividade coletiva") + 1);
     expect(CATALOG.groups["Vigilância"].description).toBe("Notificação compulsória, prazos, negativa semanal e painel");
     expect(CATALOG.screens["surveillance-queue"].description).toBe("Notificações com prazo, imediatas e vencidas primeiro");
   });

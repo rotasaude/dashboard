@@ -26,7 +26,7 @@ describe("grupo Cadastro territorial (módulo 24a)", () => {
     const labels = NAV_GROUPS.map((g) => g.label);
     expect(labels.indexOf("Cadastro territorial")).toBe(labels.indexOf("Linhas de cuidado") + 1);
     // O módulo 25 pôs a Vigilância logo depois; o 26a pôs a Regulação depois dela, e o 27a pôs a Farmácia depois dela — é a Farmácia que antecede Exames.
-    expect(labels.indexOf("Vigilância")).toBe(labels.indexOf("Cadastro territorial") + 1);
+    expect(labels.indexOf("Vigilância")).toBe(labels.indexOf("Visita e atividade coletiva") + 1);
     expect(labels.indexOf("Regulação")).toBe(labels.indexOf("Vigilância") + 1);
     expect(labels.indexOf("Farmácia")).toBe(labels.indexOf("Regulação") + 1);
     // O 29 pôs a Vacinação logo depois da Farmácia; o 28 pôs a Saúde bucal depois dela; o 30 pôs Transporte e TFD depois

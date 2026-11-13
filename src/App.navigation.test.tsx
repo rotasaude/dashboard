@@ -7,6 +7,13 @@ import { NAV_GROUPS, navGroupsFor, type ModuleId } from "./shell/modules";
 import { TerritoryMicroAreas } from "./modules/TerritoryMicroAreas";
 import { TerritoryTeam } from "./modules/TerritoryTeam";
 import { RegistryStatus } from "./modules/RegistryStatus";
+import { HomeVisitDay } from "./modules/HomeVisitDay";
+import { HomeVisitsTeam } from "./modules/HomeVisitsTeam";
+import { MicroAreaAssignments } from "./modules/MicroAreaAssignments";
+import { WhoToVisit } from "./modules/WhoToVisit";
+import { CollectiveActivities } from "./modules/CollectiveActivities";
+import { FieldDevices } from "./modules/FieldDevices";
+import { FieldDevicesAdmin } from "./modules/FieldDevicesAdmin";
 import { SurveillanceQueue } from "./modules/SurveillanceQueue";
 import { SurveillanceNegatives } from "./modules/SurveillanceNegatives";
 import { SurveillanceReports } from "./modules/SurveillanceReports";
@@ -63,6 +70,15 @@ describe("atalhos entre telas", () => {
 
   it("registry-status abre a validade dos cadastros", () => {
     expect((renderModule("registry-status", vi.fn()) as ReactElement).type).toBe(RegistryStatus);
+  });
+
+  it("as sete telas do módulo 24b abrem suas cascas", () => {
+    const screens = { "home-visit-day": HomeVisitDay, "who-to-visit": WhoToVisit, "home-visits-team": HomeVisitsTeam,
+      "micro-area-assignments": MicroAreaAssignments, "collective-activities": CollectiveActivities,
+      "field-devices": FieldDevices, "field-devices-admin": FieldDevicesAdmin } as const;
+    for (const [ id, component ] of Object.entries(screens)) {
+      expect((renderModule(id as keyof typeof screens, vi.fn()) as ReactElement).type, id).toBe(component);
+    }
   });
 
   it("caps-reception: Abrir matrícula guarda o id e o CAPS e vai a Usuários do CAPS, que os recebe", () => {

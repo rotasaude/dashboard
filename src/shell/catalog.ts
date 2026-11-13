@@ -15,7 +15,7 @@ import {
   IconDental, IconDentalBroken,
   IconBus, IconCalendarRepeat, IconUserX, IconCar, IconSteeringWheel,
   IconBrain, IconAmbulance, IconDeviceTv, IconDoorEnter, IconCalendarEvent, IconBed, IconBedFlat, IconPillOff, IconShare, IconFileReport, IconUserHeart,
-  IconMessageReport, IconMailForward, IconSitemap, IconVaccine, IconNeedle, IconCloudUpload, IconVaccineBottle, IconTemperatureSnow, IconCalendarMonth, IconReportMedical, IconFridge
+  IconMessageReport, IconMailForward, IconSitemap, IconVaccine, IconNeedle, IconCloudUpload, IconVaccineBottle, IconTemperatureSnow, IconCalendarMonth, IconReportMedical, IconFridge, IconWalk, IconDeviceMobile, IconDeviceMobileCog
 } from "@tabler/icons-react";
 import type { Catalog } from "./types";
 
@@ -30,6 +30,7 @@ export const CATALOG: Catalog = {
     "Atendimento": { icon: IconStethoscope, description: "Agenda, prontuário e consultas" },
     "Linhas de cuidado": { icon: IconHeartHandshake, description: "Busca ativa, sugestões e prévia dos indicadores" },
     "Cadastro territorial": { icon: IconHomeHeart, description: "Microáreas, domicílios, famílias e cadastro individual" },
+    "Visita e atividade coletiva": { icon: IconWalk, description: "Folha do dia, quem visitar, visitas da equipe, atividade coletiva e aparelhos de campo" },
     "Vigilância": { icon: IconVirus, description: "Notificação compulsória, prazos, negativa semanal e painel" },
     "Regulação": { icon: IconArrowsSplit2, description: "Encaminhamentos a especialista e procedimento, fila, cotas e prazos" },
     "Saúde bucal": { icon: IconDental, description: "Prontuário odontológico, CEO e prótese" },
@@ -103,6 +104,13 @@ export const CATALOG: Catalog = {
     "territory-team": { icon: IconMap2, description: "Domicílios, famílias e moradores por microárea" },
     "registry-status": { icon: IconCalendarDue, description: "Vencidos, a vencer e quem falta cadastrar" },
     "territory-micro-areas": { icon: IconHexagons, description: "Microáreas das equipes e o ACS responsável" },
+    "home-visit-day": { icon: IconClipboardList, description: "Visitas de hoje, nova visita e fechar o dia" },
+    "who-to-visit": { icon: IconUserSearch, description: "Quem precisa de visita na microárea e por quê" },
+    "home-visits-team": { icon: IconListDetails, description: "Folhas, visitas e situação da ficha por microárea e profissional" },
+    "micro-area-assignments": { icon: IconMapPin, description: "Microáreas atribuídas aos agentes de campo" },
+    "collective-activities": { icon: IconUsersGroup, description: "Registrar e consultar atividades coletivas" },
+    "field-devices": { icon: IconDeviceMobile, description: "Cadastrar e revogar o aparelho do app de campo" },
+    "field-devices-admin": { icon: IconDeviceMobileCog, description: "Aparelhos de campo da cidade e revogação" },
     "surveillance-queue": { icon: IconBellRinging, description: "Notificações com prazo, imediatas e vencidas primeiro" },
     "surveillance-negatives": { icon: IconCalendarX, description: "Unidades sem casos na semana epidemiológica" },
     "surveillance-reports": { icon: IconFileSpreadsheet, description: "CSV por semana e encerradas sem número oficial" },

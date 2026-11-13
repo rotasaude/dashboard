@@ -6,6 +6,7 @@ import { canSeeSignatureOverview, canSign } from "../lib/signature";
 import { canRequestSncr, canSeeSncrOverview } from "../lib/controlled";
 import { canUseCareLines } from "../lib/careLines";
 import { canUseTerritory } from "../lib/territoryRegistry";
+import { canUseCollectiveActivities, canUseHomeVisits } from "../lib/homeVisits";
 import { canUseSurveillance } from "../lib/surveillance";
 import { canUseRegulation } from "../lib/regulation";
 import { canUsePharmacy } from "../lib/pharmacy";
@@ -30,6 +31,7 @@ export type ModuleId =
   | "billing-procedures" | "billing-periods" | "billing-settings"
   | "care-lines-team" | "care-lines-preview" | "care-lines-admin"
   | "territory-team" | "registry-status" | "territory-micro-areas"
+  | "home-visit-day" | "home-visits-team" | "micro-area-assignments" | "who-to-visit" | "collective-activities" | "field-devices" | "field-devices-admin"
   | "surveillance-queue" | "surveillance-negatives" | "surveillance-reports" | "surveillance-panel" | "surveillance-diseases"
   | "regulation-queue" | "regulation-returned" | "regulation-offers" | "regulation-settings"
   | "pharmacy-dispensing" | "pharmacy-external" | "pharmacy-transfers" | "pharmacy-entries" | "pharmacy-stock" | "pharmacy-adjustments"
@@ -89,6 +91,15 @@ export const NAV_GROUPS: NavGroupDef[] = [
     { id: "territory-team", label: "Território da equipe", icon: "⌂" },
     { id: "registry-status", label: "Validade dos cadastros", icon: "⏲" },
     { id: "territory-micro-areas", label: "Microáreas", icon: "⬡" }
+  ]},
+  { label: "Visita e atividade coletiva", items: [
+    { id: "home-visit-day", label: "Folha do dia", icon: "✎" },
+    { id: "who-to-visit", label: "Quem visitar", icon: "⚑" },
+    { id: "home-visits-team", label: "Visitas da equipe", icon: "☷" },
+    { id: "micro-area-assignments", label: "Atribuição de microáreas", icon: "⬡" },
+    { id: "collective-activities", label: "Atividade coletiva", icon: "☰" },
+    { id: "field-devices", label: "Aparelhos de campo", icon: "▭" },
+    { id: "field-devices-admin", label: "Aparelhos de campo da cidade", icon: "▭" }
   ]},
   { label: "Vigilância", items: [
     { id: "surveillance-queue", label: "Fila da vigilância", icon: "⚠" },
@@ -330,6 +341,12 @@ export function navGroupsFor(
   // Módulo 24a (ADR 0042): `territory_registry` E `clinical_record`; território e
   // validade do profissional — o api confere CBO e escopo —, microáreas do admin.
   const territoryOn = canUseTerritory(user);
+  // Módulo 24b (ADR 0052): `home_visits` exige o cadastro territorial utilizável (canUseHomeVisits); `collective_activities`
+  // só o prontuário. A sessão não traz o CBO: o contexto de cada tela diz quem registra, lê, atribui e cadastra aparelho (D-4).
+  // Aparelhos de campo (Q75): só o papel, sem o interruptor — listar e revogar ficam abertos no api para que um aparelho
+  // perdido sempre possa ser revogado; só o cadastro de aparelho novo depende de `home_visits` (a tela diz).
+  const hvOn = canUseHomeVisits(user);
+  const caOn = canUseCollectiveActivities(user);
   // Módulo 25 (ADR 0043): `surveillance`, sem exigir o prontuário; tudo do papel
   // surveillance, o painel agregado também do analyst.
   const survOn = canUseSurveillance(user);
@@ -437,6 +454,12 @@ export function navGroupsFor(
       if (item.id === "care-lines-admin") return careOn && isAdmin;
       if (item.id === "territory-team" || item.id === "registry-status") return territoryOn && isProfessional;
       if (item.id === "territory-micro-areas") return territoryOn && isAdmin;
+      if (item.id === "collective-activities") return caOn && isProfessional;
+      if (item.id === "field-devices") return !user?.operator && isProfessional;
+      if (item.id === "field-devices-admin") return !user?.operator && isAdmin;
+      if (item.id === "home-visit-day" || item.id === "who-to-visit" || item.id === "home-visits-team" || item.id === "micro-area-assignments") {
+        return hvOn && isProfessional;
+      }
       if (item.id === "surveillance-panel") return survOn && (isSurveillance || isAnalyst);
       if (item.id.startsWith("surveillance-")) return survOn && isSurveillance;
       if (item.id === "regulation-queue") return regOn && isCareRegulator;
