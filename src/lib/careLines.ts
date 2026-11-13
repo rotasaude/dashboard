@@ -246,7 +246,7 @@ export const CUSTOM_ANCHORS: { key: "enrollment" | "rolling"; label: string }[] 
 
 // O que a tela não edita viaja no rascunho e volta igual no corpo (D-02):
 // editar a linha da semente não pode apagar CBO, início de janela, filtros etc.
-export type PracticeExtra = Pick<CarePractice, "window_start_days" | "code_filter" | "applies_to" | "all_of">;
+export type PracticeExtra = Pick<CarePractice, "window_start_days" | "code_filter" | "applies_to" | "all_of" | "min_gap_days">;
 export type EligibilityExtra = Pick<
   CareEligibility,
   "exclude_problems" | "age_min_days" | "age_max_days" | "gender_identities_included" | "gender_identities_excluded" | "requires_anchor"
@@ -283,13 +283,20 @@ function present<T extends object>(source: T, keys: (keyof T)[]): Partial<T> {
   return out;
 }
 
+// Módulo 24b (D-14): o intervalo mínimo entre registros viaja no rascunho e aparece como nota; a tela não o edita.
+export function minGapNote(p: { min_gap_days?: number | null }): string | null {
+  const n = p.min_gap_days;
+  if (typeof n !== "number") return null;
+  return `intervalo mínimo de ${n} ${n === 1 ? "dia" : "dias"} entre registros`;
+}
+
 function practiceDraftOf(p: CarePractice): PracticeDraft {
   const [ kind, code ] = p.source.split(":");
   return {
     key: p.key, label: p.label, citizenLabel: p.citizen_label ?? "", sourceKind: kind, sigtap: code ?? "", windowDays: String(p.window_days),
     minCount: String(p.min_count), schedule: p.schedule, anchor: p.anchor, doctorOrNurse: !!p.cbo_filter && isDoctorNurse(p.cbo_filter),
     baseCbo: p.cbo_filter ?? null, points: typeof p.points === "number" ? String(p.points) : "",
-    extra: present(p, [ "window_start_days", "code_filter", "applies_to", "all_of" ])
+    extra: present(p, [ "window_start_days", "code_filter", "applies_to", "all_of", "min_gap_days" ])
   };
 }
 

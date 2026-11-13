@@ -29,6 +29,8 @@ export const FICHA_STATUS: Record<string, { label: string; tone: "neutral" | "in
 export const CORRECTION_PENDING_NOTE =
   "Correções de fichas já aceitas ficam guardadas e não são enviadas enquanto o reenvio depois do aceite não for confirmado com o PEC. Não contam como pendentes.";
 
+// Módulo 24b (Q55, Q70): a atividade foi marcada como registrada por engano depois do pedido; a lista não sabe disso até o 409.
+export const ACTIVITY_CHANGED = "esta atividade foi marcada como registrada por engano — a ficha não é gerada de novo";
 export const ALREADY_RESOLVED = "esta ficha já foi gerada — a lista foi atualizada";
 export const RESEND_GENERATION_FAILED =
   "não foi possível gerar a ficha de novo — veja \"Fichas que não puderam ser geradas\"";
@@ -69,17 +71,30 @@ export const GENERATION_REASON: Record<string, string> = {
   participant_professional_without_cns: "profissional participante sem CNS",
   place_without_cnes: "local da atividade sem CNES"
 };
-export const SOURCE_LABEL: Record<string, string> = { Screening: "escuta inicial", Consultation: "consulta" };
+export const SOURCE_LABEL: Record<string, string> = {
+  Screening: "escuta inicial", Consultation: "consulta", HomeVisitDay: "folha de visitas", CollectiveActivity: "atividade coletiva"
+};
 
-export function reasonsLabel(codes: string[]): string {
-  return codes.map((c) => GENERATION_REASON[c] ?? c).join(", ");
+// Na folha de visitas `patient_without_identifier` é a ficha 8 (Q67): sem CPF e sem motivo de não ter CPF, ou sem CNS no cadastro.
+const REASON_BY_SOURCE: Record<string, Record<string, string>> = {
+  HomeVisitDay: { patient_without_identifier: "pessoa sem CPF e sem motivo de não ter CPF (ou sem CNS, no cadastro)" }
+};
+
+export function reasonsLabel(codes: string[], sourceType?: string): string {
+  const own = sourceType ? REASON_BY_SOURCE[sourceType] : undefined;
+  return codes.map((c) => own?.[c] ?? GENERATION_REASON[c] ?? c).join(", ");
+}
+
+// Q12: depois do prazo do SIAPS da competência a ficha não nasce mais; "Gerar de novo" não é oferecido.
+export function canRetryFailure(reasonCodes: string[]): boolean {
+  return !reasonCodes.includes("siaps_deadline_passed");
 }
 
 // Gerar de novo: resolvida = ficha nasceu; senão, diz o que ainda falta.
-export function retryOutcome(f: { resolved_at: string | null; reason_codes: string[] }): string {
+export function retryOutcome(f: { resolved_at: string | null; reason_codes: string[]; source_type?: string }): string {
   return f.resolved_at
     ? "Ficha gerada: ela entra na fila de envio."
-    : `Ainda não foi possível gerar: ${reasonsLabel(f.reason_codes)}. Corrija na origem e tente de novo.`;
+    : `Ainda não foi possível gerar: ${reasonsLabel(f.reason_codes, f.source_type)}. Corrija na origem e tente de novo.`;
 }
 
 export function canRetryGeneration(roles: string[]): boolean {
@@ -138,6 +153,7 @@ export function productionError(err: unknown): string {
   const code = productionErrorCode(err);
   if (code === "not_rejected") return RESEND_STALE;
   if (code === "already_resolved") return ALREADY_RESOLVED;
+  if (code === "activity_changed") return ACTIVITY_CHANGED;
   if (code === "generation_failed") return RESEND_GENERATION_FAILED;
   if (code === "export_unusable") return EXPORT_UNUSABLE;
   if (code === "invalid_competence") return INVALID_COMPETENCE;

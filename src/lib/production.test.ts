@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { ApiError } from "./api";
 import {
-  CORRECTION_PENDING_NOTE, FICHA_STATUS, SOURCE_LABEL, alertBanner, canReadProduction, canResend, canRetryGeneration, deadlinePhrase, errorCodesLabel, hasNextPage,
+  CORRECTION_PENDING_NOTE, FICHA_STATUS, SOURCE_LABEL, alertBanner, canReadProduction, canRetryFailure, canResend, canRetryGeneration, deadlinePhrase, errorCodesLabel, hasNextPage,
   productionError, productionErrorCode, reasonsLabel, replacedIds, retryOutcome
 } from "./production";
 import { ficha } from "../test/recordModeFixtures";
@@ -132,3 +132,26 @@ describe("Produção — erros", () => {
   });
 });
 
+
+describe("módulo 24b: fontes e motivos das fichas de visita e de atividade", () => {
+  it("rotula as fontes novas e os motivos novos", () => {
+    expect(SOURCE_LABEL.HomeVisitDay).toBe("folha de visitas");
+    expect(SOURCE_LABEL.CollectiveActivity).toBe("atividade coletiva");
+    expect(reasonsLabel([ "siaps_deadline_passed", "place_without_cnes" ])).toBe("prazo do SIAPS da competência já passou, local da atividade sem CNES");
+  });
+
+  it("a frase de activity_changed e o gerar de novo recusado após o prazo do SIAPS (Q12, Q70)", () => {
+    expect(productionError(new ApiError(409, { error: "activity_changed" }, "409")))
+      .toBe("esta atividade foi marcada como registrada por engano — a ficha não é gerada de novo");
+    expect(canRetryFailure([ "siaps_deadline_passed" ])).toBe(false);
+    expect(canRetryFailure([ "place_without_cnes", "siaps_deadline_passed" ])).toBe(false);
+    expect(canRetryFailure([ "place_without_cnes" ])).toBe(true);
+  });
+
+  it("patient_without_identifier: o sentido da ficha 8 na folha de visitas, o do cadastro nas demais origens (Q67)", () => {
+    expect(reasonsLabel([ "patient_without_identifier" ], "HomeVisitDay"))
+      .toBe("pessoa sem CPF e sem motivo de não ter CPF (ou sem CNS, no cadastro)");
+    expect(reasonsLabel([ "patient_without_identifier" ])).toBe("paciente sem CPF nem CNS");
+    expect(reasonsLabel([ "patient_without_identifier" ], "Consultation")).toBe("paciente sem CPF nem CNS");
+  });
+});

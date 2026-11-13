@@ -27,7 +27,9 @@ export const TIMELINE_KINDS: { key: TimelineKind; label: string }[] = [
   { key: "vaccination", label: "Vacina" },
   { key: "transport", label: "Transporte" },
   { key: "psychosocial_link", label: "CAPS" },
-  { key: "urgency", label: "Urgência" }
+  { key: "urgency", label: "Urgência" },
+  { key: "home_visit", label: "Visita domiciliar" },
+  { key: "collective_activity", label: "Atividade coletiva" }
 ];
 // Módulo 31 (P18): `psychosocial` é o kind da linha do tempo só do CAPS (GET /psychosocial/enrollments/:id/timeline); nunca entra no
 // filtro da geral (o api recusa com 422 invalid_kinds), mas ganha rótulo.
@@ -43,13 +45,16 @@ const EXTRA_KIND_LABEL: Record<string, string> = { psychosocial: "CAPS" };
 // "CAPS" só existe com `canUsePsychosocial`; o marcador continua na lista com o interruptor desligado (P51: registro retido).
 // Módulo 32a: fonte `urgency`; o cidadão vê o desfecho e a orientação, o profissional também a cor e o CID (vêm no título e no resumo
 // do api). O filtro "Urgência" só existe com `canUseUrgency`; a entrada abre a consulta finalizada do 19a (Q27) pelo caminho de sempre.
+// Módulo 24b: "Visita domiciliar" (`canUseHomeVisits`) e "Atividade coletiva" (`canUseCollectiveActivities`) só no filtro com o interruptor; a entrada fica
+// na lista com ele desligado. A visita não abre detalhe nesta entrega (D-13): o resumo do api já traz desfecho, motivos e medidas, e vai como veio (Q58).
 export function timelineKinds(
   examTracking: boolean, procedureBilling = false, pharmacy = false, vaccination = false, transport = false, psychosocial = false,
-  urgency = false
+  urgency = false, homeVisits = false, collective = false
 ): typeof TIMELINE_KINDS {
   return TIMELINE_KINDS.filter((k) =>
     (k.key !== "exam" || examTracking) && (k.key !== "procedure" || procedureBilling) && (k.key !== "dispensation" || pharmacy) && (k.key !== "vaccination" || vaccination) && (k.key !== "transport" || transport)
-    && (k.key !== "psychosocial_link" || psychosocial) && (k.key !== "urgency" || urgency));
+    && (k.key !== "psychosocial_link" || psychosocial) && (k.key !== "urgency" || urgency)
+    && (k.key !== "home_visit" || homeVisits) && (k.key !== "collective_activity" || collective));
 }
 
 export const ALL_FILTERS: TimelineFilters = { kinds: [], from: "", to: "" };
@@ -181,7 +186,9 @@ const STATUS_LABEL: Record<string, string> = {
   open: "em aberto",
   // Módulo 32a: situação do encontro da urgência (in_care e closed já estão acima).
   waiting_classification: "aguardando classificação",
-  classified: "classificado"
+  classified: "classificado",
+  // Módulo 24b: visita/atividade retirada por engano (recorded já está acima).
+  withdrawn: "retirada"
 };
 
 export function statusLabel(status: string | null, apiLabel?: string | null): string {

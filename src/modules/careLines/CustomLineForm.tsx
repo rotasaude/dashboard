@@ -10,7 +10,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { createCustomCareLine, errorCode, updateCareLine, type CareLine } from "../../lib/api";
 import {
   CONDITIONS, CUSTOM_ANCHORS, LINES_KEY, SOURCE_KINDS, customLineBody, customLineProblem, draftOfLine, emptyCustomLine, emptyPractice,
-  isDoctorNurse, knownCareLineError, type CustomLineDraft, type PracticeDraft
+  isDoctorNurse, knownCareLineError, minGapNote, type CustomLineDraft, type PracticeDraft
 } from "../../lib/careLines";
 import { SensitiveAction } from "../../components/SensitiveAction";
 import { buttonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
@@ -135,6 +135,7 @@ export function CustomLineForm({ line, onSaved, onCancel, onGoToSecurity }: {
                 </select>
               </label>
             </div>
+            {minGapNote(p.extra) && <span style={hintStyle}>{minGapNote(p.extra)}</span>}
             {p.sourceKind === "consultation" && (
               <>
                 <label style={checkLabel}>

@@ -277,3 +277,44 @@ describe("Produção e-SUS — competência no fuso da cidade", () => {
     await waitFor(() => expect(api.getProduction).toHaveBeenLastCalledWith("202609", 1));
   });
 });
+
+describe("Produção e-SUS — fichas de visita e de atividade (módulo 24b)", () => {
+  beforeEach(() => {
+    resetAll();
+    m(api.fetchCurrentSession).mockResolvedValue(withLedi([ "municipal_admin" ]));
+    m(api.getProduction).mockResolvedValue(productionFixture());
+  });
+
+  it("módulo 24b: atividade coletiva gerada de novo após ser marcada por engano — 409 activity_changed: frase e lista relida (Q70)", async () => {
+    m(api.listGenerationFailures).mockResolvedValue([ failure({ source_type: "CollectiveActivity", reason_codes: [ "place_without_cnes" ] }) ]);
+    m(api.retryGenerationFailure).mockRejectedValueOnce(new ApiError(409, { error: "activity_changed" }, "409"));
+    renderWithProviders(<Production />);
+    expect(await screen.findByText("atividade coletiva")).not.toBeNull();
+    expect(screen.getByText("local da atividade sem CNES")).not.toBeNull();
+    fireEvent.click(await screen.findByRole("button", { name: "Gerar de novo g1" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Gerar de novo" }));
+    expect(await screen.findByText("esta atividade foi marcada como registrada por engano — a ficha não é gerada de novo")).not.toBeNull();
+    await waitFor(() => expect(api.listGenerationFailures).toHaveBeenCalledTimes(2));
+  });
+
+  it("módulo 24b: reenviar ficha de atividade marcada por engano — 409 activity_changed: frase e lista relida (Q55)", async () => {
+    m(api.resendFicha).mockRejectedValue(new ApiError(409, { error: "activity_changed" }, "409"));
+    renderWithProviders(<Production />);
+    fireEvent.click(await screen.findByRole("button", { name: "Reenviar ficha f2" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Reenviar" }));
+    expect(await screen.findByText("esta atividade foi marcada como registrada por engano — a ficha não é gerada de novo")).not.toBeNull();
+    await waitFor(() => expect(api.getProduction).toHaveBeenCalledTimes(2));
+  });
+
+  it("módulo 24b: prazo do SIAPS vencido — sem Gerar de novo (Q12); outro motivo na mesma lista mantém o botão", async () => {
+    m(api.listGenerationFailures).mockResolvedValue([
+      failure({ id: "g7", source_type: "HomeVisitDay", reason_codes: [ "siaps_deadline_passed" ] }),
+      failure({ id: "g8", source_type: "HomeVisitDay", reason_codes: [ "participant_without_sex" ] })
+    ]);
+    renderWithProviders(<Production />);
+    expect(await screen.findByText("prazo do SIAPS da competência já passou")).not.toBeNull();
+    expect(screen.getAllByText("folha de visitas").length).toBe(2);
+    expect(screen.getByRole("button", { name: "Gerar de novo g8" })).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Gerar de novo g7" })).toBeNull();
+  });
+});

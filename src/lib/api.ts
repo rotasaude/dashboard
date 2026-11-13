@@ -2393,7 +2393,9 @@ export type TimelineKind =
   // Módulo 31 (D18; P18, P46, P51): marcador "Acompanhamento no CAPS", sem nome do CAPS, unit e detail_ref nulos.
   | "psychosocial_link"
   // Módulo 32a (§10, Q27): passagem pela UPA; detail_ref { type: "consultation", id } da consulta finalizada, ou nulo.
-  | "urgency";
+  | "urgency"
+  // Módulo 24b (Q18, D-13): visita domiciliar e atividade coletiva; detail_ref nulo ou de visita, sem detalhe nesta entrega. Status "recorded"/"withdrawn".
+  | "home_visit" | "collective_activity";
 
 export interface TimelineDetailRef { type: string; id: string }
 export interface TimelineEntry {
@@ -3870,6 +3872,8 @@ export interface CarePractice {
   min_count: number; schedule: CareSchedule | string; anchor: CareAnchor | string; cbo_filter: string[] | null; points?: number | null;
   code_filter?: { ciap2?: string[]; cid10?: string[] } | null; applies_to?: { age_min_years?: number; age_max_years?: number; sex?: string } | null;
   all_of?: { source: string; window_days?: number }[][] | null;
+  // Módulo 24b (D-14): intervalo mínimo entre dois registros (visita do ACS); o editor não o oferece, só o preserva.
+  min_gap_days?: number | null;
 }
 export interface CareLineTemplate {
   key: string; name: string; indicator: CareIndicator | string; version: number; declared_condition?: DeclaredCondition | null;

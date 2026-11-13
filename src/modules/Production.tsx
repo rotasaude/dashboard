@@ -130,6 +130,7 @@ export function Production({ onGoToSecurity }: { onGoToSecurity?(): void }) {
               return productionError(err);
             }
             if (code === "export_unusable") return productionError(err);
+            if (code === "activity_changed") { refresh(); return productionError(err); }
             if (code !== "not_rejected") return null;
             refresh();
             return RESEND_STALE;

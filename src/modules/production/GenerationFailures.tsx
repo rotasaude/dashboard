@@ -6,7 +6,7 @@ import { useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { listGenerationFailures, retryGenerationFailure, type GenerationFailure } from "../../lib/api";
 import {
-  ALREADY_RESOLVED, PRODUCTION_KEY, SOURCE_LABEL, canRetryGeneration, productionError, productionErrorCode, reasonsLabel, retryOutcome
+  ACTIVITY_CHANGED, ALREADY_RESOLVED, PRODUCTION_KEY, SOURCE_LABEL, canRetryFailure, canRetryGeneration, productionError, productionErrorCode, reasonsLabel, retryOutcome
 } from "../../lib/production";
 import { featureDisabledKey } from "../../lib/features";
 import { fmtDateTime } from "../../lib/format";
@@ -50,6 +50,7 @@ export function GenerationFailures({ roles, onGoToSecurity }: { roles: string[];
             translateError={(err) => {
               const code = productionErrorCode(err);
               if (featureDisabledKey(err) !== null) { refresh(); return productionError(err); }
+              if (code === "activity_changed") { refresh(); return ACTIVITY_CHANGED; }
               if (code !== "already_resolved") return null;
               refresh();
               return ALREADY_RESOLVED;
@@ -62,9 +63,9 @@ export function GenerationFailures({ roles, onGoToSecurity }: { roles: string[];
           <DataTable<GenerationFailure>
             cols={[
               { label: "Origem", w: "1fr", render: (f) => SOURCE_LABEL[f.source_type] ?? f.source_type },
-              { label: "Motivo", w: "3fr", render: (f) => reasonsLabel(f.reason_codes) },
+              { label: "Motivo", w: "3fr", render: (f) => reasonsLabel(f.reason_codes, f.source_type) },
               { label: "Desde", w: "1fr", render: (f) => fmtDateTime(f.created_at) },
-              { label: "", w: "auto", align: "right", render: (f) => canRetry && (
+              { label: "", w: "auto", align: "right", render: (f) => canRetry && canRetryFailure(f.reason_codes) && (
                 <button type="button" aria-label={`Gerar de novo ${f.id}`} style={secondaryButtonStyle}
                   onClick={() => { setDone(null); setRetrying(f); }}>
                   Gerar de novo

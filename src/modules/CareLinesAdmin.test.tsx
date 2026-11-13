@@ -96,6 +96,22 @@ describe("CareLinesAdmin", () => {
     expect(screen.queryByRole("status")).toBeNull();
   });
 
+  it("módulo 24b (D-14): a prática com intervalo mínimo mostra a nota no editor, sem campo para editá-lo, e salvar o mantém", async () => {
+    const own = cityLine({ id: "cl9", name: "Visita do ACS", source: "custom", template_key: null, template_version: null, indicator: null,
+      latest_template_version: null, practices: [ { key: "acs", label: "Visita do ACS", source: "acs_visit", window_days: 365, min_count: 1,
+        schedule: "end_of_window", anchor: "rolling", cbo_filter: null, min_gap_days: 30 } ] });
+    mocked(api.listCityCareLines).mockResolvedValue([ own ]);
+    renderWithProviders(<CareLinesAdmin />);
+    fireEvent.click(await screen.findByRole("button", { name: "Editar" }));
+    expect(await screen.findByText("intervalo mínimo de 30 dias entre registros")).not.toBeNull();
+    expect(screen.queryByLabelText(/intervalo mínimo/i)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Revisar e salvar" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Salvar linha" }));
+    await waitFor(() => expect(api.updateCareLine).toHaveBeenCalled());
+    const body = mocked(api.updateCareLine).mock.calls[0][1] as { practices: { min_gap_days?: number }[] };
+    expect(body.practices[0].min_gap_days).toBe(30);
+  });
+
   it("duplicate_template: a frase da recusa", async () => {
     mocked(api.listCityCareLines).mockResolvedValue([]);
     mocked(api.adoptCareLine).mockRejectedValueOnce(new api.ApiError(422, { error: "duplicate_template" }, "x"));

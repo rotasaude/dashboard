@@ -5,7 +5,7 @@ import {
   CARE_DISABLED, CARE_NO_ROLE, COUNT_QUERY, DOCTOR_NURSE_CBO, NOMINAL_QUERY, UNTRACKED_TEXT, anchorProblem, canUseCareLines, careLineError, careLineRoles,
   codeList, contactProblem, customLineBody, customLineProblem, decimalBr, draftOfLine, emptyCustomLine, emptyPractice, endProblem, fmtDay,
   isDoctorNurse, isStaleCare, knownCareLineError, newerVersion, originText, personName, personStatus, practiceText, reasonProblem, slugKey, statusLabel,
-  statusTone, worstStatus, type CustomLineDraft, type PracticeDraft
+  statusTone, worstStatus, minGapNote, type CustomLineDraft, type PracticeDraft
 } from "./careLines";
 import { DIABETES_TEMPLATE, TODAY23, cityLine, practice } from "../test/careLineFixtures";
 
@@ -437,5 +437,27 @@ describe("vacina não conferida (módulo 29)", () => {
       .toBe("não conferido — a caderneta de vacina ainda não foi conferida na sala de vacina");
     expect(worstStatus([ { status: "unchecked" }, { status: "ok" } ])).toBe("ok");
     expect(worstStatus([ { status: "unchecked" } ])).toBeNull();
+  });
+});
+
+describe("min_gap_days (módulo 24b, D-14)", () => {
+  const acs = (): import("./api").CarePractice => ({ key: "acs", label: "Visita do ACS", source: "acs_visit", window_days: 365, min_count: 1,
+    schedule: "end_of_window", anchor: "rolling", cbo_filter: null, min_gap_days: 30 });
+
+  it("sobrevive à edição: o editor não oferece o campo, mas salvar a linha editada não o perde", () => {
+    const seed = cityLine({ source: "custom", template_key: null, template_version: null, indicator: null, name: "Visita", practices: [ acs() ] });
+    const draft = draftOfLine(seed);
+    expect(draft.practices[0].extra.min_gap_days).toBe(30);
+    const edited = { ...draft, practices: [ { ...draft.practices[0], label: "Visita do ACS (editada)" } ] };
+    const body = customLineBody(edited);
+    expect(body.practices[0].min_gap_days).toBe(30);
+    expect(body.practices[0].label).toBe("Visita do ACS (editada)");
+  });
+
+  it("o texto da prática diz o intervalo mínimo; sem o campo, nada", () => {
+    expect(minGapNote(acs())).toBe("intervalo mínimo de 30 dias entre registros");
+    expect(minGapNote({ ...acs(), min_gap_days: 1 })).toBe("intervalo mínimo de 1 dia entre registros");
+    expect(minGapNote({ ...acs(), min_gap_days: null })).toBeNull();
+    expect(minGapNote({ ...acs(), min_gap_days: undefined })).toBeNull();
   });
 });

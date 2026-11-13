@@ -16,6 +16,7 @@ import {
 import { hasFeature } from "../../lib/features";
 import { canUsePsychosocial } from "../../lib/psychosocial";
 import { canUseUrgency } from "../../lib/urgency";
+import { canUseCollectiveActivities, canUseHomeVisits } from "../../lib/homeVisits";
 import { useAuth } from "../../lib/auth";
 import { OPENING_ENDED } from "../../lib/clinicalRecord";
 import { VERIFIER_ROLE } from "../../lib/team";
@@ -49,7 +50,7 @@ export function PatientTimeline({
   const { user } = useAuth();
   const canOpenRequests = !!user?.memberships.some((m) => m.role === VERIFIER_ROLE);
   const kinds = timelineKinds(hasFeature(user, "exam_tracking"), hasFeature(user, "procedure_billing"), hasFeature(user, "pharmacy"), hasFeature(user, "vaccination"), hasFeature(user, "sanitary_transport"),
-    canUsePsychosocial(user), canUseUrgency(user));
+    canUsePsychosocial(user), canUseUrgency(user), canUseHomeVisits(user), canUseCollectiveActivities(user));
   const key = subjectKey(subject);
   const queryClient = useQueryClient();
   // Fim da abertura (403 opening_required, ou out_of_context pela abertura):
