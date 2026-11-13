@@ -66,7 +66,11 @@ function DayBody({ now, start, onGoToTeam }: { now?: Date; start: VisitStart | n
   );
 }
 
-const upsert = (list: HomeVisit[], v: HomeVisit): HomeVisit[] => (list.some((x) => x.id === v.id) ? list.map((x) => (x.id === v.id ? v : x)) : [ ...list, v ]);
+// A ordem do api numa folha: `occurred_at`, depois `id` (uuid em minúsculas: a ordem do texto é a do banco).
+const byApiOrder = (a: HomeVisit, b: HomeVisit): number =>
+  Date.parse(a.occurred_at) - Date.parse(b.occurred_at) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+const upsert = (list: HomeVisit[], v: HomeVisit): HomeVisit[] =>
+  (list.some((x) => x.id === v.id) ? list.map((x) => (x.id === v.id ? v : x)) : [ ...list, v ]).sort(byApiOrder);
 
 function TodaySheets({ ctx, team, now, start, onHeld }: {
   ctx: HomeVisitContext; team: HomeVisitTeam; now?: Date; start: VisitStart | null; onHeld(held: boolean): void;

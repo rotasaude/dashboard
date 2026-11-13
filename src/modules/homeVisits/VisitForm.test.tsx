@@ -315,6 +315,23 @@ describe("Nova visita", () => {
     expect(api.recordHomeVisit).toHaveBeenCalledTimes(1);
   });
 
+  it("o cartão gravado entra na folha na ordem do api (occurred_at, depois id), sem reler", async () => {
+    mocked(api.getHomeVisitDay).mockResolvedValue(day({ visits_count: 2, visits: [ visit({ id: "v1", occurred_at: "2026-11-12T09:15:00-03:00" }),
+      visit({ id: "v3", occurred_at: "2026-11-12T09:40:00-03:00" }) ] }));
+    mocked(api.recordHomeVisit).mockResolvedValue({
+      visit: visit({ id: "v2", occurred_at: "2026-11-12T08:00:00-03:00" }), day: day({ visits_count: 3, visits: undefined }), replayed: false });
+    await openForm();
+    await screen.findByRole("button", { name: "Retirar visita das 09:40" });
+    fireEvent.change(screen.getByLabelText("Hora"), { target: { value: "08:00" } });
+    noHousehold("3");
+    fireEvent.click(screen.getByLabelText("Ausente"));
+    send();
+    expect(await screen.findByRole("button", { name: "Retirar visita das 08:00" })).not.toBeNull();
+    const order = screen.getAllByRole("button", { name: /^Retirar visita das/ }).map((b) => b.textContent);
+    expect(order).toEqual([ "Retirar visita das 08:00", "Retirar visita das 09:15", "Retirar visita das 09:40" ]);
+    expect(api.getHomeVisitDay).toHaveBeenCalledTimes(1);
+  });
+
   it("'Cancelar' sem envio pendurado fecha sem pergunta e sem reler", async () => {
     await openForm();
     await screen.findByText("Maria Lima");
