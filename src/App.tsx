@@ -321,7 +321,7 @@ export function useOmbudsmanHandoff(active: ModuleId): OmbudsmanHandoff {
   return useMemo(() => ({ manifestationId, openManifestation: setManifestationId }), [ manifestationId ]);
 }
 
-export function renderModule(active: ModuleId, setActive: (id: ModuleId) => void, caps: CapsHandoff = NO_CAPS_HANDOFF, omb: OmbudsmanHandoff = NO_OMB_HANDOFF, _visit: VisitHandoff = NO_VISIT_HANDOFF) {
+export function renderModule(active: ModuleId, setActive: (id: ModuleId) => void, caps: CapsHandoff = NO_CAPS_HANDOFF, omb: OmbudsmanHandoff = NO_OMB_HANDOFF, visit: VisitHandoff = NO_VISIT_HANDOFF) {
   switch (active) {
     case "overview":       return <Overview onNavigate={setActive} />;
     case "ingestion":      return <Ingestion />;
@@ -390,7 +390,7 @@ export function renderModule(active: ModuleId, setActive: (id: ModuleId) => void
     case "territory-team": return <TerritoryTeam />;
     case "registry-status": return <RegistryStatus />;
     case "territory-micro-areas": return <TerritoryMicroAreas onGoToSecurity={() => setActive("security")} />;
-    case "home-visit-day": return <HomeVisitDay />;
+    case "home-visit-day": return <HomeVisitDay start={visit.start} onGoToTeam={() => setActive("home-visits-team")} />;
     case "who-to-visit": return <WhoToVisit />;
     case "home-visits-team": return <HomeVisitsTeam />;
     case "micro-area-assignments": return <MicroAreaAssignments />;

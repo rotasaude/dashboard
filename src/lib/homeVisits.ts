@@ -539,3 +539,21 @@ export const homeVisitError = (err: unknown): string => homeVisitRefusals(err)[0
 export const isDayStale = (err: unknown): boolean => [ "day_changed", "day_closed", "visit_changed", "not_found" ].includes(errorCode(err) ?? "");
 // Não houve resposta do api, ou ele falhou: não se sabe se gravou. Guarda o `client_uuid` e tenta de novo com o mesmo.
 export const isNetworkOrServer = (err: unknown): boolean => !(err instanceof ApiError) || err.status >= 500;
+
+// Medidas da visita para o cartão: "PA 130/85", "Peso 72,5 kg". Só as que vieram; a observação nunca passa por aqui.
+const NUM = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 3 });
+export function measurementsText(domains: HomeVisitDomains, m: VisitMeasurements | null | undefined): string[] {
+  if (!m) return [];
+  const out: string[] = [];
+  if (m.systolic != null && m.diastolic != null) out.push(`PA ${NUM.format(m.systolic)}/${NUM.format(m.diastolic)}`);
+  else if (m.systolic != null) out.push(`PA sistólica ${NUM.format(m.systolic)}`);
+  else if (m.diastolic != null) out.push(`PA diastólica ${NUM.format(m.diastolic)}`);
+  if (m.weight_kg != null) out.push(`Peso ${NUM.format(m.weight_kg)} kg`);
+  if (m.height_cm != null) out.push(`Altura ${NUM.format(m.height_cm)} cm`);
+  if (m.temperature_c != null) out.push(`Temperatura ${NUM.format(m.temperature_c)} °C`);
+  if (m.glucose_mg_dl != null) {
+    const kind = m.glucose_type != null ? ` (${glucoseTypeLabel(domains, m.glucose_type)})` : "";
+    out.push(`Glicemia ${NUM.format(m.glucose_mg_dl)} mg/dL${kind}`);
+  }
+  return out;
+}
