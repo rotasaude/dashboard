@@ -9,6 +9,10 @@ import { describeActionError } from "./actionErrors";
 import { isValidCpf, onlyDigits } from "./attendance";
 import { COUNT_QUERY, NOMINAL_QUERY, STATIC_QUERY, fmtDay } from "./careLines";
 import { featureDisabledKey, hasFeature } from "./features";
+import { NO_ADDRESS, addressLine, streetTypeLabel } from "./territoryAddress";
+
+// O endereço do domicílio vive em `territoryAddress` (folha, sem ciclo com o api); quem já importa daqui continua.
+export { NO_ADDRESS, addressLine, streetTypeLabel };
 
 // "Lê sem trilha" é uma regra só, a do módulo 23.
 export { COUNT_QUERY, NOMINAL_QUERY, STATIC_QUERY, fmtDay };

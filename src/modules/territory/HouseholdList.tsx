@@ -8,33 +8,17 @@ import { useState } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { listHouseholds, type Household } from "../../lib/api";
 import { dictLabel } from "../../lib/territoryDictionaries";
-import { HOUSEHOLDS_KEY, NOMINAL_QUERY, fmtDay, territoryError } from "../../lib/territoryRegistry";
+import { HOUSEHOLDS_KEY, NOMINAL_QUERY, NO_ADDRESS, addressLine, fmtDay, streetTypeLabel, territoryError } from "../../lib/territoryRegistry";
 import { DataTable, type Column } from "../../components/DataTable";
 import { Tag } from "../../components/Tag";
 import { buttonStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { alert, box, muted, okText, row, stack } from "../exams/styles";
 import { HouseholdForm } from "./HouseholdForm";
 
-export const NO_ADDRESS = "domicílio sem endereço";
 export const HOUSEHOLD_SAVED = "Domicílio salvo. Nova versão enviada ao e-SUS.";
 
-// Tipo de logradouro DNE pelo dicionário do §15 (vem em caixa alta: "RUA" →
-// "Rua"); código desconhecido aparece cru.
-export function streetTypeLabel(code: string): string {
-  return dictLabel("tipo_logradouro", code).toLocaleLowerCase("pt-BR").replace(/(^|\s)\p{L}/gu, (c) => c.toLocaleUpperCase("pt-BR"));
-}
-
-// "Rua das Flores, 120" / "Rua das Flores, s/n", com o complemento quando há
-// ("Rua das Flores, 120 · apto 12": apartamentos do mesmo número não se
-// confundem no título, no cartão nem no nome do botão); recusa sem endereço
-// ({}) → NO_ADDRESS.
-export function addressLine(address: Household["address"]): string {
-  if (!address.street) return NO_ADDRESS;
-  const type = address.street_type ? streetTypeLabel(address.street_type) : "";
-  const street = type ? `${type} ${address.street}` : address.street;
-  const line = address.no_number ? `${street}, s/n` : address.number ? `${street}, ${address.number}` : street;
-  return address.complement ? `${line} · ${address.complement}` : line;
-}
+// O endereço de uma linha vive em `lib/territoryAddress` (o api.ts o usa na visita do 24b); quem importa daqui continua.
+export { NO_ADDRESS, addressLine, streetTypeLabel };
 
 export function householdStatus(h: Pick<Household, "refused" | "status">): { label: string; tone: string } {
   if (h.refused) return { label: "recusou o cadastro", tone: "neutral" };
