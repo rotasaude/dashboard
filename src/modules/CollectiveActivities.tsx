@@ -6,7 +6,7 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getCollectiveOptions, listCollectiveActivities, type CollectiveActivitySummary, type CollectiveOptions } from "../lib/api";
-import { ACTIVITY_SAVED, CANNOT_REGISTER_ACTIVITY, NO_TEAM, REPLAYED_ACTIVITY } from "../lib/collectiveActivities";
+import { ACTIVITY_SAVED, CANNOT_REGISTER_ACTIVITY, NO_TEAM, REPLAYED_ACTIVITY, UNCERTAIN_ACTIVITY_REREAD } from "../lib/collectiveActivities";
 import { CA_LIST_KEY, CA_OPTIONS_KEY, STATIC_QUERY, homeVisitError } from "../lib/homeVisits";
 import { HomeVisitGate } from "./homeVisits/HomeVisitGate";
 import { WriteLockProvider } from "./homeVisits/writeLock";
@@ -57,20 +57,30 @@ function NewActivity({ options }: { options: CollectiveOptions }) {
   // O formulário aberto (fechar o desmonta: nada do anterior sobra) e a frase do último registro.
   const [ open, setOpen ] = useState(false);
   const [ saved, setSaved ] = useState<string | null>(null);
+  // Descartou-se um envio pendurado: a atividade pode ter entrado; a frase pede para conferir a lista relida.
+  const [ uncertain, setUncertain ] = useState(false);
   const queryClient = useQueryClient();
   if (!options.teams.some((t) => t.can_register)) return <p style={muted}>{CANNOT_REGISTER_ACTIVITY}</p>;
   return (
     <div style={stack}>
       {saved && <p role="status" style={okText}>{saved}</p>}
+      {uncertain && <p role="status" style={alert}>{UNCERTAIN_ACTIVITY_REREAD}</p>}
       {open ? (
-        <ActivityForm options={options} onClose={() => setOpen(false)}
+        <ActivityForm options={options}
+          onClose={(discardedUncertain) => {
+            setOpen(false);
+            if (!discardedUncertain) return;
+            // UMA releitura da lista (sem pessoa): a atividade aparece, se entrou.
+            setUncertain(true);
+            void queryClient.invalidateQueries({ queryKey: [ CA_LIST_KEY ] });
+          }}
           onSaved={(r) => {
-            setOpen(false); setSaved(r.replayed ? REPLAYED_ACTIVITY : ACTIVITY_SAVED);
+            setOpen(false); setUncertain(false); setSaved(r.replayed ? REPLAYED_ACTIVITY : ACTIVITY_SAVED);
             void queryClient.invalidateQueries({ queryKey: [ CA_LIST_KEY ] });
           }} />
       ) : (
         <div>
-          <ActionButton onClick={() => { setSaved(null); setOpen(true); }}>Nova atividade</ActionButton>
+          <ActionButton onClick={() => { setSaved(null); setUncertain(false); setOpen(true); }}>Nova atividade</ActionButton>
         </div>
       )}
     </div>

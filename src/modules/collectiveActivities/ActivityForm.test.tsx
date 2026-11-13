@@ -14,7 +14,9 @@ vi.mock("../../lib/api", async (importOriginal) => {
 
 import * as api from "../../lib/api";
 import { ApiError } from "../../lib/api";
-import { ACTIVITY_NETWORK_RETRY, ACTIVITY_SAVED, IDENTIFIER_WARNING, NO_TEAM, TYPE_5_6_NOT_GENERATED } from "../../lib/collectiveActivities";
+import {
+  ACTIVITY_NETWORK_RETRY, ACTIVITY_SAVED, DISCARD_UNCERTAIN_ACTIVITY, IDENTIFIER_WARNING, NO_TEAM, TYPE_5_6_NOT_GENERATED, UNCERTAIN_ACTIVITY_REREAD
+} from "../../lib/collectiveActivities";
 import { COLLECTIVE_DISABLED, HOME_VISIT_ERRORS, duplicateParticipantText } from "../../lib/homeVisits";
 import { DUPLICATE_SUSPECTED_TEXT } from "../../lib/territoryRegistry";
 import { renderWithProviders } from "../../test/campaignFixtures";
@@ -290,6 +292,9 @@ describe("Nova atividade coletiva — regras do dado", () => {
     const ask = screen.getByRole("group", { name: "Descartar a atividade?" });
     fireEvent.click(within(ask).getByRole("button", { name: "Confirmar" }));
     await waitFor(() => expect(screen.queryByRole("form", { name: "Nova atividade coletiva" })).toBeNull());
+    // Nada foi enviado: fechar não relê a lista nem diz que pode ter gravado.
+    expect(api.listCollectiveActivities).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText(UNCERTAIN_ACTIVITY_REREAD)).toBeNull();
   });
 });
 
@@ -452,5 +457,23 @@ describe("Nova atividade coletiva — recusas do api", () => {
     await waitFor(() => expect(api.recordCollectiveActivity).toHaveBeenCalledTimes(2));
     expect(body(1)).toEqual(body(0));
     expect(await screen.findByText("Esta atividade já estava gravada.")).not.toBeNull();
+  });
+
+  it("rede: 'Descartar' avisa que a atividade pode ter sido gravada e relê a lista uma vez, sem reenviar", async () => {
+    mocked(api.recordCollectiveActivity).mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    await fillType4();
+    send();
+    expect(await screen.findByText(ACTIVITY_NETWORK_RETRY)).not.toBeNull();
+    const lists = mocked(api.listCollectiveActivities).mock.calls.length;
+    fireEvent.click(screen.getByRole("button", { name: "Descartar" }));
+    const ask = screen.getByRole("group", { name: DISCARD_UNCERTAIN_ACTIVITY });
+    expect(api.listCollectiveActivities).toHaveBeenCalledTimes(lists);
+    fireEvent.click(within(ask).getByRole("button", { name: "Confirmar" }));
+    expect(await screen.findByText(UNCERTAIN_ACTIVITY_REREAD)).not.toBeNull();
+    await waitFor(() => expect(api.listCollectiveActivities).toHaveBeenCalledTimes(lists + 1));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(api.listCollectiveActivities).toHaveBeenCalledTimes(lists + 1);
+    expect(screen.queryByRole("form", { name: "Nova atividade coletiva" })).toBeNull();
+    expect(api.recordCollectiveActivity).toHaveBeenCalledTimes(1);
   });
 });

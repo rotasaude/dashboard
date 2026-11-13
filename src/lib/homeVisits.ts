@@ -29,6 +29,9 @@ export const OTHER_DAY_TEXT = (d: { day: string; sequence: number }): string =>
   `Visita registrada na folha de ${fmtDay(d.day)}${d.sequence > 1 ? ` (complementar ${d.sequence})` : ""}`;
 export const CLOSE_EFFECT = "Depois de fechar, as visitas deste dia não mudam e a ficha de visita vai ao e-SUS.";
 export const NETWORK_RETRY = "não foi possível confirmar a gravação — tente de novo: a mesma visita não é gravada duas vezes";
+// Descartar um envio pendurado (rede/5xx): o api pode ter gravado; a folha é relida uma vez para a visita aparecer, se entrou.
+export const DISCARD_UNCERTAIN_VISIT = "a visita pode já ter sido gravada — ao descartar, a folha é relida; confira antes de registrar de novo";
+export const UNCERTAIN_VISIT_REREAD = "a visita pode já ter sido gravada — a folha foi relida; confira antes de registrar de novo";
 // Uma gravação por vez na mesma tela (fechar o dia, retirar, registrar).
 export const WRITE_RUNNING = "aguarde: outra gravação desta tela está em curso";
 // Pré-voo 4.7.6 (ledger:L61): TACS que registra, mas ainda sem microárea atribuída.
@@ -588,6 +591,7 @@ export function homeVisitRefusals(err: unknown): HomeVisitRefusal[] {
 }
 
 export const homeVisitError = (err: unknown): string => homeVisitRefusals(err)[0].text;
+
 
 // A tela está velha: a folha ou a visita mudou, fechou ou sumiu. Quem chama relê uma vez e não reenvia sozinho.
 export const isDayStale = (err: unknown): boolean => [ "day_changed", "day_closed", "visit_changed", "not_found" ].includes(errorCode(err) ?? "");

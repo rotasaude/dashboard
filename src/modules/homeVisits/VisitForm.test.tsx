@@ -16,14 +16,14 @@ vi.mock("../../lib/api", async (importOriginal) => {
 import * as api from "../../lib/api";
 import { ApiError } from "../../lib/api";
 import {
-  FAMILY_NOTICE, FAMILY_REASON_TEXT, HOME_VISIT_ERRORS, HOME_VISITS_DISABLED, MALE_REASON_TEXT, NETWORK_RETRY, NO_FAMILY_NOTICE, REPLAYED_VISIT,
-  TYPED_NOT_REGISTERED, WRITE_RUNNING
+  DISCARD_UNCERTAIN_VISIT, FAMILY_NOTICE, FAMILY_REASON_TEXT, HOME_VISIT_ERRORS, HOME_VISITS_DISABLED, MALE_REASON_TEXT, NETWORK_RETRY, NO_FAMILY_NOTICE,
+  REPLAYED_VISIT, TYPED_NOT_REGISTERED, UNCERTAIN_VISIT_REREAD, WRITE_RUNNING
 } from "../../lib/homeVisits";
 import { DUPLICATE_SUSPECTED_TEXT } from "../../lib/territoryRegistry";
 import { renderWithProviders } from "../../test/campaignFixtures";
 import { expectFrozenNotice } from "../../test/frozenNotice";
 import {
-  NOW24B, VISIT_DOMAINS, candidate, context, day, household, householdDetail, hvUser, tacsTeam, visit
+  NOW24B, VISIT_DOMAINS, acsTeam, candidate, context, day, household, householdDetail, hvUser, tacsTeam, visit
 } from "../../test/homeVisitFixtures";
 import { HomeVisitDay } from "../HomeVisitDay";
 
@@ -291,17 +291,60 @@ describe("Nova visita", () => {
     expect(screen.getByRole("button", { name: "Registrar visita" })).not.toBeNull();
   });
 
-  it("5xx também trava e 'Descartar' fecha sem reenviar", async () => {
+  it("5xx trava; 'Descartar' avisa que pode ter gravado e relê a lista de hoje e a folha uma vez, sem reenviar", async () => {
     mocked(api.recordHomeVisit).mockRejectedValueOnce(new ApiError(503, {}, "x"));
     await openForm();
     noHousehold("3");
     fireEvent.click(screen.getByLabelText("Ausente"));
     send();
     expect(await screen.findByText(NETWORK_RETRY)).not.toBeNull();
+    const lists = mocked(api.listHomeVisitDays).mock.calls.length;
+    const sheets = mocked(api.getHomeVisitDay).mock.calls.length;
     fireEvent.click(screen.getByRole("button", { name: "Descartar" }));
+    const ask = screen.getByRole("group", { name: DISCARD_UNCERTAIN_VISIT });
+    expect(api.listHomeVisitDays).toHaveBeenCalledTimes(lists);
+    fireEvent.click(within(ask).getByRole("button", { name: "Confirmar" }));
+    expect(await screen.findByText(UNCERTAIN_VISIT_REREAD)).not.toBeNull();
+    await waitFor(() => expect(api.listHomeVisitDays).toHaveBeenCalledTimes(lists + 1));
+    await waitFor(() => expect(api.getHomeVisitDay).toHaveBeenCalledTimes(sheets + 1));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(api.listHomeVisitDays).toHaveBeenCalledTimes(lists + 1);
+    expect(api.getHomeVisitDay).toHaveBeenCalledTimes(sheets + 1);
     expect(screen.queryByRole("button", { name: "Tentar de novo" })).toBeNull();
     expect(screen.getByRole("button", { name: "Nova visita" })).not.toBeNull();
     expect(api.recordHomeVisit).toHaveBeenCalledTimes(1);
+  });
+
+  it("'Cancelar' sem envio pendurado fecha sem pergunta e sem reler", async () => {
+    await openForm();
+    await screen.findByText("Maria Lima");
+    const lists = mocked(api.listHomeVisitDays).mock.calls.length;
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+    expect(screen.getByRole("button", { name: "Nova visita" })).not.toBeNull();
+    expect(screen.queryByText(UNCERTAIN_VISIT_REREAD)).toBeNull();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(api.listHomeVisitDays).toHaveBeenCalledTimes(lists);
+  });
+
+  it("duas equipes: o seletor 'Equipe' trava enquanto a visita envia e enquanto o envio está pendurado", async () => {
+    mocked(api.getHomeVisitContext).mockResolvedValue(context({ teams: [ acsTeam(), acsTeam({ id: "t2", name: "ESF Jardim" }) ] }));
+    let finish: (v: unknown) => void = () => {};
+    mocked(api.recordHomeVisit).mockRejectedValueOnce(new ApiError(503, {}, "x"))
+      .mockReturnValueOnce(new Promise((r) => { finish = r; }));
+    await openForm();
+    const team = () => screen.getByLabelText("Equipe") as HTMLSelectElement;
+    expect(team().disabled).toBe(false);
+    noHousehold("3");
+    fireEvent.click(screen.getByLabelText("Ausente"));
+    send();
+    expect(await screen.findByText(NETWORK_RETRY)).not.toBeNull();
+    expect(team().disabled).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Tentar de novo" }));
+    await waitFor(() => expect(api.recordHomeVisit).toHaveBeenCalledTimes(2));
+    expect(team().disabled).toBe(true);
+    finish({ visit: visit({ id: "v9" }), day: day({ visits: undefined }), replayed: true });
+    expect(await screen.findByText(REPLAYED_VISIT)).not.toBeNull();
+    await waitFor(() => expect(team().disabled).toBe(false));
   });
 
   it("recusa do api com path cai no campo; o uuid é trocado", async () => {

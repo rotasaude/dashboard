@@ -10,7 +10,7 @@
 import { useId, useRef, useState, type FormEvent } from "react";
 import { recordCollectiveActivity, type CollectiveActivity, type CollectiveOptions, type VisitCandidate, type VisitShift } from "../../lib/api";
 import {
-  ACTIVITY_NETWORK_RETRY, NO_CNS_PROFESSIONAL, OTHER_TEAM_PROFESSIONAL, activityBody, activityProblems, activityWarnings, alteredCount, emptyActivityDraft,
+  ACTIVITY_NETWORK_RETRY, DISCARD_UNCERTAIN_ACTIVITY, NO_CNS_PROFESSIONAL, OTHER_TEAM_PROFESSIONAL, activityBody, activityProblems, activityWarnings, alteredCount, emptyActivityDraft,
   fieldRule, healthTopicsAllowed, needsProcedure, offeredHealthTopics, offeredPractices, pruneActivityDraft, smokingAllowed, type ActivityDraft,
   type ParticipantDraft
 } from "../../lib/collectiveActivities";
@@ -47,7 +47,8 @@ const toParticipant = (c: PickedPerson, x: Extras): ParticipantDraft =>
     ? { kind: "patient", patientId: c.patientId, displayName: c.displayName, hasCpf: c.hasCpf, hasCns: c.hasCns, ...x }
     : { kind: "new", patient: c.patient, duplicatesReviewed: c.duplicatesReviewed, ...x };
 
-export function ActivityForm({ options, onSaved, onClose }: { options: CollectiveOptions; onSaved(r: ActivitySaved): void; onClose(): void }) {
+// `onClose(uncertain)`: `true` quando se descartou um envio pendurado (rede/5xx) — o pai relê a lista uma vez.
+export function ActivityForm({ options, onSaved, onClose }: { options: CollectiveOptions; onSaved(r: ActivitySaved): void; onClose(uncertain?: boolean): void }) {
   const { domains } = options;
   const uid = useId();
   const s = useIdempotentSubmit({ networkText: ACTIVITY_NETWORK_RETRY });
@@ -174,11 +175,14 @@ export function ActivityForm({ options, onSaved, onClose }: { options: Collectiv
   const placeId = `${uid}-place`;
   const placeNotice = `${uid}-place-notice`;
   const profErrors = [ ...new Set(s.problems.filter((p) => p.path.startsWith("professionals")).map((p) => p.text)) ];
+  // Com um envio pendurado (rede/5xx) não se sabe se o api gravou: a pergunta avisa e o pai relê a lista uma vez.
   const close = (label: string) => (s.busy
     ? <button type="button" aria-disabled style={disabledButtonStyle}>{label}</button>
-    : dirty || s.locked
-      ? <ConfirmButton label={label} question="Descartar a atividade?" onConfirm={onClose} />
-      : <button type="button" style={secondaryButtonStyle} onClick={onClose}>{label}</button>);
+    : s.locked
+      ? <ConfirmButton label={label} question={DISCARD_UNCERTAIN_ACTIVITY} onConfirm={() => onClose(true)} />
+      : dirty
+        ? <ConfirmButton label={label} question="Descartar a atividade?" onConfirm={() => onClose()} />
+        : <button type="button" style={secondaryButtonStyle} onClick={() => onClose()}>{label}</button>);
 
   return (
     <form ref={s.formRef} noValidate style={form} aria-label="Nova atividade coletiva" onSubmit={submit}>

@@ -24,6 +24,9 @@ const FICHA_NEEDS_ID_TYPES = [ 5, 6 ];
 
 // Frases da tela (Task 11).
 export const NO_TEAM = "Você não está em nenhuma equipe";
+// Descartar um envio pendurado (rede/5xx): o api pode ter gravado; a lista é relida uma vez para a atividade aparecer, se entrou.
+export const DISCARD_UNCERTAIN_ACTIVITY = "a atividade pode já ter sido gravada — ao descartar, a lista é relida; confira antes de registrar de novo";
+export const UNCERTAIN_ACTIVITY_REREAD = "a atividade pode já ter sido gravada — a lista foi relida; confira antes de registrar de novo";
 export const CANNOT_REGISTER_ACTIVITY = "seu CBO não registra atividade coletiva nas suas equipes";
 export const NO_CNS_PROFESSIONAL = "sem CNS no cadastro";
 export const OTHER_TEAM_PROFESSIONAL = "fora da equipe";

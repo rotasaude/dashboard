@@ -4,13 +4,14 @@
 // Folhas fechadas de hoje aparecem como cartão com a situação da ficha. Releitura só por ação (409, retirada, fechamento), uma vez.
 // "Nova visita" fica acima das folhas (também com "nenhuma folha hoje"); o atalho do "Quem visitar" (`start`, só em memória) abre o
 // formulário já com domicílio e pessoa. Uma gravação por vez na tela (`WriteLockProvider`). Nada de dado pessoal em URL nem em storage.
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   getHomeVisitContext, getHomeVisitDay, listHomeVisitDays, type HomeVisit, type HomeVisitContext, type HomeVisitDay as ApiDay, type HomeVisitTeam
 } from "../lib/api";
 import {
-  HV_CANNOT_REGISTER, HV_CONTEXT_KEY, HV_DAY_KEY, HV_TODAY_KEY, NOMINAL_QUERY, OTHER_DAY_TEXT, REPLAYED_VISIT, STATIC_QUERY, VISIT_SAVED, homeVisitError
+  HV_CANNOT_REGISTER, HV_CONTEXT_KEY, HV_DAY_KEY, HV_TODAY_KEY, NOMINAL_QUERY, OTHER_DAY_TEXT, REPLAYED_VISIT, STATIC_QUERY, UNCERTAIN_VISIT_REREAD, VISIT_SAVED,
+  homeVisitError
 } from "../lib/homeVisits";
 import { HomeVisitGate } from "./homeVisits/HomeVisitGate";
 import { DaySheet } from "./homeVisits/DaySheet";
@@ -33,6 +34,10 @@ export function HomeVisitDay({ now, start, onGoToTeam }: { now?: Date; start?: V
 function DayBody({ now, start, onGoToTeam }: { now?: Date; start: VisitStart | null; onGoToTeam?(): void }) {
   const ctx = useQuery({ queryKey: [ HV_CONTEXT_KEY ], queryFn: getHomeVisitContext, ...STATIC_QUERY });
   const [ picked, setPicked ] = useState<string | null>(start?.teamId ?? null);
+  // Trocar a equipe desmonta o formulário: travado enquanto uma gravação corre ou um envio está pendurado (rede/5xx).
+  const lock = useWriteLock();
+  const [ held, setHeld ] = useState(false);
+  const onHeld = useCallback((h: boolean) => setHeld(h), []);
   useEffect(() => { if (start) setPicked(start.teamId); }, [ start ]);
   if (ctx.isError) return <p role="alert" style={alert}>{homeVisitError(ctx.error)}</p>;
   if (!ctx.data) return <p role="status" style={muted}>Carregando…</p>;
@@ -51,19 +56,21 @@ function DayBody({ now, start, onGoToTeam }: { now?: Date; start: VisitStart | n
       {teams.length > 1 && (
         <label style={fieldLabel}>
           Equipe
-          <select value={team.id} style={inputStyle} onChange={(e) => setPicked(e.target.value)}>
+          <select value={team.id} disabled={lock.busy || held} style={inputStyle} onChange={(e) => setPicked(e.target.value)}>
             {teams.map((t) => <option key={t.id} value={t.id}>{t.name ?? t.ine}</option>)}
           </select>
         </label>
       )}
-      <TodaySheets key={team.id} ctx={ctx.data} team={team} now={now} start={start?.teamId === team.id ? start : null} />
+      <TodaySheets key={team.id} ctx={ctx.data} team={team} now={now} start={start?.teamId === team.id ? start : null} onHeld={onHeld} />
     </div>
   );
 }
 
 const upsert = (list: HomeVisit[], v: HomeVisit): HomeVisit[] => (list.some((x) => x.id === v.id) ? list.map((x) => (x.id === v.id ? v : x)) : [ ...list, v ]);
 
-function TodaySheets({ ctx, team, now, start }: { ctx: HomeVisitContext; team: HomeVisitTeam; now?: Date; start: VisitStart | null }) {
+function TodaySheets({ ctx, team, now, start, onHeld }: {
+  ctx: HomeVisitContext; team: HomeVisitTeam; now?: Date; start: VisitStart | null; onHeld(held: boolean): void;
+}) {
   const queryClient = useQueryClient();
   const lock = useWriteLock();
   const listKey = [ HV_TODAY_KEY, team.id, ctx.today ];
@@ -75,10 +82,12 @@ function TodaySheets({ ctx, team, now, start }: { ctx: HomeVisitContext; team: H
   // O formulário aberto (com o atalho que o abriu) e a frase do último registro.
   const [ form, setForm ] = useState<{ start: VisitStart | null; n: number } | null>(start ? { start, n: 1 } : null);
   const [ saved, setSaved ] = useState<string | null>(null);
+  // Descartou-se um envio pendurado: a visita pode ter entrado; a frase pede para conferir a folha relida.
+  const [ uncertain, setUncertain ] = useState(false);
   // Cada atalho abre o formulário uma vez; voltar à tela sem atalho novo não reabre.
   const consumed = useRef<VisitStart | null>(start);
   useEffect(() => {
-    if (start && start !== consumed.current) { consumed.current = start; setSaved(null); setForm((f) => ({ start, n: (f?.n ?? 0) + 1 })); }
+    if (start && start !== consumed.current) { consumed.current = start; setSaved(null); setUncertain(false); setForm((f) => ({ start, n: (f?.n ?? 0) + 1 })); }
   }, [ start ]);
 
   if (days.isError) return <p role="alert" style={alert}>{homeVisitError(days.error)}</p>;
@@ -101,7 +110,7 @@ function TodaySheets({ ctx, team, now, start }: { ctx: HomeVisitContext; team: H
   // o cartão entra no cache e os contadores e pendências vêm do `day`, sem reler. Senão → a lista de hoje é relida (sem trilha) e a
   // frase diz em que folha a visita entrou.
   function onSaved({ visit, day, replayed }: VisitSaved) {
-    setForm(null);
+    setForm(null); setUncertain(false);
     const { visits: _v, ...summary } = day;
     const cached = queryClient.getQueryData<ApiDay>([ HV_DAY_KEY, day.id ]);
     if (items.some((d) => d.id === day.id) && cached?.visits) {
@@ -114,13 +123,24 @@ function TodaySheets({ ctx, team, now, start }: { ctx: HomeVisitContext; team: H
     setSaved([ replayed ? REPLAYED_VISIT : null, OTHER_DAY_TEXT(day) ].filter(Boolean).join(" "));
   }
 
+  // Fechar o formulário. Depois de descartar um envio pendurado, UMA releitura do que mostraria a visita: a lista de hoje e as
+  // folhas dela na tela (nunca relidas sozinhas).
+  function onClose(discardedUncertain?: boolean) {
+    setForm(null);
+    if (!discardedUncertain) return;
+    setUncertain(true);
+    void queryClient.invalidateQueries({ queryKey: listKey });
+    for (const d of items) void queryClient.invalidateQueries({ queryKey: [ HV_DAY_KEY, d.id ] });
+  }
+
   return (
     <div style={stack}>
       {saved && <p role="status" style={okText}>{saved}</p>}
+      {uncertain && <p role="status" style={alert}>{UNCERTAIN_VISIT_REREAD}</p>}
       {form ? (
-        <VisitForm key={form.n} team={team} context={ctx} start={form.start} now={now} onSaved={onSaved} onClose={() => setForm(null)} />
+        <VisitForm key={form.n} team={team} context={ctx} start={form.start} now={now} onSaved={onSaved} onClose={onClose} onHeld={onHeld} />
       ) : (
-        <div><ActionButton busy={lock.busy} onClick={() => { setSaved(null); setForm({ start: null, n: Date.now() }); }}>Nova visita</ActionButton></div>
+        <div><ActionButton busy={lock.busy} onClick={() => { setSaved(null); setUncertain(false); setForm({ start: null, n: Date.now() }); }}>Nova visita</ActionButton></div>
       )}
       {items.length === 0
         ? <EmptyState title="nenhuma folha hoje — a primeira visita abre a folha" />

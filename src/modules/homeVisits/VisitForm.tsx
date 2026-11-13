@@ -5,7 +5,7 @@
 // (`useIdempotentSubmit`): o mesmo `client_uuid` no reenvio depois de rede/5xx, com os campos travados. A recusa do api cai no
 // campo do `path`; as da pessoa digitada reabrem o `PersonPick` (Q49/Q71; 409 `duplicate_suspected` com os candidatos do 409).
 // Dado pessoal só em estado local e no corpo do POST: nada em URL, storage ou mensagem.
-import { useId, useState, type FormEvent } from "react";
+import { useEffect, useId, useState, type FormEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   getVisitHousehold, recordHomeVisit, type HomeVisit, type HomeVisitContext, type HomeVisitDay, type HomeVisitTeam, type VisitCandidate,
@@ -13,12 +13,13 @@ import {
 } from "../../lib/api";
 import { fmtHourMinute } from "../../lib/format";
 import {
-  HOME_VISIT_ERRORS, HV_HOUSEHOLD_KEY, NOMINAL_QUERY, NON_RESIDENTIAL_NO_PERSON, NOTE_HINT, NO_MICRO_AREA, RESPONSIBLE_EXITED,
+  DISCARD_UNCERTAIN_VISIT, HOME_VISIT_ERRORS, HV_HOUSEHOLD_KEY, NOMINAL_QUERY, NON_RESIDENTIAL_NO_PERSON, NOTE_HINT, NO_MICRO_AREA, RESPONSIBLE_EXITED,
   allowedMeasurements, emptyVisitDraft, familyVisitNotice, homeVisitError, isNonResidential, measurementsAnyAllowed, offeredReasons,
   prunedText, pruneVisitDraft, shiftPreview, visitBody, visitProblems, type DraftHousehold, type HomeVisitRefusal, type MeasureDraft, type VisitDraft
 } from "../../lib/homeVisits";
 import { NO_NAME } from "../../lib/territoryRegistry";
 import type { Problem } from "../../lib/pharmacy";
+import { ConfirmButton } from "../../components/ConfirmButton";
 import { FrozenTextNotice } from "../../components/FrozenTextNotice";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { alert, checkLabel, fieldLabel, fieldset, form, legend, muted, row } from "../exams/styles";
@@ -53,8 +54,11 @@ function initialDraft(context: HomeVisitContext, now: Date, start: VisitStart | 
   return d;
 }
 
-export function VisitForm({ team, context, start, now, onSaved, onClose }: {
-  team: HomeVisitTeam; context: HomeVisitContext; start?: VisitStart | null; now?: Date; onSaved(r: VisitSaved): void; onClose(): void;
+// `onClose(uncertain)`: `true` quando se descartou um envio pendurado (rede/5xx) — o pai relê o que mostraria a visita.
+// `onHeld(held)`: o formulário tem um envio pendurado; o pai trava o que o desmontaria (o seletor de equipe).
+export function VisitForm({ team, context, start, now, onSaved, onClose, onHeld }: {
+  team: HomeVisitTeam; context: HomeVisitContext; start?: VisitStart | null; now?: Date; onSaved(r: VisitSaved): void; onClose(uncertain?: boolean): void;
+  onHeld?(held: boolean): void;
 }) {
   const { domains } = context;
   const uid = useId();
@@ -82,6 +86,7 @@ export function VisitForm({ team, context, start, now, onSaved, onClose }: {
   const rules = withSex(draft);
 
   const frozen = s.locked || s.busy;
+  useEffect(() => { onHeld?.(s.locked); return () => onHeld?.(false); }, [ s.locked, onHeld ]);
   const property = household?.property_type ?? draft.place?.propertyType ?? "";
   const nonResidential = property !== "" && isNonResidential(domains, property);
   const offered = offeredReasons(domains, rules, household);
@@ -182,7 +187,7 @@ export function VisitForm({ team, context, start, now, onSaved, onClose }: {
     return (
       <section aria-label="Nova visita" style={form}>
         <p role="status" style={alert}>{NO_MICRO_AREA}</p>
-        <div><button type="button" style={secondaryButtonStyle} onClick={onClose}>Fechar</button></div>
+        <div><button type="button" style={secondaryButtonStyle} onClick={() => onClose()}>Fechar</button></div>
       </section>
     );
   }
@@ -337,8 +342,10 @@ export function VisitForm({ team, context, start, now, onSaved, onClose }: {
         <div style={row}>
           <button type="button" aria-disabled={s.busy || undefined} style={s.busy ? disabledButtonStyle : buttonStyle}
             onClick={() => { if (!s.busy) void s.retry(); }}>Tentar de novo</button>
-          <button type="button" aria-disabled={s.busy || undefined} style={s.busy ? disabledButtonStyle : secondaryButtonStyle}
-            onClick={() => { if (!s.busy) onClose(); }}>Descartar</button>
+          {/* Não se sabe se o api gravou: descartar avisa e o pai relê a folha uma vez (a visita aparece, se entrou). */}
+          {s.busy
+            ? <button type="button" aria-disabled style={disabledButtonStyle}>Descartar</button>
+            : <ConfirmButton label="Descartar" question={DISCARD_UNCERTAIN_VISIT} onConfirm={() => onClose(true)} />}
         </div>
       ) : (
         <div style={row}>
