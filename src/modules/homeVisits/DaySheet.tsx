@@ -7,7 +7,9 @@ import { useRef, useState } from "react";
 import { closeHomeVisitDay, type HomeVisit, type HomeVisitDay, type HomeVisitDomains } from "../../lib/api";
 import { fmtDay } from "../../lib/careLines";
 import { fmtHourMinute } from "../../lib/format";
-import { CLOSE_EFFECT, LEDI_EXPORT_OFF, WRITE_RUNNING, blockerText, closedByLabel, dayStateLabel, fichaLabel, homeVisitRefusals, isDayStale } from "../../lib/homeVisits";
+import {
+  CLOSE_EFFECT, LEDI_EXPORT_OFF, WRITE_RUNNING, blockerText, closedByLabel, dayStateLabel, fichaLabel, homeVisitRefusals, isDayStale, rereadText
+} from "../../lib/homeVisits";
 import { useActionMessage } from "../../lib/useActionMessage";
 import { ActionMessage } from "../../components/ActionMessage";
 import { ConfirmButton } from "../../components/ConfirmButton";
@@ -40,8 +42,8 @@ export function DaySheet({ day, domains, onChanged }: { day: HomeVisitDay; domai
       msg.ok("Dia fechado.");
       onChanged(updated);
     } catch (err) {
-      msg.fail(homeVisitRefusals(err)[0].text);
-      if (isDayStale(err)) onChanged();
+      // Folha velha: a frase diz que releu (`rereadText`) e o pai relê uma vez.
+      if (isDayStale(err)) { msg.fail(rereadText(err)); onChanged(); } else msg.fail(homeVisitRefusals(err)[0].text);
     } finally { sending.current = false; setClosing(false); }
   }
 

@@ -12,7 +12,8 @@ vi.mock("../../lib/api", async (importOriginal) => {
 import * as api from "../../lib/api";
 import { ApiError, type HomeVisitDay as ApiDay } from "../../lib/api";
 import {
-  BLOCKER_TEXT, CLOSE_EFFECT, DAY_CHANGED, HOME_VISITS_DISABLED, HV_CANNOT_REGISTER, LEDI_EXPORT_OFF, VISIT_CHANGED, closedByLabel
+  BLOCKER_TEXT, CLOSE_EFFECT, DAY_CHANGED, HOME_VISIT_ERRORS, HOME_VISITS_DISABLED, HV_CANNOT_REGISTER, LEDI_EXPORT_OFF, NOT_FOUND_REREAD, VISIT_CHANGED,
+  closedByLabel
 } from "../../lib/homeVisits";
 import { renderWithProviders } from "../../test/campaignFixtures";
 import { expectFrozenNotice } from "../../test/frozenNotice";
@@ -118,6 +119,17 @@ describe("Folha do dia", () => {
     expect(api.withdrawHomeVisit).toHaveBeenCalledWith("v1", "Registrei na casa errada.");
   });
 
+  it("retirar: 404 not_found diz que releu, e relê uma vez", async () => {
+    mocked(api.withdrawHomeVisit).mockRejectedValueOnce(new ApiError(404, { error: "not_found" }, "x"));
+    mount();
+    fireEvent.click(await screen.findByRole("button", { name: "Retirar visita das 09:15" }));
+    fireEvent.change(screen.getByLabelText("Motivo da retirada"), { target: { value: "Registrei na casa errada." } });
+    fireEvent.click(screen.getByRole("button", { name: "Retirar" }));
+    expect(await screen.findByText(NOT_FOUND_REREAD)).not.toBeNull();
+    await waitFor(() => expect(api.getHomeVisitDay).toHaveBeenCalledTimes(2));
+    expect(screen.queryByText(HOME_VISIT_ERRORS.not_found)).toBeNull();
+  });
+
   it("retirar: sucesso relê e o cartão retirado mostra o motivo", async () => {
     mocked(api.withdrawHomeVisit).mockResolvedValue(visit({ state: "withdrawn", can_withdraw: false }));
     mocked(api.getHomeVisitDay).mockResolvedValueOnce(day()).mockResolvedValue(day({ withdrawn_count: 1, visits: [
@@ -153,6 +165,13 @@ describe("Folha do dia", () => {
     fireEvent.click(screen.getByRole("button", { name: "Visitas da equipe" }));
     expect(go).toHaveBeenCalledTimes(1);
     expect(api.listHomeVisitDays).not.toHaveBeenCalled();
+  });
+
+  it("leitura 404: frase neutra, sem dizer que releu", async () => {
+    mocked(api.getHomeVisitDay).mockRejectedValue(new ApiError(404, { error: "not_found" }, "x"));
+    mount();
+    expect(await screen.findByText("não encontrado — recarregue a lista")).not.toBeNull();
+    expect(screen.queryByText(NOT_FOUND_REREAD)).toBeNull();
   });
 
   it("erro de leitura mostra a frase da recusa", async () => {

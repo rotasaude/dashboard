@@ -489,7 +489,8 @@ export const HOME_VISIT_ERRORS: Record<string, string> = {
   // herdados (convenções e contrato)
   feature_disabled: HOME_VISITS_DISABLED,
   mfa_required: "confirme sua identidade com o segundo fator e tente de novo",
-  not_found: "não encontrado — os dados foram relidos",
+  // Neutra: nas leituras e nos formulários nada é relido. Onde a tela relê (fechar, retirar, engano), vale `rereadText`.
+  not_found: "não encontrado — recarregue a lista",
   invalid_request: "pedido inválido — recarregue a tela e tente de novo",
   invalid_cursor: "a lista mudou — ela será lida do início",
   invalid_limit: "tamanho de página inválido — recarregue a tela",
@@ -592,6 +593,9 @@ export function homeVisitRefusals(err: unknown): HomeVisitRefusal[] {
 
 export const homeVisitError = (err: unknown): string => homeVisitRefusals(err)[0].text;
 
+// Depois de uma recusa que fez a tela reler (fechar, retirar, engano): o `not_found` diz que releu; o resto, a frase do código.
+export const NOT_FOUND_REREAD = "não encontrado — os dados foram relidos";
+export const rereadText = (err: unknown): string => (errorCode(err) === "not_found" ? NOT_FOUND_REREAD : homeVisitError(err));
 
 // A tela está velha: a folha ou a visita mudou, fechou ou sumiu. Quem chama relê uma vez e não reenvia sozinho.
 export const isDayStale = (err: unknown): boolean => [ "day_changed", "day_closed", "visit_changed", "not_found" ].includes(errorCode(err) ?? "");

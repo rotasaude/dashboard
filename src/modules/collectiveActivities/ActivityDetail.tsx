@@ -8,7 +8,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { errorCode, getCollectiveActivity, markCollectiveMistaken, type CollectiveActivity, type CollectiveDomains, type CollectiveParticipant } from "../../lib/api";
 import { fmtDay } from "../../lib/careLines";
 import { fmtDateTime } from "../../lib/format";
-import { CA_DETAIL_KEY, CA_LIST_KEY, NOMINAL_QUERY, fichaLabel, homeVisitError, homeVisitRefusals, shiftLabel, textProblem } from "../../lib/homeVisits";
+import { CA_DETAIL_KEY, CA_LIST_KEY, NOMINAL_QUERY, fichaLabel, homeVisitError, homeVisitRefusals, rereadText, shiftLabel, textProblem } from "../../lib/homeVisits";
 import { FrozenTextNotice } from "../../components/FrozenTextNotice";
 import { KeyValue } from "../../components/KeyValue";
 import { Tag } from "../../components/Tag";
@@ -129,7 +129,8 @@ function MistakenForm({ activity, lock, onDone, onClose, onStale }: {
         check: () => { const p = textProblem(reason, { min: 10, max: 500, path: "reason" }); return p ? [ p ] : []; },
         call: () => lock.run(() => markCollectiveMistaken(activity.id, reason.trim())),
         ok: () => onDone(),
-        stale: (text) => onStale(text)
+        // `onStale` relê: o `not_found` passa a dizer isso.
+        stale: (_text, err) => onStale(rereadText(err))
       })}>
       <p style={muted}>{MISTAKEN_EFFECT}</p>
       <label style={fieldLabel}>

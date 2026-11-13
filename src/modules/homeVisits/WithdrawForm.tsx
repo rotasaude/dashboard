@@ -4,7 +4,7 @@
 // e nunca reenvia sozinho. O motivo é texto livre: nunca vai a URL, a storage nem a mensagem de erro.
 import { useState } from "react";
 import { withdrawHomeVisit, type HomeVisit } from "../../lib/api";
-import { homeVisitRefusals, isDayStale, textProblem } from "../../lib/homeVisits";
+import { homeVisitRefusals, isDayStale, rereadText, textProblem } from "../../lib/homeVisits";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { FrozenTextNotice } from "../../components/FrozenTextNotice";
 import { useFormProblems } from "../psychosocial/useFormProblems";
@@ -25,7 +25,8 @@ export function WithdrawForm({ visit, onDone, onClose, onStale }: {
         check: () => { const p = textProblem(reason, { min: 10, max: 500, path: "reason" }); return p ? [ p ] : []; },
         call: () => lock.run(() => withdrawHomeVisit(visit.id, reason.trim())),
         ok: onDone,
-        stale: (text) => onStale(text)
+        // `onStale` relê: o `not_found` passa a dizer isso.
+        stale: (_text, err) => onStale(rereadText(err))
       })}>
       <label style={fieldLabel}>
         Motivo da retirada

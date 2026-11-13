@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { ApiError } from "./api";
 import {
   ASSIGNEE_CBO_NOT_ALLOWED, BLOCKER_TEXT, CLOSE_EFFECT, COLLECTIVE_DISABLED, DAY_CHANGED, EMPTY_MEASURES, HOME_VISIT_ERRORS, HOME_VISITS_DISABLED,
-  HV_CANNOT_REGISTER, HV_NO_ROLE, LEDI_EXPORT_OFF, NETWORK_RETRY, OTHER_DAY_TEXT, REPLAYED_VISIT, VISIT_CHANGED, blockerText, canUseCollectiveActivities,
+  HV_CANNOT_REGISTER, HV_NO_ROLE, LEDI_EXPORT_OFF, NETWORK_RETRY, NOT_FOUND_REREAD, OTHER_DAY_TEXT, rereadText, REPLAYED_VISIT, VISIT_CHANGED, blockerText, canUseCollectiveActivities,
   canUseHomeVisits, closedByLabel, dayStateLabel, duplicateParticipantText, emptyVisitDraft, familyVisitNotice, fichaLabel, glucoseTypeLabel,
   homeVisitError, homeVisitRefusals, hvRoles, isDayStale, isNetworkOrServer, isNonResidential, measurementsAllowed, measurementsAnyAllowed,
   measurementsProblems, occurredAt, originLabel, outcomeLabel, parseMeasure, propertyLabel, quickPatientProblems, reasonLabel, reasonsFor,
@@ -63,6 +63,16 @@ describe("frases de erro", () => {
     expect([ HV_NO_ROLE, HV_CANNOT_REGISTER, REPLAYED_VISIT, NETWORK_RETRY ].every(Boolean)).toBe(true);
     expect(OTHER_DAY_TEXT({ day: "2026-11-10", sequence: 2 })).toBe("Visita registrada na folha de 10/11/2026 (complementar 2)");
     expect(OTHER_DAY_TEXT({ day: "2026-11-10", sequence: 1 })).toBe("Visita registrada na folha de 10/11/2026");
+  });
+
+  it("not_found: frase neutra nas leituras e nos formulários; 'relidos' só onde a tela releu", () => {
+    expect(HOME_VISIT_ERRORS.not_found).toBe("não encontrado — recarregue a lista");
+    expect(homeVisitError(err(404, { error: "not_found" }))).toBe("não encontrado — recarregue a lista");
+    expect(homeVisitError(err(404, {}))).toBe("não encontrado — recarregue a lista");
+    expect(homeVisitError(err(422, { error: "not_found", path: "household_id" }))).toBe("não encontrado — recarregue a lista");
+    expect(NOT_FOUND_REREAD).toBe("não encontrado — os dados foram relidos");
+    expect(rereadText(err(404, { error: "not_found" }))).toBe(NOT_FOUND_REREAD);
+    expect(rereadText(err(409, { error: "day_changed" }))).toBe(DAY_CHANGED);
   });
 
   it("duplicate_participant: duas frases (confirmable); cpf_or_reason_required tem frase (Q71)", () => {

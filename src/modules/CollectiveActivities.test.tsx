@@ -11,7 +11,7 @@ vi.mock("../lib/api", async (importOriginal) => {
 
 import * as api from "../lib/api";
 import { ApiError } from "../lib/api";
-import { HOME_VISIT_ERRORS } from "../lib/homeVisits";
+import { HOME_VISIT_ERRORS, NOT_FOUND_REREAD } from "../lib/homeVisits";
 import { renderWithProviders } from "../test/campaignFixtures";
 import { expectFrozenNotice } from "../test/frozenNotice";
 import { activity, hvUser, listActivity, options } from "../test/homeVisitFixtures";
@@ -185,6 +185,17 @@ describe("Atividade coletiva — registrada por engano", () => {
     await new Promise((r) => setTimeout(r, 50));
     expect(api.getCollectiveActivity).toHaveBeenCalledTimes(2);
     expect(api.markCollectiveMistaken).toHaveBeenCalledTimes(1);
+  });
+
+  it("404 not_found no engano: diz que releu, e relê uma vez", async () => {
+    mocked(api.markCollectiveMistaken).mockRejectedValue(new ApiError(404, { error: "not_found" }, "x"));
+    mount();
+    await openDetail();
+    fireEvent.click(await screen.findByRole("button", { name: "Registrada por engano" }));
+    fireEvent.change(screen.getByLabelText("Motivo"), { target: { value: "Atividade lançada em duplicidade." } });
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+    expect(await screen.findByText(NOT_FOUND_REREAD)).not.toBeNull();
+    await waitFor(() => expect(api.getCollectiveActivity).toHaveBeenCalledTimes(2));
   });
 
   it("botão fica bloqueado enquanto a chamada corre (um envio só)", async () => {
