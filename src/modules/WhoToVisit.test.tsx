@@ -8,7 +8,7 @@ vi.mock("../lib/api", async (importOriginal) => {
 
 import * as api from "../lib/api";
 import { ApiError } from "../lib/api";
-import { HOME_VISITS_DISABLED } from "../lib/homeVisits";
+import { HOME_VISIT_ERRORS, HOME_VISITS_DISABLED } from "../lib/homeVisits";
 import { renderWithProviders } from "../test/campaignFixtures";
 import { context, hvUser, nurseTeam, whoItem } from "../test/homeVisitFixtures";
 import { WhoToVisit } from "./WhoToVisit";
@@ -64,7 +64,7 @@ describe("Quem visitar", () => {
     fireEvent.click(screen.getByRole("button", { name: "Carregar mais" }));
     await waitFor(() => expect(mocked(api.listWhoToVisit).mock.calls[1][0]).toMatchObject({ before: "c2" }));
     expect(await screen.findByText("Rosa Reis")).not.toBeNull();
-    expect(screen.getByText("a lista mudou — recarregada do início")).not.toBeNull();
+    expect(screen.getByText(HOME_VISIT_ERRORS.invalid_cursor)).not.toBeNull();
     expect(mocked(api.listWhoToVisit).mock.calls[2][0]).not.toHaveProperty("before");
     expect(api.listWhoToVisit).toHaveBeenCalledTimes(3);
   });
@@ -91,4 +91,5 @@ describe("Quem visitar", () => {
     mount();
     expect(await screen.findByText(HOME_VISITS_DISABLED)).not.toBeNull();
   });
+
 });

@@ -4,15 +4,15 @@
 // frase pronta (`whoReasonText`) — nunca CID nem condição. O atalho "Registrar visita" só aparece a quem registra na equipe e na microárea
 // (própria ou atribuída) e leva o alvo à "Folha do dia" só em memória (`onStartVisit`). Nada em storage; a URL só leva ids e o cursor.
 import { useState, type CSSProperties } from "react";
-import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import {
-  countWhoToVisit, errorCode, getHomeVisitContext, listWhoToVisit,
-  type HomeVisitTeam, type MicroAreaScope, type VisitMicroArea, type WhoToVisitItem, type WhoToVisitPage
+  countWhoToVisit, getHomeVisitContext, listWhoToVisit, type HomeVisitTeam, type MicroAreaScope, type VisitMicroArea, type WhoToVisitItem
 } from "../lib/api";
 import {
-  COUNT_QUERY, HV_CONTEXT_KEY, NOMINAL_QUERY, NO_MICRO_AREA, STATIC_QUERY, WHO_COUNT_KEY, WHO_KEY, fmtDay, homeVisitError, whoReasonText
+  COUNT_QUERY, HV_CONTEXT_KEY, NO_MICRO_AREA, STATIC_QUERY, WHO_COUNT_KEY, WHO_KEY, fmtDay, homeVisitError, whoReasonText
 } from "../lib/homeVisits";
 import { HomeVisitGate } from "./homeVisits/HomeVisitGate";
+import { PagedBody, usePaged } from "./homeVisits/usePaged";
 import type { VisitStart } from "./homeVisits/useVisitHandoff";
 import { DataTable, type Column } from "../components/DataTable";
 import { EmptyState } from "../components/EmptyState";
@@ -22,7 +22,6 @@ import { alert, fieldLabel, muted, row, stack } from "./exams/styles";
 
 const PAGE = 50;
 const NO_TEAM = "nenhuma equipe encontrada para você";
-const CURSOR_RESET = "a lista mudou — recarregada do início";
 const SCOPE_TEXT: Record<MicroAreaScope, string> = { responsible: "sua", assigned: "atribuída", team: "da equipe" };
 const REASONS: { code: string; label: string }[] = [
   { code: "care_line", label: "Linhas de cuidado" }, { code: "registration_due", label: "Cadastro a vencer" }, { code: "never_visited", label: "Nunca visitadas" }
@@ -113,25 +112,10 @@ function Counts({ micro }: { micro: string }) {
 function List({ team, micro, reasons, canRegister, onStartVisit }: {
   team: HomeVisitTeam; micro: string; reasons: string[]; canRegister: boolean; onStartVisit?(start: VisitStart): void;
 }) {
-  const queryClient = useQueryClient();
-  const [ note, setNote ] = useState<string | null>(null);
-  const key = [ WHO_KEY, micro, reasons ];
-  const q = useInfiniteQuery({
-    queryKey: key, initialPageParam: null as string | null,
-    queryFn: ({ pageParam }): Promise<WhoToVisitPage> => listWhoToVisit({ micro_area_id: micro, ...(reasons.length > 0 && { reason: reasons }), ...(pageParam && { before: pageParam }), limit: PAGE }),
-    getNextPageParam: (last: WhoToVisitPage) => last.next_before ?? undefined, ...NOMINAL_QUERY
-  });
-  async function more() {
-    setNote(null);
-    const r = await q.fetchNextPage();
-    if (!r.isError) return;
-    // Cursor velho: recomeça da primeira página, uma vez; se a releitura falhar, o erro aparece (sem laço).
-    if (errorCode(r.error) === "invalid_cursor") { setNote(CURSOR_RESET); await queryClient.resetQueries({ queryKey: key }); }
-    else setNote(homeVisitError(r.error));
-  }
-  if (q.isError && !q.data) return <p role="alert" style={alert}>{homeVisitError(q.error)}</p>;
-  if (!q.data) return <p role="status" style={muted}>Carregando…</p>;
-  const items = q.data.pages.flatMap((p) => p.items);
+  const list = usePaged<WhoToVisitItem>(
+    [ WHO_KEY, micro, reasons ],
+    (before) => listWhoToVisit({ micro_area_id: micro, ...(reasons.length > 0 && { reason: reasons }), ...(before && { before }), limit: PAGE }),
+    true, true);
   const start = (i: WhoToVisitItem) => onStartVisit?.({
     teamId: team.id, microAreaId: i.micro_area.id, householdId: i.household?.id ?? null, familyId: i.family_id, patientId: i.patient_id, displayName: i.display_name
   });
@@ -146,12 +130,8 @@ function List({ team, micro, reasons, canRegister, onStartVisit }: {
     <button type="button" style={secondaryButtonStyle} aria-label={`Registrar visita para ${i.display_name ?? "esta pessoa"}`} onClick={() => start(i)}>Registrar visita</button>
   ) });
   return (
-    <div style={stack}>
-      {note && <p role="status" style={muted}>{note}</p>}
-      <DataTable cols={cols} rows={items} rowKey={(i) => i.patient_id} label="Quem visitar" empty="ninguém para visitar nesta microárea" />
-      {q.hasNextPage && (
-        <div><button type="button" style={secondaryButtonStyle} disabled={q.isFetchingNextPage} onClick={() => void more()}>{q.isFetchingNextPage ? "Carregando…" : "Carregar mais"}</button></div>
-      )}
-    </div>
+    <PagedBody list={list}>
+      {(items) => <DataTable cols={cols} rows={items} rowKey={(i) => i.patient_id} label="Quem visitar" empty="ninguém para visitar nesta microárea" />}
+    </PagedBody>
   );
 }

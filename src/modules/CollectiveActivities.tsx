@@ -10,7 +10,7 @@ import { ACTIVITY_SAVED, CANNOT_REGISTER_ACTIVITY, NO_TEAM, REPLAYED_ACTIVITY, U
 import { CA_LIST_KEY, CA_OPTIONS_KEY, STATIC_QUERY, homeVisitError } from "../lib/homeVisits";
 import { HomeVisitGate } from "./homeVisits/HomeVisitGate";
 import { WriteLockProvider } from "./homeVisits/writeLock";
-import { PagedBody, usePaged } from "./HomeVisitsTeam";
+import { PagedBody, usePaged } from "./homeVisits/usePaged";
 import { ActivityForm } from "./collectiveActivities/ActivityForm";
 import { ActivityList } from "./collectiveActivities/ActivityList";
 import { ActivityDetail } from "./collectiveActivities/ActivityDetail";

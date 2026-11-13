@@ -4,18 +4,18 @@
 // e fica montada depois, para voltar a ela não ler de novo. As contagens (sem trilha) só aceitam equipe, microárea e período: o
 // profissional e o desfecho nunca vão a elas, e o texto diz que são da equipe. Nada em storage; só ids, datas e filtros codificados.
 import { useState, type CSSProperties } from "react";
-import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import {
-  countHomeVisits, errorCode, getHomeVisitContext, listHomeVisitDays, listHomeVisits,
-  type HomeVisit, type HomeVisitContext, type HomeVisitDay, type HomeVisitTeam
+  countHomeVisits, getHomeVisitContext, listHomeVisitDays, listHomeVisits, type HomeVisit, type HomeVisitContext, type HomeVisitDay, type HomeVisitTeam
 } from "../lib/api";
 import {
-  COUNT_QUERY, HOME_VISIT_ERRORS, HV_CONTEXT_KEY, HV_COUNT_KEY, HV_DAYS_KEY, HV_VISITS_KEY, NOMINAL_QUERY, STATIC_QUERY, homeVisitError
+  COUNT_QUERY, HV_CONTEXT_KEY, HV_COUNT_KEY, HV_DAYS_KEY, HV_VISITS_KEY, STATIC_QUERY, homeVisitError
 } from "../lib/homeVisits";
 import { HomeVisitGate } from "./homeVisits/HomeVisitGate";
 import { DayDetail, DayList } from "./homeVisits/DayList";
 import { VisitList } from "./homeVisits/VisitList";
 import { VisitDetail } from "./homeVisits/VisitDetail";
+import { PagedBody, usePaged } from "./homeVisits/usePaged";
 import { EmptyState } from "../components/EmptyState";
 import { StatTile } from "../components/StatTile";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../components/formStyles";
@@ -57,26 +57,6 @@ function TeamBody() {
 }
 
 interface Filters { micro: string; professional: string; outcome: string; from: string; to: string }
-type Page<T> = { items: T[]; next_before: string | null };
-
-// Lista paginada por cursor. A ordem é a do api. Cursor antigo (`invalid_cursor`) recomeça da primeira página, com a frase.
-export function usePaged<T>(key: unknown[], fetchPage: (before: string | null) => Promise<Page<T>>, nominal: boolean, enabled: boolean) {
-  const queryClient = useQueryClient();
-  const [ note, setNote ] = useState<string | null>(null);
-  const q = useInfiniteQuery({
-    queryKey: key, queryFn: ({ pageParam }) => fetchPage(pageParam), initialPageParam: null as string | null,
-    getNextPageParam: (last: Page<T>) => last.next_before ?? undefined, enabled, ...(nominal ? NOMINAL_QUERY : STATIC_QUERY)
-  });
-  async function more() {
-    setNote(null);
-    const r = await q.fetchNextPage();
-    if (!r.isError) return;
-    if (errorCode(r.error) === "invalid_cursor") { setNote(HOME_VISIT_ERRORS.invalid_cursor); await queryClient.resetQueries({ queryKey: key }); }
-    else setNote(homeVisitError(r.error));
-  }
-  const items = q.data ? q.data.pages.flatMap((p) => p.items) : null;
-  return { items, error: q.isError && !q.data ? q.error : null, note, hasMore: !!q.hasNextPage, loadingMore: q.isFetchingNextPage, more };
-}
 
 const tabBase: CSSProperties = { padding: "4px 11px", borderRadius: 6, cursor: "pointer", fontSize: 11, fontWeight: 600, letterSpacing: 0.3 };
 const tabIdle: CSSProperties = { ...tabBase, border: "1px solid var(--rule2)", background: "transparent", color: "var(--ink2)" };
@@ -182,20 +162,6 @@ function TeamPanel({ ctx, team }: { ctx: HomeVisitContext; team: HomeVisitTeam }
           <PagedBody list={visits}>{(items) => <VisitList visits={items} onOpen={setOpenVisit} />}</PagedBody>
           </div>
         </div>
-      )}
-    </div>
-  );
-}
-
-export function PagedBody<T>({ list, children }: { list: ReturnType<typeof usePaged<T>>; children(items: T[]): React.ReactNode }) {
-  if (list.error) return <p role="alert" style={alert}>{homeVisitError(list.error)}</p>;
-  if (!list.items) return <p role="status" style={muted}>Carregando…</p>;
-  return (
-    <div style={stack}>
-      {list.note && <p role="status" style={muted}>{list.note}</p>}
-      {children(list.items)}
-      {list.hasMore && (
-        <div><button type="button" style={secondaryButtonStyle} disabled={list.loadingMore} onClick={() => void list.more()}>{list.loadingMore ? "Carregando…" : "Carregar mais"}</button></div>
       )}
     </div>
   );
