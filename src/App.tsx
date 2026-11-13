@@ -395,8 +395,8 @@ export function renderModule(active: ModuleId, setActive: (id: ModuleId) => void
     case "home-visits-team": return <HomeVisitsTeam />;
     case "micro-area-assignments": return <MicroAreaAssignments onGoToSecurity={() => setActive("security")} />;
     case "collective-activities": return <CollectiveActivities />;
-    case "field-devices": return <FieldDevices />;
-    case "field-devices-admin": return <FieldDevicesAdmin />;
+    case "field-devices": return <FieldDevices onGoToSecurity={() => setActive("security")} />;
+    case "field-devices-admin": return <FieldDevicesAdmin onGoToSecurity={() => setActive("security")} />;
     case "surveillance-queue": return <SurveillanceQueue />;
     case "surveillance-negatives": return <SurveillanceNegatives />;
     case "surveillance-reports": return <SurveillanceReports />;
