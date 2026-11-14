@@ -7,7 +7,7 @@
 // `can_register`). Uma consulta só traz o arquivo do mapa e os pontos (Q14):
 // é NOMINAL e grava trilha — lida ao abrir a microárea, nunca sozinha. Sem
 // mapa gerado, a tela avisa e a lista segue; o MapLibre nem é carregado.
-import { Suspense, lazy, useState } from "react";
+import { Suspense, lazy, useId, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getTerritoryContext, listMapHouseholds, type MapHousehold } from "../lib/api";
 import { NOMINAL_QUERY, STATIC_QUERY, TERRITORY_CONTEXT_KEY, teamName, territoryError } from "../lib/territoryRegistry";
@@ -18,6 +18,8 @@ import { inputStyle, secondaryButtonStyle } from "../components/formStyles";
 import { alert, box, fieldLabel, muted, row, stack } from "./exams/styles";
 import { TerritoryGate } from "./territory/TerritoryGate";
 import { pointLabel } from "./territory/map/points";
+import { PointCorrection } from "./territory/map/PointCorrection";
+import type { LatLng } from "./territory/map/fieldMap";
 
 const MicroAreaMap = lazy(() => import("./territory/map/MicroAreaMap"));
 
@@ -65,7 +67,7 @@ function MapBody() {
           </label>
         </div>
       </Panel>
-      <AreaMap key={area.id} microAreaId={area.id} code={area.code} />
+      <AreaMap key={area.id} microAreaId={area.id} code={area.code} canRegister={area.can_register} />
     </div>
   );
 }
@@ -74,13 +76,19 @@ function familiesText(n: number): string {
   return n === 1 ? "1 família" : `${n} famílias`;
 }
 
-function AreaMap({ microAreaId, code }: { microAreaId: string; code: string }) {
+function AreaMap({ microAreaId, code, canRegister }: { microAreaId: string; code: string; canRegister: boolean }) {
   const query = useQuery({ queryKey: [ MAP_HOUSEHOLDS_KEY, microAreaId ], queryFn: () => listMapHouseholds(microAreaId), ...NOMINAL_QUERY });
   const [ selectedId, setSelectedId ] = useState<string | null>(null);
+  // Um ponto em correção por vez: de onde o marcador sai e para onde foi.
+  const [ correcting, setCorrecting ] = useState<{ id: string; from: LatLng } | null>(null);
+  const [ moved, setMoved ] = useState<LatLng | null>(null);
+  const correction = useMemo(() => (correcting ? { from: correcting.from, onMove: setMoved } : null), [ correcting ]);
 
   if (query.isPending) return <p className="mono" style={muted}>carregando…</p>;
   if (query.isError) return <p role="alert" style={alert}>{territoryError(query.error)}</p>;
   const { map, items } = query.data;
+  const stop = () => { setCorrecting(null); setMoved(null); };
+  const reload = () => void query.refetch();
 
   return (
     <>
@@ -89,7 +97,7 @@ function AreaMap({ microAreaId, code }: { microAreaId: string; code: string }) {
           {map
             ? (
               <Suspense fallback={<p className="mono" style={muted}>carregando o mapa…</p>}>
-                <MicroAreaMap items={items} selectedId={selectedId} onSelect={setSelectedId} />
+                <MicroAreaMap items={items} selectedId={selectedId} onSelect={setSelectedId} correction={correction} />
               </Suspense>
             )
             : <EmptyState title={NO_MAP} />}
@@ -100,7 +108,16 @@ function AreaMap({ microAreaId, code }: { microAreaId: string; code: string }) {
           {items.length === 0 ? <EmptyState title={NO_POINTS} /> : (
             <ul aria-label="Domicílios com ponto" style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 8 }}>
               {items.map((h) => (
-                <PointItem key={h.id} item={h} selected={h.id === selectedId} onShow={map ? () => setSelectedId(h.id) : null} />
+                <PointItem key={h.id} item={h} selected={h.id === selectedId} onShow={map ? () => setSelectedId(h.id) : null}
+                  correction={map && canRegister ? {
+                    active: correcting?.id === h.id, moved: correcting?.id === h.id ? moved : null, locked: correcting !== null && correcting.id !== h.id,
+                    onStart: () => {
+                      setSelectedId(h.id);
+                      setMoved(null);
+                      setCorrecting({ id: h.id, from: { latitude: h.location.latitude, longitude: h.location.longitude } });
+                    },
+                    onStop: stop, onDone: reload, onStale: reload
+                  } : null} />
               ))}
             </ul>
           )}
@@ -110,12 +127,19 @@ function AreaMap({ microAreaId, code }: { microAreaId: string; code: string }) {
   );
 }
 
-function PointItem({ item, selected, onShow }: { item: MapHousehold; selected: boolean; onShow: (() => void) | null }) {
+type CorrectionControl = {
+  active: boolean; moved: LatLng | null; locked: boolean; onStart(): void; onStop(): void; onDone(): void; onStale(): void;
+};
+
+function PointItem({ item, selected, onShow, correction }: {
+  item: MapHousehold; selected: boolean; onShow: (() => void) | null; correction: CorrectionControl | null;
+}) {
   const label = pointLabel(item);
+  const labelId = useId();
   return (
     <li style={box}>
       <div style={row}>
-        <strong style={{ fontSize: 13 }}>{label}</strong>
+        <strong id={labelId} style={{ fontSize: 13 }}>{label}</strong>
         {selected && <Tag tone="info">no mapa</Tag>}
       </div>
       <span style={muted}>{familiesText(item.families_count)}</span>
@@ -124,6 +148,7 @@ function PointItem({ item, selected, onShow }: { item: MapHousehold; selected: b
           <button type="button" style={secondaryButtonStyle} aria-label={`Ver no mapa ${label}`} onClick={onShow}>Ver no mapa</button>
         </div>
       )}
+      {correction && <PointCorrection item={item} describedBy={labelId} {...correction} />}
     </li>
   );
 }
