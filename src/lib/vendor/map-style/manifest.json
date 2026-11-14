@@ -1,0 +1,25 @@
+{
+  "basemaps": "5.7.2",
+  "assets": "028c18f713baecad011301ff7a69acc39bcc2ae7",
+  "lang": "pt",
+  "themes": [
+    "light",
+    "dark"
+  ],
+  "fonts": [
+    "Noto Sans Regular",
+    "Noto Sans Medium",
+    "Noto Sans Italic",
+    "Noto Sans Devanagari Regular v1"
+  ],
+  "sprites": [
+    "light",
+    "dark"
+  ],
+  "placeholders": [
+    "__PMTILES__",
+    "__GLYPHS__",
+    "__SPRITE__"
+  ],
+  "glyph_ranges": 256
+}
