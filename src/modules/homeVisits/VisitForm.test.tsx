@@ -647,3 +647,109 @@ describe("Folha do dia: revisão da Task 6", () => {
     expect(disabledAttr(screen.getByRole("button", { name: /^Fechar o dia/ }))).toBe(true);
   });
 });
+
+// O `submit` de um <form> aninhado não sobe no navegador (Chromium): a busca e o registro rápido, dentro do <form> da visita,
+// não podem ser <form>; o botão e o Enter rodam o envio do próprio bloco e nunca o da visita.
+describe("Nova visita — busca de pessoa sem <form> aninhado", () => {
+  const nested = (c: HTMLElement) => c.querySelectorAll("form form").length;
+  const enter = (el: HTMLElement) => fireEvent.keyDown(el, { key: "Enter", code: "Enter" });
+  const openDoc = async () => {
+    const r = mount();
+    fireEvent.click(await screen.findByRole("button", { name: "Nova visita" }));
+    noHousehold("1");
+    fireEvent.click(screen.getByRole("button", { name: "Buscar pessoa" }));
+    return r;
+  };
+  const openName = async () => {
+    const r = await openDoc();
+    fireEvent.click(screen.getByRole("button", { name: "Não tem o documento" }));
+    return r;
+  };
+  const settle = () => new Promise((r) => setTimeout(r, 0));
+
+  it("guarda estrutural: nenhum <form> dentro de <form> com a busca por documento, por nome e o registro rápido abertos", async () => {
+    const { container } = await openDoc();
+    expect(screen.getByRole("form", { name: "Buscar pessoa pelo documento" })).not.toBeNull();
+    expect(nested(container)).toBe(0);
+    fireEvent.click(screen.getByRole("button", { name: "Não tem o documento" }));
+    expect(screen.getByRole("form", { name: "Buscar possíveis duplicados" })).not.toBeNull();
+    expect(nested(container)).toBe(0);
+    mocked(api.findVisitDuplicates).mockResolvedValue([]);
+    fireEvent.change(screen.getByLabelText("Nome completo"), { target: { value: "Ana Prado" } });
+    fireEvent.change(screen.getByLabelText("Data de nascimento"), { target: { value: "1990-04-02" } });
+    fireEvent.click(screen.getByRole("button", { name: "Buscar possíveis duplicados" }));
+    fireEvent.click(await screen.findByRole("button", { name: "É outra pessoa — registrar" }));
+    expect(screen.getByRole("form", { name: "Registro rápido da pessoa" })).not.toBeNull();
+    expect(nested(container)).toBe(0);
+  });
+
+  it("documento: o botão Buscar e o Enter no campo buscam uma vez cada e nunca enviam a visita", async () => {
+    mocked(api.lookupVisitPerson).mockResolvedValue(person9());
+    await openDoc();
+    fireEvent.change(screen.getByLabelText("CPF ou CNS"), { target: { value: "52998224725" } });
+    fireEvent.click(screen.getByRole("button", { name: "Buscar" }));
+    await waitFor(() => expect(api.lookupVisitPerson).toHaveBeenCalledTimes(1));
+    enter(screen.getByLabelText("CPF ou CNS"));
+    await waitFor(() => expect(api.lookupVisitPerson).toHaveBeenCalledTimes(2));
+    await settle();
+    expect(api.recordHomeVisit).not.toHaveBeenCalled();
+  });
+
+  it("duplicados: o botão e o Enter em qualquer campo buscam e nunca enviam a visita", async () => {
+    mocked(api.findVisitDuplicates).mockResolvedValue([]);
+    await openName();
+    fireEvent.change(screen.getByLabelText("Nome completo"), { target: { value: "Ana Prado" } });
+    fireEvent.change(screen.getByLabelText("Data de nascimento"), { target: { value: "1990-04-02" } });
+    fireEvent.click(screen.getByRole("button", { name: "Buscar possíveis duplicados" }));
+    await waitFor(() => expect(api.findVisitDuplicates).toHaveBeenCalledTimes(1));
+    enter(screen.getByLabelText("Nome da mãe (opcional)"));
+    await waitFor(() => expect(api.findVisitDuplicates).toHaveBeenCalledTimes(2));
+    await settle();
+    expect(api.recordHomeVisit).not.toHaveBeenCalled();
+  });
+
+  it("registro rápido: o botão e o Enter num campo enviam o bloco (a pessoa é escolhida) e não a visita", async () => {
+    mocked(api.findVisitDuplicates).mockResolvedValue([]);
+    const fill = async () => {
+      fireEvent.change(screen.getByLabelText("Nome completo"), { target: { value: "Ana Prado" } });
+      fireEvent.change(screen.getByLabelText("Data de nascimento"), { target: { value: "1990-04-02" } });
+      fireEvent.click(screen.getByRole("button", { name: "Buscar possíveis duplicados" }));
+      fireEvent.click(await screen.findByRole("button", { name: "É outra pessoa — registrar" }));
+      fireEvent.change(screen.getByLabelText("Sexo"), { target: { value: "female" } });
+      fireEvent.change(screen.getByLabelText("Motivo de não ter CPF"), { target: { value: "3" } });
+    };
+    await openName();
+    await fill();
+    // Enter num campo com o bloco válido: a pessoa é escolhida (o bloco fecha).
+    enter(screen.getByLabelText("Nome da mãe (opcional)"));
+    await waitFor(() => expect(screen.queryByRole("form", { name: "Registro rápido da pessoa" })).toBeNull());
+    await settle();
+    expect(api.recordHomeVisit).not.toHaveBeenCalled();
+  });
+
+  it("registro rápido inválido: Enter mostra os problemas do bloco e não envia a visita; o botão idem", async () => {
+    mocked(api.lookupVisitPerson).mockResolvedValue(null);
+    await openDoc();
+    fireEvent.change(screen.getByLabelText("CPF ou CNS"), { target: { value: "52998224725" } });
+    fireEvent.click(screen.getByRole("button", { name: "Buscar" }));
+    enter(await screen.findByLabelText("Nome completo"));
+    expect((await screen.findAllByRole("alert")).length).toBeGreaterThan(1);
+    fireEvent.click(screen.getByRole("button", { name: "Usar esta pessoa" }));
+    await settle();
+    expect(api.recordHomeVisit).not.toHaveBeenCalled();
+    expect(screen.getByRole("form", { name: "Registro rápido da pessoa" })).not.toBeNull();
+  });
+
+  it("Enter em botão ou fora de campo de texto não dispara a busca", async () => {
+    await openDoc();
+    fireEvent.change(screen.getByLabelText("CPF ou CNS"), { target: { value: "52998224725" } });
+    fireEvent.keyDown(screen.getByRole("button", { name: "Não tem o documento" }), { key: "Enter" });
+    fireEvent.keyDown(screen.getByLabelText("CPF ou CNS"), { key: "a" });
+    await settle();
+    expect(api.lookupVisitPerson).not.toHaveBeenCalled();
+  });
+});
+
+function person9(): api.VisitPerson {
+  return { patient_id: "pa9", display_name: "Ana Prado", birth_date: "1990-04-02", has_cpf: true, cns_masked: null, sex: "female" };
+}

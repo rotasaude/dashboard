@@ -477,3 +477,55 @@ describe("Nova atividade coletiva — recusas do api", () => {
     expect(api.recordCollectiveActivity).toHaveBeenCalledTimes(1);
   });
 });
+
+// O `submit` de um <form> aninhado não sobe no navegador: a busca de participante e o registro rápido, dentro do <form> da
+// atividade, não são <form>; botão e Enter rodam o envio do bloco e nunca o da atividade.
+describe("Nova atividade coletiva — participante sem <form> aninhado", () => {
+  const enter = (el: HTMLElement) => fireEvent.keyDown(el, { key: "Enter", code: "Enter" });
+  const settle = () => new Promise((r) => setTimeout(r, 0));
+
+  it("guarda estrutural: nenhum <form> dentro de <form> com a busca por documento, por nome e o registro rápido abertos", async () => {
+    mocked(api.findVisitDuplicates).mockResolvedValue([]);
+    await fillType4();
+    fireEvent.click(screen.getByRole("button", { name: "Adicionar participante" }));
+    expect(screen.getByRole("form", { name: "Buscar pessoa pelo documento" })).not.toBeNull();
+    expect(document.querySelectorAll("form form").length).toBe(0);
+    fireEvent.click(screen.getByRole("button", { name: "Não tem o documento" }));
+    expect(screen.getByRole("form", { name: "Buscar possíveis duplicados" })).not.toBeNull();
+    expect(document.querySelectorAll("form form").length).toBe(0);
+    fireEvent.change(screen.getByLabelText("Nome completo"), { target: { value: "Ana Prado" } });
+    fireEvent.change(screen.getByLabelText("Data de nascimento"), { target: { value: "1990-04-02" } });
+    fireEvent.click(screen.getByRole("button", { name: "Buscar possíveis duplicados" }));
+    fireEvent.click(await screen.findByRole("button", { name: "É outra pessoa — registrar" }));
+    expect(screen.getByRole("form", { name: "Registro rápido da pessoa" })).not.toBeNull();
+    expect(document.querySelectorAll("form form").length).toBe(0);
+  });
+
+  it("participante: botão Buscar e Enter no campo buscam uma vez cada e nunca registram a atividade", async () => {
+    mocked(api.lookupVisitPerson).mockResolvedValue(person({ patient_id: "pa1", display_name: "Maria Lima" }));
+    await fillType4();
+    fireEvent.click(screen.getByRole("button", { name: "Adicionar participante" }));
+    fireEvent.change(screen.getByLabelText("CPF ou CNS"), { target: { value: "52998224725" } });
+    fireEvent.click(screen.getByRole("button", { name: "Buscar" }));
+    await waitFor(() => expect(api.lookupVisitPerson).toHaveBeenCalledTimes(1));
+    enter(screen.getByLabelText("CPF ou CNS"));
+    await waitFor(() => expect(api.lookupVisitPerson).toHaveBeenCalledTimes(2));
+    await settle();
+    expect(api.recordCollectiveActivity).not.toHaveBeenCalled();
+  });
+
+  it("registro rápido do participante: Enter num campo envia o bloco (o participante entra) e não a atividade", async () => {
+    mocked(api.lookupVisitPerson).mockResolvedValueOnce(null);
+    await fillType4();
+    fireEvent.click(screen.getByRole("button", { name: "Adicionar participante" }));
+    fireEvent.change(screen.getByLabelText("CPF ou CNS"), { target: { value: "52998224725" } });
+    fireEvent.click(screen.getByRole("button", { name: "Buscar" }));
+    fireEvent.change(await screen.findByLabelText("Nome completo"), { target: { value: "Ana Prado" } });
+    fireEvent.change(screen.getByLabelText("Data de nascimento"), { target: { value: "1990-04-02" } });
+    fireEvent.change(screen.getByLabelText("Sexo"), { target: { value: "female" } });
+    enter(screen.getByLabelText("Nome da mãe (opcional)"));
+    await waitFor(() => expect(screen.queryByRole("form", { name: "Registro rápido da pessoa" })).toBeNull());
+    await settle();
+    expect(api.recordCollectiveActivity).not.toHaveBeenCalled();
+  });
+});
