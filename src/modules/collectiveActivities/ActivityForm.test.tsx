@@ -481,7 +481,8 @@ describe("Nova atividade coletiva — recusas do api", () => {
 // O `submit` de um <form> aninhado não sobe no navegador: a busca de participante e o registro rápido, dentro do <form> da
 // atividade, não são <form>; botão e Enter rodam o envio do bloco e nunca o da atividade.
 describe("Nova atividade coletiva — participante sem <form> aninhado", () => {
-  const enter = (el: HTMLElement) => fireEvent.keyDown(el, { key: "Enter", code: "Enter" });
+  // jsdom não faz submissão implícita: o keydown de Enter ter o padrão cancelado (fireEvent devolve false) é o que impede enviar a atividade.
+  const enter = (el: HTMLElement) => { expect(fireEvent.keyDown(el, { key: "Enter", code: "Enter" })).toBe(false); };
   const settle = () => new Promise((r) => setTimeout(r, 0));
 
   it("guarda estrutural: nenhum <form> dentro de <form> com a busca por documento, por nome e o registro rápido abertos", async () => {
@@ -526,6 +527,18 @@ describe("Nova atividade coletiva — participante sem <form> aninhado", () => {
     enter(screen.getByLabelText("Nome da mãe (opcional)"));
     await waitFor(() => expect(screen.queryByRole("form", { name: "Registro rápido da pessoa" })).toBeNull());
     await settle();
+    expect(api.recordCollectiveActivity).not.toHaveBeenCalled();
+  });
+
+  it("Enter em botão, select ou com composição (IME): o padrão não é cancelado e nada é buscado", async () => {
+    await fillType4();
+    fireEvent.click(screen.getByRole("button", { name: "Adicionar participante" }));
+    const doc = screen.getByLabelText("CPF ou CNS");
+    fireEvent.change(doc, { target: { value: "52998224725" } });
+    expect(fireEvent.keyDown(screen.getByRole("button", { name: "Não tem o documento" }), { key: "Enter" })).toBe(true);
+    expect(fireEvent.keyDown(doc, { key: "Enter", isComposing: true })).toBe(true);
+    await settle();
+    expect(api.lookupVisitPerson).not.toHaveBeenCalled();
     expect(api.recordCollectiveActivity).not.toHaveBeenCalled();
   });
 });

@@ -652,7 +652,9 @@ describe("Folha do dia: revisão da Task 6", () => {
 // não podem ser <form>; o botão e o Enter rodam o envio do próprio bloco e nunca o da visita.
 describe("Nova visita — busca de pessoa sem <form> aninhado", () => {
   const nested = (c: HTMLElement) => c.querySelectorAll("form form").length;
-  const enter = (el: HTMLElement) => fireEvent.keyDown(el, { key: "Enter", code: "Enter" });
+  // jsdom não faz submissão implícita: o que garante que o Enter não envia a visita é o keydown ter o padrão cancelado
+  // (fireEvent devolve false quando houve preventDefault).
+  const enter = (el: HTMLElement) => { expect(fireEvent.keyDown(el, { key: "Enter", code: "Enter" })).toBe(false); };
   const openDoc = async () => {
     const r = mount();
     fireEvent.click(await screen.findByRole("button", { name: "Nova visita" }));
@@ -687,6 +689,7 @@ describe("Nova visita — busca de pessoa sem <form> aninhado", () => {
     mocked(api.lookupVisitPerson).mockResolvedValue(person9());
     await openDoc();
     fireEvent.change(screen.getByLabelText("CPF ou CNS"), { target: { value: "52998224725" } });
+    expect(screen.getByRole("button", { name: "Buscar" }).getAttribute("type")).toBe("button");
     fireEvent.click(screen.getByRole("button", { name: "Buscar" }));
     await waitFor(() => expect(api.lookupVisitPerson).toHaveBeenCalledTimes(1));
     enter(screen.getByLabelText("CPF ou CNS"));
@@ -734,19 +737,31 @@ describe("Nova visita — busca de pessoa sem <form> aninhado", () => {
     fireEvent.click(screen.getByRole("button", { name: "Buscar" }));
     enter(await screen.findByLabelText("Nome completo"));
     expect((await screen.findAllByRole("alert")).length).toBeGreaterThan(1);
-    fireEvent.click(screen.getByRole("button", { name: "Usar esta pessoa" }));
+    // O botão não é de submissão (não há <form> do bloco): clicar só roda o envio do bloco, que segue recusando.
+    const use = screen.getByRole("button", { name: "Usar esta pessoa" });
+    expect(use.getAttribute("type")).toBe("button");
+    fireEvent.click(use);
     await settle();
     expect(api.recordHomeVisit).not.toHaveBeenCalled();
     expect(screen.getByRole("form", { name: "Registro rápido da pessoa" })).not.toBeNull();
   });
 
-  it("Enter em botão ou fora de campo de texto não dispara a busca", async () => {
+  it("Enter em botão, select, com composição (IME) ou outra tecla: o padrão NÃO é cancelado e nada é buscado", async () => {
+    mocked(api.lookupVisitPerson).mockResolvedValue(null);
     await openDoc();
-    fireEvent.change(screen.getByLabelText("CPF ou CNS"), { target: { value: "52998224725" } });
-    fireEvent.keyDown(screen.getByRole("button", { name: "Não tem o documento" }), { key: "Enter" });
-    fireEvent.keyDown(screen.getByLabelText("CPF ou CNS"), { key: "a" });
+    const doc = screen.getByLabelText("CPF ou CNS");
+    fireEvent.change(doc, { target: { value: "52998224725" } });
+    expect(fireEvent.keyDown(screen.getByRole("button", { name: "Não tem o documento" }), { key: "Enter" })).toBe(true);
+    expect(fireEvent.keyDown(doc, { key: "Enter", isComposing: true })).toBe(true);
+    expect(fireEvent.keyDown(doc, { key: "a" })).toBe(true);
     await settle();
     expect(api.lookupVisitPerson).not.toHaveBeenCalled();
+    // Num select do registro rápido o Enter também é do navegador.
+    fireEvent.click(screen.getByRole("button", { name: "Buscar" }));
+    const sex = await screen.findByLabelText("Sexo");
+    expect(fireEvent.keyDown(sex, { key: "Enter" })).toBe(true);
+    await settle();
+    expect(api.recordHomeVisit).not.toHaveBeenCalled();
   });
 });
 
