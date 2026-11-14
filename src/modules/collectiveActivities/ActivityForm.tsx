@@ -149,7 +149,7 @@ export function ActivityForm({ options, onSaved, onClose }: { options: Collectiv
     });
   }
   function submit(ev: FormEvent) {
-    // Os formulários do PersonPick ficam dentro deste: o envio deles sobe até aqui e não é o da atividade.
+    // PersonPick/QuickPatientForm não são <form> (role="form"): não há submit interno. A guarda fica por segurança: só o submit desta <form> envia a atividade.
     if (ev.target !== ev.currentTarget) { ev.preventDefault(); return; }
     sendDraft(ev, draft);
   }
