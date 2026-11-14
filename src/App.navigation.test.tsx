@@ -6,6 +6,7 @@ import { renderModule, shellGroups, useCapsHandoff } from "./App";
 import { NAV_GROUPS, navGroupsFor, type ModuleId } from "./shell/modules";
 import { TerritoryMicroAreas } from "./modules/TerritoryMicroAreas";
 import { TerritoryTeam } from "./modules/TerritoryTeam";
+import { TerritoryMap } from "./modules/TerritoryMap";
 import { RegistryStatus } from "./modules/RegistryStatus";
 import { HomeVisitDay } from "./modules/HomeVisitDay";
 import { HomeVisitsTeam } from "./modules/HomeVisitsTeam";
@@ -66,6 +67,10 @@ describe("atalhos entre telas", () => {
 
   it("territory-team abre o território da equipe", () => {
     expect((renderModule("territory-team", vi.fn()) as ReactElement).type).toBe(TerritoryTeam);
+  });
+
+  it("territory-map abre o mapa da microárea (24c)", () => {
+    expect((renderModule("territory-map", vi.fn()) as ReactElement).type).toBe(TerritoryMap);
   });
 
   it("registry-status abre a validade dos cadastros", () => {

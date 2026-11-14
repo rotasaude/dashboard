@@ -41,6 +41,7 @@ import { CareLinesAdmin } from "./modules/CareLinesAdmin";
 import { CareLinesTeam } from "./modules/CareLinesTeam";
 import { CareLinesPreview } from "./modules/CareLinesPreview";
 import { TerritoryTeam } from "./modules/TerritoryTeam";
+import { TerritoryMap } from "./modules/TerritoryMap";
 import { HomeVisitDay } from "./modules/HomeVisitDay";
 import { HomeVisitsTeam } from "./modules/HomeVisitsTeam";
 import { MicroAreaAssignments } from "./modules/MicroAreaAssignments";
@@ -388,6 +389,7 @@ export function renderModule(active: ModuleId, setActive: (id: ModuleId) => void
     case "care-lines-preview": return <CareLinesPreview />;
     case "care-lines-admin": return <CareLinesAdmin onGoToSecurity={() => setActive("security")} />;
     case "territory-team": return <TerritoryTeam />;
+    case "territory-map": return <TerritoryMap />;
     case "registry-status": return <RegistryStatus />;
     case "territory-micro-areas": return <TerritoryMicroAreas onGoToSecurity={() => setActive("security")} />;
     case "home-visit-day": return <HomeVisitDay start={visit.start} onGoToTeam={() => setActive("home-visits-team")} />;

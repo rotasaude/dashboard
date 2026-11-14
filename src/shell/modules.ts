@@ -30,7 +30,7 @@ export type ModuleId =
   | "lab-admin" | "lab-reports"
   | "billing-procedures" | "billing-periods" | "billing-settings"
   | "care-lines-team" | "care-lines-preview" | "care-lines-admin"
-  | "territory-team" | "registry-status" | "territory-micro-areas"
+  | "territory-team" | "territory-map" | "registry-status" | "territory-micro-areas"
   | "home-visit-day" | "home-visits-team" | "micro-area-assignments" | "who-to-visit" | "collective-activities" | "field-devices" | "field-devices-admin"
   | "surveillance-queue" | "surveillance-negatives" | "surveillance-reports" | "surveillance-panel" | "surveillance-diseases"
   | "regulation-queue" | "regulation-returned" | "regulation-offers" | "regulation-settings"
@@ -89,6 +89,7 @@ export const NAV_GROUPS: NavGroupDef[] = [
   ]},
   { label: "Cadastro territorial", items: [
     { id: "territory-team", label: "Território da equipe", icon: "⌂" },
+    { id: "territory-map", label: "Mapa da microárea", icon: "⌖" },
     { id: "registry-status", label: "Validade dos cadastros", icon: "⏲" },
     { id: "territory-micro-areas", label: "Microáreas", icon: "⬡" }
   ]},
@@ -452,7 +453,7 @@ export function navGroupsFor(
       if (item.id === "care-lines-team") return careOn && isProfessional;
       if (item.id === "care-lines-preview") return careOn && (isAdmin || isAnalyst);
       if (item.id === "care-lines-admin") return careOn && isAdmin;
-      if (item.id === "territory-team" || item.id === "registry-status") return territoryOn && isProfessional;
+      if (item.id === "territory-team" || item.id === "territory-map" || item.id === "registry-status") return territoryOn && isProfessional;
       if (item.id === "territory-micro-areas") return territoryOn && isAdmin;
       if (item.id === "collective-activities") return caOn && isProfessional;
       if (item.id === "field-devices") return !user?.operator && isProfessional;

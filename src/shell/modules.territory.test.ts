@@ -9,9 +9,9 @@ const itemsOf = (groups: ReturnType<typeof navGroupsFor>) =>
 
 describe("grupo Cadastro territorial (módulo 24a)", () => {
   it("profissional vê território e validade; admin vê microáreas", () => {
-    expect(itemsOf(navGroupsFor(user([ "health_professional" ])))).toEqual([ "territory-team", "registry-status" ]);
+    expect(itemsOf(navGroupsFor(user([ "health_professional" ])))).toEqual([ "territory-team", "territory-map", "registry-status" ]);
     expect(itemsOf(navGroupsFor(user([ "municipal_admin" ])))).toEqual([ "territory-micro-areas" ]);
-    expect(itemsOf(navGroupsFor(user([ "municipal_admin", "health_professional" ])))).toEqual([ "territory-team", "registry-status", "territory-micro-areas" ]);
+    expect(itemsOf(navGroupsFor(user([ "municipal_admin", "health_professional" ])))).toEqual([ "territory-team", "territory-map", "registry-status", "territory-micro-areas" ]);
   });
   it("some sem o interruptor, sem o prontuário, para a recepção e para o operador", () => {
     expect(itemsOf(navGroupsFor(user([ "health_professional" ], [ "clinical_record" ])))).toEqual([]);
@@ -43,6 +43,7 @@ describe("grupo Cadastro territorial (módulo 24a)", () => {
     expect(CATALOG.groups["Cadastro territorial"].description).toBe("Microáreas, domicílios, famílias e cadastro individual");
     expect(CATALOG.screens["registry-status"].description).toBe("Vencidos, a vencer e quem falta cadastrar");
     expect(CATALOG.screens["territory-team"].description).toBe("Domicílios, famílias e moradores por microárea");
+    expect(CATALOG.screens["territory-map"].description).toBe("Domicílios com ponto no mapa e correção do ponto");
     expect(CATALOG.screens["territory-micro-areas"].description).toBe("Microáreas das equipes e o ACS responsável");
   });
 });
