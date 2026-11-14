@@ -1,0 +1,35 @@
+import { describe, expect, it } from "vitest";
+import { boundsOf, roundCoord, toFeatureCollection } from "./points";
+import { mapHousehold } from "../../../test/territoryMapFixtures";
+
+describe("pontos do mapa da microárea (24c)", () => {
+  it("roundCoord: no máximo 8 casas, sem inventar casas", () => {
+    expect(roundCoord(-25.428471234567)).toBe(-25.42847123);
+    expect(roundCoord(-49.273254119999)).toBe(-49.27325412);
+    expect(roundCoord(-49.2733)).toBe(-49.2733);
+    expect(roundCoord(0)).toBe(0);
+  });
+
+  it("toFeatureCollection: [longitude, latitude], selected só no escolhido e rótulo de endereço", () => {
+    const fc = toFeatureCollection([
+      mapHousehold(),
+      mapHousehold({ id: "hh2", location: { latitude: -25.5, longitude: -49.3, source: "map" }, address: { street: null, number: null } }),
+      mapHousehold({ id: "hh3", address: { street: "Ipê Amarelo", number: null } })
+    ], "hh2");
+    expect(fc.type).toBe("FeatureCollection");
+    expect(fc.features.map((f) => f.geometry.coordinates)).toEqual([ [ -49.27325411, -25.42847123 ], [ -49.3, -25.5 ], [ -49.27325411, -25.42847123 ] ]);
+    expect(fc.features.map((f) => f.properties)).toEqual([
+      { id: "hh1", selected: false, label: "das Flores, 120" },
+      { id: "hh2", selected: true, label: "S/N" },
+      { id: "hh3", selected: false, label: "Ipê Amarelo, S/N" }
+    ]);
+    for (const f of fc.features) expect(Object.keys(f.properties).sort()).toEqual([ "id", "label", "selected" ]);
+  });
+
+  it("boundsOf: a caixa [[oeste, sul], [leste, norte]] dos pontos; vazio = null", () => {
+    expect(boundsOf([])).toBeNull();
+    expect(boundsOf([ mapHousehold() ])).toEqual([ [ -49.27325411, -25.42847123 ], [ -49.27325411, -25.42847123 ] ]);
+    expect(boundsOf([ mapHousehold(), mapHousehold({ id: "hh2", location: { latitude: -25.5, longitude: -49.2, source: "map" } }) ]))
+      .toEqual([ [ -49.27325411, -25.5 ], [ -49.2, -25.42847123 ] ]);
+  });
+});
