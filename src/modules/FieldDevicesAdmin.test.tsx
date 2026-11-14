@@ -36,6 +36,22 @@ describe("Aparelhos de campo da cidade", () => {
     await waitFor(() => expect(api.adminRevokeFieldDevice).toHaveBeenCalledWith("fd1"));
   });
 
+  it("situação sob a ótica do administrador: pela pessoa / pela administração; motivo desconhecido fica cru", async () => {
+    const u = { id: "u-7", name: "Joana ACS" };
+    mocked(api.listAdminFieldDevices).mockResolvedValue([
+      { ...device({ id: "a", name: "A", status: "revoked", revoked_reason: "user" }), user: u },
+      { ...device({ id: "b", name: "B", status: "revoked", revoked_reason: "admin" }), user: u },
+      { ...device({ id: "c", name: "C", status: "revoked", revoked_reason: "membership_ended" }), user: u },
+      { ...device({ id: "d", name: "D", status: "revoked", revoked_reason: "xpto" }), user: u }
+    ]);
+    mount();
+    expect(await screen.findAllByText("revogado: pela pessoa")).not.toBeNull();
+    expect(screen.getAllByText("revogado: pela administração").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("revogado: fim do vínculo na equipe").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("revogado: xpto").length).toBeGreaterThan(0);
+    expect(document.body.textContent).not.toMatch(/por você/);
+  });
+
   it("pede o código do autenticador quando a janela de step-up está fechada", async () => {
     mocked(api.fetchCurrentSession).mockResolvedValue(hvUser([ "municipal_admin" ]));
     mocked(api.fetchCurrentSession).mockResolvedValue({ ...hvUser([ "municipal_admin" ]), mfa_verified_at: null });

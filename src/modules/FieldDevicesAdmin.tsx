@@ -51,7 +51,7 @@ function Body({ onGoToSecurity }: { onGoToSecurity?(): void }) {
     { label: "Pessoa", w: "1.2fr", render: (d) => d.user.name },
     { label: "Cadastrado em", w: "1fr", render: (d) => fmtDateTime(d.created_at) },
     { label: "Último uso", w: "1fr", render: (d) => (d.last_used_at ? fmtDateTime(d.last_used_at) : "nunca usado") },
-    { label: "Situação", w: "1.2fr", render: deviceStatusLabel },
+    { label: "Situação", w: "1.2fr", render: (d) => deviceStatusLabel(d, "admin") },
     {
       label: "Ações", w: "9rem", card: "actions",
       render: (d) => (d.status === "revoked" ? null : <ActionButton variant="danger" onClick={() => { setMessage(null); setRevoking(d); }}>{`Revogar ${d.name} de ${d.user.name}`}</ActionButton>)
