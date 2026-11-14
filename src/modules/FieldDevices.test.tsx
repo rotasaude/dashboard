@@ -10,7 +10,8 @@ vi.mock("../lib/api", async (importOriginal) => {
 import { toDataURL } from "qrcode";
 import * as api from "../lib/api";
 import { ApiError } from "../lib/api";
-import { HOME_VISIT_ERRORS } from "../lib/homeVisits";
+import { DEVICE_NOT_REPLACEABLE, HOME_VISIT_ERRORS } from "../lib/homeVisits";
+import { REPLACE_NOTICE, REREGISTER_NOTICE } from "../lib/fieldDevices";
 import { renderWithProviders } from "../test/campaignFixtures";
 import { context, device, hvUser, nurseTeam } from "../test/homeVisitFixtures";
 import { FieldDevices } from "./FieldDevices";
@@ -93,8 +94,8 @@ describe("Aparelhos de campo", () => {
     ]);
     mocked(api.revokeFieldDevice).mockResolvedValue(device({ status: "revoked", revoked_at: "2026-11-12T10:00:00-03:00", revoked_reason: "user" }));
     mount();
-    expect(await screen.findByText("revogado: fim do vínculo na equipe")).not.toBeNull();
-    expect(screen.getByText("inativo: vínculo encerrado")).not.toBeNull();
+    expect(await screen.findByText("revogado automaticamente: cadastre de novo")).not.toBeNull();
+    expect(screen.getByText("suspenso enquanto sem vínculo")).not.toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Revogar Celular da Joana" }));
     expect(screen.queryByLabelText("Código do autenticador")).toBeNull();
     confirm();
@@ -150,5 +151,76 @@ describe("Aparelhos de campo", () => {
     confirm();
     expect(await screen.findByText(OFF)).not.toBeNull();
     expect(screen.queryByRole("button", { name: "Cadastrar aparelho" })).toBeNull();
+  });
+
+  it("substituir: step-up, manda replaces_device_id, QR uma vez, vale com 3 aparelhos", async () => {
+    mocked(api.listFieldDevices).mockResolvedValue([ device(), device({ id: "fd2", name: "Tablet 2" }), device({ id: "fd3", name: "Tablet 3" }) ]);
+    mocked(api.registerFieldDevice).mockResolvedValue({ device: device({ id: "fd4", name: "Tablet novo" }), token: "rsf_SEGREDO", qr_payload: PAYLOAD });
+    const { client, container } = mount();
+    fireEvent.click(await screen.findByRole("button", { name: "Substituir Celular da Joana" }));
+    expect(screen.getByText(REPLACE_NOTICE)).not.toBeNull();
+    fireEvent.change(screen.getByLabelText("Nome do aparelho"), { target: { value: "Tablet novo" } });
+    confirm();
+    expect(await screen.findByAltText("QR do aparelho de campo")).not.toBeNull();
+    expect(api.registerFieldDevice).toHaveBeenCalledWith("Tablet novo", "fd1");
+    expect(api.registerFieldDevice).toHaveBeenCalledTimes(1);
+    expect(container.textContent).not.toMatch(/rsf_SEGREDO/);
+    expect(JSON.stringify(client.getQueryCache().getAll().map((q) => q.state.data))).not.toMatch(/rsf_|rotasaude-field/);
+  });
+
+  it("revogar mostra o aviso com a data do último uso (e 'nunca usado')", async () => {
+    mocked(api.listFieldDevices).mockResolvedValue([
+      device({ last_used_at: "2026-11-12T10:00:00-03:00" }), device({ id: "fd2", name: "Tablet 2", last_used_at: null })
+    ]);
+    mount();
+    fireEvent.click(await screen.findByRole("button", { name: "Revogar Celular da Joana" }));
+    expect(screen.getByText(/O que não foi sincronizado neste aparelho será perdido\. Último uso: 12\/11\/2026/)).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Revogar Tablet 2" }));
+    expect(screen.getByText(/será perdido\. Último uso: nunca usado\./)).not.toBeNull();
+    expect(api.revokeFieldDevice).not.toHaveBeenCalled();
+  });
+
+  it("Substituir só em ativo; revogado automaticamente oferece Cadastrar novo, sem replaces_device_id", async () => {
+    mocked(api.listFieldDevices).mockResolvedValue([
+      device({ status: "inactive" }),
+      device({ id: "fd2", name: "Tablet da UBS", status: "revoked", revoked_reason: "membership_ended" }),
+      device({ id: "fd3", name: "Antigo", status: "revoked", revoked_reason: "replaced" })
+    ]);
+    mocked(api.registerFieldDevice).mockResolvedValue({ device: device({ id: "fd9", name: "Tablet da UBS" }), token: "rsf_SEGREDO", qr_payload: PAYLOAD });
+    mount();
+    expect(await screen.findByText("suspenso enquanto sem vínculo")).not.toBeNull();
+    expect(screen.getByText("revogado automaticamente: cadastre de novo")).not.toBeNull();
+    expect(screen.getByText("revogado: substituído por outro aparelho")).not.toBeNull();
+    expect(screen.queryByRole("button", { name: /^Substituir / })).toBeNull();
+    expect(screen.getAllByRole("button", { name: /^Cadastrar novo / })).toHaveLength(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "Cadastrar novo Tablet da UBS" }));
+    expect(screen.getByText(REREGISTER_NOTICE)).not.toBeNull();
+    expect((screen.getByLabelText("Nome do aparelho") as HTMLInputElement).value).toBe("Tablet da UBS");
+    confirm();
+    expect(await screen.findByAltText("QR do aparelho de campo")).not.toBeNull();
+    expect(api.registerFieldDevice).toHaveBeenCalledWith("Tablet da UBS");
+  });
+
+  it("422 replaces_device_id: frase e lista relida", async () => {
+    mocked(api.listFieldDevices).mockResolvedValue([ device() ]);
+    mocked(api.registerFieldDevice).mockRejectedValue(new ApiError(422, { error: "invalid_request", path: "replaces_device_id" }, "x"));
+    mount();
+    fireEvent.click(await screen.findByRole("button", { name: "Substituir Celular da Joana" }));
+    fireEvent.change(screen.getByLabelText("Nome do aparelho"), { target: { value: "Tablet novo" } });
+    confirm();
+    expect(await screen.findByText(DEVICE_NOT_REPLACEABLE)).not.toBeNull();
+    await waitFor(() => expect(api.listFieldDevices).toHaveBeenCalledTimes(2));
+    expect(screen.queryByAltText("QR do aparelho de campo")).toBeNull();
+  });
+
+  it("sem poder cadastrar (enfermeiro ou interruptor desligado): nem Substituir nem Cadastrar novo; Revogar segue", async () => {
+    mocked(api.getHomeVisitContext).mockResolvedValue(context({ teams: [ nurseTeam() ] }));
+    mocked(api.listFieldDevices).mockResolvedValue([ device(), device({ id: "fd2", name: "Tablet da UBS", status: "revoked", revoked_reason: "user_disabled" }) ]);
+    mount();
+    expect(await screen.findByRole("button", { name: "Revogar Celular da Joana" })).not.toBeNull();
+    expect(screen.queryByRole("button", { name: /^Substituir / })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Cadastrar novo / })).toBeNull();
   });
 });

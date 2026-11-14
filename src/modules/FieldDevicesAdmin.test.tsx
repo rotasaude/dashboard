@@ -92,4 +92,22 @@ describe("Aparelhos de campo da cidade", () => {
     expect(screen.getByRole("button", { name: "Confirmar" })).not.toBeNull();
     expect(api.listAdminFieldDevices).toHaveBeenCalledTimes(1);
   });
+
+  it("24c: aviso de perda na revogação; suspenso e substituído com rótulo; sem Substituir nem Cadastrar novo", async () => {
+    const u = { id: "u-7", name: "Joana ACS" };
+    mocked(api.listAdminFieldDevices).mockResolvedValue([
+      { ...device({ last_used_at: "2026-11-12T10:00:00-03:00" }), user: u },
+      { ...device({ id: "b", name: "B", status: "inactive" }), user: u },
+      { ...device({ id: "c", name: "C", status: "revoked", revoked_reason: "replaced" }), user: u },
+      { ...device({ id: "d", name: "D", status: "revoked", revoked_reason: "membership_ended" }), user: u }
+    ]);
+    mount();
+    expect((await screen.findAllByText("suspenso enquanto sem vínculo")).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("revogado: substituído por outro aparelho").length).toBeGreaterThan(0);
+    expect(screen.queryByRole("button", { name: /^Substituir / })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Cadastrar novo / })).toBeNull();
+    expect(document.body.textContent).not.toMatch(/cadastre de novo/);
+    fireEvent.click(screen.getByRole("button", { name: "Revogar Celular da Joana de Joana ACS" }));
+    expect(screen.getByText(/O que não foi sincronizado neste aparelho será perdido\. Último uso: 12\/11\/2026/)).not.toBeNull();
+  });
 });

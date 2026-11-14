@@ -3,11 +3,15 @@
 // dependem de `home_visits` (um aparelho perdido sempre pode ser revogado). O contexto só é lido com `home_visits` ligado, e só para
 // saber se há `can_register_device`; desligado, ou um 403 feature_disabled do contexto/do POST, esconde só o cadastro.
 // O token do aparelho novo vive num ref local e no diálogo do QR; nunca no cache (a resposta do POST não passa pelo react-query).
+// Módulo 24c (Q16, Q17): "Substituir" troca um aparelho ATIVO por outro (o antigo para de sincronizar e guarda a fila; não conta no
+// limite de 3); "Cadastrar novo" refaz o cadastro de um aparelho revogado automaticamente; revogar avisa do que se perde. Os dois
+// são cadastros: só aparecem para quem pode cadastrar.
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getHomeVisitContext, listFieldDevices, registerFieldDevice, revokeFieldDevice, type FieldDevice, type FieldDeviceCreated } from "../lib/api";
 import { useAuth } from "../lib/auth";
-import { FD_KEY, HV_CONTEXT_KEY, STATIC_QUERY, canUseHomeVisits, homeVisitError, homeVisitRefusals, isFeatureOff, revokedReasonLabel } from "../lib/homeVisits";
+import { FD_KEY, HV_CONTEXT_KEY, STATIC_QUERY, canUseHomeVisits, homeVisitError, homeVisitRefusals, isFeatureOff } from "../lib/homeVisits";
+import { REPLACE_NOTICE, REREGISTER_NOTICE, canReplace, deviceStatusLabel, isAutoRevoked, revokeLossWarning } from "../lib/fieldDevices";
 import { fmtDateTime } from "../lib/format";
 import { HomeVisitGate } from "./homeVisits/HomeVisitGate";
 import { DeviceQrDialog } from "./homeVisits/DeviceQrDialog";
@@ -23,17 +27,9 @@ export const NAME_MAX = 60;
 
 class NameRefused extends Error {}
 
-// `perspective`: "owner" é a tela de quem tem o aparelho ("por você"); "admin" é a lista da cidade, onde quem olha não é o dono.
-const ADMIN_REVOKED: Record<string, string> = { user: "pela pessoa", admin: "pela administração" };
-export const deviceStatusLabel = (d: FieldDevice, perspective: "owner" | "admin" = "owner"): string => {
-  if (d.status === "inactive") return "inativo: vínculo encerrado";
-  if (d.status === "revoked") {
-    if (!d.revoked_reason) return "revogado";
-    const own = perspective === "admin" && Object.prototype.hasOwnProperty.call(ADMIN_REVOKED, d.revoked_reason) ? ADMIN_REVOKED[d.revoked_reason] : null;
-    return `revogado: ${own ?? revokedReasonLabel(d.revoked_reason)}`;
-  }
-  return d.status === "active" ? "ativo" : d.status;
-};
+// O que o painel de cadastro está fazendo: aparelho novo, substituição de um ativo ou novo cadastro de um revogado automaticamente.
+type Flow = { kind: "new" } | { kind: "replace"; device: FieldDevice } | { kind: "again"; device: FieldDevice };
+const REGISTER_NOTICE = "Gera um QR de uso único para ligar o app de campo. Cada pessoa pode ter até 3 aparelhos ativos.";
 
 export function FieldDevices({ onGoToSecurity }: { onGoToSecurity?(): void }) {
   return (
@@ -50,7 +46,7 @@ function Body({ onGoToSecurity }: { onGoToSecurity?(): void }) {
   const list = useQuery({ queryKey: [ FD_KEY ], queryFn: listFieldDevices, ...STATIC_QUERY });
   const ctx = useQuery({ queryKey: [ HV_CONTEXT_KEY ], queryFn: getHomeVisitContext, enabled: switchOn, ...STATIC_QUERY });
   const [ postOff, setPostOff ] = useState(false);
-  const [ registering, setRegistering ] = useState(false);
+  const [ flow, setFlow ] = useState<Flow | null>(null);
   const [ showQr, setShowQr ] = useState(false);
   const [ message, setMessage ] = useState<string | null>(null);
   // O token do aparelho novo: só neste ref, só enquanto o diálogo está aberto.
@@ -71,15 +67,19 @@ function Body({ onGoToSecurity }: { onGoToSecurity?(): void }) {
   else if (ctx.isError) register = <p role="alert" style={alert}>{homeVisitError(ctx.error)}</p>;
   else if (!ctx.data) register = <p role="status" style={muted}>Carregando…</p>;
   else if (!ctx.data.teams.some((t) => t.can_register_device)) register = <p style={muted}>{REGISTER_ROLE}</p>;
-  else if (!registering) register = <div ref={registerBox}><ActionButton onClick={() => { setMessage(null); setRegistering(true); }}>Cadastrar aparelho</ActionButton></div>;
+  else if (!flow) register = <div ref={registerBox}><ActionButton onClick={() => { setMessage(null); setFlow({ kind: "new" }); }}>Cadastrar aparelho</ActionButton></div>;
+  // Substituir e cadastrar de novo são cadastros: valem as mesmas condições do "Cadastrar aparelho".
+  const canRegister = !off && !ctx.isError && !!ctx.data?.teams.some((t) => t.can_register_device);
 
   async function runRegister(values: Record<string, string>) {
     const name = values.name.trim();
     if (name === "" || name.length > NAME_MAX) throw new NameRefused();
     try {
-      created.current = await registerFieldDevice(name);
+      created.current = flow?.kind === "replace" ? await registerFieldDevice(name, flow.device.id) : await registerFieldDevice(name);
     } catch (err) {
-      if (isFeatureOff(err)) { setPostOff(true); setRegistering(false); }
+      if (isFeatureOff(err)) { setPostOff(true); setFlow(null); }
+      // O aparelho a substituir deixou de estar ativo: a lista estava velha; relê uma vez.
+      if (homeVisitRefusals(err)[0].path === "replaces_device_id") void reread();
       throw err;
     }
   }
@@ -108,25 +108,41 @@ function Body({ onGoToSecurity }: { onGoToSecurity?(): void }) {
     { label: "Aparelho", w: "1.4fr", card: "title", render: (d) => d.name },
     { label: "Cadastrado em", w: "1fr", render: (d) => fmtDateTime(d.created_at) },
     { label: "Último uso", w: "1fr", render: (d) => (d.last_used_at ? fmtDateTime(d.last_used_at) : "nunca usado") },
-    { label: "Situação", w: "1.2fr", render: deviceStatusLabel },
+    { label: "Situação", w: "1.2fr", render: (d) => deviceStatusLabel(d) },
     {
-      label: "Ações", w: "9rem", card: "actions",
-      render: (d) => (d.status === "revoked" ? null : <ConfirmButton label={`Revogar ${d.name}`} question={`Revogar ${d.name}? O app de campo deste aparelho deixa de entrar.`} variant="danger" onConfirm={() => revoke(d.id)} />)
+      label: "Ações", w: "14rem", card: "actions",
+      render: (d) => {
+        const open = (next: Flow) => { setMessage(null); setFlow(next); };
+        const actions = [
+          d.status === "revoked" ? null : (
+            <ConfirmButton key="revoke" label={`Revogar ${d.name}`}
+              question={`Revogar ${d.name}? O app de campo deste aparelho deixa de entrar. ${revokeLossWarning(d.last_used_at)}`}
+              variant="danger" onConfirm={() => revoke(d.id)} />
+          ),
+          canRegister && canReplace(d) ? <ActionButton key="replace" onClick={() => open({ kind: "replace", device: d })}>{`Substituir ${d.name}`}</ActionButton> : null,
+          canRegister && isAutoRevoked(d) ? <ActionButton key="again" onClick={() => open({ kind: "again", device: d })}>{`Cadastrar novo ${d.name}`}</ActionButton> : null
+        ].filter(Boolean);
+        return actions.length === 0 ? null : <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>{actions}</div>;
+      }
     }
   ];
+  const panel = flow?.kind === "replace" ? { title: `Substituir ${flow.device.name}`, description: REPLACE_NOTICE, initial: "" }
+    : flow?.kind === "again" ? { title: `Cadastrar novo ${flow.device.name}`, description: REREGISTER_NOTICE, initial: flow.device.name }
+    : { title: "Cadastrar aparelho", description: REGISTER_NOTICE, initial: "" };
 
   return (
     <div style={stack}>
       {register}
-      {registering && !off && (
+      {flow && !off && (
         <SensitiveAction
-          title="Cadastrar aparelho"
-          description="Gera um QR de uso único para ligar o app de campo. Cada pessoa pode ter até 3 aparelhos ativos."
+          key={`${flow.kind}:${flow.kind === "new" ? "" : flow.device.id}`}
+          title={panel.title}
+          description={panel.description}
           requiresStepUp
-          fields={[ { name: "name", label: "Nome do aparelho", required: true } ]}
+          fields={[ { name: "name", label: "Nome do aparelho", required: true, initial: panel.initial } ]}
           run={runRegister}
-          onDone={() => { setRegistering(false); setShowQr(true); void reread(); }}
-          onCancel={() => setRegistering(false)}
+          onDone={() => { setFlow(null); setShowQr(true); void reread(); }}
+          onCancel={() => setFlow(null)}
           onGoToSecurity={onGoToSecurity}
           translateError={(err) => (err instanceof NameRefused ? `informe o nome do aparelho, de 1 a ${NAME_MAX} caracteres` : homeVisitError(err))}
         />

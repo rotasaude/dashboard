@@ -17,6 +17,8 @@ export interface SensitiveField {
   name: string; label: string; required?: boolean; type?: "text" | "password";
   // Texto longo (ex.: motivo da reversão, PR-17): várias linhas e um exemplo.
   multiline?: boolean; placeholder?: string;
+  // Valor com que o campo abre (ex.: o nome do aparelho que se cadastra de novo).
+  initial?: string;
 }
 
 export interface SensitiveActionProps {
@@ -46,7 +48,7 @@ export function SensitiveAction({
   const auth = useAuth();
   const { window, stepUp } = useStepUp();
   const [ values, setValues ] = useState<Record<string, string>>(() =>
-    Object.fromEntries(fields.map((f) => [ f.name, "" ])));
+    Object.fromEntries(fields.map((f) => [ f.name, f.initial ?? "" ])));
   const [ code, setCode ] = useState("");
   const [ forceCode, setForceCode ] = useState(false);
   const [ retried, setRetried ] = useState(false);

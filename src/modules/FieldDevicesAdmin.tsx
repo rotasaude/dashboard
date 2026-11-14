@@ -8,7 +8,7 @@ import { adminRevokeFieldDevice, listAdminFieldDevices, type AdminFieldDevice } 
 import { FD_KEY, STATIC_QUERY, homeVisitError, homeVisitRefusals } from "../lib/homeVisits";
 import { fmtDateTime } from "../lib/format";
 import { HomeVisitGate } from "./homeVisits/HomeVisitGate";
-import { deviceStatusLabel } from "./FieldDevices";
+import { deviceStatusLabel, revokeLossWarning } from "../lib/fieldDevices";
 import { ActionButton } from "../components/ActionButton";
 import { DataTable, type Column } from "../components/DataTable";
 import { SensitiveAction } from "../components/SensitiveAction";
@@ -71,7 +71,7 @@ function Body({ onGoToSecurity }: { onGoToSecurity?(): void }) {
       {revoking && (
         <SensitiveAction
           title="Revogar aparelho"
-          description={`Revoga ${revoking.name}, de ${revoking.user.name}. O app de campo deste aparelho deixa de entrar.`}
+          description={`Revoga ${revoking.name}, de ${revoking.user.name}. O app de campo deste aparelho deixa de entrar. ${revokeLossWarning(revoking.last_used_at)}`}
           requiresStepUp
           run={async () => { await revoke(revoking); }}
           onDone={() => { setRevoking(null); void reread(); }}
