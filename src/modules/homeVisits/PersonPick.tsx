@@ -8,7 +8,7 @@
 // `restart`: o 409 `duplicate_suspected` da gravação reabre com a frase e os candidatos do 409, sem nova busca.
 // `refusal`: recusa do api para a pessoa digitada (`new_patient.<campo>`) ou para a escolhida (`patient_id`).
 // `unidentifiedIds`: cadastros provisórios da urgência — o api os recusa (`patient_unidentified`), a tela nem os oferece.
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import {
   findVisitDuplicates, lookupVisitPerson, type PatientSex, type PersonScope, type QuickPatient, type VisitCandidate, type VisitPerson
@@ -19,7 +19,7 @@ import { DUPLICATE_SUSPECTED_TEXT, NO_NAME, duplicateQueryProblem, fmtDay } from
 import { CPF_TEXT } from "../../lib/territoryDictionaries";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { alert, fieldLabel, form, list, muted, row } from "../exams/styles";
-import { QuickPatientForm, type QuickInitial, type QuickRefusal } from "./QuickPatientForm";
+import { QuickPatientForm, enterSubmits, type QuickInitial, type QuickRefusal } from "./QuickPatientForm";
 
 export type PickedPerson =
   | { kind: "patient"; patientId: string; displayName: string | null; hasCpf: boolean; hasCns: boolean; sex: PatientSex | null }
@@ -98,8 +98,7 @@ function ByDocument({ scope, unidentifiedIds, onChoose, onMissing, onNoDocument,
     onError: (err, { n }) => { if (n === seq.current) setProblem(homeVisitError(err)); }
   });
 
-  function submit(e: FormEvent) {
-    e.preventDefault();
+  function submit() {
     if (lookup.isPending) return;
     setFound(null);
     const digits = onlyDigits(doc);
@@ -113,14 +112,14 @@ function ByDocument({ scope, unidentifiedIds, onChoose, onMissing, onNoDocument,
   const blocked = !!found && !!unidentifiedIds?.includes(found.patient_id);
   const name = found?.display_name ?? NO_NAME;
   return (
-    <form style={form} onSubmit={submit} noValidate aria-label="Buscar pessoa pelo documento">
+    <div style={form} role="form" onKeyDown={enterSubmits(submit)} aria-label="Buscar pessoa pelo documento">
       <label style={fieldLabel}>
         CPF ou CNS
         <input value={doc} style={inputStyle} autoComplete="off" inputMode="numeric"
           onChange={(e) => { const d = onlyDigits(e.target.value); setDoc(d.length <= 11 ? maskCpf(d) : d); seq.current += 1; setFound(null); setProblem(null); }} />
       </label>
       <div style={row}>
-        <button type="submit" style={lookup.isPending ? disabledButtonStyle : buttonStyle} disabled={lookup.isPending}>Buscar</button>
+        <button type="button" onClick={submit} style={lookup.isPending ? disabledButtonStyle : buttonStyle} disabled={lookup.isPending}>Buscar</button>
         <button type="button" style={secondaryButtonStyle} onClick={abandon(onNoDocument)}>Não tem o documento</button>
         <button type="button" style={secondaryButtonStyle} onClick={abandon(onCancel)}>Cancelar</button>
       </div>
@@ -136,7 +135,7 @@ function ByDocument({ scope, unidentifiedIds, onChoose, onMissing, onNoDocument,
               </button>}
         </div>
       )}
-    </form>
+    </div>
   );
 }
 
@@ -164,8 +163,7 @@ function ByName({ scope, today, unidentifiedIds, restart, onChoose, onOther, onB
     onError: (err, { n }) => { if (n === seq.current) setProblem(homeVisitError(err)); }
   });
 
-  function submit(e: FormEvent) {
-    e.preventDefault();
+  function submit() {
     if (search.isPending) return;
     const q = typed();
     const local = duplicateQueryProblem({ full_name: q.full_name, birth_date: q.birth_date }, today);
@@ -185,13 +183,13 @@ function ByName({ scope, today, unidentifiedIds, restart, onChoose, onOther, onB
   );
 
   return (
-    <form style={form} onSubmit={submit} noValidate aria-label="Buscar possíveis duplicados">
+    <div style={form} role="form" onKeyDown={enterSubmits(submit)} aria-label="Buscar possíveis duplicados">
       <p style={muted}>Sem o documento, procure antes quem já é paciente com o mesmo nome, nascimento e mãe.</p>
       {field("Nome completo", fullName, setFullName)}
       {field("Data de nascimento", birth, setBirth, "date")}
       {field("Nome da mãe (opcional)", mother, setMother)}
       <div style={row}>
-        <button type="submit" style={search.isPending ? disabledButtonStyle : buttonStyle} disabled={search.isPending}>Buscar possíveis duplicados</button>
+        <button type="button" onClick={submit} style={search.isPending ? disabledButtonStyle : buttonStyle} disabled={search.isPending}>Buscar possíveis duplicados</button>
         <button type="button" style={secondaryButtonStyle} onClick={onBack}>Buscar pelo documento</button>
         <button type="button" style={secondaryButtonStyle} onClick={onCancel}>Cancelar</button>
       </div>
@@ -224,6 +222,6 @@ function ByName({ scope, today, unidentifiedIds, restart, onChoose, onOther, onB
           </div>
         </section>
       )}
-    </form>
+    </div>
   );
 }

@@ -3,7 +3,7 @@
 // Nome, nascimento, sexo, mãe (opcional), CPF OU motivo de não ter CPF, CNS (opcional). A tela só devolve o que ela
 // mesma conferiu (`quickPatientProblems`); nada é gravado aqui — o paciente nasce na gravação da visita ou da atividade.
 // Os dados vivem só neste estado; nada em URL, storage ou log. `refusal`: a recusa do api (`new_patient.<campo>`) marca o campo.
-import { useRef, useState, type FormEvent } from "react";
+import { useRef, useState, type KeyboardEvent } from "react";
 import type { QuickPatient } from "../../lib/api";
 import { isValidCpf, maskCpf, onlyDigits } from "../../lib/attendance";
 import { quickPatientProblems } from "../../lib/homeVisits";
@@ -16,6 +16,14 @@ export interface QuickRefusal { path: string; text: string }
 export type QuickInitial = Partial<Pick<QuickPatient, "full_name" | "birth_date" | "sex" | "mother_name" | "cpf" | "no_cpf_reason" | "cns">>;
 
 const PREFIX = "new_patient.";
+
+// Estes blocos vivem DENTRO do <form> da visita/atividade e por isso não são <form>: o `submit` de um <form> aninhado não
+// sobe no navegador. Enter num campo (input) roda o envio do bloco e NUNCA o do <form> de fora (preventDefault corta o implícito).
+export const enterSubmits = (run: () => void) => (e: KeyboardEvent<HTMLElement>) => {
+  if (e.key !== "Enter" || e.nativeEvent.isComposing || !(e.target instanceof HTMLInputElement)) return;
+  e.preventDefault();
+  run();
+};
 
 export function QuickPatientForm({ initial, today, refusal, onDone, onCancel }: {
   initial: QuickInitial; today: string; refusal?: QuickRefusal | null; onDone(p: QuickPatient): void; onCancel(): void;
@@ -35,8 +43,7 @@ export function QuickPatientForm({ initial, today, refusal, onDone, onCancel }: 
   const invalid = (key: string) => (shown?.path === `${PREFIX}${key}` ? true : undefined);
   const edit = (set: (v: string) => void) => (e: { target: { value: string } }) => { set(e.target.value); setShown(null); };
 
-  function submit(e: FormEvent) {
-    e.preventDefault();
+  function submit() {
     const digits = onlyDigits(cpf);
     const p: QuickPatient = { full_name: fullName.trim(), birth_date: birth, sex: sex as QuickPatient["sex"] };
     if (mother.trim()) p.mother_name = mother.trim();
@@ -49,7 +56,7 @@ export function QuickPatientForm({ initial, today, refusal, onDone, onCancel }: 
   }
 
   return (
-    <form style={form} onSubmit={submit} noValidate aria-label="Registro rápido da pessoa">
+    <div style={form} role="form" onKeyDown={enterSubmits(submit)} aria-label="Registro rápido da pessoa">
       <label style={fieldLabel}>
         Nome completo
         <input value={fullName} style={inputStyle} autoComplete="off" aria-invalid={invalid("full_name")} onChange={edit(setFullName)} />
@@ -92,9 +99,9 @@ export function QuickPatientForm({ initial, today, refusal, onDone, onCancel }: 
       </label>
       {shown && <p role="alert" style={alert}>{shown.text}</p>}
       <div style={row}>
-        <button type="submit" style={buttonStyle}>Usar esta pessoa</button>
+        <button type="button" style={buttonStyle} onClick={submit}>Usar esta pessoa</button>
         <button type="button" style={secondaryButtonStyle} onClick={onCancel}>Cancelar</button>
       </div>
-    </form>
+    </div>
   );
 }
