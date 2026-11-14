@@ -46,7 +46,7 @@ export function household(over: Partial<Household> = {}): Household {
     property_type: "1",
     living_conditions: { localizacao: 83, situacao_moradia_posse_terra: 75, nu_comodos: 4, nu_moradores: 3, st_disponibilidade_energia_eletrica: true },
     contact_phone: "41999990000", refused: false, status: "active", version: 2, registered_at: "2026-03-02T10:00:00-03:00",
-    registered_by: { name: "Ana Prado" }, families: [ family() ], ...over
+    registered_by: { name: "Ana Prado" }, families: [ family() ], location: null, ...over
   };
 }
 

@@ -4138,6 +4138,10 @@ export interface Family {
   // domicílio sem outro cadastro ativo aqui); em mudança é sempre false.
   responsible_exited: boolean;
 }
+// Ponto do imóvel (módulo 24c, ADR 0053): `gps` vem do app de campo, com a
+// precisão em metros; o dashboard só grava `map` (ponto marcado no mapa), sem
+// precisão, com latitude e longitude de até 8 casas. Nunca vai em URL.
+export interface HouseholdLocation { latitude: number; longitude: number; accuracy_m?: number; source: "gps" | "map" | (string & {}) }
 export interface Household {
   id: string; micro_area: { id: string; code: string }; address: HouseholdAddress | NoAddress;
   // tipoDeImovel em texto ("1" = Domicílio … "99").
@@ -4146,12 +4150,22 @@ export interface Household {
   living_conditions?: CodedSection;
   contact_phone: string | null; refused: boolean; status: "active" | "inactive"; version: number;
   registered_at: string; registered_by: { name: string | null }; families: Family[];
+  // 24c: o ponto do imóvel; null = sem ponto.
+  location: HouseholdLocation | null;
 }
 // Endereço obrigatório sem recusa; `status` só no PATCH (inativo só sem família ativa).
+// `location` (24c): ausente = o ponto fica como está; null apaga.
 export interface HouseholdInput {
   micro_area_id: string; address?: HouseholdAddress | null; property_type: string; living_conditions?: CodedSection | null;
-  contact_phone: string | null; refused: boolean; status?: "active" | "inactive";
+  contact_phone: string | null; refused: boolean; status?: "active" | "inactive"; location?: HouseholdLocation | null;
 }
+// Um domicílio no mapa da microárea (24c): só rua, número, famílias e a versão vista.
+export interface MapHousehold {
+  id: string; location: HouseholdLocation; address: { street: string | null; number: string | null }; families_count: number; version: number;
+}
+// O arquivo de mapa publicado da cidade (a mesma forma do `map` da sessão do app); null = ainda não gerado.
+export interface FieldMapManifest { version: string; size_bytes: number; sha256: string }
+export interface MapHouseholdsResponse { map: FieldMapManifest | null; items: MapHousehold[] }
 export interface HouseholdQuery { microAreaId: string; before?: string | null }
 // next_before: cursor opaco do api; repasse como veio.
 export interface HouseholdPage { households: Household[]; next_before: string | null }
@@ -4273,6 +4287,17 @@ export async function listHouseholds(q: HouseholdQuery): Promise<HouseholdPage> 
   p.set("limit", String(TERRITORY_PAGE_SIZE));
   const b = await jsonFetch<Partial<HouseholdPage>>(withQuery(territoryPath("households"), p));
   return { households: b.households ?? [], next_before: b.next_before ?? null };
+}
+
+// Mapa da microárea (24c). Leitura nominal: grava trilha no api, nunca relida sozinha. Na URL só a microárea.
+export async function listMapHouseholds(microAreaId: string): Promise<MapHouseholdsResponse> {
+  const b = await jsonFetch<Partial<MapHouseholdsResponse>>(
+    withQuery(territoryPath("map", "households"), new URLSearchParams({ micro_area_id: microAreaId })));
+  return { map: b.map ?? null, items: b.items ?? [] };
+}
+// O arquivo de mapa da cidade, servido pelo próprio Rota Saúde (nenhum serviço de terceiros).
+export function fieldMapUrl(): string {
+  return new URL(`${TERRITORY_BASE}/map`, window.location.origin).href;
 }
 
 export function getHousehold(id: string): Promise<Household> {
@@ -7624,7 +7649,7 @@ export interface FieldDevice {
   id: string; name: string; created_at: string; last_used_at: string | null;
   status: "active" | "inactive" | "revoked" | (string & {});
   revoked_at: string | null;
-  revoked_reason: "user" | "admin" | "membership_ended" | "user_disabled" | (string & {}) | null;
+  revoked_reason: "user" | "admin" | "replaced" | "membership_ended" | "user_disabled" | (string & {}) | null;
 }
 // O token e o QR só vêm nesta resposta, uma vez.
 export interface FieldDeviceCreated { device: FieldDevice; token: string; qr_payload: string }
@@ -7767,8 +7792,10 @@ export function markCollectiveMistaken(id: string, reason: string): Promise<Coll
 export async function listFieldDevices(): Promise<FieldDevice[]> {
   return (await jsonFetch<{ items?: FieldDevice[] }>(FIELD_DEVICES_BASE)).items ?? [];
 }
-export function registerFieldDevice(name: string): Promise<FieldDeviceCreated> {
-  return jsonFetch<FieldDeviceCreated>(FIELD_DEVICES_BASE, hvWrite("POST", { name }));
+// `replacesDeviceId` (24c, Q16): cadastra no lugar de um aparelho ATIVO do próprio usuário, que é revogado junto.
+export function registerFieldDevice(name: string, replacesDeviceId?: string): Promise<FieldDeviceCreated> {
+  return jsonFetch<FieldDeviceCreated>(FIELD_DEVICES_BASE,
+    hvWrite("POST", replacesDeviceId ? { name, replaces_device_id: replacesDeviceId } : { name }));
 }
 export async function revokeFieldDevice(id: string): Promise<FieldDevice> {
   return (await jsonFetch<{ device: FieldDevice }>(hvPath(FIELD_DEVICES_BASE, id, "revoke"), hvWrite("POST"))).device;

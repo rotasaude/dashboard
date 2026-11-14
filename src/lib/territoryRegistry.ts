@@ -99,6 +99,9 @@ export function cpfProblem(cpf: string): string | null {
 // ─── Recusas do api (frase, nunca o corpo nem o valor enviado) ─────────────
 const CHECK_FIELD = "confira o campo destacado";
 const ERRORS: Record<string, string> = {
+  // 24c: ponto do imóvel e mapa da cidade.
+  invalid_location: "ponto inválido — marque de novo no mapa",
+  map_not_found: "o mapa desta cidade ainda não foi gerado — peça à equipe de manutenção",
   duplicate_code: "já existe microárea com este código na equipe",
   acs_not_in_team: "o ACS escolhido não é agente comunitário ativo desta equipe",
   acs_without_cns: "o ACS precisa ter CNS no cadastro de profissionais para ser responsável pela microárea",

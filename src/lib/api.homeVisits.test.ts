@@ -155,6 +155,11 @@ describe("cliente da visita domiciliar e da atividade coletiva (módulo 24b)", (
     expect(created.token).toBe("rsf_abc");
     expect(last()).toMatchObject({ url: "/field_devices", init: { method: "POST" } });
     expect(bodyOf()).toEqual({ name: "Celular da Joana" });
+    // 24c (Q16): substituir manda o aparelho antigo no corpo.
+    stub({ device: device(), token: "rsf_abc", qr_payload: "rotasaude-field:v1:eyJ9" }, 201);
+    await registerFieldDevice("Tablet novo", "fd1");
+    expect(last()).toMatchObject({ url: "/field_devices", init: { method: "POST" } });
+    expect(bodyOf()).toEqual({ name: "Tablet novo", replaces_device_id: "fd1" });
     stub({ device: device({ status: "revoked", revoked_reason: "user" }) });
     expect(await revokeFieldDevice("fd1")).toEqual(device({ status: "revoked", revoked_reason: "user" }));
     expect(last()).toMatchObject({ url: "/field_devices/fd1/revoke", init: { method: "POST", body: "{}" } });

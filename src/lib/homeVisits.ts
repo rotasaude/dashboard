@@ -94,7 +94,8 @@ const ORIGIN: Record<string, string> = { dashboard: "Dashboard", field_app: "App
 const DAY_STATE: Record<string, string> = { open: "Aberta", closed: "Fechada" };
 const CLOSED_BY: Record<string, string> = { job: "automático de madrugada", full: "folha cheia (99 visitas)" };
 const REVOKED: Record<string, string> = {
-  user: "por você", admin: "pelo administrador", membership_ended: "fim do vínculo na equipe", user_disabled: "usuário desativado"
+  user: "por você", admin: "pelo administrador", membership_ended: "fim do vínculo na equipe", user_disabled: "usuário desativado",
+  replaced: "substituído por outro aparelho"
 };
 const pick = (map: Record<string, string>, key: string | number): string => (Object.prototype.hasOwnProperty.call(map, String(key)) ? map[String(key)] : String(key));
 
@@ -573,6 +574,7 @@ function codeText(code: string, status: number, confirmable: boolean): string {
 
 // Todas as recusas, uma por `problems[]` (o 24b só manda `error` e `path` no topo, mas lê as duas formas); a do topo se não houver lista.
 // `path` leva a recusa ao campo; sem ele, `""` (frase geral). `confirmable` segue na recusa de participante repetido.
+export const DEVICE_NOT_REPLACEABLE = "o aparelho a substituir não está mais ativo — recarregue a lista";
 export function homeVisitRefusals(err: unknown): HomeVisitRefusal[] {
   if (!(err instanceof ApiError)) return [ { path: "", code: "", text: OFFLINE } ];
   const disabled = disabledText(err);
@@ -583,7 +585,10 @@ export function homeVisitRefusals(err: unknown): HomeVisitRefusal[] {
     const raw = row?.error ?? row?.code;
     const code = safeCode(raw);
     const confirmable = typeof row?.confirmable === "boolean" ? row.confirmable : undefined;
-    const text = typeof raw === "string" && raw !== "" && code === "" ? "recusado pelo servidor" : codeText(code, err.status, confirmable === true);
+    // 24c (Q16): o api só substitui aparelho ativo; a recusa vem como invalid_request no campo.
+    const replaced = code === "invalid_request" && row?.path === "replaces_device_id";
+    const text = replaced ? DEVICE_NOT_REPLACEABLE
+      : typeof raw === "string" && raw !== "" && code === "" ? "recusado pelo servidor" : codeText(code, err.status, confirmable === true);
     return { path: safePath(row?.path), code, text, ...(confirmable === undefined ? {} : { confirmable }) };
   };
   const list = Array.isArray(body?.problems) ? (body!.problems as unknown[]) : [];

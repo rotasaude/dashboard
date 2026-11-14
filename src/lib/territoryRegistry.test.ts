@@ -105,6 +105,9 @@ describe("recusas do api (contrato §3–§5; api 17175a8)", () => {
   });
   it("invalid_micro_area diz o campo", () => {
     expect(territoryError(refusal(422, { error: "invalid_micro_area", field: "name" }))).toBe("nome da microárea inválido: de 1 a 60 caracteres");
+    // 24c: ponto do imóvel e mapa da cidade.
+    expect(territoryError(refusal(422, { error: "invalid_location", path: "location.latitude" }))).toBe("ponto inválido — marque de novo no mapa");
+    expect(territoryError(refusal(404, { error: "map_not_found" }))).toBe("o mapa desta cidade ainda não foi gerado — peça à equipe de manutenção");
     expect(territoryError(refusal(422, { error: "invalid_micro_area", field: "active" }))).toBe("situação da microárea inválida — recarregue");
     expect(territoryError(refusal(422, { error: "invalid_micro_area" }))).toBe("confira o campo destacado");
   });

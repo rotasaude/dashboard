@@ -41,6 +41,9 @@ describe("frases de erro", () => {
       expect(homeVisitError(err(422, { error: code })), code).toBe(HOME_VISIT_ERRORS[code]);
     }
     expect(homeVisitError(err(422, { error: "brand_new" }))).toBe("recusado pelo servidor (brand_new)");
+    // 24c (Q16): o api só substitui aparelho ativo.
+    expect(homeVisitError(err(422, { error: "invalid_request", path: "replaces_device_id" })))
+      .toBe("o aparelho a substituir não está mais ativo — recarregue a lista");
     expect(homeVisitError(err(403, { error: "feature_disabled", feature: "home_visits" }))).toBe(HOME_VISITS_DISABLED);
     expect(homeVisitError(err(403, { error: "feature_disabled", feature: "collective_activities" }))).toBe(COLLECTIVE_DISABLED);
   });
@@ -137,6 +140,7 @@ describe("portões e rótulos", () => {
     expect(revokedReasonLabel("admin")).toBe("pelo administrador");
     expect(revokedReasonLabel("membership_ended")).toBe("fim do vínculo na equipe");
     expect(revokedReasonLabel("user_disabled")).toBe("usuário desativado");
+    expect(revokedReasonLabel("replaced")).toBe("substituído por outro aparelho");
     expect(revokedReasonLabel("x")).toBe("x");
   });
 
