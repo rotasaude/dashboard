@@ -1,5 +1,6 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { MODULE_24B_PROXY_KEYS } from "./src/devProxy";
 
 // Frontend do Dashboard operacional da cidade (tenant-scoped, municipal_admin).
 // Em dev, Vite proxa as rotas de backend para o Rails (apps/api, :3030).
@@ -115,9 +116,8 @@ export default defineConfig({
       "^/ombudsman(/|$)": proxy(TARGET),
       "^/departments(/|$)": proxy(TARGET),
       // Módulo 24b: visita domiciliar, atividade coletiva e aparelhos de campo. Regex como os vizinhos; /field/v1 é do app de campo e fica de fora.
-      "^/home_visits(/|$)": proxy(TARGET),
-      "^/collective_activities(/|$)": proxy(TARGET),
-      "^/field_devices(/|$)": proxy(TARGET)
+      // As chaves vêm de src/devProxy.ts (testadas): a regex aceita query logo após o caminho.
+      ...Object.fromEntries(MODULE_24B_PROXY_KEYS.map((key) => [key, proxy(TARGET)]))
     }
   }
 });
