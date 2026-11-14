@@ -3,7 +3,7 @@
 // dependem de `home_visits` (um aparelho perdido sempre pode ser revogado). O contexto só é lido com `home_visits` ligado, e só para
 // saber se há `can_register_device`; desligado, ou um 403 feature_disabled do contexto/do POST, esconde só o cadastro.
 // O token do aparelho novo vive num ref local e no diálogo do QR; nunca no cache (a resposta do POST não passa pelo react-query).
-import { useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getHomeVisitContext, listFieldDevices, registerFieldDevice, revokeFieldDevice, type FieldDevice, type FieldDeviceCreated } from "../lib/api";
 import { useAuth } from "../lib/auth";
@@ -23,9 +23,15 @@ export const NAME_MAX = 60;
 
 class NameRefused extends Error {}
 
-export const deviceStatusLabel = (d: FieldDevice): string => {
+// `perspective`: "owner" é a tela de quem tem o aparelho ("por você"); "admin" é a lista da cidade, onde quem olha não é o dono.
+const ADMIN_REVOKED: Record<string, string> = { user: "pela pessoa", admin: "pela administração" };
+export const deviceStatusLabel = (d: FieldDevice, perspective: "owner" | "admin" = "owner"): string => {
   if (d.status === "inactive") return "inativo: vínculo encerrado";
-  if (d.status === "revoked") return d.revoked_reason ? `revogado: ${revokedReasonLabel(d.revoked_reason)}` : "revogado";
+  if (d.status === "revoked") {
+    if (!d.revoked_reason) return "revogado";
+    const own = perspective === "admin" && Object.prototype.hasOwnProperty.call(ADMIN_REVOKED, d.revoked_reason) ? ADMIN_REVOKED[d.revoked_reason] : null;
+    return `revogado: ${own ?? revokedReasonLabel(d.revoked_reason)}`;
+  }
   return d.status === "active" ? "ativo" : d.status;
 };
 
@@ -50,6 +56,14 @@ function Body({ onGoToSecurity }: { onGoToSecurity?(): void }) {
   // O token do aparelho novo: só neste ref, só enquanto o diálogo está aberto.
   const created = useRef<FieldDeviceCreated | null>(null);
   const reread = () => queryClient.invalidateQueries({ queryKey: [ FD_KEY ] });
+  // O painel que abriu o diálogo já não existe quando ele fecha: o foco volta ao "Cadastrar aparelho" (que reaparece sob o diálogo).
+  const registerBox = useRef<HTMLDivElement | null>(null);
+  const restoreFocus = useRef(false);
+  useEffect(() => {
+    if (showQr || !restoreFocus.current) return;
+    restoreFocus.current = false;
+    registerBox.current?.querySelector("button")?.focus();
+  }, [ showQr ]);
 
   const off = !switchOn || postOff || (ctx.isError && isFeatureOff(ctx.error));
   let register: ReactNode = null;
@@ -57,7 +71,7 @@ function Body({ onGoToSecurity }: { onGoToSecurity?(): void }) {
   else if (ctx.isError) register = <p role="alert" style={alert}>{homeVisitError(ctx.error)}</p>;
   else if (!ctx.data) register = <p role="status" style={muted}>Carregando…</p>;
   else if (!ctx.data.teams.some((t) => t.can_register_device)) register = <p style={muted}>{REGISTER_ROLE}</p>;
-  else if (!registering) register = <div><ActionButton onClick={() => { setMessage(null); setRegistering(true); }}>Cadastrar aparelho</ActionButton></div>;
+  else if (!registering) register = <div ref={registerBox}><ActionButton onClick={() => { setMessage(null); setRegistering(true); }}>Cadastrar aparelho</ActionButton></div>;
 
   async function runRegister(values: Record<string, string>) {
     const name = values.name.trim();
@@ -72,6 +86,7 @@ function Body({ onGoToSecurity }: { onGoToSecurity?(): void }) {
 
   function closeQr() {
     created.current = null;
+    restoreFocus.current = true;
     setShowQr(false);
     void reread();
   }

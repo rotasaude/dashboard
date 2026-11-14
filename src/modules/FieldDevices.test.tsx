@@ -71,6 +71,21 @@ describe("Aparelhos de campo", () => {
     expect(api.registerFieldDevice).toHaveBeenCalledWith("Tablet");
   });
 
+  it.each([ [ "Escape" ], [ "Fechar" ] ])("fechar o QR (%s) devolve o foco ao botão Cadastrar aparelho", async (how) => {
+    mocked(api.registerFieldDevice).mockResolvedValue({ device: device(), token: "rsf_SEGREDO", qr_payload: PAYLOAD });
+    mount();
+    fireEvent.click(await screen.findByRole("button", { name: "Cadastrar aparelho" }));
+    fireEvent.change(screen.getByLabelText("Nome do aparelho"), { target: { value: "Celular da Joana" } });
+    confirm();
+    await screen.findByAltText("QR do aparelho de campo");
+    if (how === "Escape") fireEvent.keyDown(document, { key: "Escape" });
+    else fireEvent.click(screen.getByRole("button", { name: "Fechar" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    const button = screen.getByRole("button", { name: "Cadastrar aparelho" });
+    await waitFor(() => expect(document.activeElement).toBe(button));
+    expect(document.activeElement).not.toBe(document.body);
+  });
+
   it("revogar o próprio: confirma, sem step-up; revogado mostra o motivo", async () => {
     mocked(api.listFieldDevices).mockResolvedValueOnce([
       device(), device({ id: "fd2", name: "Antigo", status: "revoked", revoked_at: "2026-11-01T08:00:00-03:00", revoked_reason: "membership_ended" }),
