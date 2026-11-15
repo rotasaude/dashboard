@@ -50,7 +50,8 @@ export function createFieldMap(container: HTMLElement, opts: FieldMapOptions): F
 
   const map = new MapLibreMap({
     container,
-    style: fieldMapStyle({ base: opts.base, mapUrl: opts.mapUrl }),
+    // O MapLibre recusa sprite com URL relativa: a base vira absoluta, no próprio host.
+    style: fieldMapStyle({ base: new URL(opts.base, window.location.origin).href, mapUrl: opts.mapUrl }),
     attributionControl: false
   });
   // A atribuição do OpenStreetMap fica sempre visível (licença ODbL).

@@ -10,7 +10,7 @@ const fake = vi.hoisted(() => {
 
   class FakeSource { data: unknown = null; setData(d: unknown) { this.data = d; } }
   class FakeMap {
-    options: { container: HTMLElement; style: { sources: Record<string, { url?: string }>; glyphs: string }; attributionControl: unknown };
+    options: { container: HTMLElement; style: { sources: Record<string, { url?: string }>; glyphs: string; sprite: string }; attributionControl: unknown };
     controls: unknown[] = [];
     sources: Record<string, FakeSource> = {};
     sourceSpecs: Record<string, Record<string, unknown>> = {};
@@ -93,7 +93,9 @@ describe("createFieldMap (24c)", () => {
     expect(maplibregl.setWorkerUrl).toHaveBeenCalledTimes(1);
     expect(maplibregl.setWorkerUrl).toHaveBeenCalledWith("/dashboard/assets/maplibre-gl-worker.js");
     expect(lastMap().options.style.sources.protomaps.url).toBe(`pmtiles://${OPTS.mapUrl}`);
-    expect(lastMap().options.style.glyphs).toBe("/dashboard/map/fonts/{fontstack}/{range}.pbf");
+    // O MapLibre recusa sprite com URL relativa ("must be absolute"): as duas saem absolutas, no próprio host.
+    expect(lastMap().options.style.glyphs).toBe(`${window.location.origin}/dashboard/map/fonts/{fontstack}/{range}.pbf`);
+    expect(lastMap().options.style.sprite).toBe(`${window.location.origin}/dashboard/map/sprites/light`);
     expect(lastMap().options.attributionControl).toBe(false);
     const attribution = lastMap().controls.find((c) => c instanceof maplibregl.AttributionControl) as unknown as { options: unknown };
     expect(attribution.options).toEqual({ compact: false });
