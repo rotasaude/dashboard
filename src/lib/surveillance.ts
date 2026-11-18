@@ -144,11 +144,12 @@ export function weekLabel(week: string): string {
   return `semana ${m[2]}/${m[1]} (${dayMonth(start)} a ${dayMonth(end)})`;
 }
 
-// Formato, existência (só alguns anos têm a 53) e não depois da semana de hoje.
-export function weekProblem(week: string, today: string): string | null {
+// Formato, existência (só alguns anos têm a 53) e, com `today`, não depois da semana de hoje (sem `today`: semana futura vale,
+// como nos relatórios do 35a, Reports#epi_weeks!).
+export function weekProblem(week: string, today: string | null): string | null {
   const m = WEEK_FORMAT.exec(week);
   if (!m || Number(m[2]) < 1 || epiWeekOf(epiWeekStart(week)) !== week) return WEEK_FORMAT_PROBLEM;
-  return week > epiWeekOf(today) ? "semana no futuro" : null;
+  return today !== null && week > epiWeekOf(today) ? "semana no futuro" : null;
 }
 
 // Negativa: só semana já encerrada (anterior à de hoje).
@@ -158,8 +159,8 @@ export function closedWeekProblem(week: string, today: string): string | null {
   return week >= epiWeekOf(today) ? "a semana ainda não terminou" : null;
 }
 
-// Painel: as duas pontas válidas, da inicial até a final, no máximo 53 semanas contando as duas.
-export function weekRangeProblem(from: string, to: string, today: string): string | null {
+// Painel: as duas pontas válidas, da inicial até a final, no máximo 53 semanas contando as duas. `today` null aceita semana futura.
+export function weekRangeProblem(from: string, to: string, today: string | null): string | null {
   const problem = weekProblem(from, today) ?? weekProblem(to, today);
   if (problem) return problem;
   if (from > to) return "a semana inicial vem depois da final";

@@ -22,7 +22,7 @@ import { saveFile } from "./lab/saveFile";
 import { renderWithProviders } from "../test/campaignFixtures";
 import { TODAY35, liraaSurvey, report, vcUser } from "../test/vectorControlFixtures";
 import {
-  PERIOD_TOO_LONG, PICK_CYCLE, PICK_SURVEY, REPORTS_FOR, REPORT_TITLES, TO_BEFORE_FROM, VectorReports
+  PERIOD_TOO_LONG, PICK_CYCLE, PICK_SURVEY, REPORTS_FOR, REPORT_TITLES, TO_BEFORE_FROM, VectorReports, YEAR_INVALID
 } from "./VectorReports";
 
 const ALL = [ api.fetchCurrentSession, api.getVectorReport, api.fetchVectorReportFile, api.listCycles, api.listLiraaSurveys,
@@ -257,7 +257,13 @@ describe("VectorReports", () => {
     expect(r.getByText("Casos de 1 a 4 saem suprimidos.")).not.toBeNull();
     // O bloqueio não mostra doença (Reports#blocks): os nomes da Q38 não são lidos.
     expect(api.getVectorDiseases).not.toHaveBeenCalled();
+    await tick();
+    expect(api.getVectorReport).toHaveBeenCalledTimes(1);
     expect(api.getVectorReport).toHaveBeenCalledWith("blocks", { from: "2026-11-01", to: "2026-11-16" });
+    expect(api.listCycles).not.toHaveBeenCalled();
+    expect(api.listLiraaSurveys).not.toHaveBeenCalled();
+    expect(api.listPanelNeighborhoods).not.toHaveBeenCalled();
+    expect(api.fetchVectorReportFile).not.toHaveBeenCalled();
   });
 
   it("LIRAa provisório mostra \"provisório\"; ovitrampas manda as semanas do intervalo e só os bairros marcados", async () => {
@@ -274,10 +280,76 @@ describe("VectorReports", () => {
     fireEvent.change(ov.getByLabelText("Semana inicial (AAAA-SS)"), { target: { value: "2026-43" } });
     fireEvent.click(ov.getByRole("button", { name: "Ver" }));
     await waitFor(() => expect(api.getVectorReport).toHaveBeenLastCalledWith("ovitraps", { epi_weeks: [ "2026-43", "2026-44", "2026-45" ] }));
+    // Semana futura vale (Reports#epi_weeks! não a recusa; vem vazia).
     fireEvent.change(ov.getByLabelText("Semana final (AAAA-SS)"), { target: { value: "2026-48" } });
     fireEvent.click(ov.getByRole("button", { name: "Ver" }));
-    expect(ov.getByRole("alert").textContent).toBe("semana final: semana no futuro");
-    expect(api.getVectorReport).toHaveBeenCalledTimes(2);
+    await waitFor(() => expect(api.getVectorReport).toHaveBeenLastCalledWith("ovitraps", {
+      epi_weeks: [ "2026-43", "2026-44", "2026-45", "2026-46", "2026-47", "2026-48" ] }));
+    // A recusa é a do weekRangeProblem: formato, ordem e 53 semanas contando as duas.
+    fireEvent.change(ov.getByLabelText("Semana final (AAAA-SS)"), { target: { value: "2026-5" } });
+    fireEvent.click(ov.getByRole("button", { name: "Ver" }));
+    expect(ov.getByRole("alert").textContent).toBe("semana inválida: use AAAA-SS (ex.: 2026-43)");
+    fireEvent.change(ov.getByLabelText("Semana final (AAAA-SS)"), { target: { value: "2026-42" } });
+    fireEvent.click(ov.getByRole("button", { name: "Ver" }));
+    expect(ov.getByRole("alert").textContent).toBe("a semana inicial vem depois da final");
+    fireEvent.change(ov.getByLabelText("Semana inicial (AAAA-SS)"), { target: { value: "2025-43" } });
+    fireEvent.change(ov.getByLabelText("Semana final (AAAA-SS)"), { target: { value: "2026-44" } });
+    fireEvent.click(ov.getByRole("button", { name: "Ver" }));
+    expect(ov.getByRole("alert").textContent).toBe("no máximo 53 semanas por consulta");
+    await tick();
+    expect(api.getVectorReport).toHaveBeenCalledTimes(3);
+  });
+
+  it("M2: as listas dos seletores são lidas uma vez na tela — situations → strategic_points e situations → ovitraps não releem", async () => {
+    mount();
+    const r = await choose("situations");
+    await pickCycle(r);
+    await waitFor(() => expect(r.getByLabelText("Centro")).not.toBeNull());
+    const sp = await choose("strategic_points");
+    await pickCycle(sp);
+    const ov = await choose("ovitraps");
+    expect(ov.getByLabelText("Centro")).not.toBeNull();
+    await tick();
+    expect(api.listCycles).toHaveBeenCalledTimes(1);
+    expect(api.listPanelNeighborhoods).toHaveBeenCalledTimes(1);
+    expect(api.listLiraaSurveys).not.toHaveBeenCalled();
+    expect(api.getVectorReport).not.toHaveBeenCalled();
+  });
+
+  it("M3: ano inválido esvazia o seletor de ciclo (nada do ano anterior); ano válido lê aquele ano", async () => {
+    mount();
+    const r = await choose("situations");
+    await pickCycle(r);
+    fireEvent.change(r.getByLabelText("Ano do ciclo"), { target: { value: "202" } });
+    expect(r.getByText(YEAR_INVALID)).not.toBeNull();
+    const select = r.getByLabelText("Ciclo") as HTMLSelectElement;
+    expect(select.disabled).toBe(true);
+    expect(select.value).toBe("");
+    expect(r.queryByRole("option", { name: /^Ciclo 6\/2026/ })).toBeNull();
+    fireEvent.click(r.getByRole("button", { name: "Ver" }));
+    expect(r.getByText(PICK_CYCLE)).not.toBeNull();
+    vi.mocked(api.listCycles).mockResolvedValueOnce([ cycle({ id: "cy9", year: 2027, number: 1, starts_on: "2027-01-03", ends_on: "2027-01-30" }) ]);
+    fireEvent.change(r.getByLabelText("Ano do ciclo"), { target: { value: "2027" } });
+    expect(await r.findByRole("option", { name: "Ciclo 1/2027 · 03/01/2027 a 30/01/2027" })).not.toBeNull();
+    expect(r.queryByText(YEAR_INVALID)).toBeNull();
+    await tick();
+    expect(vi.mocked(api.listCycles).mock.calls).toEqual([ [ 2026 ], [ 2027 ] ]);
+    expect(api.getVectorReport).not.toHaveBeenCalled();
+  });
+
+  it("M5: a recusa de um \"Ver\" some depois de um download que passou com o mesmo filtro", async () => {
+    vi.mocked(api.getVectorReport).mockRejectedValueOnce(new ApiError(422, { error: "invalid_request", path: "cycle_id" }, "x"));
+    mount();
+    const r = await choose("strategic_points");
+    await pickCycle(r);
+    fireEvent.click(r.getByRole("button", { name: "Ver" }));
+    expect((await r.findByRole("alert")).id).toBe("vc-report-strategic_points-cycle_id-error");
+    fireEvent.click(r.getByRole("button", { name: "Baixar CSV" }));
+    await waitFor(() => expect(saveFile).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(r.queryByRole("alert")).toBeNull());
+    await tick();
+    expect(api.getVectorReport).toHaveBeenCalledTimes(1);
+    expect(api.fetchVectorReportFile).toHaveBeenCalledTimes(1);
   });
 
   it("CSV de cada relatório baixa com o nome do api; PDF só no LIRAa", async () => {
