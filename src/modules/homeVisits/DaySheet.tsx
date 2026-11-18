@@ -23,7 +23,10 @@ import { useWriteLock } from "./writeLock";
 const NO_VISITS = "nenhuma visita nesta folha ainda";
 
 // `onChanged(updated?)`: com a folha devolvida pelo api (fechamento) o pai a grava; sem ela, relê uma vez.
-export function DaySheet({ day, domains, onChanged }: { day: HomeVisitDay; domains: HomeVisitDomains; onChanged(updated?: HomeVisitDay): void }) {
+// `onWithdrawn(v)` (35a): a visita retirada com sucesso, como a folha a mostrava (o pai relê o que o boletim dela mudou).
+export function DaySheet({ day, domains, onChanged, onWithdrawn }: {
+  day: HomeVisitDay; domains: HomeVisitDomains; onChanged(updated?: HomeVisitDay): void; onWithdrawn?(v: HomeVisit): void;
+}) {
   const msg = useActionMessage();
   const lock = useWriteLock();
   const [ withdrawing, setWithdrawing ] = useState<string | null>(null);
@@ -88,7 +91,7 @@ export function DaySheet({ day, domains, onChanged }: { day: HomeVisitDay; domai
                 onWithdraw={() => { msg.start(); setWithdrawing(v.id); }} />
               {withdrawing === v.id && (
                 <WithdrawForm visit={v} onClose={() => setWithdrawing(null)}
-                  onDone={() => { setWithdrawing(null); msg.ok("Visita retirada."); onChanged(); }}
+                  onDone={() => { setWithdrawing(null); msg.ok("Visita retirada."); onChanged(); onWithdrawn?.(v); }}
                   onStale={(text) => { setWithdrawing(null); msg.fail(text); onChanged(); }} />
               )}
             </li>

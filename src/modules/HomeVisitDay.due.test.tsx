@@ -9,7 +9,7 @@ vi.mock("../lib/api", async (importOriginal) => {
   const real = await importOriginal<typeof import("../lib/api")>();
   return {
     ...real, fetchCurrentSession: vi.fn(), getVisitHousehold: vi.fn(), getHouseholdVectorProfile: vi.fn(), listCityBlocks: vi.fn(),
-    recordHomeVisit: vi.fn(), listVisitHouseholds: vi.fn(), getHomeVisitContext: vi.fn(), listHomeVisitDays: vi.fn(), getHomeVisitDay: vi.fn(),
+    recordHomeVisit: vi.fn(), withdrawHomeVisit: vi.fn(), listVisitHouseholds: vi.fn(), getHomeVisitContext: vi.fn(), listHomeVisitDays: vi.fn(), getHomeVisitDay: vi.fn(),
     getVectorDomains: vi.fn(), listDue: vi.fn()
   };
 });
@@ -22,10 +22,11 @@ import {
   NOW35, VC_DOMAINS, agentTeam, dueItem, householdProfile, inspection, vcContext, vcUser
 } from "../test/vectorControlFixtures";
 import { HomeVisitDay } from "./HomeVisitDay";
+import type { VisitStart } from "./homeVisits/useVisitHandoff";
 import { DUE_CBO_NOT_ALLOWED, DUE_EMPTY, startFor } from "./vectorControl/DueList";
 
 const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
-const ALL = [ api.fetchCurrentSession, api.getVisitHousehold, api.getHouseholdVectorProfile, api.listCityBlocks, api.recordHomeVisit,
+const ALL = [ api.fetchCurrentSession, api.getVisitHousehold, api.getHouseholdVectorProfile, api.listCityBlocks, api.recordHomeVisit, api.withdrawHomeVisit,
   api.listVisitHouseholds, api.getHomeVisitContext, api.listHomeVisitDays, api.getHomeVisitDay, api.getVectorDomains, api.listDue ];
 
 afterEach(cleanup);
@@ -45,6 +46,7 @@ beforeEach(() => {
 const mount = () => renderWithProviders(<HomeVisitDay now={NOW35} />);
 const body = (n = 0) => mocked(api.recordHomeVisit).mock.calls[n][0] as HomeVisitInput;
 const panel = () => within(screen.getByRole("region", { name: "Imóveis a visitar" }));
+const findPanel = async () => within(await screen.findByRole("region", { name: "Imóveis a visitar" }));
 
 // Abre o formulário pelo cartão do bloqueio, escolhe imóvel sem pessoa e fechado, e envia.
 async function startBlockVisitAndSend() {
@@ -118,7 +120,7 @@ describe("Imóveis a visitar na Folha do dia", () => {
     expect(panel().getAllByRole("article").length).toBe(1);
   });
 
-  it("visita gravada sem boletim e formulário fechado sem gravar: nenhuma releitura", async () => {
+  it("formulário fechado sem gravar: nenhuma releitura", async () => {
     vi.mocked(api.listDue).mockResolvedValue({ items: [ dueItem() ], next_before: null });
     mount();
     const card = within((await screen.findAllByRole("article"))[0]);
@@ -127,6 +129,71 @@ describe("Imóveis a visitar na Folha do dia", () => {
     await panel().findAllByRole("article");
     await new Promise((r) => setTimeout(r, 20));
     expect(api.listDue).toHaveBeenCalledTimes(1);
+  });
+
+  it("visita gravada sem boletim: nenhuma releitura", async () => {
+    vi.mocked(api.listDue).mockResolvedValue({ items: [ dueItem() ], next_before: null });
+    vi.mocked(api.recordHomeVisit).mockResolvedValue({ visit: visit({ subject: "none", patient: null, family_id: null }), day: day({ visits: undefined }), replayed: false });
+    mount();
+    const card = within((await screen.findAllByRole("article"))[0]);
+    fireEvent.click(card.getByRole("button", { name: "Registrar visita" }));
+    fireEvent.click(await screen.findByLabelText("Registrar boletim"));
+    fireEvent.click(await screen.findByLabelText("Imóvel sem pessoa"));
+    fireEvent.click(screen.getByLabelText("Ausente"));
+    fireEvent.click(screen.getByRole("button", { name: "Registrar visita" }));
+    await waitFor(() => expect(api.recordHomeVisit).toHaveBeenCalledTimes(1));
+    expect(body()).not.toHaveProperty("vector_inspection");
+    await panel().findAllByRole("article");
+    await new Promise((r) => setTimeout(r, 20));
+    expect(api.listDue).toHaveBeenCalledTimes(1);
+  });
+
+  it("atalho que abre o formulário na montagem: a lista escondida não é lida até o formulário fechar", async () => {
+    vi.mocked(api.listDue).mockResolvedValue({ items: [ dueItem() ], next_before: null });
+    const start: VisitStart = { teamId: "t1", microAreaId: "ma1", householdId: "h1", familyId: "f1", patientId: null, displayName: null };
+    renderWithProviders(<HomeVisitDay now={NOW35} start={start} />);
+    await screen.findByLabelText("Família — responsável José Lima");
+    await new Promise((r) => setTimeout(r, 20));
+    expect(api.listDue).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+    expect(await panel().findAllByRole("article")).toHaveLength(1);
+    expect(api.listDue).toHaveBeenCalledTimes(1);
+  });
+
+  it("retirada bem-sucedida de visita com boletim relê a lista uma vez; sem boletim, não", async () => {
+    vi.mocked(api.listDue).mockResolvedValue({ items: [ dueItem() ], next_before: null });
+    mocked(api.listHomeVisitDays).mockResolvedValue({ items: [ day({ visits: undefined }) ], next_before: null });
+    mocked(api.getHomeVisitDay).mockResolvedValue(day({ visits: [ visit({ vector_inspection: inspection() }) ] }));
+    vi.mocked(api.withdrawHomeVisit).mockResolvedValue(visit({ state: "withdrawn", can_withdraw: false, vector_inspection: inspection() }));
+    const withdraw = async () => {
+      fireEvent.click(await screen.findByRole("button", { name: "Retirar visita das 09:15" }));
+      fireEvent.change(screen.getByLabelText("Motivo da retirada"), { target: { value: "Registrei na casa errada." } });
+      fireEvent.click(screen.getByRole("button", { name: "Retirar" }));
+      await waitFor(() => expect(api.withdrawHomeVisit).toHaveBeenCalledTimes(1));
+      await screen.findByText("Visita retirada.");
+      await new Promise((r) => setTimeout(r, 20));
+    };
+    mount();
+    await (await findPanel()).findAllByRole("article");
+    await withdraw();
+    expect(api.listDue).toHaveBeenCalledTimes(2);
+    cleanup();
+    for (const f of [ api.listDue, api.withdrawHomeVisit ]) mocked(f).mockClear();
+    mocked(api.getHomeVisitDay).mockResolvedValue(day({ visits: [ visit() ] }));
+    vi.mocked(api.withdrawHomeVisit).mockResolvedValue(visit({ state: "withdrawn", can_withdraw: false }));
+    mount();
+    await (await findPanel()).findAllByRole("article");
+    await withdraw();
+    expect(api.listDue).toHaveBeenCalledTimes(1);
+  });
+
+  it("Carregar mais recusado por CBO: a frase da lista", async () => {
+    vi.mocked(api.listDue).mockResolvedValueOnce({ items: [ dueItem() ], next_before: "c1" })
+      .mockRejectedValueOnce(new ApiError(403, { error: "cbo_not_allowed" }, "x"));
+    mount();
+    fireEvent.click(await (await findPanel()).findByRole("button", { name: "Carregar mais" }));
+    expect(await panel().findByText(DUE_CBO_NOT_ALLOWED)).not.toBeNull();
+    expect(api.listDue).toHaveBeenLastCalledWith("ma1", "c1");
   });
 
   it("vazio, várias microáreas e a recusa de CBO com a frase da lista", async () => {
@@ -146,10 +213,13 @@ describe("Imóveis a visitar na Folha do dia", () => {
     expect(panel().queryByLabelText("Microárea")).toBeNull();
   });
 
-  it("startFor: o vínculo vem do motivo; PE pelo tipo do imóvel; senão nada", () => {
+  it("startFor: o vínculo vem do motivo; PE pelo tipo do imóvel (também na pendência); senão nada", () => {
     expect(startFor(dueItem({ reason: "transmission_block", transmission_block_id: "tb1" }))).toEqual({ activity: "transmission_block", transmissionBlockId: "tb1" });
     expect(startFor(dueItem({ reason: "liraa", liraa_draw_item_id: "ld1" }))).toEqual({ activity: "liraa", liraaDrawItemId: "ld1" });
     expect(startFor(dueItem({ reason: "pending" }))).toEqual({ workType: "pending" });
+    expect(startFor(dueItem({ reason: "pending", property_type: "4" }))).toEqual({ activity: "pe", workType: "pending" });
+    expect(startFor(dueItem({ reason: "transmission_block", transmission_block_id: "tb1", property_type: "4" }))).toEqual({ activity: "transmission_block", transmissionBlockId: "tb1" });
+    expect(startFor(dueItem({ reason: "liraa", liraa_draw_item_id: "ld1", property_type: "4" }))).toEqual({ activity: "liraa", liraaDrawItemId: "ld1" });
     expect(startFor(dueItem({ property_type: "4" }))).toEqual({ activity: "pe" });
     expect(startFor(dueItem())).toEqual({});
   });

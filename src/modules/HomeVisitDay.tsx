@@ -106,6 +106,9 @@ function TodaySheets({ ctx, team, now, start, onHeld, onGoToTerritory }: {
   const [ tubes, setTubes ] = useState<string | null>(null);
   // Descartou-se um envio pendurado: a visita pode ter entrado; a frase pede para conferir a folha relida.
   const [ uncertain, setUncertain ] = useState(false);
+  // "Imóveis a visitar" só é lida depois de aparecer uma vez (o atalho abre o formulário antes): a leitura grava trilha.
+  const [ dueSeen, setDueSeen ] = useState(!start);
+  useEffect(() => { if (!form) setDueSeen(true); }, [ form ]);
   // Cada atalho abre o formulário uma vez; voltar à tela sem atalho novo não reabre.
   const consumed = useRef<VisitStart | null>(start);
   useEffect(() => {
@@ -155,6 +158,13 @@ function TodaySheets({ ctx, team, now, start, onHeld, onGoToTerritory }: {
     setSaved(null); setTubes(null); setUncertain(false); setForm({ start: s, n: Date.now() });
   }
 
+  // A retirada de uma visita com boletim reescreve o perfil e devolve o item do LIRAa a pendente (WithdrawInspection): uma releitura.
+  function onWithdrawn(v: HomeVisit) {
+    if (!vcOn || !v.vector_inspection) return;
+    if (v.household) void queryClient.invalidateQueries({ queryKey: [ VC_PROFILE_KEY, v.household.id ] });
+    void queryClient.invalidateQueries({ queryKey: [ VC_DUE_KEY ] });
+  }
+
   // Fechar o formulário. Depois de descartar um envio pendurado, UMA releitura do que mostraria a visita: a lista de hoje e as
   // folhas dela na tela (nunca relidas sozinhas).
   function onClose(discardedUncertain?: boolean) {
@@ -179,17 +189,20 @@ function TodaySheets({ ctx, team, now, start, onHeld, onGoToTerritory }: {
       )}
       {vcOn && (
         <div hidden={!!form}>
-          <DueList team={team} domains={vc.data ?? null} visitDomains={ctx.domains} today={ctx.today} busy={lock.busy || !!form} onStart={openForm} />
+          <DueList team={team} domains={vc.data ?? null} visitDomains={ctx.domains} today={ctx.today} busy={lock.busy || !!form}
+            enabled={dueSeen} onStart={openForm} />
         </div>
       )}
       {items.length === 0
         ? <EmptyState title="nenhuma folha hoje — a primeira visita abre a folha" />
-        : items.map((d) => <TodaySheet key={d.id} summary={d} ctx={ctx} onChanged={(u) => changed(d.id, u)} />)}
+        : items.map((d) => <TodaySheet key={d.id} summary={d} ctx={ctx} onChanged={(u) => changed(d.id, u)} onWithdrawn={onWithdrawn} />)}
     </div>
   );
 }
 
-function TodaySheet({ summary, ctx, onChanged }: { summary: ApiDay; ctx: HomeVisitContext; onChanged(updated?: ApiDay): void }) {
+function TodaySheet({ summary, ctx, onChanged, onWithdrawn }: {
+  summary: ApiDay; ctx: HomeVisitContext; onChanged(updated?: ApiDay): void; onWithdrawn(v: HomeVisit): void;
+}) {
   const open = summary.state === "open";
   const withVisits = open && summary.visits_count + summary.withdrawn_count > 0;
   const detail = useQuery({ queryKey: [ HV_DAY_KEY, summary.id ], queryFn: () => getHomeVisitDay(summary.id), enabled: withVisits, ...NOMINAL_QUERY });
@@ -197,5 +210,5 @@ function TodaySheet({ summary, ctx, onChanged }: { summary: ApiDay; ctx: HomeVis
   if (withVisits && !detail.data) return <p role="status" style={muted}>Carregando a folha…</p>;
   // Folha aberta sem nenhuma visita: lista vazia (o texto de vazia), sem ler o detalhe.
   const day = withVisits && detail.data ? detail.data : open ? { ...summary, visits: [] } : summary;
-  return <DaySheet day={day} domains={ctx.domains} onChanged={onChanged} />;
+  return <DaySheet day={day} domains={ctx.domains} onChanged={onChanged} onWithdrawn={onWithdrawn} />;
 }

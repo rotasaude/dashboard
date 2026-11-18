@@ -29,13 +29,15 @@ const dueError = (err: unknown): string => (errorCode(err) === "cbo_not_allowed"
 export function startFor(item: DueItem): VectorStart {
   if (item.reason === "transmission_block") return { activity: "transmission_block", transmissionBlockId: item.transmission_block_id };
   if (item.reason === "liraa") return { activity: "liraa", liraaDrawItemId: item.liraa_draw_item_id };
-  if (item.reason === "pending") return { workType: "pending" };
+  // Pendência num ponto estratégico (imóvel "4"): PE de recuperação; bloqueio e LIRAa ficam com a atividade do vínculo.
+  if (item.reason === "pending") return item.property_type === "4" ? { activity: "pe", workType: "pending" } : { workType: "pending" };
   if (item.property_type === "4") return { activity: "pe" };
   return {};
 }
 
-export function DueList({ team, domains, visitDomains, today, busy, onStart }: {
-  team: HomeVisitTeam; domains: VectorControlDomains | null; visitDomains: HomeVisitDomains; today: string; busy?: boolean;
+// `enabled`: falso enquanto a lista nunca esteve na tela (o atalho abriu o formulário primeiro) — a leitura grava trilha.
+export function DueList({ team, domains, visitDomains, today, busy, enabled = true, onStart }: {
+  team: HomeVisitTeam; domains: VectorControlDomains | null; visitDomains: HomeVisitDomains; today: string; busy?: boolean; enabled?: boolean;
   onStart(s: VisitStart): void;
 }) {
   const areas = team.micro_areas;
@@ -54,18 +56,18 @@ export function DueList({ team, domains, visitDomains, today, busy, onStart }: {
         )}
         {microAreaId
           ? <DuePage key={microAreaId} team={team} microAreaId={microAreaId} domains={domains} visitDomains={visitDomains} today={today}
-              busy={busy} onStart={onStart} />
+              busy={busy} enabled={enabled} onStart={onStart} />
           : <EmptyState title={DUE_NO_MICRO_AREA} />}
       </div>
     </Panel>
   );
 }
 
-function DuePage({ team, microAreaId, domains, visitDomains, today, busy, onStart }: {
+function DuePage({ team, microAreaId, domains, visitDomains, today, busy, enabled, onStart }: {
   team: HomeVisitTeam; microAreaId: string; domains: VectorControlDomains | null; visitDomains: HomeVisitDomains; today: string; busy?: boolean;
-  onStart(s: VisitStart): void;
+  enabled: boolean; onStart(s: VisitStart): void;
 }) {
-  const list = usePaged<DueItem>([ VC_DUE_KEY, microAreaId ], (b) => listDue(microAreaId, b), true, true);
+  const list = usePaged<DueItem>([ VC_DUE_KEY, microAreaId ], (b) => listDue(microAreaId, b), true, enabled, dueError);
   if (list.error) return <p role="alert" style={alert}>{dueError(list.error)}</p>;
   const risks = domains?.risk_classes ?? VECTOR_LABELS.risk_classes;
   return (
