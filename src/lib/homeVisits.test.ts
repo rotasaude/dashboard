@@ -10,6 +10,7 @@ import {
   offeredReasons, allowedMeasurements, pruneVisitDraft
 } from "./homeVisits";
 import { GENERATION_REASON } from "./production";
+import { VECTOR_CONTROL_DISABLED, VECTOR_ERRORS } from "./vectorErrors";
 import {
   NOW24B, TODAY24B, VISIT_DOMAINS, acsTeam, household, householdDetail, hvUser, tacsTeam, whoItem
 } from "../test/homeVisitFixtures";
@@ -435,5 +436,39 @@ describe("textProblem", () => {
     expect(textProblem("abc", { min: 3, max: 10, path: "reason" })).toBeNull();
     expect(textProblem("😀😀😀", { min: 3, max: 3, path: "reason" })).toBeNull();
     expect(textProblem("😀😀😀😀", { min: 3, max: 3, path: "reason" })).not.toBeNull();
+  });
+});
+
+describe("boletim do 35a nas recusas da visita (Task 3 do 35a)", () => {
+  const BULLETIN = [
+    "vector_inspection_invalid", "situation_outcome_mismatch", "inspection_not_worked", "activity_property_mismatch", "liraa_item_not_found",
+    "transmission_block_not_active", "deposit_counts_inconsistent", "product_not_allowed", "samples_exceed_larvae", "inspection_times_invalid",
+    "reason_derived", "household_without_neighborhood", "block_already_set", "block_not_in_household_neighborhood", "sample_label_taken"
+  ] as const;
+
+  it("as 15 frases do boletim estão na tabela do 24b, iguais às do 35a", () => {
+    for (const code of BULLETIN) expect(HOME_VISIT_ERRORS[code], code).toBe(VECTOR_ERRORS[code]);
+    expect(homeVisitError(err(422, { error: "reason_derived", path: "reasons" }))).toBe(VECTOR_ERRORS.reason_derived);
+    expect(homeVisitRefusals(err(422, { error: "sample_label_taken", path: "vector_inspection.samples[0]" }))[0])
+      .toEqual({ path: "vector_inspection.samples[0]", code: "sample_label_taken", text: VECTOR_ERRORS.sample_label_taken });
+  });
+
+  it("cbo_not_allowed: no boletim é a frase do 35a; sem path continua a do 24b", () => {
+    expect(homeVisitError(err(403, { error: "cbo_not_allowed", path: "vector_inspection" }))).toBe(VECTOR_ERRORS.cbo_not_allowed);
+    expect(homeVisitError(err(403, { error: "cbo_not_allowed" }))).toBe("seu CBO não permite esta ação");
+    expect(homeVisitError(err(403, { error: "cbo_not_allowed", path: "micro_area_id" }))).toBe("seu CBO não permite esta ação");
+  });
+
+  it("feature_disabled: vector_control diz o interruptor do 35a, também sem `feature` com path do boletim; o resto como antes", () => {
+    expect(homeVisitError(err(403, { error: "feature_disabled", feature: "vector_control" }))).toBe(VECTOR_CONTROL_DISABLED);
+    // POST /home_visits com boletim e o gate desligado: 403 sem `feature`, path vector_inspection (vector_inspection_spec.rb:111).
+    expect(homeVisitError(err(403, { error: "feature_disabled", path: "vector_inspection" }))).toBe(VECTOR_CONTROL_DISABLED);
+    expect(homeVisitError(err(403, { error: "feature_disabled" }))).toBe(HOME_VISITS_DISABLED);
+    expect(homeVisitError(err(403, { error: "feature_disabled", feature: "home_visits" }))).toBe(HOME_VISITS_DISABLED);
+  });
+
+  it("tabela própria: o parser aceita outra tabela, padrão a do 24b", () => {
+    expect(homeVisitRefusals(err(422, { error: "x_code" }), { x_code: "frase x" })[0].text).toBe("frase x");
+    expect(homeVisitRefusals(err(422, { error: "x_code" }))[0].text).toBe("recusado pelo servidor (x_code)");
   });
 });

@@ -14,6 +14,7 @@ import type { Refusal, Problem } from "./pharmacy";
 import { FICHA_STATUS, reasonsLabel } from "./production";
 import { canUseTerritory, territoryRoles, DUPLICATE_SUSPECTED_TEXT } from "./territoryRegistry";
 import { newPatientProblem } from "./territoryDictionaries";
+import { VECTOR_CONTROL_DISABLED, VECTOR_ERRORS } from "./vectorErrors";
 
 export { COUNT_QUERY, NOMINAL_QUERY, STATIC_QUERY, fmtDay };
 
@@ -488,6 +489,15 @@ export function duplicateParticipantText(confirmable: boolean): string {
     : "este participante já está na lista (mesmo paciente, CPF ou CNS) — retire o repetido";
 }
 
+// Módulo 35a: as recusas do boletim (`vector_inspection`) que o POST /home_visits devolve — regras do §3, quarteirão do
+// §2 (regra 10) e a etiqueta repetida (Q7(1)) —, com a frase da tabela única do 35a.
+const BULLETIN_CODES = [
+  "vector_inspection_invalid", "situation_outcome_mismatch", "inspection_not_worked", "activity_property_mismatch", "liraa_item_not_found",
+  "transmission_block_not_active", "deposit_counts_inconsistent", "product_not_allowed", "samples_exceed_larvae", "inspection_times_invalid",
+  "reason_derived", "household_without_neighborhood", "block_already_set", "block_not_in_household_neighborhood", "sample_label_taken"
+] as const;
+const BULLETIN_ERRORS: Record<string, string> = Object.fromEntries(BULLETIN_CODES.map((code) => [ code, VECTOR_ERRORS[code] ]));
+
 export const HOME_VISIT_ERRORS: Record<string, string> = {
   // herdados (convenções e contrato)
   feature_disabled: HOME_VISITS_DISABLED,
@@ -542,7 +552,8 @@ export const HOME_VISIT_ERRORS: Record<string, string> = {
   patient_unidentified: "pessoa com cadastro provisório da urgência (sem identificação) não pode ser registrada aqui — identifique-a no posto antes",
   invalid_patient: "confira o campo destacado da pessoa digitada",
   cpf_or_reason_required: "informe o CPF ou o motivo de não ter CPF",
-  client_uuid_conflict: "este envio já foi usado por outro registro — a tela gerou um novo identificador; confira os dados e grave de novo"
+  client_uuid_conflict: "este envio já foi usado por outro registro — a tela gerou um novo identificador; confira os dados e grave de novo",
+  ...BULLETIN_ERRORS
 };
 
 export type HomeVisitRefusal = Refusal & { confirmable?: boolean };
@@ -557,15 +568,19 @@ function disabledText(err: ApiError): string | null {
   const key = featureDisabledKey(err);
   if (key === null) return null;
   if (key === "collective_activities") return COLLECTIVE_DISABLED;
+  // 35a: as rotas /vector_control mandam `feature`; o boletim no POST /home_visits vem sem ele, com path vector_inspection.
+  if (key === "vector_control" || (key === "" && inBulletin(bodyOf(err)?.path))) return VECTOR_CONTROL_DISABLED;
   return key === "" || key === "home_visits" ? HOME_VISITS_DISABLED : `${featureLabel(key)} está desligado nesta cidade`;
 }
 
-function codeText(code: string, status: number, confirmable: boolean): string {
+const inBulletin = (path: unknown): boolean => typeof path === "string" && path.startsWith("vector_inspection");
+
+function codeText(code: string, status: number, confirmable: boolean, table: Record<string, string>): string {
   if (code === "duplicate_participant") return duplicateParticipantText(confirmable);
-  if (Object.prototype.hasOwnProperty.call(HOME_VISIT_ERRORS, code)) return HOME_VISIT_ERRORS[code];
+  if (Object.prototype.hasOwnProperty.call(table, code)) return table[code];
   if (code === "") {
-    if (status === 404) return HOME_VISIT_ERRORS.not_found;
-    if (status === 429) return HOME_VISIT_ERRORS.too_many_requests;
+    if (status === 404) return table.not_found ?? HOME_VISIT_ERRORS.not_found;
+    if (status === 429) return table.too_many_requests ?? HOME_VISIT_ERRORS.too_many_requests;
     if (status >= 500) return SERVER_DOWN;
     return `recusado pelo servidor (${status})`;
   }
@@ -574,8 +589,9 @@ function codeText(code: string, status: number, confirmable: boolean): string {
 
 // Todas as recusas, uma por `problems[]` (o 24b só manda `error` e `path` no topo, mas lê as duas formas); a do topo se não houver lista.
 // `path` leva a recusa ao campo; sem ele, `""` (frase geral). `confirmable` segue na recusa de participante repetido.
+// `table`: a tabela de frases (o 35a passa a sua, sobre esta).
 export const DEVICE_NOT_REPLACEABLE = "o aparelho a substituir não está mais ativo — recarregue a lista";
-export function homeVisitRefusals(err: unknown): HomeVisitRefusal[] {
+export function homeVisitRefusals(err: unknown, table: Record<string, string> = HOME_VISIT_ERRORS): HomeVisitRefusal[] {
   if (!(err instanceof ApiError)) return [ { path: "", code: "", text: OFFLINE } ];
   const disabled = disabledText(err);
   if (disabled) return [ { path: "", code: "feature_disabled", text: disabled } ];
@@ -587,8 +603,10 @@ export function homeVisitRefusals(err: unknown): HomeVisitRefusal[] {
     const confirmable = typeof row?.confirmable === "boolean" ? row.confirmable : undefined;
     // 24c (Q16): o api só substitui aparelho ativo; a recusa vem como invalid_request no campo.
     const replaced = code === "invalid_request" && row?.path === "replaces_device_id";
-    const text = replaced ? DEVICE_NOT_REPLACEABLE
-      : typeof raw === "string" && raw !== "" && code === "" ? "recusado pelo servidor" : codeText(code, err.status, confirmable === true);
+    // 35a: o CBO recusado no boletim é o do agente de endemias (403 path vector_inspection).
+    const bulletinCbo = code === "cbo_not_allowed" && inBulletin(row?.path);
+    const text = replaced ? DEVICE_NOT_REPLACEABLE : bulletinCbo ? VECTOR_ERRORS.cbo_not_allowed
+      : typeof raw === "string" && raw !== "" && code === "" ? "recusado pelo servidor" : codeText(code, err.status, confirmable === true, table);
     return { path: safePath(row?.path), code, text, ...(confirmable === undefined ? {} : { confirmable }) };
   };
   const list = Array.isArray(body?.problems) ? (body!.problems as unknown[]) : [];
