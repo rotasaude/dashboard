@@ -337,8 +337,11 @@ export function vectorRefusals(err: unknown): HomeVisitRefusal[] {
 export const vectorError = (err: unknown): string => vectorRefusals(err)[0].text;
 
 // A tela está velha: quem chama relê UMA vez e não reenvia. Os 409 de estado, o not_found, a proposta do bloqueio que
-// ganhou caso (409 proposal_changed) e a lista de casos vistos recusada (422 path seen_case_ids; Q26(4)).
-const STALE = [ "invalid_transition", "survey_not_draft", "already_reconciled", "not_found", "proposal_changed", "block_in_use", "product_in_use" ];
+// ganhou caso (409 proposal_changed), a lista de casos vistos recusada (422 path seen_case_ids; Q26(4)) e os parâmetros gravados
+// por outra pessoa (409 parameters_changed; Q34).
+const STALE = [
+  "invalid_transition", "survey_not_draft", "already_reconciled", "not_found", "proposal_changed", "block_in_use", "product_in_use", "parameters_changed"
+];
 export function isVectorStale(err: unknown): boolean {
   if (!(err instanceof ApiError)) return false;
   if (err.status === 404) return true;

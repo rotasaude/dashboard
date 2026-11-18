@@ -6,7 +6,8 @@
 export const VECTOR_CONTROL_DISABLED = "a vigilância ambiental (endemias) está desligada nesta cidade";
 
 // Os 38 da brief (33 do §17 + sample_label_taken, unit_has_vector_control_location, cbo_not_allowed, feature_disabled,
-// invalid_transition) e o proposal_changed, que o api emite na confirmação do bloqueio (Q26(4)).
+// invalid_transition), o proposal_changed, que o api emite na confirmação do bloqueio (Q26(4)), e os dois do PUT dos parâmetros
+// (Q34: parameters_changed e expected_version_required).
 export const VECTOR_ERROR_CODES = [
   "vector_inspection_invalid", "situation_outcome_mismatch", "inspection_not_worked", "activity_property_mismatch",
   "liraa_item_not_found", "transmission_block_not_active", "deposit_counts_inconsistent", "product_not_allowed",
@@ -15,7 +16,8 @@ export const VECTOR_ERROR_CODES = [
   "collection_out_of_range", "reading_not_open", "reading_not_countable", "ovitrap_not_active", "invalid_neighbor", "block_in_use",
   "product_in_use", "already_reconciled", "stratum_overlap", "stratum_out_of_range", "survey_not_draft", "cycle_invalid",
   "cycle_overlap", "invalid_parameter", "sample_result_invalid", "block_number_taken", "cbo_not_allowed", "feature_disabled",
-  "sample_label_taken", "unit_has_vector_control_location", "invalid_transition", "proposal_changed"
+  "sample_label_taken", "unit_has_vector_control_location", "invalid_transition", "proposal_changed",
+  "parameters_changed", "expected_version_required"
 ] as const;
 export type VectorErrorCode = (typeof VECTOR_ERROR_CODES)[number];
 
@@ -59,5 +61,8 @@ export const VECTOR_ERRORS: Record<VectorErrorCode, string> = {
   unit_has_vector_control_location: "esta unidade tem local de estoque do controle vetorial e não troca de tipo",
   invalid_transition: "a situação mudou enquanto a tela estava aberta — os dados foram relidos",
   // Frase proposta (não estava na brief): 409 da confirmação quando a proposta tem caso que a tela não mostrou.
-  proposal_changed: "a proposta ganhou caso novo enquanto a tela estava aberta — os dados foram relidos"
+  proposal_changed: "a proposta ganhou caso novo enquanto a tela estava aberta — os dados foram relidos",
+  // Q34 (frase do coordenador, na caixa e pontuação da tabela): 409 do PUT dos parâmetros com outra versão gravada no meio.
+  parameters_changed: "outra pessoa alterou os parâmetros; confira e salve de novo",
+  expected_version_required: "a tela está desatualizada — recarregue a página e tente de novo"
 };

@@ -18,8 +18,10 @@ describe("vectorErrors", () => {
     for (const p of Object.values(VECTOR_ERRORS)) expect(p).not.toMatch(/_/);
   });
 
-  it("os 38 códigos da brief mais o proposal_changed que o api emite (Q26(4))", () => {
-    expect(VECTOR_ERROR_CODES).toHaveLength(39);
+  it("os 38 códigos da brief, o proposal_changed (Q26(4)) e os dois do PUT dos parâmetros (Q34)", () => {
+    expect(VECTOR_ERROR_CODES).toHaveLength(41);
+    expect(VECTOR_ERRORS.parameters_changed).toBe("outra pessoa alterou os parâmetros; confira e salve de novo");
+    expect(VECTOR_ERRORS.expected_version_required).toBe("a tela está desatualizada — recarregue a página e tente de novo");
     expect(VECTOR_ERRORS.proposal_changed).toBe("a proposta ganhou caso novo enquanto a tela estava aberta — os dados foram relidos");
   });
 });

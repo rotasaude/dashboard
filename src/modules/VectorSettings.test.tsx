@@ -17,7 +17,7 @@ import { VECTOR_ERRORS } from "../lib/vectorErrors";
 import { renderWithProviders, sessionWith } from "../test/campaignFixtures";
 import { ADULTICIDE, INACTIVE_PRODUCT, LARVICIDE, PARAMS, VC_DOMAINS, VC_FEATURES, parameterVersion, vcUser } from "../test/vectorControlFixtures";
 import { NOTHING_CHANGED, productProblems } from "./vectorControl/ProductsPanel";
-import { PARAM_FIELDS, PARAMS_RACED, PARAMS_SAVED, draftOf, parameterProblems, parametersVersionLabel, type ParamDraft } from "./vectorControl/ParametersPanel";
+import { PARAM_FIELDS, PARAMS_SAVED, currentValueHint, draftOf, parameterProblems, parametersVersionLabel, type ParamDraft } from "./vectorControl/ParametersPanel";
 import { LOCATION_GONE, NO_LOCATION, VectorSettings } from "./VectorSettings";
 
 const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
@@ -213,13 +213,14 @@ describe("parâmetros técnicos", () => {
     fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
     await waitFor(() => expect(api.putVectorParameters).toHaveBeenCalledTimes(1));
     expect(api.stepUpMfa).toHaveBeenCalledWith("123456");
-    expect(mocked(api.putVectorParameters).mock.calls[0][0]).toEqual({ ...PARAMS, ovitrap_alert_eggs: 120 });
+    // Q34: a versão lida vai junto; a 0 (padrão de fábrica) vai como 0.
+    expect(mocked(api.putVectorParameters).mock.calls[0]).toEqual([ { ...PARAMS, ovitrap_alert_eggs: 120 }, 0 ]);
     await waitFor(() => expect(field("Alerta de ovos").getAttribute("aria-invalid")).toBe("true"));
     expect(describedText(field("Alerta de ovos"))).toBe(VECTOR_ERRORS.invalid_parameter);
     expect(api.getVectorParameters).toHaveBeenCalledTimes(1);
   });
 
-  it("versão gravada: rótulo com a data; um envio no duplo clique; outra versão no meio → aviso e UMA releitura", async () => {
+  it("versão gravada: rótulo com a data; um envio no duplo clique com a versão lida; sem aviso de corrida, UMA releitura", async () => {
     mocked(api.getVectorParameters).mockResolvedValue(parameterVersion({ version: 3, created_at: "2026-11-16T13:00:00.000000Z" }));
     let resolve!: (v: api.VectorParameterVersion) => void;
     mocked(api.putVectorParameters).mockImplementation(() => new Promise((r) => { resolve = r; }));
@@ -234,17 +235,63 @@ describe("parâmetros técnicos", () => {
     fireEvent.click(screen.getByRole("button", { name: /Confirmar/ }));
     await waitFor(() => expect(api.putVectorParameters).toHaveBeenCalledTimes(1));
     const sent = { ...PARAMS, liraa_half_household_fraction: 0.45, block_diseases: [ "dengue", "zika" ], iip_bands: [ 1, 4.5 ] as [number, number] };
-    expect(mocked(api.putVectorParameters).mock.calls[0][0]).toEqual(sent);
-    // Outra coordenação gravou a versão 4 entre a leitura e o envio: esta saiu como a 5.
-    mocked(api.getVectorParameters).mockResolvedValue(parameterVersion({ version: 5, values: sent, created_at: "2026-11-16T13:05:00.000000Z" }));
-    resolve(parameterVersion({ version: 5, values: sent, created_at: "2026-11-16T13:05:00.000000Z" }));
-    // Aviso, não sucesso: outra gravação foi sobrescrita.
-    expect((await screen.findByText(PARAMS_RACED(5))).getAttribute("role")).toBe("alert");
-    expect(await screen.findByText("versão 5, de 16/11/2026")).not.toBeNull();
+    expect(mocked(api.putVectorParameters).mock.calls[0]).toEqual([ sent, 3 ]);
+    const v4 = parameterVersion({ version: 4, values: sent, created_at: "2026-11-16T13:05:00.000000Z" });
+    mocked(api.getVectorParameters).mockResolvedValue(v4);
+    resolve(v4);
+    expect((await screen.findByText(PARAMS_SAVED(4))).getAttribute("role")).toBe("status");
+    expect(screen.getByText("versão 4, de 16/11/2026")).not.toBeNull();
+    // O formulário volta com os valores gravados (a vírgula sobrando sai).
+    expect(field("Doenças que abrem bloqueio (códigos separados por vírgula)").value).toBe("dengue, zika");
     await waitFor(() => expect(api.getVectorParameters).toHaveBeenCalledTimes(2));
     await new Promise((r) => setTimeout(r, 20));
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByText(VECTOR_ERRORS.parameters_changed)).toBeNull();
     expect(api.getVectorParameters).toHaveBeenCalledTimes(2);
     expect(api.putVectorParameters).toHaveBeenCalledTimes(1);
+  });
+
+  it("409 parameters_changed: a frase, UMA releitura, o digitado fica com o vigente ao lado; o próximo envio leva a versão nova", async () => {
+    mocked(api.getVectorParameters).mockResolvedValue(parameterVersion({ version: 3, created_at: "2026-11-16T13:00:00.000000Z" }));
+    mocked(api.putVectorParameters).mockRejectedValueOnce(new ApiError(409, { error: "parameters_changed" }, "x"));
+    mount();
+    await screen.findByText("versão 3, de 16/11/2026");
+    type("Alerta de ovos", "150");
+    type("Raio do bloqueio (anéis de quarteirões)", "2");
+    const v4 = parameterVersion({ version: 4, values: { ...PARAMS, ovitrap_alert_eggs: 130 }, created_at: "2026-11-16T13:05:00.000000Z" });
+    mocked(api.getVectorParameters).mockResolvedValue(v4);
+    fireEvent.click(screen.getByRole("button", { name: "Salvar parâmetros" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Confirmar" }));
+    expect(await screen.findByText(VECTOR_ERRORS.parameters_changed)).not.toBeNull();
+    expect(await screen.findByText("versão 4, de 16/11/2026")).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Confirmar" })).toBeNull();
+    // O digitado fica; o vigente aparece só onde difere (alerta: digitado 150, vigente 130; raio: digitado 2, vigente 1).
+    expect(field("Alerta de ovos").value).toBe("150");
+    expect(field("Raio do bloqueio (anéis de quarteirões)").value).toBe("2");
+    expect(screen.getByText(currentValueHint("130"))).not.toBeNull();
+    expect(screen.getByText(currentValueHint("1"))).not.toBeNull();
+    expect(screen.queryByText(currentValueHint("60"))).toBeNull();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(api.getVectorParameters).toHaveBeenCalledTimes(2);
+    // O próximo envio: a versão relida (4), o que foi digitado.
+    mocked(api.putVectorParameters).mockResolvedValue(parameterVersion({ version: 5, values: { ...PARAMS, ovitrap_alert_eggs: 150, block_radius_rings: 2 }, created_at: "2026-11-16T13:10:00.000000Z" }));
+    fireEvent.click(screen.getByRole("button", { name: "Salvar parâmetros" }));
+    expect(await screen.findByText("Cria a versão 5. O levantamento já sorteado continua com a versão do sorteio.")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+    await waitFor(() => expect(api.putVectorParameters).toHaveBeenCalledTimes(2));
+    expect(mocked(api.putVectorParameters).mock.calls[1]).toEqual([ { ...PARAMS, ovitrap_alert_eggs: 150, block_radius_rings: 2 }, 4 ]);
+    expect(await screen.findByText(PARAMS_SAVED(5))).not.toBeNull();
+    expect(screen.queryByText(VECTOR_ERRORS.parameters_changed)).toBeNull();
+  });
+
+  it("422 expected_version_required: a frase genérica, sem releitura", async () => {
+    mocked(api.putVectorParameters).mockRejectedValue(new ApiError(422, { error: "expected_version_required", path: "expected_version" }, "x"));
+    mount();
+    await screen.findByText("padrão de fábrica (versão 0)");
+    fireEvent.click(screen.getByRole("button", { name: "Salvar parâmetros" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Confirmar" }));
+    expect(await screen.findByText(VECTOR_ERRORS.expected_version_required)).not.toBeNull();
+    expect(api.getVectorParameters).toHaveBeenCalledTimes(1);
   });
 
   it("releitura que falha depois de gravar: a versão salva e o aviso ficam, com o erro e Tentar de novo", async () => {

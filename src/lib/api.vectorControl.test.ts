@@ -171,9 +171,12 @@ describe("cliente da vigilância ambiental — endemias (módulo 35a)", () => {
     stub(VC_DOMAINS); expect(await getVectorDomains()).toEqual(VC_DOMAINS);
     expect(last().url).toBe("/vector_control/domains");
     stub(parameterVersion()); expect((await getVectorParameters()).created_at).toBeNull();
-    stub(parameterVersion({ version: 1, created_at: "2026-11-16T13:00:00.000000Z" })); await putVectorParameters(PARAMS);
-    expect([ last().url, last().init.method, bodyOf() ]).toEqual([ "/vector_control/parameters", "PUT", { values: PARAMS } ]);
+    stub(parameterVersion({ version: 1, created_at: "2026-11-16T13:00:00.000000Z" })); await putVectorParameters(PARAMS, 0);
+    expect([ last().url, last().init.method, bodyOf() ]).toEqual([ "/vector_control/parameters", "PUT", { values: PARAMS, expected_version: 0 } ]);
     expect(Object.keys(bodyOf().values)).toHaveLength(20);
+    // Q34: a versão lida vai no corpo (0 = padrão de fábrica).
+    stub(parameterVersion({ version: 4, created_at: "2026-11-16T13:00:00.000000Z" })); await putVectorParameters(PARAMS, 3);
+    expect(bodyOf()).toEqual({ values: PARAMS, expected_version: 3 });
     const items = [ { neighborhood_id: null, risk_class: null, strategic_point: false, days: 60 } ];
     stub({ items }); expect(await putCadences(items)).toEqual(items);
     expect([ last().url, last().init.method, bodyOf() ]).toEqual([ "/vector_control/cadences", "PUT", { items } ]);

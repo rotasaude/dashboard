@@ -4,13 +4,14 @@
 // corpo INTEIRO, com step-up (SensitiveAction). A tela recusa o que o VectorControl::Parameters.validate recusaria, na mesma ordem
 // (faixas de RANGES primeiro, depois NOT_ABOVE (≤) e BELOW (<), no campo de baixo) e nunca mais que ele: a lista de doenças é o api
 // que confere (só o código novo em relação à versão vigente). 422 invalid_parameter com `path` values.<chave> cai no campo da chave.
-// O PUT não leva versão (o api serializa por trava, sem 409): se outra edição gravou no meio, a resposta pula um número; a tela avisa
-// e relê UMA vez. Sem dado de pessoa.
+// Q34: o PUT leva `expected_version` (a versão lida; 0 = padrão de fábrica). Outra versão gravada no meio → 409 parameters_changed,
+// sem gravar: a tela diz a frase, relê UMA vez e MANTÉM o que foi digitado (o próximo envio já leva a versão relida), com o valor
+// vigente ao lado de cada campo que difere. Sem dado de pessoa.
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getVectorParameters, putVectorParameters, type VectorParameterVersion, type VectorParameters } from "../../lib/api";
 import { cityDateFormat } from "../../lib/format";
-import { STATIC_QUERY, VC_DOMAINS_KEY, VC_PARAMS_KEY, vectorError, vectorRefusals } from "../../lib/vectorControl";
+import { STATIC_QUERY, VC_DOMAINS_KEY, VC_PARAMS_KEY, isVectorStale, vectorError, vectorRefusals } from "../../lib/vectorControl";
 import { VECTOR_ERRORS } from "../../lib/vectorErrors";
 import { Panel } from "../../components/Panel";
 import { SensitiveAction } from "../../components/SensitiveAction";
@@ -129,23 +130,23 @@ export function parametersVersionLabel(v: VectorParameterVersion): string {
   return `versão ${v.version}, de ${cityDateFormat(DAY).format(new Date(v.created_at))}`;
 }
 export const PARAMS_SAVED = (n: number) => `parâmetros salvos — versão ${n}`;
-export const PARAMS_RACED = (n: number) =>
-  `outra edição gravou uma versão enquanto a tela estava aberta — esta saiu como a versão ${n}, com os valores desta tela; os dados foram relidos`;
-
-type Notice = { ok: boolean; text: string } | null;
+// O valor vigente ao lado do digitado, depois de um 409 parameters_changed (só nos campos que diferem).
+export const currentValueHint = (text: string) => `vigente agora: ${text}`;
+const shown = (v: string | [ string, string ]) => (Array.isArray(v) ? v.join(" e ") : v);
 
 export function ParametersPanel({ onGoToSecurity }: { onGoToSecurity?: () => void }) {
   const queryClient = useQueryClient();
   const params = useQuery({ queryKey: [ VC_PARAMS_KEY ], queryFn: getVectorParameters, ...STATIC_QUERY });
-  // O aviso mora aqui: a releitura troca a versão e remonta o formulário.
-  const [ notice, setNotice ] = useState<Notice>(null);
+  // O aviso mora aqui: gravar remonta o formulário (formKey) com os valores gravados. A releitura do 409 NÃO remonta: o rascunho fica.
+  const [ notice, setNotice ] = useState<string | null>(null);
+  const [ formKey, setFormKey ] = useState(0);
 
-  async function saved(loaded: number, result: VectorParameterVersion) {
-    // A corrida é aviso (outra gravação foi sobrescrita), não sucesso.
-    setNotice(result.version === loaded + 1 ? { ok: true, text: PARAMS_SAVED(result.version) } : { ok: false, text: PARAMS_RACED(result.version) });
+  async function saved(result: VectorParameterVersion) {
+    setNotice(PARAMS_SAVED(result.version));
     // A versão gravada fica na tela mesmo que a releitura falhe; depois, UMA releitura (a vigente) e os domínios, que levam parte
     // dos parâmetros ao boletim.
     queryClient.setQueryData([ VC_PARAMS_KEY ], result);
+    setFormKey((k) => k + 1);
     await Promise.all([ queryClient.invalidateQueries({ queryKey: [ VC_PARAMS_KEY ] }), queryClient.invalidateQueries({ queryKey: [ VC_DOMAINS_KEY ] }) ]);
   }
 
@@ -162,9 +163,9 @@ export function ParametersPanel({ onGoToSecurity }: { onGoToSecurity?: () => voi
           : (
             <>
               <p style={muted}>{parametersVersionLabel(params.data)}</p>
-              {notice && <p role={notice.ok ? "status" : "alert"} style={notice.ok ? okText : alert}>{notice.text}</p>}
-              <ParamsForm key={params.data.version} loaded={params.data} onEdit={() => setNotice(null)}
-                onSaved={(r) => saved(params.data!.version, r)} onGoToSecurity={onGoToSecurity} />
+              {notice && <p role="status" style={okText}>{notice}</p>}
+              <ParamsForm key={formKey} loaded={params.data} onEdit={() => setNotice(null)} onSaved={saved}
+                onStale={() => queryClient.invalidateQueries({ queryKey: [ VC_PARAMS_KEY ] })} onGoToSecurity={onGoToSecurity} />
             </>
           )}
       </div>
@@ -174,10 +175,18 @@ export function ParametersPanel({ onGoToSecurity }: { onGoToSecurity?: () => voi
 
 const groupGrid: CSSProperties = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 12 };
 
-function ParamsForm({ loaded, onEdit, onSaved, onGoToSecurity }: {
-  loaded: VectorParameterVersion; onEdit(): void; onSaved(r: VectorParameterVersion): Promise<void>; onGoToSecurity?: () => void;
+function ParamsForm({ loaded, onEdit, onSaved, onStale, onGoToSecurity }: {
+  loaded: VectorParameterVersion; onEdit(): void; onSaved(r: VectorParameterVersion): Promise<void>; onStale(): Promise<void>;
+  onGoToSecurity?: () => void;
 }) {
   const [ draft, setDraft ] = useState<ParamDraft>(() => draftOf(loaded.values));
+  // Depois de um 409 parameters_changed: a versão que estava na tela. Quando a releitura traz outra, cada campo que difere mostra
+  // o valor vigente ao lado do digitado.
+  const [ staleFrom, setStaleFrom ] = useState<number | null>(null);
+  const current = draftOf(loaded.values);
+  const reread = staleFrom !== null && loaded.version !== staleFrom;
+  const differs = (key: ParamKey) => reread && JSON.stringify(draft[key]) !== JSON.stringify(current[key]);
+  const hint = (key: ParamKey) => (differs(key) ? <span style={muted}>{currentValueHint(shown(current[key]))}</span> : null);
   const [ problems, setProblems ] = useState<ParamProblem[]>([]);
   const [ confirming, setConfirming ] = useState(false);
   const result = useRef<VectorParameterVersion | null>(null);
@@ -201,6 +210,7 @@ function ParamsForm({ loaded, onEdit, onSaved, onGoToSecurity }: {
   const err = (key: ParamKey) => (problem(key) ? <span id={errId(key)} style={alert}>{problem(key)}</span> : null);
 
   function review() {
+    setStaleFrom(null);
     const found = parameterProblems(draft);
     setProblems(found);
     setFocusTick((t) => t + 1);
@@ -223,6 +233,7 @@ function ParamsForm({ loaded, onEdit, onSaved, onGoToSecurity }: {
           </div>
           <p style={muted}>abaixo da faixa média é baixo; da alta em diante, alto; o índice é calculado com uma casa</p>
           {err(f.key)}
+          {hint(f.key)}
         </div>
       );
     }
@@ -234,6 +245,7 @@ function ParamsForm({ loaded, onEdit, onSaved, onGoToSecurity }: {
             style={inputStyle} {...aria(f.key)} onChange={(e) => set(f.key, e.target.value as never)} />
         </label>
         {err(f.key)}
+        {hint(f.key)}
       </div>
     );
   };
@@ -241,6 +253,7 @@ function ParamsForm({ loaded, onEdit, onSaved, onGoToSecurity }: {
   return (
     <div style={stack}>
       <form ref={formRef} style={stack} onSubmit={(e) => { e.preventDefault(); review(); }}>
+        {staleFrom !== null && <p role="alert" style={alert}>{VECTOR_ERRORS.parameters_changed}</p>}
         {GROUPS.map((g) => (
           <fieldset key={g} style={fieldset}>
             <legend style={legend}>{g}</legend>
@@ -254,12 +267,19 @@ function ParamsForm({ loaded, onEdit, onSaved, onGoToSecurity }: {
           title="Salvar os parâmetros técnicos"
           description={`Cria a versão ${loaded.version + 1}. O levantamento já sorteado continua com a versão do sorteio.`}
           requiresStepUp
-          run={async () => { result.current = await putVectorParameters(toValues(draft)); }}
+          run={async () => { result.current = await putVectorParameters(toValues(draft), loaded.version); }}
           onDone={() => { setConfirming(false); if (result.current) void onSaved(result.current); }}
           onCancel={() => setConfirming(false)}
           onGoToSecurity={onGoToSecurity}
           translateError={(e) => {
             const refusals = vectorRefusals(e);
+            if (isVectorStale(e)) {
+              // Outra pessoa gravou: fecha a confirmação, relê uma vez e deixa o digitado; o próximo envio leva a versão relida.
+              setConfirming(false);
+              setStaleFrom(loaded.version);
+              void onStale();
+              return refusals[0].text;
+            }
             const keys = PARAM_FIELDS.map((f) => f.key as string);
             const mine = refusals.filter((r) => r.path.startsWith("values.") && keys.includes(r.path.slice(7)));
             if (mine.length > 0) {

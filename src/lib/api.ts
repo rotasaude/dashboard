@@ -8103,9 +8103,10 @@ export function getCycleSummary(id: string): Promise<CycleSummary> {
 export function getVectorParameters(): Promise<VectorParameterVersion> {
   return jsonFetch<VectorParameterVersion>(vcPath("parameters"));
 }
-// Step-up; cria a versão seguinte com as 20 chaves.
-export function putVectorParameters(values: VectorParameters): Promise<VectorParameterVersion> {
-  return jsonFetch<VectorParameterVersion>(vcPath("parameters"), vcWrite("PUT", { values }));
+// Step-up; cria a versão seguinte com as 20 chaves. Q34: `expected_version` é a versão que a tela leu (0 = padrão de fábrica);
+// ausente → 422 expected_version_required; outra versão gravada no meio → 409 parameters_changed, sem gravar.
+export function putVectorParameters(values: VectorParameters, expectedVersion: number): Promise<VectorParameterVersion> {
+  return jsonFetch<VectorParameterVersion>(vcPath("parameters"), vcWrite("PUT", { values, expected_version: expectedVersion }));
 }
 
 // ── Produtos e local da baixa ──
