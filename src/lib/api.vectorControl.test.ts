@@ -177,13 +177,18 @@ describe("cliente da vigilância ambiental — endemias (módulo 35a)", () => {
     // Q34: a versão lida vai no corpo (0 = padrão de fábrica).
     stub(parameterVersion({ version: 4, created_at: "2026-11-16T13:00:00.000000Z" })); await putVectorParameters(PARAMS, 3);
     expect(bodyOf()).toEqual({ values: PARAMS, expected_version: 3 });
+    // Q35: GET e PUT devolvem { items, digest }; o PUT manda { items, expected_digest } (o digest lido).
     const items = [ { neighborhood_id: null, risk_class: null, strategic_point: false, days: 60 } ];
-    stub({ items }); expect(await putCadences(items)).toEqual(items);
-    expect([ last().url, last().init.method, bodyOf() ]).toEqual([ "/vector_control/cadences", "PUT", { items } ]);
+    const d0 = "0".repeat(64);
+    const d1 = "1".repeat(64);
+    stub({ items, digest: d0 }); expect(await listCadences()).toEqual({ items, digest: d0 });
+    expect([ last().url, last().init.method ?? "GET" ]).toEqual([ "/vector_control/cadences", "GET" ]);
+    stub({ items, digest: d1 }); expect(await putCadences(items, d0)).toEqual({ items, digest: d1 });
+    expect([ last().url, last().init.method, bodyOf() ]).toEqual([ "/vector_control/cadences", "PUT", { items, expected_digest: d0 } ]);
     // Lista vazia: a chave `items` vai com [] (CadencesController#update lê body_param("items"); o api apaga todas as linhas).
-    stub({ items: [] }); expect(await putCadences([])).toEqual([]);
-    expect(bodyOf()).toEqual({ items: [] });
-    stub({}); expect(await listCadences()).toEqual([]);
+    stub({ items: [], digest: d1 }); expect(await putCadences([], d0)).toEqual({ items: [], digest: d1 });
+    expect(bodyOf()).toEqual({ items: [], expected_digest: d0 });
+    stub({}); expect(await listCadences()).toEqual({ items: [], digest: "" });
     stub({ id: "cy1", year: 2026, number: 12, starts_on: "2026-11-02", ends_on: "2026-12-31" }, 201);
     await createCycle({ year: 2026, starts_on: "2026-11-02", ends_on: "2026-12-31" });
     expect([ last().url, last().init.method, bodyOf() ]).toEqual([ "/vector_control/cycles", "POST", { year: 2026, starts_on: "2026-11-02", ends_on: "2026-12-31" } ]);

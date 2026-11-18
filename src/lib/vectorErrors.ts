@@ -7,7 +7,8 @@ export const VECTOR_CONTROL_DISABLED = "a vigilância ambiental (endemias) está
 
 // Os 38 da brief (33 do §17 + sample_label_taken, unit_has_vector_control_location, cbo_not_allowed, feature_disabled,
 // invalid_transition), o proposal_changed, que o api emite na confirmação do bloqueio (Q26(4)), e os dois do PUT dos parâmetros
-// (Q34: parameters_changed e expected_version_required).
+// (Q34: parameters_changed e expected_version_required) e os dois do PUT das cadências (Q35: cadences_changed e
+// expected_digest_required).
 export const VECTOR_ERROR_CODES = [
   "vector_inspection_invalid", "situation_outcome_mismatch", "inspection_not_worked", "activity_property_mismatch",
   "liraa_item_not_found", "transmission_block_not_active", "deposit_counts_inconsistent", "product_not_allowed",
@@ -17,7 +18,7 @@ export const VECTOR_ERROR_CODES = [
   "product_in_use", "already_reconciled", "stratum_overlap", "stratum_out_of_range", "survey_not_draft", "cycle_invalid",
   "cycle_overlap", "invalid_parameter", "sample_result_invalid", "block_number_taken", "cbo_not_allowed", "feature_disabled",
   "sample_label_taken", "unit_has_vector_control_location", "invalid_transition", "proposal_changed",
-  "parameters_changed", "expected_version_required"
+  "parameters_changed", "expected_version_required", "cadences_changed", "expected_digest_required"
 ] as const;
 export type VectorErrorCode = (typeof VECTOR_ERROR_CODES)[number];
 
@@ -64,5 +65,7 @@ export const VECTOR_ERRORS: Record<VectorErrorCode, string> = {
   proposal_changed: "a proposta ganhou caso novo enquanto a tela estava aberta — os dados foram relidos",
   // Q34 (frase do coordenador, na caixa e pontuação da tabela): 409 do PUT dos parâmetros com outra versão gravada no meio.
   parameters_changed: "outra pessoa alterou os parâmetros; confira e salve de novo",
-  expected_version_required: "a tela está desatualizada — recarregue a página e tente de novo"
+  expected_version_required: "a tela está desatualizada — recarregue a página e tente de novo",
+  cadences_changed: "outra pessoa alterou as cadências; confira e salve de novo",
+  expected_digest_required: "a lista de cadências está desatualizada — recarregue a página e tente de novo"
 };

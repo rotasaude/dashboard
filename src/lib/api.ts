@@ -8080,12 +8080,18 @@ export function listDue(microAreaId: string, before?: string | null): VcPage<Due
 }
 
 // ── Cadência, ciclos e parâmetros ──
-export function listCadences(): Promise<VectorCadence[]> {
-  return vcItems<VectorCadence>(vcPath("cadences"));
+// Q35: a lista vem com o `digest` (SHA-256 da lista gravada); o PUT o devolve como `expected_digest` e recebe o novo.
+export interface VectorCadenceList { items: VectorCadence[]; digest: string }
+const cadenceList = async (url: string, init?: RequestInit): Promise<VectorCadenceList> => {
+  const body = await jsonFetch<{ items?: VectorCadence[]; digest?: string }>(url, init);
+  return { items: body.items ?? [], digest: body.digest ?? "" };
+};
+export function listCadences(): Promise<VectorCadenceList> {
+  return cadenceList(vcPath("cadences"));
 }
-// Step-up; troca a lista inteira.
-export function putCadences(items: VectorCadence[]): Promise<VectorCadence[]> {
-  return vcItems<VectorCadence>(vcPath("cadences"), vcWrite("PUT", { items }));
+// Step-up; troca a lista inteira. Sem `expected_digest` → 422 expected_digest_required; lista mudada → 409 cadences_changed.
+export function putCadences(items: VectorCadence[], expectedDigest: string): Promise<VectorCadenceList> {
+  return cadenceList(vcPath("cadences"), vcWrite("PUT", { items, expected_digest: expectedDigest }));
 }
 export function listCycles(year?: number): Promise<VectorCycle[]> {
   return vcItems<VectorCycle>(withQuery(vcPath("cycles"), hvQuery({ year })));

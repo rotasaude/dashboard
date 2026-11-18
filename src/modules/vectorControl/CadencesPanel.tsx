@@ -3,15 +3,20 @@
 // qualquer, ponto estratégico, dias) editadas em memória; "Salvar cadência" troca a lista INTEIRA (PUT /cadences, step-up). A tela
 // recusa antes o que o VectorControl::SaveCadences recusaria: dias 7–365 inteiros (Catalog::CADENCE_DAYS), a mesma tripla
 // (bairro, risco, PE) repetida e o ponto estratégico com risco (o seletor de risco trava em "qualquer"). Recusa do api com
-// `path` items[i](.campo) cai na linha; bairro apagado no meio → a frase e UMA releitura dos bairros. Sem dado de pessoa.
+// `path` items[i](.campo) cai na linha; bairro apagado no meio → a frase e UMA releitura dos bairros. Q35: o PUT leva o `digest`
+// lido como `expected_digest`; outra gravação no meio → 409 cadences_changed, sem gravar: a frase, UMA releitura, e o digitado
+// FICA (o próximo envio já leva o digest relido), com "vigente agora" nas linhas cujos dias mudaram. Sem dado de pessoa.
 import { useId, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { getVectorDomains, listCadences, listPanelNeighborhoods, putCadences, type RiskClass, type VectorCadence } from "../../lib/api";
+import {
+  getVectorDomains, listCadences, listPanelNeighborhoods, putCadences, type RiskClass, type VectorCadence, type VectorCadenceList
+} from "../../lib/api";
 import { PANEL_NEIGHBORHOODS_KEY } from "../../lib/neighborhoodFilter";
 import { sortByName } from "../../lib/territory";
 import {
-  RISK_CLASSES, STATIC_QUERY, VC_CADENCES_KEY, VC_DOMAINS_KEY, domainLabel, vectorError, vectorRefusals
+  RISK_CLASSES, STATIC_QUERY, VC_CADENCES_KEY, VC_DOMAINS_KEY, domainLabel, isVectorStale, vectorError, vectorRefusals
 } from "../../lib/vectorControl";
+import { VECTOR_ERRORS } from "../../lib/vectorErrors";
 import { Panel } from "../../components/Panel";
 import { DataTable } from "../../components/DataTable";
 import { SensitiveAction } from "../../components/SensitiveAction";
@@ -35,6 +40,7 @@ export type CadenceProblem = { index: number; field: CadenceField; text: string 
 
 const DAYS = /^\d+$/;
 const daysOf = (raw: string): number => (DAYS.test(raw.trim()) ? Number(raw.trim()) : NaN);
+export const currentDaysHint = (days: number) => `vigente agora: ${days} dias`;
 const tripleOf = (d: CadenceDraft) => `${d.neighborhood_id.toLowerCase()}|${d.strategic_point ? "" : d.risk_class}|${d.strategic_point}`;
 
 // Na ordem do SaveCadences.check, linha a linha: PE com risco, dias, e por fim a tripla repetida (marcada no risco, a coluna
@@ -72,7 +78,7 @@ export function CadencesPanel({ onGoToSecurity }: { onGoToSecurity?: () => void 
   const [ notice, setNotice ] = useState<string | null>(null);
   const [ formKey, setFormKey ] = useState(0);
 
-  async function saved(result: VectorCadence[]) {
+  async function saved(result: VectorCadenceList) {
     setNotice(CADENCE_SAVED);
     queryClient.setQueryData([ VC_CADENCES_KEY ], result);
     setFormKey((k) => k + 1);
@@ -94,7 +100,8 @@ export function CadencesPanel({ onGoToSecurity }: { onGoToSecurity?: () => void 
           : (
             <>
               {notice && <p role="status" style={okText}>{notice}</p>}
-              <CadenceForm key={formKey} loaded={cadences.data} onEdit={() => setNotice(null)} onSaved={saved} onGoToSecurity={onGoToSecurity} />
+              <CadenceForm key={formKey} loaded={cadences.data} onEdit={() => setNotice(null)} onSaved={saved} onGoToSecurity={onGoToSecurity}
+                onStale={() => queryClient.invalidateQueries({ queryKey: [ VC_CADENCES_KEY ] })} />
             </>
           )}
       </div>
@@ -102,16 +109,26 @@ export function CadencesPanel({ onGoToSecurity }: { onGoToSecurity?: () => void 
   );
 }
 
-function CadenceForm({ loaded, onEdit, onSaved, onGoToSecurity }: {
-  loaded: VectorCadence[]; onEdit(): void; onSaved(r: VectorCadence[]): Promise<void>; onGoToSecurity?: () => void;
+function CadenceForm({ loaded, onEdit, onSaved, onStale, onGoToSecurity }: {
+  loaded: VectorCadenceList; onEdit(): void; onSaved(r: VectorCadenceList): Promise<void>; onStale(): Promise<void>; onGoToSecurity?: () => void;
 }) {
   const queryClient = useQueryClient();
   const neighborhoods = useQuery({ queryKey: PANEL_NEIGHBORHOODS_KEY, queryFn: listPanelNeighborhoods, ...STATIC_QUERY });
   const domains = useQuery({ queryKey: [ VC_DOMAINS_KEY ], queryFn: getVectorDomains, ...STATIC_QUERY });
-  const [ rows, setRows ] = useState<Row[]>(() => loaded.map(rowOf));
+  // A releitura do 409 troca `loaded` sem remontar: as linhas digitadas ficam, e o envio usa sempre o `loaded.digest` da vez.
+  const [ rows, setRows ] = useState<Row[]>(() => loaded.items.map(rowOf));
+  // Depois de um 409 cadences_changed: o digest que estava na tela. Quando a releitura traz outro, a linha cuja tripla existe na
+  // lista vigente com outros dias mostra os dias vigentes.
+  const [ staleFrom, setStaleFrom ] = useState<string | null>(null);
+  const reread = staleFrom !== null && loaded.digest !== staleFrom;
+  const serverDays = new Map(loaded.items.map((c) => [ tripleOf(rowOf(c)), c.days ]));
+  const hint = (r: CadenceDraft) => {
+    const days = reread ? serverDays.get(tripleOf(r)) : undefined;
+    return days !== undefined && daysOf(r.days) !== days ? <span style={muted}>{currentDaysHint(days)}</span> : null;
+  };
   const [ problems, setProblems ] = useState<CadenceProblem[]>([]);
   const [ confirming, setConfirming ] = useState(false);
-  const result = useRef<VectorCadence[] | null>(null);
+  const result = useRef<VectorCadenceList | null>(null);
   const baseId = useId();
 
   // Mexer numa linha fecha a confirmação aberta: o que se confirma é sempre o que está na tela.
@@ -134,6 +151,7 @@ function CadenceForm({ loaded, onEdit, onSaved, onGoToSecurity }: {
     changed([ ...rows, { key: ++nextKey, neighborhood_id: "", risk_class: "", strategic_point: false, days: "" } ]);
   }
   function review() {
+    setStaleFrom(null);
     const found = cadenceProblems(rows);
     setProblems(found);
     setConfirming(found.length === 0);
@@ -156,6 +174,7 @@ function CadenceForm({ loaded, onEdit, onSaved, onGoToSecurity }: {
 
   return (
     <div style={stack}>
+      {staleFrom !== null && <p role="alert" style={alert}>{VECTOR_ERRORS.cadences_changed}</p>}
       {neighborhoods.isError && <p role="alert" style={alert}>{vectorError(neighborhoods.error)}</p>}
       <DataTable label="Linhas da cadência" rows={indexed} rowKey={(r) => String(r.key)} empty="nenhuma linha — vale a cadência dos parâmetros" cols={[
         { label: "Bairro", w: "2fr", card: "pair", render: (r) => (
@@ -193,6 +212,7 @@ function CadenceForm({ loaded, onEdit, onSaved, onGoToSecurity }: {
             <input aria-label={`Dias da linha ${r.index + 1}`} value={r.days} inputMode="numeric" style={inputStyle} {...aria(r.index, "days")}
               onChange={(e) => set(r.key, { days: e.target.value }, "days")} />
             {err(r.index, "days")}
+            {hint(r)}
           </span>
         ) },
         { label: "Ações", card: "actions", render: (r) => (
@@ -208,12 +228,19 @@ function CadenceForm({ loaded, onEdit, onSaved, onGoToSecurity }: {
           title="Salvar a cadência de visita"
           description={`Troca a lista inteira (${rows.length} ${rows.length === 1 ? "linha" : "linhas"}); a linha que saiu deixa de valer.`}
           requiresStepUp
-          run={async () => { result.current = await putCadences(toCadences(rows)); }}
+          run={async () => { result.current = await putCadences(toCadences(rows), loaded.digest); }}
           onDone={() => { setConfirming(false); if (result.current) void onSaved(result.current); }}
           onCancel={() => setConfirming(false)}
           onGoToSecurity={onGoToSecurity}
           translateError={(e) => {
             const refusal = vectorRefusals(e)[0];
+            if (isVectorStale(e)) {
+              // Outra pessoa gravou: fecha a confirmação, relê uma vez e deixa o digitado.
+              setConfirming(false);
+              setStaleFrom(loaded.digest);
+              void onStale();
+              return refusal.text;
+            }
             const m = /^items\[(\d+)\](?:\.(\w+))?$/.exec(refusal.path);
             if (refusal.code !== "invalid_request" || !m) return refusal.text;
             const index = Number(m[1]);

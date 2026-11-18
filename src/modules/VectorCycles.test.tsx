@@ -46,6 +46,11 @@ const rowOf = (tableName: string, text: string) => {
   if (!found) throw new Error(`sem a linha ${text}`);
   return within(found);
 };
+// Q35: o digest da lista lida (64 hex) e o da gravada.
+const D0 = "0".repeat(64);
+const D1 = "1".repeat(64);
+const D2 = "2".repeat(64);
+const mockCadences = (items: VectorCadence[], digest = D0) => mocked(api.listCadences).mockResolvedValue({ items, digest });
 const later = () => new Promise((r) => setTimeout(r, 20));
 
 // Salvar e esperar o botão voltar (a regra local corre dentro do ActionButton, que fica ocupado até a promessa acabar).
@@ -67,7 +72,7 @@ beforeEach(() => {
   for (const fn of Object.values(api)) if (typeof fn === "function" && "mockReset" in fn) mocked(fn).mockReset();
   mocked(api.fetchCurrentSession).mockResolvedValue(vcUser([ "endemic_coordinator" ]));
   mocked(api.listCycles).mockResolvedValue([ C1, C2 ]);
-  mocked(api.listCadences).mockResolvedValue([]);
+  mockCadences([]);
   mocked(api.listPanelNeighborhoods).mockResolvedValue(NB);
   mocked(api.getVectorDomains).mockResolvedValue(VC_DOMAINS);
   mocked(api.getCycleSummary).mockResolvedValue(SUMMARY);
@@ -280,7 +285,7 @@ describe("cadência", () => {
   it("cadência: step-up, corpo com a lista inteira; a ordem de aplicação explicada em uma linha", async () => {
     mocked(api.fetchCurrentSession).mockResolvedValue(sessionWith([ "endemic_coordinator" ], { features: VC_FEATURES, mfa_verified_at: null }));
     const saved: VectorCadence[] = [ { neighborhood_id: null, risk_class: "red", strategic_point: false, days: 30 } ];
-    mocked(api.putCadences).mockResolvedValue(saved);
+    mocked(api.putCadences).mockResolvedValue({ items: saved, digest: D1 });
     fireEvent.click(await openCadences());
     expect(screen.getByText(CADENCE_ORDER)).not.toBeNull();
     expect((screen.getByLabelText("Bairro da linha 1") as HTMLSelectElement).value).toBe("");
@@ -293,6 +298,8 @@ describe("cadência", () => {
     await waitFor(() => expect(api.putCadences).toHaveBeenCalledTimes(1));
     expect(api.stepUpMfa).toHaveBeenCalledWith("123456");
     expect(mocked(api.putCadences).mock.calls[0][0]).toEqual([ { neighborhood_id: null, risk_class: "red", strategic_point: false, days: 30 } ]);
+    // Q35: o digest lido vai como expected_digest.
+    expect(mocked(api.putCadences).mock.calls[0][1]).toBe(D0);
     expect(await screen.findByText(CADENCE_SAVED)).not.toBeNull();
     // A lista que o PUT devolveu fica na tela, sem GET a mais; os domínios (que levam a cadência ao boletim) são relidos.
     await waitFor(() => expect(api.getVectorDomains).toHaveBeenCalledTimes(2));
@@ -303,11 +310,11 @@ describe("cadência", () => {
   });
 
   it("a lista inteira vai junto: linhas lidas, editadas e a nova; ponto estratégico sem risco; bairro inativo marcado", async () => {
-    mocked(api.listCadences).mockResolvedValue([
+    mockCadences([
       { neighborhood_id: null, risk_class: null, strategic_point: false, days: 60 },
       { neighborhood_id: "nb-agua", risk_class: "yellow", strategic_point: false, days: 45 }
     ]);
-    mocked(api.putCadences).mockImplementation(async (items: VectorCadence[]) => items);
+    mocked(api.putCadences).mockImplementation(async (items: VectorCadence[]) => ({ items, digest: D1 }));
     await openCadences();
     expect((screen.getByLabelText("Bairro da linha 2") as HTMLSelectElement).value).toBe("nb-agua");
     expect(field("Dias da linha 2").value).toBe("45");
@@ -332,7 +339,7 @@ describe("cadência", () => {
   });
 
   it("linha repetida (bairro, risco, PE) recusada antes de enviar; remover a linha libera", async () => {
-    mocked(api.listCadences).mockResolvedValue([ { neighborhood_id: null, risk_class: "red", strategic_point: false, days: 30 } ]);
+    mockCadences([ { neighborhood_id: null, risk_class: "red", strategic_point: false, days: 30 } ]);
     await openCadences();
     fireEvent.click(screen.getByRole("button", { name: "Adicionar linha" }));
     fireEvent.change(screen.getByLabelText("Risco da linha 2"), { target: { value: "red" } });
@@ -352,11 +359,11 @@ describe("cadência", () => {
   });
 
   it("linha lida e removida sai do corpo (o api apaga o que falta)", async () => {
-    mocked(api.listCadences).mockResolvedValue([
+    mockCadences([
       { neighborhood_id: null, risk_class: null, strategic_point: false, days: 60 },
       { neighborhood_id: "nb-agua", risk_class: "yellow", strategic_point: false, days: 45 }
     ]);
-    mocked(api.putCadences).mockImplementation(async (items: VectorCadence[]) => items);
+    mocked(api.putCadences).mockImplementation(async (items: VectorCadence[]) => ({ items, digest: D1 }));
     await openCadences();
     fireEvent.click(screen.getByRole("button", { name: "Remover linha 1" }));
     fireEvent.click(screen.getByRole("button", { name: "Salvar cadência" }));
@@ -367,10 +374,10 @@ describe("cadência", () => {
   });
 
   it("todas as linhas removidas: o corpo vai vazio ([]) e a confirmação diz 0 linhas", async () => {
-    mocked(api.listCadences).mockResolvedValue([
+    mockCadences([
       { neighborhood_id: null, risk_class: null, strategic_point: false, days: 60 }, { neighborhood_id: null, risk_class: null, strategic_point: true, days: 15 }
     ]);
-    mocked(api.putCadences).mockResolvedValue([]);
+    mocked(api.putCadences).mockResolvedValue({ items: [], digest: D1 });
     await openCadences();
     fireEvent.click(screen.getByRole("button", { name: "Remover linha 2" }));
     fireEvent.click(screen.getByRole("button", { name: "Remover linha 1" }));
@@ -380,6 +387,57 @@ describe("cadência", () => {
     await waitFor(() => expect(api.putCadences).toHaveBeenCalledTimes(1));
     expect(mocked(api.putCadences).mock.calls[0][0]).toEqual([]);
     expect(await screen.findByText("nenhuma linha — vale a cadência dos parâmetros")).not.toBeNull();
+  });
+
+  it("Q35: depois de gravar, o próximo envio leva o digest devolvido pelo PUT, sem reler", async () => {
+    mocked(api.putCadences).mockImplementation(async (items: VectorCadence[]) => ({ items, digest: D1 }));
+    await openCadences();
+    fireEvent.click(screen.getByRole("button", { name: "Adicionar linha" }));
+    type("Dias da linha 1", "30");
+    fireEvent.click(screen.getByRole("button", { name: "Salvar cadência" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Confirmar" }));
+    expect(await screen.findByText(CADENCE_SAVED)).not.toBeNull();
+    type("Dias da linha 1", "31");
+    fireEvent.click(screen.getByRole("button", { name: "Salvar cadência" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Confirmar" }));
+    await waitFor(() => expect(api.putCadences).toHaveBeenCalledTimes(2));
+    expect(mocked(api.putCadences).mock.calls.map((c) => c[1])).toEqual([ D0, D1 ]);
+    expect(api.listCadences).toHaveBeenCalledTimes(1);
+  });
+
+  it("Q35: 409 cadences_changed → a frase, UMA releitura, o digitado fica e o próximo envio leva o digest novo", async () => {
+    mockCadences([ { neighborhood_id: null, risk_class: null, strategic_point: false, days: 60 } ]);
+    mocked(api.putCadences).mockRejectedValueOnce(new ApiError(409, { error: "cadences_changed" }, "x"))
+      .mockImplementationOnce(async (items: VectorCadence[]) => ({ items, digest: D1 }));
+    await openCadences();
+    type("Dias da linha 1", "45");
+    fireEvent.click(screen.getByRole("button", { name: "Adicionar linha" }));
+    fireEvent.change(screen.getByLabelText("Risco da linha 2"), { target: { value: "red" } });
+    type("Dias da linha 2", "20");
+    // A releitura traz a lista que outra pessoa gravou (outro digest).
+    mockCadences([ { neighborhood_id: null, risk_class: null, strategic_point: false, days: 90 } ], D2);
+    fireEvent.click(screen.getByRole("button", { name: "Salvar cadência" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Confirmar" }));
+    expect(await screen.findByText(VECTOR_ERRORS.cadences_changed)).not.toBeNull();
+    expect(VECTOR_ERRORS.cadences_changed).toBe("outra pessoa alterou as cadências; confira e salve de novo");
+    await waitFor(() => expect(api.listCadences).toHaveBeenCalledTimes(2));
+    await later();
+    expect(api.listCadences).toHaveBeenCalledTimes(2);
+    expect(api.putCadences).toHaveBeenCalledTimes(1);
+    // O digitado fica (não volta à lista relida).
+    expect(field("Dias da linha 1").value).toBe("45");
+    expect((screen.getByLabelText("Risco da linha 2") as HTMLSelectElement).value).toBe("red");
+    expect(field("Dias da linha 2").value).toBe("20");
+    // A linha que difere da lista vigente diz o que está gravado agora.
+    expect(screen.getByText("vigente agora: 90 dias")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Salvar cadência" }));
+    expect(screen.queryByText(VECTOR_ERRORS.cadences_changed)).toBeNull();
+    fireEvent.click(await screen.findByRole("button", { name: "Confirmar" }));
+    await waitFor(() => expect(api.putCadences).toHaveBeenCalledTimes(2));
+    expect(mocked(api.putCadences).mock.calls[1]).toEqual([
+      [ { neighborhood_id: null, risk_class: null, strategic_point: false, days: 45 }, { neighborhood_id: null, risk_class: "red", strategic_point: false, days: 20 } ],
+      D2
+    ]);
   });
 
   it("dias 6 e 366 recusados; 7 e 365 passam", async () => {
@@ -402,7 +460,7 @@ describe("cadência", () => {
   });
 
   it("422 no bairro (apagado entre a leitura e o envio): a frase na linha e UMA releitura dos bairros; nada é reenviado", async () => {
-    mocked(api.listCadences).mockResolvedValue([ { neighborhood_id: "nb-agua", risk_class: null, strategic_point: false, days: 45 } ]);
+    mockCadences([ { neighborhood_id: "nb-agua", risk_class: null, strategic_point: false, days: 45 } ]);
     mocked(api.putCadences).mockRejectedValue(new ApiError(422, { error: "invalid_request", path: "items[0].neighborhood_id" }, "x"));
     await openCadences();
     fireEvent.click(screen.getByRole("button", { name: "Salvar cadência" }));
@@ -417,7 +475,7 @@ describe("cadência", () => {
   });
 
   it("422 dos dias ou da linha repetida vindo do api cai na linha certa", async () => {
-    mocked(api.listCadences).mockResolvedValue([
+    mockCadences([
       { neighborhood_id: null, risk_class: null, strategic_point: false, days: 60 }, { neighborhood_id: null, risk_class: "red", strategic_point: false, days: 30 }
     ]);
     mocked(api.putCadences).mockRejectedValueOnce(new ApiError(422, { error: "invalid_request", path: "items[1].days" }, "x"))
