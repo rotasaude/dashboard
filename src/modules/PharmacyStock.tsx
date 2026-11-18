@@ -32,7 +32,7 @@ const withUnit = (qty: string | null | undefined, p: StockPosition) => (qty === 
 
 export function PharmacyStock() {
   return (
-    <PharmacyGate title="Posição e extrato" sub="saldo por local e lote, extrato e estoque mínimo" allow={(r) => r.pharmacist || r.assistant || r.keeper}>
+    <PharmacyGate stock title="Posição e extrato" sub="saldo por local e lote, extrato e estoque mínimo" allow={(r) => r.pharmacist || r.assistant || r.keeper}>
       {() => (
         <LocationPick allow={() => true}>
           {(loc) => <Body location={loc} />}
@@ -134,7 +134,8 @@ function Body({ location }: { location: PharmacyLocation }) {
       )}
 
       {open && <Lots position={open} lotId={lotId} onStatement={setLotId} />}
-      {roles.keeper && <MinimumsPanel location={location} />}
+      {/* O api só tem mínimo de medicamento (MinimumsController: Stock::Domain.medication?); o local vector_control → 404. */}
+      {roles.keeper && location.kind !== "vector_control" && <MinimumsPanel location={location} />}
     </div>
   );
 }

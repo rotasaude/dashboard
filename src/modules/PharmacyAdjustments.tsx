@@ -13,7 +13,7 @@ import { PharmacyGate } from "./pharmacy/PharmacyGate";
 
 export function PharmacyAdjustments({ today = todayInCity(), onGoToSecurity }: { today?: string; onGoToSecurity?(): void } = {}) {
   return (
-    <PharmacyGate title="Inventário e ajustes" sub="ajustes, perdas e vencimentos, com aprovação" allow={(r) => r.pharmacist || r.keeper}>
+    <PharmacyGate stock title="Inventário e ajustes" sub="ajustes, perdas e vencimentos, com aprovação" allow={(r) => r.pharmacist || r.keeper}>
       {() => (
         <LocationPick allow={(r) => r.pharmacist || r.keeper}>
           {(loc) => <Body location={loc} today={today} onGoToSecurity={onGoToSecurity} />}

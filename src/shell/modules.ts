@@ -9,7 +9,7 @@ import { canUseTerritory } from "../lib/territoryRegistry";
 import { canUseCollectiveActivities, canUseHomeVisits } from "../lib/homeVisits";
 import { canUseSurveillance } from "../lib/surveillance";
 import { canUseRegulation } from "../lib/regulation";
-import { canUsePharmacy } from "../lib/pharmacy";
+import { canUsePharmacy, canUseStockScreens } from "../lib/pharmacy";
 import { canUseDental, dentalRoles } from "../lib/dental";
 import { canUseVaccination } from "../lib/vaccination";
 import { canUseTransport, isDriverOnly, transportRoles } from "../lib/transport";
@@ -373,8 +373,8 @@ export function navGroupsFor(
   // admin; prazos e lista do enfermeiro, do admin.
   const regOn = canUseRegulation(user);
   const isCareRegulator = roles.includes("care_regulator");
-  // Módulo 27a (ADR 0045): `pharmacy`, sem exigir o prontuário; o interruptor vale para TODO /pharmacy/*,
-  // inclusive "Locais e configurações". Dispensação e receita externa: farmacêutico e auxiliar; transferências,
+  // Módulo 27a (ADR 0045): `pharmacy`, sem exigir o prontuário; desde o 35a (Q21) as telas de estoque (transferências,
+  // entradas, posição, ajustes e "Locais e configurações") abrem também com vector_control (stockOn). Dispensação e receita externa: farmacêutico e auxiliar; transferências,
   // posição e alertas: os três papéis; entradas: almoxarife e farmacêutico (a abertura é dele — P6 do plano do api);
   // ajustes: farmacêutico e almoxarife; administração: municipal_admin. O papel POR LOCAL é conferido na tela
   // (LocationPick) e no api.
@@ -382,6 +382,8 @@ export function navGroupsFor(
   const isPharmacist = roles.includes("pharmacist");
   const isPharmacyAssistant = roles.includes("pharmacy_assistant");
   const isStockKeeper = roles.includes("stock_keeper");
+  // Módulo 35a (Q21): as cinco telas de estoque abrem também com vector_control sem pharmacy (StockGate do api).
+  const stockOn = canUseStockScreens(user);
   // Módulo 29 (ADR 0047): vaccination, sem exigir pharmacy. Sala e pendências: profissional (o papel na sala vem de
   // /vaccination/my_locations); estoque, frio e resumo: profissional ou almoxarife; painel: admin e analyst; administração: admin.
   const vacOn = canUseVaccination(user);
@@ -499,15 +501,14 @@ export function navGroupsFor(
       if (item.id === "vector-stock-shortfalls") return vcOn && (vc.coordinator || vc.stockKeeper);
       if (item.id.startsWith("vector-")) return vcOn && vc.coordinator;
       if (item.id === "pharmacy-dispensing" || item.id === "pharmacy-external") return phOn && (isPharmacist || isPharmacyAssistant);
-      if (item.id === "pharmacy-transfers" || item.id === "pharmacy-stock" || item.id === "pharmacy-alerts") {
-        return phOn && (isPharmacist || isPharmacyAssistant || isStockKeeper);
-      }
+      if (item.id === "pharmacy-transfers" || item.id === "pharmacy-stock") return stockOn && (isPharmacist || isPharmacyAssistant || isStockKeeper);
+      if (item.id === "pharmacy-alerts") return phOn && (isPharmacist || isPharmacyAssistant || isStockKeeper);
       // Módulo 32b: leitos da observação são do admin com urgency_care (D1); faltas da UPA, do farmacêutico e do almoxarife com
       // pharmacy, mesmo com a baixa desligada (contrato §7).
       if (item.id === "pharmacy-urgency-shortfalls") return phOn && (isPharmacist || isStockKeeper);
-      if (item.id === "pharmacy-entries") return phOn && (isStockKeeper || isPharmacist);
-      if (item.id === "pharmacy-adjustments") return phOn && (isPharmacist || isStockKeeper);
-      if (item.id === "pharmacy-admin") return phOn && isAdmin;
+      if (item.id === "pharmacy-entries") return stockOn && (isStockKeeper || isPharmacist);
+      if (item.id === "pharmacy-adjustments") return stockOn && (isPharmacist || isStockKeeper);
+      if (item.id === "pharmacy-admin") return stockOn && isAdmin;
       if (item.id === "vaccination-room" || item.id === "vaccination-pending") return vacOn && isProfessional;
       if (item.id === "vaccination-stock" || item.id === "vaccination-cold-chain" || item.id === "vaccination-summary") {
         return vacOn && (isProfessional || isStockKeeper);

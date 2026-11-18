@@ -23,6 +23,22 @@ describe("grupo Farmácia (módulo 27a)", () => {
     expect(itemsOf(navGroupsFor(user([ "stock_keeper" ], [ "clinical_record" ])))).toEqual([]);
     expect(CATALOG.screens["pharmacy-urgency-shortfalls"].description).toBe("Medicação dada na UPA sem saldo no estoque");
   });
+  it("35a (Q21): cidade só com vector_control abre os cinco itens de estoque; os só da farmácia continuam escondidos", () => {
+    const VC = [ "clinical_record", "territory_registry", "home_visits", "vector_control" ];
+    expect(itemsOf(navGroupsFor(user([ "stock_keeper" ], VC)))).toEqual([
+      "pharmacy-transfers", "pharmacy-entries", "pharmacy-stock", "pharmacy-adjustments", "vector-stock-shortfalls" ]);
+    expect(itemsOf(navGroupsFor(user([ "pharmacist" ], VC)))).toEqual([ "pharmacy-transfers", "pharmacy-entries", "pharmacy-stock", "pharmacy-adjustments" ]);
+    expect(itemsOf(navGroupsFor(user([ "pharmacy_assistant" ], VC)))).toEqual([ "pharmacy-transfers", "pharmacy-stock" ]);
+    expect(itemsOf(navGroupsFor(user([ "municipal_admin" ], VC)))).toEqual([ "pharmacy-admin" ]);
+    // vector_control sem a visita domiciliar utilizável não abre nada (Q1); o operador nunca.
+    expect(itemsOf(navGroupsFor(user([ "stock_keeper", "municipal_admin" ], [ "clinical_record", "vector_control" ])))).toEqual([]);
+    expect(itemsOf(navGroupsFor(user([ "stock_keeper", "municipal_admin" ], VC, true)))).toEqual([]);
+  });
+  it("cidade só com pharmacy: nada muda", () => {
+    expect(itemsOf(navGroupsFor(user([ "stock_keeper" ])))).toEqual([
+      "pharmacy-transfers", "pharmacy-entries", "pharmacy-stock", "pharmacy-adjustments", "pharmacy-alerts", "pharmacy-urgency-shortfalls" ]);
+    expect(itemsOf(navGroupsFor(user([ "municipal_admin" ])))).toEqual([ "pharmacy-admin" ]);
+  });
   it("some sem o interruptor, para outros papéis e para o operador", () => {
     expect(itemsOf(navGroupsFor(user([ "pharmacist", "stock_keeper", "municipal_admin" ], [ "clinical_record" ])))).toEqual([]);
     expect(itemsOf(navGroupsFor(user([ "health_professional", "citizen_verifier", "care_regulator" ])))).toEqual([]);

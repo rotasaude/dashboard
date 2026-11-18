@@ -16,7 +16,7 @@ const lotsText = (n: number) => `${n} ${n === 1 ? "lote" : "lotes"}`;
 
 export function PharmacyEntries({ today = todayInCity() }: { today?: string } = {}) {
   return (
-    <PharmacyGate title="Entradas e abertura" sub="nota fiscal, doação e inventário de abertura, com lote" allow={(r) => r.keeper || r.pharmacist}>
+    <PharmacyGate stock title="Entradas e abertura" sub="nota fiscal, doação e inventário de abertura, com lote" allow={(r) => r.keeper || r.pharmacist}>
       {() => (
         <LocationPick allow={(r) => r.keeper || r.pharmacist}>
           {(loc) => <Body location={loc} today={today} />}

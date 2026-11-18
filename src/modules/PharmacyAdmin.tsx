@@ -4,7 +4,8 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { listAdminLocations, listAllUnits, listMemberships } from "../lib/api";
-import { PH_ADMIN_KEY, STATIC_QUERY, pharmacyError } from "../lib/pharmacy";
+import { useAuth } from "../lib/auth";
+import { PH_ADMIN_KEY, STATIC_QUERY, canUsePharmacy, pharmacyError } from "../lib/pharmacy";
 import { alert, muted, stack } from "./exams/styles";
 import { PharmacyGate } from "./pharmacy/PharmacyGate";
 import { LocationsPanel } from "./pharmacy/LocationsPanel";
@@ -16,7 +17,7 @@ const MEMBERSHIPS_KEY = "pharmacyMemberships";
 
 export function PharmacyAdmin({ onGoToSecurity }: { onGoToSecurity?(): void } = {}) {
   return (
-    <PharmacyGate title="Locais e configurações" sub="locais de estoque, equipe por local e prazos" allow={(r) => r.admin}>
+    <PharmacyGate stock title="Locais e configurações" sub="locais de estoque, equipe por local e prazos" allow={(r) => r.admin}>
       {() => <Body onGoToSecurity={onGoToSecurity} />}
     </PharmacyGate>
   );
@@ -24,6 +25,7 @@ export function PharmacyAdmin({ onGoToSecurity }: { onGoToSecurity?(): void } = 
 
 function Body({ onGoToSecurity }: { onGoToSecurity?(): void }) {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   const locations = useQuery({ queryKey: [ PH_ADMIN_KEY ], queryFn: listAdminLocations, ...STATIC_QUERY });
   const units = useQuery({ queryKey: [ UNITS_KEY ], queryFn: listAllUnits, ...STATIC_QUERY });
   const memberships = useQuery({ queryKey: [ MEMBERSHIPS_KEY ], queryFn: listMemberships, ...STATIC_QUERY });
@@ -43,7 +45,8 @@ function Body({ onGoToSecurity }: { onGoToSecurity?(): void }) {
       {selected && (
         <StaffPanel key={selected.id} location={selected} memberships={memberships.data ?? []} onChanged={reload} onGoToSecurity={onGoToSecurity} />
       )}
-      <SettingsPanel onGoToSecurity={onGoToSecurity} />
+      {/* Os prazos são da farmácia: admin/settings exige `pharmacy` (sem o skip do StockGate). Com só vector_control, ficam fora. */}
+      {canUsePharmacy(user) && <SettingsPanel onGoToSecurity={onGoToSecurity} />}
     </div>
   );
 }

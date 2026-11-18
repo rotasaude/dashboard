@@ -88,6 +88,17 @@ describe("PharmacyStock", () => {
     expect(screen.queryByText(/12,5 mg/)).toBeNull();
   });
 
+  it("35a: local vector_control mostra a posição sem o painel de mínimos (o api só tem mínimo de medicamento)", async () => {
+    const vector = { id: "lv1", name: "Depósito de endemias", kind: "vector_control", health_unit: null, active: true, roles: [ "stock_keeper" ] };
+    mocked(api.listMyPharmacyLocations).mockResolvedValue([ vector ]);
+    mocked(api.fetchCurrentSession).mockResolvedValue(phUser([ "stock_keeper" ], { features: [ "clinical_record", "territory_registry", "home_visits", "vector_control" ] }));
+    renderWithProviders(<PharmacyStock />);
+    await waitFor(() => expect(mocked(api.listPositions)).toHaveBeenCalledWith(expect.objectContaining({ locationId: vector.id })));
+    expect((await screen.findAllByText(/Amoxicilina 500 mg cápsula/)).length).toBeGreaterThan(0);
+    expect(screen.queryByRole("button", { name: "Salvar mínimos" })).toBeNull();
+    expect(mocked(api.getMinimums)).not.toHaveBeenCalled();
+  });
+
   it("consulta: o almoxarife do central abre a posição de local alheio (roles vazio), sem painel de mínimos", async () => {
     const alheio = { ...UBS_FARM, roles: [] as string[] };
     mocked(api.listMyPharmacyLocations).mockResolvedValue([ CENTRAL, alheio ]);

@@ -34,7 +34,7 @@ function itemText(i: TransferItem): string {
 
 export function PharmacyTransfers({ today = todayInCity() }: { today?: string } = {}) {
   return (
-    <PharmacyGate title="Transferências" sub="envio do almoxarifado e recebimento conferido na unidade" allow={(r) => r.pharmacist || r.assistant || r.keeper}>
+    <PharmacyGate stock title="Transferências" sub="envio do almoxarifado e recebimento conferido na unidade" allow={(r) => r.pharmacist || r.assistant || r.keeper}>
       {() => (
         <LocationPick allow={(r) => r.pharmacist || r.assistant || r.keeper}>
           {(loc) => <TransfersBody location={loc} today={today} />}

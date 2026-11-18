@@ -12,6 +12,7 @@ import { featureDisabledKey, featureLabel, hasFeature } from "./features";
 import { fmtDay } from "./exams";
 import { DOT_IN_NUMBER, hasDot } from "./lab";
 import { DUPLICATE_SUSPECTED_TEXT } from "./territoryRegistry";
+import { canUseVectorControl } from "./vectorControl";
 
 export { NOMINAL_QUERY, STATIC_QUERY };
 
@@ -51,6 +52,13 @@ type SessionLike = { operator: boolean; memberships?: { role: string }[]; featur
 // Interruptor `pharmacy` na sessão e nunca o operador da plataforma.
 export function canUsePharmacy(user: SessionLike): boolean {
   return !!user && !user.operator && hasFeature(user, "pharmacy");
+}
+
+// Módulo 35a (Q21; apps/api StockGate): as rotas do razão (entradas, transferências, ajustes, posição e extrato) e as de locais
+// (admin, equipe e "meus locais") valem com `vector_control` mesmo sem `pharmacy`, para o local vector_control. Só as telas de
+// estoque usam isto; dispensação, receita externa, alertas e faltas da UPA seguem `canUsePharmacy`.
+export function canUseStockScreens(user: SessionLike): boolean {
+  return canUsePharmacy(user) || canUseVectorControl(user);
 }
 
 export function pharmacyRoles(user: SessionLike): { pharmacist: boolean; assistant: boolean; keeper: boolean; admin: boolean } {

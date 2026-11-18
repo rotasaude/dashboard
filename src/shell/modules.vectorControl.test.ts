@@ -38,7 +38,9 @@ describe("grupo Endemias (módulo 35a)", () => {
   });
 
   it("Q21: o almoxarife vê as faltas de insumo com vector_control e SEM pharmacy; sem vector_control, nunca", () => {
-    expect(ids(vcUser([ "stock_keeper" ]), "Farmácia")).toEqual([ "vector-stock-shortfalls" ]);
+    // Com as telas de estoque abertas a vector_control (fix da Task 4, I1), a Farmácia traz também o razão do 27a.
+    expect(ids(vcUser([ "stock_keeper" ]), "Farmácia")).toEqual([
+      "pharmacy-transfers", "pharmacy-entries", "pharmacy-stock", "pharmacy-adjustments", "vector-stock-shortfalls" ]);
     expect(ids(vcUser([ "stock_keeper" ], [ "clinical_record", "territory_registry", "home_visits", "pharmacy" ]), "Farmácia"))
       .not.toContain("vector-stock-shortfalls");
     const farmacia = ids(vcUser([ "stock_keeper" ], [ ...VC_FEATURES, "pharmacy" ]), "Farmácia");

@@ -29,6 +29,14 @@ describe("PharmacyAdmin", () => {
     mocked(api.updatePharmacySettings).mockResolvedValue(phSettings({ continuous_interval_days: 28 }));
   });
 
+  it("35a (Q21): cidade só com vector_control mostra locais e equipe, sem o painel de prazos (admin/settings exige pharmacy)", async () => {
+    mocked(api.getPharmacySettings).mockClear();
+    mocked(api.fetchCurrentSession).mockResolvedValue(phUser([ "municipal_admin" ], { features: [ "clinical_record", "territory_registry", "home_visits", "vector_control" ] }));
+    renderWithProviders(<PharmacyAdmin />);
+    expect(await screen.findByRole("row", { name: /Farmácia UBS Centro/ })).not.toBeNull();
+    expect(mocked(api.getPharmacySettings)).not.toHaveBeenCalled();
+  });
+
   it("locais: tipo, unidade, situação e equipe", async () => {
     renderWithProviders(<PharmacyAdmin />);
     const row = await screen.findByRole("row", { name: /Farmácia UBS Centro/ });
