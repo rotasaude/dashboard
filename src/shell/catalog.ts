@@ -15,7 +15,8 @@ import {
   IconDental, IconDentalBroken,
   IconBus, IconCalendarRepeat, IconUserX, IconCar, IconSteeringWheel,
   IconBrain, IconAmbulance, IconDeviceTv, IconDoorEnter, IconCalendarEvent, IconBed, IconBedFlat, IconPillOff, IconShare, IconFileReport, IconUserHeart,
-  IconMessageReport, IconMailForward, IconSitemap, IconVaccine, IconNeedle, IconCloudUpload, IconVaccineBottle, IconTemperatureSnow, IconCalendarMonth, IconReportMedical, IconFridge, IconWalk, IconDeviceMobile, IconDeviceMobileCog
+  IconMessageReport, IconMailForward, IconSitemap, IconVaccine, IconNeedle, IconCloudUpload, IconVaccineBottle, IconTemperatureSnow, IconCalendarMonth, IconReportMedical, IconFridge, IconWalk, IconDeviceMobile, IconDeviceMobileCog,
+  IconBug, IconLayoutGrid, IconEgg, IconDice, IconShieldHalf, IconMapPinCheck, IconPackageOff
 } from "@tabler/icons-react";
 import type { Catalog } from "./types";
 
@@ -32,6 +33,7 @@ export const CATALOG: Catalog = {
     "Cadastro territorial": { icon: IconHomeHeart, description: "Microáreas, domicílios, famílias e cadastro individual" },
     "Visita e atividade coletiva": { icon: IconWalk, description: "Folha do dia, quem visitar, visitas da equipe, atividade coletiva e aparelhos de campo" },
     "Vigilância": { icon: IconVirus, description: "Notificação compulsória, prazos, negativa semanal e painel" },
+    "Endemias": { icon: IconBug, description: "Quarteirões, ciclos, ovitrampas, LIRAa, bloqueio, amostras e relatórios do controle vetorial" },
     "Regulação": { icon: IconArrowsSplit2, description: "Encaminhamentos a especialista e procedimento, fila, cotas e prazos" },
     "Saúde bucal": { icon: IconDental, description: "Prontuário odontológico, CEO e prótese" },
     "Transporte": { icon: IconBus, description: "Frota, viagens, séries, motorista e lista de passageiros" },
@@ -117,6 +119,16 @@ export const CATALOG: Catalog = {
     "surveillance-reports": { icon: IconFileSpreadsheet, description: "CSV por semana e encerradas sem número oficial" },
     "surveillance-panel": { icon: IconGridDots, description: "Casos por bairro e semana epidemiológica" },
     "surveillance-diseases": { icon: IconVirusSearch, description: "Lista nacional e doenças da cidade" },
+    "vector-blocks": { icon: IconLayoutGrid, description: "Quarteirões do bairro, vizinhos e perfil vetorial dos imóveis" },
+    "vector-cycles": { icon: IconCalendarRepeat, description: "Ciclos de trabalho do ano e cadência por atividade e risco" },
+    "vector-ovitraps": { icon: IconEgg, description: "Ovitrampas do bairro, contagem de ovos e correção" },
+    "vector-samples": { icon: IconTestPipe, description: "Amostras do boletim pendentes e resultado do laboratório" },
+    "vector-liraa": { icon: IconDice, description: "Levantamento, estratos, sorteio dos quarteirões e índices" },
+    "vector-transmission": { icon: IconShieldHalf, description: "Propostas de bloqueio pelos casos, área, ciclos e fechamento" },
+    "vector-tasks": { icon: IconListCheck, description: "Tarefas abertas da coordenação e conclusão" },
+    "vector-reports": { icon: IconReportAnalytics, description: "Situação dos imóveis, produção, consumo, ovitrampas e LIRAa em CSV e PDF" },
+    "vector-settings": { icon: IconAdjustments, description: "Inseticidas e larvicidas, parâmetros e ajustes da cidade" },
+    "field-ovitraps": { icon: IconMapPinCheck, description: "Instalar e recolher ovitrampas da sua microárea" },
     "regulation-queue": { icon: IconListNumbers, description: "Pedidos por cor e espera, vencidos primeiro" },
     "regulation-returned": { icon: IconArrowBackUp, description: "Pedidos da unidade devolvidos para complementar" },
     "regulation-offers": { icon: IconBuildingStore, description: "Prestadores, ofertas e cota mensal com saldo" },
@@ -167,6 +179,7 @@ export const CATALOG: Catalog = {
     "departments": { icon: IconSitemap, description: "Setores da secretaria que recebem encaminhamentos" },
     "urgency-beds": { icon: IconBedFlat, description: "Leitos da observação da UPA, com step-up" },
     "pharmacy-urgency-shortfalls": { icon: IconPillOff, description: "Medicação dada na UPA sem saldo no estoque" },
+    "vector-stock-shortfalls": { icon: IconPackageOff, description: "Insumo aplicado em campo sem saldo no local, com conciliação" },
     "urgency-panel": { icon: IconChartBar, description: "Tempos por cor, fora do tempo, desfechos e evasão" },
     "waiting-room-settings": { icon: IconDeviceTv, description: "Locais de chamada e TVs da sala de espera" },
     "campaigns": { icon: IconSpeakerphone, description: "Criar e enviar campanhas por SMS" },

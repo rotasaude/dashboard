@@ -21,6 +21,17 @@ import { SurveillanceReports } from "./modules/SurveillanceReports";
 import { SurveillancePanel } from "./modules/SurveillancePanel";
 import { SurveillanceDiseases } from "./modules/SurveillanceDiseases";
 import { CapsEnrollments } from "./modules/CapsEnrollments";
+import { VectorBlocks } from "./modules/VectorBlocks";
+import { VectorCycles } from "./modules/VectorCycles";
+import { VectorOvitraps } from "./modules/VectorOvitraps";
+import { VectorSamples } from "./modules/VectorSamples";
+import { VectorLiraa } from "./modules/VectorLiraa";
+import { VectorTransmission } from "./modules/VectorTransmission";
+import { VectorTasks } from "./modules/VectorTasks";
+import { VectorReports } from "./modules/VectorReports";
+import { VectorSettings } from "./modules/VectorSettings";
+import { FieldOvitraps } from "./modules/FieldOvitraps";
+import { VectorStockShortfalls } from "./modules/VectorStockShortfalls";
 
 type El = ReactElement<Record<string, (id?: string) => void>>;
 
@@ -81,6 +92,16 @@ describe("atalhos entre telas", () => {
     const screens = { "home-visit-day": HomeVisitDay, "who-to-visit": WhoToVisit, "home-visits-team": HomeVisitsTeam,
       "micro-area-assignments": MicroAreaAssignments, "collective-activities": CollectiveActivities,
       "field-devices": FieldDevices, "field-devices-admin": FieldDevicesAdmin } as const;
+    for (const [ id, component ] of Object.entries(screens)) {
+      expect((renderModule(id as keyof typeof screens, vi.fn()) as ReactElement).type, id).toBe(component);
+    }
+  });
+
+  it("as onze telas do módulo 35a abrem suas cascas", () => {
+    const screens = { "vector-blocks": VectorBlocks, "vector-cycles": VectorCycles, "vector-ovitraps": VectorOvitraps,
+      "vector-samples": VectorSamples, "vector-liraa": VectorLiraa, "vector-transmission": VectorTransmission,
+      "vector-tasks": VectorTasks, "vector-reports": VectorReports, "vector-settings": VectorSettings,
+      "field-ovitraps": FieldOvitraps, "vector-stock-shortfalls": VectorStockShortfalls } as const;
     for (const [ id, component ] of Object.entries(screens)) {
       expect((renderModule(id as keyof typeof screens, vi.fn()) as ReactElement).type, id).toBe(component);
     }

@@ -46,10 +46,14 @@ export function vectorRoles(user: SessionLike): VectorRoles {
 // (`can_register`, o :field do HomeVisits::Access).
 export const isEndemicAgentTeam = (team: HomeVisitTeam): boolean => team.cbo === ENDEMIC_AGENT_CBO && team.can_register;
 
+// Catalog::REPORTS, na ordem do api.
+export const VC_REPORT_NAMES: readonly VectorReportName[] = [ "situations", "strategic_points", "production", "consumption", "ovitraps", "liraa", "blocks" ];
 // ReportsController#readable?: coordenação e municipal_admin leem os sete; o laboratório só Reports::LAB_REPORTS (Q28).
 export const VC_LAB_REPORTS: readonly VectorReportName[] = [ "ovitraps", "liraa" ];
 export const canReadVectorReport = (roles: VectorRoles, name: VectorReportName): boolean =>
   roles.coordinator || roles.admin || (roles.lab && VC_LAB_REPORTS.includes(name));
+// Lê algum dos relatórios: o item do menu e o portão da tela (Task 4).
+export const canReadAnyVectorReport = (roles: VectorRoles): boolean => VC_REPORT_NAMES.some((name) => canReadVectorReport(roles, name));
 
 // MapPointsController: a coordenação lê as três camadas; o laboratório só `ovitraps`; os outros nenhuma (403 missing_role).
 export type VectorMapLayer = "risk" | "ovitraps" | "transmission";

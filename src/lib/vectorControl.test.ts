@@ -3,8 +3,8 @@ import { ApiError } from "./api";
 import {
   NOMINAL_QUERY, STATIC_QUERY, VC_BLOCKS_KEY, VC_BLOCKS_TB_KEY, VC_BLOCK_TB_KEY, VC_CADENCES_KEY, VC_CYCLES_KEY, VC_CYCLE_KEY, VC_DOMAINS_KEY,
   VC_DUE_KEY, VC_HOUSEHOLDS_KEY, VC_ITEMS_KEY, VC_MAP_KEY, VC_NOT_AGENT, VC_NO_ROLE, VC_OVITRAPS_KEY, VC_PARAMS_KEY, VC_PRODUCTS_KEY, VC_PROFILE_KEY,
-  VC_READINGS_KEY, VC_REPORT_KEY, VC_SAMPLES_KEY, VC_SETTINGS_KEY, VC_SHORTFALLS_KEY, VC_SURVEYS_KEY, VC_TASKS_KEY,
-  blockNumberProblem, blockStatusLabel, canReadVectorReport, canUseVectorControl, caseLabel, collectionProblems, conditionLabel, countProblems,
+  VC_READINGS_KEY, VC_REPORT_KEY, VC_REPORT_NAMES, VC_SAMPLES_KEY, VC_SETTINGS_KEY, VC_SHORTFALLS_KEY, VC_SURVEYS_KEY, VC_TASKS_KEY,
+  blockNumberProblem, blockStatusLabel, canReadAnyVectorReport, canReadVectorReport, canUseVectorControl, caseLabel, collectionProblems, conditionLabel, countProblems,
   cycleProblems, domainLabel, dueReasonLabel, installProblems, isEndemicAgentTeam, isVectorStale, itemStatusLabel, noteProblem, optionalNote, ovitrapStatusLabel,
   riskTone, sampleResultProblems, shortfallCauseLabel, stratumModeLabel, stratumRangeProblem, surveyStatusLabel, taskKindLabel, taskStateLabel,
   ubvCycleProblems, vectorError, vectorMapLayers, vectorRefusals, vectorRoles
@@ -52,6 +52,8 @@ describe("portões e papéis", () => {
     expect(canReadVectorReport(lab, "liraa")).toBe(true);
     expect(canReadVectorReport(lab, "situations")).toBe(false);
     expect(canReadVectorReport(pro, "ovitraps")).toBe(false);
+    expect([ coord, admin, lab, pro, vectorRoles(vcUser([ "stock_keeper" ])) ].map(canReadAnyVectorReport)).toEqual([ true, true, true, false, false ]);
+    expect(VC_REPORT_NAMES).toEqual([ "situations", "strategic_points", "production", "consumption", "ovitraps", "liraa", "blocks" ]);
   });
 
   it("mapa: coordenação lê as três camadas; laboratório só ovitrampas; municipal_admin nenhuma", () => {

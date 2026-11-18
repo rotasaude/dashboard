@@ -17,6 +17,7 @@ import { canUseTfd } from "../lib/tfd";
 import { canUsePsychosocial, psychosocialRoles } from "../lib/psychosocial";
 import { canUseOmbudsman, ombudsmanRoles } from "../lib/ombudsman";
 import { canUseUrgency, canUseWaitingRoom } from "../lib/urgency";
+import { canReadAnyVectorReport, canUseVectorControl, vectorRoles } from "../lib/vectorControl";
 export type ModuleId =
   | "overview" | "ingestion" | "conversations" | "consent"
   | "triages" | "classification" | "reports" | "protocols" | "events"
@@ -44,7 +45,9 @@ export type ModuleId =
   | "caps-reception" | "caps-today" | "caps-enrollments" | "caps-groups" | "caps-beds" | "caps-matrix" | "caps-raas" | "caps-panel"
   | "caps-settings"
   | "ombudsman-manifestations" | "ombudsman-new" | "ombudsman-replies" | "ombudsman-panel" | "ombudsman-annual-report" | "ombudsman-settings" | "departments"
-  | "urgency-panel" | "waiting-room-settings" | "urgency-beds";
+  | "urgency-panel" | "waiting-room-settings" | "urgency-beds"
+  | "vector-blocks" | "vector-cycles" | "vector-ovitraps" | "vector-samples" | "vector-liraa" | "vector-transmission" | "vector-tasks"
+  | "vector-reports" | "vector-settings" | "field-ovitraps" | "vector-stock-shortfalls";
 
 export interface NavItem { id: ModuleId; label: string; icon: string; }
 export interface NavGroupDef { label: string; items: NavItem[]; }
@@ -100,7 +103,8 @@ export const NAV_GROUPS: NavGroupDef[] = [
     { id: "micro-area-assignments", label: "Atribuição de microáreas", icon: "⬡" },
     { id: "collective-activities", label: "Atividade coletiva", icon: "☰" },
     { id: "field-devices", label: "Aparelhos de campo", icon: "▭" },
-    { id: "field-devices-admin", label: "Aparelhos de campo da cidade", icon: "▭" }
+    { id: "field-devices-admin", label: "Aparelhos de campo da cidade", icon: "▭" },
+    { id: "field-ovitraps", label: "Ovitrampas de campo", icon: "◎" }
   ]},
   { label: "Vigilância", items: [
     { id: "surveillance-queue", label: "Fila da vigilância", icon: "⚠" },
@@ -108,6 +112,17 @@ export const NAV_GROUPS: NavGroupDef[] = [
     { id: "surveillance-reports", label: "Relatórios da vigilância", icon: "▤" },
     { id: "surveillance-panel", label: "Painel por bairro e semana", icon: "▦" },
     { id: "surveillance-diseases", label: "Doenças notificáveis", icon: "☰" }
+  ]},
+  { label: "Endemias", items: [
+    { id: "vector-blocks", label: "Quarteirões e imóveis", icon: "▦" },
+    { id: "vector-cycles", label: "Ciclos e cadência", icon: "↻" },
+    { id: "vector-ovitraps", label: "Ovitrampas", icon: "◎" },
+    { id: "vector-samples", label: "Amostras de larvas", icon: "⚗" },
+    { id: "vector-liraa", label: "LIRAa", icon: "⚄" },
+    { id: "vector-transmission", label: "Bloqueio de transmissão", icon: "⛨" },
+    { id: "vector-tasks", label: "Tarefas de endemias", icon: "☑" },
+    { id: "vector-reports", label: "Relatórios de endemias", icon: "▤" },
+    { id: "vector-settings", label: "Produtos e parâmetros", icon: "⚙" }
   ]},
   { label: "Regulação", items: [
     { id: "regulation-queue", label: "Fila regulada", icon: "⇉" },
@@ -124,6 +139,7 @@ export const NAV_GROUPS: NavGroupDef[] = [
     { id: "pharmacy-adjustments", label: "Inventário e ajustes", icon: "±" },
     { id: "pharmacy-alerts", label: "Alertas da farmácia", icon: "⚠" },
     { id: "pharmacy-urgency-shortfalls", label: "Faltas da UPA", icon: "⚠" },
+    { id: "vector-stock-shortfalls", label: "Faltas de insumo de campo", icon: "⚠" },
     { id: "pharmacy-admin", label: "Locais e configurações", icon: "⚙" }
   ]},
   { label: "Vacinação", items: [
@@ -389,6 +405,16 @@ export function navGroupsFor(
   // Módulo 33 (ADR 0051): ombudsman na sessão; o respondente sem ombudsman_staff só responde (contrato §6)
   const ombOn = canUseOmbudsman(user);
   const omb = ombudsmanRoles(user);
+  // Módulo 35a (ADR 0054): `vector_control` com a visita domiciliar utilizável (canUseVectorControl, nunca o operador). Os
+  // papéis valem para a cidade inteira; cada item segue o controller do api (ab32775c): ovitrampas do bairro e amostras,
+  // coordenação e laboratório; relatórios, quem lê algum (ReportsController#readable?: coordenação e admin os sete, o
+  // laboratório os de LAB_REPORTS); o resto do grupo, só a coordenação. "Ovitrampas de campo" é do profissional: o api
+  // confere o agente 515140 na microárea (Access.agent_refusal) e a tela, a equipe. "Faltas de insumo de campo" fica na
+  // Farmácia, mas NÃO exige `pharmacy` (Q21, stock_shortfalls_controller.rb#readable_scope): a coordenação lê todas e o
+  // almoxarife as dos seus locais vector_control (o vínculo por local é conferido no api). O grupo Farmácia não tem regra
+  // de rótulo: some só quando fica vazio, então com pharmacy desligado ele aparece só com este item.
+  const vcOn = canUseVectorControl(user);
+  const vc = vectorRoles(user);
   return NAV_GROUPS.filter((group) => {
     if (group.label === "Conta") return !user?.operator;
     if (group.label === "Equipe") return isAdmin;
@@ -467,6 +493,11 @@ export function navGroupsFor(
       if (item.id === "regulation-returned") return regOn && isProfessional && hasFeature(user, "clinical_record");
       if (item.id === "regulation-offers") return regOn && (isAdmin || isCareRegulator);
       if (item.id === "regulation-settings") return regOn && isAdmin;
+      if (item.id === "vector-ovitraps" || item.id === "vector-samples") return vcOn && (vc.coordinator || vc.lab);
+      if (item.id === "vector-reports") return vcOn && canReadAnyVectorReport(vc);
+      if (item.id === "field-ovitraps") return vcOn && isProfessional;
+      if (item.id === "vector-stock-shortfalls") return vcOn && (vc.coordinator || vc.stockKeeper);
+      if (item.id.startsWith("vector-")) return vcOn && vc.coordinator;
       if (item.id === "pharmacy-dispensing" || item.id === "pharmacy-external") return phOn && (isPharmacist || isPharmacyAssistant);
       if (item.id === "pharmacy-transfers" || item.id === "pharmacy-stock" || item.id === "pharmacy-alerts") {
         return phOn && (isPharmacist || isPharmacyAssistant || isStockKeeper);
