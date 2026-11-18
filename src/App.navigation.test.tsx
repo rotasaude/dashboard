@@ -107,6 +107,13 @@ describe("atalhos entre telas", () => {
     }
   });
 
+  it("vector-tasks: Abrir o bloqueio vai ao Bloqueio de transmissão", () => {
+    const navigate = vi.fn();
+    (renderModule("vector-tasks", navigate) as ReactElement<{ onOpenTransmission(): void }>).props.onOpenTransmission();
+    expect(navigate).toHaveBeenCalledTimes(1);
+    expect(navigate).toHaveBeenCalledWith("vector-transmission");
+  });
+
   it("caps-reception: Abrir matrícula guarda o id e o CAPS e vai a Usuários do CAPS, que os recebe", () => {
     const navigate = vi.fn();
     const caps = { enrollment: null, openEnrollment: vi.fn() };
