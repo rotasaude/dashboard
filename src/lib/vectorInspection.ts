@@ -50,7 +50,12 @@ export type InspectionCtx = {
 const isCount = (v: unknown, max: number): v is number => Number.isInteger(v) && (v as number) >= 0 && (v as number) <= max;
 const positive = (v: unknown) => Number.isInteger(v) && (v as number) > 0;
 const has = (o: object, key: string) => (o as Record<string, unknown>)[key] !== undefined;
-const instant = (v: unknown): number | null => (typeof v === "string" && INSTANT.test(v) ? Date.parse(v) : null);
+// Data que passa pela regex e não existe (mês 13) → null, como o `rescue ArgumentError` → nil do api (l. 352-358).
+const instant = (v: unknown): number | null => {
+  if (typeof v !== "string" || !INSTANT.test(v)) return null;
+  const t = Date.parse(v);
+  return Number.isNaN(t) ? null : t;
+};
 // (0, max], no máximo duas casas: a mesma conta do BigDecimal(value.to_s) do api.
 const chargesOk = (v: unknown, max: number) =>
   typeof v === "number" && Number.isFinite(v) && v > 0 && v <= max && /^\d+(\.\d{1,2})?$/.test(String(v));
@@ -106,8 +111,10 @@ export function checkInspection(input: VectorInspectionInput, ctx: InspectionCtx
     const id = input.transmission_block_id;
     const block = id !== undefined && ctx.transmissionBlocks ? ctx.transmissionBlocks.find((x) => x.id === id) : undefined;
     const blockId = ctx.profile?.city_block_id || input.city_block_id;
-    const ok = id !== undefined && (!ctx.transmissionBlocks ||
-      (!!block && block.status === "active" && !!blockId && block.block_ids.includes(blockId)));
+    // Sem quarteirão no perfil nem no corpo, o api sempre recusa (inspection_rules.rb:206-208, `block_id && …`),
+    // mesmo sem a lista de bloqueios no contexto.
+    const ok = id !== undefined && !!blockId && (!ctx.transmissionBlocks ||
+      (!!block && block.status === "active" && block.block_ids.includes(blockId)));
     if (!ok) push("transmission_block_not_active", `${ROOT}.transmission_block_id`);
   }
   for (const [ activity, key ] of Object.entries(LINKS)) if (activity !== input.activity && has(input, key)) invalid(`${ROOT}.${key}`);

@@ -94,8 +94,13 @@ describe("checkInspection", () => {
     expect(issues(inspectionInput({ activity: "transmission_block", transmission_block_id: "tb1" }), { transmissionBlocks: [ tb ] })).toEqual([]);
     expect(issues(inspectionInput({ activity: "transmission_block", transmission_block_id: "tb1" }), { transmissionBlocks: [ { ...tb, status: "proposed" } ] }))
       .toContainEqual({ error: "transmission_block_not_active", path: "vector_inspection.transmission_block_id" });
-    // Sem a lista no contexto, só a presença do vínculo.
+    // Sem a lista no contexto, só a presença do vínculo...
     expect(issues(inspectionInput({ activity: "transmission_block", transmission_block_id: "tb1" }))).toEqual([]);
+    // ...e o quarteirão: sem ele no perfil nem no corpo, o api sempre recusa (inspection_rules.rb:206-208).
+    expect(issues(inspectionInput({ activity: "transmission_block", transmission_block_id: "tb1" }), { profile: { city_block_id: null } }))
+      .toEqual([ { error: "transmission_block_not_active", path: "vector_inspection.transmission_block_id" } ]);
+    expect(issues(inspectionInput({ activity: "transmission_block", transmission_block_id: "tb1", city_block_id: "cb1" }), { profile: { city_block_id: null } }))
+      .toEqual([]);
   });
 
   it("5. depósitos: grupo repetido e cada desigualdade no próprio campo", () => {
@@ -113,8 +118,10 @@ describe("checkInspection", () => {
   });
 
   it("6. medidas: mecânico sem produto; inativo; uso errado; cargas 0, 999,01 e 3 casas", () => {
-    expect(issues(inspectionInput({ measures: [ { method: "mechanical", vector_product_id: "pr1", charges: 1 } ] })).map((p) => p.path))
-      .toEqual(expect.arrayContaining([ "vector_inspection.measures[0].vector_product_id", "vector_inspection.measures[0].charges" ]));
+    expect(issues(inspectionInput({ measures: [ { method: "mechanical", vector_product_id: "pr1", charges: 1 } ] }))).toEqual([
+      { error: "vector_inspection_invalid", path: "vector_inspection.measures[0].vector_product_id" },
+      { error: "vector_inspection_invalid", path: "vector_inspection.measures[0].charges" }
+    ]);
     expect(issues(inspectionInput({ measures: [ { method: "spatial", vector_product_id: "pr1", charges: 1 } ] })))
       .toContainEqual({ error: "product_not_allowed", path: "vector_inspection.measures[0].vector_product_id" });
     expect(issues(inspectionInput({ measures: [ { method: "focal", vector_product_id: INACTIVE_PRODUCT.id, charges: 1 } ] })))
@@ -139,6 +146,12 @@ describe("checkInspection", () => {
     expect(issues(inspectionInput({ samples: [ { ...one, larvae_collected: 11 } ] }))).toContainEqual({ error: "vector_inspection_invalid", path: "vector_inspection.samples[0].larvae_collected" });
   });
 
+  it("8. data que passa pelo formato e não existe (mês 13) recusa na forma, como o rescue do api", () => {
+    expect(issues(inspectionInput({ entered_at: "2026-13-16T09:40:00-03:00" }))[0])
+      .toEqual({ error: "vector_inspection_invalid", path: "vector_inspection.entered_at" });
+    expect(issues(inspectionInput({ entered_at: "2026-13-16T09:40:00-03:00" }))).not.toContainEqual({ error: "inspection_times_invalid", path: "vector_inspection.entered_at" });
+  });
+
   it("8. horários: um sem o outro; entrada depois da visita; 12 h 01; outro dia; os dois omitidos valem", () => {
     const t = (entered_at?: string, left_at?: string) => issues({ ...inspectionInput(), entered_at, left_at });
     const bad = { error: "inspection_times_invalid", path: "vector_inspection.entered_at" };
@@ -155,6 +168,8 @@ describe("checkInspection", () => {
     expect(issues(inspectionInput(), { visit: { ...base.visit, reasons: [ 1, 35 ] } })).toContainEqual({ error: "reason_derived", path: "reasons" });
     expect(derivedReasons(inspectionInput())).toEqual([ 34, 35, 36, 37 ]);
     expect(derivedReasons(inspectionInput({ educational_action: false, deposits: [], samples: [], measures: [ { method: "mechanical" } ] }))).toEqual([ 36 ]);
+    expect(derivedReasons(inspectionInput({ educational_action: false, samples: [], measures: [],
+      deposits: [ { ...ZERO_DEPOSIT, group: "A2", existing: 1, eliminated: 1 } ] }))).toEqual([ 36 ]);
     expect(derivedReasons(inspectionInput({ situation: "closed", educational_action: false, deposits: [], measures: [], samples: [] }))).toEqual([]);
   });
 
@@ -182,6 +197,34 @@ describe("checkInspection", () => {
       .toContainEqual({ error: "vector_inspection_invalid", path: "vector_inspection.measures" });
     expect(issues(inspectionInput({ samples: Array.from({ length: 100 }, (_, i) => ({ number: i + 1, deposit_group: "A2" as const, larvae_collected: 1 })) })))
       .toContainEqual({ error: "vector_inspection_invalid", path: "vector_inspection.samples" });
+  });
+});
+
+describe("limites — o lado que aceita e o que recusa", () => {
+  it("7 grupos, 20 medidas e 99 amostras não recusam a lista", () => {
+    expect(issues(inspectionInput({ deposits: GROUPS.map((group) => ({ ...ZERO_DEPOSIT, group })), samples: [] }))).toEqual([]);
+    expect(issues(inspectionInput({ measures: Array.from({ length: 20 }, () => ({ method: "mechanical" as const })) })))
+      .not.toContainEqual({ error: "vector_inspection_invalid", path: "vector_inspection.measures" });
+    const ninetyNine = inspectionInput({
+      deposits: [ { group: "A2", existing: 99, with_water: 99, with_larvae: 99, eliminated: 0, treated: 0 } ],
+      samples: Array.from({ length: 99 }, (_, i) => ({ number: i + 1, deposit_group: "A2" as const, larvae_collected: 1 }))
+    });
+    expect(issues(ninetyNine)).toEqual([]);
+  });
+
+  it("contagem 999 aceita; larvas 10 aceitas e 0 recusadas", () => {
+    expect(issues(inspectionInput({ deposits: [ { group: "A2", existing: 999, with_water: 999, with_larvae: 999, eliminated: 999, treated: 999 } ] }))).toEqual([]);
+    const larvae = (larvae_collected: number) => issues(inspectionInput({ samples: [ { number: 1, deposit_group: "A2", larvae_collected } ] }));
+    expect(larvae(10)).toEqual([]);
+    expect(larvae(1)).toEqual([]);
+    expect(larvae(0)).toEqual([ { error: "vector_inspection_invalid", path: "vector_inspection.samples[0].larvae_collected" } ]);
+  });
+
+  it("cargas 0,01 e 1,25 aceitas; 1,000000000001 recusada (a tolerância de ponto flutuante aceitaria)", () => {
+    const charges = (c: number) => issues(inspectionInput({ measures: [ { method: "focal", vector_product_id: "pr1", charges: c } ] }));
+    expect(charges(0.01)).toEqual([]);
+    expect(charges(1.25)).toEqual([]);
+    expect(charges(1.000000000001)).toEqual([ { error: "vector_inspection_invalid", path: "vector_inspection.measures[0].charges" } ]);
   });
 });
 
