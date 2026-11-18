@@ -233,13 +233,13 @@ describe("VectorOvitraps", () => {
     expect(api.getVectorReport).toHaveBeenCalledWith("ovitraps", { epi_weeks: [ "2026-45" ], neighborhood_ids: [ "nb1" ] });
     await waitFor(() => expect(api.listVectorMapPoints).toHaveBeenCalledTimes(1));
     expect(api.listVectorMapPoints).toHaveBeenCalledWith({ layer: "ovitraps", neighborhoodId: "nb1", epiWeek: "2026-45" });
-    expect(screen.getByText("semana 45/2026 (08/11 a 14/11)")).not.toBeNull();
+    expect(within(screen.getByRole("tabpanel", { name: "Índices e mapa" })).getByText("semana 45/2026 (08/11 a 14/11)")).not.toBeNull();
     const t = table("Índices de ovitrampa");
     for (const h of [ "Examinadas", "Positivas", "IPO %", "IDO", "IDV" ]) expect(t.getByText(h)).not.toBeNull();
     expect(t.getByText("150")).not.toBeNull();
     expect(await screen.findByText("positiva: 1")).not.toBeNull();
-    // A semana seguinte à corrente nunca é pedida.
-    expect((screen.getByRole("button", { name: "Semana seguinte" }) as HTMLButtonElement).disabled).toBe(false);
+    const nextWeek = () => screen.getByRole("button", { name: "Semana seguinte" }) as HTMLButtonElement;
+    expect(nextWeek().disabled).toBe(false);
 
     fireEvent.click(screen.getByRole("button", { name: "Semana anterior" }));
     await waitFor(() => expect(api.getVectorReport).toHaveBeenCalledTimes(2));
@@ -247,21 +247,40 @@ describe("VectorOvitraps", () => {
     await waitFor(() => expect(api.listVectorMapPoints).toHaveBeenCalledTimes(2));
     expect(api.listVectorMapPoints).toHaveBeenLastCalledWith({ layer: "ovitraps", neighborhoodId: "nb1", epiWeek: "2026-44" });
 
+    // Até a semana corrente (2026-46) e não além: na corrente, "Semana seguinte" fica desabilitada e nada mais é pedido.
+    fireEvent.click(nextWeek());
+    await waitFor(() => expect(api.getVectorReport).toHaveBeenCalledTimes(3));
+    fireEvent.click(nextWeek());
+    await waitFor(() => expect(api.getVectorReport).toHaveBeenCalledTimes(4));
+    expect(api.getVectorReport).toHaveBeenLastCalledWith("ovitraps", { epi_weeks: [ "2026-46" ], neighborhood_ids: [ "nb1" ] });
+    await waitFor(() => expect(api.listVectorMapPoints).toHaveBeenCalledTimes(4));
+    expect(api.listVectorMapPoints).toHaveBeenLastCalledWith({ layer: "ovitraps", neighborhoodId: "nb1", epiWeek: "2026-46" });
+    expect(nextWeek().disabled).toBe(true);
+    fireEvent.click(nextWeek());
+    await tick();
+    expect(api.getVectorReport).toHaveBeenCalledTimes(4);
+    expect(api.listVectorMapPoints).toHaveBeenCalledTimes(4);
+
     // Semana digitada inválida ou no futuro: a frase, nenhuma leitura.
     fireEvent.change(screen.getByLabelText("Semana (AAAA-SS)"), { target: { value: "2026-48" } });
     fireEvent.click(screen.getByRole("button", { name: "Ver semana" }));
     expect(await screen.findByText("semana no futuro")).not.toBeNull();
     await tick();
-    expect(api.getVectorReport).toHaveBeenCalledTimes(2);
-    expect(api.listVectorMapPoints).toHaveBeenCalledTimes(2);
+    expect(api.getVectorReport).toHaveBeenCalledTimes(4);
+    expect(api.listVectorMapPoints).toHaveBeenCalledTimes(4);
     expect(api.listOvitrapReadings).toHaveBeenCalledTimes(1);
+    expect(api.listPanelNeighborhoods).toHaveBeenCalledTimes(1);
     expect(api.listOvitraps).not.toHaveBeenCalled();
     expect(api.getVectorDomains).not.toHaveBeenCalled();
   });
 
   it("a lista não mostra morador: ovitrampas do bairro por status, com número, quarteirão, status e última leitura", async () => {
     vi.mocked(api.listOvitraps).mockResolvedValue({
-      items: [ ovitrap(), ovitrap({ id: "ov3", number: "OV-03", status: "removed", removed_on: "2026-11-10", open_reading: null, last_reading: null }) ],
+      items: [
+        ovitrap(), ovitrap({ id: "ov3", number: "OV-03", status: "removed", removed_on: "2026-11-10", open_reading: null, last_reading: null }),
+        ovitrap({ id: "ov5", number: "OV-05", last_reading: { id: "or5", collected_on: "2026-11-09", condition: "ok", egg_count: 1, epi_week: "2026-45" } }),
+        ovitrap({ id: "ov6", number: "OV-06", last_reading: { id: "or6", collected_on: "2026-11-09", condition: "ok", egg_count: 1234, epi_week: "2026-45" } })
+      ],
       next_before: null
     });
     mount();
@@ -274,11 +293,14 @@ describe("VectorOvitraps", () => {
     await screen.findByRole("table", { name: "Ovitrampas do bairro" });
     const t = table("Ovitrampas do bairro");
     expect(t.getByText("OV-07")).not.toBeNull();
-    expect(t.getByText("ativa")).not.toBeNull();
+    expect(t.getAllByText("ativa")).toHaveLength(3);
     expect(t.getByText("retirada")).not.toBeNull();
     expect(t.getByText("09/11/2026 · em bom estado · 42 ovos")).not.toBeNull();
     expect(t.getByText("sem leitura")).not.toBeNull();
+    expect(t.getByText("09/11/2026 · em bom estado · 1 ovo")).not.toBeNull();
+    expect(t.getByText("09/11/2026 · em bom estado · 1.234 ovos")).not.toBeNull();
     expect(api.listOvitraps).toHaveBeenCalledTimes(1);
+    expect(api.listPanelNeighborhoods).toHaveBeenCalledTimes(1);
     expect(api.listOvitraps).toHaveBeenCalledWith({ neighborhoodId: "nb1" });
     // Sem morador e sem o endereço do imóvel (a lista da coordenação é por quarteirão).
     expect(document.body.textContent).not.toMatch(/Rua das Flores|José|Maria/);
@@ -288,6 +310,7 @@ describe("VectorOvitraps", () => {
     expect(api.listOvitraps).toHaveBeenLastCalledWith({ neighborhoodId: "nb1", status: "removed" });
     await tick();
     expect(api.listOvitraps).toHaveBeenCalledTimes(2);
+    expect(api.listPanelNeighborhoods).toHaveBeenCalledTimes(1);
     expect(window.location.search).toBe("");
     expect(window.localStorage.length + window.sessionStorage.length).toBe(0);
     expect(api.getVectorDomains).not.toHaveBeenCalled();
@@ -296,6 +319,7 @@ describe("VectorOvitraps", () => {
   it("coordenação: as mesmas três abas e a mesma contagem (o api deixa os dois contarem); o mapa só pede a camada ovitraps", async () => {
     vi.mocked(api.fetchCurrentSession).mockResolvedValue(vcUser([ "endemic_coordinator" ]));
     vi.mocked(api.countOvitrapReading).mockResolvedValue(reading({ id: "rd1", egg_count: 7 }));
+    rereadBrings();
     mount();
     for (const name of [ "A contar", "Ovitrampas", "Índices e mapa" ]) expect(await screen.findByRole("tab", { name })).not.toBeNull();
     await openCount(/^Contar/);
@@ -303,12 +327,63 @@ describe("VectorOvitraps", () => {
     fireEvent.click(screen.getByRole("button", { name: "Registrar contagem" }));
     expect(await screen.findByText("contagem da ovitrampa OV-07 registrada: 7 ovos")).not.toBeNull();
     expect(api.countOvitrapReading).toHaveBeenCalledWith("rd1", { egg_count: 7 });
+    await settledReads(2);
+    expect(api.countOvitrapReading).toHaveBeenCalledTimes(1);
 
     fireEvent.click(screen.getByRole("tab", { name: "Índices e mapa" }));
     await waitFor(() => expect(screen.getByRole("option", { name: "Centro" })).not.toBeNull());
     fireEvent.change(screen.getByLabelText("Bairro"), { target: { value: "nb1" } });
     await waitFor(() => expect(api.listVectorMapPoints).toHaveBeenCalledTimes(1));
+    await screen.findByText("37,5");
+    await tick();
+    expect(api.listVectorMapPoints).toHaveBeenCalledTimes(1);
+    expect(api.getVectorReport).toHaveBeenCalledTimes(1);
+    expect(api.listPanelNeighborhoods).toHaveBeenCalledTimes(1);
+    expect(api.listOvitrapReadings).toHaveBeenCalledTimes(2);
+    expect(api.listOvitraps).not.toHaveBeenCalled();
     for (const [ q ] of vi.mocked(api.listVectorMapPoints).mock.calls) expect(q.layer).toBe("ovitraps");
+  });
+
+  it("voltar a uma aba não relê a lista nominal nem o mapa; a aba escondida não lê ao trocar o bairro", async () => {
+    mount();
+    await screen.findByRole("table", { name: "Palhetas a contar" });
+    fireEvent.click(screen.getByRole("tab", { name: "Ovitrampas" }));
+    await waitFor(() => expect(screen.getByRole("option", { name: "Centro" })).not.toBeNull());
+    fireEvent.change(screen.getByLabelText("Bairro"), { target: { value: "nb1" } });
+    await screen.findByRole("table", { name: "Ovitrampas do bairro" });
+
+    fireEvent.click(screen.getByRole("tab", { name: "Índices e mapa" }));
+    await screen.findByText("37,5");
+    await waitFor(() => expect(createFieldMap).toHaveBeenCalledTimes(1));
+    for (const name of [ "Ovitrampas", "A contar", "Índices e mapa", "Ovitrampas", "Índices e mapa" ]) {
+      fireEvent.click(screen.getByRole("tab", { name }));
+      await tick();
+    }
+    expect(api.listOvitrapReadings).toHaveBeenCalledTimes(1);
+    expect(api.listOvitraps).toHaveBeenCalledTimes(1);
+    expect(api.getVectorReport).toHaveBeenCalledTimes(1);
+    expect(api.listVectorMapPoints).toHaveBeenCalledTimes(1);
+    expect(api.listPanelNeighborhoods).toHaveBeenCalledTimes(1);
+    expect(createFieldMap).toHaveBeenCalledTimes(1);
+    expect(handle.destroy).not.toHaveBeenCalled();
+
+    // Outro bairro com "Índices e mapa" aberta: só ela lê; "Ovitrampas" lê o bairro novo ao ser aberta, uma vez.
+    fireEvent.change(screen.getByLabelText("Bairro"), { target: { value: "nb2" } });
+    await waitFor(() => expect(api.getVectorReport).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(api.listVectorMapPoints).toHaveBeenCalledTimes(2));
+    expect(api.getVectorReport).toHaveBeenLastCalledWith("ovitraps", { epi_weeks: [ "2026-45" ], neighborhood_ids: [ "nb2" ] });
+    await tick();
+    expect(api.listOvitraps).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("tab", { name: "Ovitrampas" }));
+    await waitFor(() => expect(api.listOvitraps).toHaveBeenCalledTimes(2));
+    expect(api.listOvitraps).toHaveBeenLastCalledWith({ neighborhoodId: "nb2" });
+    fireEvent.click(screen.getByRole("tab", { name: "Índices e mapa" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Ovitrampas" }));
+    await tick();
+    expect(api.listOvitraps).toHaveBeenCalledTimes(2);
+    expect(api.getVectorReport).toHaveBeenCalledTimes(2);
+    expect(api.listVectorMapPoints).toHaveBeenCalledTimes(2);
+    expect(api.listOvitrapReadings).toHaveBeenCalledTimes(1);
   });
 
   it("municipal_admin e o agente: a frase do papel e nenhuma leitura", async () => {

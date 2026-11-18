@@ -9,6 +9,7 @@
 // tem client_uuid, então não se sabe se gravou — o formulário fecha e a lista é relida.
 import { useState, type FormEvent } from "react";
 import { countOvitrapReading, errorCode, type ApiError, type OvitrapReading } from "../../lib/api";
+import { fmtNumber } from "../../lib/format";
 import { fmtDay, isNetworkOrServer } from "../../lib/homeVisits";
 import { countProblems, isVectorStale, optionalNote, vectorRefusals } from "../../lib/vectorControl";
 import { weekLabel } from "../../lib/surveillance";
@@ -22,6 +23,9 @@ export const COUNT_RACED = "esta palheta já tem contagem — a lista foi relida
 export const COUNT_UNCERTAIN = "não foi possível confirmar a contagem — a lista foi relida; confira a palheta antes de contar de novo";
 
 const OWN = [ "egg_count", "count_note" ];
+
+// "1 ovo", "0 ovos", "1.234 ovos".
+export const eggsText = (n: number): string => `${fmtNumber(n)} ${n === 1 ? "ovo" : "ovos"}`;
 
 // A primeira contagem recusada em count_note: a tela nunca manda nota nela, então a palheta já foi contada do outro lado.
 const raced = (err: unknown, corrected: boolean): boolean =>
@@ -60,7 +64,7 @@ export function CountForm({ reading, corrected, onDone, onStale, onCancel }: {
       <span style={muted}>
         {[ `Quarteirão ${reading.city_block.number}`, reading.neighborhood.name, weekLabel(reading.epi_week),
           reading.collected_on ? `coletada em ${fmtDay(reading.collected_on)}` : null,
-          corrected && reading.egg_count !== null ? `contagem atual: ${reading.egg_count} ovos` : null ].filter(Boolean).join(" · ")}
+          corrected && reading.egg_count !== null ? `contagem atual: ${eggsText(reading.egg_count)}` : null ].filter(Boolean).join(" · ")}
       </span>
 
       <label style={fieldLabel}>

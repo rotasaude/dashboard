@@ -1,7 +1,9 @@
 // src/modules/VectorOvitraps.tsx
 // "Ovitrampas" da coordenação de endemias e do laboratório de entomologia (módulo 35a, F-35.5; contrato §6, §10, §17; Q9, Q23,
 // Q28). Papel: coordenação e laboratório (OvitrapReadingsController#reader!, OvitrapsController#neighborhood_scope; os dois
-// contam, CountReading). Três abas, e só a aberta lê:
+// contam, CountReading). Três abas: cada uma lê ao ser aberta pela primeira vez e depois fica montada e escondida (voltar a ela
+// não relê a lista nominal nem o mapa, que gravariam a trilha de novo). A aba escondida nunca lê: o bairro dela só muda com ela
+// aberta (`tabNb`), e trocar o bairro numa aba não mexe na outra até ela ser aberta.
 //   - "A contar": as palhetas a contar e as contadas (GET /ovitrap_readings?state=, sem domicílio nem pessoa: STATIC_QUERY,
 //     relidas depois de cada contagem), uma lista por vez; "Contar" e "Corrigir contagem" abrem o CountForm. Tela velha relê UMA vez.
 //   - "Ovitrampas": as do bairro, por status (GET /ovitraps?neighborhood_id=). A rota grava a trilha territory_registry com os
@@ -27,7 +29,7 @@ import {
   type VectorRoles
 } from "../lib/vectorControl";
 import { VectorGate } from "./vectorControl/VectorGate";
-import { CountForm } from "./vectorControl/CountForm";
+import { CountForm, eggsText } from "./vectorControl/CountForm";
 import { VectorMapPanel } from "./vectorControl/VectorMapPanel";
 import { usePaged, type Paged } from "./homeVisits/usePaged";
 import { SegmentedControl } from "../shell/SegmentedControl";
@@ -54,24 +56,39 @@ export function VectorOvitraps({ today }: { today?: string } = {}) {
   );
 }
 
+type NbTab = Exclude<Tab, "count">;
+
 function OvitrapsScreen({ roles, today }: { roles: VectorRoles; today: string }) {
   const [ tab, setTab ] = useState<Tab>("count");
+  const [ visited, setVisited ] = useState<ReadonlySet<Tab>>(() => new Set<Tab>([ "count" ]));
+  // O bairro do seletor (compartilhado) e o que cada aba mostra: este só muda com a aba aberta.
   const [ neighborhoodId, setNeighborhoodId ] = useState("");
+  const [ tabNb, setTabNb ] = useState<Record<NbTab, string>>({ ovitraps: "", indexes: "" });
   const options: { key: Tab; label: string }[] = [
     { key: "count", label: "A contar" }, { key: "ovitraps", label: "Ovitrampas" }, { key: "indexes", label: "Índices e mapa" }
   ];
+  const open = (t: Tab) => {
+    setTab(t);
+    setVisited((v) => (v.has(t) ? v : new Set([ ...v, t ])));
+    if (t !== "count") setTabNb((m) => (m[t] === neighborhoodId ? m : { ...m, [t]: neighborhoodId }));
+  };
+  const pick = (id: string) => {
+    setNeighborhoodId(id);
+    if (tab !== "count") setTabNb((m) => ({ ...m, [tab]: id }));
+  };
+  const pane = (shown: boolean) => ({ ...stack, display: shown ? "flex" : "none" });
+  const label = (t: Tab) => options.find((o) => o.key === t)!.label;
+  const nbBody = (t: NbTab) => (!tabNb[t] ? <EmptyState title={PICK_OVITRAP_NEIGHBORHOOD} />
+    : t === "ovitraps" ? <NeighborhoodOvitraps key={tabNb[t]} neighborhoodId={tabNb[t]} />
+    : <IndexesTab neighborhoodId={tabNb[t]} today={today} roles={roles} />);
   return (
     <div style={stack}>
-      <div><SegmentedControl options={options} value={tab} onChange={setTab} /></div>
-      {tab === "count" && <ReadingsTab />}
-      {tab !== "count" && (
-        <>
-          <NeighborhoodSelect value={neighborhoodId} onChange={setNeighborhoodId} />
-          {!neighborhoodId ? <EmptyState title={PICK_OVITRAP_NEIGHBORHOOD} />
-            : tab === "ovitraps" ? <NeighborhoodOvitraps key={neighborhoodId} neighborhoodId={neighborhoodId} />
-            : <IndexesTab neighborhoodId={neighborhoodId} today={today} roles={roles} />}
-        </>
+      <div><SegmentedControl options={options} value={tab} onChange={open} /></div>
+      <div role="tabpanel" aria-label={label("count")} style={pane(tab === "count")}><ReadingsTab /></div>
+      {(visited.has("ovitraps") || visited.has("indexes")) && (
+        <div style={pane(tab !== "count")}><NeighborhoodSelect value={neighborhoodId} onChange={pick} /></div>
       )}
+      {([ "ovitraps", "indexes" ] as const).map((t) => visited.has(t) && <div key={t} role="tabpanel" aria-label={label(t)} style={pane(tab === t)}>{nbBody(t)}</div>)}
     </div>
   );
 }
@@ -157,7 +174,7 @@ function ReadingsList({ state, done, note, setDone, setNote }: {
         <Panel title={corrected ? "Corrigir contagem" : "Contar ovos"}>
           <div style={{ padding: 16 }}>
             <CountForm reading={open} corrected={corrected}
-              onDone={(r) => finish(`contagem da ovitrampa ${r.ovitrap.number} ${corrected ? "corrigida" : "registrada"}: ${r.egg_count ?? 0} ovos`, null, true)}
+              onDone={(r) => finish(`contagem da ovitrampa ${r.ovitrap.number} ${corrected ? "corrigida" : "registrada"}: ${eggsText(r.egg_count ?? 0)}`, null, true)}
               onStale={(text) => finish(null, text, true)}
               onCancel={() => finish(null, null, false)} />
           </div>
@@ -205,7 +222,7 @@ const STATUS_TONE: Record<string, "ok" | "neutral" | "warn"> = { active: "ok", r
 function lastReadingText(o: Ovitrap): string {
   const last = o.last_reading;
   if (!last) return "sem leitura";
-  return [ fmtDay(last.collected_on), conditionLabel(last.condition), last.egg_count === null ? "ovos a contar" : `${last.egg_count} ovos` ].join(" · ");
+  return [ fmtDay(last.collected_on), conditionLabel(last.condition), last.egg_count === null ? "ovos a contar" : eggsText(last.egg_count) ].join(" · ");
 }
 
 function NeighborhoodOvitraps({ neighborhoodId }: { neighborhoodId: string }) {
