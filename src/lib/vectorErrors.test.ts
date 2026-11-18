@@ -18,8 +18,10 @@ describe("vectorErrors", () => {
     for (const p of Object.values(VECTOR_ERRORS)) expect(p).not.toMatch(/_/);
   });
 
-  it("os 38 códigos da brief, o proposal_changed (Q26(4)), os dois do PUT dos parâmetros (Q34) e os dois do PUT das cadências (Q35)", () => {
-    expect(VECTOR_ERROR_CODES).toHaveLength(43);
+  it("os 38 códigos da brief, o proposal_changed (Q26(4)), os dois do PUT dos parâmetros (Q34) e os dois do PUT das cadências (Q35) e os dois da correção com versão (Q36)", () => {
+    expect(VECTOR_ERROR_CODES).toHaveLength(45);
+    expect(VECTOR_ERRORS.reading_changed).toBe("outra pessoa corrigiu esta contagem; confira e salve de novo");
+    expect(VECTOR_ERRORS.sample_changed).toBe("outra pessoa corrigiu este resultado; confira e salve de novo");
     expect(VECTOR_ERRORS.cadences_changed).toBe("outra pessoa alterou as cadências; confira e salve de novo");
     expect(VECTOR_ERRORS.expected_digest_required).toBe("a lista de cadências está desatualizada — recarregue a página e tente de novo");
     expect(VECTOR_ERRORS.parameters_changed).toBe("outra pessoa alterou os parâmetros; confira e salve de novo");

@@ -227,6 +227,7 @@ export function countProblems(d: { eggs: string; note: string }, corrected: bool
 
 // RecordSampleResult: os três números inteiros ≥ 0; examinadas ≤ coletadas (path examined_larvae) e aegypti + albopictus ≤
 // examinadas (path aegypti_larvae); nota só na correção (10–500); a correção que repete os três números recusa em examined_larvae.
+export const SAMPLE_SAME_NUMBERS = "a correção muda algum número — os mesmos números com outra nota não são correção";
 export function sampleResultProblems(
   d: { examined: string; aegypti: string; albopictus: string; note: string },
   s: { larvae_collected: number; result?: SampleResult | null }, corrected: boolean
@@ -247,7 +248,7 @@ export function sampleResultProblems(
   if (note) out.push(note);
   else if (out.length === 0 && s.result && s.result.examined_larvae === examined && s.result.aegypti_larvae === aegypti
     && s.result.albopictus_larvae === albopictus) {
-    out.push(local("examined_larvae", "a correção muda algum número — os mesmos números com outra nota não são correção"));
+    out.push(local("examined_larvae", SAMPLE_SAME_NUMBERS));
   }
   return out;
 }
@@ -338,10 +339,11 @@ export const vectorError = (err: unknown): string => vectorRefusals(err)[0].text
 
 // A tela está velha: quem chama relê UMA vez e não reenvia. Os 409 de estado, o not_found, a proposta do bloqueio que
 // ganhou caso (409 proposal_changed), a lista de casos vistos recusada (422 path seen_case_ids; Q26(4)) e os parâmetros gravados
-// por outra pessoa (409 parameters_changed; Q34) e as cadências gravadas por outra pessoa (409 cadences_changed; Q35).
+// por outra pessoa (409 parameters_changed; Q34), as cadências gravadas por outra pessoa (409 cadences_changed; Q35) e a
+// contagem ou o resultado corrigidos por outra pessoa (409 reading_changed / sample_changed; Q36: a correção relê e mantém o digitado).
 const STALE = [
   "invalid_transition", "survey_not_draft", "already_reconciled", "not_found", "proposal_changed", "block_in_use", "product_in_use", "parameters_changed",
-  "cadences_changed"
+  "cadences_changed", "reading_changed", "sample_changed"
 ];
 export function isVectorStale(err: unknown): boolean {
   if (!(err instanceof ApiError)) return false;

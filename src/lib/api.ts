@@ -7941,6 +7941,8 @@ export interface OvitrapReading {
   id: string; ovitrap: { id: string; number: string }; city_block: { id: string; number: string }; neighborhood: { id: string; name: string };
   installed_on: string; collected_on: string | null; condition: ReadingCondition | (string & {}) | null; epi_week: string;
   egg_count: number | null; counted_at: string | null; corrected: boolean;
+  // Q36: a version da leitura; a correção a devolve como expected_version.
+  version: number;
 }
 export interface OvitrapInstallInput { client_uuid: string; household_id: string; number: string; consent: boolean; installed_on: string }
 // O api aceita `reinstall`/`remove` ausentes (padrão true/false); a tela manda os dois, `reinstall: !remove` (Q7(5)).
@@ -7993,8 +7995,11 @@ export interface CaseAddress { patient_address: string | null; household_address
 export interface VectorSample {
   id: string; label: string; visit_on: string; deposit_group: DepositGroup; larvae_collected: number;
   city_block: { id: string; number: string } | null; result: SampleResult | null;
+  // Q36: a version da amostra; a correção a devolve como expected_version.
+  version: number;
 }
-export interface SampleResultInput { examined_larvae: number; aegypti_larvae: number; albopictus_larvae: number; result_note?: string }
+// Q36: `expected_version` (a version lida) só na correção, com a nota; no primeiro resultado → 422 path expected_version.
+export interface SampleResultInput { examined_larvae: number; aegypti_larvae: number; albopictus_larvae: number; result_note?: string; expected_version?: number }
 
 // ── Falta de insumo (§4; D-9) ──
 export type VectorShortfallCause = "no_location" | "insufficient_balance" | "no_lot" | (string & {});
@@ -8154,7 +8159,8 @@ export function listOvitrapReadings(q: { state: "to_count" | "counted"; before?:
   return hvPage<OvitrapReading>(withQuery(vcPath("ovitrap_readings"), hvQuery({ state: q.state, before: q.before })));
 }
 // `count_note` obrigatória na correção (Q23: a mesma contagem só com a nota → 422 path egg_count).
-export function countOvitrapReading(id: string, i: { egg_count: number; count_note?: string }): Promise<OvitrapReading> {
+// Q36: `expected_version` (a version lida) só na correção, com a nota; na primeira contagem → 422 path expected_version.
+export function countOvitrapReading(id: string, i: { egg_count: number; count_note?: string; expected_version?: number }): Promise<OvitrapReading> {
   return jsonFetch<OvitrapReading>(vcPath("ovitrap_readings", id, "count"), vcWrite("POST", i));
 }
 

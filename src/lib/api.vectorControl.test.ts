@@ -106,6 +106,11 @@ describe("cliente da vigilância ambiental — endemias (módulo 35a)", () => {
     expect([ last().url, bodyOf() ]).toEqual([ "/vector_control/ovitrap_readings/or0/count", { egg_count: 45, count_note: "contagem refeita na lupa" } ]);
     stub(sample()); await recordSampleResult("vs1", { examined_larvae: 8, aegypti_larvae: 6, albopictus_larvae: 1 });
     expect([ last().url, bodyOf() ]).toEqual([ "/vector_control/samples/vs1/result", { examined_larvae: 8, aegypti_larvae: 6, albopictus_larvae: 1 } ]);
+    // Q36: a correção leva a nota e a version lida.
+    stub(reading({ egg_count: 46, version: 3 })); await countOvitrapReading("or0", { egg_count: 46, count_note: "contagem refeita na lupa", expected_version: 2 });
+    expect(bodyOf()).toEqual({ egg_count: 46, count_note: "contagem refeita na lupa", expected_version: 2 });
+    stub(sample({ version: 3 })); await recordSampleResult("vs1", { examined_larvae: 8, aegypti_larvae: 5, albopictus_larvae: 2, result_note: "revisão na lupa", expected_version: 2 });
+    expect(bodyOf()).toEqual({ examined_larvae: 8, aegypti_larvae: 5, albopictus_larvae: 2, result_note: "revisão na lupa", expected_version: 2 });
     stub(vectorTask({ state: "done" })); await closeVectorTask("vt1", { state: "done", note: "quarteirões revisitados" });
     expect([ last().url, bodyOf() ]).toEqual([ "/vector_control/tasks/vt1/close", { state: "done", note: "quarteirões revisitados" } ]);
     stub(householdProfile()); await updateHouseholdProfile("h1", { city_block_id: null, risk_class: "red" });

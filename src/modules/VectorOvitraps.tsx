@@ -135,6 +135,8 @@ function ReadingsList({ state, done, note, setDone, setNote }: {
   const list = usePaged<OvitrapReading>(key, (before) => listOvitrapReadings({ state, ...(before ? { before } : {}) }), false, true, vectorError);
   const [ open, setOpen ] = useState<OvitrapReading | null>(null);
   const corrected = state === "counted";
+  // Q36: depois do 409 reading_changed a lista é relida com o formulário aberto; ele recebe a leitura relida (version nova).
+  const current = open ? list.items?.find((r) => r.id === open.id) : undefined;
 
   // Uma releitura por ação: refaz as páginas já mostradas desta lista (a outra lê ao abrir).
   const finish = (doneText: string | null, noteText: string | null, again: boolean) => {
@@ -174,9 +176,10 @@ function ReadingsList({ state, done, note, setDone, setNote }: {
       {open && (
         <Panel title={corrected ? "Corrigir contagem" : "Contar ovos"}>
           <div style={{ padding: 16 }}>
-            <CountForm reading={open} corrected={corrected}
+            <CountForm reading={current ?? open} corrected={corrected}
               onDone={(r) => finish(`contagem da ovitrampa ${r.ovitrap.number} ${corrected ? "corrigida" : "registrada"}: ${eggsText(r.egg_count ?? 0)}`, null, true)}
               onStale={(text) => finish(null, text, true)}
+              onReread={() => void queryClient.invalidateQueries({ queryKey: key })}
               onCancel={() => finish(null, null, false)} />
           </div>
         </Panel>

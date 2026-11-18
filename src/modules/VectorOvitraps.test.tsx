@@ -34,7 +34,7 @@ const ALL = [ api.fetchCurrentSession, api.listOvitraps, api.listOvitrapReadings
   api.listPanelNeighborhoods, api.listVectorMapPoints, api.getVectorDomains, api.getVectorParameters, createFieldMap, ...Object.values(handle) ];
 const RD1 = reading({ id: "rd1" });
 const RD9 = reading({ id: "rd9", ovitrap: { id: "ov9", number: "OV-09" } });
-const COUNTED = reading({ id: "rd2", ovitrap: { id: "ov2", number: "OV-08" }, egg_count: 42, counted_at: "2026-11-12T14:00:00Z" });
+const COUNTED = reading({ id: "rd2", ovitrap: { id: "ov2", number: "OV-08" }, egg_count: 42, counted_at: "2026-11-12T14:00:00Z", version: 7 });
 const OVITRAPS_REPORT = report({
   name: "ovitraps",
   columns: [
@@ -157,7 +157,8 @@ describe("VectorOvitraps", () => {
     fireEvent.click(submit);
     fireEvent.click(submit);
     expect(api.countOvitrapReading).toHaveBeenCalledTimes(1);
-    expect(api.countOvitrapReading).toHaveBeenCalledWith("rd2", { egg_count: 40, count_note: "Recontagem com lupa" });
+    // Q36: a correção leva a version que a tela mostra; a primeira contagem nunca (o JSON exato do primeiro teste).
+    expect(api.countOvitrapReading).toHaveBeenCalledWith("rd2", { egg_count: 40, count_note: "Recontagem com lupa", expected_version: 7 });
     expect(await screen.findByText("contagem da ovitrampa OV-08 corrigida: 40 ovos")).not.toBeNull();
     // a contar (ao abrir), contadas (ao trocar) e uma releitura das contadas.
     await settledReads(3);
@@ -180,6 +181,41 @@ describe("VectorOvitraps", () => {
     // Uma leitura de cada lista aberta (a contar, depois contadas), nenhuma releitura.
     expect(api.listOvitrapReadings).toHaveBeenCalledTimes(2);
     expect(screen.queryByText(/invalid_request|422/)).toBeNull();
+  });
+
+  it("Q36: 409 reading_changed relê UMA vez, mantém o digitado e o envio seguinte leva a version nova", async () => {
+    const NEWER = reading({ ...COUNTED, egg_count: 44, corrected: true, version: 8 });
+    let countedReads = 0;
+    vi.mocked(api.listOvitrapReadings).mockImplementation(async (q) => {
+      if (q.state === "to_count") return { items: [ RD1 ], next_before: null };
+      countedReads += 1;
+      return { items: countedReads === 1 ? [ COUNTED ] : [ NEWER, RD9 ], next_before: null };
+    });
+    vi.mocked(api.countOvitrapReading)
+      .mockRejectedValueOnce(new ApiError(409, { error: "reading_changed" }, "x"))
+      .mockResolvedValueOnce(reading({ ...NEWER, egg_count: 40, version: 9 }));
+    mount();
+    fireEvent.click(await screen.findByRole("tab", { name: "Contadas" }));
+    await openCount(/^Corrigir contagem/, "Palhetas contadas");
+    eggs("40");
+    note("Recontagem com lupa");
+    fireEvent.click(screen.getByRole("button", { name: "Registrar correção" }));
+    expect(await screen.findByText(VECTOR_ERRORS.reading_changed)).not.toBeNull();
+    // Uma releitura das contadas; o formulário fica aberto, com o digitado e a contagem nova.
+    await settledReads(3);
+    expect(vi.mocked(api.listOvitrapReadings).mock.calls.map(([ q ]) => q.state)).toEqual([ "to_count", "counted", "counted" ]);
+    expect(vi.mocked(api.countOvitrapReading).mock.calls[0][1]).toEqual({ egg_count: 40, count_note: "Recontagem com lupa", expected_version: 7 });
+    expect((screen.getByLabelText("Ovos") as HTMLInputElement).value).toBe("40");
+    expect((screen.getByLabelText("Nota da correção") as HTMLTextAreaElement).value).toBe("Recontagem com lupa");
+    expect(screen.getByText(/contagem atual: 44 ovos/)).not.toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Registrar correção" }));
+    expect(await screen.findByText("contagem da ovitrampa OV-08 corrigida: 40 ovos")).not.toBeNull();
+    expect(api.countOvitrapReading).toHaveBeenCalledTimes(2);
+    expect(api.countOvitrapReading).toHaveBeenLastCalledWith("rd2", { egg_count: 40, count_note: "Recontagem com lupa", expected_version: 8 });
+    await waitFor(() => expect(api.listOvitrapReadings).toHaveBeenCalledTimes(4));
+    await tick();
+    expect(api.listOvitrapReadings).toHaveBeenCalledTimes(4);
   });
 
   it("reading_not_countable → frase e listOvitrapReadings 2×", async () => {

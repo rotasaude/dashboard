@@ -11,8 +11,13 @@
 // (record_sample_result.rb: o primeiro resultado com nota → 422 result_note; a correção exige nota de 10–500 e muda algum número).
 // Depois de gravar, a aba aberta é relida UMA vez; depois de lançar, "Com resultado" fica velha e relê UMA vez quando estiver (ou
 // ficar) à vista, mesmo se foi aberta com o envio em voo (a correção não muda "Sem resultado").
-// Tela velha (relê UMA vez, sem reenvio): 404, o primeiro resultado recusado em result_note (outra pessoa lançou antes), a correção
-// recusada em examined_larvae (os números já são esses: outra pessoa corrigiu) e rede/5xx (sem client_uuid: não se sabe se gravou).
+// Tela velha (relê UMA vez, sem reenvio): 404, o primeiro resultado recusado em result_note (outra pessoa lançou antes) e rede/5xx
+// (sem client_uuid: não se sabe se gravou).
+// Q36: a correção leva `expected_version` (a version da amostra que a tela mostra; o primeiro resultado nunca). 409 sample_changed
+// (outra pessoa corrigiu no meio): a frase no formulário, a fila relida UMA vez e o digitado fica; o formulário recebe a amostra
+// relida, e o envio seguinte leva a version nova. A correção recusada em examined_larvae (os mesmos números) vai ao campo.
+// Frases de sucesso (Q36(1)): "Resultado lançado." / "Resultado corrigido."; a frase do LIRAa sai, porque a amostra da fila não
+// diz se veio de levantamento do LIRAa (Json.samples não tem origem nem levantamento).
 // A nota nunca sai do campo. Nada em URL ou storage; nenhum polling.
 import { useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -22,8 +27,10 @@ import {
 import { fmtDateTime, fmtNumber } from "../lib/format";
 import { fmtDay, isNetworkOrServer } from "../lib/homeVisits";
 import {
-  STATIC_QUERY, VC_DOMAINS_KEY, VC_SAMPLES_KEY, domainLabel, isVectorStale, optionalNote, sampleResultProblems, vectorError, vectorRefusals
+  SAMPLE_SAME_NUMBERS, STATIC_QUERY, VC_DOMAINS_KEY, VC_SAMPLES_KEY, domainLabel, isVectorStale, optionalNote, sampleResultProblems, vectorError,
+  vectorRefusals
 } from "../lib/vectorControl";
+import { VECTOR_ERRORS } from "../lib/vectorErrors";
 import { VectorGate } from "./vectorControl/VectorGate";
 import { usePaged } from "./homeVisits/usePaged";
 import { VectorListBody } from "./vectorControl/VectorListBody";
@@ -36,12 +43,12 @@ import { FrozenTextNotice } from "../components/FrozenTextNotice";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../components/formStyles";
 import { alert, fieldLabel, form, muted, okText, row, stack } from "./exams/styles";
 
-export const RESULT_SAVED = "Resultado lançado. O índice do LIRAa usa o resultado novo.";
+export const RESULT_SAVED = "Resultado lançado.";
+export const RESULT_CORRECTED = "Resultado corrigido.";
 export const PENDING_EMPTY = "nenhuma amostra sem resultado";
 export const DONE_EMPTY = "nenhuma amostra com resultado";
 export const SAMPLE_STALE_REREAD = "a fila foi relida";
 export const SAMPLE_RACED = "esta amostra já tem resultado — a fila foi relida; para mudar, abra a aba Com resultado e use Corrigir resultado";
-export const SAMPLE_CHANGED = "o resultado desta amostra mudou — a fila foi relida; confira antes de corrigir";
 export const SAMPLE_UNCERTAIN = "não foi possível confirmar o resultado — a fila foi relida; confira a amostra antes de lançar de novo";
 export const SAMPLE_CORRECTION_UNCERTAIN = "não foi possível confirmar a correção — a fila foi relida; confira a amostra antes de corrigir de novo";
 export const SAMPLE_NOTE_REPEATED = "a nota é igual à da correção anterior — escreva o que mudou nesta correção";
@@ -113,6 +120,8 @@ function SamplesList({ state, domains, onSaved }: { state: State; domains: Vecto
   const [ done, setDone ] = useState<string | null>(null);
   const [ note, setNote ] = useState<string | null>(null);
   const corrected = state === "done";
+  // Q36: depois do 409 sample_changed a fila é relida com o formulário aberto; ele recebe a amostra relida (version nova).
+  const current = open ? list.items?.find((s) => s.id === open.id) ?? open : null;
 
   // Uma releitura por ação: refaz as páginas já mostradas desta aba.
   const finish = (doneText: string | null, noteText: string | null, again: boolean) => {
@@ -149,8 +158,9 @@ function SamplesList({ state, domains, onSaved }: { state: State; domains: Vecto
       {open && (
         <Panel title={action}>
           <div style={{ padding: 16 }}>
-            <SampleResultForm sample={open} corrected={corrected} group={groupText(domains, open.deposit_group)}
-              onDone={() => finish(RESULT_SAVED, null, true)} onStale={(text) => finish(null, text, true)} onCancel={() => finish(null, null, false)} />
+            <SampleResultForm sample={current ?? open} corrected={corrected} group={groupText(domains, open.deposit_group)}
+              onDone={() => finish(corrected ? RESULT_CORRECTED : RESULT_SAVED, null, true)} onStale={(text) => finish(null, text, true)}
+              onReread={() => void queryClient.invalidateQueries({ queryKey: key })} onCancel={() => finish(null, null, false)} />
           </div>
         </Panel>
       )}
@@ -175,15 +185,14 @@ const invalidAt = (err: unknown, path: string): boolean =>
   errorCode(err) === "invalid_request" && ((err as ApiError).body as { path?: string } | null)?.path === path;
 // O primeiro resultado recusado em result_note: a tela nunca manda nota nele, então outra pessoa lançou antes (virou correção).
 const raced = (err: unknown, corrected: boolean): boolean => !corrected && invalidAt(err, "result_note");
-// A correção recusada em examined_larvae: a tela já recusa os mesmos números do resultado que mostrou, então ele mudou do outro lado.
-const changed = (err: unknown, corrected: boolean): boolean => corrected && invalidAt(err, "examined_larvae");
 
-function SampleResultForm({ sample, corrected, group, onDone, onStale, onCancel }: {
-  sample: VectorSample; corrected: boolean; group: string; onDone(s: VectorSample): void; onStale(text: string): void; onCancel(): void;
+function SampleResultForm({ sample, corrected, group, onDone, onStale, onReread, onCancel }: {
+  sample: VectorSample; corrected: boolean; group: string; onDone(s: VectorSample): void; onStale(text: string): void; onReread(): void;
+  onCancel(): void;
 }) {
   const f = useFormProblems({
     refusals: (err) => vectorRefusals(err).map((r) => ({ ...r, participantIndex: null })),
-    isStale: (err) => isVectorStale(err) || raced(err, corrected) || changed(err, corrected) || isNetworkOrServer(err)
+    isStale: (err) => isVectorStale(err) || raced(err, corrected) || isNetworkOrServer(err)
   });
   const [ examined, setExamined ] = useState("");
   const [ aegypti, setAegypti ] = useState("");
@@ -196,17 +205,18 @@ function SampleResultForm({ sample, corrected, group, onDone, onStale, onCancel 
       check: () => sampleResultProblems({ examined, aegypti, albopictus, note: corrected ? note : "" }, sample, corrected),
       call: () => recordSampleResult(sample.id, {
         examined_larvae: Number(examined.trim()), aegypti_larvae: Number(aegypti.trim()), albopictus_larvae: Number(albopictus.trim()),
-        ...(corrected ? optionalNote("result_note", note) : {})
+        ...(corrected ? { ...optionalNote("result_note", note), expected_version: sample.version } : {})
       }),
       ok: onDone,
       stale: (text, err) => {
+        if (errorCode(err) === "sample_changed") { f.show([ { path: "", text: VECTOR_ERRORS.sample_changed } ]); onReread(); return; }
         if (isNetworkOrServer(err)) onStale(corrected ? SAMPLE_CORRECTION_UNCERTAIN : SAMPLE_UNCERTAIN);
         else if (raced(err, corrected)) onStale(SAMPLE_RACED);
-        else if (changed(err, corrected)) onStale(SAMPLE_CHANGED);
         else onStale(`${text} — ${SAMPLE_STALE_REREAD}`);
       },
-      // A mesma nota da correção anterior (a nota nunca sai no JSON: só o api confere).
-      refused: (rs) => rs.map((r) => ({ path: r.path, text: corrected && r.code === "invalid_request" && r.path === "result_note" ? SAMPLE_NOTE_REPEATED : r.text }))
+      // Na correção, a mesma nota da anterior (a nota nunca sai no JSON: só o api confere) e os mesmos números.
+      refused: (rs) => rs.map((r) => ({ path: r.path, text: !corrected || r.code !== "invalid_request" ? r.text
+        : r.path === "result_note" ? SAMPLE_NOTE_REPEATED : r.path === "examined_larvae" ? SAMPLE_SAME_NUMBERS : r.text }))
     });
   }
 

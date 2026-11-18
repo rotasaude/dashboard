@@ -131,11 +131,11 @@ export const ovitrap = (o: Partial<Ovitrap> = {}): Ovitrap => ({
 export const reading = (o: Partial<OvitrapReading> = {}): OvitrapReading => ({
   id: "or0", ovitrap: { id: "ov1", number: "OV-07" }, city_block: { id: "cb1", number: "12" }, neighborhood: { id: "nb1", name: "Centro" },
   installed_on: "2026-11-02", collected_on: "2026-11-09", condition: "ok", epi_week: "2026-45", egg_count: null, counted_at: null,
-  corrected: false, ...o
+  corrected: false, version: 1, ...o
 });
 export const sample = (o: Partial<VectorSample> = {}): VectorSample => ({
   id: "vs1", label: "00000000-01", visit_on: TODAY35, deposit_group: "A2", larvae_collected: 8, city_block: { id: "cb1", number: "12" },
-  result: null, ...o
+  result: null, version: 1, ...o
 });
 export const vectorTask = (o: Partial<VectorTask> = {}): VectorTask => ({
   id: "vt1", kind: "ovitrap_intensification", state: "open", created_at: "2026-11-15T12:00:00Z", ovitrap: { id: "ov1", number: "OV-07" },

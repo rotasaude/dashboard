@@ -7,8 +7,12 @@
 // Tela velha (o pai relê a lista UMA vez, sem reenvio): 404, `reading_not_countable` (palheta que deixou de ser contável) e a
 // primeira contagem recusada em count_note (outra pessoa contou antes: a leitura virou correção). Rede ou 5xx: a contagem não
 // tem client_uuid, então não se sabe se gravou — o formulário fecha e a lista é relida.
+// Q36: a correção leva `expected_version` (a version da leitura que a tela mostra; a primeira contagem nunca). 409 reading_changed
+// (outra pessoa corrigiu no meio): a frase no formulário, a lista relida UMA vez (`onReread`) e o digitado fica; o pai passa a
+// leitura relida, e o envio seguinte leva a version nova.
 import { useState, type FormEvent } from "react";
 import { countOvitrapReading, errorCode, type ApiError, type OvitrapReading } from "../../lib/api";
+import { VECTOR_ERRORS } from "../../lib/vectorErrors";
 import { fmtNumber } from "../../lib/format";
 import { fmtDay, isNetworkOrServer } from "../../lib/homeVisits";
 import { countProblems, isVectorStale, optionalNote, vectorRefusals } from "../../lib/vectorControl";
@@ -31,8 +35,8 @@ export const eggsText = (n: number): string => `${fmtNumber(n)} ${n === 1 ? "ovo
 const raced = (err: unknown, corrected: boolean): boolean =>
   !corrected && errorCode(err) === "invalid_request" && ((err as ApiError).body as { path?: string } | null)?.path === "count_note";
 
-export function CountForm({ reading, corrected, onDone, onStale, onCancel }: {
-  reading: OvitrapReading; corrected: boolean; onDone(r: OvitrapReading): void; onStale(text: string): void; onCancel(): void;
+export function CountForm({ reading, corrected, onDone, onStale, onReread, onCancel }: {
+  reading: OvitrapReading; corrected: boolean; onDone(r: OvitrapReading): void; onStale(text: string): void; onReread(): void; onCancel(): void;
 }) {
   const f = useFormProblems({
     refusals: (err) => vectorRefusals(err).map((r) => ({ ...r, participantIndex: null })),
@@ -46,9 +50,12 @@ export function CountForm({ reading, corrected, onDone, onStale, onCancel }: {
   function submit(ev: FormEvent) {
     void f.submit(ev, {
       check: () => countProblems({ eggs, note: corrected ? note : "" }, corrected, corrected ? reading.egg_count : null),
-      call: () => countOvitrapReading(reading.id, { egg_count: Number(eggs.trim()), ...(corrected ? optionalNote("count_note", note) : {}) }),
+      call: () => countOvitrapReading(reading.id, {
+        egg_count: Number(eggs.trim()), ...(corrected ? { ...optionalNote("count_note", note), expected_version: reading.version } : {})
+      }),
       ok: onDone,
       stale: (text, err) => {
+        if (errorCode(err) === "reading_changed") { f.show([ { path: "", text: VECTOR_ERRORS.reading_changed } ]); onReread(); return; }
         if (isNetworkOrServer(err)) onStale(COUNT_UNCERTAIN);
         else if (raced(err, corrected)) onStale(COUNT_RACED);
         else onStale(`${text} — ${COUNT_STALE_REREAD}`);

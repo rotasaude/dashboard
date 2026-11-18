@@ -16,13 +16,13 @@ vi.mock("../lib/api", async (importOriginal) => {
 
 import * as api from "../lib/api";
 import { ApiError, type VectorSample } from "../lib/api";
-import { VC_NO_ROLE } from "../lib/vectorControl";
+import { SAMPLE_SAME_NUMBERS, VC_NO_ROLE } from "../lib/vectorControl";
 import { VECTOR_ERRORS } from "../lib/vectorErrors";
 import { renderWithProviders } from "../test/campaignFixtures";
 import { expectFrozenNotice } from "../test/frozenNotice";
 import { VC_DOMAINS, sample, vcUser } from "../test/vectorControlFixtures";
 import {
-  DONE_EMPTY, PENDING_EMPTY, RESULT_SAVED, SAMPLE_CHANGED, SAMPLE_CORRECTION_UNCERTAIN, SAMPLE_NOTE_REPEATED, SAMPLE_RACED, SAMPLE_STALE_REREAD, SAMPLE_UNCERTAIN, VectorSamples
+  DONE_EMPTY, PENDING_EMPTY, RESULT_CORRECTED, RESULT_SAVED, SAMPLE_CORRECTION_UNCERTAIN, SAMPLE_NOTE_REPEATED, SAMPLE_RACED, SAMPLE_STALE_REREAD, SAMPLE_UNCERTAIN, VectorSamples
 } from "./VectorSamples";
 
 const ALL = [ api.fetchCurrentSession, api.listVectorSamples, api.recordSampleResult, api.getVectorDomains, api.getVectorParameters, api.listPanelNeighborhoods ];
@@ -31,7 +31,7 @@ const SA2 = sample({ id: "sa2", label: "3F2A9C1E-02", visit_on: "2026-11-12", de
 const SA9 = sample({ id: "sa9", label: "9C9C9C9C-01", visit_on: "2026-11-14", deposit_group: "C", larvae_collected: 2 });
 const DONE1 = sample({
   id: "sd1", label: "AB12CD34-01", visit_on: "2026-11-09", deposit_group: "B", larvae_collected: 6,
-  result: { examined_larvae: 6, aegypti_larvae: 4, albopictus_larvae: 1, result_at: "2026-11-13T14:00:00Z", corrected: false }
+  result: { examined_larvae: 6, aegypti_larvae: 4, albopictus_larvae: 1, result_at: "2026-11-13T14:00:00Z", corrected: false }, version: 4
 });
 const DONE2 = sample({
   id: "sd2", label: "AB12CD34-02", visit_on: "2026-11-08", deposit_group: "A1", larvae_collected: 5,
@@ -138,7 +138,9 @@ describe("VectorSamples", () => {
     expect(JSON.stringify(vi.mocked(api.recordSampleResult).mock.calls[0][1])).toBe('{"examined_larvae":8,"aegypti_larvae":5,"albopictus_larvae":0}');
     resolve(sample({ ...SA1, result: { examined_larvae: 8, aegypti_larvae: 5, albopictus_larvae: 0, result_at: "2026-11-16T13:00:00Z", corrected: false } }));
     expect(await screen.findByText(RESULT_SAVED)).not.toBeNull();
-    expect(RESULT_SAVED).toBe("Resultado lançado. O índice do LIRAa usa o resultado novo.");
+    // Q36(1): a amostra da fila não diz se veio do LIRAa (Json.samples sem origem nem levantamento): a frase do LIRAa não sai.
+    expect(RESULT_SAVED).toBe("Resultado lançado.");
+    expect(document.body.textContent).not.toContain("LIRAa");
     // A fila é relida uma vez; a aba "Com resultado" nunca foi aberta e não lê.
     await settledReads(2);
     expect(states()).toEqual([ "pending", "pending" ]);
@@ -182,10 +184,13 @@ describe("VectorSamples", () => {
     fireEvent.click(submit);
     fireEvent.click(submit);
     expect(api.recordSampleResult).toHaveBeenCalledTimes(1);
+    // Q36: a correção leva a version que a tela mostra.
     expect(api.recordSampleResult).toHaveBeenCalledWith("sd1", {
-      examined_larvae: 6, aegypti_larvae: 3, albopictus_larvae: 2, result_note: "Revisão na lupa do laboratório"
+      examined_larvae: 6, aegypti_larvae: 3, albopictus_larvae: 2, result_note: "Revisão na lupa do laboratório", expected_version: 4
     });
-    expect(await screen.findByText(RESULT_SAVED)).not.toBeNull();
+    expect(await screen.findByText(RESULT_CORRECTED)).not.toBeNull();
+    expect(RESULT_CORRECTED).toBe("Resultado corrigido.");
+    expect(document.body.textContent).not.toContain("LIRAa");
     // Sem resultado (ao abrir), Com resultado (ao trocar) e uma releitura de Com resultado.
     await settledReads(3);
     expect(states()).toEqual([ "pending", "done", "done" ]);
@@ -212,6 +217,61 @@ describe("VectorSamples", () => {
     expect(screen.queryByText(/invalid_request|422/)).toBeNull();
   });
 
+  it("Q36: 409 sample_changed relê UMA vez, mantém o digitado e o envio seguinte leva a version nova", async () => {
+    const NEWER = sample({ ...DONE1, result: { ...DONE1.result!, aegypti_larvae: 2, albopictus_larvae: 2, corrected: true }, version: 5 });
+    let doneReads = 0;
+    vi.mocked(api.listVectorSamples).mockImplementation(async (q) => {
+      if (q.state === "pending") return page([ SA1, SA2 ]);
+      doneReads += 1;
+      return doneReads === 1 ? page([ DONE1, DONE2 ]) : page([ NEWER, DONE2, SA9 ]);
+    });
+    vi.mocked(api.recordSampleResult)
+      .mockRejectedValueOnce(new ApiError(409, { error: "sample_changed" }, "x"))
+      .mockResolvedValueOnce(sample({ ...NEWER, version: 6 }));
+    mount();
+    fireEvent.click(await screen.findByRole("tab", { name: "Com resultado" }));
+    await openForm(/^Corrigir resultado — amostra AB12CD34-01/, DONE);
+    fill("6", "3", "2");
+    note("Revisão na lupa do laboratório");
+    fireEvent.click(screen.getByRole("button", { name: "Registrar correção" }));
+    expect(await screen.findByText(VECTOR_ERRORS.sample_changed)).not.toBeNull();
+    expect(VECTOR_ERRORS.sample_changed).toBe("outra pessoa corrigiu este resultado; confira e salve de novo");
+    // Uma releitura (pending ao abrir, done ao trocar, done relida); o formulário fica aberto, com o digitado e o resultado novo.
+    await settledReads(3);
+    expect(states()).toEqual([ "pending", "done", "done" ]);
+    expect(vi.mocked(api.recordSampleResult).mock.calls[0][1]).toMatchObject({ expected_version: 4 });
+    expect((screen.getByLabelText("Larvas examinadas") as HTMLInputElement).value).toBe("6");
+    expect((screen.getByLabelText("Ae. aegypti") as HTMLInputElement).value).toBe("3");
+    expect((screen.getByLabelText("Ae. albopictus") as HTMLInputElement).value).toBe("2");
+    expect((screen.getByLabelText("Nota da correção") as HTMLTextAreaElement).value).toBe("Revisão na lupa do laboratório");
+    expect(screen.getByText(/resultado atual: 6 examinadas · 2 Ae\. aegypti · 2 Ae\. albopictus/)).not.toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Registrar correção" }));
+    expect(await screen.findByText(RESULT_CORRECTED)).not.toBeNull();
+    expect(api.recordSampleResult).toHaveBeenCalledTimes(2);
+    expect(api.recordSampleResult).toHaveBeenLastCalledWith("sd1", {
+      examined_larvae: 6, aegypti_larvae: 3, albopictus_larvae: 2, result_note: "Revisão na lupa do laboratório", expected_version: 5
+    });
+    await waitFor(() => expect(api.listVectorSamples).toHaveBeenCalledTimes(4));
+    await tick();
+    expect(api.listVectorSamples).toHaveBeenCalledTimes(4);
+  });
+
+  it("Q36: a correção recusada em 422 examined_larvae (os mesmos números) vai ao campo, sem releitura", async () => {
+    vi.mocked(api.recordSampleResult).mockRejectedValueOnce(new ApiError(422, { error: "invalid_request", path: "examined_larvae" }, "x"));
+    mount();
+    fireEvent.click(await screen.findByRole("tab", { name: "Com resultado" }));
+    await openForm(/^Corrigir resultado — amostra AB12CD34-01/, DONE);
+    fill("6", "3", "2");
+    note("Revisão na lupa do laboratório");
+    fireEvent.click(screen.getByRole("button", { name: "Registrar correção" }));
+    expect(await screen.findByText(SAMPLE_SAME_NUMBERS)).not.toBeNull();
+    expect(screen.getByLabelText("Larvas examinadas").getAttribute("aria-invalid")).toBe("true");
+    await tick();
+    expect(api.recordSampleResult).toHaveBeenCalledTimes(1);
+    expect(api.listVectorSamples).toHaveBeenCalledTimes(2);
+  });
+
   it("sample_result_invalid do api vai ao campo do path, sem releitura", async () => {
     vi.mocked(api.recordSampleResult).mockRejectedValueOnce(new ApiError(422, { error: "sample_result_invalid", path: "aegypti_larvae" }, "x"));
     mount();
@@ -229,7 +289,6 @@ describe("VectorSamples", () => {
     const cases: [ unknown, string, "pending" | "done" ][] = [
       [ new ApiError(404, { error: "not_found" }, "x"), SAMPLE_STALE_REREAD, "pending" ],
       [ new ApiError(422, { error: "invalid_request", path: "result_note" }, "x"), SAMPLE_RACED, "pending" ],
-      [ new ApiError(422, { error: "invalid_request", path: "examined_larvae" }, "x"), SAMPLE_CHANGED, "done" ],
       [ new TypeError("Failed to fetch"), SAMPLE_UNCERTAIN, "pending" ],
       [ new TypeError("Failed to fetch"), SAMPLE_CORRECTION_UNCERTAIN, "done" ],
       [ new ApiError(503, {}, "x"), SAMPLE_UNCERTAIN, "pending" ]
