@@ -3,7 +3,7 @@
 // pessoa (STATIC_QUERY, relida depois de cada ação). Novo quarteirão (número no Catalog::BLOCK_NUMBER, sem caixa único no
 // bairro: 422 block_number_taken no campo), vizinhos (o par pode cruzar bairros; remover grava ended_at, o par fica no
 // histórico) e desativar (409 block_in_use → a frase e UMA releitura). Nenhum reenvio; botões presos enquanto a chamada corre.
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   addBlockNeighbor, createCityBlock, listCityBlocks, listPanelNeighborhoods, removeBlockNeighbor, updateCityBlock, type CityBlock
@@ -24,16 +24,37 @@ import { inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { alert, box, fieldLabel, muted, row, stack } from "../exams/styles";
 
 export const blocksKey = (neighborhoodId: string) => [ VC_BLOCKS_KEY, neighborhoodId ];
+// Sem releitura ao montar outro leitor da mesma lista (o painel de vizinhos, a aba Imóveis): relida só pelas ações (invalidate).
 export const useBlocks = (neighborhoodId: string) =>
-  useQuery({ queryKey: blocksKey(neighborhoodId), queryFn: () => listCityBlocks(neighborhoodId), ...STATIC_QUERY });
+  useQuery({ queryKey: blocksKey(neighborhoodId), queryFn: () => listCityBlocks(neighborhoodId), ...STATIC_QUERY, staleTime: Infinity });
 
 // Os quarteirões de todos os bairros já lidos nesta tela (o vizinho pode ser de outro bairro): só o cache, sem leitura nova.
+// Assina o cache: quando o bairro de um vizinho é lido (no painel de vizinhos), o número aparece também na tabela.
 function useKnownBlocks(): Map<string, CityBlock> {
   const queryClient = useQueryClient();
+  const [ , setTick ] = useState(0);
+  useEffect(() => queryClient.getQueryCache().subscribe((e) => {
+    if (e.type === "updated" && e.query.queryKey[0] === VC_BLOCKS_KEY) setTick((t) => t + 1);
+  }), [ queryClient ]);
   const known = new Map<string, CityBlock>();
   for (const [ , list ] of queryClient.getQueriesData<CityBlock[]>({ queryKey: [ VC_BLOCKS_KEY ] })) for (const b of list ?? []) known.set(b.id, b);
   return known;
 }
+
+// O rótulo de cada vizinho, distinto entre si. O /blocks traz TODOS os quarteirões do bairro (Q18), então um id fora dos
+// bairros lidos é mesmo de outro bairro; o api não manda o número dele (só `neighbor_ids`), e a tela não lê os outros bairros
+// sozinha: ele vira "de outro bairro nº k", na ordem de `neighbor_ids`, até o bairro dele ser escolhido.
+export function neighborLabels(ids: string[], known: Map<string, CityBlock>, neighborhoodId: string): Map<string, string> {
+  const out = new Map<string, string>();
+  let k = 0;
+  for (const id of ids) {
+    const n = known.get(id);
+    if (!n) out.set(id, `de outro bairro nº ${++k}`);
+    else out.set(id, n.neighborhood.id === neighborhoodId ? n.number : `${n.number} (${n.neighborhood.name})`);
+  }
+  return out;
+}
+export const UNKNOWN_NEIGHBOR_HINT = "escolha o bairro do vizinho abaixo para ver o número";
 
 export function BlocksPanel({ neighborhoodId }: { neighborhoodId: string }) {
   const queryClient = useQueryClient();
@@ -44,17 +65,18 @@ export function BlocksPanel({ neighborhoodId }: { neighborhoodId: string }) {
   const [ openId, setOpenId ] = useState<string | null>(null);
   const reread = () => queryClient.invalidateQueries({ queryKey: [ VC_BLOCKS_KEY ] });
 
-  const neighborText = (b: CityBlock) => b.neighbor_ids.length === 0 ? "—" : b.neighbor_ids.map((id) => {
-    const n = known.get(id);
-    if (!n) return "outro bairro";
-    return n.neighborhood.id === neighborhoodId ? n.number : `${n.number} (${n.neighborhood.name})`;
-  }).join(", ");
+  const neighborText = (b: CityBlock) => {
+    if (b.neighbor_ids.length === 0) return "—";
+    const labels = neighborLabels(b.neighbor_ids, known, neighborhoodId);
+    return b.neighbor_ids.map((id) => labels.get(id)).join(", ");
+  };
 
-  async function deactivate(b: CityBlock) {
+  // Desativar e reativar: a frase do código, uma releitura no estado velho (409 block_in_use, 404), nenhum reenvio.
+  async function setActive(b: CityBlock, active: boolean) {
     msg.start();
     try {
-      await updateCityBlock(b.id, { active: false });
-      msg.ok(`quarteirão ${b.number} desativado`);
+      await updateCityBlock(b.id, { active });
+      msg.ok(`quarteirão ${b.number} ${active ? "reativado" : "desativado"}`);
       await reread();
     } catch (err) {
       msg.fail(vectorError(err));
@@ -81,7 +103,9 @@ export function BlocksPanel({ neighborhoodId }: { neighborhoodId: string }) {
                   <div style={row}>
                     <button type="button" style={secondaryButtonStyle} aria-expanded={openId === b.id}
                       onClick={() => setOpenId(openId === b.id ? null : b.id)}>Vizinhos</button>
-                    {b.active && <ConfirmButton label="Desativar" question={`desativar o quarteirão ${b.number}?`} onConfirm={() => deactivate(b)} />}
+                    {b.active
+                      ? <ConfirmButton label="Desativar" question={`desativar o quarteirão ${b.number}?`} onConfirm={() => setActive(b, false)} />
+                      : <ConfirmButton label="Reativar" question={`reativar o quarteirão ${b.number}?`} onConfirm={() => setActive(b, true)} />}
                   </div>
                 ) }
               ]} />
@@ -149,11 +173,9 @@ function NeighborsPanel({ block, neighborhoodId }: { block: CityBlock; neighborh
   const reread = () => queryClient.invalidateQueries({ queryKey: [ VC_BLOCKS_KEY ] });
   // Nem ele mesmo (invalid_neighbor) nem quem já é vizinho; só os ativos (o raio em anéis ignora os inativos).
   const options = (candidates.data ?? []).filter((b) => b.active && b.id !== block.id && !block.neighbor_ids.includes(b.id));
-  const label = (id: string) => {
-    const n = known.get(id);
-    if (!n) return "quarteirão de outro bairro";
-    return n.neighborhood.id === neighborhoodId ? n.number : `${n.number} (${n.neighborhood.name})`;
-  };
+  const labels = neighborLabels(block.neighbor_ids, known, neighborhoodId);
+  const label = (id: string) => labels.get(id) ?? id;
+  const anyUnknown = block.neighbor_ids.some((id) => !known.has(id));
 
   async function run(action: () => Promise<unknown>, ok: string) {
     msg.start();
@@ -177,13 +199,14 @@ function NeighborsPanel({ block, neighborhoodId }: { block: CityBlock; neighborh
           <ul style={{ margin: 0, paddingLeft: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: 8 }}>
             {block.neighbor_ids.map((id) => (
               <li key={id} style={row}>
-                <span>{label(id)}</span>
+                <span>{known.has(id) ? label(id) : `vizinho ${label(id)}`}</span>
                 <ConfirmButton label={`Remover o vizinho ${label(id)}`} question={`remover o vizinho ${label(id)}? o par fica no histórico`}
                   onConfirm={() => run(() => removeBlockNeighbor(block.id, id), "vizinho removido — o par fica no histórico")} />
               </li>
             ))}
           </ul>
         )}
+        {anyUnknown && <p style={muted}>{UNKNOWN_NEIGHBOR_HINT}</p>}
         <div style={box}>
           <div style={row}>
             <label style={fieldLabel}>

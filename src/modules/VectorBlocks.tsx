@@ -33,8 +33,8 @@ function BlocksScreen({ roles }: { roles: VectorRoles }) {
   const [ neighborhoodId, setNeighborhoodId ] = useState("");
   const [ tab, setTab ] = useState<Tab>("blocks");
   const neighborhoods = useQuery({ queryKey: PANEL_NEIGHBORHOODS_KEY, queryFn: listPanelNeighborhoods, ...STATIC_QUERY });
-  // Sem os domínios (falha), o risco aparece cru.
-  const domains = useQuery({ queryKey: [ VC_DOMAINS_KEY ], queryFn: getVectorDomains, ...STATIC_QUERY });
+  // Só com a aba Imóveis aberta (o mapa lê os seus); sem os domínios (falha), o risco aparece cru.
+  const domains = useQuery({ queryKey: [ VC_DOMAINS_KEY ], queryFn: getVectorDomains, enabled: !!neighborhoodId && tab === "households", ...STATIC_QUERY });
   const options: { key: Tab; label: string }[] = [ { key: "blocks", label: "Quarteirões" }, { key: "households", label: "Imóveis" } ];
   if (vectorMapLayers(roles).includes("risk")) options.push({ key: "map", label: "Mapa" });
   return (

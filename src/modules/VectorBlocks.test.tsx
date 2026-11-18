@@ -18,13 +18,14 @@ vi.mock("./territory/map/fieldMap", () => ({ createFieldMap: vi.fn(() => handle)
 
 import * as api from "../lib/api";
 import { ApiError, type VectorHousehold } from "../lib/api";
-import { blockNumberProblem } from "../lib/vectorControl";
+import { blockNumberProblem, vectorError } from "../lib/vectorControl";
 import { VECTOR_ERRORS } from "../lib/vectorErrors";
 import { renderWithProviders } from "../test/campaignFixtures";
 import { MAP_MANIFEST } from "../test/territoryMapFixtures";
 import { VC_DOMAINS, cityBlock, vcUser, vectorHousehold } from "../test/vectorControlFixtures";
 import { VectorBlocks } from "./VectorBlocks";
 
+const vectorErrorOf404 = () => vectorError(new ApiError(404, { error: "not_found" }, "x"));
 const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
 const CB1 = cityBlock();
 const CB2 = cityBlock({ id: "cb2", number: "13", neighbor_ids: [ "cb1" ], households_count: 0 });
@@ -74,11 +75,14 @@ describe("VectorBlocks (35a, F-35.1)", () => {
     expect(api.listCityBlocks).toHaveBeenCalledWith("nb1");
     expect(api.listVectorHouseholds).not.toHaveBeenCalled();
     expect(api.listVectorMapPoints).not.toHaveBeenCalled();
+    expect(api.getVectorDomains).not.toHaveBeenCalled();
     // Colunas: número, imóveis ativos, vizinhos por número, ativo.
     const r = rowOf("12");
     expect(r.getByText("14")).not.toBeNull();
     expect(rowOf("12").queryAllByText("13").length).toBe(1);
     expect(window.location.search).toBe("");
+    await openHouseholds();
+    await waitFor(() => expect(api.getVectorDomains).toHaveBeenCalledTimes(1));
   });
 
   it("novo quarteirão: número validado; block_number_taken no campo", async () => {
@@ -147,6 +151,56 @@ describe("VectorBlocks (35a, F-35.1)", () => {
     expect(await screen.findByText("vizinho removido — o par fica no histórico")).not.toBeNull();
   });
 
+  it("vizinhos de bairros não lidos: rótulos e botões distintos; o número aparece quando o bairro é lido", async () => {
+    const X1 = cityBlock({ id: "x1", neighborhood: { id: "nb2", name: "Batel" }, number: "7", neighbor_ids: [ "cb1" ] });
+    mocked(api.listCityBlocks).mockImplementation(async (nb: string) =>
+      (nb === "nb1" ? [ { ...CB1, neighbor_ids: [ "cb2", "x1", "x2" ] }, CB2 ] : nb === "nb2" ? [ CB9, X1 ] : []));
+    mount(); await selectNeighborhood("nb1");
+    await blocksTable();
+    expect(rowOf("12").getByText("13, de outro bairro nº 1, de outro bairro nº 2")).not.toBeNull();
+    fireEvent.click(rowOf("12").getByRole("button", { name: "Vizinhos" }));
+    await screen.findByLabelText("Quarteirão vizinho");
+    const names = screen.getAllByRole("button", { name: /^Remover o vizinho/ }).map((b) => b.textContent);
+    expect(names).toEqual([ "Remover o vizinho 13", "Remover o vizinho de outro bairro nº 1", "Remover o vizinho de outro bairro nº 2" ]);
+    expect(new Set(names).size).toBe(3);
+    expect(screen.getByText("escolha o bairro do vizinho abaixo para ver o número")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Remover o vizinho de outro bairro nº 2" }));
+    expect(screen.getByText("remover o vizinho de outro bairro nº 2? o par fica no histórico")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+    // Lido o bairro do vizinho, o número dele aparece no painel e na tabela.
+    fireEvent.change(screen.getByLabelText("Bairro do vizinho"), { target: { value: "nb2" } });
+    expect(await screen.findByRole("button", { name: "Remover o vizinho 7 (Batel)" })).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Remover o vizinho de outro bairro nº 1" })).not.toBeNull();
+    expect(rowOf("12").getByText("13, 7 (Batel), de outro bairro nº 1")).not.toBeNull();
+    expect(api.listCityBlocks).toHaveBeenCalledTimes(2);
+  });
+
+  it("reativar: confirmação, uma chamada; 404 → frase e uma releitura; depois reativa", async () => {
+    const CB3 = cityBlock({ id: "cb3", number: "15", active: false, neighbor_ids: [], households_count: 0 });
+    mocked(api.listCityBlocks).mockImplementation(async (nb: string) => (nb === "nb1" ? [ CB1, CB2, CB3 ] : []));
+    mocked(api.updateCityBlock).mockRejectedValueOnce(new ApiError(404, { error: "not_found" }, "x")).mockResolvedValueOnce({ ...CB3, active: true, version: 2 });
+    mount(); await selectNeighborhood("nb1");
+    await blocksTable();
+    expect(rowOf("15").queryByRole("button", { name: "Desativar" })).toBeNull();
+    expect(rowOf("12").queryByRole("button", { name: "Reativar" })).toBeNull();
+    fireEvent.click(rowOf("15").getByRole("button", { name: "Reativar" }));
+    expect(screen.getByText("reativar o quarteirão 15?")).not.toBeNull();
+    expect(api.updateCityBlock).not.toHaveBeenCalled();
+    const confirm = screen.getByRole("button", { name: "Confirmar" });
+    fireEvent.click(confirm); fireEvent.click(confirm);
+    expect(await screen.findByText(vectorErrorOf404())).not.toBeNull();
+    expect(api.updateCityBlock).toHaveBeenCalledTimes(1);
+    expect(api.updateCityBlock).toHaveBeenCalledWith("cb3", { active: true });
+    await waitFor(() => expect(api.listCityBlocks).toHaveBeenCalledTimes(2));
+    await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
+    expect(api.listCityBlocks).toHaveBeenCalledTimes(2);
+    fireEvent.click(rowOf("15").getByRole("button", { name: "Reativar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+    expect(await screen.findByText("quarteirão 15 reativado")).not.toBeNull();
+    expect(api.updateCityBlock).toHaveBeenCalledTimes(2);
+    await waitFor(() => expect(api.listCityBlocks).toHaveBeenCalledTimes(3));
+  });
+
   it("desativar com imóvel: 409 block_in_use → frase e uma releitura", async () => {
     mocked(api.updateCityBlock).mockRejectedValue(new ApiError(409, { error: "block_in_use" }, "x"));
     mount(); await selectNeighborhood("nb1");
@@ -198,7 +252,8 @@ describe("VectorBlocks (35a, F-35.1)", () => {
   it("quarteirão de outro bairro aparece marcado", async () => {
     mocked(api.listVectorHouseholds).mockResolvedValue({ items: [
       vectorHousehold({ neighborhood_id: "nb2", block: { id: "cb1", number: "12", neighborhood_id: "nb1" } }),
-      vectorHousehold({ id: "h2", address_short: "Rua Sete, 45" })
+      vectorHousehold({ id: "h2", address_short: "Rua Sete, 45" }),
+      vectorHousehold({ id: "h3", address_short: "Rua Nova, 9", neighborhood_id: null })
     ], next_before: null });
     mount(); await selectNeighborhood("nb1"); await openHouseholds();
     await waitFor(() => expect(api.listVectorHouseholds).toHaveBeenCalledTimes(1));
@@ -207,6 +262,10 @@ describe("VectorBlocks (35a, F-35.1)", () => {
     expect(await screen.findAllByText("quarteirão de outro bairro")).toHaveLength(1);
     expect(rowOf("Rua das Flores, 120").getByText("quarteirão de outro bairro")).not.toBeNull();
     expect(rowOf("Rua Sete, 45").queryByText("quarteirão de outro bairro")).toBeNull();
+    // Com quarteirão e sem bairro no cadastro: marca própria, não a de outro bairro.
+    expect(rowOf("Rua Nova, 9").getByText("imóvel sem bairro no cadastro")).not.toBeNull();
+    expect(rowOf("Rua Nova, 9").queryByText("quarteirão de outro bairro")).toBeNull();
+    expect(screen.getAllByText("imóvel sem bairro no cadastro")).toHaveLength(1);
     expect(api.listVectorHouseholds).toHaveBeenCalledTimes(2);
   });
 

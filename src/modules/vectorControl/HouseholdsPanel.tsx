@@ -33,6 +33,9 @@ import { alert, box, checkLabel, fieldLabel, muted, row, stack } from "../exams/
 // Catalog::ASSIGN_BATCH.
 export const ASSIGN_MAX = 200;
 const WITHOUT = "without";
+export const OTHER_NEIGHBORHOOD_TAG = "quarteirão de outro bairro";
+// Com quarteirão e sem bairro na versão atual do 24a: o perfil não recebe quarteirão novo (household_without_neighborhood).
+export const NO_NEIGHBORHOOD_TAG = "imóvel sem bairro no cadastro";
 const HOUSEHOLD_PATH = /^household_ids\[(\d+)\]$/;
 
 export function HouseholdsPanel({ neighborhoodId, domains }: { neighborhoodId: string; domains: VectorControlDomains | null }) {
@@ -100,7 +103,9 @@ export function HouseholdsPanel({ neighborhoodId, domains }: { neighborhoodId: s
     return (
       <span style={row}>
         <span>{h.block.number}</span>
-        {h.neighborhood_id !== null && h.block.neighborhood_id !== h.neighborhood_id && <Tag tone="warn" mono={false}>quarteirão de outro bairro</Tag>}
+        {h.neighborhood_id === null
+          ? <Tag tone="warn" mono={false}>{NO_NEIGHBORHOOD_TAG}</Tag>
+          : h.block.neighborhood_id !== h.neighborhood_id && <Tag tone="warn" mono={false}>{OTHER_NEIGHBORHOOD_TAG}</Tag>}
       </span>
     );
   };
