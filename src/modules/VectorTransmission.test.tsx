@@ -31,7 +31,7 @@ import { MAP_MANIFEST } from "../test/territoryMapFixtures";
 import { VC_FEATURES, cityBlock, parameterVersion, transmissionBlock, vcUser } from "../test/vectorControlFixtures";
 import { VectorTransmission } from "./VectorTransmission";
 import {
-  BLOCK_CLOSED, BLOCK_CONFIRMED, CASES_REREAD, CASE_MOVED, CYCLE_SAVED, NEED_AREA, NEED_CENTER, PROPOSAL_DISMISSED
+  BLOCK_CLOSED, BLOCK_CONFIRMED, CASES_REREAD, CASE_MOVED, CENTER_INACTIVE, CYCLE_SAVED, NEED_AREA, NEED_CENTER, NO_CASE, NO_CASE_ACK, PROPOSAL_DISMISSED
 } from "./vectorControl/BlockDetail";
 import { ADDRESS_DESCRIPTION } from "./vectorControl/CaseAddressDialog";
 
@@ -76,7 +76,7 @@ async function mountDetail(block: TransmissionBlock, o: { others?: TransmissionB
   if (block.status !== "proposed") fireEvent.click(await screen.findByRole("tab", { name: TAB[block.status] }));
   const panel = within(await screen.findByRole("tabpanel", { name: TAB[block.status] }));
   fireEvent.click(await panel.findByRole("button", { name: /^Abrir o bloqueio/ }));
-  await screen.findByRole("list", { name: "Casos do bloqueio" });
+  await screen.findByText("Ciclos de UBV");
   return r;
 }
 // Abre a ação pelo botão, informa o código quando a janela do step-up está fechada e confirma.
@@ -167,6 +167,45 @@ describe("detalhe", () => {
     expect(api.getTransmissionCaseAddress).toHaveBeenCalledTimes(1);
   });
 
+  it("endereço nunca no console; trocar de bloqueio com o diálogo aberto o apaga; resposta depois do desmonte não fica", async () => {
+    const spies = [ "log", "info", "warn", "error", "debug" ].map((k) => vi.spyOn(console, k as "log").mockImplementation(() => undefined));
+    try {
+      mocked(api.getTransmissionCaseAddress).mockResolvedValue({ patient_address: "Rua Secreta, 99", household_address: "Travessa Oculta, 7" });
+      const unplaced = { id: "c1", number: 1, disease: "dengue", case_on: "2026-11-12", has_place: false };
+      blocks = [ transmissionBlock({ cases: [ unplaced ] }), transmissionBlock({ id: "tb2", created_at: "2026-11-15T13:00:00Z", cases: [ { ...unplaced, id: "c2", number: 2 } ] }) ];
+      const { client, container } = mount();
+      const opens = await screen.findAllByRole("button", { name: /^Abrir o bloqueio/ });
+      fireEvent.click(opens.find((b) => /14\/11/.test(b.getAttribute("aria-label") ?? "")) as HTMLElement);
+      await screen.findByText("Ciclos de UBV");
+      await confirmStepUp("Ver endereço do caso");
+      expect(await screen.findByText("Rua Secreta, 99")).not.toBeNull();
+      expect(screen.getByRole("dialog", { name: "Endereço do caso 1" })).not.toBeNull();
+      // Outro bloqueio: o detalhe remonta e o diálogo some com o estado.
+      fireEvent.click(screen.getAllByRole("button", { name: /^Abrir o bloqueio/ }).find((b) => /15\/11/.test(b.getAttribute("aria-label") ?? "")) as HTMLElement);
+      await screen.findByText(/caso 2 · dengue/);
+      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(container.textContent).not.toMatch(/Rua Secreta|Travessa Oculta/);
+      expect(cacheText(client)).not.toMatch(/Rua Secreta|Travessa Oculta/);
+      expect(storageText()).not.toMatch(/Rua Secreta|Travessa Oculta/);
+      expect(api.getTransmissionCaseAddress).toHaveBeenCalledTimes(1);
+
+      // A resposta chega depois do desmonte: nada no DOM nem no cache.
+      let resolve!: (a: api.CaseAddress) => void;
+      mocked(api.getTransmissionCaseAddress).mockImplementation(() => new Promise((r) => { resolve = r; }));
+      await confirmStepUp("Ver endereço do caso");
+      await waitFor(() => expect(api.getTransmissionCaseAddress).toHaveBeenCalledTimes(2));
+      cleanup();
+      resolve({ patient_address: "Rua Secreta, 99", household_address: null });
+      await tick();
+      expect(document.body.textContent).not.toMatch(/Rua Secreta/);
+      expect(cacheText(client)).not.toMatch(/Rua Secreta/);
+      expect(storageText()).not.toMatch(/Rua Secreta/);
+      for (const spy of spies) expect(JSON.stringify(spy.mock.calls)).not.toMatch(/Rua Secreta|Travessa Oculta/);
+    } finally {
+      for (const spy of spies) spy.mockRestore();
+    }
+  });
+
   it("endereço: janela fechada pede o código; sem autenticador leva à segurança; caso com quarteirão não oferece", async () => {
     mocked(api.fetchCurrentSession).mockResolvedValue(sessionWith([ "endemic_coordinator" ], { features: VC_FEATURES, mfa_verified_at: null }));
     mocked(api.getTransmissionCaseAddress).mockResolvedValue({ patient_address: "Rua Secreta, 99", household_address: "Rua das Flores, 120" });
@@ -241,8 +280,46 @@ describe("detalhe", () => {
     expect(await screen.findByText(BLOCK_CONFIRMED)).not.toBeNull();
     expect(screen.queryByRole("button", { name: "Confirmar bloqueio" })).toBeNull();
     await tick();
-    // A resposta vai à tela; o detalhe não é relido.
+    // A resposta vai à tela; o detalhe não é relido; a aba montada (propostos) é relida UMA vez.
     expect(api.getTransmissionBlock).toHaveBeenCalledTimes(1);
+    expect(api.listTransmissionBlocks).toHaveBeenCalledTimes(2);
+  });
+
+  it("centro inativo (fora da área sugerida): não vem escolhido, aparece marcado e o bairro abre", async () => {
+    mocked(api.confirmTransmissionBlock).mockResolvedValue(transmissionBlock({ status: "active" }));
+    await mountDetail(transmissionBlock({ center_block: { id: "cb6", number: "20" }, area: [
+      { id: "cb1", number: "12", suggested: true }, { id: "cb2", number: "13", suggested: true }
+    ] }));
+    const center = screen.getByLabelText("Quarteirão do caso") as HTMLSelectElement;
+    expect(center.value).toBe("");
+    const inactive = within(center).getByRole("option", { name: "quarteirão 20 (inativo)" }) as HTMLOptionElement;
+    expect(inactive.disabled).toBe(true);
+    expect(screen.getByText(CENTER_INACTIVE("20"))).not.toBeNull();
+    expect(screen.queryByLabelText(/^quarteirão 20/)).toBeNull();
+    expect(screen.getByLabelText("Bairro")).not.toBeNull();
+    expect(blocked("Confirmar bloqueio")).toBe(true);
+    expect(screen.getByText(NEED_CENTER)).not.toBeNull();
+    fireEvent.change(center, { target: { value: "cb1" } });
+    expect(blocked("Confirmar bloqueio")).toBe(false);
+    await confirmStepUp("Confirmar bloqueio");
+    await waitFor(() => expect(api.confirmTransmissionBlock).toHaveBeenCalledTimes(1));
+    expect(api.confirmTransmissionBlock).toHaveBeenCalledWith("tb1", { center_block_id: "cb1", block_ids: [ "cb1", "cb2" ], seen_case_ids: [ "tc1" ] });
+  });
+
+  it("proposta sem caso (o api aceita): só com a marca explícita; corpo com seen_case_ids vazio", async () => {
+    mocked(api.confirmTransmissionBlock).mockResolvedValue(transmissionBlock({ status: "active", cases: [] }));
+    await mountDetail(transmissionBlock({ cases: [] }));
+    expect(screen.getByText("nenhum caso neste bloqueio")).not.toBeNull();
+    expect(blocked("Confirmar bloqueio")).toBe(true);
+    expect(screen.getByText(NO_CASE)).not.toBeNull();
+    fireEvent.click(screen.getByLabelText(NO_CASE_ACK));
+    expect(blocked("Confirmar bloqueio")).toBe(false);
+    fireEvent.click(button("Confirmar bloqueio"));
+    expect(await screen.findByText(/^Confirma o bloqueio sem caso e 2 quarteirões na área/)).not.toBeNull();
+    fireEvent.click(button("Confirmar"));
+    await waitFor(() => expect(api.confirmTransmissionBlock).toHaveBeenCalledTimes(1));
+    expect(api.confirmTransmissionBlock).toHaveBeenCalledWith("tb1", { center_block_id: "cb1", block_ids: [ "cb1", "cb2" ], seen_case_ids: [] });
+    expect(await screen.findByText(BLOCK_CONFIRMED)).not.toBeNull();
   });
 
   it("confirmar proposta sem quarteirão: escolhe bairro, quarteirão do caso e área; janela fechada pede o código", async () => {
@@ -408,6 +485,10 @@ describe("detalhe", () => {
     expect(api.closeTransmissionBlock).toHaveBeenCalledWith("tb1");
     expect(screen.queryByRole("button", { name: "Fechar bloqueio" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Novo ciclo" })).toBeNull();
+    await tick();
+    // Detalhe pela resposta (sem releitura); as duas abas montadas (propostos e ativos) relidas UMA vez cada.
+    expect(api.getTransmissionBlock).toHaveBeenCalledTimes(1);
+    expect(api.listTransmissionBlocks).toHaveBeenCalledTimes(4);
   });
 
   it("juntar caso a outro bloqueio manda o destino no corpo", async () => {

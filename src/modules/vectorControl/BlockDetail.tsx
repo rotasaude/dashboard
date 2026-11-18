@@ -61,8 +61,15 @@ const staleText = (err: unknown) => {
   const r = vectorRefusals(err)[0];
   return r.code === "invalid_request" && r.path === "seen_case_ids" ? CASES_REREAD : r.text;
 };
+// O api aceita confirmar a proposta sem caso (seen_case_ids: [], confirm.rb:40-61; o último caso foi juntado a outro bloqueio):
+// a tela pede que a coordenação diga isso de propósito.
+export const NO_CASE = "a proposta não tem caso — descarte-a, ou marque que o bloqueio segue sem caso";
+export const NO_CASE_ACK = "o bloqueio segue sem caso";
+// Json.transmission_blocks tira o quarteirão inativo da sugestão, o centro incluído (json.rb:343-353): centro fora da área = inativo,
+// e o confirm o recusaria (422 center_block_id).
+export const CENTER_INACTIVE = (n: string) => `o quarteirão ${n} do caso está inativo — escolha outro quarteirão`;
 const CONFIRM_DESCRIPTION = (cases: number, area: number) =>
-  `Confirma o bloqueio com ${cases === 1 ? "o caso mostrado" : `os ${cases} casos mostrados`} e ${area === 1 ? "1 quarteirão" : `${area} quarteirões`} na área. Se entrou caso novo, a tela relê a proposta.`;
+  `Confirma o bloqueio ${cases === 0 ? "sem caso" : `com ${cases === 1 ? "o caso mostrado" : `os ${cases} casos mostrados`}`} e ${area === 1 ? "1 quarteirão" : `${area} quarteirões`} na área. Se entrou caso novo, a tela relê a proposta.`;
 
 const OPEN = [ "proposed", "active" ];
 const STATUS_TONE: Record<string, string> = { proposed: "warn", active: "info", closed: "ok", dismissed: "neutral" };
@@ -165,11 +172,13 @@ export function BlockDetail({ id, onGoToSecurity }: { id: string; onGoToSecurity
 type AreaRow = { id: string; label: string };
 function ProposalSection({ ctx, onGoToSecurity }: { ctx: Ctx; onGoToSecurity?: () => void }) {
   const { block, msg, changed, stale } = ctx;
-  const [ center, setCenter ] = useState(block.center_block?.id ?? "");
+  const centerInactive = !!block.center_block && !block.area.some((a) => a.id === block.center_block?.id);
+  const [ center, setCenter ] = useState(block.center_block && !centerInactive ? block.center_block.id : "");
+  const [ noCaseAck, setNoCaseAck ] = useState(false);
   const [ checked, setChecked ] = useState<ReadonlySet<string>>(() => new Set(block.area.filter((a) => a.suggested).map((a) => a.id)));
   // Quarteirões de bairro já escolhidos (centro ou área): continuam à vista ao trocar de bairro.
   const [ extras, setExtras ] = useState<AreaRow[]>([]);
-  const [ picking, setPicking ] = useState(block.area.length === 0);
+  const [ picking, setPicking ] = useState(block.area.length === 0 || centerInactive);
   const [ neighborhoodId, setNeighborhoodId ] = useState("");
   const [ confirming, setConfirming ] = useState(false);
   const confirmed = useRef<TransmissionBlock | null>(null);
@@ -181,7 +190,6 @@ function ProposalSection({ ctx, onGoToSecurity }: { ctx: Ctx; onGoToSecurity?: (
   const nbRows: AreaRow[] = (cityBlocks.data ?? []).filter((b) => b.active).map((b) => ({ id: b.id, label: `quarteirão ${b.number} · ${b.neighborhood.name}` }));
   const seen = new Set<string>();
   const rows = [ ...areaRows, ...extras, ...nbRows ].filter((r) => (seen.has(r.id) ? false : (seen.add(r.id), true)));
-  if (block.center_block && !seen.has(block.center_block.id)) rows.unshift({ id: block.center_block.id, label: `quarteirão ${block.center_block.number}` });
   const keep = (id: string) => {
     const r = nbRows.find((x) => x.id === id);
     if (r && !extras.some((x) => x.id === id)) setExtras((e) => [ ...e, r ]);
@@ -192,8 +200,8 @@ function ProposalSection({ ctx, onGoToSecurity }: { ctx: Ctx; onGoToSecurity?: (
     setChecked((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   };
   const blockIds = rows.filter((r) => checked.has(r.id)).map((r) => r.id);
-  const reason = !center ? NEED_CENTER : blockIds.length === 0 ? NEED_AREA : blockIds.length > AREA_MAX ? AREA_TOO_BIG
-    : block.cases.length > CASES_MAX ? TOO_MANY_CASES : null;
+  const reason = !center || (centerInactive && center === block.center_block?.id) ? NEED_CENTER : blockIds.length === 0 ? NEED_AREA : blockIds.length > AREA_MAX ? AREA_TOO_BIG
+    : block.cases.length > CASES_MAX ? TOO_MANY_CASES : block.cases.length === 0 && !noCaseAck ? NO_CASE : null;
 
   async function done() {
     setConfirming(false);
@@ -212,9 +220,13 @@ function ProposalSection({ ctx, onGoToSecurity }: { ctx: Ctx; onGoToSecurity?: (
           Quarteirão do caso
           <select value={center} style={inputStyle} onChange={(e) => { msg.start(); keep(e.target.value); setCenter(e.target.value); }}>
             <option value="">escolha o quarteirão</option>
+            {centerInactive && block.center_block && (
+              <option value={block.center_block.id} disabled>{`quarteirão ${block.center_block.number} (inativo)`}</option>
+            )}
             {rows.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
           </select>
         </label>
+        {centerInactive && block.center_block && <p role="status" style={alert}>{CENTER_INACTIVE(block.center_block.number)}</p>}
         <p style={muted}>{CENTER_IN_AREA}</p>
         {rows.length === 0 ? <p style={muted}>sem quarteirão sugerido — escolha um bairro</p> : rows.map((r) => (
           <label key={r.id} style={checkLabel}>
@@ -238,6 +250,12 @@ function ProposalSection({ ctx, onGoToSecurity }: { ctx: Ctx; onGoToSecurity?: (
           </>
         )}
       </fieldset>
+      {block.cases.length === 0 && (
+        <label style={checkLabel}>
+          <input type="checkbox" checked={noCaseAck} onChange={(e) => { msg.start(); setNoCaseAck(e.target.checked); }} />
+          {NO_CASE_ACK}
+        </label>
+      )}
       {!confirming ? (
         <div style={row}>
           <ActionButton disabledReason={reason} onClick={() => { msg.start(); setConfirming(true); }}>Confirmar bloqueio</ActionButton>
@@ -256,10 +274,12 @@ function ProposalSection({ ctx, onGoToSecurity }: { ctx: Ctx; onGoToSecurity?: (
           onCancel={() => setConfirming(false)}
           onGoToSecurity={onGoToSecurity}
           translateError={(e) => {
+            // O SensitiveAction fecha aqui: a frase vai à mensagem do detalhe (a mesma devolvida).
             setConfirming(false);
-            if (isVectorStale(e)) void stale(e);
-            else msg.fail(vectorError(e));
-            return staleText(e);
+            if (isVectorStale(e)) { void stale(e); return staleText(e); }
+            const text = vectorError(e);
+            msg.fail(text);
+            return text;
           }}
         />
       )}
