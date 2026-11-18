@@ -7,7 +7,7 @@
 // nunca vai para log, URL ou mensagem de erro.
 import {
   AttributionControl, Map as MapLibreMap, Marker, NavigationControl, addProtocol, setWorkerUrl,
-  type GeoJSONSource, type MapLayerMouseEvent, type MapMouseEvent
+  type ExpressionSpecification, type GeoJSONSource, type MapLayerMouseEvent, type MapMouseEvent
 } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { PMTiles, Protocol } from "pmtiles";
@@ -28,7 +28,13 @@ export interface FieldMapHandle {
 
 // O mapa é sempre claro (Q18), em qualquer tema do dashboard: o contorno
 // (`outline`) é o que mantém o ponto legível quando a cor do tema é clara.
-export type FieldMapOptions = { mapUrl: string; base: string; colors: { point: string; selected: string; outline: string } };
+// Módulo 35a: `cluster: false` mostra cada ponto (padrão `true`, o 24c); `colors.categories` pinta cada ponto pela
+// `category` (código → cor), e categoria fora da tabela fica com `colors.point`. Só círculos: nenhuma camada de texto
+// ou símbolo, que pediria faixas de fonte (glifo ausente derruba o mapa inteiro).
+export type FieldMapOptions = {
+  mapUrl: string; base: string; cluster?: boolean;
+  colors: { point: string; selected: string; outline: string; categories?: Record<string, string> };
+};
 
 const SOURCE = "households";
 const EMPTY: PointCollection = { type: "FeatureCollection", features: [] };
@@ -44,7 +50,15 @@ function pmtilesProtocol(): Protocol {
   return protocol;
 }
 
+// O MapLibre recusa `match` sem nenhum par: sem categoria, a cor do 24c (seleção ou ponto).
+function pointColor(colors: FieldMapOptions["colors"]): unknown[] {
+  const pairs = Object.entries(colors.categories ?? {});
+  if (pairs.length === 0) return [ "case", [ "get", "selected" ], colors.selected, colors.point ];
+  return [ "match", [ "get", "category" ], ...pairs.flat(), colors.point ];
+}
+
 export function createFieldMap(container: HTMLElement, opts: FieldMapOptions): FieldMapHandle {
+  const cluster = opts.cluster ?? true;
   const archive = new PMTiles(opts.mapUrl);
   pmtilesProtocol().add(archive);
 
@@ -67,19 +81,21 @@ export function createFieldMap(container: HTMLElement, opts: FieldMapOptions): F
 
   map.on("load", () => {
     loaded = true;
-    map.addSource(SOURCE, { type: "geojson", data: points, cluster: true, clusterRadius: 40 });
-    map.addLayer({
-      id: "households-clusters", type: "circle", source: SOURCE, filter: [ "has", "point_count" ],
-      paint: {
-        "circle-color": opts.colors.point, "circle-opacity": 0.85,
-        "circle-radius": [ "step", [ "get", "point_count" ], 14, 10, 18, 50, 24 ],
-        "circle-stroke-width": 2, "circle-stroke-color": opts.colors.outline
-      }
-    });
+    map.addSource(SOURCE, cluster ? { type: "geojson", data: points, cluster: true, clusterRadius: 40 } : { type: "geojson", data: points });
+    if (cluster) {
+      map.addLayer({
+        id: "households-clusters", type: "circle", source: SOURCE, filter: [ "has", "point_count" ],
+        paint: {
+          "circle-color": opts.colors.point, "circle-opacity": 0.85,
+          "circle-radius": [ "step", [ "get", "point_count" ], 14, 10, 18, 50, 24 ],
+          "circle-stroke-width": 2, "circle-stroke-color": opts.colors.outline
+        }
+      });
+    }
     map.addLayer({
       id: "households-points", type: "circle", source: SOURCE, filter: [ "!", [ "has", "point_count" ] ],
       paint: {
-        "circle-color": [ "case", [ "get", "selected" ], opts.colors.selected, opts.colors.point ],
+        "circle-color": pointColor(opts.colors) as ExpressionSpecification,
         "circle-radius": [ "case", [ "get", "selected" ], 9, 6 ],
         "circle-stroke-width": 2, "circle-stroke-color": opts.colors.outline
       }
@@ -91,9 +107,12 @@ export function createFieldMap(container: HTMLElement, opts: FieldMapOptions): F
     const id = e.features?.[0]?.properties?.id;
     if (typeof id === "string") pointClick?.(id);
   });
-  map.on("click", "households-clusters", (e: MapLayerMouseEvent) => {
-    map.easeTo({ center: [ e.lngLat.lng, e.lngLat.lat ], zoom: map.getZoom() + 2 });
-  });
+  // Sem agrupamento a camada dos grupos não existe: ouvi-la faria o MapLibre avisar a cada clique.
+  if (cluster) {
+    map.on("click", "households-clusters", (e: MapLayerMouseEvent) => {
+      map.easeTo({ center: [ e.lngLat.lng, e.lngLat.lat ], zoom: map.getZoom() + 2 });
+    });
+  }
 
   // Sem ponto para enquadrar, o mapa abre na área do arquivo (a cidade), não
   // no mundo. Arquivo inalcançável: o mapa fica vazio e a tela segue.

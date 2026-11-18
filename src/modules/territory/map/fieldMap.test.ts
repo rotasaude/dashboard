@@ -197,4 +197,33 @@ describe("createFieldMap (24c)", () => {
     expect(first.removed).toBe(true);
     expect(fake.state.markers).toHaveLength(2);
   });
+
+  it("35a: com cluster: false a fonte não agrupa e só a camada dos pontos entra", () => {
+    const h = createFieldMap(div(), { ...OPTS, cluster: false }); const clicked = vi.fn();
+    h.onPointClick(clicked);
+    lastMap().fire("load");
+    expect(lastMap().sourceSpecs.households).toEqual({ type: "geojson", data: { type: "FeatureCollection", features: [] } });
+    expect("cluster" in lastMap().sourceSpecs.households).toBe(false);
+    expect(lastMap().layers.map((l) => l.id)).toEqual([ "households-points" ]);
+    expect(lastMap().handlers.some((x) => x.layer === "households-clusters")).toBe(false);
+    lastMap().fire("click", "households-points", { features: [ { properties: { id: "h1" } } ] });
+    expect(clicked).toHaveBeenCalledWith("h1");
+  });
+
+  it("35a: com categories, households-points pinta por categoria e o desconhecido fica com a cor do ponto", () => {
+    createFieldMap(div(), { ...OPTS, cluster: false, colors: { point: "#888", selected: "#000", outline: "white", categories: { red: "#c00", green: "#0a0" } } });
+    lastMap().fire("load");
+    const points = { paint: lastMap().layers.find((l) => l.id === "households-points")!.paint as Record<string, unknown> };
+    expect(points.paint["circle-color"]).toEqual([ "match", [ "get", "category" ], "red", "#c00", "green", "#0a0", "#888" ]);
+    expect(points.paint["circle-stroke-color"]).toBe("white");
+    // Nenhuma camada de texto ou símbolo: o mapa não pede faixa de fonte nova.
+    expect(lastMap().layers.every((l) => l.type === "circle")).toBe(true);
+  });
+
+  it("35a: categories vazio é o mesmo que sem categories (o match vazio é inválido no MapLibre)", () => {
+    createFieldMap(div(), { ...OPTS, colors: { ...OPTS.colors, categories: {} } });
+    lastMap().fire("load");
+    const points = { paint: lastMap().layers.find((l) => l.id === "households-points")!.paint as Record<string, unknown> };
+    expect(points.paint["circle-color"]).toEqual([ "case", [ "get", "selected" ], "red", "blue" ]);
+  });
 });

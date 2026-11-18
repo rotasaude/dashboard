@@ -1,8 +1,9 @@
 // Módulo 24c (ADR 0053): os pontos dos domicílios no mapa da microárea.
 // Funções puras, sem MapLibre. Nada de pessoa: o rótulo é só rua e número.
-import type { MapHousehold } from "../../../lib/api";
+import type { MapHousehold, VectorMapPoint } from "../../../lib/api";
 
-export type PointProperties = { id: string; selected: boolean; label: string };
+// `category` (35a): a cor do ponto pela camada; o 24c não a usa.
+export type PointProperties = { id: string; selected: boolean; label: string; category?: string };
 export type PointCollection = GeoJSON.FeatureCollection<GeoJSON.Point, PointProperties>;
 export type Bounds = [ [ number, number ], [ number, number ] ];
 
@@ -28,8 +29,25 @@ export function toFeatureCollection(items: MapHousehold[], selectedId: string | 
 
 // [[oeste, sul], [leste, norte]], para enquadrar o mapa nos pontos.
 export function boundsOf(items: MapHousehold[]): Bounds | null {
-  if (items.length === 0) return null;
-  const lng = items.map((h) => h.location.longitude);
-  const lat = items.map((h) => h.location.latitude);
+  return boundsOfPoints(items.map((h) => h.location));
+}
+
+export function boundsOfPoints(points: readonly { latitude: number; longitude: number }[]): Bounds | null {
+  if (points.length === 0) return null;
+  const lng = points.map((p) => p.longitude);
+  const lat = points.map((p) => p.latitude);
   return [ [ Math.min(...lng), Math.min(...lat) ], [ Math.max(...lng), Math.max(...lat) ] ];
+}
+
+// Módulo 35a (Q13(7)): os pontos de uma camada do mapa de endemias, pintados pela categoria. Só id, rótulo e
+// categoria vão para o mapa: nunca pessoa nem caso (o rótulo é o do api, D-5).
+export function toCategoryCollection(points: VectorMapPoint[]): PointCollection {
+  return {
+    type: "FeatureCollection",
+    features: points.map((p) => ({
+      type: "Feature",
+      geometry: { type: "Point", coordinates: [ p.longitude, p.latitude ] },
+      properties: { id: p.id, selected: false, label: p.label, category: p.category }
+    }))
+  };
 }

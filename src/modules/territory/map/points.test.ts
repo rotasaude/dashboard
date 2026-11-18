@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { boundsOf, roundCoord, toFeatureCollection } from "./points";
+import { boundsOf, boundsOfPoints, roundCoord, toCategoryCollection, toFeatureCollection } from "./points";
 import { mapHousehold } from "../../../test/territoryMapFixtures";
 
 describe("pontos do mapa da microárea (24c)", () => {
@@ -31,5 +31,20 @@ describe("pontos do mapa da microárea (24c)", () => {
     expect(boundsOf([ mapHousehold() ])).toEqual([ [ -49.27325411, -25.42847123 ], [ -49.27325411, -25.42847123 ] ]);
     expect(boundsOf([ mapHousehold(), mapHousehold({ id: "hh2", location: { latitude: -25.5, longitude: -49.2, source: "map" } }) ]))
       .toEqual([ [ -49.27325411, -25.5 ], [ -49.2, -25.42847123 ] ]);
+  });
+
+  it("toCategoryCollection (35a): [longitude, latitude] e só id, selected, label e category", () => {
+    const fc = toCategoryCollection([ { id: "h1", latitude: -25.4, longitude: -49.27, category: "red", label: "Quarteirão 12" } ]);
+    expect(fc.type).toBe("FeatureCollection");
+    expect(fc.features.map((f) => f.geometry.coordinates)).toEqual([ [ -49.27, -25.4 ] ]);
+    expect(fc.features.map((f) => f.properties)).toEqual([ { id: "h1", selected: false, label: "Quarteirão 12", category: "red" } ]);
+    expect(Object.keys(fc.features[0].properties).sort()).toEqual([ "category", "id", "label", "selected" ]);
+    expect(toCategoryCollection([]).features).toEqual([]);
+  });
+
+  it("boundsOfPoints (35a): a caixa dos pontos; vazio = null", () => {
+    expect(boundsOfPoints([])).toBeNull();
+    expect(boundsOfPoints([ { latitude: -25.4, longitude: -49.27 }, { latitude: -25.5, longitude: -49.2 } ]))
+      .toEqual([ [ -49.27, -25.5 ], [ -49.2, -25.4 ] ]);
   });
 });
