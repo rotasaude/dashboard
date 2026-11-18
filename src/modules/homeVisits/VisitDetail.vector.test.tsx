@@ -2,7 +2,7 @@
 // Detalhe da visita com o boletim do agente de endemias (módulo 35a, Task 5; F-35.2, F-35.8): rótulos dos domínios do 35a,
 // recuperado, depósitos, medidas com produto e quantidade, amostras com etiqueta e resultado. Sem boletim, nada muda.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, screen, within } from "@testing-library/react";
+import { cleanup, screen, waitFor, within } from "@testing-library/react";
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const real = await importOriginal<typeof import("../../lib/api")>();
@@ -69,31 +69,33 @@ describe("Detalhe da visita com boletim", () => {
     expect(s.getByText("sem amostra")).not.toBeNull();
   });
 
-  it("enfermeiro ou médico da equipe: os rótulos fixos do contrato, sem ler /vector_control/domains", async () => {
+  it("enfermeiro ou médico da equipe: os rótulos vêm de /vector_control/domains, sem conferir papel antes (Q32)", async () => {
     // A sessão do enfermeiro e a do médico são iguais aqui: health_professional, sem papel do 35a.
     mocked(api.fetchCurrentSession).mockResolvedValue(vcUser([ "health_professional" ]));
     mocked(api.getHomeVisit).mockResolvedValue(visit({ vector_inspection: inspection() }));
     mount();
     const s = await section();
-    expect(s.getByText("LI+T — Levantamento de índice e tratamento")).not.toBeNull();
+    expect(await s.findByText("LI+T — Levantamento de índice e tratamento")).not.toBeNull();
     expect(s.getByText("Trabalhado")).not.toBeNull();
     expect(s.getByText("Rotina")).not.toBeNull();
     expect(s.getByText("A2 — Depósito de armazenamento ao nível do solo")).not.toBeNull();
     expect(s.getByText("Focal (larvicida)")).not.toBeNull();
-    await new Promise((r) => setTimeout(r, 20));
-    expect(api.getVectorDomains).not.toHaveBeenCalled();
+    expect(api.getVectorDomains).toHaveBeenCalledTimes(1);
   });
 
-  it("a coordenação com 403 nos domínios: os rótulos fixos; código desconhecido aparece cru", async () => {
-    coordinator();
-    mocked(api.getVectorDomains).mockRejectedValue(new ApiError(403, { error: "missing_role" }, "x"));
-    mocked(api.getHomeVisit).mockResolvedValue(visit({ vector_inspection: inspection({ activity: "zz_new" as never }) }));
-    mount();
-    const s = await section();
-    expect(await s.findByText("zz_new")).not.toBeNull();
-    expect(s.getByText("Trabalhado")).not.toBeNull();
-    expect(s.getByText("A2 — Depósito de armazenamento ao nível do solo")).not.toBeNull();
-    expect(api.getVectorDomains).toHaveBeenCalledTimes(1);
+  it("/domains falha (403 ou rede): os códigos crus, sem quebrar", async () => {
+    for (const err of [ new ApiError(403, { error: "missing_role" }, "x"), new TypeError("Failed to fetch") ]) {
+      mocked(api.getVectorDomains).mockReset().mockRejectedValue(err);
+      mocked(api.getHomeVisit).mockResolvedValue(visit({ vector_inspection: inspection() }));
+      mount();
+      const s = await section();
+      await waitFor(() => expect(api.getVectorDomains).toHaveBeenCalledTimes(1));
+      expect(await s.findByText("li_t")).not.toBeNull();
+      expect(s.getByText("worked")).not.toBeNull();
+      expect(s.getByText("A2")).not.toBeNull();
+      expect(s.getByText("Pyriproxyfen 0,5% G · 2 cargas · 4,00 g")).not.toBeNull();
+      cleanup();
+    }
   });
 
   it("visita sem vector_inspection: sem a seção e sem ler os domínios", async () => {

@@ -7,7 +7,7 @@
 import { useState } from "react";
 import { errorCode, listDue, type DueItem, type HomeVisitDomains, type HomeVisitTeam, type VectorControlDomains } from "../../lib/api";
 import { fmtDay, propertyLabel } from "../../lib/homeVisits";
-import { VC_DUE_KEY, VECTOR_LABELS, domainLabel, dueReasonLabel, riskTone, vectorError } from "../../lib/vectorControl";
+import { VC_DUE_KEY, domainLabel, dueReasonLabel, riskTone, vectorError } from "../../lib/vectorControl";
 import type { VectorStart } from "../../lib/vectorInspection";
 import { PagedBody, usePaged } from "../homeVisits/usePaged";
 import type { VisitStart } from "../homeVisits/useVisitHandoff";
@@ -69,7 +69,8 @@ function DuePage({ team, microAreaId, domains, visitDomains, today, busy, enable
 }) {
   const list = usePaged<DueItem>([ VC_DUE_KEY, microAreaId ], (b) => listDue(microAreaId, b), true, enabled, dueError);
   if (list.error) return <p role="alert" style={alert}>{dueError(list.error)}</p>;
-  const risks = domains?.risk_classes ?? VECTOR_LABELS.risk_classes;
+  // Sem os domínios (leitura falhou), o código do risco aparece cru.
+  const risks = domains?.risk_classes ?? [];
   return (
     <PagedBody list={list}>
       {(items) => items.length === 0 ? <EmptyState title={DUE_EMPTY} /> : items.map((item) => (
