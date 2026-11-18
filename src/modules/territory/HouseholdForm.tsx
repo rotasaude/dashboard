@@ -11,8 +11,8 @@
 // "Recarregar" relê o domicílio. Sem step-up (só microárea pede).
 // `propertyTypes` (módulo 35a, Q13(1)): a lista do api para a microárea — o
 // agente de endemias só vê esses tipos (não residenciais), também na edição;
-// a recusa cbo_not_allowed dele é pelo tipo e marca o campo. null/ausente =
-// os 14 tipos, como no 24a.
+// as recusas dele têm frase própria (agentHouseholdError), sem marcar campo:
+// o tipo nunca é a causa. null/ausente = os 14 tipos, como no 24a.
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -25,7 +25,9 @@ import {
   DOMAINS, SECTIONS, STRING_DOMAINS, allowsLivingConditions, householdProblem, livingFieldAllowed, usableNeighborhood, type FieldSpec
 } from "../../lib/territoryDictionaries";
 import { FIELD_LABELS, sectionFieldLabel } from "../../lib/territoryLabels";
-import { HOUSEHOLDS_KEY, HOUSEHOLD_KEY, STALE_TEXT, STATIC_QUERY, errorPath, isStale, territoryError } from "../../lib/territoryRegistry";
+import {
+  HOUSEHOLDS_KEY, HOUSEHOLD_KEY, STALE_TEXT, STATIC_QUERY, agentHouseholdError, errorPath, isStale, territoryError
+} from "../../lib/territoryRegistry";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { alert, checkLabel, fieldLabel, fieldset, form, legend, muted, row } from "../exams/styles";
 import { useFieldFocus } from "./fieldFocus";
@@ -134,8 +136,9 @@ export function HouseholdForm({ microAreaId, initial, propertyTypes = null, onSa
     },
     onError: (err) => {
       if (isStale(err)) { setProblem(null); focus.mark(null); setStale(true); return; }
-      const path = errorPath(err) ?? (propertyTypes && errorCode(err) === "cbo_not_allowed" ? "property_type" : null);
-      reject(errorCode(err) === "invalid_household" && path === "families" ? FAMILIES_TEXT : territoryError(err), path);
+      const path = errorPath(err);
+      const text = propertyTypes ? agentHouseholdError(err, { editing: !!initial }) : territoryError(err);
+      reject(errorCode(err) === "invalid_household" && path === "families" ? FAMILIES_TEXT : text, path);
     }
   });
 

@@ -24,6 +24,9 @@ const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
 const NON_RESIDENTIAL = [ "2", "3", "4", "5", "6", "12", "13" ];
 const NOTE = "Nesta microárea você cadastra só imóvel não residencial (ponto estratégico, comércio, terreno baldio, escola, creche, estabelecimento religioso e outros).";
 const CBO_TEXT = "só o ACS da microárea, enfermeiro ou médico da equipe grava o cadastro — o agente de endemias, só imóvel não residencial";
+const OLD_CBO_TEXT = "só o ACS da microárea, enfermeiro ou médico da equipe grava o cadastro";
+const HAS_RESIDENT = "este imóvel tem morador ativo; só a equipe da APS edita";
+const NOT_ASSIGNED = "esta microárea não está mais atribuída a você — recarregue a tela";
 const label = (code: string) => DOMAINS.tipo_de_imovel.find((t) => String(t.code) === code)!.label;
 const ALL_LABELS = DOMAINS.tipo_de_imovel.map((t) => t.label);
 const AGENT_LABELS = NON_RESIDENTIAL.map(label);
@@ -96,6 +99,8 @@ describe("TerritoryTeam — agente de endemias (35a, Q13(1))", () => {
     });
     expect(await screen.findByText("Domicílio salvo. Nova versão enviada ao e-SUS.")).not.toBeNull();
     expect(api.listHouseholds).toHaveBeenCalledWith({ microAreaId: "ma1", before: null });
+    // Abrir a microárea + a releitura depois de salvar (lista nominal com trilha).
+    await waitFor(() => expect(api.listHouseholds).toHaveBeenCalledTimes(2));
     expect(api.getTerritoryContext).toHaveBeenCalledTimes(1);
   });
 
@@ -112,8 +117,10 @@ describe("TerritoryTeam — agente de endemias (35a, Q13(1))", () => {
     // Imóvel "4": edita só o domicílio, com os tipos dele.
     fireEvent.click(screen.getByRole("button", { name: "Editar domicílio" }));
     expect(typeOptions()).toEqual(AGENT_LABELS);
+    expect(api.listHouseholds).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole("button", { name: "Salvar domicílio" }));
     await waitFor(() => expect(api.updateHousehold).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(api.listHouseholds).toHaveBeenCalledTimes(2));
     expect(mocked(api.updateHousehold).mock.calls[0][1].property_type).toBe("4");
     expect(mocked(api.updateHousehold).mock.calls[0][2]).toBe(2);
     cleanup();
@@ -166,6 +173,51 @@ describe("TerritoryTeam — agente de endemias (35a, Q13(1))", () => {
     expect(screen.queryByText(NOTE)).toBeNull();
   });
 
+  it("ACS e enfermeiro: 403 cbo_not_allowed e out_of_scope com as frases do 24a de sempre", async () => {
+    for (const context of [ territoryContext(), territoryContext({ teams: [ { ...TEAM_ESF, unit: { id: "u1", name: "UBS Vila Verde" },
+      reads_whole_team: true, micro_areas: [ { ...microArea(), can_register: true, property_types: null } ] } ] }) ]) {
+      mocked(api.getTerritoryContext).mockResolvedValue(context);
+      mocked(api.createHousehold).mockReset();
+      mocked(api.createHousehold).mockRejectedValue(new api.ApiError(403, { error: "cbo_not_allowed" }, "403"));
+      renderWithProviders(<TerritoryTeam today={TODAY24} />);
+      fireEvent.click(await screen.findByRole("button", { name: "Novo domicílio" }));
+      await fillAddress();
+      typeIn("Tipo de imóvel", "2");
+      fireEvent.click(screen.getByRole("button", { name: "Salvar domicílio" }));
+      expect(await screen.findByText(OLD_CBO_TEXT)).not.toBeNull();
+      expect(screen.queryByText(CBO_TEXT)).toBeNull();
+      mocked(api.createHousehold).mockRejectedValue(new api.ApiError(403, { error: "out_of_scope" }, "403"));
+      fireEvent.click(screen.getByRole("button", { name: "Salvar domicílio" }));
+      expect(await screen.findByText("esta microárea não é da sua equipe")).not.toBeNull();
+      expect(api.createHousehold).toHaveBeenCalledTimes(2);
+      cleanup();
+    }
+  });
+
+  it("agente: editar ou inativar imóvel com morador ativo → a frase do morador, sem marcar o tipo", async () => {
+    mocked(api.updateHousehold).mockRejectedValue(new api.ApiError(403, { error: "cbo_not_allowed" }, "403"));
+    renderWithProviders(<TerritoryTeam today={TODAY24} />);
+    await openHousehold();
+    fireEvent.click(screen.getByRole("button", { name: "Editar domicílio" }));
+    fireEvent.click(screen.getByRole("button", { name: "Salvar domicílio" }));
+    expect(await screen.findByText(HAS_RESIDENT)).not.toBeNull();
+    expect(screen.getByLabelText("Tipo de imóvel").getAttribute("aria-invalid")).toBeNull();
+    expect(document.activeElement).not.toBe(screen.getByLabelText("Tipo de imóvel"));
+    expect(screen.queryByText(CBO_TEXT)).toBeNull();
+    expect(api.updateHousehold).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Inativar domicílio" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar inativação" }));
+    expect(await screen.findByText(HAS_RESIDENT)).not.toBeNull();
+    expect(mocked(api.updateHousehold).mock.calls[1][1].status).toBe("inactive");
+    // Atribuição encerrada no meio da sessão.
+    mocked(api.updateHousehold).mockRejectedValue(new api.ApiError(403, { error: "out_of_scope" }, "403"));
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar inativação" }));
+    expect(await screen.findByText(NOT_ASSIGNED)).not.toBeNull();
+    expect(api.updateHousehold).toHaveBeenCalledTimes(3);
+    expect(api.listRegistrations).not.toHaveBeenCalled();
+  });
+
   it("403 cbo_not_allowed mostra a frase nova", async () => {
     mocked(api.createHousehold).mockRejectedValue(new api.ApiError(403, { error: "cbo_not_allowed" }, "403"));
     renderWithProviders(<TerritoryTeam today={TODAY24} />);
@@ -174,15 +226,16 @@ describe("TerritoryTeam — agente de endemias (35a, Q13(1))", () => {
     typeIn("Tipo de imóvel", "2");
     fireEvent.click(screen.getByRole("button", { name: "Salvar domicílio" }));
     expect(await screen.findByText(CBO_TEXT)).not.toBeNull();
-    // A recusa do agente é pelo tipo: o campo fica marcado e com o foco.
+    // A tela só oferece os tipos da lista: o tipo nunca é a causa, nada é marcado.
     const type = screen.getByLabelText("Tipo de imóvel");
-    expect(type.getAttribute("aria-invalid")).toBe("true");
-    expect(document.activeElement).toBe(type);
+    expect(type.getAttribute("aria-invalid")).toBeNull();
+    expect(document.activeElement).not.toBe(type);
     expect(api.createHousehold).toHaveBeenCalledTimes(1);
-    // A microárea não atribuída é recusada sem campo: só a frase.
+    // A microárea deixou de ser atribuída: a frase do agente, sem campo.
     mocked(api.createHousehold).mockRejectedValue(new api.ApiError(403, { error: "out_of_scope" }, "403"));
     fireEvent.click(screen.getByRole("button", { name: "Salvar domicílio" }));
-    expect(await screen.findByText("esta microárea não é da sua equipe")).not.toBeNull();
+    expect(await screen.findByText(NOT_ASSIGNED)).not.toBeNull();
+    expect(screen.queryByText("esta microárea não é da sua equipe")).toBeNull();
     expect(screen.getByLabelText("Tipo de imóvel").getAttribute("aria-invalid")).toBeNull();
     expect(api.createHousehold).toHaveBeenCalledTimes(2);
   });

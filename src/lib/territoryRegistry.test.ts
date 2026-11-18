@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { ApiError } from "./api";
 import {
   IDENTITY_REVIEW_TEXT, STALE_TEXT, TERRITORY_DISABLED, TERRITORY_NO_ROLE, canUseTerritory, cpfProblem, duplicateQueryProblem, errorPath,
-  exitReasonLabel, householdTypesFor, isStale, microAreaCodeProblem, microAreaNameProblem, registryStatusLabel, registryStatusTone, territoryError, territoryRoles
+  AGENT_CBO_NOT_ALLOWED, AGENT_HAS_RESIDENT, AGENT_OUT_OF_SCOPE, agentHouseholdError, exitReasonLabel, householdTypesFor, isStale, microAreaCodeProblem, microAreaNameProblem, registryStatusLabel, registryStatusTone, territoryError, territoryRoles
 } from "./territoryRegistry";
 
 const user = (roles: string[], features: string[], operator = false) =>
@@ -86,7 +86,7 @@ describe("recusas do api (contrato §3–§5; api 17175a8)", () => {
     [ 422, "invalid_ethnicity", "etnia inválida: só vale com raça/cor indígena e com um código de etnia da lista — confira a raça/cor ou escolha outro código" ],
     [ 422, "too_long", "texto maior que o limite do campo destacado" ],
     [ 422, "invalid_transition", "esta ação não vale para a situação atual do cadastro (já saiu ou recusou)" ],
-    [ 403, "cbo_not_allowed", "só o ACS da microárea, enfermeiro ou médico da equipe grava o cadastro — o agente de endemias, só imóvel não residencial" ],
+    [ 403, "cbo_not_allowed", "só o ACS da microárea, enfermeiro ou médico da equipe grava o cadastro" ],
     [ 403, "out_of_scope", "esta microárea não é da sua equipe" ],
     [ 403, "missing_role", TERRITORY_NO_ROLE ],
     [ 409, "stale_version", STALE_TEXT ],
@@ -159,5 +159,21 @@ describe("householdTypesFor", () => {
       .toEqual([ "2", "3", "4", "5", "6", "12", "13" ]);
     expect(householdTypesFor({ can_register: false, property_types: null })).toEqual([]);
     expect(householdTypesFor({ can_register: false, property_types: [ "2" ] })).toEqual([]);
+  });
+});
+
+describe("agentHouseholdError (só a ficha do agente de endemias)", () => {
+  it("cbo_not_allowed: criar → a regra do agente; editar → morador ativo; out_of_scope → atribuição encerrada; o resto, o 24a", () => {
+    const cbo = refusal(403, { error: "cbo_not_allowed" });
+    expect(agentHouseholdError(cbo, { editing: false })).toBe(AGENT_CBO_NOT_ALLOWED);
+    expect(AGENT_CBO_NOT_ALLOWED).toBe("só o ACS da microárea, enfermeiro ou médico da equipe grava o cadastro — o agente de endemias, só imóvel não residencial");
+    expect(agentHouseholdError(cbo, { editing: true })).toBe(AGENT_HAS_RESIDENT);
+    expect(AGENT_HAS_RESIDENT).toBe("este imóvel tem morador ativo; só a equipe da APS edita");
+    expect(agentHouseholdError(refusal(403, { error: "out_of_scope" }), { editing: false })).toBe(AGENT_OUT_OF_SCOPE);
+    expect(AGENT_OUT_OF_SCOPE).toBe("esta microárea não está mais atribuída a você — recarregue a tela");
+    expect(agentHouseholdError(refusal(409, { error: "stale_version" }), { editing: true })).toBe(STALE_TEXT);
+    // O mapa do 24a não muda para os outros.
+    expect(territoryError(cbo)).toBe("só o ACS da microárea, enfermeiro ou médico da equipe grava o cadastro");
+    expect(territoryError(refusal(403, { error: "out_of_scope" }))).toBe("esta microárea não é da sua equipe");
   });
 });

@@ -132,8 +132,7 @@ const ERRORS: Record<string, string> = {
   invalid_ethnicity: "etnia inválida: só vale com raça/cor indígena e com um código de etnia da lista — confira a raça/cor ou escolha outro código",
   too_long: "texto maior que o limite do campo destacado",
   invalid_transition: "esta ação não vale para a situação atual do cadastro (já saiu ou recusou)",
-  // Módulo 35a (Q13(1)): o agente de endemias grava só o imóvel não residencial.
-  cbo_not_allowed: "só o ACS da microárea, enfermeiro ou médico da equipe grava o cadastro — o agente de endemias, só imóvel não residencial",
+  cbo_not_allowed: "só o ACS da microárea, enfermeiro ou médico da equipe grava o cadastro",
   out_of_scope: "esta microárea não é da sua equipe",
   missing_role: TERRITORY_NO_ROLE,
   stale_version: STALE_TEXT,
@@ -188,3 +187,20 @@ export function errorPath(err: unknown): string | null {
 }
 
 export function isStale(err: unknown): boolean { return errorCode(err) === "stale_version"; }
+
+// ─── Agente de endemias (módulo 35a, Q13(1), Q14(2)) ───────────────────────
+// Frases só da ficha do agente (a microárea veio com `property_types`); o
+// resto do 24a segue o ERRORS acima. Nenhuma marca campo: a tela só oferece
+// os tipos da lista, então o tipo nunca é a causa.
+export const AGENT_CBO_NOT_ALLOWED = "só o ACS da microárea, enfermeiro ou médico da equipe grava o cadastro — o agente de endemias, só imóvel não residencial";
+// Editar/inativar/reativar: o api recusa o imóvel com morador ativo (SaveHousehold, sem path).
+export const AGENT_HAS_RESIDENT = "este imóvel tem morador ativo; só a equipe da APS edita";
+// A atribuição da microárea acabou depois da leitura do contexto.
+export const AGENT_OUT_OF_SCOPE = "esta microárea não está mais atribuída a você — recarregue a tela";
+
+export function agentHouseholdError(err: unknown, { editing }: { editing: boolean }): string {
+  const code = errorCode(err);
+  if (code === "cbo_not_allowed") return editing ? AGENT_HAS_RESIDENT : AGENT_CBO_NOT_ALLOWED;
+  if (code === "out_of_scope") return AGENT_OUT_OF_SCOPE;
+  return territoryError(err);
+}

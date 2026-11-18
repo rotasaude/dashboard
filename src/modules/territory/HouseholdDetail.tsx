@@ -139,7 +139,7 @@ export function HouseholdDetail({ householdId, onBack, today, householdOnly = fa
             )}
             {editing?.kind === "status" && (
               <Reveal>
-                <HouseholdStatusForm household={h} onCancel={() => setEditing(null)} onDone={(text) => saved(text)()} />
+                <HouseholdStatusForm household={h} agent={householdOnly} onCancel={() => setEditing(null)} onDone={(text) => saved(text)()} />
               </Reveal>
             )}
             {editing?.kind === "resident" && (

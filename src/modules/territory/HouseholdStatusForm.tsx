@@ -5,10 +5,12 @@
 // invalid_household em `status`). Cada confirmação é uma versão nova e uma
 // ficha domiciliar; a tela diz isso antes. 409 stale_version: a frase e
 // "Recarregar" relê o domicílio. Sem step-up (só microárea pede).
+// `agent` (módulo 35a): as recusas do agente de endemias com frase própria
+// (morador ativo → cbo_not_allowed; atribuição encerrada → out_of_scope).
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { errorCode, updateHousehold, type Household } from "../../lib/api";
-import { HOUSEHOLDS_KEY, HOUSEHOLD_KEY, STALE_TEXT, errorPath, isStale, territoryError } from "../../lib/territoryRegistry";
+import { HOUSEHOLDS_KEY, HOUSEHOLD_KEY, STALE_TEXT, agentHouseholdError, errorPath, isStale, territoryError } from "../../lib/territoryRegistry";
 import { buttonStyle, disabledButtonStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { alert, box, muted, row } from "../exams/styles";
 import { householdAsInput } from "./HouseholdForm";
@@ -31,7 +33,9 @@ const TEXT = {
 // Só sem família morando (mudou-se em todas, ou nenhuma família).
 export const canInactivate = (h: Household) => h.status === "active" && h.families.every((f) => f.moved_out);
 
-export function HouseholdStatusForm({ household, onDone, onCancel }: { household: Household; onDone(text: string): void; onCancel(): void }) {
+export function HouseholdStatusForm({ household, agent = false, onDone, onCancel }: {
+  household: Household; agent?: boolean; onDone(text: string): void; onCancel(): void;
+}) {
   const client = useQueryClient();
   const status = household.status === "active" ? "inactive" : "active";
   const text = TEXT[status];
@@ -47,7 +51,8 @@ export function HouseholdStatusForm({ household, onDone, onCancel }: { household
     onError: (err) => {
       if (isStale(err)) { setProblem(null); setStale(true); return; }
       setStale(false);
-      setProblem(errorCode(err) === "invalid_household" && errorPath(err) === "status" ? STILL_LIVING : territoryError(err));
+      const fallback = agent ? agentHouseholdError(err, { editing: true }) : territoryError(err);
+      setProblem(errorCode(err) === "invalid_household" && errorPath(err) === "status" ? STILL_LIVING : fallback);
     }
   });
 

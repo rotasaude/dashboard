@@ -250,22 +250,33 @@ describe("HouseholdForm", () => {
     expect(options().length).toBe(15);
   });
 
-  it("403 cbo_not_allowed: sem propertyTypes só a frase; com a lista, marca o tipo", async () => {
+  it("403 cbo_not_allowed: sem propertyTypes a frase do 24a; com a lista, a do agente (morador ativo na edição); nunca marca o tipo", async () => {
+    const OLD = "só o ACS da microárea, enfermeiro ou médico da equipe grava o cadastro";
     mocked(api.createHousehold).mockRejectedValue(new api.ApiError(403, { error: "cbo_not_allowed" }, "403"));
+    mocked(api.updateHousehold).mockRejectedValue(new api.ApiError(403, { error: "cbo_not_allowed" }, "403"));
     renderHousehold(<HouseholdForm microAreaId="ma1" onSaved={vi.fn()} onCancel={vi.fn()} />);
     fillAddress();
     pick("Tipo de imóvel", "2");
     save();
-    expect(await screen.findByRole("alert")).not.toBeNull();
+    expect((await screen.findByRole("alert")).textContent).toBe(OLD);
     expect(screen.getByLabelText("Tipo de imóvel").getAttribute("aria-invalid")).toBeNull();
     cleanup();
     renderHousehold(<HouseholdForm microAreaId="ma1" propertyTypes={[ "2" ]} onSaved={vi.fn()} onCancel={vi.fn()} />);
     fillAddress();
     pick("Tipo de imóvel", "2");
     save();
-    expect(await screen.findByRole("alert")).not.toBeNull();
-    expect(screen.getByLabelText("Tipo de imóvel").getAttribute("aria-invalid")).toBe("true");
+    expect((await screen.findByRole("alert")).textContent)
+      .toBe("só o ACS da microárea, enfermeiro ou médico da equipe grava o cadastro — o agente de endemias, só imóvel não residencial");
+    expect(screen.getByLabelText("Tipo de imóvel").getAttribute("aria-invalid")).toBeNull();
     expect(api.createHousehold).toHaveBeenCalledTimes(2);
+    cleanup();
+    renderHousehold(<HouseholdForm microAreaId="ma1" initial={household({ property_type: "2", living_conditions: {}, families: [] })}
+      propertyTypes={[ "2" ]} onSaved={vi.fn()} onCancel={vi.fn()} />);
+    save();
+    expect((await screen.findByRole("alert")).textContent).toBe("este imóvel tem morador ativo; só a equipe da APS edita");
+    expect(screen.getByLabelText("Tipo de imóvel").getAttribute("aria-invalid")).toBeNull();
+    expect(document.activeElement).not.toBe(screen.getByLabelText("Tipo de imóvel"));
+    expect(api.updateHousehold).toHaveBeenCalledTimes(1);
   });
 
   it("nada da ficha vai para o storage", async () => {
