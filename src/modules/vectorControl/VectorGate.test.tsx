@@ -14,7 +14,7 @@ import { acsTeam } from "../../test/homeVisitFixtures";
 import { vcContext, vcUser } from "../../test/vectorControlFixtures";
 import { VectorGate } from "./VectorGate";
 import { VectorBlocks } from "../VectorBlocks";
-import { VectorCycles } from "../VectorCycles";
+import { VectorLiraa } from "../VectorLiraa";
 import { FieldOvitraps } from "../FieldOvitraps";
 
 const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
@@ -74,7 +74,7 @@ describe("VectorGate", () => {
 
   it("as cascas usam o portão: coordenação vê Em construção; o profissional passa na de campo (Task 7: a tela confere a equipe); o laboratório nos quarteirões, a frase do papel", async () => {
     mocked(api.fetchCurrentSession).mockResolvedValue(vcUser([ "endemic_coordinator" ]));
-    renderWithProviders(<VectorCycles />);
+    renderWithProviders(<VectorLiraa />);
     expect(await screen.findByText("Em construção")).not.toBeNull();
     cleanup();
     mocked(api.fetchCurrentSession).mockResolvedValue(vcUser([ "health_professional" ]));
