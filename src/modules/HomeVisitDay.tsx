@@ -4,11 +4,16 @@
 // Folhas fechadas de hoje aparecem como cartão com a situação da ficha. Releitura só por ação (409, retirada, fechamento), uma vez.
 // "Nova visita" fica acima das folhas (também com "nenhuma folha hoje"); o atalho do "Quem visitar" (`start`, só em memória) abre o
 // formulário já com domicílio e pessoa. Uma gravação por vez na tela (`WriteLockProvider`). Nada de dado pessoal em URL nem em storage.
+// Módulo 35a: para a equipe do agente de endemias com o gate utilizável, os domínios do boletim (`getVectorDomains`, uma leitura)
+// vão ao formulário; depois de gravar, as etiquetas definitivas das amostras. `onGoToTerritory`: cadastrar o imóvel (Q13(1)).
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  getHomeVisitContext, getHomeVisitDay, listHomeVisitDays, type HomeVisit, type HomeVisitContext, type HomeVisitDay as ApiDay, type HomeVisitTeam
+  getHomeVisitContext, getHomeVisitDay, getVectorDomains, listHomeVisitDays, type HomeVisit, type HomeVisitContext, type HomeVisitDay as ApiDay,
+  type HomeVisitTeam
 } from "../lib/api";
+import { useAuth } from "../lib/auth";
+import { VC_DOMAINS_KEY, canUseVectorControl, isEndemicAgentTeam, vectorError } from "../lib/vectorControl";
 import {
   HV_CANNOT_REGISTER, HV_CONTEXT_KEY, HV_DAY_KEY, HV_TODAY_KEY, NOMINAL_QUERY, OTHER_DAY_TEXT, REPLAYED_VISIT, STATIC_QUERY, UNCERTAIN_VISIT_REREAD, VISIT_SAVED,
   homeVisitError
@@ -16,6 +21,7 @@ import {
 import { HomeVisitGate } from "./homeVisits/HomeVisitGate";
 import { DaySheet } from "./homeVisits/DaySheet";
 import { VisitForm, type VisitSaved } from "./homeVisits/VisitForm";
+import { tubeLabelsText } from "./homeVisits/InspectionSection";
 import { WriteLockProvider, useWriteLock } from "./homeVisits/writeLock";
 import type { VisitStart } from "./homeVisits/useVisitHandoff";
 import { EmptyState } from "../components/EmptyState";
@@ -23,15 +29,17 @@ import { ActionButton } from "../components/ActionButton";
 import { fieldLabel, stack, alert, muted, okText } from "./exams/styles";
 import { inputStyle } from "../components/formStyles";
 
-export function HomeVisitDay({ now, start, onGoToTeam }: { now?: Date; start?: VisitStart | null; onGoToTeam?(): void }) {
+export function HomeVisitDay({ now, start, onGoToTeam, onGoToTerritory }: {
+  now?: Date; start?: VisitStart | null; onGoToTeam?(): void; onGoToTerritory?(): void;
+}) {
   return (
     <HomeVisitGate title="Folha do dia" sub="visita domiciliar · visitas de hoje" feature="home_visits" allow={(r) => r.professional}>
-      {() => <WriteLockProvider><DayBody now={now} start={start ?? null} onGoToTeam={onGoToTeam} /></WriteLockProvider>}
+      {() => <WriteLockProvider><DayBody now={now} start={start ?? null} onGoToTeam={onGoToTeam} onGoToTerritory={onGoToTerritory} /></WriteLockProvider>}
     </HomeVisitGate>
   );
 }
 
-function DayBody({ now, start, onGoToTeam }: { now?: Date; start: VisitStart | null; onGoToTeam?(): void }) {
+function DayBody({ now, start, onGoToTeam, onGoToTerritory }: { now?: Date; start: VisitStart | null; onGoToTeam?(): void; onGoToTerritory?(): void }) {
   const ctx = useQuery({ queryKey: [ HV_CONTEXT_KEY ], queryFn: getHomeVisitContext, ...STATIC_QUERY });
   const [ picked, setPicked ] = useState<string | null>(start?.teamId ?? null);
   // Trocar a equipe desmonta o formulário: travado enquanto uma gravação corre ou um envio está pendurado (rede/5xx).
@@ -61,7 +69,8 @@ function DayBody({ now, start, onGoToTeam }: { now?: Date; start: VisitStart | n
           </select>
         </label>
       )}
-      <TodaySheets key={team.id} ctx={ctx.data} team={team} now={now} start={start?.teamId === team.id ? start : null} onHeld={onHeld} />
+      <TodaySheets key={team.id} ctx={ctx.data} team={team} now={now} start={start?.teamId === team.id ? start : null} onHeld={onHeld}
+        onGoToTerritory={onGoToTerritory} />
     </div>
   );
 }
@@ -72,11 +81,15 @@ const byApiOrder = (a: HomeVisit, b: HomeVisit): number =>
 const upsert = (list: HomeVisit[], v: HomeVisit): HomeVisit[] =>
   (list.some((x) => x.id === v.id) ? list.map((x) => (x.id === v.id ? v : x)) : [ ...list, v ]).sort(byApiOrder);
 
-function TodaySheets({ ctx, team, now, start, onHeld }: {
-  ctx: HomeVisitContext; team: HomeVisitTeam; now?: Date; start: VisitStart | null; onHeld(held: boolean): void;
+function TodaySheets({ ctx, team, now, start, onHeld, onGoToTerritory }: {
+  ctx: HomeVisitContext; team: HomeVisitTeam; now?: Date; start: VisitStart | null; onHeld(held: boolean): void; onGoToTerritory?(): void;
 }) {
   const queryClient = useQueryClient();
   const lock = useWriteLock();
+  const { user } = useAuth();
+  // Boletim (35a): só para a equipe do agente com o gate; sem os domínios (erro), a visita segue sem boletim e a frase diz por quê.
+  const vcOn = canUseVectorControl(user) && isEndemicAgentTeam(team);
+  const vc = useQuery({ queryKey: [ VC_DOMAINS_KEY ], queryFn: getVectorDomains, enabled: vcOn, ...STATIC_QUERY });
   const listKey = [ HV_TODAY_KEY, team.id, ctx.today ];
   const days = useQuery({
     queryKey: listKey,
@@ -86,16 +99,20 @@ function TodaySheets({ ctx, team, now, start, onHeld }: {
   // O formulário aberto (com o atalho que o abriu) e a frase do último registro.
   const [ form, setForm ] = useState<{ start: VisitStart | null; n: number } | null>(start ? { start, n: 1 } : null);
   const [ saved, setSaved ] = useState<string | null>(null);
+  // As etiquetas definitivas das amostras da visita gravada (D-12).
+  const [ tubes, setTubes ] = useState<string | null>(null);
   // Descartou-se um envio pendurado: a visita pode ter entrado; a frase pede para conferir a folha relida.
   const [ uncertain, setUncertain ] = useState(false);
   // Cada atalho abre o formulário uma vez; voltar à tela sem atalho novo não reabre.
   const consumed = useRef<VisitStart | null>(start);
   useEffect(() => {
-    if (start && start !== consumed.current) { consumed.current = start; setSaved(null); setUncertain(false); setForm((f) => ({ start, n: (f?.n ?? 0) + 1 })); }
+    if (start && start !== consumed.current) {
+      consumed.current = start; setSaved(null); setTubes(null); setUncertain(false); setForm((f) => ({ start, n: (f?.n ?? 0) + 1 }));
+    }
   }, [ start ]);
 
   if (days.isError) return <p role="alert" style={alert}>{homeVisitError(days.error)}</p>;
-  if (!days.data) return <p role="status" style={muted}>Carregando…</p>;
+  if (!days.data || (vcOn && vc.isPending)) return <p role="status" style={muted}>Carregando…</p>;
   const items = days.data.items;
 
   // Releitura única, por ação: a folha e a lista de hoje. Com a folha devolvida pelo api (fechamento) ela é gravada no lugar.
@@ -114,7 +131,7 @@ function TodaySheets({ ctx, team, now, start, onHeld }: {
   // o cartão entra no cache e os contadores e pendências vêm do `day`, sem reler. Senão → a lista de hoje é relida (sem trilha) e a
   // frase diz em que folha a visita entrou.
   function onSaved({ visit, day, replayed }: VisitSaved) {
-    setForm(null); setUncertain(false);
+    setForm(null); setUncertain(false); setTubes(tubeLabelsText(visit));
     const { visits: _v, ...summary } = day;
     const cached = queryClient.getQueryData<ApiDay>([ HV_DAY_KEY, day.id ]);
     if (items.some((d) => d.id === day.id) && cached?.visits) {
@@ -140,11 +157,14 @@ function TodaySheets({ ctx, team, now, start, onHeld }: {
   return (
     <div style={stack}>
       {saved && <p role="status" style={okText}>{saved}</p>}
+      {tubes && <p role="status" style={okText}>{tubes}</p>}
       {uncertain && <p role="status" style={alert}>{UNCERTAIN_VISIT_REREAD}</p>}
+      {vcOn && vc.isError && <p role="alert" style={alert}>{vectorError(vc.error)}</p>}
       {form ? (
-        <VisitForm key={form.n} team={team} context={ctx} start={form.start} now={now} onSaved={onSaved} onClose={onClose} onHeld={onHeld} />
+        <VisitForm key={form.n} team={team} context={ctx} start={form.start} now={now} onSaved={onSaved} onClose={onClose} onHeld={onHeld}
+          vectorDomains={vcOn ? vc.data ?? null : null} onGoToTerritory={onGoToTerritory} />
       ) : (
-        <div><ActionButton busy={lock.busy} onClick={() => { setSaved(null); setUncertain(false); setForm({ start: null, n: Date.now() }); }}>Nova visita</ActionButton></div>
+        <div><ActionButton busy={lock.busy} onClick={() => { setSaved(null); setTubes(null); setUncertain(false); setForm({ start: null, n: Date.now() }); }}>Nova visita</ActionButton></div>
       )}
       {items.length === 0
         ? <EmptyState title="nenhuma folha hoje — a primeira visita abre a folha" />

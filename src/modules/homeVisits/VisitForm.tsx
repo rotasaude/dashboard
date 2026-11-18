@@ -5,29 +5,41 @@
 // (`useIdempotentSubmit`): o mesmo `client_uuid` no reenvio depois de rede/5xx, com os campos travados. A recusa do api cai no
 // campo do `path`; as da pessoa digitada reabrem o `PersonPick` (Q49/Q71; 409 `duplicate_suspected` com os candidatos do 409).
 // Dado pessoal só em estado local e no corpo do POST: nada em URL, storage ou mensagem.
+// Módulo 35a (F-35.2, F-35.3): com `vectorDomains` e a equipe do agente de endemias, "Registrar boletim" (ligado) e, com domicílio
+// do cadastro, a `InspectionSection` depois de "Quem foi visitado". Com o boletim, o desfecho sai da situação do imóvel, os motivos
+// 34–37 não se oferecem nem se enviam (o api os deriva: a tela mostra a prévia e confere o limite e o aviso de família com eles),
+// e o envio confere também `checkInspection`. Sem `vectorDomains`, tudo como no 24b.
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
-  getVisitHousehold, recordHomeVisit, type HomeVisit, type HomeVisitContext, type HomeVisitDay, type HomeVisitTeam, type VisitHousehold,
-  type VisitOutcome
+  getHouseholdVectorProfile, getVisitHousehold, listCityBlocks, recordHomeVisit, type HomeVisit, type HomeVisitContext, type HomeVisitDay,
+  type HomeVisitTeam, type VectorControlDomains, type VisitHousehold, type VisitOutcome
 } from "../../lib/api";
 import { fmtHourMinute } from "../../lib/format";
 import {
-  DISCARD_UNCERTAIN_VISIT, HOME_VISIT_ERRORS, HV_HOUSEHOLD_KEY, NOMINAL_QUERY, NON_RESIDENTIAL_NO_PERSON, NOTE_HINT, NO_MICRO_AREA, RESPONSIBLE_EXITED,
-  allowedMeasurements, emptyVisitDraft, familyVisitNotice, homeVisitError, isNonResidential, measurementsAnyAllowed, noCpfReasonPath, offeredReasons,
-  prunedText, pruneVisitDraft, shiftPreview, visitBody, visitProblems, type DraftHousehold, type HomeVisitRefusal, type MeasureDraft, type VisitDraft
+  DISCARD_UNCERTAIN_VISIT, HOME_VISIT_ERRORS, HV_HOUSEHOLD_KEY, NOMINAL_QUERY, NON_RESIDENTIAL_NO_PERSON, NOTE_HINT, NO_MICRO_AREA, REASONS_MAX_TEXT,
+  RESPONSIBLE_EXITED, STATIC_QUERY, allowedMeasurements, emptyVisitDraft, familyVisitNotice, homeVisitError, isNonResidential, measurementsAnyAllowed,
+  noCpfReasonPath, occurredAt, offeredReasons, prunedText, pruneVisitDraft, reasonLabel, shiftPreview, visitBody, visitProblems, type DraftHousehold,
+  type HomeVisitRefusal, type MeasureDraft, type VisitDraft
 } from "../../lib/homeVisits";
+import { VC_BLOCKS_KEY, VC_PROFILE_KEY, isEndemicAgentTeam, vectorError } from "../../lib/vectorControl";
+import { VECTOR_ERRORS } from "../../lib/vectorErrors";
+import {
+  DERIVED_REASONS, checkInspection, derivedReasons, emptyInspectionDraft, inspectionInput, outcomeForSituation, pruneInspection,
+  type InspectionCtx, type InspectionDraft
+} from "../../lib/vectorInspection";
 import { NO_NAME } from "../../lib/territoryRegistry";
 import type { Problem } from "../../lib/pharmacy";
 import { ConfirmButton } from "../../components/ConfirmButton";
 import { FrozenTextNotice } from "../../components/FrozenTextNotice";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
-import { alert, checkLabel, fieldLabel, fieldset, form, legend, muted, row } from "../exams/styles";
+import { alert, checkLabel, fieldLabel, fieldset, form, legend, muted, okText, row } from "../exams/styles";
 import { MeasurementsField } from "./MeasurementsField";
 import { OUT_OF_AREA, PlacePick, type PlaceMode } from "./PlacePick";
 import { PersonPick, candidatesOf, type PersonRestart, type PickedPerson } from "./PersonPick";
 import type { QuickInitial, QuickRefusal } from "./QuickPatientForm";
-import { ReasonsField } from "./ReasonsField";
+import { BULLETIN_NEEDS_HOUSEHOLD, InspectionSection, inspectionPaths, tubeLabelsText, type InspectionChange } from "./InspectionSection";
+import { ReasonsField, visibleReasons } from "./ReasonsField";
 import { useIdempotentSubmit } from "./useIdempotentSubmit";
 import type { VisitStart } from "./useVisitHandoff";
 
@@ -50,9 +62,10 @@ function initialDraft(context: HomeVisitContext, now: Date, start: VisitStart | 
 
 // `onClose(uncertain)`: `true` quando se descartou um envio pendurado (rede/5xx) — o pai relê o que mostraria a visita.
 // `onHeld(held)`: o formulário tem um envio pendurado; o pai trava o que o desmontaria (o seletor de equipe).
-export function VisitForm({ team, context, start, now, onSaved, onClose, onHeld }: {
+// `vectorDomains` (35a): os domínios do boletim, null sem o gate (sem boletim); `onGoToTerritory`: cadastrar o imóvel (Q13(1)).
+export function VisitForm({ team, context, start, now, onSaved, onClose, onHeld, vectorDomains, onGoToTerritory }: {
   team: HomeVisitTeam; context: HomeVisitContext; start?: VisitStart | null; now?: Date; onSaved(r: VisitSaved): void; onClose(uncertain?: boolean): void;
-  onHeld?(held: boolean): void;
+  onHeld?(held: boolean): void; vectorDomains?: VectorControlDomains | null; onGoToTerritory?(): void;
 }) {
   const { domains } = context;
   const uid = useId();
@@ -66,6 +79,11 @@ export function VisitForm({ team, context, start, now, onSaved, onClose, onHeld 
   const [ pick, setPick ] = useState<Pick | null>(null);
   const [ taken, setTaken ] = useState(false);
   const [ cleared, setCleared ] = useState<string | null>(null);
+  // Boletim (35a): só em memória, como o resto do formulário.
+  const [ bulletin, setBulletin ] = useState(true);
+  const [ inspection, setInspection ] = useState<InspectionDraft>(() => emptyInspectionDraft(start?.vector));
+  const [ inspCleared, setInspCleared ] = useState<string | null>(null);
+  const [ tubes, setTubes ] = useState<string | null>(null);
 
   const householdId = draft.place?.kind === "household" ? draft.place.householdId : null;
   const detail = useQuery({ queryKey: [ HV_HOUSEHOLD_KEY, householdId ], queryFn: () => getVisitHousehold(householdId!), enabled: !!householdId, ...NOMINAL_QUERY });
@@ -79,13 +97,27 @@ export function VisitForm({ team, context, start, now, onSaved, onClose, onHeld 
   };
   const rules = withSex(draft);
 
+  // O boletim: agente de endemias com o gate, a caixa ligada e um domicílio do cadastro (Q10).
+  const agent = !!vectorDomains && isEndemicAgentTeam(team);
+  const vectorOn = agent && bulletin && mode === "household" && !!householdId;
+  const profile = useQuery({
+    queryKey: [ VC_PROFILE_KEY, householdId ], queryFn: () => getHouseholdVectorProfile(householdId!), enabled: agent && !!householdId, ...STATIC_QUERY
+  });
+  const neighborhoodId = profile.data && !profile.data.vector?.city_block_id ? profile.data.neighborhood_id : null;
+  const blocks = useQuery({
+    queryKey: [ VC_BLOCKS_KEY, neighborhoodId ], queryFn: () => listCityBlocks(neighborhoodId!), enabled: vectorOn && !!neighborhoodId, ...STATIC_QUERY
+  });
+  const derived = vectorOn ? derivedReasons(inspectionInput(inspection, draft.day)) : [];
+  // O que o api vê nas regras do 24b: os motivos escolhidos mais os derivados do boletim.
+  const reasonRules: VisitDraft = derived.length > 0 ? { ...rules, reasons: [ ...rules.reasons, ...derived ] } : rules;
+
   const frozen = s.locked || s.busy;
   useEffect(() => { onHeld?.(s.locked); return () => onHeld?.(false); }, [ s.locked, onHeld ]);
   const property = household?.property_type ?? draft.place?.propertyType ?? "";
   const nonResidential = property !== "" && isNonResidential(domains, property);
-  const offered = offeredReasons(domains, rules, household);
-  const allowed = allowedMeasurements(domains, rules, household);
-  const notice = familyVisitNotice(domains, rules, household);
+  const offered = offeredReasons(domains, reasonRules, household);
+  const allowed = allowedMeasurements(domains, reasonRules, household);
+  const notice = familyVisitNotice(domains, reasonRules, household);
   const noArea = team.micro_areas.length === 0 && !team.out_of_area_allowed;
 
   // Toda troca passa pela poda; o que saiu vai à linha de status.
@@ -130,6 +162,14 @@ export function VisitForm({ team, context, start, now, onSaved, onClose, onHeld 
   function onHousehold(h: VisitHousehold | null) {
     setPicked(h); setOtherName(null); setPick(null);
     s.clear("household_id");
+    // O quarteirão e o vínculo do atalho (LIRAa, bloqueio) eram do domicílio anterior.
+    const lost = [ inspection.cityBlockId !== null ? "quarteirão" : null, inspection.liraaDrawItemId !== null || inspection.transmissionBlockId !== null ? "vínculo do atalho" : null ]
+      .filter((x): x is string => x !== null);
+    if (lost.length > 0) {
+      const linked = inspection.activity === "liraa" || inspection.activity === "transmission_block";
+      setInspection((i) => ({ ...i, cityBlockId: null, liraaDrawItemId: null, transmissionBlockId: null, ...(linked ? { activity: null } : {}) }));
+      setInspCleared(prunedText(linked ? [ ...lost, "atividade" ] : lost));
+    }
     update({ ...withoutPerson(draft), place: h ? { kind: "household", householdId: h.id, propertyType: h.property_type, microAreaId: h.micro_area.id } : null }, h);
   }
   function onPropertyType(t: string) {
@@ -151,6 +191,28 @@ export function VisitForm({ team, context, start, now, onSaved, onClose, onHeld 
     s.clear("reasons", ...draft.reasons.map((_, i) => `reasons[${i}]`));
     update({ ...draft, reasons: draft.reasons.includes(code) ? draft.reasons.filter((c) => c !== code) : [ ...draft.reasons, code ] });
   }
+  // Boletim: a troca de situação ou de método passa pela poda (nunca a cada tecla) e diz o que saiu; a situação fixa o desfecho.
+  function onInspection(next: InspectionDraft, o: InspectionChange = {}) {
+    if (o.clear?.length) s.clear(...o.clear);
+    if (!o.prune) { setInspection(next); return; }
+    const out = pruneInspection(next);
+    const lost = [ ...out.cleared, ...(o.cleared ?? []) ];
+    if (next.situation !== null && next.situation !== inspection.situation) {
+      s.clear("outcome", "reasons");
+      const visit = pruneVisitDraft(domains, withSex({ ...draft, outcome: outcomeForSituation(next.situation) }), household);
+      setDraft(visit.draft);
+      setCleared(null);
+      lost.push(...visit.cleared);
+    }
+    setInspection(out.draft);
+    setInspCleared(lost.length > 0 ? prunedText(lost) : null);
+  }
+  function toggleBulletin(on: boolean) {
+    setBulletin(on);
+    s.clear("outcome", "reasons");
+    if (on && inspection.situation) update({ ...draft, outcome: outcomeForSituation(inspection.situation) });
+  }
+
   function setMeasure(key: keyof MeasureDraft, v: string) {
     s.clear(`measurements.${key}`);
     setDraft((d) => ({ ...d, measurements: { ...d.measurements, [key]: v } }));
@@ -174,15 +236,47 @@ export function VisitForm({ team, context, start, now, onSaved, onClose, onHeld 
     return out.map(({ path, text }) => ({ path, text }));
   }
 
+  // Os fatos do api para as regras do boletim (InspectionCtx da Task 2): domicílio da versão atual, perfil e quarteirões.
+  function inspectionCtx(): InspectionCtx {
+    return {
+      visit: { outcome: (draft.outcome ?? 0) as VisitOutcome, occurred_at: occurredAt(draft.day, draft.time) ?? "", reasons: draft.reasons },
+      household: householdId ? { id: householdId, property_type: property, neighborhood_id: profile.data?.neighborhood_id ?? null } : null,
+      profile: profile.data?.vector ? { city_block_id: profile.data.vector.city_block_id } : null,
+      agent: true, gateUsable: true, products: vectorDomains!.products, limits: vectorDomains!.limits,
+      blocks: blocks.data?.map((b) => ({ id: b.id, neighborhood_id: b.neighborhood.id, active: b.active }))
+    };
+  }
+  // As regras do 24b com os motivos derivados (o limite e a conversão em família contam com eles). A recusa num motivo derivado
+  // aponta `subject`, como no api (Q10); o limite sai com a frase do 24b, contando os derivados.
+  function problems(): Problem[] {
+    const ctx = { domains, today: context.today, minDate: context.min_date, team, household, now: now ?? new Date() };
+    if (!vectorOn) return visitProblems(rules, ctx);
+    const n = rules.reasons.length;
+    const out = visitProblems(reasonRules, { ...ctx, domains: { ...domains, reasons_max: Number.POSITIVE_INFINITY } }).map((p) => {
+      const at = /^reasons\[(\d+)\]$/.exec(p.path);
+      return at && Number(at[1]) >= n ? { ...p, path: "subject" } : p;
+    });
+    if (reasonRules.reasons.length > domains.reasons_max) out.push({ path: "reasons", text: REASONS_MAX_TEXT(domains.reasons_max) });
+    const input = inspectionInput(inspection, draft.day);
+    out.push(...checkInspection(input, inspectionCtx()).map((i) => ({ path: i.path, text: VECTOR_ERRORS[i.error] })));
+    return out;
+  }
+
   function submit(ev: FormEvent) {
     // PersonPick/QuickPatientForm não são <form> (role="form"): não há submit interno. A guarda fica por segurança: só o submit
     // desta própria <form> envia a visita.
     if (ev.target !== ev.currentTarget) { ev.preventDefault(); return; }
+    // A poda do boletim também roda no envio: se tirou algo (amostra de grupo que ficou sem larva), diz o quê e não envia.
+    if (vectorOn && !frozen) {
+      const out = pruneInspection(inspection);
+      if (out.cleared.length > 0) { ev.preventDefault(); setInspection(out.draft); setInspCleared(prunedText(out.cleared)); return; }
+    }
+    setTubes(null);
     void s.send(ev, {
-      check: () => visitProblems(rules, { domains, today: context.today, minDate: context.min_date, team, household, now: now ?? new Date() }),
-      body: () => ({ team_id: team.id, ...visitBody(draft) }),
+      check: problems,
+      body: () => ({ team_id: team.id, ...visitBody(draft), ...(vectorOn ? { vector_inspection: inspectionInput(inspection, draft.day) } : {}) }),
       call: recordHomeVisit,
-      ok: onSaved,
+      ok: (r) => { setTubes(tubeLabelsText(r.visit)); onSaved(r); },
       refused
     });
   }
@@ -207,6 +301,13 @@ export function VisitForm({ team, context, start, now, onSaved, onClose, onHeld 
   const chosenPatient = draft.subject === "resident" && draft.person?.kind === "patient" ? draft.person.patientId : null;
   const other = draft.subject === "resident" && draft.person && otherName && !(draft.person.kind === "patient" && isResident(draft.person.patientId));
   const who = `${uid}-who`;
+  const ownPaths = vectorOn ? inspectionPaths(inspection) : null;
+  const own = (path: string) => isOwn(path) || !!ownPaths?.has(path);
+  const hidden = vectorOn ? DERIVED_REASONS : undefined;
+  const showReasons = draft.outcome === 1 && visibleReasons(offered, draft.reasons, hidden).length > 0;
+  const outcomeText = inspection.situation
+    ? `Desfecho: ${domains.desfecho.find((o) => o.code === outcomeForSituation(inspection.situation!))?.label ?? outcomeForSituation(inspection.situation)} (da situação do imóvel)`
+    : "Desfecho: escolha a situação do imóvel";
 
   return (
     <form ref={s.formRef} noValidate style={form} aria-label="Nova visita" onSubmit={submit}>
@@ -298,6 +399,36 @@ export function VisitForm({ team, context, start, now, onSaved, onClose, onHeld 
         </fieldset>
       )}
 
+      {agent && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <label style={checkLabel}>
+            <input type="checkbox" checked={bulletin && mode !== "no_household"} disabled={frozen || mode === "no_household"}
+              onChange={(e) => toggleBulletin(e.target.checked)} />
+            Registrar boletim
+          </label>
+          {mode === "no_household" && (
+            <>
+              <p style={muted}>{BULLETIN_NEEDS_HOUSEHOLD}</p>
+              {onGoToTerritory && (
+                <div><button type="button" disabled={frozen} style={secondaryButtonStyle} onClick={onGoToTerritory}>Cadastrar o imóvel no território</button></div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+      {vectorOn && (
+        <InspectionSection draft={inspection} onChange={onInspection} domains={vectorDomains!} household={{ property_type: property }}
+          profile={{ data: profile.data, error: profile.isError ? vectorError(profile.error) : null }}
+          blocks={neighborhoodId ? { data: blocks.data, error: blocks.isError ? vectorError(blocks.error) : null } : null}
+          uuid={s.uuid} disabled={frozen} cleared={inspCleared} aria={s.aria} errNode={s.errNode} />
+      )}
+
+      {vectorOn ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <p style={{ margin: 0, fontSize: 12.5, fontWeight: 600 }}>{outcomeText}</p>
+          {s.errNode("outcome")}
+        </div>
+      ) : (
       <fieldset style={fieldset}>
         <legend style={legend}>Desfecho</legend>
         <div style={row}>
@@ -311,10 +442,18 @@ export function VisitForm({ team, context, start, now, onSaved, onClose, onHeld 
         </div>
         {s.errNode("outcome")}
       </fieldset>
-
-      {draft.outcome === 1 && offered.length > 0 && (
-        <ReasonsField offered={offered} chosen={draft.reasons} max={domains.reasons_max} disabled={frozen} onToggle={toggleReason} aria={s.aria} errNode={s.errNode} />
       )}
+
+      {showReasons && (
+        <ReasonsField offered={offered} chosen={draft.reasons} max={domains.reasons_max} disabled={frozen} onToggle={toggleReason} aria={s.aria} errNode={s.errNode}
+          hidden={hidden} />
+      )}
+      {vectorOn && derived.length > 0 && (
+        <p style={{ margin: 0, fontSize: 12.5, color: "var(--ink2)" }}>
+          {`O boletim acrescenta: ${derived.map((c) => `${c} ${reasonLabel(domains, c)}`).join(", ")}`}
+        </p>
+      )}
+      {vectorOn && !showReasons && s.errNode("reasons")}
 
       {measurementsAnyAllowed(allowed) && (
         <MeasurementsField domains={domains} allowed={allowed} value={draft.measurements} disabled={frozen} onChange={setMeasure} aria={s.aria} errNode={s.errNode} />
@@ -340,7 +479,8 @@ export function VisitForm({ team, context, start, now, onSaved, onClose, onHeld 
 
       {cleared && <p role="status" style={muted}>{cleared}</p>}
       {notice && <p role="status" style={{ margin: 0, fontSize: 12.5, color: "var(--ink2)" }}>{notice}</p>}
-      {s.top(isOwn)}
+      {tubes && <p role="status" style={okText}>{tubes}</p>}
+      {s.top(own)}
 
       {s.locked ? (
         <div style={row}>

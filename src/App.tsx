@@ -403,7 +403,8 @@ export function renderModule(active: ModuleId, setActive: (id: ModuleId) => void
     case "territory-map": return <TerritoryMap />;
     case "registry-status": return <RegistryStatus />;
     case "territory-micro-areas": return <TerritoryMicroAreas onGoToSecurity={() => setActive("security")} />;
-    case "home-visit-day": return <HomeVisitDay start={visit.start} onGoToTeam={() => setActive("home-visits-team")} />;
+    case "home-visit-day":
+      return <HomeVisitDay start={visit.start} onGoToTeam={() => setActive("home-visits-team")} onGoToTerritory={() => setActive("territory-team")} />;
     case "who-to-visit": return <WhoToVisit onStartVisit={(s) => { visit.startVisit(s); setActive("home-visit-day"); }} />;
     case "home-visits-team": return <HomeVisitsTeam />;
     case "micro-area-assignments": return <MicroAreaAssignments onGoToSecurity={() => setActive("security")} />;
