@@ -18,6 +18,11 @@
 // Responsável que saiu (L29, PROVA-2): a família com `responsible_exited`
 // ganha a marca e "Trocar responsável" (só nesse caso). Toda gravação termina
 // com a mensagem focada (Notice), porque o bloco que tinha o foco some.
+// Módulo 35a (Q13(1)): `householdOnly` (o agente de endemias) — sem família,
+// sem morador e sem cadastro individual: os moradores nem são lidos (trilha
+// nominal), as famílias aparecem só contadas, sem nome. "Editar domicílio" e
+// "Inativar/Reativar" só quando o tipo está em `propertyTypes` (o residencial
+// fica só leitura; o api recusaria com cbo_not_allowed).
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getHousehold, listRegistrations, type Family, type Registration } from "../../lib/api";
@@ -66,14 +71,23 @@ export function familyOf(r: Registration, families: Family[]): string {
   return `família de ${f.responsible.display_name ?? NO_NAME}${f.moved_out ? " (mudou-se)" : ""}`;
 }
 
-export function HouseholdDetail({ householdId, onBack, today }: { householdId: string; onBack(): void; today?: string }) {
+export function familiesCountLine(families: Family[]): string {
+  const n = families.filter((f) => !f.moved_out).length;
+  if (n === 0) return "nenhuma família";
+  return `${n} ${n === 1 ? "família morando" : "famílias morando"}`;
+}
+
+export function HouseholdDetail({ householdId, onBack, today, householdOnly = false, propertyTypes = null }: {
+  householdId: string; onBack(): void; today?: string; householdOnly?: boolean; propertyTypes?: string[] | null;
+}) {
   const [ editing, setEditing ] = useState<Editing>(null);
   const [ notice, setNotice ] = useState<string | null>(null);
   const household = useQuery({ queryKey: [ HOUSEHOLD_KEY, householdId ], queryFn: () => getHousehold(householdId), ...NOMINAL_QUERY });
   const residents = useQuery({
-    queryKey: [ RESIDENTS_KEY, householdId ], queryFn: () => listRegistrations({ householdId }), ...NOMINAL_QUERY
+    queryKey: [ RESIDENTS_KEY, householdId ], queryFn: () => listRegistrations({ householdId }), ...NOMINAL_QUERY, enabled: !householdOnly
   });
   const h = household.data;
+  const editable = !!h && (!propertyTypes || propertyTypes.includes(h.property_type));
   const status = h && householdStatus(h);
   const open = (next: Editing) => { setNotice(null); setEditing(next); };
   const saved = (text: string) => () => { setEditing(null); setNotice(text); };
@@ -102,21 +116,21 @@ export function HouseholdDetail({ householdId, onBack, today }: { householdId: s
             {editing?.kind === "household" ? (
               <Reveal style={box}>
                 <strong>Editar domicílio</strong>
-                <HouseholdForm microAreaId={h.micro_area.id} initial={h} onCancel={() => setEditing(null)} onSaved={saved(HOUSEHOLD_SAVED)} />
+                <HouseholdForm microAreaId={h.micro_area.id} initial={h} propertyTypes={propertyTypes} onCancel={() => setEditing(null)} onSaved={saved(HOUSEHOLD_SAVED)} />
               </Reveal>
-            ) : !editing && (
+            ) : !editing && (editable || !householdOnly) && (
               <div style={row}>
-                <button type="button" style={secondaryButtonStyle} onClick={() => open({ kind: "household" })}>Editar domicílio</button>
-                {allowsFamilies(h.property_type) && !h.refused && h.status === "active" && (
+                {editable && <button type="button" style={secondaryButtonStyle} onClick={() => open({ kind: "household" })}>Editar domicílio</button>}
+                {!householdOnly && allowsFamilies(h.property_type) && !h.refused && h.status === "active" && (
                   <button type="button" style={secondaryButtonStyle} onClick={() => open({ kind: "newFamily" })}>Nova família</button>
                 )}
-                {h.status === "active" && (
+                {!householdOnly && h.status === "active" && (
                   <button type="button" style={secondaryButtonStyle}
                     onClick={() => open({ kind: "resident", choice: null })}>
                     Adicionar morador
                   </button>
                 )}
-                {(canInactivate(h) || h.status === "inactive") && (
+                {editable && (canInactivate(h) || h.status === "inactive") && (
                   <button type="button" style={secondaryButtonStyle} onClick={() => open({ kind: "status" })}>
                     {h.status === "active" ? "Inativar domicílio" : "Reativar domicílio"}
                   </button>
@@ -167,7 +181,7 @@ export function HouseholdDetail({ householdId, onBack, today }: { householdId: s
             )}
             <section aria-label="Famílias" style={stack}>
               <strong>Famílias</strong>
-              {h.families.length === 0 ? <p style={muted}>nenhuma família</p> : (
+              {householdOnly ? <p style={muted}>{familiesCountLine(h.families)}</p> : h.families.length === 0 ? <p style={muted}>nenhuma família</p> : (
                 <ul style={list}>
                   {h.families.map((f) => (
                     <li key={f.id} style={row}>
@@ -193,7 +207,7 @@ export function HouseholdDetail({ householdId, onBack, today }: { householdId: s
             </section>
           </>
         )}
-        <section aria-label="Moradores" style={stack}>
+        {!householdOnly && <section aria-label="Moradores" style={stack}>
           <strong>Moradores</strong>
           {residents.isPending && <p className="mono" style={muted}>carregando…</p>}
           {residents.isError && <p role="alert" style={alert}>{territoryError(residents.error)}</p>}
@@ -225,7 +239,7 @@ export function HouseholdDetail({ householdId, onBack, today }: { householdId: s
               rows={residents.data} rowKey={(r) => r.id} empty="nenhum morador com cadastro ativo que você possa ver"
             />
           )}
-        </section>
+        </section>}
       </div>
     </Panel>
   );

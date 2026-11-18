@@ -68,6 +68,16 @@ const STATUS_TONE: Record<string, string> = {
 };
 export function registryStatusTone(code: string): string { return STATUS_TONE[code] ?? "neutral"; }
 
+// Tipos de imóvel que o usuário cadastra na microárea (módulo 35a, Q13(1),
+// Q14(1)): `property_types` do GET /territory/teams lido junto com
+// `can_register`. null = todos os tipos (ACS, enfermeiro e médico, como no
+// 24a); lista = só esses (o agente de endemias, não residenciais); sem
+// can_register, nenhum.
+export function householdTypesFor(m: { can_register: boolean; property_types?: string[] | null }): string[] | null {
+  if (!m.can_register) return [];
+  return m.property_types ?? null;
+}
+
 export const EXIT_REASONS: { key: "moved" | "death"; label: string }[] = [
   { key: "moved", label: "mudou de território" }, { key: "death", label: "óbito" }
 ];
@@ -122,7 +132,8 @@ const ERRORS: Record<string, string> = {
   invalid_ethnicity: "etnia inválida: só vale com raça/cor indígena e com um código de etnia da lista — confira a raça/cor ou escolha outro código",
   too_long: "texto maior que o limite do campo destacado",
   invalid_transition: "esta ação não vale para a situação atual do cadastro (já saiu ou recusou)",
-  cbo_not_allowed: "só o ACS da microárea, enfermeiro ou médico da equipe grava o cadastro",
+  // Módulo 35a (Q13(1)): o agente de endemias grava só o imóvel não residencial.
+  cbo_not_allowed: "só o ACS da microárea, enfermeiro ou médico da equipe grava o cadastro — o agente de endemias, só imóvel não residencial",
   out_of_scope: "esta microárea não é da sua equipe",
   missing_role: TERRITORY_NO_ROLE,
   stale_version: STALE_TEXT,

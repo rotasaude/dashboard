@@ -9,6 +9,10 @@
 // Recusa: só o endereço (se houver), sem moradia. Uma recusa por vez, com
 // foco no campo; 409 stale_version: a frase, o que foi digitado fica e
 // "Recarregar" relê o domicílio. Sem step-up (só microárea pede).
+// `propertyTypes` (módulo 35a, Q13(1)): a lista do api para a microárea — o
+// agente de endemias só vê esses tipos (não residenciais), também na edição;
+// a recusa cbo_not_allowed dele é pelo tipo e marca o campo. null/ausente =
+// os 14 tipos, como no 24a.
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -83,8 +87,8 @@ export function householdAsInput(h: Household): HouseholdInput {
   };
 }
 
-export function HouseholdForm({ microAreaId, initial, onSaved, onCancel }: {
-  microAreaId: string; initial?: Household; onSaved(h: Household): void; onCancel(): void;
+export function HouseholdForm({ microAreaId, initial, propertyTypes = null, onSaved, onCancel }: {
+  microAreaId: string; initial?: Household; propertyTypes?: string[] | null; onSaved(h: Household): void; onCancel(): void;
 }) {
   const client = useQueryClient();
   const focus = useFieldFocus();
@@ -98,6 +102,7 @@ export function HouseholdForm({ microAreaId, initial, onSaved, onCancel }: {
   const [ stale, setStale ] = useState(false);
 
   const showLiving = !refused && allowsLivingConditions(propertyType);
+  const typeOptions = propertyTypes ? DOMAINS.tipo_de_imovel.filter((t) => propertyTypes.includes(String(t.code))) : DOMAINS.tipo_de_imovel;
   const all = neighborhoods.data ?? [];
   const usable = all.filter(usableNeighborhood);
   // O bairro gravado que deixou de servir aparece marcado (a regra explica e pede o texto).
@@ -129,7 +134,7 @@ export function HouseholdForm({ microAreaId, initial, onSaved, onCancel }: {
     },
     onError: (err) => {
       if (isStale(err)) { setProblem(null); focus.mark(null); setStale(true); return; }
-      const path = errorPath(err);
+      const path = errorPath(err) ?? (propertyTypes && errorCode(err) === "cbo_not_allowed" ? "property_type" : null);
       reject(errorCode(err) === "invalid_household" && path === "families" ? FAMILIES_TEXT : territoryError(err), path);
     }
   });
@@ -218,7 +223,7 @@ export function HouseholdForm({ microAreaId, initial, onSaved, onCancel }: {
         <select ref={focus.reg("property_type")} value={propertyType} style={inputStyle} aria-invalid={focus.invalid("property_type")}
           onChange={(e) => changeType(e.target.value)}>
           <option value="">— escolha —</option>
-          {DOMAINS.tipo_de_imovel.map((t) => <option key={t.code} value={String(t.code)}>{t.label}</option>)}
+          {typeOptions.map((t) => <option key={t.code} value={String(t.code)}>{t.label}</option>)}
         </select>
       </label>
 

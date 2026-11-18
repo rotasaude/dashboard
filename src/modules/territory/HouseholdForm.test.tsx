@@ -232,6 +232,42 @@ describe("HouseholdForm", () => {
     expect(document.activeElement).toBe(screen.getByLabelText("Número"));
   });
 
+  // Módulo 35a (Q13(1)): o agente de endemias recebe a lista do api (property_types).
+  it("propertyTypes: o tipo só oferece esses códigos, com os rótulos do dicionário, também na edição", () => {
+    const options = () => Array.from((screen.getByLabelText("Tipo de imóvel") as HTMLSelectElement).options).map((o) => o.value);
+    renderHousehold(<HouseholdForm microAreaId="ma1" propertyTypes={[ "2", "4", "13" ]} onSaved={vi.fn()} onCancel={vi.fn()} />);
+    expect(options()).toEqual([ "", "2", "4", "13" ]);
+    expect(screen.getByRole("option", { name: "Comércio" })).not.toBeNull();
+    expect(screen.queryByRole("option", { name: "Domicílio" })).toBeNull();
+    cleanup();
+    renderHousehold(<HouseholdForm microAreaId="ma1" initial={household({ property_type: "2", living_conditions: {}, families: [] })}
+      propertyTypes={[ "2", "4", "13" ]} onSaved={vi.fn()} onCancel={vi.fn()} />);
+    expect(options()).toEqual([ "", "2", "4", "13" ]);
+    expect((screen.getByLabelText("Tipo de imóvel") as HTMLSelectElement).value).toBe("2");
+    cleanup();
+    // null (ou ausente): os 14 tipos, como hoje.
+    renderHousehold(<HouseholdForm microAreaId="ma1" propertyTypes={null} onSaved={vi.fn()} onCancel={vi.fn()} />);
+    expect(options().length).toBe(15);
+  });
+
+  it("403 cbo_not_allowed: sem propertyTypes só a frase; com a lista, marca o tipo", async () => {
+    mocked(api.createHousehold).mockRejectedValue(new api.ApiError(403, { error: "cbo_not_allowed" }, "403"));
+    renderHousehold(<HouseholdForm microAreaId="ma1" onSaved={vi.fn()} onCancel={vi.fn()} />);
+    fillAddress();
+    pick("Tipo de imóvel", "2");
+    save();
+    expect(await screen.findByRole("alert")).not.toBeNull();
+    expect(screen.getByLabelText("Tipo de imóvel").getAttribute("aria-invalid")).toBeNull();
+    cleanup();
+    renderHousehold(<HouseholdForm microAreaId="ma1" propertyTypes={[ "2" ]} onSaved={vi.fn()} onCancel={vi.fn()} />);
+    fillAddress();
+    pick("Tipo de imóvel", "2");
+    save();
+    expect(await screen.findByRole("alert")).not.toBeNull();
+    expect(screen.getByLabelText("Tipo de imóvel").getAttribute("aria-invalid")).toBe("true");
+    expect(api.createHousehold).toHaveBeenCalledTimes(2);
+  });
+
   it("nada da ficha vai para o storage", async () => {
     const setItem = vi.spyOn(Storage.prototype, "setItem");
     renderHousehold(<HouseholdForm microAreaId="ma1" onSaved={vi.fn()} onCancel={vi.fn()} />);

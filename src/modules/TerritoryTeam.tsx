@@ -5,10 +5,13 @@
 // de outro ACS o api recusa (403 out_of_scope), então nem aparece (A19/C24).
 // O contexto não tem pessoa (STATIC_QUERY); lista, domicílio e moradores são
 // nominais e gravam trilha — lidos ao abrir, nunca sozinhos.
+// Módulo 35a (Q13(1), Q14(1)): a microárea com `property_types` (o agente de
+// endemias, nas atribuídas a ele) cadastra só esses tipos, sem família nem
+// morador; a lista vai à ficha e ao detalhe. Sem o campo, nada muda.
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getTerritoryContext } from "../lib/api";
-import { STATIC_QUERY, TERRITORY_CONTEXT_KEY, teamName, territoryError } from "../lib/territoryRegistry";
+import { STATIC_QUERY, TERRITORY_CONTEXT_KEY, householdTypesFor, teamName, territoryError } from "../lib/territoryRegistry";
 import { Panel } from "../components/Panel";
 import { EmptyState } from "../components/EmptyState";
 import { inputStyle } from "../components/formStyles";
@@ -17,6 +20,9 @@ import { TerritoryGate } from "./territory/TerritoryGate";
 import { HouseholdList } from "./territory/HouseholdList";
 import { HouseholdDetail } from "./territory/HouseholdDetail";
 import { Reveal } from "./territory/Reveal";
+
+export const NON_RESIDENTIAL_ONLY =
+  "Nesta microárea você cadastra só imóvel não residencial (ponto estratégico, comércio, terreno baldio, escola, creche, estabelecimento religioso e outros).";
 
 // `today` (padrão: o dia da cidade) vai para as fichas ("reside desde" não passa deste mês); a navegação não depende do dia.
 export function TerritoryTeam({ today }: { today?: string } = {}) {
@@ -41,6 +47,7 @@ function TeamBody({ today }: { today?: string }) {
   if (context.isPending) return <p className="mono" style={muted}>carregando…</p>;
   if (context.isError) return <p role="alert" style={alert}>{territoryError(context.error)}</p>;
   if (!team || !area) return <EmptyState title="nenhuma microárea em que você cadastre nas suas equipes" />;
+  const types = householdTypesFor(area);
 
   return (
     <div style={stack}>
@@ -61,15 +68,16 @@ function TeamBody({ today }: { today?: string }) {
             </select>
           </label>
         </div>
+        {types && <p style={{ ...muted, padding: "0 16px 16px" }}>{NON_RESIDENTIAL_ONLY}</p>}
       </Panel>
       {openId && (
         <Reveal key={openId}>
-          <HouseholdDetail householdId={openId} today={today} onBack={() => setOpenId(null)} />
+          <HouseholdDetail householdId={openId} today={today} householdOnly={types !== null} propertyTypes={types} onBack={() => setOpenId(null)} />
         </Reveal>
       )}
       <Panel title="Domicílios" sub={`microárea ${area.code} · do último salvo ao mais antigo`}>
         <div style={{ padding: 16 }}>
-          <HouseholdList key={area.id} microAreaId={area.id} onOpen={setOpenId} />
+          <HouseholdList key={area.id} microAreaId={area.id} propertyTypes={types} onOpen={setOpenId} />
         </div>
       </Panel>
     </div>

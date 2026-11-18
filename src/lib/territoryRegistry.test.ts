@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { ApiError } from "./api";
 import {
   IDENTITY_REVIEW_TEXT, STALE_TEXT, TERRITORY_DISABLED, TERRITORY_NO_ROLE, canUseTerritory, cpfProblem, duplicateQueryProblem, errorPath,
-  exitReasonLabel, isStale, microAreaCodeProblem, microAreaNameProblem, registryStatusLabel, registryStatusTone, territoryError, territoryRoles
+  exitReasonLabel, householdTypesFor, isStale, microAreaCodeProblem, microAreaNameProblem, registryStatusLabel, registryStatusTone, territoryError, territoryRoles
 } from "./territoryRegistry";
 
 const user = (roles: string[], features: string[], operator = false) =>
@@ -86,7 +86,7 @@ describe("recusas do api (contrato §3–§5; api 17175a8)", () => {
     [ 422, "invalid_ethnicity", "etnia inválida: só vale com raça/cor indígena e com um código de etnia da lista — confira a raça/cor ou escolha outro código" ],
     [ 422, "too_long", "texto maior que o limite do campo destacado" ],
     [ 422, "invalid_transition", "esta ação não vale para a situação atual do cadastro (já saiu ou recusou)" ],
-    [ 403, "cbo_not_allowed", "só o ACS da microárea, enfermeiro ou médico da equipe grava o cadastro" ],
+    [ 403, "cbo_not_allowed", "só o ACS da microárea, enfermeiro ou médico da equipe grava o cadastro — o agente de endemias, só imóvel não residencial" ],
     [ 403, "out_of_scope", "esta microárea não é da sua equipe" ],
     [ 403, "missing_role", TERRITORY_NO_ROLE ],
     [ 409, "stale_version", STALE_TEXT ],
@@ -147,5 +147,17 @@ describe("recusas do api (contrato §3–§5; api 17175a8)", () => {
     const text = territoryError(refusal(422, { error: "invalid_registration", path: "new_patient.cpf", value: "52998224725", message: "52998224725" }));
     expect(text).not.toMatch(/\d{11}/);
     expect(territoryError(refusal(500, { error: "x", value: "52998224725" }))).not.toMatch(/\d{11}/);
+  });
+});
+
+// Módulo 35a (Q13(1), Q14(1)): property_types por microárea, lido junto com can_register.
+describe("householdTypesFor", () => {
+  it("sem lista: null (todos os tipos, como o ACS hoje); com a lista, a lista; sem can_register, nenhum", () => {
+    expect(householdTypesFor({ can_register: true })).toBeNull();
+    expect(householdTypesFor({ can_register: true, property_types: null })).toBeNull();
+    expect(householdTypesFor({ can_register: true, property_types: [ "2", "3", "4", "5", "6", "12", "13" ] }))
+      .toEqual([ "2", "3", "4", "5", "6", "12", "13" ]);
+    expect(householdTypesFor({ can_register: false, property_types: null })).toEqual([]);
+    expect(householdTypesFor({ can_register: false, property_types: [ "2" ] })).toEqual([]);
   });
 });

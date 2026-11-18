@@ -26,7 +26,10 @@ export function householdStatus(h: Pick<Household, "refused" | "status">): { lab
 }
 
 // Toda microárea listada é uma em que o profissional grava (can_register): "Novo domicílio" sempre cabe.
-export function HouseholdList({ microAreaId, onOpen }: { microAreaId: string; onOpen(id: string): void }) {
+// `propertyTypes` (módulo 35a): os tipos que a ficha oferece (null = todos).
+export function HouseholdList({ microAreaId, propertyTypes = null, onOpen }: {
+  microAreaId: string; propertyTypes?: string[] | null; onOpen(id: string): void;
+}) {
   const [ creating, setCreating ] = useState(false);
   const [ notice, setNotice ] = useState<string | null>(null);
   const query = useInfiniteQuery({
@@ -53,7 +56,7 @@ export function HouseholdList({ microAreaId, onOpen }: { microAreaId: string; on
       {creating ? (
         <div style={box}>
           <strong>Novo domicílio</strong>
-          <HouseholdForm microAreaId={microAreaId} onCancel={() => setCreating(false)}
+          <HouseholdForm microAreaId={microAreaId} propertyTypes={propertyTypes} onCancel={() => setCreating(false)}
             onSaved={() => { setCreating(false); setNotice(HOUSEHOLD_SAVED); }} />
         </div>
       ) : (
