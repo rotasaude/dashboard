@@ -187,6 +187,73 @@ describe("VectorTasks", () => {
     expect(api.listVectorTasks).toHaveBeenCalledTimes(2);
   });
 
+  // A releitura de "Encerradas" traz a tarefa recém-concluída (OV-12): esperar o cartão é esperar a releitura.
+  function closedRereadBrings() {
+    let openFirst = true;
+    let closedFirst = true;
+    const INT_DONE = { ...INT, state: "done", closed_at: "2026-11-16T13:00:00Z" };
+    vi.mocked(api.listVectorTasks).mockImplementation(async (q) => {
+      if (q.state === "open") { const items = openFirst ? [ INT, ELSE, NOPLACE ] : [ ELSE, NOPLACE ]; openFirst = false; return page(items); }
+      const items = closedFirst ? [ DONE1, DISM1 ] : [ INT_DONE, DONE1, DISM1 ];
+      closedFirst = false;
+      return page(items);
+    });
+    vi.mocked(api.closeVectorTask).mockResolvedValue(INT_DONE);
+  }
+  async function mountWithClosedTab() {
+    renderWithProviders(<VectorTasks />);
+    await screen.findByRole("list", { name: OPEN });
+    fireEvent.click(screen.getByRole("tab", { name: "Encerradas" }));
+    await screen.findByRole("list", { name: CLOSED });
+    fireEvent.click(screen.getByRole("tab", { name: "Abertas" }));
+    expect(states()).toEqual([ "open", "closed" ]);
+  }
+
+  it("concluir com Encerradas já montada e escondida: ela relê exatamente uma vez ao voltar e mostra a tarefa", async () => {
+    closedRereadBrings();
+    await mountWithClosedTab();
+    await openClose("Concluir");
+    note("Quarteirões vistoriados na semana");
+    fireEvent.click(screen.getByRole("button", { name: "Concluir tarefa" }));
+    expect(await screen.findByText(TASK_DONE)).not.toBeNull();
+    await waitFor(() => expect(within(screen.getByRole("list", { name: OPEN })).queryByText("OV-12")).toBeNull());
+    await tick();
+    // Escondida, "Encerradas" não relê ainda.
+    expect(states()).toEqual([ "open", "closed", "open" ]);
+
+    fireEvent.click(screen.getByRole("tab", { name: "Encerradas" }));
+    const closedList = within(screen.getByRole("list", { name: CLOSED }));
+    expect(await closedList.findByText("OV-12")).not.toBeNull();
+    expect(card("OV-12").getByText("concluída")).not.toBeNull();
+    fireEvent.click(screen.getByRole("tab", { name: "Abertas" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Encerradas" }));
+    await tick();
+    expect(states()).toEqual([ "open", "closed", "open", "closed" ]);
+    expect(api.closeVectorTask).toHaveBeenCalledTimes(1);
+  });
+
+  it("concluir com o envio em voo e Encerradas à vista quando ele termina: ela relê exatamente uma vez na hora", async () => {
+    closedRereadBrings();
+    let resolve!: (t: VectorTask) => void;
+    const INT_DONE = { ...INT, state: "done", closed_at: "2026-11-16T13:00:00Z" };
+    vi.mocked(api.closeVectorTask).mockImplementation(() => new Promise((r) => { resolve = r; }));
+    await mountWithClosedTab();
+    await openClose("Concluir");
+    note("Quarteirões vistoriados na semana");
+    fireEvent.click(screen.getByRole("button", { name: "Concluir tarefa" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Encerradas" }));
+    resolve(INT_DONE);
+    const closedList = within(screen.getByRole("list", { name: CLOSED }));
+    expect(await closedList.findByText("OV-12")).not.toBeNull();
+    await tick();
+    expect([ ...states() ].sort()).toEqual([ "closed", "closed", "open", "open" ]);
+    fireEvent.click(screen.getByRole("tab", { name: "Abertas" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Encerradas" }));
+    await tick();
+    expect(api.listVectorTasks).toHaveBeenCalledTimes(4);
+    expect(api.closeVectorTask).toHaveBeenCalledTimes(1);
+  });
+
   it("invalid_transition relê uma vez: a frase, um envio, o formulário fechado; Encerradas, já aberta, relê uma vez ao voltar", async () => {
     rereadBrings();
     vi.mocked(api.closeVectorTask).mockRejectedValue(new ApiError(409, { error: "invalid_transition", path: "status" }, "x"));

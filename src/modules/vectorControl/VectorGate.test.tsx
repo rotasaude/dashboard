@@ -14,7 +14,6 @@ import { acsTeam } from "../../test/homeVisitFixtures";
 import { vcContext, vcUser } from "../../test/vectorControlFixtures";
 import { VectorGate } from "./VectorGate";
 import { VectorBlocks } from "../VectorBlocks";
-import { VectorStockShortfalls } from "../VectorStockShortfalls";
 import { FieldOvitraps } from "../FieldOvitraps";
 
 const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
@@ -72,10 +71,13 @@ describe("VectorGate", () => {
     expect(screen.queryByText(VC_NO_ROLE)).toBeNull();
   });
 
-  it("as cascas usam o portão: coordenação vê Em construção; o profissional passa na de campo (Task 7: a tela confere a equipe); o laboratório nos quarteirões, a frase do papel", async () => {
+  it("o portão com um filho de teste: a coordenação vê o filho; as telas usam o portão: o profissional passa na de campo (Task 7: a tela confere a equipe); o laboratório nos quarteirões, a frase do papel", async () => {
     mocked(api.fetchCurrentSession).mockResolvedValue(vcUser([ "endemic_coordinator" ]));
-    renderWithProviders(<VectorStockShortfalls />);
-    expect(await screen.findByText("Em construção")).not.toBeNull();
+    const stub = vi.fn(() => <p>filho de teste</p>);
+    renderWithProviders(gate((r) => r.coordinator || r.stockKeeper, stub));
+    expect(await screen.findByText("filho de teste")).not.toBeNull();
+    expect(stub).toHaveBeenCalled();
+    expect(screen.queryByText(VC_NO_ROLE)).toBeNull();
     cleanup();
     mocked(api.fetchCurrentSession).mockResolvedValue(vcUser([ "health_professional" ]));
     mocked(api.getHomeVisitContext).mockResolvedValue(vcContext({ teams: [ acsTeam() ] }));
