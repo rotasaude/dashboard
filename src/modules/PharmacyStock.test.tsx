@@ -9,6 +9,7 @@ import { ApiError } from "../lib/api";
 import { PharmacyStock } from "./PharmacyStock";
 import { renderWithProviders } from "../test/campaignFixtures";
 import { AMOXI, CENTRAL, CLONA, UBS_FARM, lotBalance, phUser, position, stockLot } from "../test/pharmacyFixtures";
+import { VC_FEATURES, VC_LOCATION, VECTOR_ITEM } from "../test/vectorControlFixtures";
 
 afterEach(cleanup);
 const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
@@ -97,6 +98,41 @@ describe("PharmacyStock", () => {
     expect((await screen.findAllByText(/Amoxicilina 500 mg cápsula/)).length).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: "Salvar mínimos" })).toBeNull();
     expect(mocked(api.getMinimums)).not.toHaveBeenCalled();
+  });
+
+  it("35a: dois produtos de campo no mesmo local têm chaves distintas; 'Lotes de B' abre os lotes e o extrato de B; palavras de produto", async () => {
+    const VC_REF = { id: VC_LOCATION.id, name: VC_LOCATION.name, kind: "vector_control" };
+    const B = { ...VECTOR_ITEM, vector_product_id: "pr2", code: "MAL", name: "Malationa 44% EW", unit: "ml", dispensing_unit: "ml" };
+    const vcPos = (item: typeof VECTOR_ITEM, lotId: string, lotNumber: string) => position({ location: VC_REF, item, minimum: null, below_minimum: false,
+      expiring_soon: false, balance: "100", lots: [ lotBalance({ lot: stockLot({ id: lotId, item, lot_number: lotNumber, expires_on: "2027-06-30" }), balance: "100",
+        expiring_soon: false }) ] });
+    mocked(api.fetchCurrentSession).mockResolvedValue(phUser([ "stock_keeper" ], { features: VC_FEATURES }));
+    mocked(api.listMyPharmacyLocations).mockResolvedValue([ VC_LOCATION ]);
+    mocked(api.listPositions).mockResolvedValue({ positions: [ vcPos(VECTOR_ITEM, "lot-a", "PYR-1"), vcPos(B, "lot-b", "MAL-1") ], next_before: null });
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    renderWithProviders(<PharmacyStock />);
+    expect(await screen.findAllByRole("row", { name: /Pyriproxyfen|Malationa/ })).toHaveLength(2);
+    expect(errors.mock.calls.some((c) => String(c[0]).includes("same key"))).toBe(false);
+    errors.mockRestore();
+    expect(screen.getByLabelText("Produto")).not.toBeNull();
+    expect(screen.queryByLabelText("Medicamento")).toBeNull();
+    expect(screen.getByRole("columnheader", { name: "Produto" })).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Lotes de Malationa 44% EW" }));
+    const lots = within(await screen.findByRole("region", { name: "Lotes de Malationa 44% EW" }));
+    expect(lots.getByText("MAL-1")).not.toBeNull();
+    expect(lots.queryByText("PYR-1")).toBeNull();
+    expect(screen.getByRole("button", { name: "Lotes de Malationa 44% EW" }).getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByRole("button", { name: "Lotes de Pyriproxyfen 0,5% G" }).getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(lots.getByRole("button", { name: "Extrato do lote MAL-1" }));
+    await waitFor(() => expect(mocked(api.listLotMovements)).toHaveBeenCalledTimes(1));
+    expect(mocked(api.listLotMovements)).toHaveBeenCalledWith("lot-b", "loc-vc", null);
+  });
+
+  it("35a: no local de farmácia as palavras continuam de medicamento", async () => {
+    renderWithProviders(<PharmacyStock />);
+    await screen.findByRole("row", { name: /Amoxicilina 500 mg cápsula/ });
+    expect(screen.getByLabelText("Medicamento")).not.toBeNull();
+    expect(screen.queryByLabelText("Produto")).toBeNull();
   });
 
   it("consulta: o almoxarife do central abre a posição de local alheio (roles vazio), sem painel de mínimos", async () => {

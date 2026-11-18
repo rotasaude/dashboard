@@ -9,7 +9,7 @@ import { useInfiniteQuery } from "@tanstack/react-query";
 import { listPositions, type LotBalance, type PharmacyLocation, type StockPosition } from "../lib/api";
 import { fmtDay } from "../lib/exams";
 import {
-  PH_POSITIONS_KEY, STATIC_QUERY, fmtQuantity, locationRoles, pharmacyError, sortPositions
+  PH_POSITIONS_KEY, STATIC_QUERY, fmtQuantity, isVectorLocation, itemKey, locationRoles, pharmacyError, sortPositions
 } from "../lib/pharmacy";
 import { DataTable } from "../components/DataTable";
 import { EmptyState } from "../components/EmptyState";
@@ -23,11 +23,14 @@ import { PharmacyGate } from "./pharmacy/PharmacyGate";
 
 export const MEDICATION_MIN = 2;
 export const MEDICATION_TOO_SHORT = `digite ao menos ${MEDICATION_MIN} letras do medicamento`;
+// Módulo 35a: no local vector_control o item é o produto de campo.
+export const PRODUCT_TOO_SHORT = `digite ao menos ${MEDICATION_MIN} letras do produto`;
 
 interface Applied { q: string | null; expiring: boolean; belowMinimum: boolean; all: boolean }
 const FIRST: Applied = { q: null, expiring: false, belowMinimum: false, all: false };
 
-const positionKey = (p: StockPosition) => `${p.location.id}:${p.item.catalog_item_id}`;
+// O item pelo itemKey: o produto de campo (35a) vem com catalog_item_id nulo (Json.vector_item); a posição dele é (local, vector_product_id).
+const positionKey = (p: StockPosition) => `${p.location.id}:${itemKey(p.item)}`;
 const withUnit = (qty: string | null | undefined, p: StockPosition) => (qty === null || qty === undefined ? "—" : `${fmtQuantity(qty)} ${p.item.dispensing_unit}`);
 
 export function PharmacyStock() {
@@ -46,6 +49,7 @@ function Body({ location }: { location: PharmacyLocation }) {
   const roles = locationRoles(location);
   // "Todos os locais" (sem location_id): só o almoxarife do central; o api recusa de novo.
   const canAll = location.kind === "central" && roles.keeper;
+  const itemWord = isVectorLocation(location) ? "Produto" : "Medicamento";
   const [ draft, setDraft ] = useState({ q: "", expiring: false, belowMinimum: false, all: false });
   const [ applied, setApplied ] = useState<Applied>(FIRST);
   const [ filterError, setFilterError ] = useState<string | null>(null);
@@ -69,7 +73,7 @@ function Body({ location }: { location: PharmacyLocation }) {
   function filter(e: FormEvent) {
     e.preventDefault();
     const q = draft.q.trim();
-    if (q.length > 0 && q.length < MEDICATION_MIN) { setFilterError(MEDICATION_TOO_SHORT); return; }
+    if (q.length > 0 && q.length < MEDICATION_MIN) { setFilterError(isVectorLocation(location) ? PRODUCT_TOO_SHORT : MEDICATION_TOO_SHORT); return; }
     setFilterError(null);
     setOpenKey(null); setLotId(null);
     setApplied({ q: q || null, expiring: draft.expiring, belowMinimum: draft.belowMinimum, all: draft.all });
@@ -80,7 +84,7 @@ function Body({ location }: { location: PharmacyLocation }) {
       <p className="mono" style={muted}>{`Local: ${location.name}`}</p>
       <form onSubmit={filter} style={{ ...row, alignItems: "flex-end" }}>
         <label style={{ ...fieldLabel, flex: "1 1 20ch" }}>
-          Medicamento
+          {itemWord}
           <input value={draft.q} style={inputStyle} onChange={(e) => setDraft({ ...draft, q: e.target.value })} />
         </label>
         <label style={checkLabel}>
@@ -108,7 +112,7 @@ function Body({ location }: { location: PharmacyLocation }) {
         <DataTable<StockPosition>
           cols={[
             { label: "Local", w: "1fr", render: (p) => p.location.name },
-            { label: "Medicamento", w: "1.6fr", card: "title", render: (p) => p.item.name },
+            { label: itemWord, w: "1.6fr", card: "title", render: (p) => p.item.name },
             { label: "Saldo", w: "0.8fr", align: "right", render: (p) => <span className="mono">{withUnit(p.balance, p)}</span> },
             { label: "Mínimo", w: "0.8fr", align: "right", render: (p) => <span className="mono">{withUnit(p.minimum, p)}</span> },
             { label: "Situação", w: "1fr", card: "pair", render: (p) => (

@@ -19,7 +19,7 @@ import { renderWithProviders } from "../test/campaignFixtures";
 import { CENTRAL } from "../test/pharmacyFixtures";
 import { VC_FEATURES, VC_LOCATION, shortfall, vcUser } from "../test/vectorControlFixtures";
 import {
-  RECONCILE_HINT, SHORTFALLS_OPEN_EMPTY, SHORTFALL_RECONCILED, SHORTFALL_UNCERTAIN, VC_NO_STOCK_LOCATION, VectorStockShortfalls
+  RECONCILE_HINT, SHORTFALLS_OPEN_EMPTY, SHORTFALL_GONE, SHORTFALL_RECONCILED, SHORTFALL_UNCERTAIN, VC_NO_STOCK_LOCATION, VectorStockShortfalls
 } from "./VectorStockShortfalls";
 
 afterEach(cleanup);
@@ -148,6 +148,20 @@ describe("VectorStockShortfalls", () => {
     fireEvent.change(screen.getByLabelText("Nota da conciliação"), { target: { value: NOTE } });
     fireEvent.click(screen.getByRole("button", { name: "Conciliar falta" }));
     expect(await screen.findByText(VECTOR_ERRORS.already_reconciled)).not.toBeNull();
+    await waitFor(() => expect(mocked(api.listVectorShortfalls)).toHaveBeenCalledTimes(2));
+    expect(mocked(api.reconcileVectorShortfall)).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("form")).toBeNull();
+  });
+
+  it("404 (a falta sumiu): a frase, UMA releitura, nenhum reenvio", async () => {
+    mocked(api.fetchCurrentSession).mockResolvedValue(coordinator());
+    mocked(api.reconcileVectorShortfall).mockRejectedValue(new ApiError(404, { error: "not_found" }, "404"));
+    renderWithProviders(<VectorStockShortfalls />);
+    await screen.findByRole("row", { name: /Pyriproxyfen/ });
+    fireEvent.click(conciliar());
+    fireEvent.change(screen.getByLabelText("Nota da conciliação"), { target: { value: NOTE } });
+    fireEvent.click(screen.getByRole("button", { name: "Conciliar falta" }));
+    expect(await screen.findByText(SHORTFALL_GONE)).not.toBeNull();
     await waitFor(() => expect(mocked(api.listVectorShortfalls)).toHaveBeenCalledTimes(2));
     expect(mocked(api.reconcileVectorShortfall)).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole("form")).toBeNull();

@@ -9,7 +9,7 @@ import { useQuery } from "@tanstack/react-query";
 import { getPharmacyAlerts, listPositions, type LotBalance, type PharmacyLocation, type StockPosition } from "../lib/api";
 import { fmtDay } from "../lib/exams";
 import {
-  PHARMACY_ALERTS_REFRESH_MS, PH_ALERTS_KEY, PH_POSITIONS_KEY, STATIC_QUERY, fmtQuantity, locationRoles, pharmacyError, sortPositions
+  PHARMACY_ALERTS_REFRESH_MS, PH_ALERTS_KEY, PH_POSITIONS_KEY, STATIC_QUERY, fmtQuantity, itemKey, locationRoles, pharmacyError, sortPositions
 } from "../lib/pharmacy";
 import { toHash } from "../shell/router";
 import { DataTable } from "../components/DataTable";
@@ -145,7 +145,7 @@ function BelowMinimumList({ scope }: { scope: string | null }) {
                 <span className="mono">{`${fmtQuantity(p.balance)} ${p.item.dispensing_unit} (mínimo ${fmtQuantity(p.minimum)})`}</span>
               ) }
             ]}
-            rows={positions} rowKey={(p) => `${p.location.id}:${p.item.catalog_item_id}`} empty={NOTHING}
+            rows={positions} rowKey={(p) => `${p.location.id}:${itemKey(p.item)}`} empty={NOTHING}
           />
         )}
       </ListBody>
