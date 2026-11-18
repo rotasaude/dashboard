@@ -16,7 +16,8 @@ vi.mock("../territory/map/fieldMap", () => ({ createFieldMap: vi.fn(() => handle
 import * as api from "../../lib/api";
 import type { VectorMapPoint, VectorMapQuery } from "../../lib/api";
 import { createFieldMap } from "../territory/map/fieldMap";
-import { CATEGORY_COLORS, NO_VECTOR_POINTS, VectorMapPanel } from "./VectorMapPanel";
+import { NO_VECTOR_POINTS, VectorMapPanel } from "./VectorMapPanel";
+import { CATEGORY_COLORS } from "../../lib/vectorMap";
 import { renderWithProviders } from "../../test/campaignFixtures";
 import { MAP_MANIFEST } from "../../test/territoryMapFixtures";
 import { VC_DOMAINS, vcUser } from "../../test/vectorControlFixtures";
@@ -124,6 +125,66 @@ describe("VectorMapPanel (35a)", () => {
     mount({ layer: "risk", neighborhoodId: "nb1" });
     expect(await screen.findByRole("alert")).not.toBeNull();
     expect(createFieldMap).not.toHaveBeenCalled();
+  });
+
+  it("as cores que chegam ao mapa são os papéis do tema lidos por nome (nunca \"\")", async () => {
+    const ROLES: Record<string, string> = {
+      "--ok": "#0f6b1d", "--warn": "#7a4b00", "--down": "#b31800", "--ink3": "#555555", "--info": "#0c4ca3", "--ink2": "#333333",
+      "--ink4": "#888888", "--ink": "#1b1b1b", "--panel": "#ffffff"
+    };
+    const real = window.getComputedStyle.bind(window);
+    vi.spyOn(window, "getComputedStyle").mockImplementation((el: Element, pseudo?: string | null) => {
+      const style = real(el, pseudo);
+      return new Proxy(style, { get(target, key) {
+        if (key === "getPropertyValue") return (name: string) => ROLES[name] ?? target.getPropertyValue(name);
+        const v = Reflect.get(target, key);
+        return typeof v === "function" ? v.bind(target) : v;
+      } });
+    });
+    vi.mocked(api.listVectorMapPoints).mockResolvedValue({ map: MAP_MANIFEST, points: mapPoints() });
+    mount({ layer: "risk", neighborhoodId: "nb1" });
+    await waitFor(() => expect(createFieldMap).toHaveBeenCalled());
+    expect(vi.mocked(createFieldMap).mock.calls[0][1].colors).toEqual({
+      point: "#888888", selected: "#1b1b1b", outline: "#ffffff",
+      categories: { green: "#0f6b1d", yellow: "#7a4b00", red: "#b31800", gray: "#555555", purple: "#0c4ca3", none: "#333333" },
+      hollow: [ "none" ], hollowOther: true
+    });
+  });
+
+  it("o ponto clicado ganha o destaque no mapa; duas ovitrampas no mesmo ponto: a tela lista as duas para escolher", async () => {
+    vi.mocked(api.listVectorMapPoints).mockResolvedValue({ map: MAP_MANIFEST, points: [
+      point({ id: "o1", category: "positive", label: "A-01 · 5" }), point({ id: "o2", category: "alert", label: "A-02 · 120" }),
+      point({ id: "o3", latitude: -25.5, category: "negative", label: "A-03 · 0" })
+    ] });
+    mount({ layer: "ovitraps", neighborhoodId: "nb1", epiWeek: "2026-46" }, "Ovitrampas da semana");
+    await waitFor(() => expect(handle.onPointClick).toHaveBeenCalled());
+    const fits = handle.fitTo.mock.calls.length;
+    act(() => { (handle.onPointClick.mock.calls[0][0] as (id: string) => void)("o1"); });
+    await waitFor(() => expect(lastPoints().features.map((f) => f.properties.selected)).toEqual([ true, false, false ]));
+    expect(screen.getByText("ovitrampa A-01 · 5 · positiva", { selector: "strong" })).not.toBeNull();
+    expect(screen.getAllByText("2 ovitrampas neste ponto").length).toBeGreaterThan(0);
+    const other = screen.getByRole("button", { name: "ovitrampa A-02 · 120 · acima do alerta" });
+    expect(other.getAttribute("aria-pressed")).toBe("false");
+    fireEvent.click(other);
+    expect(screen.getByText("ovitrampa A-02 · 120 · acima do alerta", { selector: "strong" })).not.toBeNull();
+    await waitFor(() => expect(lastPoints().features.map((f) => f.properties.selected)).toEqual([ false, true, false ]));
+    // Escolher um ponto não reenquadra o mapa.
+    expect(handle.fitTo.mock.calls.length).toBe(fits);
+    act(() => { (handle.onPointClick.mock.calls[0][0] as (id: string) => void)("o3"); });
+    expect(screen.queryByText(/neste ponto/)).toBeNull();
+  });
+
+  it.each([
+    [ { layer: "risk", neighborhoodId: "nb1" } as VectorMapQuery, [ "Verde (baixo): 1", "Amarelo (médio): 0", "Vermelho (alto): 2",
+      "Cinza (difícil acesso, com agendamento): 0", "Roxo (difícil acesso, exige intervenção legal ou VISA): 0", "sem risco avaliado: 0" ] ],
+    [ { layer: "ovitraps", neighborhoodId: "nb1", epiWeek: "2026-46" } as VectorMapQuery, [ "negativa: 0", "positiva: 0", "acima do alerta: 0", "não contada: 0", "red: 2", "green: 1" ] ],
+    [ { layer: "transmission", transmissionBlockId: "tb1" } as VectorMapQuery, [ "área do bloqueio: 0", "red: 2", "green: 1" ] ]
+  ])("a legenda em texto lista toda categoria da camada (%o)", async (query, texts) => {
+    vi.mocked(api.listVectorMapPoints).mockResolvedValue({ map: MAP_MANIFEST, points: mapPoints() });
+    mount(query, "Mapa");
+    const legend = await screen.findByRole("list", { name: "Legenda — Mapa" });
+    await waitFor(() => expect(legend.textContent).toContain(texts[0]));
+    expect([ ...legend.querySelectorAll("li") ].map((li) => li.textContent)).toEqual(texts);
   });
 
   it("CATEGORY_COLORS cobre as categorias do api e nada mais (Q13(7))", () => {

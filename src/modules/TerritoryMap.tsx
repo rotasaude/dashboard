@@ -10,7 +10,7 @@
 import { Suspense, lazy, useId, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getTerritoryContext, listMapHouseholds, type MapHousehold } from "../lib/api";
-import { NOMINAL_QUERY, STATIC_QUERY, TERRITORY_CONTEXT_KEY, teamName, territoryError } from "../lib/territoryRegistry";
+import { NO_MAP, NOMINAL_QUERY, STATIC_QUERY, TERRITORY_CONTEXT_KEY, teamName, territoryError } from "../lib/territoryRegistry";
 import { Panel } from "../components/Panel";
 import { EmptyState } from "../components/EmptyState";
 import { Tag } from "../components/Tag";
@@ -24,7 +24,7 @@ import type { LatLng } from "./territory/map/fieldMap";
 const MicroAreaMap = lazy(() => import("./territory/map/MicroAreaMap"));
 
 export const MAP_HOUSEHOLDS_KEY = "territoryMapHouseholds";
-export const NO_MAP = "o mapa desta cidade ainda não foi gerado — peça à equipe de manutenção";
+export { NO_MAP };
 export const NO_POINTS = "nenhum domicílio desta microárea tem ponto marcado — o ponto é marcado no app de campo";
 
 export function TerritoryMap() {

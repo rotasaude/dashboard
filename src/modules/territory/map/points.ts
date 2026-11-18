@@ -34,20 +34,27 @@ export function boundsOf(items: MapHousehold[]): Bounds | null {
 
 export function boundsOfPoints(points: readonly { latitude: number; longitude: number }[]): Bounds | null {
   if (points.length === 0) return null;
-  const lng = points.map((p) => p.longitude);
-  const lat = points.map((p) => p.latitude);
-  return [ [ Math.min(...lng), Math.min(...lat) ], [ Math.max(...lng), Math.max(...lat) ] ];
+  // Laço, não Math.min(...lista): a camada do 35a não tem teto, e o espalhamento estoura a pilha com listas enormes.
+  let [ west, south, east, north ] = [ points[0].longitude, points[0].latitude, points[0].longitude, points[0].latitude ];
+  for (const p of points) {
+    if (p.longitude < west) west = p.longitude;
+    if (p.longitude > east) east = p.longitude;
+    if (p.latitude < south) south = p.latitude;
+    if (p.latitude > north) north = p.latitude;
+  }
+  return [ [ west, south ], [ east, north ] ];
 }
 
 // Módulo 35a (Q13(7)): os pontos de uma camada do mapa de endemias, pintados pela categoria. Só id, rótulo e
 // categoria vão para o mapa: nunca pessoa nem caso (o rótulo é o do api, D-5).
-export function toCategoryCollection(points: VectorMapPoint[]): PointCollection {
+// `selectedId`: o ponto escolhido sai maior e com o anel da seleção, sem perder a cor da categoria.
+export function toCategoryCollection(points: VectorMapPoint[], selectedId: string | null = null): PointCollection {
   return {
     type: "FeatureCollection",
     features: points.map((p) => ({
       type: "Feature",
       geometry: { type: "Point", coordinates: [ p.longitude, p.latitude ] },
-      properties: { id: p.id, selected: false, label: p.label, category: p.category }
+      properties: { id: p.id, selected: p.id === selectedId, label: p.label, category: p.category }
     }))
   };
 }

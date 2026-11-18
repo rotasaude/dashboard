@@ -215,7 +215,11 @@ describe("createFieldMap (24c)", () => {
     lastMap().fire("load");
     const points = { paint: lastMap().layers.find((l) => l.id === "households-points")!.paint as Record<string, unknown> };
     expect(points.paint["circle-color"]).toEqual([ "match", [ "get", "category" ], "red", "#c00", "green", "#0a0", "#888" ]);
-    expect(points.paint["circle-stroke-color"]).toBe("white");
+    // Sem vazadas, o contorno é o do painel; o ponto escolhido ganha o anel `selected`, maior e mais grosso.
+    expect(points.paint["circle-stroke-color"]).toEqual([ "case", [ "get", "selected" ], "#000", [ "match", [ "get", "category" ], "red", "white", "green", "white", "white" ] ]);
+    expect(points.paint["circle-opacity"]).toEqual([ "match", [ "get", "category" ], "red", 1, "green", 1, 1 ]);
+    expect(points.paint["circle-radius"]).toEqual([ "case", [ "get", "selected" ], 9, 6 ]);
+    expect(points.paint["circle-stroke-width"]).toEqual([ "case", [ "get", "selected" ], 3, 2 ]);
     // Nenhuma camada de texto ou símbolo: o mapa não pede faixa de fonte nova.
     expect(lastMap().layers.every((l) => l.type === "circle")).toBe(true);
   });
@@ -224,6 +228,20 @@ describe("createFieldMap (24c)", () => {
     createFieldMap(div(), { ...OPTS, colors: { ...OPTS.colors, categories: {} } });
     lastMap().fire("load");
     const points = { paint: lastMap().layers.find((l) => l.id === "households-points")!.paint as Record<string, unknown> };
-    expect(points.paint["circle-color"]).toEqual([ "case", [ "get", "selected" ], "red", "blue" ]);
+    expect(points.paint).toEqual({
+      "circle-color": [ "case", [ "get", "selected" ], "red", "blue" ], "circle-radius": [ "case", [ "get", "selected" ], 9, 6 ],
+      "circle-stroke-width": 2, "circle-stroke-color": "white"
+    });
+  });
+
+  it("35a: vazada = sem preenchimento e contorno na cor da categoria; hollowOther vaza a desconhecida na cor do ponto", () => {
+    createFieldMap(div(), { ...OPTS, cluster: false, colors: {
+      point: "#888", selected: "#000", outline: "white", categories: { red: "#c00", none: "#333" }, hollow: [ "none" ], hollowOther: true
+    } });
+    lastMap().fire("load");
+    const paint = lastMap().layers.find((l) => l.id === "households-points")!.paint as Record<string, unknown>;
+    expect(paint["circle-opacity"]).toEqual([ "match", [ "get", "category" ], "red", 1, "none", 0, 0 ]);
+    expect(paint["circle-stroke-color"]).toEqual([ "case", [ "get", "selected" ], "#000", [ "match", [ "get", "category" ], "red", "white", "none", "#333", "#888" ] ]);
+    expect("circle-stroke-opacity" in paint).toBe(false);
   });
 });

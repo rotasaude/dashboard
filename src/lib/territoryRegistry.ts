@@ -19,6 +19,8 @@ export { COUNT_QUERY, NOMINAL_QUERY, STATIC_QUERY, fmtDay };
 
 export const TERRITORY_DISABLED = "o cadastro individual e domiciliar está desligado nesta cidade";
 export const TERRITORY_NO_ROLE = "seu papel não permite usar o cadastro territorial";
+// Mapa do 24c sem arquivo gerado (também nos mapas do 35a).
+export const NO_MAP = "o mapa desta cidade ainda não foi gerado — peça à equipe de manutenção";
 export const STALE_TEXT = "outra pessoa salvou enquanto você editava — recarregue para ver a versão nova";
 // L24: o posto atualizou a identidade do paciente depois do último cadastro.
 export const IDENTITY_REVIEW_TEXT = "identidade atualizada no posto, revisar e salvar";

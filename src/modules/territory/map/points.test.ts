@@ -40,11 +40,16 @@ describe("pontos do mapa da microárea (24c)", () => {
     expect(fc.features.map((f) => f.properties)).toEqual([ { id: "h1", selected: false, label: "Quarteirão 12", category: "red" } ]);
     expect(Object.keys(fc.features[0].properties).sort()).toEqual([ "category", "id", "label", "selected" ]);
     expect(toCategoryCollection([]).features).toEqual([]);
+    const two = [ { id: "h1", latitude: -25.4, longitude: -49.27, category: "red", label: "12" }, { id: "h2", latitude: -25.5, longitude: -49.2, category: "green", label: "13" } ];
+    expect(toCategoryCollection(two, "h2").features.map((f) => f.properties.selected)).toEqual([ false, true ]);
   });
 
   it("boundsOfPoints (35a): a caixa dos pontos; vazio = null", () => {
     expect(boundsOfPoints([])).toBeNull();
     expect(boundsOfPoints([ { latitude: -25.4, longitude: -49.27 }, { latitude: -25.5, longitude: -49.2 } ]))
       .toEqual([ [ -49.27, -25.5 ], [ -49.2, -25.4 ] ]);
+    // Sem espalhar em Math.min/Math.max: 300 mil pontos não estouram a pilha.
+    const many = Array.from({ length: 300_000 }, (_, i) => ({ latitude: -25 - i / 1e6, longitude: -49 + i / 1e6 }));
+    expect(boundsOfPoints(many)).toEqual([ [ -49, -25.299999 ], [ -48.700001, -25 ] ]);
   });
 });

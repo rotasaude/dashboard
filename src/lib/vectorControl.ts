@@ -95,6 +95,8 @@ export const domainLabel = (list: readonly { code: string; label: string }[], co
 // Tons do tema (Tag): o roxo é o `accent`; sem classe ou classe nova, neutro.
 export type RiskTone = "ok" | "warn" | "down" | "neutral" | "accent";
 const RISK_TONE: Record<string, RiskTone> = { green: "ok", yellow: "warn", red: "down", gray: "neutral", purple: "accent" };
+// As classes de risco do api (Catalog::RISK_CLASSES), na ordem dos domínios.
+export const RISK_CLASSES = Object.keys(RISK_TONE) as readonly string[];
 export const riskTone = (r: string | null | undefined): RiskTone => (r && Object.prototype.hasOwnProperty.call(RISK_TONE, r) ? RISK_TONE[r] : "neutral");
 
 const DUE_REASON: Record<string, string> = { transmission_block: "bloqueio", liraa: "LIRAa", pending: "pendência", due: "vencido" };

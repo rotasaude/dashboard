@@ -7,7 +7,7 @@
 // nunca vai para log, URL ou mensagem de erro.
 import {
   AttributionControl, Map as MapLibreMap, Marker, NavigationControl, addProtocol, setWorkerUrl,
-  type ExpressionSpecification, type GeoJSONSource, type MapLayerMouseEvent, type MapMouseEvent
+  type AddLayerObject, type GeoJSONSource, type MapLayerMouseEvent, type MapMouseEvent
 } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { PMTiles, Protocol } from "pmtiles";
@@ -29,12 +29,20 @@ export interface FieldMapHandle {
 // O mapa é sempre claro (Q18), em qualquer tema do dashboard: o contorno
 // (`outline`) é o que mantém o ponto legível quando a cor do tema é clara.
 // Módulo 35a: `cluster: false` mostra cada ponto (padrão `true`, o 24c); `colors.categories` pinta cada ponto pela
-// `category` (código → cor), e categoria fora da tabela fica com `colors.point`. Só círculos: nenhuma camada de texto
-// ou símbolo, que pediria faixas de fonte (glifo ausente derruba o mapa inteiro).
+// `category` (código → cor), e categoria fora da tabela fica com `colors.point`. `hollow` lista as categorias
+// desenhadas vazadas (só o contorno, na cor da categoria) e `hollowOther` faz o mesmo com a categoria fora da tabela
+// (WCAG 1.4.1: preenchimento e contorno juntos distinguem as categorias). Com categorias, o ponto escolhido ganha o
+// anel `selected`. Só círculos: nenhuma camada de texto ou símbolo, que pediria faixas de fonte (glifo ausente
+// derruba o mapa inteiro).
 export type FieldMapOptions = {
   mapUrl: string; base: string; cluster?: boolean;
-  colors: { point: string; selected: string; outline: string; categories?: Record<string, string> };
+  colors: {
+    point: string; selected: string; outline: string;
+    categories?: Record<string, string>; hollow?: readonly string[]; hollowOther?: boolean;
+  };
 };
+
+type CirclePaint = Extract<AddLayerObject, { type: "circle" }>["paint"];
 
 const SOURCE = "households";
 const EMPTY: PointCollection = { type: "FeatureCollection", features: [] };
@@ -50,11 +58,28 @@ function pmtilesProtocol(): Protocol {
   return protocol;
 }
 
-// O MapLibre recusa `match` sem nenhum par: sem categoria, a cor do 24c (seleção ou ponto).
-function pointColor(colors: FieldMapOptions["colors"]): unknown[] {
+// O MapLibre recusa `match` sem nenhum par: sem categoria, a pintura do 24c (seleção ou ponto), sem mudança.
+function pointPaint(colors: FieldMapOptions["colors"]): Record<string, unknown> {
   const pairs = Object.entries(colors.categories ?? {});
-  if (pairs.length === 0) return [ "case", [ "get", "selected" ], colors.selected, colors.point ];
-  return [ "match", [ "get", "category" ], ...pairs.flat(), colors.point ];
+  if (pairs.length === 0) {
+    return {
+      "circle-color": [ "case", [ "get", "selected" ], colors.selected, colors.point ],
+      "circle-radius": [ "case", [ "get", "selected" ], 9, 6 ],
+      "circle-stroke-width": 2, "circle-stroke-color": colors.outline
+    };
+  }
+  const hollow = new Set(colors.hollow ?? []);
+  const byCategory = (pick: (category: string, color: string) => unknown, other: unknown) =>
+    [ "match", [ "get", "category" ], ...pairs.flatMap(([ category, color ]) => [ category, pick(category, color) ]), other ];
+  return {
+    "circle-color": byCategory((_, color) => color, colors.point),
+    // Vazado: o preenchimento some (a opacidade do contorno é outra propriedade) e o contorno leva a cor.
+    "circle-opacity": byCategory((category) => (hollow.has(category) ? 0 : 1), colors.hollowOther ? 0 : 1),
+    "circle-radius": [ "case", [ "get", "selected" ], 9, 6 ],
+    "circle-stroke-width": [ "case", [ "get", "selected" ], 3, 2 ],
+    "circle-stroke-color": [ "case", [ "get", "selected" ], colors.selected,
+      byCategory((category, color) => (hollow.has(category) ? color : colors.outline), colors.hollowOther ? colors.point : colors.outline) ]
+  };
 }
 
 export function createFieldMap(container: HTMLElement, opts: FieldMapOptions): FieldMapHandle {
@@ -94,11 +119,7 @@ export function createFieldMap(container: HTMLElement, opts: FieldMapOptions): F
     }
     map.addLayer({
       id: "households-points", type: "circle", source: SOURCE, filter: [ "!", [ "has", "point_count" ] ],
-      paint: {
-        "circle-color": pointColor(opts.colors) as ExpressionSpecification,
-        "circle-radius": [ "case", [ "get", "selected" ], 9, 6 ],
-        "circle-stroke-width": 2, "circle-stroke-color": opts.colors.outline
-      }
+      paint: pointPaint(opts.colors) as CirclePaint
     });
   });
 
