@@ -15,13 +15,11 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  getVectorReport, listOvitrapReadings, listOvitraps, listPanelNeighborhoods, type Ovitrap, type OvitrapReading, type OvitrapStatus,
-  type VectorReport
+  getVectorReport, listOvitrapReadings, listOvitraps, listPanelNeighborhoods, type Ovitrap, type OvitrapReading, type OvitrapStatus
 } from "../lib/api";
 import { cityIsoDate, fmtDateTime, fmtNumber } from "../lib/format";
 import { fmtDay } from "../lib/homeVisits";
 import { PANEL_NEIGHBORHOODS_KEY } from "../lib/neighborhoodFilter";
-import { isSuppressed, suppressedLabel } from "../lib/smallCount";
 import { epiWeekOf, previousEpiWeek, shiftEpiWeek, weekLabel, weekProblem } from "../lib/surveillance";
 import { sortByName } from "../lib/territory";
 import {
@@ -31,6 +29,7 @@ import {
 import { VectorGate } from "./vectorControl/VectorGate";
 import { CountForm, eggsText } from "./vectorControl/CountForm";
 import { VectorMapPanel } from "./vectorControl/VectorMapPanel";
+import { ReportTable } from "./vectorControl/ReportTable";
 import { usePaged } from "./homeVisits/usePaged";
 import { VectorListBody } from "./vectorControl/VectorListBody";
 import { SegmentedControl } from "../shell/SegmentedControl";
@@ -239,30 +238,6 @@ function NeighborhoodOvitraps({ neighborhoodId }: { neighborhoodId: string }) {
 }
 
 // ─── Índices e mapa ─────────────────────────────────────────────────────────
-type ReportRow = VectorReport["rows"][number];
-
-// Contagem com o número da cidade; percentual e decimal chegam em texto ("37.5") e saem com vírgula; nulo vira "—".
-function cellText(v: ReportRow[string], kind: VectorReport["columns"][number]["kind"]): string {
-  if (v === null || v === undefined) return "—";
-  if (isSuppressed(v)) return suppressedLabel(kind === "percent" ? "%" : undefined);
-  if (typeof v === "number") return fmtNumber(v);
-  return kind === "percent" || kind === "decimal" ? v.replace(".", ",") : v;
-}
-
-// A tabela simples desta tela (a Task 17 troca pelo ReportTable).
-function ReportTableSimple({ report, label }: { report: VectorReport; label: string }) {
-  const cols: Column<ReportRow>[] = report.columns.map((c, i) => ({
-    label: c.label, w: c.kind === "text" ? "1.4fr" : "0.8fr", align: c.kind === "text" ? "left" : "right", ...(i === 0 ? { card: "title" as const } : {}),
-    render: (r: ReportRow) => cellText(r[c.key], c.kind)
-  }));
-  return (
-    <div style={stack}>
-      <DataTable<ReportRow> label={label} cols={cols} rows={report.rows} rowKey={(_, i) => String(i)} empty="sem leituras nesta semana" />
-      {(report.notes ?? []).map((n) => <p key={n} style={muted}>{n}</p>)}
-    </div>
-  );
-}
-
 function IndexesTab({ neighborhoodId, today, roles }: { neighborhoodId: string; today: string; roles: VectorRoles }) {
   const latest = epiWeekOf(today);
   const [ week, setWeek ] = useState(() => previousEpiWeek(today));
@@ -298,7 +273,7 @@ function IndexesTab({ neighborhoodId, today, roles }: { neighborhoodId: string; 
         <div style={{ padding: 16 }}>
           {report.isError ? <p role="alert" style={alert}>{vectorError(report.error)}</p>
             : !report.data ? <p role="status" style={muted}>Carregando…</p>
-            : <ReportTableSimple report={report.data} label="Índices de ovitrampa" />}
+            : <ReportTable report={report.data} label="Índices de ovitrampa" empty="sem leituras nesta semana" />}
         </div>
       </Panel>
       {vectorMapLayers(roles).includes("ovitraps") && (
