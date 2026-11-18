@@ -4,11 +4,13 @@
 // linhas antes (receiptProblems); a recusa do api com `problems` mostra cada uma na linha dela (`items[i]` é o índice do corpo
 // enviado = a linha i da tela) e o formulário fica como estava. Depois do sucesso limpa linhas e documento, mantém o tipo de
 // entrada e relê as posições. Nada em URL, log ou storage.
+// Módulo 35a (D-8, Q21): no local `vector_control` a busca é a dos produtos de campo (com `domain`), a linha manda `vector_product_id`
+// (nunca `catalog_item_id`) e não há embalagem; o api recusa o lote de outro domínio com `item_not_allowed_here` (a frase do 27a).
 import { useState, type CSSProperties } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { recordOpening, recordReceipt, type PharmacyLocation, type StockItem, type StockReceipt } from "../../lib/api";
 import {
-  PH_POSITIONS_KEY, errorPath, fmtQuantity, lineQuantity, newReceiptLine, pharmacyError, pharmacyProblems, problemItemIndex,
+  PH_POSITIONS_KEY, errorPath, fmtQuantity, isVectorLocation, lineQuantity, newReceiptLine, pharmacyError, pharmacyProblems, problemItemIndex,
   receiptItems, receiptProblems, type ReceiptLine
 } from "../../lib/pharmacy";
 import { Tag } from "../../components/Tag";
@@ -31,6 +33,7 @@ export function ReceiptForm({ location, mode, today, delayMs, onStart, onDone }:
   const [ shown, setShown ] = useState<Shown[]>([]);
   const [ busy, setBusy ] = useState(false);
   const opening = mode === "opening";
+  const vector = isVectorLocation(location);
   const many = lines.length > 1;
   const flagged = new Set(shown.map((s) => s.key));
 
@@ -103,11 +106,15 @@ export function ReceiptForm({ location, mode, today, delayMs, onStart, onDone }:
           </div>
         </div>
       )}
-      <ItemSearch label="Buscar medicamento" onPick={add} delayMs={delayMs} disabled={busy} />
+      {vector
+        ? <ItemSearch label="Buscar produto de controle vetorial" domain="vector_control" onPick={add} delayMs={delayMs} disabled={busy} />
+        : <ItemSearch label="Buscar medicamento" onPick={add} delayMs={delayMs} disabled={busy} />}
       {lines.map((l) => {
         const item = l.item;
         const unit = item?.dispensing_unit ?? "";
         const total = lineQuantity(l);
+        // O produto de campo não tem embalagem: só a quantidade direta.
+        const byPackage = l.byPackage && !item?.vector_product_id;
         return (
           <div key={l.key} style={{ ...box, ...(flagged.has(l.key) ? flaggedStyle : null) }}>
             <div style={row}>
@@ -134,11 +141,13 @@ export function ReceiptForm({ location, mode, today, delayMs, onStart, onDone }:
                   onChange={(e) => patch(l.key, { manufacturer: e.target.value })} />
               </label>
             </div>
-            <label style={checkLabel}>
-              <input type="checkbox" checked={l.byPackage} aria-label={named("Por embalagem", l)} onChange={(e) => patch(l.key, { byPackage: e.target.checked })} />
-              Por embalagem
-            </label>
-            {l.byPackage ? (
+            {!item?.vector_product_id && (
+              <label style={checkLabel}>
+                <input type="checkbox" checked={l.byPackage} aria-label={named("Por embalagem", l)} onChange={(e) => patch(l.key, { byPackage: e.target.checked })} />
+                Por embalagem
+              </label>
+            )}
+            {byPackage ? (
               <div style={row}>
                 <label style={fieldLabel}>
                   Unidades por embalagem

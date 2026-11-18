@@ -6,6 +6,8 @@
 // do cache, que é relido depois de cada escrita (saldo mudou: a tela mostra o saldo novo). Nada em URL, log ou storage.
 // Módulo 29: a rede de frio envia às salas de vacina — quem chama passa os `destinations` (a lista de locais da pessoa NÃO é lida) e
 // o corpo leva `from_location_id` (fora do central de medicamentos). O item é identificado por `itemKey` (vacina não tem catalog_item_id).
+// Módulo 35a (A-12; SendTransfer::DESTINATIONS): o local `vector_control` envia só a OUTRO local `vector_control` ativo da lista da pessoa
+// (o GET /pharmacy/locations só traz os locais em que ela tem papel), com `from_location_id`.
 import { useState, type CSSProperties } from "react";
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { listMyPharmacyLocations, listPositions, sendTransfer, type PharmacyLocation, type StockPosition, type StockTransfer } from "../../lib/api";
@@ -32,7 +34,8 @@ export function TransferForm({ central, today, destinations: given, onStart, onD
     queryKey: [ PH_LOCATIONS_KEY, user?.id ?? null ], queryFn: listMyPharmacyLocations, enabled: !!user && !given, ...STATIC_QUERY
   });
   const vaccine = central.kind === "cold_chain_central";
-  const words = vaccine ? VACCINE_WORDS : MEDICATION_WORDS;
+  const vector = central.kind === "vector_control";
+  const words = vaccine ? VACCINE_WORDS : vector ? VECTOR_WORDS : MEDICATION_WORDS;
   const positions = useInfiniteQuery({
     queryKey: [ PH_POSITIONS_KEY, central.id, "transfer" ],
     queryFn: ({ pageParam }) => listPositions({ locationId: central.id, before: pageParam }),
@@ -46,7 +49,8 @@ export function TransferForm({ central, today, destinations: given, onStart, onD
   const [ shown, setShown ] = useState<Shown[]>([]);
   const [ busy, setBusy ] = useState(false);
 
-  const destinations = given ?? (locations.data ?? []).filter((l) => l.kind === "unit" && l.active && l.id !== central.id);
+  const destinationKind = vector ? "vector_control" : "unit";
+  const destinations = given ?? (locations.data ?? []).filter((l) => l.kind === destinationKind && l.active && l.id !== central.id);
   const all = (positions.data?.pages ?? []).flatMap((p) => p.positions);
   const offered = all.filter((p) => availableLots(p, today).length > 0);
   const current = (l: Line): StockPosition => all.find((p) => itemKey(p.item) === itemKey(l.snapshot.item)) ?? l.snapshot;
@@ -185,6 +189,10 @@ const flaggedStyle: CSSProperties = { borderColor: "var(--down)" };
 const MEDICATION_WORDS = {
   pick: "Escolha a farmácia de destino", heading: "Medicamentos com saldo no almoxarifado",
   none: "nenhum medicamento com lote disponível para enviar", more: "Carregar mais medicamentos"
+};
+const VECTOR_WORDS = {
+  pick: "Escolha o local de destino", heading: "Produtos de campo com saldo neste local",
+  none: "nenhum produto de campo com lote disponível para enviar", more: "Carregar mais produtos"
 };
 const VACCINE_WORDS = {
   pick: "Escolha a sala de destino", heading: "Vacinas com saldo na rede de frio",

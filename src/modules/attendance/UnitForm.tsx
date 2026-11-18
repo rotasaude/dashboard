@@ -40,13 +40,15 @@ interface Props {
   capsOn?: boolean;
   // Módulo 32a: `waiting_room_display` ligado (canUseWaitingRoom) — só então o prefixo da senha e os tempos na TV aparecem.
   waitingRoomOn?: boolean;
+  // Módulo 35a: `vector_control` utilizável (canUseVectorControl) — só então a unidade de vigilância ambiental é oferecida.
+  vectorOn?: boolean;
   onSave(value: UnitFormValue): void;
   onCancel(): void;
 }
 
 type CepState = { kind: "idle" } | { kind: "loading" } | { kind: "found"; neighborhood: string } | { kind: "failed" };
 
-export function UnitForm({ initial, neighborhoods, busy, cepTimeoutMs = VIACEP_TIMEOUT_MS, dentalOn = false, tfdOn = false, capsOn = false, waitingRoomOn = false, onSave, onCancel }: Props) {
+export function UnitForm({ initial, neighborhoods, busy, cepTimeoutMs = VIACEP_TIMEOUT_MS, dentalOn = false, tfdOn = false, capsOn = false, waitingRoomOn = false, vectorOn = false, onSave, onCancel }: Props) {
   const [ value, setValue ] = useState<UnitFormValue>(initial);
   const [ cep, setCep ] = useState<CepState>({ kind: "idle" });
   // Todas as recusas de uma vez: cada texto é um alerta.
@@ -131,7 +133,8 @@ export function UnitForm({ initial, neighborhoods, busy, cepTimeoutMs = VIACEP_T
       <label style={labelStyle}>
         Tipo
         <select value={value.kind} onChange={(e) => set({ kind: e.target.value })} style={inputStyle}>
-          {unitKindOptions(dentalOn || value.kind === "ceo", tfdOn || value.kind === "health_management", capsOn || value.kind === "caps").map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}
+          {unitKindOptions(dentalOn || value.kind === "ceo", tfdOn || value.kind === "health_management", capsOn || value.kind === "caps",
+            vectorOn || value.kind === "environmental_surveillance").map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}
         </select>
       </label>
       {value.kind === "caps" && (

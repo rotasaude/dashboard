@@ -8,6 +8,7 @@ import { ApiError } from "../lib/api";
 import { PharmacyEntries } from "./PharmacyEntries";
 import { renderWithProviders } from "../test/campaignFixtures";
 import { AMOXI, CENTRAL, CLONA, TODAY27, UBS_FARM, phUser, stockLot } from "../test/pharmacyFixtures";
+import { VC_FEATURES, VC_LOCATION, VECTOR_ITEM } from "../test/vectorControlFixtures";
 
 afterEach(cleanup);
 const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
@@ -118,5 +119,80 @@ describe("PharmacyEntries", () => {
     const items = (await screen.findAllByRole("listitem")).map((li) => li.textContent);
     expect(items).toEqual([ "Amoxicilina 500 mg cápsula: quantidade inválida — use até 2 casas depois da vírgula",
       "Clonazepam 2 mg comprimido: item do catálogo inválido ou inativo" ]);
+  });
+
+  describe("35a: local vector_control (D-8, Q21)", () => {
+    const vcLot = stockLot({ id: "lot-vc", item: VECTOR_ITEM, lot_number: "L1", expires_on: "2027-06-30" });
+    beforeEach(() => {
+      mocked(api.fetchCurrentSession).mockResolvedValue(phUser([ "stock_keeper" ], { features: VC_FEATURES }));
+      mocked(api.listMyPharmacyLocations).mockResolvedValue([ VC_LOCATION ]);
+      mocked(api.searchPharmacyItems).mockResolvedValue([ VECTOR_ITEM ]);
+      mocked(api.recordReceipt).mockResolvedValue({ id: "r9", location: VC_LOCATION, kind: "invoice", items: [ { lot: vcLot, quantity: "500" } ], at: "2026-11-16T09:00:00-03:00" });
+    });
+    async function addProduct() {
+      text("Buscar produto de controle vetorial", "pyr");
+      fireEvent.click(await screen.findByRole("button", { name: "Pyriproxyfen 0,5% G · g" }));
+    }
+
+    it("cidade só com vector_control: a busca manda o domínio; a linha manda vector_product_id, sem catalog_item_id nem embalagem; um envio", async () => {
+      renderWithProviders(<PharmacyEntries today={TODAY27} />);
+      await screen.findByText("UVZ — insumos");
+      expect(screen.queryByLabelText("Buscar medicamento")).toBeNull();
+      text("Número do documento", "NF 77"); text("Fornecedor ou doador", "Ministério da Saúde");
+      await addProduct();
+      expect(mocked(api.searchPharmacyItems)).toHaveBeenCalledTimes(1);
+      expect(mocked(api.searchPharmacyItems).mock.calls[0]).toEqual([ "pyr", "vector_control" ]);
+      expect(screen.queryByLabelText("Por embalagem")).toBeNull();
+      text("Lote", "L1"); text("Validade", "2027-06-30"); text("Quantidade (g)", "500");
+      const send = screen.getByRole("button", { name: "Registrar entrada" });
+      fireEvent.click(send); fireEvent.click(send);
+      await waitFor(() => expect(mocked(api.recordReceipt)).toHaveBeenCalledTimes(1));
+      expect(mocked(api.recordReceipt)).toHaveBeenCalledWith({ location_id: "loc-vc", document: { kind: "invoice", number: "NF 77", supplier: "Ministério da Saúde" },
+        items: [ { vector_product_id: "pr1", lot_number: "L1", expires_on: "2027-06-30", quantity: "500" } ] });
+      const items = mocked(api.recordReceipt).mock.calls[0][0].items[0];
+      expect(items).not.toHaveProperty("catalog_item_id");
+      expect(items).not.toHaveProperty("package");
+      expect((await screen.findByRole("status")).textContent).toBe("Entrada registrada: 1 lote.");
+    });
+
+    it("abertura no local vector_control: a mesma linha de campo", async () => {
+      mocked(api.recordOpening).mockResolvedValue({ id: "r8", location: VC_LOCATION, kind: "opening", items: [ { lot: vcLot, quantity: "40" } ], at: "2026-11-16T09:00:00-03:00" });
+      renderWithProviders(<PharmacyEntries today={TODAY27} />);
+      await screen.findByText("UVZ — insumos");
+      fireEvent.click(screen.getByLabelText("Inventário de abertura"));
+      await addProduct();
+      text("Lote", "L1"); text("Validade", "2027-06-30"); text("Quantidade (g)", "40,5");
+      fireEvent.click(screen.getByRole("button", { name: "Registrar abertura" }));
+      await waitFor(() => expect(mocked(api.recordOpening)).toHaveBeenCalledTimes(1));
+      expect(mocked(api.recordOpening)).toHaveBeenCalledWith({ location_id: "loc-vc",
+        items: [ { vector_product_id: "pr1", lot_number: "L1", expires_on: "2027-06-30", quantity: "40.5" } ] });
+    });
+
+    it("422 item_not_allowed_here: a frase do 27a na linha; o formulário fica e nada é reenviado", async () => {
+      mocked(api.recordReceipt).mockRejectedValue(new ApiError(422, { error: "item_not_allowed_here", path: "items[0]",
+        problems: [ { path: "items[0]", error: "item_not_allowed_here" } ] }, "422"));
+      renderWithProviders(<PharmacyEntries today={TODAY27} />);
+      await screen.findByText("UVZ — insumos");
+      text("Número do documento", "NF 77"); text("Fornecedor ou doador", "Ministério da Saúde");
+      await addProduct();
+      text("Lote", "L1"); text("Validade", "2027-06-30"); text("Quantidade (g)", "500");
+      fireEvent.click(screen.getByRole("button", { name: "Registrar entrada" }));
+      expect(await screen.findByText("Pyriproxyfen 0,5% G: este item não entra neste local")).not.toBeNull();
+      expect(mocked(api.recordReceipt)).toHaveBeenCalledTimes(1);
+      expect((screen.getByLabelText("Lote") as HTMLInputElement).value).toBe("L1");
+    });
+
+    it("cidade com os dois: no local de medicamento a busca segue sem domínio; no vector_control, com ele", async () => {
+      mocked(api.fetchCurrentSession).mockResolvedValue(phUser([ "stock_keeper" ], { features: [ "pharmacy", ...VC_FEATURES ] }));
+      mocked(api.listMyPharmacyLocations).mockResolvedValue([ CENTRAL, VC_LOCATION ]);
+      mocked(api.searchPharmacyItems).mockImplementation(async (_q: string, domain?: string) => (domain ? [ VECTOR_ITEM ] : [ AMOXI ]));
+      renderWithProviders(<PharmacyEntries today={TODAY27} />);
+      await screen.findByLabelText("Local");
+      await addAmoxi();
+      expect(mocked(api.searchPharmacyItems).mock.calls).toEqual([ [ "amox" ] ]);
+      text("Local", "loc-vc");
+      await addProduct();
+      expect(mocked(api.searchPharmacyItems).mock.calls).toEqual([ [ "amox" ], [ "pyr", "vector_control" ] ]);
+    });
   });
 });

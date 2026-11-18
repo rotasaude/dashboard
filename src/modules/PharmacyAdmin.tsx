@@ -5,7 +5,8 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { listAdminLocations, listAllUnits, listMemberships } from "../lib/api";
 import { useAuth } from "../lib/auth";
-import { PH_ADMIN_KEY, STATIC_QUERY, canUsePharmacy, pharmacyError } from "../lib/pharmacy";
+import type { PharmacyRole } from "../lib/api";
+import { PH_ADMIN_KEY, STATIC_QUERY, canUsePharmacy, isVectorLocation, pharmacyError } from "../lib/pharmacy";
 import { alert, muted, stack } from "./exams/styles";
 import { PharmacyGate } from "./pharmacy/PharmacyGate";
 import { LocationsPanel } from "./pharmacy/LocationsPanel";
@@ -14,6 +15,7 @@ import { SettingsPanel } from "./pharmacy/SettingsPanel";
 
 const UNITS_KEY = "pharmacyUnits";
 const MEMBERSHIPS_KEY = "pharmacyMemberships";
+const VECTOR_STAFF_ROLES: PharmacyRole[] = [ "stock_keeper" ];
 
 export function PharmacyAdmin({ onGoToSecurity }: { onGoToSecurity?(): void } = {}) {
   return (
@@ -43,7 +45,9 @@ function Body({ onGoToSecurity }: { onGoToSecurity?(): void }) {
           onSelectStaff={setSelectedId} onSaved={reload} onGoToSecurity={onGoToSecurity} />
       )}
       {selected && (
-        <StaffPanel key={selected.id} location={selected} memberships={memberships.data ?? []} onChanged={reload} onGoToSecurity={onGoToSecurity} />
+        // Q21 (LinkStaff): o local vector_control só aceita o almoxarife (farmacêutico e auxiliar → 422 path role); a tela nem oferece.
+        <StaffPanel key={selected.id} location={selected} memberships={memberships.data ?? []} onChanged={reload} onGoToSecurity={onGoToSecurity}
+          roles={isVectorLocation(selected) ? VECTOR_STAFF_ROLES : undefined} />
       )}
       {/* Os prazos são da farmácia: admin/settings exige `pharmacy` (sem o skip do StockGate). Com só vector_control, ficam fora. */}
       {canUsePharmacy(user) && <SettingsPanel onGoToSecurity={onGoToSecurity} />}

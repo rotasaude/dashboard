@@ -4819,7 +4819,8 @@ const phWrite = (method: "POST" | "PATCH" | "PUT" | "DELETE", body: unknown): Re
 export const PHARMACY_PAGE_SIZE = 50;
 
 export type PharmacyRole = "pharmacist" | "pharmacy_assistant" | "stock_keeper";
-export type StockLocationKind = "central" | "unit";
+// Módulo 35a (A-12): o local `vector_control` (numa unidade environmental_surveillance) também se cria pelo admin do 27a.
+export type StockLocationKind = "central" | "unit" | "vector_control";
 export type StockMovementKind =
   | "opening" | "receipt" | "donation" | "transfer_out" | "transfer_in" | "dispensing" | "loss" | "expiry" | "adjustment" | "return"
   // Módulo 29 (V4): abertura de frasco, dose de unidose e a devolução por cancelamento.

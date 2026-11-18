@@ -9,6 +9,7 @@ import { ApiError } from "../lib/api";
 import { PharmacyTransfers } from "./PharmacyTransfers";
 import { renderWithProviders } from "../test/campaignFixtures";
 import { CENTRAL, CENTRAL_REF, TODAY27, UBS_FARM, UBS_REF, lotBalance, phUser, position, stockLot, transfer } from "../test/pharmacyFixtures";
+import { VC_FEATURES, VC_LOCATION, VECTOR_ITEM } from "../test/vectorControlFixtures";
 
 afterEach(cleanup);
 const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
@@ -185,5 +186,56 @@ describe("PharmacyTransfers", () => {
     await screen.findByText("Transferências do local");
     expect(screen.queryByRole("button", { name: "Enviar transferência" })).toBeNull();
     expect(mocked(api.listPositions)).not.toHaveBeenCalled();
+  });
+
+  describe("35a: local vector_control (A-12, SendTransfer::DESTINATIONS)", () => {
+    const VC_REF = { id: VC_LOCATION.id, name: VC_LOCATION.name, kind: "vector_control" };
+    const VC2 = { ...VC_LOCATION, id: "loc-vc2", name: "Base de campo Norte", health_unit: { id: "u-uvz2", name: "UVZ Norte" } };
+    const VC_OFF = { ...VC_LOCATION, id: "loc-vc3", name: "Base desativada", active: false };
+    const vcPositions = () => ({ positions: [ position({ location: VC_REF, item: VECTOR_ITEM, balance: "800", minimum: null, below_minimum: false,
+      lots: [ lotBalance({ lot: stockLot({ id: "lot-vc", item: VECTOR_ITEM, lot_number: "L1", expires_on: "2027-06-30" }), balance: "800" }) ] }) ], next_before: null });
+
+    it("almoxarife do local vector_control envia; os destinos são só os outros vector_control ativos; corpo com a origem", async () => {
+      mocked(api.fetchCurrentSession).mockResolvedValue(phUser([ "stock_keeper" ], { features: VC_FEATURES }));
+      mocked(api.listMyPharmacyLocations).mockResolvedValue([ VC_LOCATION, VC2, VC_OFF ]);
+      mocked(api.listPositions).mockResolvedValue(vcPositions());
+      mocked(api.sendTransfer).mockResolvedValue(transfer({ from: VC_REF, to: { id: "loc-vc2", name: "Base de campo Norte", kind: "vector_control" } }));
+      renderWithProviders(<PharmacyTransfers today={TODAY27} />);
+      await screen.findByLabelText("Destino");
+      const options = within(screen.getByLabelText("Destino")).getAllByRole("option").map((o) => o.textContent);
+      expect(options).toEqual([ "Escolha o local de destino", "Base de campo Norte — Controle vetorial (vigilância ambiental)" ]);
+      text("Destino", "loc-vc2");
+      fireEvent.click(await screen.findByRole("button", { name: "Acrescentar Pyriproxyfen 0,5% G" }));
+      text("Quantidade", "200");
+      const send = screen.getByRole("button", { name: "Enviar transferência" });
+      fireEvent.click(send); fireEvent.click(send);
+      await waitFor(() => expect(mocked(api.sendTransfer)).toHaveBeenCalledTimes(1));
+      expect(mocked(api.sendTransfer)).toHaveBeenCalledWith({ to_location_id: "loc-vc2", from_location_id: "loc-vc", items: [ { lot_id: "lot-vc", quantity: "200" } ] });
+      expect(mocked(api.listPositions)).toHaveBeenCalledWith({ locationId: "loc-vc", before: null });
+    });
+
+    it("sem outro local vector_control: só a escolha vazia, e nada é enviado", async () => {
+      mocked(api.fetchCurrentSession).mockResolvedValue(phUser([ "stock_keeper" ], { features: VC_FEATURES }));
+      mocked(api.listMyPharmacyLocations).mockResolvedValue([ VC_LOCATION ]);
+      mocked(api.listPositions).mockResolvedValue(vcPositions());
+      renderWithProviders(<PharmacyTransfers today={TODAY27} />);
+      await screen.findByLabelText("Destino");
+      expect(within(screen.getByLabelText("Destino")).getAllByRole("option").map((o) => o.textContent)).toEqual([ "Escolha o local de destino" ]);
+      fireEvent.click(await screen.findByRole("button", { name: "Acrescentar Pyriproxyfen 0,5% G" }));
+      text("Quantidade", "200");
+      fireEvent.click(screen.getByRole("button", { name: "Enviar transferência" }));
+      expect((await screen.findByRole("alert")).textContent).toBe("escolha o destino da transferência");
+      expect(mocked(api.sendTransfer)).not.toHaveBeenCalled();
+    });
+
+    it("cidade com os dois: o central continua enviando só às farmácias (o local vector_control não é destino dele)", async () => {
+      mocked(api.fetchCurrentSession).mockResolvedValue(phUser([ "stock_keeper" ], { features: [ "pharmacy", ...VC_FEATURES ] }));
+      mocked(api.listMyPharmacyLocations).mockResolvedValue([ CENTRAL, { ...UBS_FARM, roles: [] }, VC_LOCATION ]);
+      mocked(api.listPositions).mockResolvedValue(centralPositions());
+      renderWithProviders(<PharmacyTransfers today={TODAY27} />);
+      await screen.findByLabelText("Destino");
+      expect(within(screen.getByLabelText("Destino")).getAllByRole("option").map((o) => o.textContent))
+        .toEqual([ "Escolha a farmácia de destino", "Farmácia UBS Centro — Farmácia da unidade" ]);
+    });
   });
 });

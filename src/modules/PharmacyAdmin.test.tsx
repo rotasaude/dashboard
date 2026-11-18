@@ -159,6 +159,77 @@ describe("PharmacyAdmin", () => {
     expect(mocked(api.updatePharmacySettings)).not.toHaveBeenCalled();
   });
 
+  describe("35a: local vector_control (Q21, A-12)", () => {
+    const VC = [ "clinical_record", "territory_registry", "home_visits", "vector_control" ];
+    const UVZ = { id: "u-uvz", name: "UVZ Central", kind: "environmental_surveillance", active: true };
+    const kindOptions = () => within(screen.getByLabelText("Tipo")).getAllByRole("option").map((o) => o.textContent);
+    beforeEach(() => {
+      mocked(api.listAllUnits).mockResolvedValue([ { id: "u1", name: "UBS Centro", kind: "ubs", active: true }, UVZ,
+        { id: "u-old", name: "UVZ antiga", kind: "environmental_surveillance", active: false } ]);
+      mocked(api.createAdminLocation).mockResolvedValue(adminLocation({ id: "loc-vc", name: "UVZ — insumos", kind: "vector_control",
+        health_unit: { id: "u-uvz", name: "UVZ Central" }, staff: [] }));
+    });
+
+    it("cidade só com vector_control: o tipo é só Controle vetorial; a unidade só as de vigilância ambiental ativas; o corpo", async () => {
+      mocked(api.fetchCurrentSession).mockResolvedValue(phUser([ "municipal_admin" ], { features: VC }));
+      renderWithProviders(<PharmacyAdmin />);
+      fireEvent.click(await screen.findByRole("button", { name: "Novo local" }));
+      expect(kindOptions()).toEqual([ "escolha", "Controle vetorial (vigilância ambiental)" ]);
+      text("Tipo", "vector_control"); text("Nome", "UVZ — insumos");
+      await waitFor(() => expect(within(screen.getByLabelText("Unidade de saúde")).getAllByRole("option").map((o) => o.textContent))
+        .toEqual([ "escolha", "UVZ Central" ]));
+      fireEvent.click(screen.getByRole("button", { name: "Revisar" }));
+      expect((await screen.findByRole("alert")).textContent).toBe("escolha a unidade de vigilância ambiental do local");
+      text("Unidade de saúde", "u-uvz");
+      fireEvent.click(screen.getByRole("button", { name: "Revisar" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Criar local" }));
+      await waitFor(() => expect(mocked(api.createAdminLocation)).toHaveBeenCalledTimes(1));
+      expect(mocked(api.createAdminLocation)).toHaveBeenCalledWith({ kind: "vector_control", health_unit_id: "u-uvz", name: "UVZ — insumos", active: true });
+    });
+
+    it("sem unidade de vigilância ambiental: a frase, e nada é enviado", async () => {
+      mocked(api.fetchCurrentSession).mockResolvedValue(phUser([ "municipal_admin" ], { features: VC }));
+      mocked(api.listAllUnits).mockResolvedValue([ { id: "u1", name: "UBS Centro", kind: "ubs", active: true } ]);
+      renderWithProviders(<PharmacyAdmin />);
+      fireEvent.click(await screen.findByRole("button", { name: "Novo local" }));
+      text("Tipo", "vector_control"); text("Nome", "UVZ — insumos");
+      expect(await screen.findByText("cadastre antes uma unidade do tipo Vigilância ambiental e zoonoses")).not.toBeNull();
+      expect(screen.queryByLabelText("Unidade de saúde")).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Revisar" }));
+      expect((await screen.findByRole("alert")).textContent).toBe("cadastre antes uma unidade do tipo Vigilância ambiental e zoonoses");
+      expect(screen.queryByRole("button", { name: "Criar local" })).toBeNull();
+      expect(mocked(api.createAdminLocation)).not.toHaveBeenCalled();
+    });
+
+    it("cidade só com pharmacy: o tipo novo não é oferecido (como antes)", async () => {
+      renderWithProviders(<PharmacyAdmin />);
+      fireEvent.click(await screen.findByRole("button", { name: "Novo local" }));
+      expect(kindOptions()).toEqual([ "escolha", "Almoxarifado central", "Farmácia da unidade" ]);
+    });
+
+    it("cidade com os dois: os três tipos; a farmácia da unidade lista as unidades como antes", async () => {
+      mocked(api.fetchCurrentSession).mockResolvedValue(phUser([ "municipal_admin" ], { features: [ "pharmacy", ...VC ] }));
+      renderWithProviders(<PharmacyAdmin />);
+      fireEvent.click(await screen.findByRole("button", { name: "Novo local" }));
+      expect(kindOptions()).toEqual([ "escolha", "Almoxarifado central", "Farmácia da unidade", "Controle vetorial (vigilância ambiental)" ]);
+      text("Tipo", "unit");
+      await waitFor(() => expect(within(screen.getByLabelText("Unidade de saúde")).getAllByRole("option").map((o) => o.textContent))
+        .toEqual([ "escolha", "UBS Centro", "UVZ Central" ]));
+    });
+
+    it("equipe do local vector_control: só o papel de almoxarife é oferecido", async () => {
+      mocked(api.fetchCurrentSession).mockResolvedValue(phUser([ "municipal_admin" ], { features: VC }));
+      mocked(api.listAdminLocations).mockResolvedValue([ adminLocation({ id: "loc-vc", name: "UVZ — insumos", kind: "vector_control",
+        health_unit: { id: "u-uvz", name: "UVZ Central" }, staff: [] }) ]);
+      renderWithProviders(<PharmacyAdmin />);
+      const row = await screen.findByRole("row", { name: /UVZ — insumos/ });
+      expect(row.textContent).toContain("Controle vetorial (vigilância ambiental)");
+      fireEvent.click(screen.getByRole("button", { name: "Equipe de UVZ — insumos" }));
+      await screen.findByRole("region", { name: "Equipe de UVZ — insumos" });
+      expect(within(screen.getByLabelText("Papel no local")).getAllByRole("option").map((o) => o.textContent)).toEqual([ "escolha", "Almoxarife" ]);
+    });
+  });
+
   it("sem ser administrador, nada é lido", async () => {
     mocked(api.fetchCurrentSession).mockResolvedValue(phUser([ "pharmacist" ]));
     mocked(api.listAdminLocations).mockClear(); mocked(api.getPharmacySettings).mockClear();

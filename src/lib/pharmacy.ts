@@ -3,7 +3,7 @@
 // controlado, aprovação acima do limite e retenção são dele. A tela só não envia o que já sabe que será recusado.
 import {
   ApiError, errorCode,
-  type AdjustmentInput, type AdjustmentKind, type Dispensation, type DispensationInput, type DispensedItem, type ReturnInput, type LotBalance, type PharmacyLocation, type PharmacySettings,
+  type AdjustmentInput, type AdjustmentKind, type Dispensation, type DispensationInput, type DispensedItem, type LocationRef, type ReturnInput, type LotBalance, type PharmacyLocation, type PharmacySettings,
   type PrescriberInput, type PrescriptionItemView, type PrescriptionView, type ReceiptItemInput, type ReceiveInput, type StockItem,
   type StockLot, type StockMovement, type StockPosition, type StockTransfer
 } from "./api";
@@ -78,14 +78,21 @@ export function locationRoles(loc: PharmacyLocation): { pharmacist: boolean; ass
 
 // ─── Rótulos (contrato §1). Código novo do api aparece cru. ────────────────
 const KIND_LABEL: Record<string, string> = {
-  central: "Almoxarifado central", unit: "Farmácia da unidade", vaccine_room: "Sala de vacina", cold_chain_central: "Rede de frio municipal"
+  central: "Almoxarifado central", unit: "Farmácia da unidade", vaccine_room: "Sala de vacina", cold_chain_central: "Rede de frio municipal",
+  // Módulo 35a (A-12): o insumo de campo da vigilância ambiental (Stock::Domain VECTOR_CONTROL).
+  vector_control: "Controle vetorial (vigilância ambiental)"
 };
 export const locationKindLabel = (code: string): string => KIND_LABEL[code] ?? code;
+// Módulo 35a (Q21): o local do insumo de campo. Só aceita `stock_keeper`; a linha de entrada leva `vector_product_id`; transfere só para
+// outro local vector_control (SendTransfer::DESTINATIONS); sem mínimos (MinimumsController exige medicamento).
+export const isVectorLocation = (loc: Pick<LocationRef, "kind">): boolean => loc.kind === "vector_control";
 
 const MOVEMENT_LABEL: Record<string, string> = {
   opening: "abertura", receipt: "entrada por nota", donation: "doação", transfer_out: "saída por transferência",
   transfer_in: "entrada por transferência", dispensing: "dispensação", loss: "perda", expiry: "vencimento", adjustment: "ajuste", return: "devolução",
-  administration: "administração na UPA"
+  administration: "administração na UPA",
+  // Módulo 35a (Q10): a baixa do boletim (ApplyStock) e o estorno quando a visita é retirada.
+  vector_application: "aplicação no campo (boletim)", vector_application_reversal: "estorno de aplicação (visita retirada)"
 };
 export const movementLabel = (code: string): string => MOVEMENT_LABEL[code] ?? code;
 
@@ -93,7 +100,9 @@ export const movementLabel = (code: string): string => MOVEMENT_LABEL[code] ?? c
 // aparece pelo id no api e nunca por nome de paciente). Tipo novo aparece cru.
 const DOCUMENT_LABEL: Record<string, string> = {
   dispensation: "dispensação", transfer: "transferência", invoice: "nota fiscal", receipt: "nota fiscal", donation: "doação",
-  adjustment: "ajuste", opening: "abertura", return: "devolução", entry: "entrada", urgency_administration: "administração na UPA"
+  adjustment: "ajuste", opening: "abertura", return: "devolução", entry: "entrada", urgency_administration: "administração na UPA",
+  // Módulo 35a: a medida do boletim que baixou (ou estornou) o insumo; nunca o imóvel nem o agente.
+  vector_inspection_measure: "boletim de campo"
 };
 export function movementDocument(doc: StockMovement["document"] | undefined): string {
   if (!doc) return "—";
@@ -168,8 +177,10 @@ export function normalizeShortCode(raw: string): string | null {
   return SHORT_CODE.test(code) ? code : null;
 }
 
-// Chave do item no estoque: o do catálogo de medicamentos, ou o imunobiológico (sem `catalog_item_id`).
-export const itemKey = (item: StockItem): string => item.catalog_item_id ?? `imm:${item.immunobiological_code ?? ""}`;
+// Chave do item no estoque: o do catálogo de medicamentos, o produto de campo do 35a (`vec:<vector_product_id>`) ou o imunobiológico
+// (os dois sem `catalog_item_id`).
+export const itemKey = (item: StockItem): string =>
+  item.catalog_item_id ?? (item.vector_product_id ? `vec:${item.vector_product_id}` : `imm:${item.immunobiological_code ?? ""}`);
 
 // ─── Lotes ──────────────────────────────────────────────────────────────────
 const byExpiry = (a: LotBalance, b: LotBalance) =>
@@ -335,7 +346,7 @@ function receiptLineProblem(l: ReceiptLine, today: string): string | null {
   else if (l.expiresOn === "") text = "informe a validade";
   else if (l.expiresOn < today) text = "lote vencido — não entra no estoque";
   else if (l.manufacturer.trim().length > 120) text = "o fabricante tem até 120 caracteres";
-  else if (!l.byPackage) text = quantityProblem(l.quantity);
+  else if (!l.byPackage || l.item.vector_product_id) text = quantityProblem(l.quantity);
   else if (!inRange(l.unitsPerPackage, 10000)) text = "unidades por embalagem: número inteiro de 1 a 10000";
   else if (!inRange(l.packages, 10000)) text = "embalagens: número inteiro de 1 a 10000";
   else if (lineQuantity(l) === null) text = "unidades por embalagem × embalagens passa de 99999,99 — confira";
@@ -362,10 +373,16 @@ export function receiptProblems(
   return out;
 }
 
-// Só depois de receiptProblems == []. Por embalagem, manda o total e a conta.
+// Só depois de receiptProblems == []. Por embalagem, manda o total e a conta. Módulo 35a (D-8; record_entry.rb#validate_vector_row): o
+// produto de campo vai por `vector_product_id`, sem `catalog_item_id` e sem embalagem (422 path items[i].package), na quantidade direta.
 export function receiptItems(lines: ReceiptLine[]): ReceiptItemInput[] {
   return lines.map((l) => {
     const manufacturer = l.manufacturer.trim();
+    const vectorId = l.item?.vector_product_id;
+    if (vectorId) {
+      const quantity = quantityProblem(l.quantity) === null ? toApiQuantity(l.quantity) : "";
+      return { vector_product_id: vectorId, lot_number: l.lotNumber.trim(), expires_on: l.expiresOn, ...(manufacturer ? { manufacturer } : {}), quantity };
+    }
     return {
       catalog_item_id: l.item?.catalog_item_id ?? "", lot_number: l.lotNumber.trim(), expires_on: l.expiresOn,
       ...(manufacturer ? { manufacturer } : {}), quantity: lineQuantity(l) ?? "",
@@ -601,7 +618,9 @@ const ERRORS: Record<string, string> = {
   invalid_patient: "confira os dados do paciente novo",
   mfa_required: "o código do autenticador não valeu — digite o código atual",
   missing_role: PHARMACY_NO_ROLE,
-  already_reconciled: "esta falta já foi conciliada por outra pessoa — a lista foi atualizada"
+  already_reconciled: "esta falta já foi conciliada por outra pessoa — a lista foi atualizada",
+  // Stock::Domain (ADR 0047; 35a A-12): o lote de um domínio não entra em local de outro (a mesma frase da tela de imunobiológicos).
+  item_not_allowed_here: "este item não entra neste local"
 };
 
 const PATH_RULES: [ RegExp, string ][] = [

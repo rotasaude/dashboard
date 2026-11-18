@@ -4,10 +4,16 @@
 // O tipo (e a unidade) não mudam depois de criado. Tudo é conferido aqui antes da confirmação (recusar, nunca cortar) e de novo
 // no api; a escrita passa pelo step-up e a tabela é relida depois (PH_ADMIN_KEY). Durante a confirmação o formulário fica à vista,
 // parado: a recusa do api (central_exists, unit_taken, location_has_stock…) aparece junto dele.
+// Módulo 35a (Q21, A-12; StockGate#stock_feature_for!, SaveLocation#unit_fits?): o tipo oferecido segue o interruptor do domínio — central e
+// farmácia com `pharmacy`, "Controle vetorial" com `vector_control` (sem `pharmacy`, só ele). O local vector_control fica numa unidade
+// `environmental_surveillance` ativa (o seletor só lista essas; sem nenhuma, a frase pede para cadastrar antes), uma por unidade.
 import { useState } from "react";
 import { createAdminLocation, updateAdminLocation } from "../../lib/api";
 import type { AdminLocation, AdminLocationInput, HealthUnitRow, StockLocationKind } from "../../lib/api";
-import { locationKindLabel, pharmacyError } from "../../lib/pharmacy";
+import { useAuth } from "../../lib/auth";
+import { ENVIRONMENTAL_SURVEILLANCE_UNIT_KIND } from "../../lib/attendance";
+import { canUsePharmacy, locationKindLabel, pharmacyError } from "../../lib/pharmacy";
+import { canUseVectorControl } from "../../lib/vectorControl";
 import { Panel } from "../../components/Panel";
 import { DataTable } from "../../components/DataTable";
 import { Tag } from "../../components/Tag";
@@ -16,11 +22,14 @@ import { buttonStyle, inputStyle, secondaryButtonStyle } from "../../components/
 import { alert, box, checkLabel, fieldLabel, form, row, stack } from "../exams/styles";
 import { fieldBox, fieldsetStyle, hintStyle, statusStyle } from "../regulation/styles";
 
-const KINDS: StockLocationKind[] = [ "central", "unit" ];
+const PHARMACY_KINDS: StockLocationKind[] = [ "central", "unit" ];
+const VECTOR_KIND: StockLocationKind = "vector_control";
 const KIND_NOTE = "O tipo não muda depois de criado.";
 const EDIT_NOTE = "O tipo e a unidade não mudam depois de criado.";
 const NAME_TEXT = "o nome do local tem de 3 a 120 caracteres";
 const UNIT_TEXT = "escolha a unidade de saúde da farmácia";
+const VECTOR_UNIT_TEXT = "escolha a unidade de vigilância ambiental do local";
+export const VECTOR_UNIT_MISSING = `cadastre antes uma unidade do tipo ${ENVIRONMENTAL_SURVEILLANCE_UNIT_KIND.label}`;
 
 export function staffCount(n: number): string {
   return n === 0 ? "ninguém" : n === 1 ? "1 pessoa" : `${n} pessoas`;
@@ -32,6 +41,8 @@ export function LocationsPanel({ locations, units, selectedId, onSelectStaff, on
   locations: AdminLocation[]; units: HealthUnitRow[]; selectedId: string | null;
   onSelectStaff(id: string): void; onSaved(): void; onGoToSecurity?(): void;
 }) {
+  const { user } = useAuth();
+  const kinds = [ ...(canUsePharmacy(user) ? PHARMACY_KINDS : []), ...(canUseVectorControl(user) ? [ VECTOR_KIND ] : []) ];
   const [ editor, setEditor ] = useState<Editor>(null);
   const [ notice, setNotice ] = useState<string | null>(null);
   const open = (next: Editor) => { setNotice(null); setEditor(next); };
@@ -64,15 +75,15 @@ export function LocationsPanel({ locations, units, selectedId, onSelectStaff, on
         />
       </Panel>
       {editor && (
-        <LocationForm key={editor === "new" ? "new" : editor.id} location={editor === "new" ? null : editor} units={units}
+        <LocationForm key={editor === "new" ? "new" : editor.id} location={editor === "new" ? null : editor} units={units} kinds={kinds}
           onSaved={(message) => { setEditor(null); setNotice(message); onSaved(); }} onCancel={() => setEditor(null)} onGoToSecurity={onGoToSecurity} />
       )}
     </div>
   );
 }
 
-function LocationForm({ location, units, onSaved, onCancel, onGoToSecurity }: {
-  location: AdminLocation | null; units: HealthUnitRow[]; onSaved(message: string): void; onCancel(): void; onGoToSecurity?(): void;
+function LocationForm({ location, units, kinds, onSaved, onCancel, onGoToSecurity }: {
+  location: AdminLocation | null; units: HealthUnitRow[]; kinds: StockLocationKind[]; onSaved(message: string): void; onCancel(): void; onGoToSecurity?(): void;
 }) {
   const [ kind, setKind ] = useState<string>(location?.kind ?? "");
   const [ name, setName ] = useState(location?.name ?? "");
@@ -82,10 +93,15 @@ function LocationForm({ location, units, onSaved, onCancel, onGoToSecurity }: {
   const [ confirming, setConfirming ] = useState(false);
   const touch = <T,>(set: (v: T) => void) => (v: T) => { setError(null); set(v); };
 
-  const isUnit = kind === "unit";
+  const isVector = kind === VECTOR_KIND;
+  const isUnit = kind === "unit" || isVector;
   // A unidade atual do local aparece mesmo desativada (a edição não a perde); as demais, só as ativas. Configuração da rede: o CAPS aparece
-  // pelo nome para o admin (a farmácia do CAPS é dele), de propósito, sem withoutCaps.
-  const options = units.filter((u) => u.active || u.id === location?.health_unit?.id);
+  // pelo nome para o admin (a farmácia do CAPS é dele), de propósito, sem withoutCaps. No vector_control, só as de vigilância ambiental.
+  const options = units.filter((u) => (u.active || u.id === location?.health_unit?.id)
+    && (!isVector || u.kind === ENVIRONMENTAL_SURVEILLANCE_UNIT_KIND.value || u.id === location?.health_unit?.id));
+  const noVectorUnit = isVector && options.length === 0;
+  // Na edição, o tipo do local aparece mesmo que o interruptor dele não esteja na lista (o select fica desabilitado).
+  const kindOptions = location && !kinds.includes(location.kind as StockLocationKind) ? [ ...kinds, location.kind as StockLocationKind ] : kinds;
 
   function body(): AdminLocationInput {
     const base = { kind: kind as StockLocationKind, name: name.trim(), active };
@@ -96,7 +112,8 @@ function LocationForm({ location, units, onSaved, onCancel, onGoToSecurity }: {
     const length = name.trim().length;
     const problem = (kind === "" ? "escolha o tipo do local" : null)
       ?? (length < 3 || length > 120 ? NAME_TEXT : null)
-      ?? (isUnit && unitId === "" ? UNIT_TEXT : null);
+      ?? (noVectorUnit ? VECTOR_UNIT_MISSING : null)
+      ?? (isUnit && unitId === "" ? (isVector ? VECTOR_UNIT_TEXT : UNIT_TEXT) : null);
     if (problem) { setError(problem); return; }
     setConfirming(true);
   }
@@ -111,7 +128,7 @@ function LocationForm({ location, units, onSaved, onCancel, onGoToSecurity }: {
               Tipo
               <select value={kind} disabled={location !== null || confirming} style={inputStyle} onChange={(e) => touch(setKind)(e.target.value)}>
                 <option value="">escolha</option>
-                {KINDS.map((k) => <option key={k} value={k}>{locationKindLabel(k)}</option>)}
+                {kindOptions.map((k) => <option key={k} value={k}>{locationKindLabel(k)}</option>)}
               </select>
             </label>
             <span style={hintStyle}>{location ? EDIT_NOTE : KIND_NOTE}</span>
@@ -123,7 +140,8 @@ function LocationForm({ location, units, onSaved, onCancel, onGoToSecurity }: {
             </label>
             <span style={hintStyle}>de 3 a 120 caracteres</span>
           </div>
-          {isUnit && (
+          {noVectorUnit && <p role="status" style={hintStyle}>{VECTOR_UNIT_MISSING}</p>}
+          {isUnit && !noVectorUnit && (
             <div style={fieldBox}>
               <label style={fieldLabel}>
                 Unidade de saúde
@@ -132,7 +150,9 @@ function LocationForm({ location, units, onSaved, onCancel, onGoToSecurity }: {
                   {options.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
                 </select>
               </label>
-              <span style={hintStyle}>Uma unidade tem uma só farmácia; a unidade passa a dispensar.</span>
+              <span style={hintStyle}>{isVector
+                ? "Uma unidade de vigilância ambiental tem um só local de controle vetorial; o local não dispensa."
+                : "Uma unidade tem uma só farmácia; a unidade passa a dispensar."}</span>
             </div>
           )}
           <label style={checkLabel}>

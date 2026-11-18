@@ -3,6 +3,7 @@
 // CIDADÃO, não o TOTP do servidor que describeActionError traduz.
 import { ApiError } from "./api";
 import { fmtDateTime } from "./format";
+import { VECTOR_ERRORS } from "./vectorErrors";
 
 // Fila, pedidos e agenda são vistos por papéis diferentes em máquinas
 // diferentes e o foco da janela não recarrega (main.tsx) — relê a cada 20s.
@@ -47,8 +48,14 @@ export const CAPS_UNIT_KIND = { value: "caps", label: "CAPS" };
 export function withoutCaps<T extends { kind: string }>(units: readonly T[]): T[] {
   return units.filter((u) => u.kind !== CAPS_UNIT_KIND.value);
 }
-export function unitKindOptions(dentalOn: boolean, tfdOn = false, capsOn = false): { value: string; label: string }[] {
-  return [ ...UNIT_KINDS, ...(dentalOn ? [ CEO_UNIT_KIND ] : []), ...(tfdOn ? [ HEALTH_MANAGEMENT_UNIT_KIND ] : []), ...(capsOn ? [ CAPS_UNIT_KIND ] : []) ];
+// Módulo 35a (F-35.1; ADR 0054): a unidade de vigilância ambiental (onde fica o local de estoque `vector_control`) é oferecida com o
+// interruptor utilizável (canUseVectorControl); a já criada continua legível (KIND_LABEL).
+export const ENVIRONMENTAL_SURVEILLANCE_UNIT_KIND = { value: "environmental_surveillance", label: "Vigilância ambiental e zoonoses" };
+export function unitKindOptions(dentalOn: boolean, tfdOn = false, capsOn = false, vectorOn = false): { value: string; label: string }[] {
+  return [
+    ...UNIT_KINDS, ...(dentalOn ? [ CEO_UNIT_KIND ] : []), ...(tfdOn ? [ HEALTH_MANAGEMENT_UNIT_KIND ] : []), ...(capsOn ? [ CAPS_UNIT_KIND ] : []),
+    ...(vectorOn ? [ ENVIRONMENTAL_SURVEILLANCE_UNIT_KIND ] : [])
+  ];
 }
 
 export function currentUnitKey(userId: string): string {
@@ -175,6 +182,8 @@ const MESSAGES: Record<string, string> = {
   // Módulo 32a (Q10, Q28): na UPA com a urgência ligada, a chegada é da recepção da urgência; a exclusão de quem espera fica pendente.
   urgency_reception_required: "na UPA a chegada é registrada pela recepção da urgência",
   patient_in_urgency: "a pessoa está em atendimento na urgência — confirme depois do desfecho; o pedido continua pendente",
+  // Módulo 35a (Q10, A-13): a unidade de vigilância ambiental com local de estoque `vector_control` ativo não troca de tipo (409).
+  unit_has_vector_control_location: VECTOR_ERRORS.unit_has_vector_control_location,
   regulation_request_required: "com a regulação ligada, encaminhamento sem unidade de destino é pelo “Pedir regulação” na consulta — escolha a unidade da rede"
 };
 

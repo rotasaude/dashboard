@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ApiError } from "./api";
-import { CAPS_UNIT_KIND, attendanceError, isValidCpf, maskCpf, splitReferenceUnits, unitKindOptions, withoutCaps } from "./attendance";
+import { CAPS_UNIT_KIND, ENVIRONMENTAL_SURVEILLANCE_UNIT_KIND, attendanceError, isValidCpf, maskCpf, splitReferenceUnits, unitKindOptions, withoutCaps } from "./attendance";
+import { VECTOR_ERRORS } from "./vectorErrors";
 
 describe("attendance helpers", () => {
   it("mascara e valida CPF", () => {
@@ -156,5 +157,18 @@ describe("módulo 32a", () => {
   it("exclusão de quem espera na UPA fica pendente (Q28)", () => {
     expect(attendanceError(new ApiError(409, { error: "patient_in_urgency" }, "x")))
       .toBe("a pessoa está em atendimento na urgência — confirme depois do desfecho; o pedido continua pendente");
+  });
+});
+
+describe("módulo 35a (F-35.1)", () => {
+  it("a unidade de vigilância ambiental só com o interruptor (quarto parâmetro)", () => {
+    expect(ENVIRONMENTAL_SURVEILLANCE_UNIT_KIND).toEqual({ value: "environmental_surveillance", label: "Vigilância ambiental e zoonoses" });
+    expect(unitKindOptions(false, false, false, true).map((k) => k.value)).toContain("environmental_surveillance");
+    expect(unitKindOptions(false, false, false).map((k) => k.value)).not.toContain("environmental_surveillance");
+    expect(unitKindOptions(true, true, true).map((k) => k.value)).not.toContain("environmental_surveillance");
+  });
+  it("trocar o tipo da unidade com local vector_control ativo (409, Q10) tem a frase da tabela do 35a", () => {
+    expect(attendanceError(new ApiError(409, { error: "unit_has_vector_control_location" }, "x")))
+      .toBe(VECTOR_ERRORS.unit_has_vector_control_location);
   });
 });

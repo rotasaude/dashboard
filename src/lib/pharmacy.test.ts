@@ -8,8 +8,10 @@ import {
   errorPath, filledLines, fmtQuantity, fmtSigned, hasDifference, issuedOnProblem, itemBlock, lineQuantity, locationRoles, lotOptionLabel,
   lotKindProblem, lotsForKind, lotsWithBalance, needsRetention, newReceiptLine, normalizeShortCode, notificationNumberProblem, pharmacyError, pharmacyProblems, pharmacyRefusals,
   pharmacyRoles, prescriberProblem, prescriptionBlock, problemItemIndex, quantityProblem, reasonProblem, receiptItems, receiptProblems,
-  receiveBody, receiveProblems, returnBody, returnProblems, returnRemaining, settingsProblem, sortPositions, suggestedLotId, toApiQuantity, transferProblems, movementDocument, movementLabel
+  receiveBody, receiveProblems, returnBody, returnProblems, returnRemaining, settingsProblem, sortPositions, suggestedLotId, toApiQuantity, transferProblems, movementDocument, movementLabel,
+  isVectorLocation, itemKey, locationKindLabel
 } from "./pharmacy";
+import { VC_LOCATION, VECTOR_ITEM } from "../test/vectorControlFixtures";
 import { AMOXI, CENTRAL, CLONA, TODAY27, UBS_FARM, dispensation, lotBalance, position, prescription, rxItem, stockLot, transfer } from "../test/pharmacyFixtures";
 
 const user = (roles: string[], features: string[] = [ "pharmacy" ], operator = false) => ({ operator, memberships: roles.map((role) => ({ role })), features });
@@ -525,5 +527,40 @@ describe("32b: administração na UPA e conciliação", () => {
     expect(pharmacyError(new ApiError(409, { error: "already_reconciled" }, "x")))
       .toBe("esta falta já foi conciliada por outra pessoa — a lista foi atualizada");
     expect(pharmacyError(new ApiError(422, { error: "invalid_request", path: "note" }, "x"))).toBe("a nota tem de 10 a 500 caracteres");
+  });
+});
+
+describe("35a: domínio vector_control no estoque (F-35.3, Q10)", () => {
+  it("rótulos do local, dos movimentos do boletim e do documento", () => {
+    expect(locationKindLabel("vector_control")).toBe("Controle vetorial (vigilância ambiental)");
+    expect(movementLabel("vector_application")).toBe("aplicação no campo (boletim)");
+    expect(movementLabel("vector_application_reversal")).toBe("estorno de aplicação (visita retirada)");
+    expect(movementDocument({ type: "vector_inspection_measure", id: "m1", number: null })).toBe("boletim de campo");
+    // Sem o domínio novo, os de antes não mudam.
+    expect(locationKindLabel("central")).toBe("Almoxarifado central");
+    expect(movementLabel("dispensing")).toBe("dispensação");
+  });
+  it("itemKey: vec:<vector_product_id> no produto de campo; medicamento e vacina como antes", () => {
+    expect(itemKey(VECTOR_ITEM)).toBe("vec:pr1");
+    expect(itemKey(AMOXI)).toBe("ci1");
+    expect(itemKey({ ...AMOXI, catalog_item_id: null, immunobiological_code: "86" })).toBe("imm:86");
+  });
+  it("isVectorLocation só no kind vector_control", () => {
+    expect(isVectorLocation(VC_LOCATION)).toBe(true);
+    expect(isVectorLocation(CENTRAL)).toBe(false);
+    expect(isVectorLocation(UBS_FARM)).toBe(false);
+  });
+  it("receiptItems: a linha do produto de campo manda vector_product_id, nunca catalog_item_id nem package", () => {
+    const line: ReceiptLine = { ...newReceiptLine("k"), item: VECTOR_ITEM, lotNumber: " L1 ", expiresOn: "2027-06-30", quantity: "500", byPackage: true, unitsPerPackage: "10", packages: "2" };
+    const [ row ] = receiptItems([ { ...line, byPackage: false } ]);
+    expect(row).toEqual({ vector_product_id: "pr1", lot_number: "L1", expires_on: "2027-06-30", quantity: "500" });
+    // Mesmo com a marca de embalagem esquecida ligada, a linha de campo não leva embalagem.
+    expect(receiptItems([ line ])[0]).toEqual({ vector_product_id: "pr1", lot_number: "L1", expires_on: "2027-06-30", quantity: "500" });
+    // A de medicamento não muda.
+    expect(receiptItems([ { ...line, item: AMOXI } ])[0]).toEqual({
+      catalog_item_id: "ci1", lot_number: "L1", expires_on: "2027-06-30", quantity: "20", package: { units_per_package: 10, packages: 2 } });
+  });
+  it("item_not_allowed_here (o lote de outro domínio) tem frase", () => {
+    expect(pharmacyError(new ApiError(422, { error: "item_not_allowed_here", path: "items[0]" }, "x"))).toBe("este item não entra neste local");
   });
 });

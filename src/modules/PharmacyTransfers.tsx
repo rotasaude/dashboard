@@ -9,7 +9,7 @@ import { listTransfers, type PharmacyLocation, type StockTransfer, type Transfer
 import { todayInCity } from "../lib/campaigns";
 import { fmtDateTime } from "../lib/format";
 import {
-  PH_TRANSFERS_KEY, STATIC_QUERY, fmtQuantity, locationRoles, pharmacyError, transferStatusLabel, transferStatusTone
+  PH_TRANSFERS_KEY, STATIC_QUERY, fmtQuantity, isVectorLocation, locationRoles, pharmacyError, transferStatusLabel, transferStatusTone
 } from "../lib/pharmacy";
 import { DataTable } from "../components/DataTable";
 import { Tag } from "../components/Tag";
@@ -45,13 +45,14 @@ export function PharmacyTransfers({ today = todayInCity() }: { today?: string } 
 }
 
 // Módulo 29: a tela de imunobiológicos monta este corpo com `canSend` (a rede de frio envia; a sala só recebe) e os `destinations`
-// (as salas ativas). Sem as props, a regra de hoje: só o almoxarife do central envia, às farmácias da lista de locais.
+// (as salas ativas). Sem as props, a regra de hoje: só o almoxarife do central envia, às farmácias da lista de locais. Módulo 35a (A-12):
+// no local `vector_control`, envia o almoxarife do local, aos outros locais vector_control ativos (o TransferForm filtra pelo tipo).
 // `focusNotice` (módulo 29, regra de teclado): a frase de sucesso recebe o foco quando aparece.
 export function TransfersBody({ location, today, canSend: allowSend, destinations, focusNotice = false }: {
   location: PharmacyLocation; today: string; canSend?: boolean; destinations?: PharmacyLocation[]; focusNotice?: boolean;
 }) {
   const roles = locationRoles(location);
-  const canSend = allowSend ?? (location.kind === "central" && roles.keeper);
+  const canSend = allowSend ?? ((location.kind === "central" || isVectorLocation(location)) && roles.keeper);
   const [ notice, setNotice ] = useState<string | null>(null);
   const [ stale, setStale ] = useState<string | null>(null);
   const [ receiving, setReceiving ] = useState<StockTransfer | null>(null);

@@ -3,7 +3,9 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   createUnit, errorCode, listAllUnits, listNeighborhoods, setUnitActive, updateUnit, type HealthUnitRow, type ScreeningScope, type UnitCapsInput
 } from "../../lib/api";
-import { CAPS_UNIT_KIND, CEO_UNIT_KIND, HEALTH_MANAGEMENT_UNIT_KIND, UNIT_KINDS, attendanceError } from "../../lib/attendance";
+import {
+  CAPS_UNIT_KIND, CEO_UNIT_KIND, ENVIRONMENTAL_SURVEILLANCE_UNIT_KIND, HEALTH_MANAGEMENT_UNIT_KIND, UNIT_KINDS, attendanceError
+} from "../../lib/attendance";
 import { modalityLabel, psyError } from "../../lib/psychosocial";
 import { urgencyError } from "../../lib/urgency";
 import { NEIGHBORHOODS_KEY } from "../../lib/territory";
@@ -21,7 +23,7 @@ import { DrainUnitPanel } from "./DrainUnitPanel";
 // Criar ou reativar muda quem entra em "unidades ativas" (UnitPicker,
 // destino de encaminhamento em UnitQueue): invalida a query `activeUnits`
 // para essas telas recarregarem (card dashboard#4, item 1 — Task 7).
-const KIND_LABEL: Record<string, string> = Object.fromEntries([ ...UNIT_KINDS, CEO_UNIT_KIND, HEALTH_MANAGEMENT_UNIT_KIND, CAPS_UNIT_KIND ].map((k) => [ k.value, k.label ]));
+const KIND_LABEL: Record<string, string> = Object.fromEntries([ ...UNIT_KINDS, CEO_UNIT_KIND, HEALTH_MANAGEMENT_UNIT_KIND, CAPS_UNIT_KIND, ENVIRONMENTAL_SURVEILLANCE_UNIT_KIND ].map((k) => [ k.value, k.label ]));
 // Módulo 31 (P34, P53): recusas do cadastro que são do CAPS ou do telefone; a frase vem da lib do módulo (genérica, sem nome de CAPS).
 const CAPS_UNIT_ERRORS = [ "unit_has_caps_records", "caps_has_beds", "unit_has_attendances", "invalid_phone", "caps_modality_mismatch", "invalid_service_classification" ];
 // Módulo 32b: desativar a UPA, ou trocar o tipo dela, com leito de observação ativo (409 upa_has_beds).
@@ -63,8 +65,10 @@ interface Editing { id: string | null; initial: UnitFormValue }
 // Módulo 28: `dentalOn` = canUseDental; só então o cadastro oferece a unidade CEO.
 // Módulo 31: `capsOn` = canUsePsychosocial; só então o cadastro oferece o tipo CAPS (sem step-up novo, P26).
 // Módulo 32a: `waitingRoomOn` = canUseWaitingRoom; só então o cadastro mostra o prefixo da senha e, na UPA, os tempos na TV.
-export function Units({ labOn = false, surveillanceOn = false, dentalOn = false, tfdOn = false, capsOn = false, waitingRoomOn = false }: {
-  labOn?: boolean; surveillanceOn?: boolean; dentalOn?: boolean; tfdOn?: boolean; capsOn?: boolean; waitingRoomOn?: boolean;
+// Módulo 35a: `vectorOn` = canUseVectorControl; só então o cadastro oferece a unidade de vigilância ambiental. Trocar o tipo dela com local
+// vector_control ativo → 409 unit_has_vector_control_location (a frase do attendanceError), sem reenvio.
+export function Units({ labOn = false, surveillanceOn = false, dentalOn = false, tfdOn = false, capsOn = false, waitingRoomOn = false, vectorOn = false }: {
+  labOn?: boolean; surveillanceOn?: boolean; dentalOn?: boolean; tfdOn?: boolean; capsOn?: boolean; waitingRoomOn?: boolean; vectorOn?: boolean;
 } = {}) {
   const queryClient = useQueryClient();
   const neighborhoods = useQuery({ queryKey: NEIGHBORHOODS_KEY, queryFn: listNeighborhoods });
@@ -182,6 +186,7 @@ export function Units({ labOn = false, surveillanceOn = false, dentalOn = false,
             tfdOn={tfdOn}
             capsOn={capsOn}
             waitingRoomOn={waitingRoomOn}
+            vectorOn={vectorOn}
             onSave={(value) => void save(value)}
             onCancel={() => setEditing(null)}
           />

@@ -7,7 +7,7 @@ import type {
   CaseAddress, CityBlock, DepositGroup, DueItem, HomeVisitContext, HomeVisitTeam, HouseholdVector, HouseholdVectorProfile, LiraaItem,
   LiraaSurvey, Ovitrap, OvitrapReading, SessionUser, TransmissionBlock, VectorControlDomains, VectorDiseases, VectorHousehold, VectorInspection,
   VectorInspectionInput, VectorMapResponse, VectorParameterVersion, VectorParameters, VectorProduct, VectorReport, VectorSample,
-  VectorShortfall, VectorTask
+  VectorShortfall, VectorTask, PharmacyLocation, StockItem
 } from "../lib/api";
 import { sessionWith } from "./campaignFixtures";
 import { acsTeam, context } from "./homeVisitFixtures";
@@ -187,3 +187,14 @@ export const report = (o: Partial<VectorReport> = {}): VectorReport => ({
 export const mapPoints = (o: Partial<VectorMapResponse> = {}): VectorMapResponse => ({
   map: MAP_MANIFEST, points: [ { id: "h1", latitude: -25.42851, longitude: -49.2733, category: "yellow", label: "12" } ], ...o
 });
+
+// ── Estoque do 27a no domínio vector_control (Task 18; Pharmacy::Json.vector_item e Json.location) ──
+// O produto de campo como sai da busca `{ q, domain: "vector_control" }`: sem CATMAT, com o código do produto.
+export const VECTOR_ITEM: StockItem = {
+  catalog_item_id: null, catmat_code: null, vector_product_id: "pr1", code: "PYR", item_kind: "vector_control", name: "Pyriproxyfen 0,5% G",
+  unit: "g", dispensing_unit: "g", controlled: false, controlled_list: null
+};
+// O local vector_control (numa unidade environmental_surveillance), com o almoxarife do local.
+export const VC_LOCATION: PharmacyLocation = {
+  id: "loc-vc", name: "UVZ — insumos", kind: "vector_control", health_unit: { id: "u-uvz", name: "UVZ Central" }, active: true, roles: [ "stock_keeper" ]
+};

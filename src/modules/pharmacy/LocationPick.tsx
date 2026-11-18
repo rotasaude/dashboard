@@ -5,6 +5,7 @@
 // uma tela de ação passa um `allow` que exige papel (esses locais não aparecem), uma tela só
 // de consulta (posição, alertas) passa `() => true` e deixa CONSULTAR a posição de todos.
 // Trocar de local remonta o conteúdo (nada do local anterior sobra). Nada em storage.
+// Módulo 35a: `where` filtra também pelo local (as faltas de insumo de campo só nos `vector_control`) e `empty` troca a frase sem local.
 import { Fragment, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { listMyPharmacyLocations, type PharmacyLocation } from "../../lib/api";
@@ -16,7 +17,9 @@ import { alert, fieldLabel, muted, stack } from "../exams/styles";
 
 export type LocationAllow = (roles: { pharmacist: boolean; assistant: boolean; keeper: boolean }) => boolean;
 
-export function LocationPick({ allow, children }: { allow: LocationAllow; children(loc: PharmacyLocation): ReactNode }) {
+export function LocationPick({ allow, where, empty = NO_LOCATION, children }: {
+  allow: LocationAllow; where?(loc: PharmacyLocation): boolean; empty?: string; children(loc: PharmacyLocation): ReactNode;
+}) {
   const { user } = useAuth();
   const locations = useQuery({
     queryKey: [ PH_LOCATIONS_KEY, user?.id ?? null ], queryFn: listMyPharmacyLocations, enabled: !!user, ...STATIC_QUERY
@@ -24,8 +27,8 @@ export function LocationPick({ allow, children }: { allow: LocationAllow; childr
   const [ locationId, setLocationId ] = useState("");
   if (locations.isPending) return <p className="mono" style={muted}>carregando…</p>;
   if (locations.isError && !locations.data) return <p role="alert" style={alert}>{pharmacyError(locations.error)}</p>;
-  const options = (locations.data ?? []).filter((l) => l.active && allow(locationRoles(l)));
-  if (options.length === 0) return <EmptyState title={NO_LOCATION} />;
+  const options = (locations.data ?? []).filter((l) => l.active && allow(locationRoles(l)) && (!where || where(l)));
+  if (options.length === 0) return <EmptyState title={empty} />;
   const loc = options.find((l) => l.id === locationId) ?? options[0];
   return (
     <div style={stack}>
