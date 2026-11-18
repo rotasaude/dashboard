@@ -10,7 +10,7 @@ vi.mock("../../lib/api", async (importOriginal) => {
   return {
     ...real, fetchCurrentSession: vi.fn(), getVisitHousehold: vi.fn(), getHouseholdVectorProfile: vi.fn(), listCityBlocks: vi.fn(),
     recordHomeVisit: vi.fn(), listVisitHouseholds: vi.fn(), getHomeVisitContext: vi.fn(), listHomeVisitDays: vi.fn(), getHomeVisitDay: vi.fn(),
-    getVectorDomains: vi.fn()
+    getVectorDomains: vi.fn(), listDue: vi.fn()
   };
 });
 
@@ -32,7 +32,7 @@ import type { VisitStart } from "./useVisitHandoff";
 
 const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
 const ALL = [ api.fetchCurrentSession, api.getVisitHousehold, api.getHouseholdVectorProfile, api.listCityBlocks, api.recordHomeVisit,
-  api.listVisitHouseholds, api.getHomeVisitContext, api.listHomeVisitDays, api.getHomeVisitDay, api.getVectorDomains ];
+  api.listVisitHouseholds, api.getHomeVisitContext, api.listHomeVisitDays, api.getHomeVisitDay, api.getVectorDomains, api.listDue ];
 const SAMPLE = inspection().samples[0];
 
 afterEach(cleanup);
@@ -354,6 +354,7 @@ describe("Folha do dia com o boletim", () => {
     mocked(api.getHomeVisitContext).mockResolvedValue(vcContext());
     mocked(api.listHomeVisitDays).mockResolvedValue({ items: [], next_before: null });
     mocked(api.getVectorDomains).mockResolvedValue(VC_DOMAINS);
+    mocked(api.listDue).mockResolvedValue({ items: [], next_before: null });
   });
 
   it("agente com o gate: lê os domínios uma vez e o formulário traz o boletim; o atalho de cadastro vai ao território", async () => {

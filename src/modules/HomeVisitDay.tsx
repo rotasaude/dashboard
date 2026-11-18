@@ -6,6 +6,8 @@
 // formulário já com domicílio e pessoa. Uma gravação por vez na tela (`WriteLockProvider`). Nada de dado pessoal em URL nem em storage.
 // Módulo 35a: para a equipe do agente de endemias com o gate utilizável, os domínios do boletim (`getVectorDomains`, uma leitura)
 // vão ao formulário; depois de gravar, as etiquetas definitivas das amostras. `onGoToTerritory`: cadastrar o imóvel (Q13(1)).
+// "Imóveis a visitar" (F-35.4) abaixo da "Nova visita": o atalho abre o formulário com o vínculo do boletim; a lista (nominal) fica
+// montada, escondida enquanto o formulário está aberto, e é relida uma vez depois de gravar um boletim.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -13,7 +15,7 @@ import {
   type HomeVisitTeam
 } from "../lib/api";
 import { useAuth } from "../lib/auth";
-import { VC_DOMAINS_KEY, VC_PROFILE_KEY, canUseVectorControl, isEndemicAgentTeam, vectorError } from "../lib/vectorControl";
+import { VC_DOMAINS_KEY, VC_DUE_KEY, VC_PROFILE_KEY, canUseVectorControl, isEndemicAgentTeam, vectorError } from "../lib/vectorControl";
 import {
   HV_CANNOT_REGISTER, HV_CONTEXT_KEY, HV_DAY_KEY, HV_TODAY_KEY, NOMINAL_QUERY, OTHER_DAY_TEXT, REPLAYED_VISIT, STATIC_QUERY, UNCERTAIN_VISIT_REREAD, VISIT_SAVED,
   homeVisitError
@@ -23,6 +25,7 @@ import { DaySheet } from "./homeVisits/DaySheet";
 import { VisitForm, type VisitSaved } from "./homeVisits/VisitForm";
 import { tubeLabelsText } from "./homeVisits/InspectionSection";
 import { WriteLockProvider, useWriteLock } from "./homeVisits/writeLock";
+import { DueList } from "./vectorControl/DueList";
 import type { VisitStart } from "./homeVisits/useVisitHandoff";
 import { EmptyState } from "../components/EmptyState";
 import { ActionButton } from "../components/ActionButton";
@@ -134,6 +137,8 @@ function TodaySheets({ ctx, team, now, start, onHeld, onGoToTerritory }: {
     setForm(null); setUncertain(false); setTubes(tubeLabelsText(visit));
     // O boletim grava no perfil (quarteirão, risco, última situação): a próxima visita ao imóvel o relê.
     if (visit.vector_inspection && visit.household) void queryClient.invalidateQueries({ queryKey: [ VC_PROFILE_KEY, visit.household.id ] });
+    // …e muda a lista de "Imóveis a visitar" (só o boletim mexe no perfil): uma releitura.
+    if (vcOn && visit.vector_inspection) void queryClient.invalidateQueries({ queryKey: [ VC_DUE_KEY ] });
     const { visits: _v, ...summary } = day;
     const cached = queryClient.getQueryData<ApiDay>([ HV_DAY_KEY, day.id ]);
     if (items.some((d) => d.id === day.id) && cached?.visits) {
@@ -144,6 +149,10 @@ function TodaySheets({ ctx, team, now, start, onHeld, onGoToTerritory }: {
     }
     void queryClient.invalidateQueries({ queryKey: listKey });
     setSaved([ replayed ? REPLAYED_VISIT : null, OTHER_DAY_TEXT(day) ].filter(Boolean).join(" "));
+  }
+
+  function openForm(s: VisitStart | null) {
+    setSaved(null); setTubes(null); setUncertain(false); setForm({ start: s, n: Date.now() });
   }
 
   // Fechar o formulário. Depois de descartar um envio pendurado, UMA releitura do que mostraria a visita: a lista de hoje e as
@@ -166,7 +175,12 @@ function TodaySheets({ ctx, team, now, start, onHeld, onGoToTerritory }: {
         <VisitForm key={form.n} team={team} context={ctx} start={form.start} now={now} onSaved={onSaved} onClose={onClose} onHeld={onHeld}
           vectorDomains={vcOn ? vc.data ?? null : null} onGoToTerritory={onGoToTerritory} />
       ) : (
-        <div><ActionButton busy={lock.busy} onClick={() => { setSaved(null); setTubes(null); setUncertain(false); setForm({ start: null, n: Date.now() }); }}>Nova visita</ActionButton></div>
+        <div><ActionButton busy={lock.busy} onClick={() => openForm(null)}>Nova visita</ActionButton></div>
+      )}
+      {vcOn && (
+        <div hidden={!!form}>
+          <DueList team={team} domains={vc.data ?? null} visitDomains={ctx.domains} today={ctx.today} busy={lock.busy || !!form} onStart={openForm} />
+        </div>
       )}
       {items.length === 0
         ? <EmptyState title="nenhuma folha hoje — a primeira visita abre a folha" />
