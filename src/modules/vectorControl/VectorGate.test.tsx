@@ -3,14 +3,15 @@ import { cleanup, screen } from "@testing-library/react";
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const real = await importOriginal<typeof import("../../lib/api")>();
-  return { ...real, fetchCurrentSession: vi.fn() };
+  return { ...real, fetchCurrentSession: vi.fn(), getHomeVisitContext: vi.fn() };
 });
 
 import * as api from "../../lib/api";
-import { VC_NO_ROLE, type VectorRoles } from "../../lib/vectorControl";
+import { VC_NOT_AGENT, VC_NO_ROLE, type VectorRoles } from "../../lib/vectorControl";
 import { VECTOR_CONTROL_DISABLED } from "../../lib/vectorErrors";
 import { renderWithProviders } from "../../test/campaignFixtures";
-import { vcUser } from "../../test/vectorControlFixtures";
+import { acsTeam } from "../../test/homeVisitFixtures";
+import { vcContext, vcUser } from "../../test/vectorControlFixtures";
 import { VectorGate } from "./VectorGate";
 import { VectorBlocks } from "../VectorBlocks";
 import { FieldOvitraps } from "../FieldOvitraps";
@@ -70,14 +71,16 @@ describe("VectorGate", () => {
     expect(screen.queryByText(VC_NO_ROLE)).toBeNull();
   });
 
-  it("as cascas usam o portão: coordenação vê Em construção; o profissional na de campo também; o laboratório nos quarteirões, a frase do papel", async () => {
+  it("as cascas usam o portão: coordenação vê Em construção; o profissional passa na de campo (Task 7: a tela confere a equipe); o laboratório nos quarteirões, a frase do papel", async () => {
     mocked(api.fetchCurrentSession).mockResolvedValue(vcUser([ "endemic_coordinator" ]));
     renderWithProviders(<VectorBlocks />);
     expect(await screen.findByText("Em construção")).not.toBeNull();
     cleanup();
     mocked(api.fetchCurrentSession).mockResolvedValue(vcUser([ "health_professional" ]));
+    mocked(api.getHomeVisitContext).mockResolvedValue(vcContext({ teams: [ acsTeam() ] }));
     renderWithProviders(<FieldOvitraps />);
-    expect(await screen.findByText("Em construção")).not.toBeNull();
+    expect(await screen.findByText(VC_NOT_AGENT)).not.toBeNull();
+    expect(screen.queryByText(VC_NO_ROLE)).toBeNull();
     cleanup();
     mocked(api.fetchCurrentSession).mockResolvedValue(vcUser([ "vector_lab" ]));
     renderWithProviders(<VectorBlocks />);
