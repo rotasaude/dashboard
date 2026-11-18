@@ -23,7 +23,9 @@ import { VECTOR_ERRORS } from "../lib/vectorErrors";
 import { saveFile } from "./lab/saveFile";
 import { renderWithProviders, sessionWith } from "../test/campaignFixtures";
 import { VC_FEATURES, cityBlock, liraaItem, liraaSurvey, parameterVersion, report, vcUser } from "../test/vectorControlFixtures";
-import { CLOSED, DRAWN, DRAW_DESCRIPTION, NAME_PROBLEM, N_ON_SAVE, PROVISIONAL, SAVE_FIRST, STRATA_SAVED, SURVEY_CREATED, VectorLiraa } from "./VectorLiraa";
+import {
+  CLOSED, DRAWN, DRAW_DESCRIPTION, FIX_TO_DRAW, INACTIVE_CHOSEN, NAME_PROBLEM, N_ON_SAVE, PROVISIONAL, SAVE_FIRST, STRATA_SAVED, SURVEY_CREATED, VectorLiraa
+} from "./VectorLiraa";
 
 const ALL = [
   api.fetchCurrentSession, api.stepUpMfa, api.listLiraaSurveys, api.createLiraaSurvey, api.updateLiraaSurvey, api.drawLiraaSurvey, api.closeLiraaSurvey,
@@ -164,11 +166,10 @@ describe("estratos do rascunho", () => {
     mocked(api.updateLiraaSurvey).mockResolvedValue(liraaSurvey({ strata: [ stratum({ mode: "half" }) ] }));
     await mountDraft();
     expect(await screen.findByText("Padrão vale de 8.100 a 12.000 imóveis — este estrato tem 8.099")).not.toBeNull();
-    expect(blocked("Salvar estratos")).toBe(true);
+    // A faixa trava só o sorteio (o SaveSurvey não a confere, e salvar é a recontagem — Q24); salvar fica livre.
     expect(blocked("Sortear")).toBe(true);
-    fireEvent.click(button("Salvar estratos"));
-    await tick();
-    expect(api.updateLiraaSurvey).not.toHaveBeenCalled();
+    expect(screen.getByText(FIX_TO_DRAW)).not.toBeNull();
+    expect(blocked("Salvar estratos")).toBe(false);
     // Os rótulos do tipo saem dos parâmetros vigentes.
     fireEvent.change(group(1).getByLabelText("Tipo"), { target: { value: "half" } });
     expect(screen.queryByText(/Padrão vale/)).toBeNull();
@@ -188,12 +189,49 @@ describe("estratos do rascunho", () => {
     expect(api.getVectorParameters).toHaveBeenCalledTimes(1);
   });
 
+  it("fora da faixa salva sem mudança para recontar: o N novo do api libera o sorteio (sem impasse)", async () => {
+    // A base mudou desde a gravação: o api reconta 8.100 (estrato recriado, id novo).
+    const recounted = liraaSurvey({ strata: [ stratum({ id: "st9", households_count: 8100 }) ] });
+    mocked(api.updateLiraaSurvey).mockResolvedValue(recounted);
+    await mountDraft();
+    expect(blocked("Sortear")).toBe(true);
+    mocked(api.listLiraaSurveys).mockResolvedValue([ recounted ]);
+    fireEvent.click(button("Salvar estratos"));
+    await waitFor(() => expect(api.updateLiraaSurvey).toHaveBeenCalledTimes(1));
+    expect(mocked(api.updateLiraaSurvey).mock.calls[0]).toEqual([ "s1", { strata: [ { name: "Centro-norte", mode: "standard", block_ids: [ "cb1", "cb2" ] } ] } ]);
+    expect(await screen.findByText(/N = 8\.100 imóveis/)).not.toBeNull();
+    expect(screen.queryByText(/Padrão vale/)).toBeNull();
+    await waitFor(() => expect(blocked("Sortear")).toBe(false));
+    await waitFor(() => expect(api.listLiraaSurveys).toHaveBeenCalledTimes(2));
+    await tick();
+    expect(api.listLiraaSurveys).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    [ "standard", 8099, false ], [ "standard", 8100, true ], [ "standard", 12000, true ], [ "standard", 12001, false ],
+    [ "half", 1999, false ], [ "half", 2000, true ], [ "half", 8099, true ], [ "half", 8100, false ],
+    [ "census", 0, true ], [ "census", 1999, true ], [ "census", 2000, false ]
+  ] as const)("faixa do tipo %s com N %d: sorteia = %s; salvar sempre livre", async (mode, n, ok) => {
+    mocked(api.listLiraaSurveys).mockResolvedValue([ liraaSurvey({ strata: [ stratum({ mode, households_count: n }) ] }) ]);
+    await mountDraft();
+    expect(blocked("Sortear")).toBe(!ok);
+    expect(screen.queryByText(/vale (de|até) /) === null).toBe(ok);
+    expect(blocked("Salvar estratos")).toBe(false);
+  });
+
   it("os dois lados da faixa: 8.100 em padrão sorteia; estrato sem quarteirão e nome vazio travam", async () => {
     mocked(api.listLiraaSurveys).mockResolvedValue([ liraaSurvey({ strata: [ stratum({ households_count: 8100 }) ] }) ]);
     await mountDraft();
     expect(screen.getByText(/N = 8\.100 imóveis/)).not.toBeNull();
     expect(screen.queryByText(/Padrão vale/)).toBeNull();
     expect(blocked("Salvar estratos")).toBe(false);
+    expect(blocked("Sortear")).toBe(false);
+    // Desmarcar e remarcar o mesmo quarteirão (a ordem muda) não é mudança: o sorteio segue livre.
+    await pickNeighborhood(1);
+    fireEvent.click(await group(1).findByLabelText("Quarteirão 12"));
+    expect(screen.getByText(SAVE_FIRST)).not.toBeNull();
+    fireEvent.click(group(1).getByLabelText("Quarteirão 12"));
+    expect(screen.queryByText(SAVE_FIRST)).toBeNull();
     expect(blocked("Sortear")).toBe(false);
     fireEvent.click(button("Adicionar estrato"));
     expect(group(2).getByText("escolha ao menos um quarteirão para o estrato")).not.toBeNull();
@@ -226,11 +264,53 @@ describe("estratos do rascunho", () => {
     await waitFor(() => expect(api.updateLiraaSurvey).toHaveBeenCalledTimes(1));
     expect(mocked(api.updateLiraaSurvey).mock.calls[0][1]).toEqual({ strata: [ { name: "Centro-norte", mode: "standard", block_ids: [ "cb1", "cb2", "cb3" ] } ] });
     expect(await screen.findByText(/N = 8\.390 imóveis/)).not.toBeNull();
+    // Remontado com os estratos gravados: o bairro aberto continua, e o foco está na mensagem.
+    expect((group(1).getByLabelText("Bairro") as HTMLSelectElement).value).toBe("nb1");
+    expect((await group(1).findByLabelText("Quarteirão 14") as HTMLInputElement).checked).toBe(true);
+    expect(document.activeElement?.textContent).toBe(STRATA_SAVED);
     await waitFor(() => expect(blocked("Sortear")).toBe(false));
     await waitFor(() => expect(api.listLiraaSurveys).toHaveBeenCalledTimes(2));
     await tick();
     expect(api.listLiraaSurveys).toHaveBeenCalledTimes(2);
     expect(api.getVectorParameters).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    [ "409 survey_not_draft", new ApiError(409, { error: "survey_not_draft" }, "x"), VECTOR_ERRORS.survey_not_draft ],
+    [ "404", new ApiError(404, { error: "not_found" }, "x"), null ]
+  ])("salvar com a tela velha (%s): a frase e UMA releitura, sem reenvio", async (_, err, text) => {
+    mocked(api.updateLiraaSurvey).mockRejectedValue(err);
+    await mountDraft();
+    fireEvent.click(button("Salvar estratos"));
+    await waitFor(() => expect(api.updateLiraaSurvey).toHaveBeenCalledTimes(1));
+    const shown = await screen.findByRole("alert");
+    if (text) expect(shown.textContent).toBe(text);
+    expect(shown.textContent).not.toMatch(/not_found|survey_not_draft/);
+    await waitFor(() => expect(api.listLiraaSurveys).toHaveBeenCalledTimes(2));
+    await tick();
+    expect(api.listLiraaSurveys).toHaveBeenCalledTimes(2);
+    expect(api.updateLiraaSurvey).toHaveBeenCalledTimes(1);
+  });
+
+  it("quarteirão inativo já escolhido: marcado no estrato, trava salvar até sair; a recusa do api cai no estrato", async () => {
+    mocked(api.listLiraaSurveys).mockResolvedValue([ liraaSurvey({ strata: [ stratum({ block_ids: [ "cb1", "cb4" ], households_count: 4010 }) ] }) ]);
+    mocked(api.updateLiraaSurvey).mockRejectedValue(new ApiError(422, { error: "invalid_request", path: "strata[0].block_ids[1]" }, "x"));
+    await mountDraft();
+    // Com o bairro fechado, a tela não sabe: salvar livre, e a recusa do api vai ao estrato com a frase do inativo.
+    fireEvent.click(button("Salvar estratos"));
+    expect(await group(1).findByText(INACTIVE_CHOSEN)).not.toBeNull();
+    expect(screen.queryByText(/recarregue/)).toBeNull();
+    await pickNeighborhood(1);
+    const cb4 = (await group(1).findByLabelText("Quarteirão 15")) as HTMLInputElement;
+    expect(cb4.checked).toBe(true);
+    expect(cb4.disabled).toBe(false);
+    expect(group(1).getByText("inativo — tire-o")).not.toBeNull();
+    await waitFor(() => expect(blocked("Salvar estratos")).toBe(true));
+    fireEvent.click(cb4);
+    await waitFor(() => expect(blocked("Salvar estratos")).toBe(false));
+    expect(group(1).queryByText(INACTIVE_CHOSEN)).toBeNull();
+    expect(cb4.disabled).toBe(true);
+    expect(api.updateLiraaSurvey).toHaveBeenCalledTimes(1);
   });
 
   it("quarteirão de outro estrato fica desabilitado", async () => {
@@ -336,6 +416,26 @@ describe("sorteio", () => {
     await tick();
     expect(api.drawLiraaSurvey).toHaveBeenCalledTimes(1);
     expect(api.listLiraaSurveys).toHaveBeenCalledTimes(1);
+    // Sortear fica travado até salvar de novo (a recontagem); salvar sem mudança libera com o N novo.
+    expect(blocked("Sortear")).toBe(true);
+    expect(screen.getByText(SAVE_FIRST)).not.toBeNull();
+    const recounted = liraaSurvey({ strata: [ stratum({ id: "st9", households_count: 9100 }) ] });
+    mocked(api.updateLiraaSurvey).mockResolvedValue(recounted);
+    mocked(api.listLiraaSurveys).mockResolvedValue([ recounted ]);
+    fireEvent.click(button("Salvar estratos"));
+    await waitFor(() => expect(api.updateLiraaSurvey).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(blocked("Sortear")).toBe(false));
+    expect(group(1).queryByText(new RegExp(VECTOR_ERRORS.stratum_out_of_range))).toBeNull();
+  });
+
+  it("quarteirão desativado depois de salvar (invalid_request strata[i] no sorteio): a frase do inativo no estrato, não o pedido inválido", async () => {
+    mocked(api.drawLiraaSurvey).mockRejectedValue(new ApiError(422, { error: "invalid_request", path: "strata[0]" }, "x"));
+    await mountDraft();
+    await confirmStepUp("Sortear");
+    expect(await group(1).findByText(INACTIVE_CHOSEN)).not.toBeNull();
+    expect(screen.queryByText(/recarregue/)).toBeNull();
+    expect(blocked("Sortear")).toBe(true);
+    expect(api.drawLiraaSurvey).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -400,6 +500,34 @@ describe("sorteado e fechado", () => {
     expect(saveFile).not.toHaveBeenCalled();
   });
 
+  it("Atualizar: relê o índice e só a primeira página dos itens (uma trilha por clique); sem clique, nada", async () => {
+    mocked(api.listLiraaSurveys).mockResolvedValue([ DRAWN_SURVEY ]);
+    mocked(api.listLiraaItems).mockImplementation(async (_id, before) => (before
+      ? { items: [ liraaItem({ id: "lit2", position: 8, household: { id: "h2", address_short: "Rua das Acácias, 7" } }) ], next_before: null }
+      : { items: [ liraaItem() ], next_before: "cur-2" }));
+    mocked(api.getVectorReport).mockResolvedValue({ ...LIRAA_REPORT, notes: [ "Provisório: há amostra sem resultado de laboratório.", "1 imóvel(is) substituído(s) sem candidato." ] });
+    mount();
+    await open();
+    await screen.findByRole("table", { name: "Imóveis sorteados" });
+    // O aviso de provisório aparece uma vez (a nota do api que diz o mesmo sai); as outras notas ficam.
+    expect(await screen.findByText(PROVISIONAL)).not.toBeNull();
+    expect(screen.queryByText(/^Provisório:/)).toBeNull();
+    expect(screen.getByText("1 imóvel(is) substituído(s) sem candidato.")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Carregar mais" }));
+    expect(await screen.findByText("Rua das Acácias, 7")).not.toBeNull();
+    await tick();
+    expect(api.listLiraaItems).toHaveBeenCalledTimes(2);
+    expect(api.getVectorReport).toHaveBeenCalledTimes(1);
+    fireEvent.click(button("Atualizar"));
+    fireEvent.click(button("Atualizar"));
+    await waitFor(() => expect(api.listLiraaItems).toHaveBeenCalledTimes(3));
+    await waitFor(() => expect(api.getVectorReport).toHaveBeenCalledTimes(2));
+    await tick();
+    expect(mocked(api.listLiraaItems).mock.calls).toEqual([ [ "s1", null ], [ "s1", "cur-2" ], [ "s1", null ] ]);
+    expect(api.getVectorReport).toHaveBeenCalledTimes(2);
+    expect(api.listLiraaSurveys).toHaveBeenCalledTimes(1);
+  });
+
   it("fechar: só de sorteado, com step-up", async () => {
     mocked(api.listLiraaSurveys).mockResolvedValue([ CLOSED_SURVEY ]);
     mount();
@@ -416,18 +544,22 @@ describe("sorteado e fechado", () => {
     await screen.findByRole("table", { name: "Estratos sorteados" });
     mocked(api.listLiraaSurveys).mockResolvedValue([ CLOSED_SURVEY ]);
     await confirmStepUp("Fechar levantamento", "123456");
+    // Duplo clique no Confirmar: um envio.
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
     await waitFor(() => expect(api.closeLiraaSurvey).toHaveBeenCalledTimes(1));
     expect(api.stepUpMfa).toHaveBeenCalledWith("123456");
     expect(mocked(api.closeLiraaSurvey).mock.calls[0]).toEqual([ "s1" ]);
     expect(await screen.findByText(CLOSED)).not.toBeNull();
     expect(screen.queryByRole("button", { name: /^Fechar levantamento/ })).toBeNull();
-    // Depois de fechar: a lista e o índice relidos uma vez; os itens (com trilha) não.
+    // Depois de fechar: a lista, o índice e os itens (reset: só a primeira página) relidos uma vez cada.
     await waitFor(() => expect(api.listLiraaSurveys).toHaveBeenCalledTimes(3));
     await waitFor(() => expect(api.getVectorReport).toHaveBeenCalledTimes(3));
+    await waitFor(() => expect(api.listLiraaItems).toHaveBeenCalledTimes(3));
     await tick();
+    expect(api.closeLiraaSurvey).toHaveBeenCalledTimes(1);
     expect(api.listLiraaSurveys).toHaveBeenCalledTimes(3);
     expect(api.getVectorReport).toHaveBeenCalledTimes(3);
-    expect(api.listLiraaItems).toHaveBeenCalledTimes(2);
+    expect(mocked(api.listLiraaItems).mock.calls).toEqual([ [ "s1", null ], [ "s1", null ], [ "s1", null ] ]);
   });
 
   it("fechar com a tela velha: 409 invalid_transition → a frase e UMA releitura, sem reenvio", async () => {

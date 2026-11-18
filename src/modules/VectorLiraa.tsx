@@ -11,7 +11,7 @@
 //     o do fechado é o retrato em closed_at, Q30); CSV e PDF pelo saveFile (nome do api ou "liraa-<id>.<formato>", sem pessoa);
 //     "Fechar levantamento" (só sorteado; step-up; 409 invalid_transition → a frase e UMA releitura).
 // Nada em URL ou storage; nenhum polling.
-import { useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   closeLiraaSurvey, createLiraaSurvey, fetchVectorReportFile, getVectorParameters, getVectorReport, listLiraaItems, listLiraaSurveys, type LiraaItem,
@@ -40,7 +40,7 @@ import { SensitiveAction } from "../components/SensitiveAction";
 import { inputStyle, secondaryButtonStyle } from "../components/formStyles";
 import { alert, fieldLabel, muted, okText, row, stack } from "./exams/styles";
 
-export { DRAWN, DRAW_DESCRIPTION, N_ON_SAVE, SAVE_FIRST, STRATA_SAVED } from "./vectorControl/StrataEditor";
+export { DRAWN, DRAW_DESCRIPTION, FIX_TO_DRAW, INACTIVE_CHOSEN, N_ON_SAVE, SAVE_FIRST, STRATA_SAVED } from "./vectorControl/StrataEditor";
 export const PROVISIONAL = "provisório: há amostra sem resultado";
 export const CLOSED = "levantamento fechado — o índice fica como estava no fechamento";
 export const CLOSE_DESCRIPTION = "Fecha o levantamento: o índice passa a ser o retrato deste momento e os imóveis sorteados não mudam mais.";
@@ -208,6 +208,9 @@ type BodyProps = { survey: LiraaSurvey; msg: Msg; onChanged(s: LiraaSurvey): Pro
 
 function DraftBody({ survey, msg, onChanged, onStale, onGoToSecurity }: BodyProps) {
   const params = useQuery({ queryKey: [ VC_PARAMS_KEY ], queryFn: getVectorParameters, ...STATIC_QUERY });
+  // O bairro aberto de cada estrato (por posição) atravessa a remontagem depois de salvar; o foco vai à mensagem (ActionMessage).
+  const open = useRef<string[]>([]);
+  const remember = useCallback((list: string[]) => { open.current = list; }, []);
   if (params.isError) {
     return (
       <div style={row}>
@@ -220,7 +223,7 @@ function DraftBody({ survey, msg, onChanged, onStale, onGoToSecurity }: BodyProp
   return (
     // O api recria os estratos a cada gravação (ids novos): o editor remonta com os gravados (o N novo) quando a lista os traz.
     <StrataEditor key={survey.strata.map((s) => s.id).join(",")} survey={survey} params={params.data.values} msg={msg} onStale={onStale}
-      onGoToSecurity={onGoToSecurity} onSaved={onChanged} onDrawn={onChanged} />
+      onGoToSecurity={onGoToSecurity} onSaved={onChanged} onDrawn={onChanged} initialNeighborhoods={open.current} onNeighborhoods={remember} />
   );
 }
 
@@ -228,12 +231,17 @@ function DrawnBody({ survey, msg, onChanged, onStale, onGoToSecurity }: BodyProp
   const queryClient = useQueryClient();
   const [ confirming, setConfirming ] = useState(false);
   const closed = useRef<LiraaSurvey | null>(null);
+  // Itens e índice relidos só por ação: "Atualizar" e o fechamento. Itens por reset (só a primeira página: uma trilha por clique,
+  // não uma por página carregada, como faria o refetch do infinite query); índice por invalidate.
+  const refresh = () => Promise.all([
+    queryClient.resetQueries({ queryKey: [ VC_ITEMS_KEY, survey.id ] }), queryClient.invalidateQueries({ queryKey: reportKey(survey.id) })
+  ]);
 
   async function done() {
     setConfirming(false);
     msg.ok(CLOSED);
     if (!closed.current) return;
-    await Promise.all([ onChanged(closed.current), queryClient.invalidateQueries({ queryKey: reportKey(survey.id) }) ]);
+    await Promise.all([ onChanged(closed.current), refresh() ]);
   }
 
   return (
@@ -250,9 +258,13 @@ function DrawnBody({ survey, msg, onChanged, onStale, onGoToSecurity }: BodyProp
         { label: "Intervalo", align: "right", render: (s) => fmtNumber(s.block_interval) },
         { label: "Início", align: "right", render: (s) => fmtNumber(s.random_start) }
       ]} />
-      {survey.status === "drawn" && !confirming && (
-        <div><ActionButton variant="secondary" onClick={() => { msg.start(); setConfirming(true); }}>Fechar levantamento</ActionButton></div>
-      )}
+      <div style={row}>
+        <ActionButton variant="secondary" onClick={async () => { msg.start(); await refresh(); }}>Atualizar</ActionButton>
+        <span style={muted}>relê os imóveis sorteados e o índice</span>
+        {survey.status === "drawn" && !confirming && (
+          <ActionButton variant="secondary" onClick={() => { msg.start(); setConfirming(true); }}>Fechar levantamento</ActionButton>
+        )}
+      </div>
       {survey.status === "drawn" && confirming && (
         <SensitiveAction
           title="Fechar o levantamento"
@@ -302,7 +314,8 @@ function IndexPanel({ surveyId }: { surveyId: string }) {
               label: c.label, align: c.kind === "text" ? "left" as const : "right" as const, card: i === 0 ? "title" as const : undefined,
               render: (r: VectorReport["rows"][number]) => cellText(c.kind, r[c.key])
             }))} />
-            {(report.data.notes ?? []).map((n) => <p key={n} style={muted}>{n}</p>)}
+            {/* O aviso de provisório já está no topo (a nota do api diz o mesmo). */}
+            {(report.data.notes ?? []).filter((n) => !(report.data.provisional && /^provisório/i.test(n))).map((n) => <p key={n} style={muted}>{n}</p>)}
           </>
         )}
       <Downloads surveyId={surveyId} />
