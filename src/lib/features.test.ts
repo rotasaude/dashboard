@@ -161,3 +161,11 @@ describe("módulo 24b", () => {
     expect(hasFeature({ features: [ "home_visits" ] }, "collective_activities")).toBe(false);
   });
 });
+
+describe("módulo 35a", () => {
+  it("vector_control tem o rótulo curto do contrato §1 e vem da sessão", () => {
+    expect(featureLabel("vector_control")).toBe("Vigilância ambiental (endemias)");
+    expect(hasFeature({ features: [ "vector_control" ] }, "vector_control")).toBe(true);
+    expect(hasFeature({ features: [ "home_visits" ] }, "vector_control")).toBe(false);
+  });
+});

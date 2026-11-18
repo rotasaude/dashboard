@@ -12,7 +12,8 @@ export type FeatureKey =
   | "procedure_billing" | "care_lines" | "territory_registry" | "surveillance" | "care_regulation"
   | "pharmacy" | "dental_care" | "vaccination" | "rnds_immunization" | "rnds_mock"
   | "sanitary_transport" | "tfd" | "psychosocial_care" | "urgency_care" | "waiting_room_display"
-  | "urgency_stock_deduction" | "ombudsman" | "ombudsman_anonymous_web" | "home_visits" | "collective_activities";
+  | "urgency_stock_deduction" | "ombudsman" | "ombudsman_anonymous_web" | "home_visits" | "collective_activities"
+  | "vector_control";
 
 export const FEATURE_DISABLED_MESSAGE = "esta funcionalidade está desligada para a cidade";
 
@@ -66,7 +67,9 @@ const FEATURE_LABEL: Record<string, string> = {
   ombudsman_anonymous_web: "Denúncia anônima sem login (canal do cidadão)",
   // Módulo 24b (ADR 0052): home_visits exige territory_registry utilizável; collective_activities exige clinical_record
   home_visits: "Visita domiciliar e territorial",
-  collective_activities: "Atividade coletiva"
+  collective_activities: "Atividade coletiva",
+  // Módulo 35a (ADR 0054): exige home_visits utilizável; o rótulo curto do contrato §1 (Q12: só a descrição do maintenance muda)
+  vector_control: "Vigilância ambiental (endemias)"
 };
 
 export function sessionFeatures(user: { features?: unknown } | null | undefined): string[] {

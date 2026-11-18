@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MODULE_24B_PROXY_KEYS } from "./devProxy";
+import { MODULE_24B_PROXY_KEYS, MODULE_35A_PROXY_KEYS } from "./devProxy";
 
 // O Vite casa as chaves de regex do proxy contra a URL com a query string.
 describe("proxy de dev do módulo 24b", () => {
@@ -16,5 +16,21 @@ describe("proxy de dev do módulo 24b", () => {
 
   it("cobre as três rotas do módulo", () => {
     expect(MODULE_24B_PROXY_KEYS).toHaveLength(3);
+  });
+});
+
+describe("proxy de dev do módulo 35a", () => {
+  const matchesAny = (url: string) => MODULE_35A_PROXY_KEYS.some((key) => new RegExp(key).test(url));
+
+  it("casa /vector_control, a query e as sub-rotas (inclusive o PDF do LIRAa)", () => {
+    for (const url of [ "/vector_control", "/vector_control?x=1", "/vector_control/reports/liraa.pdf", "/vector_control/due?micro_area_id=ma1" ]) {
+      expect(matchesAny(url), url).toBe(true);
+    }
+  });
+
+  it("não casa outro prefixo nem a rota do próprio dashboard", () => {
+    expect(matchesAny("/vector_controlX")).toBe(false);
+    expect(matchesAny("/dashboard/vector_control")).toBe(false);
+    expect(MODULE_35A_PROXY_KEYS).toEqual([ "^/vector_control(/|\\?|$)" ]);
   });
 });

@@ -4116,7 +4116,9 @@ export interface TerritoryTeam extends TerritoryTeamRef {
   unit: { id: string; name: string };
   // L27: lê a validade da equipe toda (sem microárea) — a mesma regra do registry_status.
   reads_whole_team: boolean;
-  micro_areas: (MicroArea & { can_register: boolean })[];
+  // Módulo 35a (Q14(1)): tipos de imóvel que o usuário cadastra na microárea; null (ou ausente, api antigo) = todos.
+  // O agente de endemias recebe só os não residenciais ("2","3","4","5","6","12","13"); a lista vem do api.
+  micro_areas: (MicroArea & { can_register: boolean; property_types?: string[] | null })[];
 }
 export interface TerritoryContext { teams: TerritoryTeam[] }
 
@@ -4820,7 +4822,9 @@ export type StockLocationKind = "central" | "unit";
 export type StockMovementKind =
   | "opening" | "receipt" | "donation" | "transfer_out" | "transfer_in" | "dispensing" | "loss" | "expiry" | "adjustment" | "return"
   // Módulo 29 (V4): abertura de frasco, dose de unidose e a devolução por cancelamento.
-  | "vial_opening" | "immunization" | "immunization_reversal";
+  | "vial_opening" | "immunization" | "immunization_reversal"
+  // Módulo 35a (Q10): a baixa do boletim e o estorno na retirada da visita.
+  | "vector_application" | "vector_application_reversal";
 export type TransferStatus = "sent" | "received" | "received_with_difference";
 export type AdjustmentStatus = "applied" | "pending" | "approved" | "rejected";
 export type AdjustmentKind = "adjustment" | "loss" | "expiry";
@@ -4831,7 +4835,10 @@ export type PrescriptionKind = "digital" | "external";
 export interface StockItem {
   catalog_item_id: string | null; catmat_code: number | null; name: string; unit: string; dispensing_unit: string;
   controlled: boolean; controlled_list: string | null;
-  immunobiological_code?: string | null; item_kind?: "medication" | "immunobiological";
+  immunobiological_code?: string | null; item_kind?: "medication" | "immunobiological" | "vector_control";
+  // Módulo 35a (D-8; Pharmacy::Json.vector_item): produto de campo sem CATMAT, com o código do produto; `unit` e
+  // `dispensing_unit` são a unidade do produto (g, ml, un).
+  vector_product_id?: string | null; code?: string;
 }
 // Módulo 29 (V19): lote de vacina leva `manufacturer_key` (chave do catálogo); o api não manda código RNDS no lote
 // (o plano dizia `manufacturer_code`), e `manufacturer` é o NOME. Lote de medicamento não traz a chave.
@@ -4874,9 +4881,11 @@ export interface StockMovement {
 export interface MovementPage { movements: StockMovement[]; next_before: string | null }
 
 export interface PackageInput { units_per_package: number; packages: number }
-export interface ReceiptItemInput {
-  catalog_item_id: string; lot_number: string; expires_on: string; manufacturer?: string; quantity: string; package?: PackageInput;
-}
+// Módulo 35a (D-8; record_entry.rb): no local `vector_control` a linha leva `vector_product_id` no lugar de `catalog_item_id`,
+// sem embalagem (a tela não manda `package` com produto de campo).
+export type ReceiptItemInput = ({ catalog_item_id: string } | { vector_product_id: string }) & {
+  lot_number: string; expires_on: string; manufacturer?: string; quantity: string; package?: PackageInput;
+};
 export interface ReceiptInput {
   location_id: string; document: { kind: "invoice" | "donation"; number: string; supplier: string }; items: ReceiptItemInput[];
 }
@@ -5034,8 +5043,9 @@ export async function putMinimums(locationId: string, rows: { catalog_item_id: s
 }
 
 // ── Catálogo, entradas e abertura ──
-export async function searchPharmacyItems(q: string): Promise<StockItem[]> {
-  return (await jsonFetch<{ items?: StockItem[] }>(phPath("items", "search"), phWrite("POST", { q }))).items ?? [];
+// Módulo 35a (D-8): `domain: "vector_control"` busca os produtos ATIVOS de campo (q vazio traz todos); sem domínio, o CATMAT.
+export async function searchPharmacyItems(q: string, domain?: "vector_control"): Promise<StockItem[]> {
+  return (await jsonFetch<{ items?: StockItem[] }>(phPath("items", "search"), phWrite("POST", domain ? { q, domain } : { q }))).items ?? [];
 }
 
 export function recordReceipt(input: ReceiptInput): Promise<StockReceipt> {
@@ -7513,6 +7523,8 @@ export interface HomeVisit {
   // Só no GET /home_visits/:id.
   note?: string | null;
   can_withdraw: boolean;
+  // Módulo 35a: só na visita com boletim (a chave não existe sem ele); as etiquetas definitivas das amostras (D-12).
+  vector_inspection?: VectorInspection;
 }
 export interface HomeVisitDay {
   id: string; professional: { id: string; name: string }; team: { id: string; ine: string; name: string | null };
@@ -7560,6 +7572,8 @@ export interface HomeVisitInput {
   client_uuid: string; team_id: string; occurred_at: string; household_id?: string; micro_area_id?: string; out_of_area?: boolean;
   property_type?: string; subject: VisitSubject; patient_id?: string; new_patient?: QuickPatient; family_id?: string; duplicates_reviewed?: boolean;
   outcome: VisitOutcome; reasons: number[]; shared: boolean; measurements?: VisitMeasurements; note?: string;
+  // Módulo 35a (§3): o boletim do agente de endemias, opcional (D-17); os motivos 34–37 o api deriva dele.
+  vector_inspection?: VectorInspectionInput;
 }
 // `limit` (1–100) é opcional em todas as listas (field_list_query.rb:13-22).
 export interface HomeVisitDayQuery { team_id: string; professional_id?: string; from?: string; to?: string; state?: string[]; before?: string | null; limit?: number }
@@ -7806,4 +7820,412 @@ export async function listAdminFieldDevices(userId?: string): Promise<AdminField
 }
 export async function adminRevokeFieldDevice(id: string): Promise<AdminFieldDevice> {
   return (await jsonFetch<{ device: AdminFieldDevice }>(hvPath(FIELD_DEVICES_BASE, "admin", id, "revoke"), hvWrite("POST"))).device;
+}
+
+// ─── Vigilância ambiental — endemias (módulo 35a; ADR 0054; contrato 2026-11-16 §1–§12) ───
+// Formas do api JÁ mergeado (app/services/vector_control/json.rb, os controllers e os specs de request), não as do plano:
+// onde os dois divergem, vale o api (decisions.md da Task 1). Na URL só ids, datas, semanas ("YYYY-WW"), estados e o
+// cursor opaco; notas, motivos, contagens e o endereço do caso só no corpo ou na resposta. Toda escrita leva corpo JSON
+// (`{}` sem campo; query numa escrita → 422). Decimais (carga, quantidade) em TEXTO com 2 casas, como no 27a (Q15).
+
+const VECTOR_BASE = import.meta.env.VITE_VECTOR_CONTROL_BASE || "/vector_control";
+const vcPath = (...parts: string[]) => hvPath(VECTOR_BASE, ...parts);
+const vcWrite = (method: "POST" | "PATCH" | "PUT" | "DELETE", body: unknown = {}): RequestInit => ({ method, body: JSON.stringify(body) });
+const vcItems = async <T>(url: string, init?: RequestInit): Promise<T[]> => (await jsonFetch<{ items?: T[] }>(url, init)).items ?? [];
+
+export type VectorActivity = "li" | "li_t" | "pe" | "ie" | "transmission_block" | "liraa";
+export type VectorWorkType = "routine" | "pending";
+export type VectorSituation = "worked" | "closed" | "refused" | "vacant";
+export type DepositGroup = "A1" | "A2" | "B" | "C" | "D1" | "D2" | "E";
+export type MeasureMethod = "mechanical" | "focal" | "perifocal" | "spatial";
+export type RiskClass = "green" | "yellow" | "red" | "gray" | "purple";
+
+// ── Boletim (§3) ──
+export interface DepositCounts { group: DepositGroup; existing: number; with_water: number; with_larvae: number; eliminated: number; treated: number }
+// `charges` é NÚMERO (até 2 casas, > 0, ≤ charges_max) e só com produto; a mecânica vai só com `method`.
+export interface VectorMeasureInput { method: MeasureMethod; vector_product_id?: string; charges?: number }
+export interface VectorSampleInput { number: number; deposit_group: DepositGroup; larvae_collected: number }
+// O api só exige activity, work_type, situation e educational_action; a tela manda as três listas sempre (vazias se for o caso).
+// `city_block_id` só se o perfil não tiver quarteirão (regra 10); `risk_class` grava no perfil, não no boletim.
+export interface VectorInspectionInput {
+  activity: VectorActivity; work_type: VectorWorkType; situation: VectorSituation; educational_action: boolean;
+  entered_at?: string; left_at?: string; city_block_id?: string; risk_class?: RiskClass;
+  liraa_draw_item_id?: string; transmission_block_id?: string;
+  deposits: DepositCounts[]; measures: VectorMeasureInput[]; samples: VectorSampleInput[];
+}
+// `corrected` = houve correção (a nota nunca sai).
+export interface SampleResult { examined_larvae: number; aegypti_larvae: number; albopictus_larvae: number; result_at: string; corrected: boolean }
+export interface VectorProductRef { id: string; code: string; name: string; unit: "g" | "ml" | "un" | (string & {}) }
+// O boletim gravado no <home_visit>: sem `city_block_id` e sem `risk_class` (ficam no perfil); horários e vínculos
+// ausentes não vêm (a chave some, não é null). Deposits na ordem dos grupos, medidas pelo método, amostras pelo número.
+export interface VectorInspection extends Omit<VectorInspectionInput, "measures" | "samples" | "city_block_id" | "risk_class"> {
+  id: string; recovered: boolean; city_block: { id: string; number: string } | null;
+  // `quantity` (texto, 2 casas) nula na mecânica; `product` nulo na mecânica.
+  measures: (VectorMeasureInput & { quantity: string | null; product: VectorProductRef | null })[];
+  samples: (VectorSampleInput & { id: string; label: string; result: SampleResult | null })[];
+}
+
+// Mesma forma do `vector_control_domains` da referência do field-sync (§13; D-2): um serializador só no api.
+export interface VectorControlDomains {
+  activities: { code: VectorActivity; label: string }[]; work_types: { code: VectorWorkType; label: string }[];
+  situations: { code: VectorSituation; label: string }[]; deposit_groups: { code: DepositGroup; label: string }[];
+  measure_methods: { code: MeasureMethod; label: string }[]; risk_classes: { code: RiskClass; label: string }[];
+  // Só os ativos, por código; carga em texto (Q15).
+  products: (VectorProductRef & { charge_size: string; uses: Exclude<MeasureMethod, "mechanical">[] })[];
+  cadences: VectorCadence[];
+  parameters: { default_days: number; strategic_point_days: number; ovitrap_collection_days_min: number; ovitrap_collection_days_max: number };
+  // Q7(3): 999, 999, 99, 10, 20; `deposits` tem no máximo 7 itens (um por grupo).
+  limits: { deposit_count_max: number; charges_max: number; samples_max: number; larvae_collected_max: number; measures_max: number };
+}
+
+// ── Imóvel e quarteirão (§2) ──
+// O mesmo `vector` do `<household>` do field-sync (§13), servido por `GET /vector_control/households/:id` (Q8).
+export interface HouseholdVectorProfile { id: string; neighborhood_id: string | null; vector: HouseholdVector | null }   // Q13(5)
+export interface HouseholdVector {
+  city_block_id: string | null; risk_class: RiskClass | null; risk_assessed_on: string | null; last_worked_on: string | null; last_situation: VectorSituation | null;
+}
+// `households_count` = domicílios ATIVOS com o quarteirão no perfil (conta PE; o N do estrato do LIRAa não, Q24).
+export interface CityBlock { id: string; neighborhood: { id: string; name: string }; number: string; active: boolean; neighbor_ids: string[]; households_count: number; version: number }
+export interface VectorHousehold {
+  id: string; address_short: string; property_type: string; neighborhood_id: string | null; micro_area: { id: string; code: string };
+  block: { id: string; number: string; neighborhood_id: string } | null; risk_class: RiskClass | null; risk_assessed_on: string | null;
+  last_worked_on: string | null; last_situation: VectorSituation | null;
+}
+export type DueReason = "transmission_block" | "liraa" | "pending" | "due" | (string & {});
+// Ordem do api: motivo (bloqueio, LIRAa, pendência, vencido) e, dentro dele, os nunca trabalhados (`due_since` nulo) primeiro.
+export interface DueItem {
+  household_id: string; address_short: string; property_type: string; block: { id: string; number: string } | null; risk_class: RiskClass | null;
+  last_worked_on: string | null; due_since: string | null; reason: DueReason; liraa_draw_item_id: string | null; transmission_block_id: string | null;
+}
+
+// ── Cadência, ciclos e parâmetros (§5, §11) ──
+export interface VectorCadence { neighborhood_id: string | null; risk_class: RiskClass | null; strategic_point: boolean; days: number }
+export interface VectorCycle { id: string; year: number; number: number; starts_on: string; ends_on: string }
+// Criar: sem `number` o api usa o próximo do ano (D-1); o ano é o civil ou o epidemiológico de `starts_on` (Q22).
+export type VectorCycleInput = Omit<VectorCycle, "id" | "number"> & { number?: number };
+export interface CycleSummary {
+  cycle: VectorCycle;
+  // Bairros ativos por nome; `pending_percent` = (fechados + recusados) ÷ visitados × 100, uma casa; null sem visitados.
+  neighborhoods: { neighborhood: { id: string; name: string }; to_visit: number; visited: number; worked: number; closed: number; refused: number;
+    vacant: number; recovered: number; pending_percent: number | null; registered_households: number }[];
+}
+// As 20 chaves (Q17: `liraa_half_household_fraction` é nova); frações são número com até 2 casas (0,01–1,0).
+export interface VectorParameters {
+  default_days: number; strategic_point_days: number; block_radius_rings: number; block_grouping_days: number; block_diseases: string[];
+  ubv_cycles_max: number; ubv_cycle_days_min: number; ubv_cycle_days_max: number; ubv_cycle_interval_days: number;
+  ovitrap_collection_days_min: number; ovitrap_collection_days_max: number; ovitrap_alert_eggs: number; ovitrap_radius_rings: number;
+  liraa_standard_min: number; liraa_standard_max: number; liraa_half_min: number; liraa_base_sample: number;
+  liraa_household_fraction: number; liraa_half_household_fraction: number;
+  iip_bands: [ number, number ];
+}
+// Q13(8): a versão 0 (padrão de fábrica, sem gravação) tem `created_at: null`.
+export interface VectorParameterVersion { version: number; values: VectorParameters; created_at: string | null }
+
+// ── Produtos e local da baixa (§4) ──
+// `in_use` = há lote ou medida do produto (unit e charge_size não mudam: 409 product_in_use).
+export interface VectorProduct extends VectorProductRef { charge_size: string; uses: Exclude<MeasureMethod, "mechanical">[]; active: boolean; in_use: boolean }
+export interface VectorProductInput { code: string; name: string; unit: "g" | "ml" | "un"; charge_size: string; uses: Exclude<MeasureMethod, "mechanical">[]; active: boolean }
+export interface VectorSettings { stock_location: { id: string; name: string } | null; options: { id: string; name: string }[] }
+
+// ── Ovitrampas (§6) ──
+export type OvitrapStatus = "active" | "removed" | "lost" | (string & {});
+export type ReadingCondition = "ok" | "damaged" | "lost" | "dry";
+export interface Ovitrap {
+  id: string; number: string; household: { id: string; address_short: string }; city_block: { id: string; number: string }; status: OvitrapStatus;
+  installed_on: string; removed_on: string | null; open_reading: { id: string; installed_on: string } | null;
+  last_reading: { id: string; collected_on: string; condition: ReadingCondition | (string & {}); egg_count: number | null; epi_week: string } | null; version: number;
+}
+export interface OvitrapReading {
+  id: string; ovitrap: { id: string; number: string }; city_block: { id: string; number: string }; neighborhood: { id: string; name: string };
+  installed_on: string; collected_on: string | null; condition: ReadingCondition | (string & {}) | null; epi_week: string;
+  egg_count: number | null; counted_at: string | null; corrected: boolean;
+}
+export interface OvitrapInstallInput { client_uuid: string; household_id: string; number: string; consent: boolean; installed_on: string }
+// O api aceita `reinstall`/`remove` ausentes (padrão true/false); a tela manda os dois, `reinstall: !remove` (Q7(5)).
+export interface OvitrapCollectInput { collected_on: string; condition: ReadingCondition; reinstall: boolean; remove: boolean }
+
+// ── Tarefas (§6, §8) ──
+export type VectorTaskKind = "ovitrap_intensification" | "case_resident_elsewhere" | "block_case_without_place" | (string & {});
+export interface VectorTask {
+  id: string; kind: VectorTaskKind; state: "open" | "done" | "dismissed" | (string & {}); created_at: string;
+  ovitrap: { id: string; number: string } | null; suggested_blocks: { id: string; number: string }[];
+  disease: string | null; case_on: string | null; transmission_block_id: string | null; closed_at: string | null;
+}
+
+// ── LIRAa (§7) ──
+export type StratumMode = "standard" | "half" | "census";
+// Q24: no rascunho `households_count` vem do api a cada gravação (imóveis SEM ponto estratégico); n, intervalo e início nulos até o sorteio.
+export interface LiraaStratum {
+  id: string; name: string; mode: StratumMode; block_ids: string[]; households_count: number | null; sample_target: number | null;
+  block_interval: number | null; random_start: number | null;
+}
+export interface LiraaSurvey {
+  id: string; name: string; starts_on: string; ends_on: string; status: "draft" | "drawn" | "closed" | (string & {});
+  parameters_version: number | null; drawn_at: string | null; closed_at: string | null; strata: LiraaStratum[];
+}
+export interface LiraaSurveyInput { name: string; starts_on: string; ends_on: string }
+// `strata` troca a lista inteira, na ordem dada.
+export interface LiraaStratumInput { name: string; mode: StratumMode; block_ids: string[] }
+export interface LiraaItem {
+  id: string; stratum_id: string; city_block: { id: string; number: string }; household: { id: string; address_short: string }; position: number;
+  status: "pending" | "inspected" | "substituted" | (string & {}); substitute_of_id: string | null;
+}
+
+// ── Bloqueio de transmissão (§8; o caso só como "caso N", doença e data) ──
+// `number` é sequência da cidade, gravada e imutável (Q13(6)).
+export interface TransmissionCase { id: string; number: number; disease: string; case_on: string; has_place: boolean }
+export interface TransmissionBlock {
+  id: string; status: "proposed" | "active" | "closed" | "dismissed" | (string & {}); disease_group: string;
+  center_block: { id: string; number: string } | null; area: { id: string; number: string; suggested: boolean }[];
+  cases: TransmissionCase[]; cycles: { number: number; starts_on: string; ends_on: string }[];
+  created_at: string; confirmed_at: string | null; closed_at: string | null;
+}
+// Q26(4): `seen_case_ids` = os casos que a tela mostrou (até 500); caso novo → 409 proposal_changed; lista inválida → 422 path seen_case_ids.
+export interface TransmissionConfirmInput { center_block_id: string; block_ids: string[]; seen_case_ids: string[] }
+// A única resposta do 35a com endereço de pessoa (Q26(3): só em bloqueio proposed/active; Cache-Control: no-store).
+export interface CaseAddress { patient_address: string | null; household_address: string | null }
+
+// ── Amostras (§9) ──
+export interface VectorSample {
+  id: string; label: string; visit_on: string; deposit_group: DepositGroup; larvae_collected: number;
+  city_block: { id: string; number: string } | null; result: SampleResult | null;
+}
+export interface SampleResultInput { examined_larvae: number; aegypti_larvae: number; albopictus_larvae: number; result_note?: string }
+
+// ── Falta de insumo (§4; D-9) ──
+export type VectorShortfallCause = "no_location" | "insufficient_balance" | "no_lot" | (string & {});
+export interface VectorShortfall {
+  id: string; created_at: string; stock_location: { id: string; name: string } | null; product: VectorProductRef; quantity: string;
+  cause: VectorShortfallCause; visit_on: string; reconciled_at: string | null; reconciled_by: { name: string | null } | null;
+}
+
+// ── Relatórios (§10; D-13) ──
+export type VectorReportName = "situations" | "strategic_points" | "production" | "consumption" | "ovitraps" | "liraa" | "blocks";
+export type VectorReportFilters = Partial<{ cycle_id: string; neighborhood_ids: string[]; from: string; to: string; professional_ids: string[];
+  epi_weeks: string[]; survey_id: string }>;
+// D-13: uma forma para os sete relatórios; contagem pode vir suprimida (SmallCount); `provisional` só no liraa.
+export interface VectorReport {
+  name: VectorReportName; provisional?: boolean;
+  columns: { key: string; label: string; kind: "text" | "count" | "percent" | "decimal" }[];
+  rows: Record<string, SmallCount | string | null>[]; notes?: string[];
+}
+
+// ── Mapa (D-5; Q13(7)) ──
+export type VectorMapQuery =
+  | { layer: "risk"; neighborhoodId: string } | { layer: "ovitraps"; neighborhoodId: string; epiWeek: string } | { layer: "transmission"; transmissionBlockId: string };
+// Categorias do api: risk → código do risco ou "none"; ovitraps → negative/positive/alert/not_counted; transmission → só "area".
+export interface VectorMapPoint { id: string; latitude: number; longitude: number; category: string; label: string }
+export interface VectorMapResponse { map: FieldMapManifest | null; points: VectorMapPoint[] }
+
+type VcPage<T> = Promise<{ items: T[]; next_before: string | null }>;
+
+// ── Domínios ──
+export function getVectorDomains(): Promise<VectorControlDomains> {
+  return jsonFetch<VectorControlDomains>(vcPath("domains"));
+}
+
+// ── Quarteirões (Q18: todos do bairro, ordem natural do número, sem cursor) ──
+export function listCityBlocks(neighborhoodId: string): Promise<CityBlock[]> {
+  return vcItems<CityBlock>(withQuery(vcPath("blocks"), hvQuery({ neighborhood_id: neighborhoodId })));
+}
+export function createCityBlock(i: { neighborhood_id: string; number: string }): Promise<CityBlock> {
+  return jsonFetch<CityBlock>(vcPath("blocks"), vcWrite("POST", i));
+}
+export function updateCityBlock(id: string, i: { number?: string; active?: boolean }): Promise<CityBlock> {
+  return jsonFetch<CityBlock>(vcPath("blocks", id), vcWrite("PATCH", i));
+}
+export function addBlockNeighbor(id: string, neighborId: string): Promise<CityBlock> {
+  return jsonFetch<CityBlock>(vcPath("blocks", id, "neighbors"), vcWrite("POST", { neighbor_block_id: neighborId }));
+}
+export function removeBlockNeighbor(id: string, neighborId: string): Promise<CityBlock> {
+  return jsonFetch<CityBlock>(vcPath("blocks", id, "neighbors", neighborId), vcWrite("DELETE"));
+}
+
+// ── Imóveis (só a coordenação lista; grava trilha territory_registry) ──
+export function listVectorHouseholds(q: { neighborhoodId?: string; cityBlockId?: string; withoutBlock?: boolean; before?: string | null }): VcPage<VectorHousehold> {
+  return hvPage<VectorHousehold>(withQuery(vcPath("households"), hvQuery({
+    neighborhood_id: q.neighborhoodId, city_block_id: q.cityBlockId, without_block: q.withoutBlock ? "true" : undefined, before: q.before })));
+}
+// Ids só no corpo, até 200.
+export function assignHouseholdsBlock(householdIds: string[], cityBlockId: string): Promise<{ assigned: number }> {
+  return jsonFetch<{ assigned: number }>(vcPath("households", "assign_block"), vcWrite("POST", { household_ids: householdIds, city_block_id: cityBlockId }));
+}
+// null limpa o campo.
+export function updateHouseholdProfile(id: string, i: { city_block_id?: string | null; risk_class?: RiskClass | null }): Promise<VectorHousehold> {
+  return jsonFetch<VectorHousehold>(vcPath("households", id, "profile"), vcWrite("PATCH", i));
+}
+// Q8, Q13(5): agente nas microáreas dele e coordenação; `vector: null` sem perfil.
+export function getHouseholdVectorProfile(householdId: string): Promise<HouseholdVectorProfile> {
+  return jsonFetch<HouseholdVectorProfile>(vcPath("households", householdId));
+}
+
+// ── Imóveis a visitar (agente de endemias) ──
+export function listDue(microAreaId: string, before?: string | null): VcPage<DueItem> {
+  return hvPage<DueItem>(withQuery(vcPath("due"), hvQuery({ micro_area_id: microAreaId, before })));
+}
+
+// ── Cadência, ciclos e parâmetros ──
+export function listCadences(): Promise<VectorCadence[]> {
+  return vcItems<VectorCadence>(vcPath("cadences"));
+}
+// Step-up; troca a lista inteira.
+export function putCadences(items: VectorCadence[]): Promise<VectorCadence[]> {
+  return vcItems<VectorCadence>(vcPath("cadences"), vcWrite("PUT", { items }));
+}
+export function listCycles(year?: number): Promise<VectorCycle[]> {
+  return vcItems<VectorCycle>(withQuery(vcPath("cycles"), hvQuery({ year })));
+}
+export function createCycle(i: VectorCycleInput): Promise<VectorCycle> {
+  return jsonFetch<VectorCycle>(vcPath("cycles"), vcWrite("POST", i));
+}
+export function updateCycle(id: string, i: Partial<Omit<VectorCycle, "id">>): Promise<VectorCycle> {
+  return jsonFetch<VectorCycle>(vcPath("cycles", id), vcWrite("PATCH", i));
+}
+// D-6: o ciclo e os números por bairro.
+export function getCycleSummary(id: string): Promise<CycleSummary> {
+  return jsonFetch<CycleSummary>(vcPath("cycles", id));
+}
+export function getVectorParameters(): Promise<VectorParameterVersion> {
+  return jsonFetch<VectorParameterVersion>(vcPath("parameters"));
+}
+// Step-up; cria a versão seguinte com as 20 chaves.
+export function putVectorParameters(values: VectorParameters): Promise<VectorParameterVersion> {
+  return jsonFetch<VectorParameterVersion>(vcPath("parameters"), vcWrite("PUT", { values }));
+}
+
+// ── Produtos e local da baixa ──
+export function listVectorProducts(): Promise<VectorProduct[]> {
+  return vcItems<VectorProduct>(vcPath("products"));
+}
+export function createVectorProduct(i: VectorProductInput): Promise<VectorProduct> {
+  return jsonFetch<VectorProduct>(vcPath("products"), vcWrite("POST", i));
+}
+export function updateVectorProduct(id: string, i: Partial<VectorProductInput>): Promise<VectorProduct> {
+  return jsonFetch<VectorProduct>(vcPath("products", id), vcWrite("PATCH", i));
+}
+export function getVectorSettings(): Promise<VectorSettings> {
+  return jsonFetch<VectorSettings>(vcPath("settings"));
+}
+// null = sem baixa (cada aplicação vira falta no_location).
+export function putVectorSettings(stockLocationId: string | null): Promise<VectorSettings> {
+  return jsonFetch<VectorSettings>(vcPath("settings"), vcWrite("PUT", { stock_location_id: stockLocationId }));
+}
+
+// ── Ovitrampas (D-7: o agente por microárea; coordenação e laboratório por bairro; um dos dois) ──
+export function listOvitraps(q: { microAreaId?: string; neighborhoodId?: string; status?: OvitrapStatus; before?: string | null }): VcPage<Ovitrap> {
+  return hvPage<Ovitrap>(withQuery(vcPath("ovitraps"), hvQuery({
+    micro_area_id: q.microAreaId, neighborhood_id: q.neighborhoodId, status: q.status, before: q.before })));
+}
+// 201 = instalou; 200 = o mesmo client_uuid já estava gravado. A tela só manda `consent: true` (false → consent_required, Q7(5)).
+export function installOvitrap(i: OvitrapInstallInput): Promise<Ovitrap> {
+  return jsonFetch<Ovitrap>(vcPath("ovitraps"), vcWrite("POST", i));
+}
+export function collectOvitrap(id: string, i: OvitrapCollectInput): Promise<Ovitrap> {
+  return jsonFetch<Ovitrap>(vcPath("ovitraps", id, "collect"), vcWrite("POST", i));
+}
+export function listOvitrapReadings(q: { state: "to_count" | "counted"; before?: string | null }): VcPage<OvitrapReading> {
+  return hvPage<OvitrapReading>(withQuery(vcPath("ovitrap_readings"), hvQuery({ state: q.state, before: q.before })));
+}
+// `count_note` obrigatória na correção (Q23: a mesma contagem só com a nota → 422 path egg_count).
+export function countOvitrapReading(id: string, i: { egg_count: number; count_note?: string }): Promise<OvitrapReading> {
+  return jsonFetch<OvitrapReading>(vcPath("ovitrap_readings", id, "count"), vcWrite("POST", i));
+}
+
+// ── Tarefas ──
+export function listVectorTasks(q: { state: "open" | "closed"; before?: string | null }): VcPage<VectorTask> {
+  return hvPage<VectorTask>(withQuery(vcPath("tasks"), hvQuery({ state: q.state, before: q.before })));
+}
+export function closeVectorTask(id: string, i: { state: "done" | "dismissed"; note: string }): Promise<VectorTask> {
+  return jsonFetch<VectorTask>(vcPath("tasks", id, "close"), vcWrite("POST", i));
+}
+
+// ── LIRAa ──
+// Mais recente primeiro, sem cursor.
+export function listLiraaSurveys(): Promise<LiraaSurvey[]> {
+  return vcItems<LiraaSurvey>(vcPath("liraa_surveys"));
+}
+export function createLiraaSurvey(i: LiraaSurveyInput & { strata?: LiraaStratumInput[] }): Promise<LiraaSurvey> {
+  return jsonFetch<LiraaSurvey>(vcPath("liraa_surveys"), vcWrite("POST", i));
+}
+export function updateLiraaSurvey(id: string, i: Partial<LiraaSurveyInput> & { strata?: LiraaStratumInput[] }): Promise<LiraaSurvey> {
+  return jsonFetch<LiraaSurvey>(vcPath("liraa_surveys", id), vcWrite("PATCH", i));
+}
+// Step-up nos dois.
+export function drawLiraaSurvey(id: string): Promise<LiraaSurvey> {
+  return jsonFetch<LiraaSurvey>(vcPath("liraa_surveys", id, "draw"), vcWrite("POST"));
+}
+export function closeLiraaSurvey(id: string): Promise<LiraaSurvey> {
+  return jsonFetch<LiraaSurvey>(vcPath("liraa_surveys", id, "close"), vcWrite("POST"));
+}
+// Na ordem do sorteio (substitutos no fim).
+export function listLiraaItems(id: string, before?: string | null): VcPage<LiraaItem> {
+  return hvPage<LiraaItem>(withQuery(vcPath("liraa_surveys", id, "items"), hvQuery({ before })));
+}
+
+// ── Bloqueio de transmissão ──
+export function listTransmissionBlocks(q: { status?: string[]; before?: string | null }): VcPage<TransmissionBlock> {
+  return hvPage<TransmissionBlock>(withQuery(vcPath("transmission_blocks"), hvQuery({ status: q.status, before: q.before })));
+}
+export function getTransmissionBlock(id: string): Promise<TransmissionBlock> {
+  return jsonFetch<TransmissionBlock>(vcPath("transmission_blocks", id));
+}
+// Step-up.
+export function confirmTransmissionBlock(id: string, i: TransmissionConfirmInput): Promise<TransmissionBlock> {
+  return jsonFetch<TransmissionBlock>(vcPath("transmission_blocks", id, "confirm"), vcWrite("POST", i));
+}
+export function dismissTransmissionBlock(id: string, reason: string): Promise<TransmissionBlock> {
+  return jsonFetch<TransmissionBlock>(vcPath("transmission_blocks", id, "dismiss"), vcWrite("POST", { reason }));
+}
+export function closeTransmissionBlock(id: string): Promise<TransmissionBlock> {
+  return jsonFetch<TransmissionBlock>(vcPath("transmission_blocks", id, "close"), vcWrite("POST"));
+}
+export function addTransmissionCycle(id: string, i: { starts_on: string; ends_on: string }): Promise<TransmissionBlock> {
+  return jsonFetch<TransmissionBlock>(vcPath("transmission_blocks", id, "cycles"), vcWrite("POST", i));
+}
+// Devolve o bloqueio de DESTINO.
+export function moveTransmissionCase(id: string, caseId: string, toBlockId: string): Promise<TransmissionBlock> {
+  return jsonFetch<TransmissionBlock>(vcPath("transmission_blocks", id, "cases", caseId, "move"), vcWrite("POST", { to_transmission_block_id: toBlockId }));
+}
+// Step-up; lido no clique e guardado só no estado do diálogo (nunca no queryClient, storage, console ou URL). Sem cache do navegador.
+export function getTransmissionCaseAddress(id: string, caseId: string): Promise<CaseAddress> {
+  return jsonFetch<CaseAddress>(vcPath("transmission_blocks", id, "cases", caseId, "address"), { cache: "no-store" });
+}
+
+// ── Amostras (Q27: `pending` mais antiga primeiro; `done` pelo resultado mais recente; o cursor é da aba) ──
+export function listVectorSamples(q: { state: "pending" | "done"; before?: string | null }): VcPage<VectorSample> {
+  return hvPage<VectorSample>(withQuery(vcPath("samples"), hvQuery({ state: q.state, before: q.before })));
+}
+export function recordSampleResult(id: string, i: SampleResultInput): Promise<VectorSample> {
+  return jsonFetch<VectorSample>(vcPath("samples", id, "result"), vcWrite("POST", i));
+}
+
+// ── Falta de insumo ──
+export function listVectorShortfalls(q: { state: "open" | "reconciled"; locationId?: string | null; before?: string | null }): VcPage<VectorShortfall> {
+  return hvPage<VectorShortfall>(withQuery(vcPath("stock_shortfalls"), hvQuery({ state: q.state, location_id: q.locationId, before: q.before })));
+}
+export function reconcileVectorShortfall(id: string, note: string): Promise<VectorShortfall> {
+  return jsonFetch<VectorShortfall>(vcPath("stock_shortfalls", id, "reconcile"), vcWrite("POST", { note }));
+}
+
+// ── Relatórios ──
+// Só as chaves conhecidas, numa ordem fixa; listas como `chave[]`.
+const vcReportQuery = (f: VectorReportFilters) => hvQuery({
+  survey_id: f.survey_id, cycle_id: f.cycle_id, epi_weeks: f.epi_weeks, neighborhood_ids: f.neighborhood_ids, from: f.from, to: f.to,
+  professional_ids: f.professional_ids });
+export function getVectorReport(name: VectorReportName, f: VectorReportFilters): Promise<VectorReport> {
+  return jsonFetch<VectorReport>(withQuery(vcPath("reports", name), vcReportQuery(f)));
+}
+// CSV de qualquer relatório; PDF só do liraa (senão lança sem chamar o api: seria 404).
+export async function fetchVectorReportFile(name: VectorReportName, f: VectorReportFilters, format: "csv" | "pdf"): Promise<SignatureFile> {
+  if (format === "pdf" && name !== "liraa") throw new Error(`o relatório ${name} não tem PDF`);
+  return binaryFetch(withQuery(vcPath("reports", `${name}.${format}`), vcReportQuery(f)), format === "pdf" ? "application/pdf" : "text/csv");
+}
+
+// ── Mapa (grava a trilha territory_map) ──
+export async function listVectorMapPoints(q: VectorMapQuery): Promise<VectorMapResponse> {
+  const params = q.layer === "risk" ? hvQuery({ layer: q.layer, neighborhood_id: q.neighborhoodId })
+    : q.layer === "ovitraps" ? hvQuery({ layer: q.layer, neighborhood_id: q.neighborhoodId, epi_week: q.epiWeek })
+    : hvQuery({ layer: q.layer, transmission_block_id: q.transmissionBlockId });
+  const b = await jsonFetch<Partial<VectorMapResponse>>(withQuery(vcPath("map_points"), params));
+  return { map: b.map ?? null, points: b.points ?? [] };
 }
