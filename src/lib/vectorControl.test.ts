@@ -5,7 +5,7 @@ import {
   VC_DUE_KEY, VC_HOUSEHOLDS_KEY, VC_ITEMS_KEY, VC_MAP_KEY, VC_NOT_AGENT, VC_NO_ROLE, VC_OVITRAPS_KEY, VC_PARAMS_KEY, VC_PRODUCTS_KEY, VC_PROFILE_KEY,
   VC_READINGS_KEY, VC_REPORT_KEY, VC_SAMPLES_KEY, VC_SETTINGS_KEY, VC_SHORTFALLS_KEY, VC_SURVEYS_KEY, VC_TASKS_KEY,
   blockNumberProblem, blockStatusLabel, canReadVectorReport, canUseVectorControl, caseLabel, collectionProblems, conditionLabel, countProblems,
-  cycleProblems, domainLabel, dueReasonLabel, installProblems, isEndemicAgentTeam, isVectorStale, itemStatusLabel, noteProblem, ovitrapStatusLabel,
+  cycleProblems, domainLabel, dueReasonLabel, installProblems, isEndemicAgentTeam, isVectorStale, itemStatusLabel, noteProblem, optionalNote, ovitrapStatusLabel,
   riskTone, sampleResultProblems, shortfallCauseLabel, stratumModeLabel, stratumRangeProblem, surveyStatusLabel, taskKindLabel, taskStateLabel,
   ubvCycleProblems, vectorError, vectorMapLayers, vectorRefusals, vectorRoles
 } from "./vectorControl";
@@ -100,6 +100,14 @@ describe("rótulos (código novo cru)", () => {
     expect(stratumModeLabel("half")).toBe("Reduzido (2.000 a 8.099)");
     expect(stratumModeLabel("census")).toBe("Censitário (até 1.999)");
     expect(stratumModeLabel("x")).toBe("x");
+    expect(stratumModeLabel("standard", PARAMS)).toBe("Padrão (8.100 a 12.000 imóveis)");
+    expect(stratumModeLabel("half", PARAMS)).toBe("Reduzido (2.000 a 8.099)");
+    expect(stratumModeLabel("census", PARAMS)).toBe("Censitário (até 1.999)");
+    const moved = { ...PARAMS, liraa_standard_min: 9000, liraa_standard_max: 13000, liraa_half_min: 2500 };
+    expect(stratumModeLabel("standard", moved)).toBe("Padrão (9.000 a 13.000 imóveis)");
+    expect(stratumModeLabel("half", moved)).toBe("Reduzido (2.500 a 8.999)");
+    expect(stratumModeLabel("census", moved)).toBe("Censitário (até 2.499)");
+    expect(stratumModeLabel("x", moved)).toBe("x");
     expect([ "proposed", "active", "closed", "dismissed", "x" ].map(blockStatusLabel)).toEqual([ "proposto", "ativo", "fechado", "descartado", "x" ]);
     expect([ "no_location", "insufficient_balance", "no_lot", "x" ].map(shortfallCauseLabel))
       .toEqual([ "sem local de estoque configurado", "saldo insuficiente", "sem lote do produto", "x" ]);
@@ -162,6 +170,19 @@ describe("regras de tela", () => {
     expect(countProblems({ eggs: "12", note: "   " }, false)).toEqual([]);
     expect(paths(countProblems({ eggs: "12", note: "recontagem no laboratório" }, true, 12))).toEqual([ "egg_count" ]);
     expect(countProblems({ eggs: "13", note: "recontagem no laboratório" }, true, 12)).toEqual([]);
+    // nota da correção: 9 caracteres recusa, 10 vale.
+    expect(paths(countProblems({ eggs: "13", note: "a".repeat(9) }, true, 12))).toEqual([ "count_note" ]);
+    expect(countProblems({ eggs: "13", note: "a".repeat(10) }, true, 12)).toEqual([]);
+  });
+
+  it("nota opcional no corpo: em branco a chave não vai; com texto, vai sem as pontas", () => {
+    expect(optionalNote("count_note", "")).toEqual({});
+    expect(optionalNote("count_note", "   ")).toEqual({});
+    expect("count_note" in optionalNote("count_note", " \n ")).toBe(false);
+    expect(optionalNote("count_note", "  recontagem no laboratório ")).toEqual({ count_note: "recontagem no laboratório" });
+    expect(optionalNote("result_note", "")).toEqual({});
+    expect(optionalNote("result_note", "conferido de novo")).toEqual({ result_note: "conferido de novo" });
+    expect(JSON.stringify({ egg_count: 12, ...optionalNote("count_note", " ") })).toBe('{"egg_count":12}');
   });
 
   it("resultado da amostra: examinadas ≤ coletadas; aegypti + albopictus ≤ examinadas", () => {
@@ -182,6 +203,8 @@ describe("regras de tela", () => {
     const previous = { ...s, result: { examined_larvae: 8, aegypti_larvae: 5, albopictus_larvae: 3, result_at: "2026-11-16T12:00:00Z", corrected: false } };
     expect(paths(sampleResultProblems({ examined: "8", aegypti: "5", albopictus: "3", note: "conferido de novo" }, previous, true))).toEqual([ "examined_larvae" ]);
     expect(sampleResultProblems({ examined: "8", aegypti: "6", albopictus: "2", note: "conferido de novo" }, previous, true)).toEqual([]);
+    expect(paths(sampleResultProblems({ examined: "8", aegypti: "6", albopictus: "2", note: "a".repeat(9) }, previous, true))).toEqual([ "result_note" ]);
+    expect(sampleResultProblems({ examined: "8", aegypti: "6", albopictus: "2", note: "a".repeat(10) }, previous, true)).toEqual([]);
   });
 
   it("ciclo de UBV: intervalo de 4 dias recusa, 5 vale; duração 3 a 5; máximo 3", () => {
@@ -217,6 +240,13 @@ describe("regras de tela", () => {
     expect(cycleProblems({ year: 2025, starts_on: "2026-01-02", ends_on: "2026-01-31" })).toEqual([]);
     expect(cycleProblems({ year: 2026, starts_on: "2026-01-02", ends_on: "2026-01-31" })).toEqual([]);
     expect(paths(cycleProblems({ year: 2024, starts_on: "2026-01-02", ends_on: "2026-01-31" }))).toEqual([ "year" ]);
+    // Sentido oposto: 2024-12-29 (domingo) abre a semana 1 de 2025 — o ano epidemiológico é MAIOR que o civil.
+    expect(cycleProblems({ year: 2025, starts_on: "2024-12-29", ends_on: "2025-01-31" })).toEqual([]);
+    expect(cycleProblems({ year: 2024, starts_on: "2024-12-29", ends_on: "2025-01-31" })).toEqual([]);
+    expect(paths(cycleProblems({ year: 2023, starts_on: "2024-12-29", ends_on: "2025-01-31" }))).toEqual([ "year" ]);
+    // year e ends_on juntos: year primeiro (save_cycle.rb:86-87).
+    expect(cycleProblems({ year: 2025, starts_on: "2026-11-02", ends_on: "2026-11-01" }).map((p) => [ p.code, p.path ]))
+      .toEqual([ [ "cycle_invalid", "year" ], [ "cycle_invalid", "ends_on" ] ]);
     expect(paths(cycleProblems({ year: 1999, starts_on: "", ends_on: "x" }))).toEqual([ "year", "starts_on", "ends_on" ]);
   });
 
@@ -230,6 +260,11 @@ describe("regras de tela", () => {
     expect(stratumRangeProblem("standard", 9000, { ...PARAMS, liraa_standard_min: 9500 })).not.toBeNull();
     expect(stratumRangeProblem("standard", 12001, PARAMS)).toMatch(/8\.100 a 12\.000/);
     expect(stratumRangeProblem("x" as "census", 10, PARAMS)).not.toBeNull();
+    // sample.rb:29: sem quarteirão, recusa em qualquer tipo; com eles, a faixa decide.
+    expect(stratumRangeProblem("census", 0, PARAMS, 0)).not.toBeNull();
+    expect(stratumRangeProblem("census", 0, PARAMS, 1)).toBeNull();
+    expect(stratumRangeProblem("standard", 9000, PARAMS, 0)).not.toBeNull();
+    expect(stratumRangeProblem("standard", 9000, PARAMS, 3)).toBeNull();
   });
 
   it("nota de 10 a 500 caracteres (code points depois do trim)", () => {

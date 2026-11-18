@@ -117,7 +117,19 @@ export const conditionLabel = (code: string): string => pick(CONDITION, code);
 export const taskKindLabel = (code: string): string => pick(TASK_KIND, code);
 export const taskStateLabel = (code: string): string => pick(TASK_STATE, code);
 export const surveyStatusLabel = (code: string): string => pick(SURVEY_STATUS, code);
-export const stratumModeLabel = (code: string): string => pick(STRATUM_MODE, code);
+// Com `p` (os parâmetros vigentes, GET /parameters), as faixas saem deles, como no Liraa::Sample.in_range?; sem `p`, o texto
+// do padrão de fábrica (defaults.yml).
+export type StratumRangeParams = Pick<VectorParameters, "liraa_standard_min" | "liraa_standard_max" | "liraa_half_min">;
+export function stratumModeLabel(code: string, p?: StratumRangeParams): string {
+  if (!p) return pick(STRATUM_MODE, code);
+  const fmt = (v: number) => NUM.format(v);
+  switch (code) {
+    case "standard": return `Padrão (${fmt(p.liraa_standard_min)} a ${fmt(p.liraa_standard_max)} imóveis)`;
+    case "half": return `Reduzido (${fmt(p.liraa_half_min)} a ${fmt(p.liraa_standard_min - 1)})`;
+    case "census": return `Censitário (até ${fmt(p.liraa_half_min - 1)})`;
+    default: return code;
+  }
+}
 export const blockStatusLabel = (code: string): string => pick(BLOCK_STATUS, code);
 export const shortfallCauseLabel = (code: string): string => pick(SHORTFALL_CAUSE, code);
 export const itemStatusLabel = (code: string): string => pick(ITEM_STATUS, code);
@@ -281,12 +293,12 @@ export function cycleProblems(d: { year: number; number?: number | null; starts_
 }
 
 // Liraa::Sample.in_range?: padrão de standard_min a standard_max; reduzido de half_min até antes de standard_min; censitário
-// até antes de half_min. N zero só no censitário. Texto com a faixa dos parâmetros vigentes; null = dentro.
+// até antes de half_min. N zero só no censitário. `blocksCount` (opcional): estrato sem quarteirão recusa em qualquer tipo
+// (sample.rb:29, `big_b.positive?`). Texto com a faixa dos parâmetros vigentes; null = dentro.
 const STRATUM_NAME: Record<string, string> = { standard: "Padrão", half: "Reduzido", census: "Censitário" };
-export function stratumRangeProblem(
-  mode: StratumMode, n: number, p: Pick<VectorParameters, "liraa_standard_min" | "liraa_standard_max" | "liraa_half_min">
-): string | null {
+export function stratumRangeProblem(mode: StratumMode, n: number, p: StratumRangeParams, blocksCount?: number): string | null {
   const fmt = (v: number) => NUM.format(v);
+  if (blocksCount === 0) return "escolha ao menos um quarteirão para o estrato";
   let inside: boolean;
   let range: string;
   switch (mode) {
@@ -297,6 +309,13 @@ export function stratumRangeProblem(
   }
   if (inside && (n > 0 || mode === "census")) return null;
   return `${STRATUM_NAME[mode]} vale ${range} imóveis — este estrato tem ${fmt(n)}`;
+}
+
+// A nota da contagem e do resultado é só da correção, e o api recusa qualquer nota presente na primeira, até "" (count_reading.rb:47,
+// record_sample_result.rb:56). O corpo leva a chave só com texto depois do trim; em branco, a chave não vai.
+export function optionalNote<K extends "count_note" | "result_note">(key: K, text: string): { [P in K]?: string } {
+  const clean = text.trim();
+  return (clean === "" ? {} : { [key]: clean }) as { [P in K]?: string };
 }
 
 // ─── Recusas do api ─────────────────────────────────────────────────────────
