@@ -1,13 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  type HomeVisitInput,
+  type HomeVisitInput, type ReceiptItemInput,
   addBlockNeighbor, addTransmissionCycle, assignHouseholdsBlock, closeLiraaSurvey, closeTransmissionBlock, closeVectorTask, collectOvitrap,
   confirmTransmissionBlock, countOvitrapReading, createCityBlock, createCycle, createLiraaSurvey, createVectorProduct, dismissTransmissionBlock,
   drawLiraaSurvey, fetchVectorReportFile, getCycleSummary, getHouseholdVectorProfile, getTransmissionBlock, getTransmissionCaseAddress,
   getVectorDomains, getVectorParameters, getVectorReport, getVectorSettings, installOvitrap, listCadences, listCityBlocks, listCycles, listDue,
   listLiraaItems, listLiraaSurveys, listOvitrapReadings, listOvitraps, listTransmissionBlocks, listVectorHouseholds, listVectorMapPoints,
   listVectorProducts, listVectorSamples, listVectorShortfalls, listVectorTasks, moveTransmissionCase, putCadences, putVectorParameters,
-  putVectorSettings, recordHomeVisit, recordSampleResult, reconcileVectorShortfall, removeBlockNeighbor, searchPharmacyItems, updateCityBlock,
+  putVectorSettings, recordHomeVisit, recordReceipt, recordSampleResult, reconcileVectorShortfall, removeBlockNeighbor, searchPharmacyItems, updateCityBlock,
   updateCycle, updateHouseholdProfile, updateLiraaSurvey, updateVectorProduct
 } from "./api";
 import { day, visit } from "../test/homeVisitFixtures";
@@ -220,5 +220,32 @@ describe("cliente da vigilância ambiental — endemias (módulo 35a)", () => {
     expect(bodyOf()).toEqual({ q: "pyr", domain: "vector_control" });
     stub({}); await searchPharmacyItems("dipirona");
     expect(bodyOf()).toEqual({ q: "dipirona" });
+    stub({ id: "e1", kind: "invoice", location: { id: "loc-vc", name: "Almoxarifado de endemias", kind: "vector_control" }, items: [], at: "2026-11-16T13:00:00Z" }, 201);
+    await recordReceipt({
+      location_id: "loc-vc", document: { kind: "invoice", number: "NF-881", supplier: "Distribuidora Sul" },
+      items: [ { vector_product_id: "pr1", lot_number: "L1", expires_on: "2027-12-31", quantity: "10.00" } ]
+    });
+    expect(bodyOf().items[0]).toEqual({ vector_product_id: "pr1", lot_number: "L1", expires_on: "2027-12-31", quantity: "10.00" });
+    expect("catalog_item_id" in bodyOf().items[0]).toBe(false);
+    expect("package" in bodyOf().items[0]).toBe(false);
+  });
+
+  it("tipos recusam o que o api recusaria (conferido pelo tsc)", () => {
+    // Exatamente um filtro nas ovitrampas (M1).
+    // @ts-expect-error nenhum dos dois
+    const none: Parameters<typeof listOvitraps>[0] = { status: "active" };
+    // @ts-expect-error os dois juntos
+    const both: Parameters<typeof listOvitraps>[0] = { microAreaId: "ma1", neighborhoodId: "nb1" };
+    // Linha de produto de campo sem embalagem e sem catalog_item_id (M2).
+    // @ts-expect-error package com vector_product_id
+    const pkg: ReceiptItemInput = { vector_product_id: "pr1", lot_number: "L1", expires_on: "2027-12-31", quantity: "1", package: { units_per_package: 1, packages: 1 } };
+    // @ts-expect-error as duas chaves juntas
+    const twoKeys: ReceiptItemInput = { vector_product_id: "pr1", catalog_item_id: "c1", lot_number: "L1", expires_on: "2027-12-31", quantity: "1" };
+    // Filtro de outro relatório (M3) e status fora do catálogo (M6).
+    // @ts-expect-error cycle_id não é filtro do ovitraps
+    const wrongFilter: Parameters<typeof getVectorReport<"ovitraps">>[1] = { cycle_id: "cy1" };
+    // @ts-expect-error status desconhecido
+    const wrongStatus: Parameters<typeof listTransmissionBlocks>[0] = { status: [ "archived" ] };
+    expect([ none, both, pkg, twoKeys, wrongFilter, wrongStatus ]).toHaveLength(6);
   });
 });

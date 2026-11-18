@@ -4116,8 +4116,9 @@ export interface TerritoryTeam extends TerritoryTeamRef {
   unit: { id: string; name: string };
   // L27: lê a validade da equipe toda (sem microárea) — a mesma regra do registry_status.
   reads_whole_team: boolean;
-  // Módulo 35a (Q14(1)): tipos de imóvel que o usuário cadastra na microárea; null (ou ausente, api antigo) = todos.
-  // O agente de endemias recebe só os não residenciais ("2","3","4","5","6","12","13"); a lista vem do api.
+  // Módulo 35a (Q14(1)): tipos de imóvel que o usuário cadastra na microárea; null (ou ausente, api antigo) = sem restrição
+  // de tipo — leia junto com `can_register` (as microáreas não atribuídas ao agente de endemias também vêm null, com
+  // can_register false). Nas atribuídas, o agente recebe só os não residenciais ("2","3","4","5","6","12","13"); a lista vem do api.
   micro_areas: (MicroArea & { can_register: boolean; property_types?: string[] | null })[];
 }
 export interface TerritoryContext { teams: TerritoryTeam[] }
@@ -4882,10 +4883,11 @@ export interface MovementPage { movements: StockMovement[]; next_before: string 
 
 export interface PackageInput { units_per_package: number; packages: number }
 // Módulo 35a (D-8; record_entry.rb): no local `vector_control` a linha leva `vector_product_id` no lugar de `catalog_item_id`,
-// sem embalagem (a tela não manda `package` com produto de campo).
-export type ReceiptItemInput = ({ catalog_item_id: string } | { vector_product_id: string }) & {
-  lot_number: string; expires_on: string; manufacturer?: string; quantity: string; package?: PackageInput;
-};
+// sem embalagem (`package` numa linha de produto de campo → 422 path items[i].package). Uma chave OU a outra, nunca as duas.
+export type ReceiptItemInput = (
+  | { catalog_item_id: string; vector_product_id?: never; package?: PackageInput }
+  | { vector_product_id: string; catalog_item_id?: never; package?: never }
+) & { lot_number: string; expires_on: string; manufacturer?: string; quantity: string };
 export interface ReceiptInput {
   location_id: string; document: { kind: "invoice" | "donation"; number: string; supplier: string }; items: ReceiptItemInput[];
 }
@@ -7972,10 +7974,12 @@ export interface LiraaItem {
 }
 
 // ── Bloqueio de transmissão (§8; o caso só como "caso N", doença e data) ──
+// Catalog::BLOCK_STATUSES; outro valor no filtro → 422 path status.
+export type TransmissionBlockStatus = "proposed" | "active" | "closed" | "dismissed";
 // `number` é sequência da cidade, gravada e imutável (Q13(6)).
 export interface TransmissionCase { id: string; number: number; disease: string; case_on: string; has_place: boolean }
 export interface TransmissionBlock {
-  id: string; status: "proposed" | "active" | "closed" | "dismissed" | (string & {}); disease_group: string;
+  id: string; status: TransmissionBlockStatus | (string & {}); disease_group: string;
   center_block: { id: string; number: string } | null; area: { id: string; number: string; suggested: boolean }[];
   cases: TransmissionCase[]; cycles: { number: number; starts_on: string; ends_on: string }[];
   created_at: string; confirmed_at: string | null; closed_at: string | null;
@@ -8001,6 +8005,17 @@ export interface VectorShortfall {
 
 // ── Relatórios (§10; D-13) ──
 export type VectorReportName = "situations" | "strategic_points" | "production" | "consumption" | "ovitraps" | "liraa" | "blocks";
+// As chaves de cada relatório, as de Reports::FILTERS (reports.rb:41-49): chave de outro relatório → 422 invalid_request.
+export interface VectorReportFiltersByName {
+  situations: { cycle_id?: string; neighborhood_ids?: string[] };
+  strategic_points: { cycle_id?: string };
+  production: { from?: string; to?: string; professional_ids?: string[] };
+  consumption: { from?: string; to?: string };
+  ovitraps: { epi_weeks?: string[]; neighborhood_ids?: string[] };
+  liraa: { survey_id?: string };
+  blocks: { from?: string; to?: string };
+}
+// Todas as chaves juntas (só para montar a query); as funções recebem a forma do relatório pedido.
 export type VectorReportFilters = Partial<{ cycle_id: string; neighborhood_ids: string[]; from: string; to: string; professional_ids: string[];
   epi_weeks: string[]; survey_id: string }>;
 // D-13: uma forma para os sete relatórios; contagem pode vir suprimida (SmallCount); `provisional` só no liraa.
@@ -8111,8 +8126,13 @@ export function putVectorSettings(stockLocationId: string | null): Promise<Vecto
   return jsonFetch<VectorSettings>(vcPath("settings"), vcWrite("PUT", { stock_location_id: stockLocationId }));
 }
 
-// ── Ovitrampas (D-7: o agente por microárea; coordenação e laboratório por bairro; um dos dois) ──
-export function listOvitraps(q: { microAreaId?: string; neighborhoodId?: string; status?: OvitrapStatus; before?: string | null }): VcPage<Ovitrap> {
+// ── Ovitrampas (D-7: o agente por microárea; coordenação e laboratório por bairro) ──
+// Exatamente UM dos dois filtros: nenhum ou os dois → 422 path micro_area_id (ovitraps_controller#listed_scope).
+export type OvitrapListQuery = (
+  | { microAreaId: string; neighborhoodId?: never }
+  | { neighborhoodId: string; microAreaId?: never }
+) & { status?: OvitrapStatus; before?: string | null };
+export function listOvitraps(q: OvitrapListQuery): VcPage<Ovitrap> {
   return hvPage<Ovitrap>(withQuery(vcPath("ovitraps"), hvQuery({
     micro_area_id: q.microAreaId, neighborhood_id: q.neighborhoodId, status: q.status, before: q.before })));
 }
@@ -8163,7 +8183,7 @@ export function listLiraaItems(id: string, before?: string | null): VcPage<Liraa
 }
 
 // ── Bloqueio de transmissão ──
-export function listTransmissionBlocks(q: { status?: string[]; before?: string | null }): VcPage<TransmissionBlock> {
+export function listTransmissionBlocks(q: { status?: TransmissionBlockStatus[]; before?: string | null }): VcPage<TransmissionBlock> {
   return hvPage<TransmissionBlock>(withQuery(vcPath("transmission_blocks"), hvQuery({ status: q.status, before: q.before })));
 }
 export function getTransmissionBlock(id: string): Promise<TransmissionBlock> {
@@ -8212,11 +8232,13 @@ export function reconcileVectorShortfall(id: string, note: string): Promise<Vect
 const vcReportQuery = (f: VectorReportFilters) => hvQuery({
   survey_id: f.survey_id, cycle_id: f.cycle_id, epi_weeks: f.epi_weeks, neighborhood_ids: f.neighborhood_ids, from: f.from, to: f.to,
   professional_ids: f.professional_ids });
-export function getVectorReport(name: VectorReportName, f: VectorReportFilters): Promise<VectorReport> {
+export function getVectorReport<N extends VectorReportName>(name: N, f: VectorReportFiltersByName[N]): Promise<VectorReport> {
   return jsonFetch<VectorReport>(withQuery(vcPath("reports", name), vcReportQuery(f)));
 }
 // CSV de qualquer relatório; PDF só do liraa (senão lança sem chamar o api: seria 404).
-export async function fetchVectorReportFile(name: VectorReportName, f: VectorReportFilters, format: "csv" | "pdf"): Promise<SignatureFile> {
+export async function fetchVectorReportFile<N extends VectorReportName>(
+  name: N, f: VectorReportFiltersByName[N], format: "csv" | "pdf"
+): Promise<SignatureFile> {
   if (format === "pdf" && name !== "liraa") throw new Error(`o relatório ${name} não tem PDF`);
   return binaryFetch(withQuery(vcPath("reports", `${name}.${format}`), vcReportQuery(f)), format === "pdf" ? "application/pdf" : "text/csv");
 }
