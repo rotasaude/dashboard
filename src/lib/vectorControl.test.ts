@@ -250,6 +250,10 @@ describe("regras de tela", () => {
     expect(cycleProblems({ year: 2025, starts_on: "2026-11-02", ends_on: "2026-11-01" }).map((p) => [ p.code, p.path ]))
       .toEqual([ [ "cycle_invalid", "year" ], [ "cycle_invalid", "ends_on" ] ]);
     expect(paths(cycleProblems({ year: 1999, starts_on: "", ends_on: "x" }))).toEqual([ "year", "starts_on", "ends_on" ]);
+    // SaveCycle::YEARS = 2000..2100, dos dois lados.
+    expect(cycleProblems({ year: 2000, starts_on: "2000-03-01", ends_on: "2000-03-31" })).toEqual([]);
+    expect(cycleProblems({ year: 2100, starts_on: "2100-03-01", ends_on: "2100-03-31" })).toEqual([]);
+    expect(paths(cycleProblems({ year: 2101, starts_on: "2101-03-01", ends_on: "2101-03-31" }))).toEqual([ "year" ]);
   });
 
   it.each([ [ "half", 8099, null ], [ "standard", 8099, "x" ], [ "standard", 8100, null ], [ "standard", 12000, null ], [ "standard", 12001, "x" ],

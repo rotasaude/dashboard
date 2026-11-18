@@ -76,8 +76,9 @@ export function CadencesPanel({ onGoToSecurity }: { onGoToSecurity?: () => void 
     setNotice(CADENCE_SAVED);
     queryClient.setQueryData([ VC_CADENCES_KEY ], result);
     setFormKey((k) => k + 1);
-    // Os domínios levam a cadência ao boletim: relidos junto.
-    await Promise.all([ queryClient.invalidateQueries({ queryKey: [ VC_CADENCES_KEY ] }), queryClient.invalidateQueries({ queryKey: [ VC_DOMAINS_KEY ] }) ]);
+    // O PUT já devolve a lista gravada ({ items }, na ordem do api): ela fica na tela, sem reler as cadências. Os domínios levam
+    // a cadência ao boletim: relidos.
+    await queryClient.invalidateQueries({ queryKey: [ VC_DOMAINS_KEY ] });
   }
 
   return (

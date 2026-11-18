@@ -180,6 +180,9 @@ describe("cliente da vigilância ambiental — endemias (módulo 35a)", () => {
     const items = [ { neighborhood_id: null, risk_class: null, strategic_point: false, days: 60 } ];
     stub({ items }); expect(await putCadences(items)).toEqual(items);
     expect([ last().url, last().init.method, bodyOf() ]).toEqual([ "/vector_control/cadences", "PUT", { items } ]);
+    // Lista vazia: a chave `items` vai com [] (CadencesController#update lê body_param("items"); o api apaga todas as linhas).
+    stub({ items: [] }); expect(await putCadences([])).toEqual([]);
+    expect(bodyOf()).toEqual({ items: [] });
     stub({}); expect(await listCadences()).toEqual([]);
     stub({ id: "cy1", year: 2026, number: 12, starts_on: "2026-11-02", ends_on: "2026-12-31" }, 201);
     await createCycle({ year: 2026, starts_on: "2026-11-02", ends_on: "2026-12-31" });

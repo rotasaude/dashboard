@@ -62,7 +62,7 @@ async function newCycle(start: string, end: string, number = "") {
   type("Fim", end);
 }
 
-afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+afterEach(() => { vi.useRealTimers(); cleanup(); vi.restoreAllMocks(); });
 beforeEach(() => {
   for (const fn of Object.values(api)) if (typeof fn === "function" && "mockReset" in fn) mocked(fn).mockReset();
   mocked(api.fetchCurrentSession).mockResolvedValue(vcUser([ "endemic_coordinator" ]));
@@ -254,11 +254,20 @@ describe("resumo por bairro", () => {
     fireEvent.click(rowOf("Ciclos do ano", "ciclo 1").getByRole("button", { name: "Ver resumo do ciclo 1" }));
     const table = await screen.findByRole("table", { name: "Resumo por bairro" });
     expect(within(table).queryByText(/endereço|morador|rua/i)).toBeNull();
-    await later();
+    // Nenhum polling nem releitura por foco/rede: 10 minutos no relógio falso, foco, aba visível e rede de volta.
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    await vi.advanceTimersByTimeAsync(10 * 60_000);
+    window.dispatchEvent(new Event("focus"));
+    document.dispatchEvent(new Event("visibilitychange"));
+    window.dispatchEvent(new Event("online"));
+    await vi.advanceTimersByTimeAsync(60_000);
+    vi.useRealTimers();
     expect(setItem).not.toHaveBeenCalled();
     expect(api.getCycleSummary).toHaveBeenCalledTimes(1);
     expect(api.listCycles).toHaveBeenCalledTimes(1);
     expect(api.listCadences).toHaveBeenCalledTimes(1);
+    expect(api.getVectorDomains).toHaveBeenCalledTimes(1);
+    expect(api.listPanelNeighborhoods).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -285,7 +294,11 @@ describe("cadência", () => {
     expect(api.stepUpMfa).toHaveBeenCalledWith("123456");
     expect(mocked(api.putCadences).mock.calls[0][0]).toEqual([ { neighborhood_id: null, risk_class: "red", strategic_point: false, days: 30 } ]);
     expect(await screen.findByText(CADENCE_SAVED)).not.toBeNull();
-    await waitFor(() => expect(api.listCadences).toHaveBeenCalledTimes(2));
+    // A lista que o PUT devolveu fica na tela, sem GET a mais; os domínios (que levam a cadência ao boletim) são relidos.
+    await waitFor(() => expect(api.getVectorDomains).toHaveBeenCalledTimes(2));
+    expect((screen.getByLabelText("Risco da linha 1") as HTMLSelectElement).value).toBe("red");
+    expect(field("Dias da linha 1").value).toBe("30");
+    expect(api.listCadences).toHaveBeenCalledTimes(1);
     expect(api.putCadences).toHaveBeenCalledTimes(1);
   });
 
@@ -336,6 +349,37 @@ describe("cadência", () => {
     fireEvent.click(screen.getByRole("button", { name: "Salvar cadência" }));
     expect(await screen.findByRole("button", { name: "Confirmar" })).not.toBeNull();
     expect(api.putCadences).not.toHaveBeenCalled();
+  });
+
+  it("linha lida e removida sai do corpo (o api apaga o que falta)", async () => {
+    mocked(api.listCadences).mockResolvedValue([
+      { neighborhood_id: null, risk_class: null, strategic_point: false, days: 60 },
+      { neighborhood_id: "nb-agua", risk_class: "yellow", strategic_point: false, days: 45 }
+    ]);
+    mocked(api.putCadences).mockImplementation(async (items: VectorCadence[]) => items);
+    await openCadences();
+    fireEvent.click(screen.getByRole("button", { name: "Remover linha 1" }));
+    fireEvent.click(screen.getByRole("button", { name: "Salvar cadência" }));
+    expect(await screen.findByText("Troca a lista inteira (1 linha); a linha que saiu deixa de valer.")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+    await waitFor(() => expect(api.putCadences).toHaveBeenCalledTimes(1));
+    expect(mocked(api.putCadences).mock.calls[0][0]).toEqual([ { neighborhood_id: "nb-agua", risk_class: "yellow", strategic_point: false, days: 45 } ]);
+  });
+
+  it("todas as linhas removidas: o corpo vai vazio ([]) e a confirmação diz 0 linhas", async () => {
+    mocked(api.listCadences).mockResolvedValue([
+      { neighborhood_id: null, risk_class: null, strategic_point: false, days: 60 }, { neighborhood_id: null, risk_class: null, strategic_point: true, days: 15 }
+    ]);
+    mocked(api.putCadences).mockResolvedValue([]);
+    await openCadences();
+    fireEvent.click(screen.getByRole("button", { name: "Remover linha 2" }));
+    fireEvent.click(screen.getByRole("button", { name: "Remover linha 1" }));
+    fireEvent.click(screen.getByRole("button", { name: "Salvar cadência" }));
+    expect(await screen.findByText("Troca a lista inteira (0 linhas); a linha que saiu deixa de valer.")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+    await waitFor(() => expect(api.putCadences).toHaveBeenCalledTimes(1));
+    expect(mocked(api.putCadences).mock.calls[0][0]).toEqual([]);
+    expect(await screen.findByText("nenhuma linha — vale a cadência dos parâmetros")).not.toBeNull();
   });
 
   it("dias 6 e 366 recusados; 7 e 365 passam", async () => {
