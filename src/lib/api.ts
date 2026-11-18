@@ -7964,7 +7964,8 @@ export interface LiraaStratum {
   block_interval: number | null; random_start: number | null;
 }
 export interface LiraaSurvey {
-  id: string; name: string; starts_on: string; ends_on: string; status: "draft" | "drawn" | "closed" | (string & {});
+  // Q37(2): `version` sobe a cada gravação do rascunho (nome, período, estratos, recontagem), no sorteio e no fechamento.
+  id: string; name: string; starts_on: string; ends_on: string; status: "draft" | "drawn" | "closed" | (string & {}); version: number;
   parameters_version: number | null; drawn_at: string | null; closed_at: string | null; strata: LiraaStratum[];
 }
 export interface LiraaSurveyInput { name: string; starts_on: string; ends_on: string }
@@ -8177,10 +8178,14 @@ export function closeVectorTask(id: string, i: { state: "done" | "dismissed"; no
 export function listLiraaSurveys(): Promise<LiraaSurvey[]> {
   return vcItems<LiraaSurvey>(vcPath("liraa_surveys"));
 }
-export function createLiraaSurvey(i: LiraaSurveyInput & { strata?: LiraaStratumInput[] }): Promise<LiraaSurvey> {
+// Q37(2): a criação não leva `expected_version` (seria chave desconhecida, 422).
+export function createLiraaSurvey(i: LiraaSurveyInput & { strata?: LiraaStratumInput[]; expected_version?: never }): Promise<LiraaSurvey> {
   return jsonFetch<LiraaSurvey>(vcPath("liraa_surveys"), vcWrite("POST", i));
 }
-export function updateLiraaSurvey(id: string, i: Partial<LiraaSurveyInput> & { strata?: LiraaStratumInput[] }): Promise<LiraaSurvey> {
+// Q37(2): `expected_version` = a version mostrada (ausente → 422 expected_version_required; outra gravada → 409 survey_changed, nada gravado).
+export function updateLiraaSurvey(
+  id: string, i: Partial<LiraaSurveyInput> & { strata?: LiraaStratumInput[]; expected_version: number }
+): Promise<LiraaSurvey> {
   return jsonFetch<LiraaSurvey>(vcPath("liraa_surveys", id), vcWrite("PATCH", i));
 }
 // Step-up nos dois.

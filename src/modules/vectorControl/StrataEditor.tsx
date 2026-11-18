@@ -12,6 +12,10 @@
 // UMA releitura. "Sortear" por SensitiveAction (step-up); o botão some enquanto a confirmação está aberta; 409 survey_not_draft →
 // a frase e UMA releitura; 422 stratum_out_of_range / invalid_request path strata[i] (o sorteio reconta a base na hora) cai no
 // estrato e trava o sorteio até o estrato mudar ou ser salvo de novo.
+// Q37(2): o PATCH leva `expected_version` = a version mostrada (a do `survey`, que a resposta da gravação e a releitura trocam).
+// 409 survey_changed (outra pessoa gravou o rascunho): a frase, UMA releitura, e o digitado FICA — o editor não remonta pela
+// releitura; o próximo envio já leva a version relida. Depois de gravar, o rascunho do editor passa a ser o gravado (o api recria os
+// estratos: ids novos, N recontado), com o bairro aberto de cada estrato mantido por posição.
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { drawLiraaSurvey, listPanelNeighborhoods, updateLiraaSurvey, type LiraaSurvey, type StratumMode, type VectorParameters } from "../../lib/api";
@@ -55,15 +59,13 @@ const sameSet = (a: string[], b: string[]) => {
 };
 const blocksText = (k: number) => (k === 1 ? "1 quarteirão escolhido" : `${fmtNumber(k)} quarteirões escolhidos`);
 
-export function StrataEditor({ survey, params, msg, onSaved, onDrawn, onStale, onGoToSecurity, initialNeighborhoods = [], onNeighborhoods }: {
+export function StrataEditor({ survey, params, msg, onSaved, onDrawn, onStale, onGoToSecurity }: {
   survey: LiraaSurvey; params: VectorParameters; msg: Msg; onSaved(s: LiraaSurvey): Promise<void>; onDrawn(s: LiraaSurvey): Promise<void>;
   onStale(): Promise<void>; onGoToSecurity?: () => void;
-  // O bairro aberto de cada estrato, por posição: sobrevive à remontagem depois de salvar (o api mantém a ordem dada).
-  initialNeighborhoods?: string[]; onNeighborhoods?(list: string[]): void;
 }) {
   const nextKey = useRef(survey.strata.length);
   const [ draft, setDraft ] = useState<Draft[]>(() => survey.strata.map((s, i) => ({
-    key: i, savedId: s.id, name: s.name, mode: s.mode, block_ids: [ ...s.block_ids ], neighborhoodId: initialNeighborhoods[i] ?? ""
+    key: i, savedId: s.id, name: s.name, mode: s.mode, block_ids: [ ...s.block_ids ], neighborhoodId: ""
   })));
   // Recusas do api por estrato (pela chave): somem quando o estrato muda; travam o sorteio até lá.
   const [ apiProblems, setApiProblems ] = useState<Record<number, string>>({});
@@ -72,7 +74,6 @@ export function StrataEditor({ survey, params, msg, onSaved, onDrawn, onStale, o
   const [ confirming, setConfirming ] = useState(false);
   const drawn = useRef<LiraaSurvey | null>(null);
   const neighborhoods = useQuery({ queryKey: PANEL_NEIGHBORHOODS_KEY, queryFn: listPanelNeighborhoods, ...STATIC_QUERY });
-  useEffect(() => { onNeighborhoods?.(draft.map((d) => d.neighborhoodId)); }, [ draft, onNeighborhoods ]);
 
   const savedById = new Map(survey.strata.map((s) => [ s.id, s ]));
   // Q24: o N do api vale só enquanto os quarteirões são os salvos; o tipo e o nome não mudam o N.
@@ -149,7 +150,17 @@ export function StrataEditor({ survey, params, msg, onSaved, onDrawn, onStale, o
     msg.start();
     if (saveReason) return;
     try {
-      const result = await updateLiraaSurvey(survey.id, { strata: draft.map((d) => ({ name: d.name.trim(), mode: d.mode, block_ids: d.block_ids })) });
+      const result = await updateLiraaSurvey(survey.id, {
+        strata: draft.map((d) => ({ name: d.name.trim(), mode: d.mode, block_ids: d.block_ids })), expected_version: survey.version
+      });
+      // O gravado vira o rascunho (ids novos, N recontado); o api mantém a ordem dada, então o bairro aberto fica por posição.
+      const base = nextKey.current;
+      nextKey.current += result.strata.length;
+      setDraft((prev) => result.strata.map((s, i) => ({
+        key: base + i, savedId: s.id, name: s.name, mode: s.mode, block_ids: [ ...s.block_ids ], neighborhoodId: prev[i]?.neighborhoodId ?? ""
+      })));
+      setApiProblems({});
+      setInactive({});
       msg.ok(STRATA_SAVED);
       await onSaved(result);
     } catch (err) {

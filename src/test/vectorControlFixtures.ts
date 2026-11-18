@@ -144,7 +144,7 @@ export const vectorTask = (o: Partial<VectorTask> = {}): VectorTask => ({
 
 // ── LIRAa (Q24: no rascunho o N do estrato vem do api, sem PE; n, intervalo e início nulos) ──
 export const liraaSurvey = (o: Partial<LiraaSurvey> = {}): LiraaSurvey => ({
-  id: "s1", name: "LIRAa novembro", starts_on: "2026-11-23", ends_on: "2026-11-27", status: "draft", parameters_version: null,
+  id: "s1", name: "LIRAa novembro", starts_on: "2026-11-23", ends_on: "2026-11-27", status: "draft", version: 1, parameters_version: null,
   drawn_at: null, closed_at: null,
   strata: [ { id: "st1", name: "Estrato 1", mode: "standard", block_ids: [ "cb1", "cb2" ], households_count: 9000, sample_target: null,
     block_interval: null, random_start: null } ], ...o

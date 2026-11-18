@@ -24,7 +24,7 @@ import { saveFile } from "./lab/saveFile";
 import { renderWithProviders, sessionWith } from "../test/campaignFixtures";
 import { VC_FEATURES, cityBlock, liraaItem, liraaSurvey, parameterVersion, report, vcUser } from "../test/vectorControlFixtures";
 import {
-  CLOSED, DRAWN, DRAW_DESCRIPTION, FIX_TO_DRAW, INACTIVE_CHOSEN, NAME_PROBLEM, N_ON_SAVE, PROVISIONAL, SAVE_FIRST, STRATA_SAVED, SURVEY_CREATED, VectorLiraa
+  CLOSED, DETAILS_SAVED, DRAWN, DRAW_DESCRIPTION, END_BEFORE_START, FIX_TO_DRAW, INACTIVE_CHOSEN, NAME_PROBLEM, NOTHING_CHANGED, N_ON_SAVE, PROVISIONAL, SAVE_FIRST, STRATA_SAVED, SURVEY_CREATED, VectorLiraa
 } from "./VectorLiraa";
 
 const ALL = [
@@ -182,7 +182,7 @@ describe("estratos do rascunho", () => {
     fireEvent.click(button("Salvar estratos"));
     fireEvent.click(button("Salvar estratos"));
     await waitFor(() => expect(api.updateLiraaSurvey).toHaveBeenCalledTimes(1));
-    expect(mocked(api.updateLiraaSurvey).mock.calls[0]).toEqual([ "s1", { strata: [ { name: "Centro-norte", mode: "half", block_ids: [ "cb1", "cb2" ] } ] } ]);
+    expect(mocked(api.updateLiraaSurvey).mock.calls[0]).toEqual([ "s1", { strata: [ { name: "Centro-norte", mode: "half", block_ids: [ "cb1", "cb2" ] } ], expected_version: 1 } ]);
     expect(await screen.findByText(STRATA_SAVED)).not.toBeNull();
     await waitFor(() => expect(blocked("Sortear")).toBe(false));
     await waitFor(() => expect(api.listLiraaSurveys).toHaveBeenCalledTimes(2));
@@ -198,7 +198,7 @@ describe("estratos do rascunho", () => {
     mocked(api.listLiraaSurveys).mockResolvedValue([ recounted ]);
     fireEvent.click(button("Salvar estratos"));
     await waitFor(() => expect(api.updateLiraaSurvey).toHaveBeenCalledTimes(1));
-    expect(mocked(api.updateLiraaSurvey).mock.calls[0]).toEqual([ "s1", { strata: [ { name: "Centro-norte", mode: "standard", block_ids: [ "cb1", "cb2" ] } ] } ]);
+    expect(mocked(api.updateLiraaSurvey).mock.calls[0]).toEqual([ "s1", { strata: [ { name: "Centro-norte", mode: "standard", block_ids: [ "cb1", "cb2" ] } ], expected_version: 1 } ]);
     expect(await screen.findByText(/N = 8\.100 imóveis/)).not.toBeNull();
     expect(screen.queryByText(/Padrão vale/)).toBeNull();
     await waitFor(() => expect(blocked("Sortear")).toBe(false));
@@ -262,7 +262,7 @@ describe("estratos do rascunho", () => {
     mocked(api.listLiraaSurveys).mockResolvedValue([ recounted ]);
     fireEvent.click(button("Salvar estratos"));
     await waitFor(() => expect(api.updateLiraaSurvey).toHaveBeenCalledTimes(1));
-    expect(mocked(api.updateLiraaSurvey).mock.calls[0][1]).toEqual({ strata: [ { name: "Centro-norte", mode: "standard", block_ids: [ "cb1", "cb2", "cb3" ] } ] });
+    expect(mocked(api.updateLiraaSurvey).mock.calls[0][1]).toEqual({ strata: [ { name: "Centro-norte", mode: "standard", block_ids: [ "cb1", "cb2", "cb3" ] } ], expected_version: 1 });
     expect(await screen.findByText(/N = 8\.390 imóveis/)).not.toBeNull();
     // Remontado com os estratos gravados: o bairro aberto continua, e o foco está na mensagem.
     expect((group(1).getByLabelText("Bairro") as HTMLSelectElement).value).toBe("nb1");
@@ -345,7 +345,7 @@ describe("estratos do rascunho", () => {
     await waitFor(() => expect(api.updateLiraaSurvey).toHaveBeenCalledTimes(1));
     expect(mocked(api.updateLiraaSurvey).mock.calls[0][1]).toEqual({ strata: [
       { name: "Centro-norte", mode: "census", block_ids: [ "cb1", "cb3" ] }, { name: "Centro-sul", mode: "census", block_ids: [ "cb2" ] }
-    ] });
+    ], expected_version: 1 });
     expect(await group(2).findByText(VECTOR_ERRORS.stratum_overlap)).not.toBeNull();
     expect(group(1).queryByText(VECTOR_ERRORS.stratum_overlap)).toBeNull();
     await tick();
@@ -575,5 +575,110 @@ describe("sorteado e fechado", () => {
     expect(api.closeLiraaSurvey).toHaveBeenCalledTimes(1);
     expect(api.listLiraaSurveys).toHaveBeenCalledTimes(2);
     expect(api.listLiraaItems).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("Q37: nome, período e version do rascunho", () => {
+  const typeIn = (label: string, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
+
+  it("nome e período: só o que mudou, com a version mostrada; a segunda edição leva a version devolvida; a recusa do api no campo", async () => {
+    const v2 = liraaSurvey({ name: "LIRAa novembro 2", version: 2 });
+    mocked(api.updateLiraaSurvey).mockResolvedValueOnce(v2)
+      .mockRejectedValueOnce(new ApiError(422, { error: "invalid_request", path: "ends_on" }, "x"));
+    await mountDraft();
+    expect((screen.getByLabelText("Nome do levantamento") as HTMLInputElement).value).toBe("LIRAa novembro");
+    // Sem mudança: nada vai (o api recusaria a edição vazia).
+    fireEvent.click(button("Salvar nome e período"));
+    expect(await screen.findByText(NOTHING_CHANGED)).not.toBeNull();
+    // As regras do SaveSurvey, sem chamar: 81 caracteres e o fim antes do início.
+    typeIn("Nome do levantamento", "x".repeat(81));
+    typeIn("Fim do período", "2026-11-22");
+    fireEvent.click(button("Salvar nome e período"));
+    expect(await screen.findByText(NAME_PROBLEM)).not.toBeNull();
+    expect(screen.getByText(END_BEFORE_START)).not.toBeNull();
+    expect(api.updateLiraaSurvey).not.toHaveBeenCalled();
+    typeIn("Nome do levantamento", " LIRAa novembro 2 ");
+    typeIn("Fim do período", "2026-11-23");
+    mocked(api.listLiraaSurveys).mockResolvedValue([ v2 ]);
+    fireEvent.click(button("Salvar nome e período"));
+    fireEvent.click(button("Salvar nome e período"));
+    await waitFor(() => expect(api.updateLiraaSurvey).toHaveBeenCalledTimes(1));
+    expect(mocked(api.updateLiraaSurvey).mock.calls[0]).toEqual([ "s1", { name: "LIRAa novembro 2", ends_on: "2026-11-23", expected_version: 1 } ]);
+    expect(await screen.findByText(DETAILS_SAVED)).not.toBeNull();
+    await waitFor(() => expect(api.listLiraaSurveys).toHaveBeenCalledTimes(2));
+    // A segunda edição: a version devolvida (2); a recusa do api cai no campo do path.
+    typeIn("Fim do período", "2026-11-30");
+    fireEvent.click(button("Salvar nome e período"));
+    await waitFor(() => expect(api.updateLiraaSurvey).toHaveBeenCalledTimes(2));
+    expect(mocked(api.updateLiraaSurvey).mock.calls[1]).toEqual([ "s1", { ends_on: "2026-11-30", expected_version: 2 } ]);
+    const end = screen.getByLabelText("Fim do período");
+    await waitFor(() => expect(end.getAttribute("aria-invalid")).toBe("true"));
+    expect(screen.getByText(END_BEFORE_START)).not.toBeNull();
+    await tick();
+    expect(api.listLiraaSurveys).toHaveBeenCalledTimes(2);
+  });
+
+  it("estratos: salvar duas vezes leva a version devolvida pela primeira", async () => {
+    const v2 = liraaSurvey({ version: 2, strata: [ stratum({ id: "st5", mode: "half" }) ] });
+    const v3 = liraaSurvey({ version: 3, strata: [ stratum({ id: "st6", mode: "census", households_count: 1800 }) ] });
+    mocked(api.updateLiraaSurvey).mockResolvedValueOnce(v2).mockResolvedValueOnce(v3);
+    await mountDraft();
+    fireEvent.change(group(1).getByLabelText("Tipo"), { target: { value: "half" } });
+    mocked(api.listLiraaSurveys).mockResolvedValue([ v2 ]);
+    fireEvent.click(button("Salvar estratos"));
+    await waitFor(() => expect(api.updateLiraaSurvey).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(blocked("Sortear")).toBe(false));
+    fireEvent.change(group(1).getByLabelText("Tipo"), { target: { value: "census" } });
+    fireEvent.click(button("Salvar estratos"));
+    await waitFor(() => expect(api.updateLiraaSurvey).toHaveBeenCalledTimes(2));
+    expect(mocked(api.updateLiraaSurvey).mock.calls.map((c) => c[1].expected_version)).toEqual([ 1, 2 ]);
+  });
+
+  it("409 survey_changed nos estratos: a frase, UMA releitura, o digitado fica e o próximo envio leva a version relida", async () => {
+    // Outra pessoa gravou (estratos recriados com outro id, version 5).
+    const theirs = liraaSurvey({ version: 5, strata: [ stratum({ id: "st7", name: "Deles", block_ids: [ "cb1" ], households_count: 4000 }) ] });
+    mocked(api.updateLiraaSurvey).mockRejectedValueOnce(new ApiError(409, { error: "survey_changed" }, "x")).mockResolvedValueOnce(theirs);
+    await mountDraft();
+    fireEvent.change(group(1).getByLabelText("Tipo"), { target: { value: "half" } });
+    await pickNeighborhood(1);
+    fireEvent.click(await group(1).findByLabelText("Quarteirão 14"));
+    mocked(api.listLiraaSurveys).mockResolvedValue([ theirs ]);
+    fireEvent.click(button("Salvar estratos"));
+    expect(await screen.findByText(VECTOR_ERRORS.survey_changed)).not.toBeNull();
+    await waitFor(() => expect(api.listLiraaSurveys).toHaveBeenCalledTimes(2));
+    await tick();
+    expect(api.listLiraaSurveys).toHaveBeenCalledTimes(2);
+    expect(api.updateLiraaSurvey).toHaveBeenCalledTimes(1);
+    // O digitado fica: o tipo, o bairro aberto e o quarteirão escolhido; o N é o do salvar.
+    expect((group(1).getByLabelText("Tipo") as HTMLSelectElement).value).toBe("half");
+    expect((group(1).getByLabelText("Nome do estrato") as HTMLInputElement).value).toBe("Centro-norte");
+    expect(((await group(1).findByLabelText("Quarteirão 14")) as HTMLInputElement).checked).toBe(true);
+    expect(group(1).getByText(N_ON_SAVE)).not.toBeNull();
+    expect(blocked("Sortear")).toBe(true);
+    fireEvent.click(button("Salvar estratos"));
+    await waitFor(() => expect(api.updateLiraaSurvey).toHaveBeenCalledTimes(2));
+    expect(mocked(api.updateLiraaSurvey).mock.calls[1]).toEqual([ "s1", {
+      strata: [ { name: "Centro-norte", mode: "half", block_ids: [ "cb1", "cb2", "cb3" ] } ], expected_version: 5
+    } ]);
+  });
+
+  it("409 survey_changed no nome: a frase, UMA releitura, o nome digitado fica; o próximo envio leva a version relida", async () => {
+    mocked(api.updateLiraaSurvey).mockRejectedValueOnce(new ApiError(409, { error: "survey_changed" }, "x"))
+      .mockResolvedValueOnce(liraaSurvey({ name: "Meu nome", version: 5 }));
+    await mountDraft();
+    typeIn("Nome do levantamento", "Meu nome");
+    mocked(api.listLiraaSurveys).mockResolvedValue([ liraaSurvey({ name: "Nome deles", version: 4 }) ]);
+    fireEvent.click(button("Salvar nome e período"));
+    expect(await screen.findByText(VECTOR_ERRORS.survey_changed)).not.toBeNull();
+    await waitFor(() => expect(api.listLiraaSurveys).toHaveBeenCalledTimes(2));
+    await tick();
+    expect(api.listLiraaSurveys).toHaveBeenCalledTimes(2);
+    expect((screen.getByLabelText("Nome do levantamento") as HTMLInputElement).value).toBe("Meu nome");
+    fireEvent.click(button("Salvar nome e período"));
+    await waitFor(() => expect(api.updateLiraaSurvey).toHaveBeenCalledTimes(2));
+    expect(mocked(api.updateLiraaSurvey).mock.calls.map((c) => c[1])).toEqual([
+      { name: "Meu nome", expected_version: 1 }, { name: "Meu nome", expected_version: 4 }
+    ]);
+    expect(await screen.findByText(DETAILS_SAVED)).not.toBeNull();
   });
 });

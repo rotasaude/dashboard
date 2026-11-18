@@ -219,9 +219,16 @@ describe("cliente da vigilância ambiental — endemias (módulo 35a)", () => {
     stub(ovitrap()); await collectOvitrap("ov1", { collected_on: "2026-11-16", condition: "ok", reinstall: true, remove: false });
     expect([ last().url, bodyOf() ]).toEqual([ "/vector_control/ovitraps/ov1/collect", { collected_on: "2026-11-16", condition: "ok", reinstall: true, remove: false } ]);
     stub(liraaSurvey(), 201); await createLiraaSurvey({ name: "LIRAa novembro", starts_on: "2026-11-23", ends_on: "2026-11-27" });
-    expect([ last().url, last().init.method ]).toEqual([ "/vector_control/liraa_surveys", "POST" ]);
-    stub(liraaSurvey()); await updateLiraaSurvey("s1", { strata: [ { name: "Estrato 1", mode: "half", block_ids: [ "cb1" ] } ] });
-    expect([ last().url, last().init.method, bodyOf() ]).toEqual([ "/vector_control/liraa_surveys/s1", "PATCH", { strata: [ { name: "Estrato 1", mode: "half", block_ids: [ "cb1" ] } ] } ]);
+    // Q37(2): a criação sem expected_version; a edição com a version mostrada.
+    expect([ last().url, last().init.method, bodyOf() ]).toEqual([ "/vector_control/liraa_surveys", "POST", { name: "LIRAa novembro", starts_on: "2026-11-23", ends_on: "2026-11-27" } ]);
+    stub(liraaSurvey()); await updateLiraaSurvey("s1", { strata: [ { name: "Estrato 1", mode: "half", block_ids: [ "cb1" ] } ], expected_version: 3 });
+    expect([ last().url, last().init.method, bodyOf() ]).toEqual([ "/vector_control/liraa_surveys/s1", "PATCH", { strata: [ { name: "Estrato 1", mode: "half", block_ids: [ "cb1" ] } ], expected_version: 3 } ]);
+    stub(liraaSurvey()); await updateLiraaSurvey("s1", { name: "Outro", expected_version: 0 });
+    expect(bodyOf()).toEqual({ name: "Outro", expected_version: 0 });
+    // @ts-expect-error a edição sem expected_version seria 422 expected_version_required
+    void updateLiraaSurvey.bind(null, "s1", { name: "x" });
+    // @ts-expect-error a criação com expected_version seria 422 (chave desconhecida)
+    void createLiraaSurvey.bind(null, { name: "x", starts_on: "2026-11-23", ends_on: "2026-11-27", expected_version: 1 });
     stub({ items: [ liraaSurvey() ] }); expect(await listLiraaSurveys()).toEqual([ liraaSurvey() ]);
   });
 

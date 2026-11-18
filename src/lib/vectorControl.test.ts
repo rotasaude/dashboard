@@ -304,7 +304,7 @@ describe("recusas do api", () => {
   });
 
   it("tela velha: relê nos 409 de estado, no not_found e na proposta que mudou (Q26(4)); não no resto", () => {
-    for (const code of [ "invalid_transition", "survey_not_draft", "already_reconciled", "proposal_changed", "block_in_use", "product_in_use", "parameters_changed", "cadences_changed", "reading_changed", "sample_changed" ]) {
+    for (const code of [ "invalid_transition", "survey_not_draft", "already_reconciled", "proposal_changed", "block_in_use", "product_in_use", "parameters_changed", "cadences_changed", "reading_changed", "sample_changed", "survey_changed" ]) {
       expect(isVectorStale(err(409, { error: code })), code).toBe(true);
     }
     expect(isVectorStale(err(404, { error: "not_found" }))).toBe(true);

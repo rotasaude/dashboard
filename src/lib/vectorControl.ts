@@ -340,10 +340,11 @@ export const vectorError = (err: unknown): string => vectorRefusals(err)[0].text
 // A tela está velha: quem chama relê UMA vez e não reenvia. Os 409 de estado, o not_found, a proposta do bloqueio que
 // ganhou caso (409 proposal_changed), a lista de casos vistos recusada (422 path seen_case_ids; Q26(4)) e os parâmetros gravados
 // por outra pessoa (409 parameters_changed; Q34), as cadências gravadas por outra pessoa (409 cadences_changed; Q35) e a
-// contagem ou o resultado corrigidos por outra pessoa (409 reading_changed / sample_changed; Q36: a correção relê e mantém o digitado).
+// contagem ou o resultado corrigidos por outra pessoa (409 reading_changed / sample_changed; Q36: a correção relê e mantém o digitado), e o rascunho do LIRAa gravado por
+// outra pessoa (409 survey_changed; Q37(2): relê e mantém o digitado).
 const STALE = [
   "invalid_transition", "survey_not_draft", "already_reconciled", "not_found", "proposal_changed", "block_in_use", "product_in_use", "parameters_changed",
-  "cadences_changed", "reading_changed", "sample_changed"
+  "cadences_changed", "reading_changed", "sample_changed", "survey_changed"
 ];
 export function isVectorStale(err: unknown): boolean {
   if (!(err instanceof ApiError)) return false;
