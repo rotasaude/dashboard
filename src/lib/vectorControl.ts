@@ -3,7 +3,9 @@
 // contrato 2026-11-16 §1–§12, §17, §20). Puro: nenhuma leitura de rede. As regras do boletim moram em vectorInspection.ts e as
 // frases em vectorErrors.ts. O api (apps/api, ab32775c) decide; aqui só se recusa antes o que ele recusaria, com o mesmo
 // `path`, e a lista começa pelo erro que o api daria. Código desconhecido aparece cru.
-import { ApiError, errorCode, type HomeVisitTeam, type SampleResult, type StratumMode, type VectorParameters, type VectorReportName } from "./api";
+import {
+  ApiError, errorCode, type HomeVisitTeam, type SampleResult, type StratumMode, type VectorControlDomains, type VectorParameters, type VectorReportName
+} from "./api";
 import { hasFeature } from "./features";
 import {
   HOME_VISIT_ERRORS, NOMINAL_QUERY, STATIC_QUERY, canUseHomeVisits, homeVisitRefusals, textProblem, type HomeVisitRefusal
@@ -87,6 +89,37 @@ export const VC_REPORT_KEY = "vcReport";
 export const VC_MAP_KEY = "vcMap";
 
 // ─── Rótulos (código desconhecido aparece cru) ──────────────────────────────
+// Rótulos fixos do contrato, para quem lê a visita sem ler /vector_control/domains (enfermeiro, médico, ACS: 403 lá).
+// Cópia verbatim de contracts/field-sync/domains-v1.json → vector_control.* (= apps/api/config/vector_control/domains.yml,
+// conferido no domains_spec do api). Não dependem da cidade; vectorControl.test.ts os prende ao contrato.
+export type VectorLabelKey = "activities" | "work_types" | "situations" | "deposit_groups" | "measure_methods" | "risk_classes";
+export const VECTOR_LABELS: Pick<VectorControlDomains, VectorLabelKey> = {
+  activities: [
+    { code: "li", label: "LI — Levantamento de índice" }, { code: "li_t", label: "LI+T — Levantamento de índice e tratamento" },
+    { code: "pe", label: "PE — Ponto estratégico" }, { code: "ie", label: "IE — Imóvel especial" },
+    { code: "transmission_block", label: "Bloqueio de transmissão" }, { code: "liraa", label: "LIRAa" }
+  ],
+  work_types: [ { code: "routine", label: "Rotina" }, { code: "pending", label: "Recuperação de pendência" } ],
+  situations: [
+    { code: "worked", label: "Trabalhado" }, { code: "closed", label: "Fechado" }, { code: "refused", label: "Recusado" }, { code: "vacant", label: "Desocupado" }
+  ],
+  deposit_groups: [
+    { code: "A1", label: "A1 — Depósito de água elevado" }, { code: "A2", label: "A2 — Depósito de armazenamento ao nível do solo" },
+    { code: "B", label: "B — Depósito móvel" }, { code: "C", label: "C — Depósito fixo" }, { code: "D1", label: "D1 — Pneu e outro material rodante" },
+    { code: "D2", label: "D2 — Lixo, sucata e entulho" }, { code: "E", label: "E — Depósito natural" }
+  ],
+  measure_methods: [
+    { code: "mechanical", label: "Mecânico (eliminação)" }, { code: "focal", label: "Focal (larvicida)" },
+    { code: "perifocal", label: "Perifocal (adulticida residual)" }, { code: "spatial", label: "Espacial (UBV)" }
+  ],
+  risk_classes: [
+    { code: "green", label: "Verde (baixo)" }, { code: "yellow", label: "Amarelo (médio)" }, { code: "red", label: "Vermelho (alto)" },
+    { code: "gray", label: "Cinza (difícil acesso, com agendamento)" }, { code: "purple", label: "Roxo (difícil acesso, exige intervenção legal ou VISA)" }
+  ]
+};
+// Quem lê GET /vector_control/domains sem depender de equipe (Access.reader?; o agente também lê, mas a sessão não traz o CBO,
+// e os rótulos fixos são os mesmos).
+export const canReadVectorDomains = (user: SessionLike): boolean => canUseVectorControl(user) && vectorRoles(user).reader;
 const pick = (map: Record<string, string>, key: string): string => (Object.prototype.hasOwnProperty.call(map, key) ? map[key] : key);
 
 export const domainLabel = (list: readonly { code: string; label: string }[], code: string): string =>

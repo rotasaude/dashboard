@@ -33,12 +33,12 @@ import type { Problem } from "../../lib/pharmacy";
 import { ConfirmButton } from "../../components/ConfirmButton";
 import { FrozenTextNotice } from "../../components/FrozenTextNotice";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
-import { alert, checkLabel, fieldLabel, fieldset, form, legend, muted, okText, row } from "../exams/styles";
+import { alert, checkLabel, fieldLabel, fieldset, form, legend, muted, row } from "../exams/styles";
 import { MeasurementsField } from "./MeasurementsField";
 import { OUT_OF_AREA, PlacePick, type PlaceMode } from "./PlacePick";
 import { PersonPick, candidatesOf, type PersonRestart, type PickedPerson } from "./PersonPick";
 import type { QuickInitial, QuickRefusal } from "./QuickPatientForm";
-import { BULLETIN_NEEDS_HOUSEHOLD, InspectionSection, inspectionPaths, tubeLabelsText, type InspectionChange } from "./InspectionSection";
+import { BULLETIN_NEEDS_HOUSEHOLD, InspectionSection, inspectionPaths, type InspectionChange } from "./InspectionSection";
 import { ReasonsField, visibleReasons } from "./ReasonsField";
 import { useIdempotentSubmit } from "./useIdempotentSubmit";
 import type { VisitStart } from "./useVisitHandoff";
@@ -47,6 +47,7 @@ export type VisitSaved = { visit: HomeVisit; day: HomeVisitDay; replayed: boolea
 type Pick = { n: number; restart?: PersonRestart; initialNew?: QuickInitial; refusal?: QuickRefusal | null };
 
 const NOTE_MAX = 500;
+const LARVAE_TEXT = /^\d+([.,]\d+)?$/;
 const PERSON_CODES = [ "duplicate_suspected", "cpf_taken", "cns_taken", "invalid_patient", "cpf_or_reason_required", "invalid_cpf", "invalid_cns" ];
 const OWN = new Set([ "occurred_at", "household_id", "micro_area_id", "out_of_area", "property_type", "subject", "patient_id", "family_id", "outcome", "shared", "note" ]);
 const isOwn = (path: string) => OWN.has(path) || path === "reasons" || path.startsWith("reasons[") || path.startsWith("measurements.") || path.startsWith("new_patient");
@@ -83,7 +84,6 @@ export function VisitForm({ team, context, start, now, onSaved, onClose, onHeld,
   const [ bulletin, setBulletin ] = useState(true);
   const [ inspection, setInspection ] = useState<InspectionDraft>(() => emptyInspectionDraft(start?.vector));
   const [ inspCleared, setInspCleared ] = useState<string | null>(null);
-  const [ tubes, setTubes ] = useState<string | null>(null);
 
   const householdId = draft.place?.kind === "household" ? draft.place.householdId : null;
   const detail = useQuery({ queryKey: [ HV_HOUSEHOLD_KEY, householdId ], queryFn: () => getVisitHousehold(householdId!), enabled: !!householdId, ...NOMINAL_QUERY });
@@ -109,7 +109,9 @@ export function VisitForm({ team, context, start, now, onSaved, onClose, onHeld,
   });
   const derived = vectorOn ? derivedReasons(inspectionInput(inspection, draft.day)) : [];
   // O que o api vê nas regras do 24b: os motivos escolhidos mais os derivados do boletim.
-  const reasonRules: VisitDraft = derived.length > 0 ? { ...rules, reasons: [ ...rules.reasons, ...derived ] } : rules;
+  // Como o api (inspection_rules.rb#derived_reasons): a união, sem repetir um derivado já escolhido.
+  const extra = derived.filter((c) => !rules.reasons.includes(c));
+  const reasonRules: VisitDraft = extra.length > 0 ? { ...rules, reasons: [ ...rules.reasons, ...extra ] } : rules;
 
   const frozen = s.locked || s.busy;
   useEffect(() => { onHeld?.(s.locked); return () => onHeld?.(false); }, [ s.locked, onHeld ]);
@@ -191,11 +193,18 @@ export function VisitForm({ team, context, start, now, onSaved, onClose, onHeld,
     s.clear("reasons", ...draft.reasons.map((_, i) => `reasons[${i}]`));
     update({ ...draft, reasons: draft.reasons.includes(code) ? draft.reasons.filter((c) => c !== code) : [ ...draft.reasons, code ] });
   }
+  // "Com larva" em branco ou inválido NÃO conta como 0: as amostras do grupo ficam e `checkInspection` recusa o campo.
+  function prune(d: InspectionDraft) {
+    const invalid = new Set(d.deposits.filter((x) => !LARVAE_TEXT.test(x.with_larvae.trim())).map((x) => x.group));
+    if (invalid.size === 0) return pruneInspection(d);
+    const out = pruneInspection({ ...d, deposits: d.deposits.map((x) => (invalid.has(x.group) ? { ...x, with_larvae: "1" } : x)) });
+    return { draft: { ...out.draft, deposits: out.draft.deposits.length > 0 ? d.deposits : [] }, cleared: out.cleared };
+  }
   // Boletim: a troca de situação ou de método passa pela poda (nunca a cada tecla) e diz o que saiu; a situação fixa o desfecho.
   function onInspection(next: InspectionDraft, o: InspectionChange = {}) {
     if (o.clear?.length) s.clear(...o.clear);
     if (!o.prune) { setInspection(next); return; }
-    const out = pruneInspection(next);
+    const out = prune(next);
     const lost = [ ...out.cleared, ...(o.cleared ?? []) ];
     if (next.situation !== null && next.situation !== inspection.situation) {
       s.clear("outcome", "reasons");
@@ -268,15 +277,14 @@ export function VisitForm({ team, context, start, now, onSaved, onClose, onHeld,
     if (ev.target !== ev.currentTarget) { ev.preventDefault(); return; }
     // A poda do boletim também roda no envio: se tirou algo (amostra de grupo que ficou sem larva), diz o quê e não envia.
     if (vectorOn && !frozen) {
-      const out = pruneInspection(inspection);
+      const out = prune(inspection);
       if (out.cleared.length > 0) { ev.preventDefault(); setInspection(out.draft); setInspCleared(prunedText(out.cleared)); return; }
     }
-    setTubes(null);
     void s.send(ev, {
       check: problems,
       body: () => ({ team_id: team.id, ...visitBody(draft), ...(vectorOn ? { vector_inspection: inspectionInput(inspection, draft.day) } : {}) }),
       call: recordHomeVisit,
-      ok: (r) => { setTubes(tubeLabelsText(r.visit)); onSaved(r); },
+      ok: onSaved,
       refused
     });
   }
@@ -479,7 +487,6 @@ export function VisitForm({ team, context, start, now, onSaved, onClose, onHeld,
 
       {cleared && <p role="status" style={muted}>{cleared}</p>}
       {notice && <p role="status" style={{ margin: 0, fontSize: 12.5, color: "var(--ink2)" }}>{notice}</p>}
-      {tubes && <p role="status" style={okText}>{tubes}</p>}
       {s.top(own)}
 
       {s.locked ? (

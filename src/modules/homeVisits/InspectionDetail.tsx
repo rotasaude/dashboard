@@ -2,10 +2,11 @@
 // Leitura do boletim do agente de endemias no detalhe da visita (módulo 35a, F-35.2, F-35.8), na forma do <home_visit> do api
 // (VectorControl::Json#inspection): atividade, trabalho, situação (recuperado), horários, quarteirão, depósitos por grupo, medidas
 // com produto e quantidade, amostras com a etiqueta definitiva e o resultado, ação educativa. O risco não vem no boletim (fica no
-// perfil do imóvel). Sem os domínios do 35a (quem lê a visita pode não ler /vector_control/domains), os códigos crus.
+// perfil do imóvel). Sem os domínios do api (quem lê a visita pode não ler /vector_control/domains), os rótulos fixos do
+// contrato (VECTOR_LABELS); código desconhecido aparece cru.
 import type { VectorControlDomains, VectorInspection } from "../../lib/api";
 import { fmtHourMinute } from "../../lib/format";
-import { domainLabel } from "../../lib/vectorControl";
+import { VECTOR_LABELS, domainLabel } from "../../lib/vectorControl";
 import { KeyValue } from "../../components/KeyValue";
 import { Tag } from "../../components/Tag";
 import { box, grid, muted } from "../exams/styles";
@@ -16,7 +17,7 @@ const decimal = (n: number | string) => String(n).replace(".", ",");
 const chargesText = (n: number) => `${decimal(n)} ${n === 1 ? "carga" : "cargas"}`;
 
 export function InspectionDetail({ inspection: i, domains }: { inspection: VectorInspection; domains: VectorControlDomains | null }) {
-  const label = (key: ListKey, code: string) => (domains ? domainLabel(domains[key], code) : code);
+  const label = (key: ListKey, code: string) => domainLabel((domains ?? VECTOR_LABELS)[key], code);
   const hours = i.entered_at && i.left_at ? `${fmtHourMinute(i.entered_at)}–${fmtHourMinute(i.left_at)}` : "—";
   return (
     <section aria-label="Boletim do agente de endemias" style={box}>

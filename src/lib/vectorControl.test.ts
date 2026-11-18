@@ -7,7 +7,7 @@ import {
   blockNumberProblem, blockStatusLabel, canReadAnyVectorReport, canReadVectorReport, canUseVectorControl, caseLabel, collectionProblems, conditionLabel, countProblems,
   cycleProblems, domainLabel, dueReasonLabel, installProblems, isEndemicAgentTeam, isVectorStale, itemStatusLabel, noteProblem, optionalNote, ovitrapStatusLabel,
   riskTone, sampleResultProblems, shortfallCauseLabel, stratumModeLabel, stratumRangeProblem, surveyStatusLabel, taskKindLabel, taskStateLabel,
-  ubvCycleProblems, vectorError, vectorMapLayers, vectorRefusals, vectorRoles
+  ubvCycleProblems, vectorError, vectorMapLayers, vectorRefusals, vectorRoles, VECTOR_LABELS, canReadVectorDomains
 } from "./vectorControl";
 import { NOMINAL_QUERY as HV_NOMINAL, STATIC_QUERY as HV_STATIC } from "./homeVisits";
 import { VECTOR_CONTROL_DISABLED, VECTOR_ERRORS } from "./vectorErrors";
@@ -310,5 +310,55 @@ describe("recusas do api", () => {
     expect(isVectorStale(err(403, { error: "feature_disabled", feature: "vector_control" }))).toBe(false);
     expect(isVectorStale(new Error("rede"))).toBe(false);
     expect(isVectorStale(null)).toBe(false);
+  });
+});
+
+// Cópia de contracts/field-sync/domains-v1.json → vector_control.* (repo rotasaude/contracts, worktree contracts-mod35a; igual a
+// apps/api/config/vector_control/domains.yml, conferido em 2026-11-18). O json fica fora deste repositório: a tabela o fixa,
+// na ordem do contrato. Mudou o contrato → mude os dois.
+const CONTRACT_LABELS: [ string, string, string ][] = [
+    [ "activities", "li", "LI — Levantamento de índice" ],
+    [ "activities", "li_t", "LI+T — Levantamento de índice e tratamento" ],
+    [ "activities", "pe", "PE — Ponto estratégico" ],
+    [ "activities", "ie", "IE — Imóvel especial" ],
+    [ "activities", "transmission_block", "Bloqueio de transmissão" ],
+    [ "activities", "liraa", "LIRAa" ],
+    [ "work_types", "routine", "Rotina" ],
+    [ "work_types", "pending", "Recuperação de pendência" ],
+    [ "situations", "worked", "Trabalhado" ],
+    [ "situations", "closed", "Fechado" ],
+    [ "situations", "refused", "Recusado" ],
+    [ "situations", "vacant", "Desocupado" ],
+    [ "deposit_groups", "A1", "A1 — Depósito de água elevado" ],
+    [ "deposit_groups", "A2", "A2 — Depósito de armazenamento ao nível do solo" ],
+    [ "deposit_groups", "B", "B — Depósito móvel" ],
+    [ "deposit_groups", "C", "C — Depósito fixo" ],
+    [ "deposit_groups", "D1", "D1 — Pneu e outro material rodante" ],
+    [ "deposit_groups", "D2", "D2 — Lixo, sucata e entulho" ],
+    [ "deposit_groups", "E", "E — Depósito natural" ],
+    [ "measure_methods", "mechanical", "Mecânico (eliminação)" ],
+    [ "measure_methods", "focal", "Focal (larvicida)" ],
+    [ "measure_methods", "perifocal", "Perifocal (adulticida residual)" ],
+    [ "measure_methods", "spatial", "Espacial (UBV)" ],
+    [ "risk_classes", "green", "Verde (baixo)" ],
+    [ "risk_classes", "yellow", "Amarelo (médio)" ],
+    [ "risk_classes", "red", "Vermelho (alto)" ],
+    [ "risk_classes", "gray", "Cinza (difícil acesso, com agendamento)" ],
+    [ "risk_classes", "purple", "Roxo (difícil acesso, exige intervenção legal ou VISA)" ],
+];
+
+describe("VECTOR_LABELS (rótulos fixos do contrato)", () => {
+  it("são exatamente os do contrato, na ordem", () => {
+    const flat = (Object.keys(VECTOR_LABELS) as (keyof typeof VECTOR_LABELS)[])
+      .flatMap((k) => VECTOR_LABELS[k].map((r): [ string, string, string ] => [ k, r.code, r.label ]));
+    expect(flat).toEqual(CONTRACT_LABELS);
+  });
+  it("coincidem com os domínios que o api serve (fixture copiada do domains.yml)", () => {
+    for (const k of Object.keys(VECTOR_LABELS) as (keyof typeof VECTOR_LABELS)[]) expect(VECTOR_LABELS[k]).toEqual(VC_DOMAINS[k]);
+  });
+  it("só coordenação, laboratório e municipal_admin com o gate leem /domains sem equipe", () => {
+    expect(canReadVectorDomains(vcUser([ "health_professional" ]))).toBe(false);
+    for (const r of [ "endemic_coordinator", "vector_lab", "municipal_admin" ]) expect(canReadVectorDomains(vcUser([ r ]))).toBe(true);
+    expect(canReadVectorDomains(vcUser([ "endemic_coordinator" ], [ "clinical_record", "territory_registry", "home_visits" ]))).toBe(false);
   });
 });

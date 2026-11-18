@@ -1,7 +1,8 @@
 // src/modules/homeVisits/VisitDetail.tsx
 // Detalhe de uma visita (módulo 24b, F-24.10): a única tela que mostra a observação (leitura nominal, com trilha, uma vez).
 // O motivo da retirada vem nulo para quem não é o dono nem enfermeiro/médico da equipe: a frase diz isso, sem inventar motivo.
-// Módulo 35a: com `vector_inspection`, o boletim (InspectionDetail), com os rótulos de /vector_control/domains lidos só então.
+// Módulo 35a: com `vector_inspection`, o boletim (InspectionDetail). Os rótulos de /vector_control/domains só são lidos por quem
+// pode lê-los (coordenação, laboratório, municipal_admin); os outros leitores usam os rótulos fixos do contrato, sem 403.
 import { useQuery } from "@tanstack/react-query";
 import { getHomeVisit, getVectorDomains, type HomeVisitDomains } from "../../lib/api";
 import { fmtDay } from "../../lib/careLines";
@@ -9,7 +10,8 @@ import { fmtDateTime, fmtHourMinute } from "../../lib/format";
 import {
   HV_VISIT_KEY, NOMINAL_QUERY, homeVisitError, measurementsText, originLabel, outcomeLabel, propertyLabel, reasonLabel, shiftLabel
 } from "../../lib/homeVisits";
-import { STATIC_QUERY, VC_DOMAINS_KEY } from "../../lib/vectorControl";
+import { useAuth } from "../../lib/auth";
+import { STATIC_QUERY, VC_DOMAINS_KEY, canReadVectorDomains } from "../../lib/vectorControl";
 import { KeyValue } from "../../components/KeyValue";
 import { Tag } from "../../components/Tag";
 import { alert, box, grid, muted } from "../exams/styles";
@@ -20,7 +22,10 @@ export const WITHDRAW_REASON_HIDDEN = "motivo visível só para o dono e o enfer
 
 export function VisitDetail({ id, domains }: { id: string; domains: HomeVisitDomains }) {
   const q = useQuery({ queryKey: [ HV_VISIT_KEY, id ], queryFn: () => getHomeVisit(id), ...NOMINAL_QUERY });
-  const vd = useQuery({ queryKey: [ VC_DOMAINS_KEY ], queryFn: getVectorDomains, enabled: !!q.data?.vector_inspection, ...STATIC_QUERY });
+  const { user } = useAuth();
+  const vd = useQuery({
+    queryKey: [ VC_DOMAINS_KEY ], queryFn: getVectorDomains, enabled: !!q.data?.vector_inspection && canReadVectorDomains(user), ...STATIC_QUERY
+  });
   if (q.isError) return <p role="alert" style={alert}>{homeVisitError(q.error)}</p>;
   if (!q.data) return <p role="status" style={muted}>Carregando a visita…</p>;
   const v = q.data;

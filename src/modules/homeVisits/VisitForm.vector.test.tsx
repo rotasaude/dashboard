@@ -25,7 +25,8 @@ import {
   NOW35, VC_DOMAINS, agentTeam, cityBlock, householdProfile, householdVector, inspection, vcContext, vcUser
 } from "../../test/vectorControlFixtures";
 import { HomeVisitDay } from "../HomeVisitDay";
-import { BULLETIN_NEEDS_HOUSEHOLD } from "./InspectionSection";
+import { VC_PROFILE_KEY } from "../../lib/vectorControl";
+import { BULLETIN_NEEDS_HOUSEHOLD, tubeLabelsText } from "./InspectionSection";
 import { VisitForm } from "./VisitForm";
 import type { VisitStart } from "./useVisitHandoff";
 
@@ -105,7 +106,9 @@ describe("Boletim na nova visita", () => {
     expect(sent.reasons.some((r) => [ 34, 35, 36, 37 ].includes(r))).toBe(false);
     expect(sent.vector_inspection).toMatchObject({ activity: "li_t", situation: "worked", deposits: [ { group: "A2", with_larvae: 1 } ], samples: [ { number: 1, deposit_group: "A2" } ] });
     expect(sent.vector_inspection).toMatchObject({ educational_action: true, measures: [ { method: "focal", vector_product_id: "pr1", charges: 2 } ] });
-    expect(sent.vector_inspection).not.toHaveProperty("city_block_id");
+    for (const k of [ "city_block_id", "entered_at", "left_at", "risk_class", "liraa_draw_item_id", "transmission_block_id" ]) {
+      expect(sent.vector_inspection).not.toHaveProperty(k);
+    }
     expect(sent).toMatchObject({ team_id: "t1", household_id: "h1", subject: "family_responsible", family_id: "f1" });
   });
 
@@ -138,8 +141,55 @@ describe("Boletim na nova visita", () => {
     expect(body().vector_inspection).toMatchObject({ situation: "closed", deposits: [], measures: [], samples: [], educational_action: false });
   });
 
-  it("etiqueta: prévia provisória; 4xx troca; a definitiva vem da visita gravada", async () => {
+  it("duplo clique com boletim: um envio só", async () => {
+    vi.mocked(api.recordHomeVisit).mockResolvedValue({ visit: visit(), day: day(), replayed: false });
     await mountWithHousehold(); fillCompleteInspection();
+    send(); send();
+    await waitFor(() => expect(api.recordHomeVisit).toHaveBeenCalledTimes(1));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(api.recordHomeVisit).toHaveBeenCalledTimes(1);
+  });
+
+  it("entrada, saída e risco preenchidos: o instante com o deslocamento da cidade e a classe", async () => {
+    vi.mocked(api.recordHomeVisit).mockResolvedValue({ visit: visit(), day: day(), replayed: false });
+    await mountWithHousehold(); fillCompleteInspection();
+    fireEvent.change(screen.getByLabelText("Entrada"), { target: { value: "09:40" } });
+    fireEvent.change(screen.getByLabelText("Saída"), { target: { value: "10:20" } });
+    fireEvent.click(screen.getByLabelText("Vermelho (alto)"));
+    send();
+    await waitFor(() => expect(api.recordHomeVisit).toHaveBeenCalledTimes(1));
+    expect(body().vector_inspection).toMatchObject({ entered_at: "2026-11-16T09:40:00-03:00", left_at: "2026-11-16T10:20:00-03:00", risk_class: "red" });
+  });
+
+  it("'Com larva' em branco no envio: recusa no campo, a amostra fica e nada é enviado", async () => {
+    await mountWithHousehold(); fillCompleteInspection();
+    fireEvent.change(groupCard("A2").getByLabelText("Com larva"), { target: { value: "" } });
+    send();
+    expect(await groupCard("A2").findByText(VECTOR_ERRORS.vector_inspection_invalid)).not.toBeNull();
+    expect(groupCard("A2").getByLabelText("Com larva").getAttribute("aria-invalid")).toBe("true");
+    expect(screen.getByRole("group", { name: "Amostra 1" })).not.toBeNull();
+    expect((within(screen.getByRole("group", { name: "Amostra 1" })).getByLabelText("Larvas coletadas") as HTMLInputElement).value).toBe("8");
+    expect(api.recordHomeVisit).not.toHaveBeenCalled();
+  });
+
+  it("derivado já escolhido antes de ligar o boletim: sem 'motivo repetido', só a recusa do derivado (M1)", async () => {
+    await mountWithHousehold();
+    fireEvent.click(screen.getByLabelText("Registrar boletim"));
+    fireEvent.click(screen.getByLabelText("Visita realizada"));
+    fireEvent.click(screen.getByLabelText("Imóvel com foco"));
+    fireEvent.click(screen.getByLabelText("Registrar boletim"));
+    fillCompleteInspection();
+    // O 35 escolhido continua visível para ser desmarcado.
+    expect(screen.getByLabelText("Imóvel com foco")).not.toBeNull();
+    send();
+    expect(await screen.findByText(VECTOR_ERRORS.reason_derived)).not.toBeNull();
+    expect(screen.queryByText("motivo repetido")).toBeNull();
+    expect(api.recordHomeVisit).not.toHaveBeenCalled();
+  });
+
+  it("etiqueta: prévia provisória; 4xx troca; a definitiva vem da visita gravada", async () => {
+    const onSaved = vi.fn();
+    await mountWithHousehold({ onSaved }); fillCompleteInspection();
     const first = screen.getByText(/-01 \(provisória até gravar\)/).textContent;
     vi.mocked(api.recordHomeVisit).mockRejectedValueOnce(new ApiError(422, { error: "product_not_allowed", path: "vector_inspection.measures[0].vector_product_id" }, "x"));
     fireEvent.click(screen.getByRole("button", { name: "Registrar visita" }));
@@ -148,7 +198,8 @@ describe("Boletim na nova visita", () => {
     expect(screen.getByText(/-01 \(provisória até gravar\)/).textContent).not.toBe(first);
     vi.mocked(api.recordHomeVisit).mockResolvedValueOnce({ visit: visit({ vector_inspection: inspection({ samples: [ { ...SAMPLE, label: "ABCDEF12-01" } ] }) }), day: day(), replayed: false });
     fireEvent.click(screen.getByRole("button", { name: "Registrar visita" }));
-    expect(await screen.findByText("Etiquete os tubitos: ABCDEF12-01")).not.toBeNull();
+    await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
+    expect(tubeLabelsText(onSaved.mock.calls[0][0].visit)).toBe("Etiquete os tubitos: ABCDEF12-01");
     expect(screen.queryByText(/ABCDEF12-01 \(provisória/)).toBeNull();
   });
 
@@ -322,13 +373,16 @@ describe("Folha do dia com o boletim", () => {
       day: day({ visits: undefined }), replayed: false });
     mocked(api.listHomeVisitDays).mockResolvedValue({ items: [ day({ visits: undefined }) ], next_before: null });
     mocked(api.getHomeVisitDay).mockResolvedValue(day());
-    renderWithProviders(<HomeVisitDay now={NOW35} start={START} />);
+    const { client } = renderWithProviders(<HomeVisitDay now={NOW35} start={START} />);
     await screen.findByLabelText("Família — responsável José Lima");
     await waitFor(() => expect(screen.queryByText("Carregando o perfil do imóvel…")).toBeNull());
     fillCompleteInspection();
+    const invalidate = vi.spyOn(client, "invalidateQueries");
     send();
     expect(await screen.findByText("Etiquete os tubitos: 3F2A9C1E-01, 3F2A9C1E-02")).not.toBeNull();
     expect(screen.getByText(VISIT_SAVED)).not.toBeNull();
+    // O boletim mudou o perfil do imóvel: a próxima visita relê (M3).
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: [ VC_PROFILE_KEY, "h1" ] });
   });
 
   it("ACS ou gate desligado: os domínios do 35a não são lidos", async () => {

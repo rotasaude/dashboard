@@ -13,7 +13,7 @@ import {
   type HomeVisitTeam
 } from "../lib/api";
 import { useAuth } from "../lib/auth";
-import { VC_DOMAINS_KEY, canUseVectorControl, isEndemicAgentTeam, vectorError } from "../lib/vectorControl";
+import { VC_DOMAINS_KEY, VC_PROFILE_KEY, canUseVectorControl, isEndemicAgentTeam, vectorError } from "../lib/vectorControl";
 import {
   HV_CANNOT_REGISTER, HV_CONTEXT_KEY, HV_DAY_KEY, HV_TODAY_KEY, NOMINAL_QUERY, OTHER_DAY_TEXT, REPLAYED_VISIT, STATIC_QUERY, UNCERTAIN_VISIT_REREAD, VISIT_SAVED,
   homeVisitError
@@ -132,6 +132,8 @@ function TodaySheets({ ctx, team, now, start, onHeld, onGoToTerritory }: {
   // frase diz em que folha a visita entrou.
   function onSaved({ visit, day, replayed }: VisitSaved) {
     setForm(null); setUncertain(false); setTubes(tubeLabelsText(visit));
+    // O boletim grava no perfil (quarteirão, risco, última situação): a próxima visita ao imóvel o relê.
+    if (visit.vector_inspection && visit.household) void queryClient.invalidateQueries({ queryKey: [ VC_PROFILE_KEY, visit.household.id ] });
     const { visits: _v, ...summary } = day;
     const cached = queryClient.getQueryData<ApiDay>([ HV_DAY_KEY, day.id ]);
     if (items.some((d) => d.id === day.id) && cached?.visits) {

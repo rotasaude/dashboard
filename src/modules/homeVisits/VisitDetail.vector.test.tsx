@@ -25,10 +25,12 @@ beforeEach(() => {
   mocked(api.getVectorDomains).mockResolvedValue(VC_DOMAINS);
 });
 const mount = () => renderWithProviders(<VisitDetail id="v1" domains={VISIT_DOMAINS} />);
+const coordinator = () => mocked(api.fetchCurrentSession).mockResolvedValue(vcUser([ "endemic_coordinator" ]));
 const section = async () => within(await screen.findByRole("region", { name: "Boletim do agente de endemias" }));
 
 describe("Detalhe da visita com boletim", () => {
-  it("recuperado, depósitos, medida com produto e quantidade, etiqueta e aguardando resultado", async () => {
+  it("recuperado, depósitos, medida com produto e quantidade, etiqueta e aguardando resultado (coordenação lê os domínios)", async () => {
+    coordinator();
     mocked(api.getHomeVisit).mockResolvedValue(visit({ reasons: [ 34, 35, 37 ], vector_inspection: inspection({
       recovered: true, samples: [ { ...SAMPLE, label: "3F2A9C1E-01" } ] }) }));
     mount();
@@ -67,14 +69,31 @@ describe("Detalhe da visita com boletim", () => {
     expect(s.getByText("sem amostra")).not.toBeNull();
   });
 
-  it("sem os domínios do 35a (403): os códigos crus", async () => {
-    mocked(api.getVectorDomains).mockRejectedValue(new ApiError(403, { error: "missing_role" }, "x"));
+  it("enfermeiro ou médico da equipe: os rótulos fixos do contrato, sem ler /vector_control/domains", async () => {
+    // A sessão do enfermeiro e a do médico são iguais aqui: health_professional, sem papel do 35a.
+    mocked(api.fetchCurrentSession).mockResolvedValue(vcUser([ "health_professional" ]));
     mocked(api.getHomeVisit).mockResolvedValue(visit({ vector_inspection: inspection() }));
     mount();
     const s = await section();
-    expect(await s.findByText("li_t")).not.toBeNull();
-    expect(s.getByText("worked")).not.toBeNull();
-    expect(s.getByText("A2")).not.toBeNull();
+    expect(s.getByText("LI+T — Levantamento de índice e tratamento")).not.toBeNull();
+    expect(s.getByText("Trabalhado")).not.toBeNull();
+    expect(s.getByText("Rotina")).not.toBeNull();
+    expect(s.getByText("A2 — Depósito de armazenamento ao nível do solo")).not.toBeNull();
+    expect(s.getByText("Focal (larvicida)")).not.toBeNull();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(api.getVectorDomains).not.toHaveBeenCalled();
+  });
+
+  it("a coordenação com 403 nos domínios: os rótulos fixos; código desconhecido aparece cru", async () => {
+    coordinator();
+    mocked(api.getVectorDomains).mockRejectedValue(new ApiError(403, { error: "missing_role" }, "x"));
+    mocked(api.getHomeVisit).mockResolvedValue(visit({ vector_inspection: inspection({ activity: "zz_new" as never }) }));
+    mount();
+    const s = await section();
+    expect(await s.findByText("zz_new")).not.toBeNull();
+    expect(s.getByText("Trabalhado")).not.toBeNull();
+    expect(s.getByText("A2 — Depósito de armazenamento ao nível do solo")).not.toBeNull();
+    expect(api.getVectorDomains).toHaveBeenCalledTimes(1);
   });
 
   it("visita sem vector_inspection: sem a seção e sem ler os domínios", async () => {
