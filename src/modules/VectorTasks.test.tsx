@@ -10,7 +10,7 @@ vi.mock("../lib/api", async (importOriginal) => {
   const real = await importOriginal<typeof import("../lib/api")>();
   return {
     ...real, fetchCurrentSession: vi.fn(), listVectorTasks: vi.fn(), closeVectorTask: vi.fn(), getVectorDomains: vi.fn(),
-    getVectorParameters: vi.fn(), listTransmissionBlocks: vi.fn()
+    getVectorParameters: vi.fn(), listTransmissionBlocks: vi.fn(), getVectorDiseases: vi.fn()
   };
 });
 
@@ -20,10 +20,13 @@ import { VC_NO_ROLE } from "../lib/vectorControl";
 import { VECTOR_ERRORS } from "../lib/vectorErrors";
 import { renderWithProviders } from "../test/campaignFixtures";
 import { expectFrozenNotice } from "../test/frozenNotice";
-import { vcUser, vectorTask } from "../test/vectorControlFixtures";
+import { VC_DISEASES, vcUser, vectorTask } from "../test/vectorControlFixtures";
 import { CLOSED_EMPTY, OPEN_EMPTY, TASK_DISMISSED, TASK_DONE, TASK_GONE, TASK_UNCERTAIN, VectorTasks } from "./VectorTasks";
 
-const ALL = [ api.fetchCurrentSession, api.listVectorTasks, api.closeVectorTask, api.getVectorDomains, api.getVectorParameters, api.listTransmissionBlocks ];
+const ALL = [
+  api.fetchCurrentSession, api.listVectorTasks, api.closeVectorTask, api.getVectorDomains, api.getVectorParameters, api.listTransmissionBlocks,
+  api.getVectorDiseases
+];
 const INT = vectorTask({
   id: "vt1", kind: "ovitrap_intensification", created_at: "2026-11-15T12:00:00Z", ovitrap: { id: "ov12", number: "OV-12" },
   suggested_blocks: [ { id: "cb12", number: "12" }, { id: "cb13", number: "13" }, { id: "cb14", number: "14" } ]
@@ -298,5 +301,27 @@ describe("VectorTasks", () => {
     expect(await screen.findByRole("alert")).not.toBeNull();
     expect(document.body.textContent).not.toContain("missing_role");
     expect(api.listVectorTasks).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("nome da doença (Q38)", () => {
+  it("o caso de outro município mostra o nome; código sem nome sai cru; uma leitura para todos os cartões", async () => {
+    vi.mocked(api.getVectorDiseases).mockResolvedValue(VC_DISEASES);
+    renderWithProviders(<VectorTasks />);
+    expect(await screen.findByText("Dengue clássico")).not.toBeNull();
+    expect(screen.queryByText("A90")).toBeNull();
+    fireEvent.click(screen.getByRole("tab", { name: "Encerradas" }));
+    expect(await screen.findByText("A92.0")).not.toBeNull();
+    await tick();
+    expect(api.getVectorDiseases).toHaveBeenCalledTimes(1);
+  });
+
+  it("a leitura falha: o código cru, sem aviso de erro", async () => {
+    vi.mocked(api.getVectorDiseases).mockRejectedValue(new ApiError(500, { error: "internal" }, "x"));
+    renderWithProviders(<VectorTasks />);
+    expect(await screen.findByText("A90")).not.toBeNull();
+    await tick();
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(api.getVectorDiseases).toHaveBeenCalledTimes(1);
   });
 });

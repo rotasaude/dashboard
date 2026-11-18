@@ -4,7 +4,7 @@ import {
   addBlockNeighbor, addTransmissionCycle, assignHouseholdsBlock, closeLiraaSurvey, closeTransmissionBlock, closeVectorTask, collectOvitrap,
   confirmTransmissionBlock, countOvitrapReading, createCityBlock, createCycle, createLiraaSurvey, createVectorProduct, dismissTransmissionBlock,
   drawLiraaSurvey, fetchVectorReportFile, getCycleSummary, getHouseholdVectorProfile, getTransmissionBlock, getTransmissionCaseAddress,
-  getVectorDomains, getVectorParameters, getVectorReport, getVectorSettings, installOvitrap, listCadences, listCityBlocks, listCycles, listDue,
+  getVectorDiseases, getVectorDomains, getVectorParameters, getVectorReport, getVectorSettings, installOvitrap, listCadences, listCityBlocks, listCycles, listDue,
   listLiraaItems, listLiraaSurveys, listOvitrapReadings, listOvitraps, listTransmissionBlocks, listVectorHouseholds, listVectorMapPoints,
   listVectorProducts, listVectorSamples, listVectorShortfalls, listVectorTasks, moveTransmissionCase, putCadences, putVectorParameters,
   putVectorSettings, recordHomeVisit, recordReceipt, recordSampleResult, reconcileVectorShortfall, removeBlockNeighbor, searchPharmacyItems, updateCityBlock,
@@ -12,7 +12,7 @@ import {
 } from "./api";
 import { day, visit } from "../test/homeVisitFixtures";
 import {
-  LARVICIDE, PARAMS, VC_DOMAINS, caseAddress, cityBlock, householdProfile, inspection, inspectionInput, liraaSurvey, mapPoints, ovitrap,
+  LARVICIDE, PARAMS, VC_DISEASES, VC_DOMAINS, caseAddress, cityBlock, householdProfile, inspection, inspectionInput, liraaSurvey, mapPoints, ovitrap,
   parameterVersion, reading, sample, shortfall, transmissionBlock, vectorTask
 } from "../test/vectorControlFixtures";
 
@@ -44,6 +44,14 @@ const HV_INPUT: HomeVisitInput = {
 const SECRET_IN_URL = /lote achado|descartado|Rua|Palmeiras|egg_count|note|reason/i;
 
 describe("cliente da vigilância ambiental — endemias (módulo 35a)", () => {
+  it("doenças (Q38): GET /vector_control/diseases sem query; corpo vazio vira listas vazias", async () => {
+    stub(VC_DISEASES);
+    expect(await getVectorDiseases()).toEqual(VC_DISEASES);
+    expect([ last().url, last().init.method ?? "GET", fetchCalls() ]).toEqual([ "/vector_control/diseases", "GET", 1 ]);
+    stub({});
+    expect(await getVectorDiseases()).toEqual({ items: [], groups: [] });
+  });
+
   it("visita leva vector_inspection no corpo; nada do boletim na URL", async () => {
     stub({ visit: visit({ vector_inspection: inspection() }), day: day() }, 201);
     const r = await recordHomeVisit({ ...HV_INPUT, vector_inspection: inspectionInput() });

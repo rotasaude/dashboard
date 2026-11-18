@@ -22,6 +22,7 @@ import { VC_TASKS_KEY, isVectorStale, noteProblem, taskKindLabel, taskStateLabel
 import { VECTOR_ERRORS } from "../lib/vectorErrors";
 import { VectorGate } from "./vectorControl/VectorGate";
 import { VectorListBody } from "./vectorControl/VectorListBody";
+import { useVectorDiseases } from "./vectorControl/useVectorDiseases";
 import { usePaged } from "./homeVisits/usePaged";
 import { useFormProblems } from "./psychosocial/useFormProblems";
 import { SegmentedControl } from "../shell/SegmentedControl";
@@ -145,6 +146,7 @@ function TaskCard({ task, closing, onStart, onDone, onStale, onCancel, onOpenTra
   onCancel(): void; onOpenTransmission?: () => void;
 }) {
   const isOpen = task.state === "open";
+  const diseases = useVectorDiseases(); // Q38: o nome da doença; cru sem ele
   const blocks = task.kind === "ovitrap_intensification" ? blocksText(task.suggested_blocks) : null;
   return (
     <article style={box} aria-label={`${taskKindLabel(task.kind)} — criada em ${fmtDateTime(task.created_at)}`}>
@@ -161,7 +163,7 @@ function TaskCard({ task, closing, onStart, onDone, onStale, onCancel, onOpenTra
       {task.kind === "ovitrap_intensification" && <span>{blocks ?? "sem quarteirão sugerido"}</span>}
       {task.kind === "case_resident_elsewhere" && (
         <>
-          <span style={row}><span style={muted}>Doença</span><strong className="mono">{task.disease ?? "—"}</strong></span>
+          <span style={row}><span style={muted}>Doença</span><strong>{task.disease ? diseases.disease(task.disease) : "—"}</strong></span>
           <span style={row}><span style={muted}>Data do caso</span><span>{task.case_on ? fmtDay(task.case_on) : "—"}</span></span>
         </>
       )}

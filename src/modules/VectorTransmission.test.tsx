@@ -13,7 +13,7 @@ vi.mock("../lib/api", async (importOriginal) => {
     ...real, fetchCurrentSession: vi.fn(), stepUpMfa: vi.fn(), listTransmissionBlocks: vi.fn(), getTransmissionBlock: vi.fn(),
     confirmTransmissionBlock: vi.fn(), dismissTransmissionBlock: vi.fn(), closeTransmissionBlock: vi.fn(), addTransmissionCycle: vi.fn(),
     moveTransmissionCase: vi.fn(), getTransmissionCaseAddress: vi.fn(), listCityBlocks: vi.fn(), listPanelNeighborhoods: vi.fn(),
-    getVectorParameters: vi.fn(), listVectorMapPoints: vi.fn(), getVectorDomains: vi.fn()
+    getVectorParameters: vi.fn(), listVectorMapPoints: vi.fn(), getVectorDomains: vi.fn(), getVectorDiseases: vi.fn()
   };
 });
 const handle = vi.hoisted(() => ({
@@ -28,7 +28,7 @@ import { VECTOR_ERRORS } from "../lib/vectorErrors";
 import { FROZEN_TEXT_NOTICE } from "../components/FrozenTextNotice";
 import { renderWithProviders, sessionWith } from "../test/campaignFixtures";
 import { MAP_MANIFEST } from "../test/territoryMapFixtures";
-import { VC_FEATURES, cityBlock, parameterVersion, transmissionBlock, vcUser } from "../test/vectorControlFixtures";
+import { VC_DISEASES, VC_FEATURES, cityBlock, parameterVersion, transmissionBlock, vcUser } from "../test/vectorControlFixtures";
 import { VectorTransmission } from "./VectorTransmission";
 import {
   BLOCK_CLOSED, BLOCK_CONFIRMED, CASES_REREAD, CASE_MOVED, CENTER_INACTIVE, CYCLE_SAVED, NEED_AREA, NEED_CENTER, NO_CASE, NO_CASE_ACK, PROPOSAL_DISMISSED
@@ -38,7 +38,7 @@ import { ADDRESS_DESCRIPTION } from "./vectorControl/CaseAddressDialog";
 const ALL = [
   api.fetchCurrentSession, api.stepUpMfa, api.listTransmissionBlocks, api.getTransmissionBlock, api.confirmTransmissionBlock,
   api.dismissTransmissionBlock, api.closeTransmissionBlock, api.addTransmissionCycle, api.moveTransmissionCase, api.getTransmissionCaseAddress,
-  api.listCityBlocks, api.listPanelNeighborhoods, api.getVectorParameters, api.listVectorMapPoints, api.getVectorDomains
+  api.listCityBlocks, api.listPanelNeighborhoods, api.getVectorParameters, api.listVectorMapPoints, api.getVectorDomains, api.getVectorDiseases
 ];
 const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
 const tick = () => new Promise((r) => setTimeout(r, 20));
@@ -61,6 +61,8 @@ beforeEach(() => {
     return b;
   });
   mocked(api.getVectorParameters).mockResolvedValue(parameterVersion());
+  // Sem rótulos por padrão: o código cru (os testes dos nomes, Q38, no fim).
+  mocked(api.getVectorDiseases).mockResolvedValue({ items: [], groups: [] });
   mocked(api.listPanelNeighborhoods).mockResolvedValue([ { id: "nb1", name: "Centro", active: true } ]);
   mocked(api.listCityBlocks).mockResolvedValue([
     cityBlock({ id: "cb7", number: "40" }), cityBlock({ id: "cb8", number: "41" }), cityBlock({ id: "cb9", number: "42", active: false })
@@ -553,5 +555,33 @@ describe("detalhe", () => {
     fireEvent.click(button("Ver mapa da área"));
     await tick();
     expect(api.listVectorMapPoints).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("nomes das doenças (Q38)", () => {
+  const CASES = [
+    { id: "tc1", number: 1, disease: "dengue", case_on: "2026-11-12", has_place: true },
+    { id: "tc2", number: 2, disease: "agravo_novo", case_on: "2026-11-13", has_place: true }
+  ];
+  it("lista e detalhe mostram o nome e o grupo; código sem nome sai cru; uma leitura só", async () => {
+    mocked(api.getVectorDiseases).mockResolvedValue(VC_DISEASES);
+    await mountDetail(transmissionBlock({ cases: CASES }));
+    const table = within(screen.getByRole("table", { name: "Bloqueios propostos" }));
+    expect(table.getByText("Dengue (casos), agravo_novo")).not.toBeNull();
+    expect(await screen.findByText(/caso 1 · Dengue \(casos\) · 12\/11\/2026/)).not.toBeNull();
+    expect(screen.getByText(/caso 2 · agravo_novo · 13\/11\/2026/)).not.toBeNull();
+    expect(screen.getByText(/Arboviroses \(dengue, chikungunya, zika\)/)).not.toBeNull();
+    await tick();
+    expect(api.getVectorDiseases).toHaveBeenCalledTimes(1);
+  });
+
+  it("a leitura falha: códigos crus, nenhum aviso de erro, sem nova tentativa ao abrir o detalhe", async () => {
+    mocked(api.getVectorDiseases).mockRejectedValue(err(500, { error: "internal" }));
+    await mountDetail(transmissionBlock({ cases: CASES }));
+    expect(screen.getByText(/caso 1 · dengue · 12\/11\/2026/)).not.toBeNull();
+    expect(screen.getByText(/arbovirus/)).not.toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+    await tick();
+    expect(api.getVectorDiseases).toHaveBeenCalledTimes(1);
   });
 });

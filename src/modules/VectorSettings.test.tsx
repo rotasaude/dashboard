@@ -6,7 +6,8 @@ vi.mock("../lib/api", async (importOriginal) => {
   const real = await importOriginal<typeof import("../lib/api")>();
   return {
     ...real, fetchCurrentSession: vi.fn(), stepUpMfa: vi.fn(), getVectorDomains: vi.fn(), listVectorProducts: vi.fn(), createVectorProduct: vi.fn(),
-    updateVectorProduct: vi.fn(), getVectorParameters: vi.fn(), putVectorParameters: vi.fn(), getVectorSettings: vi.fn(), putVectorSettings: vi.fn()
+    updateVectorProduct: vi.fn(), getVectorParameters: vi.fn(), putVectorParameters: vi.fn(), getVectorSettings: vi.fn(), putVectorSettings: vi.fn(),
+    getVectorDiseases: vi.fn()
   };
 });
 
@@ -15,7 +16,7 @@ import { ApiError, type VectorParameters, type VectorProduct, type VectorSetting
 import { VC_NO_ROLE } from "../lib/vectorControl";
 import { VECTOR_ERRORS } from "../lib/vectorErrors";
 import { renderWithProviders, sessionWith } from "../test/campaignFixtures";
-import { ADULTICIDE, INACTIVE_PRODUCT, LARVICIDE, PARAMS, VC_DOMAINS, VC_FEATURES, parameterVersion, vcUser } from "../test/vectorControlFixtures";
+import { ADULTICIDE, INACTIVE_PRODUCT, LARVICIDE, PARAMS, VC_DISEASES, VC_DOMAINS, VC_FEATURES, parameterVersion, vcUser } from "../test/vectorControlFixtures";
 import { NOTHING_CHANGED, productProblems } from "./vectorControl/ProductsPanel";
 import { PARAM_FIELDS, PARAMS_SAVED, currentValueHint, draftOf, parameterProblems, parametersVersionLabel, type ParamDraft } from "./vectorControl/ParametersPanel";
 import { LOCATION_GONE, NO_LOCATION, VectorSettings } from "./VectorSettings";
@@ -460,5 +461,31 @@ describe("local de estoque", () => {
     await new Promise((r) => setTimeout(r, 20));
     expect(api.getVectorSettings).toHaveBeenCalledTimes(2);
     expect(api.putVectorSettings).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("nomes das doenças em block_diseases (Q38)", () => {
+  const BLOCK_DISEASES = "Doenças que abrem bloqueio (códigos separados por vírgula)";
+  it("o nome ao lado de cada código; sem nome, cru; o envio continua com os códigos; uma leitura", async () => {
+    mocked(api.getVectorDiseases).mockResolvedValue(VC_DISEASES);
+    mocked(api.putVectorParameters).mockResolvedValue(parameterVersion({ version: 1, created_at: "2026-11-16T13:00:00Z" }));
+    mount();
+    expect(await screen.findByText("Doenças: dengue — Dengue (casos); chikungunya — Febre de Chikungunya; zika")).not.toBeNull();
+    type(BLOCK_DISEASES, "dengue, agravo_novo");
+    expect(screen.getByText("Doenças: dengue — Dengue (casos); agravo_novo")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Salvar parâmetros" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Confirmar" }));
+    await waitFor(() => expect(api.putVectorParameters).toHaveBeenCalledTimes(1));
+    expect(mocked(api.putVectorParameters).mock.calls[0][0].block_diseases).toEqual([ "dengue", "agravo_novo" ]);
+    expect(api.getVectorDiseases).toHaveBeenCalledTimes(1);
+  });
+
+  it("a leitura falha: só os códigos, sem aviso de erro", async () => {
+    mocked(api.getVectorDiseases).mockRejectedValue(new ApiError(500, { error: "internal" }, "x"));
+    mount();
+    expect(await screen.findByText("Doenças: dengue; chikungunya; zika")).not.toBeNull();
+    expect(field(BLOCK_DISEASES).value).toBe("dengue, chikungunya, zika");
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(api.getVectorDiseases).toHaveBeenCalledTimes(1);
   });
 });

@@ -62,6 +62,9 @@ export function vectorMapLayers(roles: VectorRoles): VectorMapLayer[] {
   return roles.lab ? [ "ovitraps" ] : [];
 }
 
+// DiseasesController (Q38): só a coordenação e o municipal_admin leem os nomes das doenças; os outros recebem 403.
+export const canReadVectorDiseases = (roles: VectorRoles): boolean => roles.coordinator || roles.admin;
+
 // ─── Chaves de cache ────────────────────────────────────────────────────────
 export const VC_DOMAINS_KEY = "vcDomains";
 export const VC_BLOCKS_KEY = "vcBlocks";
@@ -85,6 +88,7 @@ export const VC_SAMPLES_KEY = "vcSamples";
 export const VC_SHORTFALLS_KEY = "vcShortfalls";
 export const VC_REPORT_KEY = "vcReport";
 export const VC_MAP_KEY = "vcMap";
+export const VC_DISEASES_KEY = "vcDiseases";
 
 // ─── Rótulos (código desconhecido aparece cru) ──────────────────────────────
 const pick = (map: Record<string, string>, key: string): string => (Object.prototype.hasOwnProperty.call(map, key) ? map[key] : key);
@@ -137,6 +141,12 @@ export function stratumModeLabel(code: string, p?: StratumRangeParams): string {
   }
 }
 export const blockStatusLabel = (code: string): string => pick(BLOCK_STATUS, code);
+// Q38: nome da doença e rótulo do grupo pelo GET /vector_control/diseases; sem a lista (carregando, falha, sem leitura) ou código
+// desconhecido, o código cru.
+export const diseaseName = (d: { items: readonly { code: string; name: string }[] } | null | undefined, code: string): string =>
+  d?.items.find((x) => x.code === code)?.name ?? code;
+export const diseaseGroupLabel = (d: { groups: readonly { code: string; label: string }[] } | null | undefined, code: string): string =>
+  d?.groups.find((x) => x.code === code)?.label ?? code;
 export const shortfallCauseLabel = (code: string): string => pick(SHORTFALL_CAUSE, code);
 export const itemStatusLabel = (code: string): string => pick(ITEM_STATUS, code);
 // §17: o caso do bloqueio é só "caso N" (sequência da cidade, Q13(6)), nunca o paciente.

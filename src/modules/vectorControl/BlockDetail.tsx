@@ -1,7 +1,7 @@
 // src/modules/vectorControl/BlockDetail.tsx
 // Detalhe do bloqueio de transmissão (módulo 35a, F-35.7; contrato §8, §11, §17; Q8, Q9, Q13(6)(9), Q26, Q28). Só a coordenação
 // (TransmissionBlocksController: coordinator!). GET /transmission_blocks/:id sem pessoa e sem trilha: STATIC_QUERY, relido só depois
-// de ação. O caso só como "caso N · doença · data" (e "sem quarteirão" quando !has_place); nunca paciente, notificação ou coordenada.
+// de ação. Doença e grupo pelos rótulos do GET /vector_control/diseases (Q38; cru sem eles). O caso só como "caso N · doença · data" (e "sem quarteirão" quando !has_place); nunca paciente, notificação ou coordenada.
 //   - proposto: quarteirão do caso (`<select>`; o centro, pré-escolhido quando o api o achou) e a área (os da sugestão de anéis
 //     pré-marcados; outros quarteirões de um bairro, GET /blocks?neighborhood_id=); "Confirmar bloqueio" com step-up manda
 //     { center_block_id, block_ids, seen_case_ids } (Q26(4): os casos que a tela mostra); "Descartar" com motivo 10–500;
@@ -29,6 +29,7 @@ import {
 } from "../../lib/vectorControl";
 import { usePaged } from "../homeVisits/usePaged";
 import { CaseAddressDialog } from "./CaseAddressDialog";
+import { useVectorDiseases } from "./useVectorDiseases";
 import { VectorMapPanel } from "./VectorMapPanel";
 import { Panel } from "../../components/Panel";
 import { Tag } from "../../components/Tag";
@@ -74,7 +75,8 @@ const CONFIRM_DESCRIPTION = (cases: number, area: number) =>
 const OPEN = [ "proposed", "active" ];
 const STATUS_TONE: Record<string, string> = { proposed: "warn", active: "info", closed: "ok", dismissed: "neutral" };
 const blockKey = (id: string) => [ VC_BLOCK_TB_KEY, id ];
-export const caseText = (c: TransmissionCase) => `${caseLabel(c)} · ${c.disease} · ${fmtDay(c.case_on)}`;
+export const caseText = (c: TransmissionCase, name: (code: string) => string = (code) => code) =>
+  `${caseLabel(c)} · ${name(c.disease)} · ${fmtDay(c.case_on)}`;
 export const centerText = (b: Pick<TransmissionBlock, "center_block">) => (b.center_block ? `quarteirão ${b.center_block.number}` : "sem quarteirão");
 const casesCount = (n: number) => (n === 1 ? "1 caso" : `${n} casos`);
 // O destino no `<select>` do mover: status, quarteirão do caso, casos e quando nasceu (nunca pessoa).
@@ -88,6 +90,7 @@ export function BlockDetail({ id, onGoToSecurity }: { id: string; onGoToSecurity
   const queryClient = useQueryClient();
   const q = useQuery({ queryKey: blockKey(id), queryFn: () => getTransmissionBlock(id), ...STATIC_QUERY });
   const msg = useActionMessage();
+  const labels = useVectorDiseases();
   const lists = () => queryClient.invalidateQueries({ queryKey: [ VC_BLOCKS_TB_KEY ] });
   // A resposta já é o bloqueio novo: vai à tela, e as listas relidas uma vez.
   const changed = async (b: TransmissionBlock) => { queryClient.setQueryData(blockKey(b.id), b); await lists(); };
@@ -117,7 +120,7 @@ export function BlockDetail({ id, onGoToSecurity }: { id: string; onGoToSecurity
       <div style={stack}>
         <ActionMessage message={msg.message} />
         <p style={muted}>
-          {[ `doença do grupo ${block.disease_group}`, block.confirmed_at && `confirmado em ${fmtDateTime(block.confirmed_at)}`,
+          {[ labels.group(block.disease_group), block.confirmed_at && `confirmado em ${fmtDateTime(block.confirmed_at)}`,
             block.closed_at && `fechado em ${fmtDateTime(block.closed_at)}` ].filter(Boolean).join(" · ")}
         </p>
         <div style={stack}>
@@ -127,7 +130,7 @@ export function BlockDetail({ id, onGoToSecurity }: { id: string; onGoToSecurity
               {block.cases.map((c) => (
                 <li key={c.id}>
                   <div style={stack}>
-                    <span>{caseText(c)}{c.has_place ? "" : " · sem quarteirão"}</span>
+                    <span>{caseText(c, labels.disease)}{c.has_place ? "" : " · sem quarteirão"}</span>
                     {open && (
                       <div style={row}>
                         {!c.has_place && (

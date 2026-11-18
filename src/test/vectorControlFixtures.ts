@@ -5,7 +5,7 @@
 // Nunca morador: o imóvel só com o endereço curto do 24a; o caso do bloqueio só como número, doença e data.
 import type {
   CaseAddress, CityBlock, DepositGroup, DueItem, HomeVisitContext, HomeVisitTeam, HouseholdVector, HouseholdVectorProfile, LiraaItem,
-  LiraaSurvey, Ovitrap, OvitrapReading, SessionUser, TransmissionBlock, VectorControlDomains, VectorHousehold, VectorInspection,
+  LiraaSurvey, Ovitrap, OvitrapReading, SessionUser, TransmissionBlock, VectorControlDomains, VectorDiseases, VectorHousehold, VectorInspection,
   VectorInspectionInput, VectorMapResponse, VectorParameterVersion, VectorParameters, VectorProduct, VectorReport, VectorSample,
   VectorShortfall, VectorTask
 } from "../lib/api";
@@ -161,6 +161,11 @@ export const transmissionBlock = (o: Partial<TransmissionBlock> = {}): Transmiss
   cases: [ { id: "tc1", number: 1, disease: "dengue", case_on: "2026-11-12", has_place: true } ], cycles: [],
   created_at: "2026-11-14T13:00:00Z", confirmed_at: null, closed_at: null, ...o
 });
+// Q38: GET /vector_control/diseases (nomes do módulo 25; grupos do Catalog::DISEASE_GROUP_LABELS do 35a).
+export const VC_DISEASES: VectorDiseases = {
+  items: [ { code: "dengue", name: "Dengue (casos)" }, { code: "chikungunya", name: "Febre de Chikungunya" }, { code: "A90", name: "Dengue clássico" } ],
+  groups: [ { code: "arbovirus", label: "Arboviroses (dengue, chikungunya, zika)" } ]
+};
 // Só no diálogo do step-up; nunca em cache, URL, storage ou console.
 export const caseAddress = (o: Partial<CaseAddress> = {}): CaseAddress =>
   ({ patient_address: "Rua das Palmeiras, 45, Centro", household_address: "Rua das Flores, 120", ...o });

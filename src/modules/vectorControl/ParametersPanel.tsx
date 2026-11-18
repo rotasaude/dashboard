@@ -15,6 +15,7 @@ import { STATIC_QUERY, VC_DOMAINS_KEY, VC_PARAMS_KEY, isVectorStale, vectorError
 import { VECTOR_ERRORS } from "../../lib/vectorErrors";
 import { Panel } from "../../components/Panel";
 import { SensitiveAction } from "../../components/SensitiveAction";
+import { useVectorDiseases } from "./useVectorDiseases";
 import { buttonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { alert, fieldLabel, fieldset, legend, muted, okText, row, stack } from "../exams/styles";
 
@@ -79,6 +80,11 @@ const toNumber = (raw: string) => (NUMBER.test(raw.trim()) ? Number(raw.trim().r
 // Até duas casas, como o `decimal.round(2) == decimal` do api (zero à direita não conta).
 const twoPlaces = (raw: string) => ((raw.trim().split(/[.,]/)[1] ?? "").replace(/0+$/, "").length <= 2);
 const diseases = (raw: string) => raw.split(",").map((s) => s.trim()).filter((s) => s !== "");
+// Q38: o nome ao lado de cada código digitado (o envio continua com os códigos); código sem nome sai cru.
+export const diseaseNamesText = (raw: string, name: (code: string) => string): string => {
+  const list = diseases(raw);
+  return list.length === 0 ? "" : `Doenças: ${list.map((c) => (name(c) === c ? c : `${c} — ${name(c)}`)).join("; ")}`;
+};
 
 export function toValues(d: ParamDraft): VectorParameters {
   const out = {} as Record<ParamKey, unknown>;
@@ -180,6 +186,7 @@ function ParamsForm({ loaded, onEdit, onSaved, onStale, onGoToSecurity }: {
   onGoToSecurity?: () => void;
 }) {
   const [ draft, setDraft ] = useState<ParamDraft>(() => draftOf(loaded.values));
+  const labels = useVectorDiseases();
   // Depois de um 409 parameters_changed: a versão que estava na tela. Quando a releitura traz outra, cada campo que difere mostra
   // o valor vigente ao lado do digitado.
   const [ staleFrom, setStaleFrom ] = useState<number | null>(null);
@@ -244,6 +251,7 @@ function ParamsForm({ loaded, onEdit, onSaved, onStale, onGoToSecurity }: {
           <input value={draft[f.key] as string} inputMode={f.kind === "int" ? "numeric" : f.kind === "fraction" ? "decimal" : undefined}
             style={inputStyle} {...aria(f.key)} onChange={(e) => set(f.key, e.target.value as never)} />
         </label>
+        {f.kind === "diseases" && <p style={muted}>{diseaseNamesText(draft[f.key] as string, labels.disease)}</p>}
         {err(f.key)}
         {hint(f.key)}
       </div>

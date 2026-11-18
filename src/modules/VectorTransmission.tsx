@@ -4,7 +4,7 @@
 // notificação (Blocks::Propose); aqui a coordenação revê, confirma (step-up), descarta, fecha, lança os ciclos de UBV e junta casos.
 // Lista por status em abas, propostos primeiro (GET /transmission_blocks?status[]=, mais recente primeiro, com cursor; sem pessoa nem
 // trilha: STATIC_QUERY, relida depois de cada ação). Cada aba lê ao ser aberta pela primeira vez e depois fica montada e escondida.
-// Colunas: doença dos casos, casos ("2 casos"), quarteirão do caso, criado em; nunca paciente. O detalhe é o BlockDetail.
+// Colunas: doença dos casos (o nome do GET /vector_control/diseases, Q38; código cru sem ele), casos ("2 casos"), quarteirão do caso, criado em; nunca paciente. O detalhe é o BlockDetail.
 // Nada em URL ou storage; nenhum polling.
 import { useState } from "react";
 import { listTransmissionBlocks, type TransmissionBlock, type TransmissionBlockStatus } from "../lib/api";
@@ -13,6 +13,7 @@ import { VC_BLOCKS_TB_KEY, vectorError } from "../lib/vectorControl";
 import { VectorGate } from "./vectorControl/VectorGate";
 import { VectorListBody } from "./vectorControl/VectorListBody";
 import { BlockDetail } from "./vectorControl/BlockDetail";
+import { useVectorDiseases } from "./vectorControl/useVectorDiseases";
 import { usePaged } from "./homeVisits/usePaged";
 import { SegmentedControl } from "../shell/SegmentedControl";
 import { DataTable } from "../components/DataTable";
@@ -26,7 +27,7 @@ const TABS: { key: TransmissionBlockStatus; label: string }[] = [
 const EMPTY: Record<TransmissionBlockStatus, string> = {
   proposed: "nenhuma proposta de bloqueio", active: "nenhum bloqueio ativo", closed: "nenhum bloqueio fechado", dismissed: "nenhuma proposta descartada"
 };
-const diseasesText = (b: TransmissionBlock) => [ ...new Set(b.cases.map((c) => c.disease)) ].join(", ") || "—";
+const diseasesText = (b: TransmissionBlock, name: (code: string) => string) => [ ...new Set(b.cases.map((c) => c.disease)) ].map(name).join(", ") || "—";
 const casesText = (n: number) => (n === 1 ? "1 caso" : `${n} casos`);
 
 export function VectorTransmission({ onGoToSecurity }: { onGoToSecurity?: () => void } = {}) {
@@ -61,13 +62,14 @@ function TransmissionScreen({ onGoToSecurity }: { onGoToSecurity?: () => void })
 function BlocksList({ status, label, selectedId, onOpen }: {
   status: TransmissionBlockStatus; label: string; selectedId: string | null; onOpen(id: string): void;
 }) {
+  const labels = useVectorDiseases();
   const list = usePaged<TransmissionBlock>([ VC_BLOCKS_TB_KEY, status ], (before) => listTransmissionBlocks({ status: [ status ], before }),
     false, true, vectorError);
   return (
     <VectorListBody list={list}>
       {(items) => items.length === 0 ? <EmptyState title={EMPTY[status]} /> : (
         <DataTable label={`Bloqueios ${label.toLowerCase()}`} rows={items} rowKey={(b) => b.id} cols={[
-          { label: "Doença", w: "1.6fr", card: "title", render: (b) => <strong>{diseasesText(b)}</strong> },
+          { label: "Doença", w: "1.6fr", card: "title", render: (b) => <strong>{diseasesText(b, labels.disease)}</strong> },
           { label: "Casos", render: (b) => casesText(b.cases.length) },
           { label: "Quarteirão do caso", render: (b) => b.center_block?.number ?? "sem quarteirão" },
           { label: "Criado em", w: "1.2fr", render: (b) => fmtDateTime(b.created_at) },

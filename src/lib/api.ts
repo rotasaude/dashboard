@@ -8045,6 +8045,16 @@ export function getVectorDomains(): Promise<VectorControlDomains> {
   return jsonFetch<VectorControlDomains>(vcPath("domains"));
 }
 
+// ── Doenças (Q38; api fix/mod-35a-report-pickers 606e0d0a) ──
+// GET /vector_control/diseases: os nomes das notificáveis vigentes da cidade (as do módulo 25, na mesma ordem) e os rótulos dos
+// grupos do bloqueio (Catalog::DISEASE_GROUP_LABELS). Só rótulo, sem pessoa nem trilha; coordenação e municipal_admin (os outros
+// → 403 missing_role). Sem chave de query.
+export interface VectorDiseases { items: { code: string; name: string }[]; groups: { code: string; label: string }[] }
+export async function getVectorDiseases(): Promise<VectorDiseases> {
+  const b = await jsonFetch<Partial<VectorDiseases>>(vcPath("diseases"));
+  return { items: b?.items ?? [], groups: b?.groups ?? [] };
+}
+
 // ── Quarteirões (Q18: todos do bairro, ordem natural do número, sem cursor) ──
 export function listCityBlocks(neighborhoodId: string): Promise<CityBlock[]> {
   return vcItems<CityBlock>(withQuery(vcPath("blocks"), hvQuery({ neighborhood_id: neighborhoodId })));
