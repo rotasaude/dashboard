@@ -63,7 +63,7 @@ export function InstallForm({ microAreaId, today, onDone, onCancel }: {
 
       <fieldset style={fieldset} {...s.aria("household_id")}>
         <legend style={legend}>Domicílio</legend>
-        {picked ? (
+        {picked && (
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             <span style={{ fontSize: 13, overflowWrap: "anywhere" }}>{picked.address_short}</span>
             {profile.isPending && <span role="status" style={muted}>Carregando o perfil do imóvel…</span>}
@@ -75,7 +75,12 @@ export function InstallForm({ microAreaId, today, onDone, onCancel }: {
               </button>
             </div>
           </div>
-        ) : <HouseholdList microAreaId={microAreaId} disabled={frozen} onPick={(h) => { setPicked(h); s.clear("household_id"); }} />}
+        )}
+        {/* A lista do 24a grava trilha e é nominal (gcTime 0): fica montada e escondida com o domicílio escolhido, para "Trocar
+            domicílio" não ler de novo (nem perder as páginas carregadas). */}
+        <div style={{ display: picked ? "none" : "block" }}>
+          <HouseholdList microAreaId={microAreaId} disabled={frozen} onPick={(h) => { setPicked(h); s.clear("household_id"); }} />
+        </div>
       </fieldset>
       {s.errNode("household_id")}
 

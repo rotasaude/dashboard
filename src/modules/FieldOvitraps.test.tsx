@@ -25,8 +25,8 @@ import {
   TODAY35, VC_DOMAINS, householdProfile, householdVector, ovitrap, vcContext, vcUser
 } from "../test/vectorControlFixtures";
 import { FieldOvitraps } from "./FieldOvitraps";
-import { COLLECT_STALE_REREAD, LOST_ON_REMOVE } from "./vectorControl/CollectForm";
-import { INSTALL_NETWORK_RETRY } from "./vectorControl/InstallForm";
+import { COLLECT_STALE_REREAD, COLLECT_UNCERTAIN, LOST_ON_REMOVE, REINSTALL_NOTE } from "./vectorControl/CollectForm";
+import { DISCARD_UNCERTAIN_INSTALL, INSTALL_NETWORK_RETRY } from "./vectorControl/InstallForm";
 
 const ALL = [ api.fetchCurrentSession, api.getHomeVisitContext, api.listOvitraps, api.installOvitrap, api.collectOvitrap, api.getVectorDomains,
   api.listVisitHouseholds, api.getHouseholdVectorProfile ];
@@ -74,6 +74,18 @@ async function openCollect(number: string) {
   await screen.findByLabelText("Data da coleta");
 }
 const collect = () => fireEvent.click(screen.getByRole("button", { name: "Registrar coleta" }));
+// A releitura traz OV-09: esperar o cartão novo é esperar a releitura terminar; depois, a contagem exata (uma terceira falha).
+const OV9 = ovitrap({ id: "ov9", number: "OV-09", household: { id: "h2", address_short: "Rua das Palmeiras, 33" } });
+function rereadBrings() {
+  vi.mocked(api.listOvitraps).mockReset()
+    .mockResolvedValueOnce({ items: [ OV1, OV2 ], next_before: null })
+    .mockResolvedValue({ items: [ OV1, OV2, OV9 ], next_before: null });
+}
+async function settledReads(n: number) {
+  await screen.findByRole("article", { name: "Ovitrampa OV-09" });
+  await new Promise((r) => setTimeout(r, 20));
+  expect(api.listOvitraps).toHaveBeenCalledTimes(n);
+}
 
 describe("FieldOvitraps", () => {
   it("só o agente: ACS vê a frase e nada é listado", async () => {
@@ -132,6 +144,8 @@ describe("FieldOvitraps", () => {
     fireEvent.click(screen.getByRole("button", { name: "Trocar domicílio" }));
     await pickHousehold("Rua das Palmeiras, 33");
     expect(api.getHouseholdVectorProfile).toHaveBeenLastCalledWith("h2");
+    // A lista do 24a (nominal, grava trilha) ficou montada: trocar o domicílio não a lê de novo.
+    expect(api.listVisitHouseholds).toHaveBeenCalledTimes(1);
     expect(screen.queryByText(VECTOR_ERRORS.household_without_block)).toBeNull();
 
     // Q7(6): espaço no número recusa antes de enviar.
@@ -161,7 +175,10 @@ describe("FieldOvitraps", () => {
     vi.mocked(api.collectOvitrap).mockResolvedValue(ovitrap({ version: 3 }));
     await openCollect("OV-08");
     expect((screen.getByLabelText("Data da coleta") as HTMLInputElement).value).toBe(TODAY35);
-    expect((screen.getByLabelText("Reinstalar palheta") as HTMLInputElement).checked).toBe(true);
+    // Q7(5): sem caixa de reinstalar à parte; a única caixa é a de retirar.
+    expect(screen.queryByLabelText("Reinstalar palheta")).toBeNull();
+    expect(screen.getAllByRole("checkbox").map((c) => c.closest("label")?.textContent)).toEqual([ "Retirar a ovitrampa" ]);
+    expect(screen.getByText(REINSTALL_NOTE)).not.toBeNull();
     fireEvent.click(screen.getByLabelText("em bom estado"));
     collect();
     expect(await screen.findByText(VECTOR_ERRORS.collection_out_of_range)).not.toBeNull();
@@ -182,9 +199,7 @@ describe("FieldOvitraps", () => {
     vi.mocked(api.collectOvitrap).mockResolvedValue(ovitrap({ status: "lost", removed_on: TODAY35, open_reading: null }));
     await openCollect("OV-07");
     fireEvent.click(screen.getByLabelText("Retirar a ovitrampa"));
-    const reinstall = screen.getByLabelText("Reinstalar palheta") as HTMLInputElement;
-    expect(reinstall.checked).toBe(false);
-    expect(reinstall.disabled).toBe(true);
+    expect(screen.queryByText(REINSTALL_NOTE)).toBeNull();
     expect(screen.queryByText(LOST_ON_REMOVE)).toBeNull();
     fireEvent.click(screen.getByLabelText("perdida"));
     expect(screen.getByText(LOST_ON_REMOVE)).not.toBeNull();
@@ -220,23 +235,75 @@ describe("FieldOvitraps", () => {
     expect(await screen.findByText("ovitrampa OV-13 instalada")).not.toBeNull();
   });
 
+  it("reinstall é sempre !remove: marcar e desmarcar retirar manda reinstall true; nunca reinstall false sem retirar", async () => {
+    vi.mocked(api.collectOvitrap).mockResolvedValue(ovitrap({ version: 3 }));
+    await openCollect("OV-07");
+    fireEvent.click(screen.getByLabelText("Retirar a ovitrampa"));
+    fireEvent.click(screen.getByLabelText("Retirar a ovitrampa"));
+    expect(screen.getByText(REINSTALL_NOTE)).not.toBeNull();
+    fireEvent.click(screen.getByLabelText("seca"));
+    collect();
+    await waitFor(() => expect(api.collectOvitrap).toHaveBeenCalledTimes(1));
+    expect(api.collectOvitrap).toHaveBeenCalledWith("ov1", { collected_on: TODAY35, condition: "dry", reinstall: true, remove: false });
+    for (const [ , body ] of vi.mocked(api.collectOvitrap).mock.calls) expect(body.reinstall).toBe(!body.remove);
+  });
+
+  it("coleta com rede ou 5xx: fecha, uma releitura, a frase de conferir, nenhum reenvio", async () => {
+    rereadBrings();
+    vi.mocked(api.collectOvitrap).mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    await openCollect("OV-07");
+    fireEvent.click(screen.getByLabelText("em bom estado"));
+    collect();
+    expect(await screen.findByText(COLLECT_UNCERTAIN)).not.toBeNull();
+    expect(screen.queryByLabelText("Data da coleta")).toBeNull();
+    await settledReads(2);
+    expect(api.collectOvitrap).toHaveBeenCalledTimes(1);
+    cleanup();
+
+    rereadBrings();
+    vi.mocked(api.collectOvitrap).mockReset().mockRejectedValueOnce(new ApiError(503, { error: "unavailable" }, "x"));
+    await openCollect("OV-07");
+    fireEvent.click(screen.getByLabelText("em bom estado"));
+    collect();
+    expect(await screen.findByText(COLLECT_UNCERTAIN)).not.toBeNull();
+    await settledReads(2);
+    expect(api.collectOvitrap).toHaveBeenCalledTimes(1);
+  });
+
+  it("instalação pendurada por rede: Descartar confirmado fecha e relê a lista uma vez, sem reenviar", async () => {
+    rereadBrings();
+    vi.mocked(api.installOvitrap).mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    await openInstall();
+    await pickHousehold("Rua das Palmeiras, 33");
+    fillInstall("OV-12", true);
+    install();
+    expect(await screen.findByText(INSTALL_NETWORK_RETRY)).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Descartar" }));
+    expect(screen.getByText(DISCARD_UNCERTAIN_INSTALL)).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+    await settledReads(2);
+    expect(screen.queryByLabelText("Número")).toBeNull();
+    expect(api.installOvitrap).toHaveBeenCalledTimes(1);
+  });
+
   it("tela velha: ovitrampa já inativa ou sumida dá a frase, relê a lista uma vez e não reenvia", async () => {
+    rereadBrings();
     vi.mocked(api.collectOvitrap).mockRejectedValueOnce(new ApiError(422, { error: "ovitrap_not_active", path: "ovitrap_id" }, "x"));
     await openCollect("OV-07");
     fireEvent.click(screen.getByLabelText("em bom estado"));
     collect();
     expect(await screen.findByText(`${VECTOR_ERRORS.ovitrap_not_active} — ${COLLECT_STALE_REREAD}`)).not.toBeNull();
-    await waitFor(() => expect(api.listOvitraps).toHaveBeenCalledTimes(2));
+    await settledReads(2);
     expect(api.collectOvitrap).toHaveBeenCalledTimes(1);
     expect(screen.queryByLabelText("Data da coleta")).toBeNull();
     cleanup();
 
-    vi.mocked(api.listOvitraps).mockClear();
+    rereadBrings();
     vi.mocked(api.collectOvitrap).mockReset().mockRejectedValueOnce(new ApiError(404, { error: "not_found" }, "x"));
     await openCollect("OV-07");
     fireEvent.click(screen.getByLabelText("em bom estado"));
     collect();
-    await waitFor(() => expect(api.listOvitraps).toHaveBeenCalledTimes(2));
+    await settledReads(2);
     expect(api.collectOvitrap).toHaveBeenCalledTimes(1);
   });
 });

@@ -4,8 +4,9 @@
 // (`isEndemicAgentTeam`), senão VC_NOT_AGENT sem ler nada do 35a. O api confere de novo (Access.agent_refusal): 403
 // cbo_not_allowed ou missing_role depois da leitura dão a mesma frase; out_of_scope e o desligado, as deles (nunca o código cru).
 // Cartões das ativas da microárea (GET /vector_control/ovitraps?micro_area_id=&status=active, paginado): a rota grava a trilha
-// territory_registry com os imóveis mostrados, então a leitura é nominal (NOMINAL_QUERY), relida só UMA vez depois de cada
-// instalação, coleta ou tela velha. Sem pessoa: o imóvel só com o endereço curto. A janela da palheta vem dos parâmetros de
+// territory_registry com os imóveis mostrados, então a leitura é nominal (NOMINAL_QUERY), relida só por ação (instalação, coleta,
+// tela velha, descarte incerto): uma releitura das páginas já mostradas (a query infinita refaz cada página carregada, e cada GET
+// grava a trilha; com uma página só, um GET). Sem pessoa: o imóvel só com o endereço curto. A janela da palheta vem dos parâmetros de
 // GET /vector_control/domains (min e max) e do alvo de 5 dias do contrato §6. Nenhuma <table>, nenhum polling, nada em URL ou
 // storage. Uma gravação por vez (`WriteLockProvider`).
 import { useState } from "react";
@@ -101,7 +102,7 @@ function AreaOvitraps({ microAreaId, today }: { microAreaId: string; today: stri
   const [ done, setDone ] = useState<string | null>(null);
   const [ note, setNote ] = useState<string | null>(null);
 
-  // Uma releitura por ação, nunca sozinha.
+  // Uma releitura por ação, nunca sozinha: refaz as páginas já carregadas ("Carregar mais"), para o agente não perder o que via.
   const reread = () => void queryClient.invalidateQueries({ queryKey: key });
   const finish = (doneText: string | null, noteText: string | null, again: boolean) => {
     setForm(null); setDone(doneText); setNote(noteText);

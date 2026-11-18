@@ -1,7 +1,8 @@
 // src/modules/vectorControl/CollectForm.tsx
 // Coleta da palheta pelo agente de endemias (módulo 35a, F-35.5; contrato §6; Q7(5), Q9). POST /vector_control/ovitraps/:id/collect
-// com `{ collected_on, condition, reinstall, remove }`: a tela manda os dois, `reinstall: !remove` (com `remove` o api ignora o
-// reinstall). A janela da palheta (`collectionProblems`, dias corridos entre a instalação da leitura aberta e a coleta, nos
+// com `{ collected_on, condition, reinstall, remove }`: a tela manda os dois, sempre `reinstall: !remove` (Q7(5); com `remove` o
+// api ignora o reinstall). Não há caixa de reinstalar à parte: `reinstall: false` sem retirar deixaria a ovitrampa ativa sem
+// leitura aberta, e nenhuma rota do api a recupera (collect_ovitrap.rb: reading_not_open antes do remove). A janela da palheta (`collectionProblems`, dias corridos entre a instalação da leitura aberta e a coleta, nos
 // parâmetros dos domínios) recusa antes de enviar; sem os parâmetros (domínios falharam), quem decide é o api.
 // A coleta não tem client_uuid: tela velha (404, ovitrampa já inativa, leitura já fechada) ou rede/5xx (não se sabe se gravou)
 // fecham o formulário e o pai relê a lista UMA vez, sem reenviar.
@@ -15,13 +16,14 @@ import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } fr
 import { checkLabel, fieldLabel, fieldset, form, legend, muted, row } from "../exams/styles";
 
 export const LOST_ON_REMOVE = "a ovitrampa sai como perdida";
+export const REINSTALL_NOTE = "a palheta é reinstalada na coleta";
 export const COLLECT_STALE_REREAD = "a lista foi relida";
 export const COLLECT_UNCERTAIN = "não foi possível confirmar a coleta — a lista foi relida; confira a ovitrampa antes de coletar de novo";
 
 const CONDITIONS: ReadingCondition[] = [ "ok", "damaged", "lost", "dry" ];
 // A leitura já não está como a tela mostrou (collect_ovitrap.rb: ovitrap_not_active, reading_not_open; o 404 da ovitrampa).
 const GONE = [ "ovitrap_not_active", "reading_not_open" ];
-const OWN = [ "collected_on", "condition", "reinstall", "remove" ];
+const OWN = [ "collected_on", "condition", "remove" ];
 
 export type CollectParams = Pick<VectorControlDomains["parameters"], "ovitrap_collection_days_min" | "ovitrap_collection_days_max">;
 
@@ -36,7 +38,6 @@ export function CollectForm({ ovitrap, params, today, onDone, onStale, onCancel 
   });
   const [ collectedOn, setCollectedOn ] = useState(today);
   const [ condition, setCondition ] = useState<ReadingCondition | null>(null);
-  const [ reinstall, setReinstall ] = useState(true);
   const [ remove, setRemove ] = useState(false);
   const installedOn = ovitrap.open_reading?.installed_on ?? "";
   // Sem parâmetros, a janela não é conferida aqui (o api confere).
@@ -46,7 +47,7 @@ export function CollectForm({ ovitrap, params, today, onDone, onStale, onCancel 
     if (lock.held()) { ev.preventDefault(); return; }
     void f.submit(ev, {
       check: () => collectionProblems({ installedOn, collectedOn, condition }, range, today),
-      call: () => lock.run(() => collectOvitrap(ovitrap.id, { collected_on: collectedOn, condition: condition!, reinstall: !remove && reinstall, remove })),
+      call: () => lock.run(() => collectOvitrap(ovitrap.id, { collected_on: collectedOn, condition: condition!, reinstall: !remove, remove })),
       ok: onDone,
       stale: (text, err) => onStale(isNetworkOrServer(err) ? COLLECT_UNCERTAIN : `${text} — ${COLLECT_STALE_REREAD}`)
     });
@@ -80,14 +81,10 @@ export function CollectForm({ ovitrap, params, today, onDone, onStale, onCancel 
       {f.errNode("condition")}
 
       <label style={checkLabel}>
-        <input type="checkbox" checked={!remove && reinstall} disabled={busy || remove} onChange={(e) => setReinstall(e.target.checked)} />
-        Reinstalar palheta
-      </label>
-      <label style={checkLabel}>
         <input type="checkbox" checked={remove} disabled={busy} onChange={(e) => setRemove(e.target.checked)} />
         Retirar a ovitrampa
       </label>
-      {remove && condition === "lost" && <p role="status" style={muted}>{LOST_ON_REMOVE}</p>}
+      {remove ? condition === "lost" && <p role="status" style={muted}>{LOST_ON_REMOVE}</p> : <p style={muted}>{REINSTALL_NOTE}</p>}
 
       {f.top((p) => OWN.includes(p))}
       <div style={row}>
