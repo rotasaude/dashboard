@@ -421,7 +421,7 @@ export function renderModule(active: ModuleId, setActive: (id: ModuleId) => void
     case "vector-ovitraps": return <VectorOvitraps />;
     case "vector-samples": return <VectorSamples />;
     case "vector-liraa": return <VectorLiraa onGoToSecurity={() => setActive("security")} />;
-    case "vector-transmission": return <VectorTransmission />;
+    case "vector-transmission": return <VectorTransmission onGoToSecurity={() => setActive("security")} />;
     case "vector-tasks": return <VectorTasks />;
     case "vector-reports": return <VectorReports />;
     case "vector-settings": return <VectorSettings onGoToSecurity={() => setActive("security")} />;
