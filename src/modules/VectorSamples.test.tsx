@@ -22,7 +22,7 @@ import { renderWithProviders } from "../test/campaignFixtures";
 import { expectFrozenNotice } from "../test/frozenNotice";
 import { VC_DOMAINS, sample, vcUser } from "../test/vectorControlFixtures";
 import {
-  DONE_EMPTY, RESULT_SAVED, SAMPLE_CHANGED, SAMPLE_NOTE_REPEATED, SAMPLE_RACED, SAMPLE_STALE_REREAD, SAMPLE_UNCERTAIN, VectorSamples
+  DONE_EMPTY, PENDING_EMPTY, RESULT_SAVED, SAMPLE_CHANGED, SAMPLE_CORRECTION_UNCERTAIN, SAMPLE_NOTE_REPEATED, SAMPLE_RACED, SAMPLE_STALE_REREAD, SAMPLE_UNCERTAIN, VectorSamples
 } from "./VectorSamples";
 
 const ALL = [ api.fetchCurrentSession, api.listVectorSamples, api.recordSampleResult, api.getVectorDomains, api.getVectorParameters, api.listPanelNeighborhoods ];
@@ -231,6 +231,7 @@ describe("VectorSamples", () => {
       [ new ApiError(422, { error: "invalid_request", path: "result_note" }, "x"), SAMPLE_RACED, "pending" ],
       [ new ApiError(422, { error: "invalid_request", path: "examined_larvae" }, "x"), SAMPLE_CHANGED, "done" ],
       [ new TypeError("Failed to fetch"), SAMPLE_UNCERTAIN, "pending" ],
+      [ new TypeError("Failed to fetch"), SAMPLE_CORRECTION_UNCERTAIN, "done" ],
       [ new ApiError(503, {}, "x"), SAMPLE_UNCERTAIN, "pending" ]
     ];
     for (const [ err, text, state ] of cases) {
@@ -345,6 +346,50 @@ describe("VectorSamples", () => {
     mount();
     expect(await screen.findByRole("alert")).not.toBeNull();
     expect(screen.queryByText(/missing_role|403/)).toBeNull();
+  });
+
+  it("envio em voo e troca para Com resultado: ela relê exatamente uma vez quando está (ou fica) à vista", async () => {
+    const saved = sample({ ...SA1, result: { examined_larvae: 8, aegypti_larvae: 5, albopictus_larvae: 0, result_at: "2026-11-16T13:00:00Z", corrected: false } });
+    for (const backToPending of [ false, true ]) {
+      vi.mocked(api.listVectorSamples).mockClear();
+      let resolve!: (s: VectorSample) => void;
+      vi.mocked(api.recordSampleResult).mockReset().mockImplementation(() => new Promise((r) => { resolve = r; }));
+      mount();
+      await openForm(/^Lançar resultado — amostra 3F2A9C1E-01/);
+      fill("8", "5", "0");
+      fireEvent.click(screen.getByRole("button", { name: "Registrar resultado" }));
+      // Com o envio em voo, "Com resultado" monta e lê a fila antiga.
+      fireEvent.click(screen.getByRole("tab", { name: "Com resultado" }));
+      await screen.findByRole("table", { name: DONE });
+      expect(states()).toEqual([ "pending", "done" ]);
+      if (backToPending) fireEvent.click(screen.getByRole("tab", { name: "Sem resultado" }));
+      resolve(saved);
+      expect(await screen.findByText(RESULT_SAVED)).not.toBeNull();
+      await waitFor(() => expect(api.listVectorSamples).toHaveBeenCalledTimes(backToPending ? 3 : 4));
+      await tick();
+      if (backToPending) {
+        // Escondida, ela não lê; ao ficar à vista, relê uma vez.
+        expect(states()).toEqual([ "pending", "done", "pending" ]);
+        fireEvent.click(screen.getByRole("tab", { name: "Com resultado" }));
+        await waitFor(() => expect(api.listVectorSamples).toHaveBeenCalledTimes(4));
+      } else {
+        expect([ ...states() ].sort()).toEqual([ "done", "done", "pending", "pending" ]);
+      }
+      for (const name of [ "Sem resultado", "Com resultado", "Sem resultado", "Com resultado" ]) {
+        fireEvent.click(screen.getByRole("tab", { name }));
+        await tick();
+      }
+      expect(api.listVectorSamples).toHaveBeenCalledTimes(4);
+      expect(api.recordSampleResult).toHaveBeenCalledTimes(1);
+      cleanup();
+    }
+  });
+
+  it("fila vazia: a frase", async () => {
+    vi.mocked(api.listVectorSamples).mockResolvedValue(page([]));
+    mount();
+    expect(await screen.findByText(PENDING_EMPTY)).not.toBeNull();
+    expect(api.listVectorSamples).toHaveBeenCalledTimes(1);
   });
 
   it("aba vazia: a frase", async () => {

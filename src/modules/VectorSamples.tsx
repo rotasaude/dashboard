@@ -9,12 +9,12 @@
 // (Q32); código cru só se ele falhar.
 // "Lançar resultado" / "Corrigir resultado" abrem o formulário: examinadas, Ae. aegypti, Ae. albopictus e, só na correção, a nota
 // (record_sample_result.rb: o primeiro resultado com nota → 422 result_note; a correção exige nota de 10–500 e muda algum número).
-// Depois de gravar, a aba aberta é relida UMA vez; depois de lançar, "Com resultado", se já foi aberta, relê uma vez quando for
-// aberta de novo (a correção não muda "Sem resultado").
+// Depois de gravar, a aba aberta é relida UMA vez; depois de lançar, "Com resultado" fica velha e relê UMA vez quando estiver (ou
+// ficar) à vista, mesmo se foi aberta com o envio em voo (a correção não muda "Sem resultado").
 // Tela velha (relê UMA vez, sem reenvio): 404, o primeiro resultado recusado em result_note (outra pessoa lançou antes), a correção
 // recusada em examined_larvae (os números já são esses: outra pessoa corrigiu) e rede/5xx (sem client_uuid: não se sabe se gravou).
 // A nota nunca sai do campo. Nada em URL ou storage; nenhum polling.
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   errorCode, getVectorDomains, listVectorSamples, recordSampleResult, type ApiError, type VectorControlDomains, type VectorSample
@@ -25,7 +25,8 @@ import {
   STATIC_QUERY, VC_DOMAINS_KEY, VC_SAMPLES_KEY, domainLabel, isVectorStale, optionalNote, sampleResultProblems, vectorError, vectorRefusals
 } from "../lib/vectorControl";
 import { VectorGate } from "./vectorControl/VectorGate";
-import { usePaged, type Paged } from "./homeVisits/usePaged";
+import { usePaged } from "./homeVisits/usePaged";
+import { VectorListBody } from "./vectorControl/VectorListBody";
 import { useFormProblems } from "./psychosocial/useFormProblems";
 import { SegmentedControl } from "../shell/SegmentedControl";
 import { Panel } from "../components/Panel";
@@ -39,9 +40,10 @@ export const RESULT_SAVED = "Resultado lançado. O índice do LIRAa usa o result
 export const PENDING_EMPTY = "nenhuma amostra sem resultado";
 export const DONE_EMPTY = "nenhuma amostra com resultado";
 export const SAMPLE_STALE_REREAD = "a fila foi relida";
-export const SAMPLE_RACED = "esta amostra já tem resultado — a fila foi relida; para mudar, use Corrigir resultado";
+export const SAMPLE_RACED = "esta amostra já tem resultado — a fila foi relida; para mudar, abra a aba Com resultado e use Corrigir resultado";
 export const SAMPLE_CHANGED = "o resultado desta amostra mudou — a fila foi relida; confira antes de corrigir";
 export const SAMPLE_UNCERTAIN = "não foi possível confirmar o resultado — a fila foi relida; confira a amostra antes de lançar de novo";
+export const SAMPLE_CORRECTION_UNCERTAIN = "não foi possível confirmar a correção — a fila foi relida; confira a amostra antes de corrigir de novo";
 export const SAMPLE_NOTE_REPEATED = "a nota é igual à da correção anterior — escreva o que mudou nesta correção";
 
 type State = "pending" | "done";
@@ -62,21 +64,29 @@ function SamplesScreen() {
   const queryClient = useQueryClient();
   const [ tab, setTab ] = useState<State>("pending");
   const [ visited, setVisited ] = useState<ReadonlySet<State>>(() => new Set<State>([ "pending" ]));
-  // A aba escondida que ficou velha com uma gravação na outra: relê uma vez, quando for aberta.
-  const [ dirty, setDirty ] = useState<ReadonlySet<State>>(() => new Set<State>());
+  // Refs, não estado: a resposta de um envio chega com o closure do clique, e a aba pode ter mudado (ou montado) enquanto ele voava.
+  const tabRef = useRef<State>("pending");
+  const mounted = useRef<Set<State>>(new Set<State>([ "pending" ]));
+  // "Com resultado" velha por um lançamento: relê UMA vez quando estiver (ou ficar) à vista; se ainda não montou, a montagem já lê.
+  const dirty = useRef<Set<State>>(new Set<State>());
   const domains = useQuery({ queryKey: [ VC_DOMAINS_KEY ], queryFn: getVectorDomains, ...STATIC_QUERY });
-  const open = (t: State) => {
-    setTab(t);
-    setVisited((v) => (v.has(t) ? v : new Set([ ...v, t ])));
-    if (dirty.has(t)) {
-      setDirty((d) => new Set([ ...d ].filter((x) => x !== t)));
-      void queryClient.invalidateQueries({ queryKey: samplesKey(t) });
-    }
+  const refresh = (t: State) => {
+    if (!dirty.current.delete(t)) return;
+    if (mounted.current.has(t)) void queryClient.invalidateQueries({ queryKey: samplesKey(t) });
   };
-  // Gravou em `from`: a aba aberta relê (o SamplesList). O resultado novo (ou a corrida) muda "Com resultado": se montada, ela
-  // relê quando for aberta. A correção não mexe em "Sem resultado" (a amostra já saiu dela).
+  const open = (t: State) => {
+    tabRef.current = t;
+    setTab(t);
+    refresh(t);
+    mounted.current.add(t);
+    setVisited((v) => (v.has(t) ? v : new Set([ ...v, t ])));
+  };
+  // Gravou em `from`: a aba aberta relê (o SamplesList). O lançamento (ou a corrida) muda "Com resultado", vista ou não, montada ou
+  // não; a correção não mexe em "Sem resultado" (a amostra já saiu dela).
   const saved = (from: State) => {
-    if (from === "pending" && visited.has("done")) setDirty((d) => new Set([ ...d, "done" as const ]));
+    if (from !== "pending") return;
+    dirty.current.add("done");
+    if (tabRef.current === "done") refresh("done");
   };
   return (
     <div style={stack}>
@@ -150,32 +160,13 @@ function SamplesList({ state, domains, onSaved }: { state: State; domains: Vecto
         {note && <p role="alert" style={alert}>{note}</p>}
         <Panel title={label}>
           <div style={{ padding: 16 }}>
-            <ListBody list={list}>
+            <VectorListBody list={list}>
               {(items) => <DataTable<VectorSample> label={label} cols={cols} rows={items} rowKey={(s) => s.id} empty={corrected ? DONE_EMPTY : PENDING_EMPTY} />}
-            </ListBody>
+            </VectorListBody>
           </div>
         </Panel>
       </div>
     </>
-  );
-}
-
-// O corpo da lista paginada: a recusa pela tabela do 35a (nunca o código cru), carregando, itens e "Carregar mais".
-function ListBody<T>({ list, children }: { list: Paged<T>; children(items: T[]): ReactNode }) {
-  if (list.error) return <p role="alert" style={alert}>{vectorError(list.error)}</p>;
-  if (!list.items) return <p role="status" style={muted}>Carregando…</p>;
-  return (
-    <div style={stack}>
-      {list.note && <p role="status" style={muted}>{list.note}</p>}
-      {children(list.items)}
-      {list.hasMore && (
-        <div>
-          <button type="button" style={secondaryButtonStyle} disabled={list.loadingMore} onClick={() => void list.more()}>
-            {list.loadingMore ? "Carregando…" : "Carregar mais"}
-          </button>
-        </div>
-      )}
-    </div>
   );
 }
 
@@ -209,7 +200,7 @@ function SampleResultForm({ sample, corrected, group, onDone, onStale, onCancel 
       }),
       ok: onDone,
       stale: (text, err) => {
-        if (isNetworkOrServer(err)) onStale(SAMPLE_UNCERTAIN);
+        if (isNetworkOrServer(err)) onStale(corrected ? SAMPLE_CORRECTION_UNCERTAIN : SAMPLE_UNCERTAIN);
         else if (raced(err, corrected)) onStale(SAMPLE_RACED);
         else if (changed(err, corrected)) onStale(SAMPLE_CHANGED);
         else onStale(`${text} — ${SAMPLE_STALE_REREAD}`);

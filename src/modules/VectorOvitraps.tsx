@@ -12,7 +12,7 @@
 //   - "Índices e mapa": a semana (padrão: a anterior à de hoje) e o bairro; o relatório `ovitraps` (OvitrapIndex: IPO, IDO, IDV;
 //     só contagens) e o mapa da camada `ovitraps` (a única que o laboratório lê, `vectorMapLayers`; grava a trilha territory_map).
 // O bairro escolhido vale para as duas últimas abas e fica só em memória. Nada em URL ou storage; nenhum polling.
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   getVectorReport, listOvitrapReadings, listOvitraps, listPanelNeighborhoods, type Ovitrap, type OvitrapReading, type OvitrapStatus,
@@ -31,7 +31,8 @@ import {
 import { VectorGate } from "./vectorControl/VectorGate";
 import { CountForm, eggsText } from "./vectorControl/CountForm";
 import { VectorMapPanel } from "./vectorControl/VectorMapPanel";
-import { usePaged, type Paged } from "./homeVisits/usePaged";
+import { usePaged } from "./homeVisits/usePaged";
+import { VectorListBody } from "./vectorControl/VectorListBody";
 import { SegmentedControl } from "../shell/SegmentedControl";
 import { Panel } from "../components/Panel";
 import { DataTable, type Column } from "../components/DataTable";
@@ -186,32 +187,13 @@ function ReadingsList({ state, done, note, setDone, setNote }: {
         {note && <p role="alert" style={alert}>{note}</p>}
         <Panel title={label}>
           <div style={{ padding: 16 }}>
-            <ListBody list={list}>
+            <VectorListBody list={list}>
               {(items) => <DataTable<OvitrapReading> label={label} cols={cols} rows={items} rowKey={(r) => r.id} empty={corrected ? COUNTED_EMPTY : TO_COUNT_EMPTY} />}
-            </ListBody>
+            </VectorListBody>
           </div>
         </Panel>
       </div>
     </>
-  );
-}
-
-// O corpo de uma lista paginada do 35a: a recusa pela tabela do 35a (nunca o código cru), carregando, itens e "Carregar mais".
-function ListBody<T>({ list, children }: { list: Paged<T>; children(items: T[]): ReactNode }) {
-  if (list.error) return <p role="alert" style={alert}>{vectorError(list.error)}</p>;
-  if (!list.items) return <p role="status" style={muted}>Carregando…</p>;
-  return (
-    <div style={stack}>
-      {list.note && <p role="status" style={muted}>{list.note}</p>}
-      {children(list.items)}
-      {list.hasMore && (
-        <div>
-          <button type="button" style={secondaryButtonStyle} disabled={list.loadingMore} onClick={() => void list.more()}>
-            {list.loadingMore ? "Carregando…" : "Carregar mais"}
-          </button>
-        </div>
-      )}
-    </div>
   );
 }
 
@@ -245,9 +227,9 @@ function NeighborhoodOvitraps({ neighborhoodId }: { neighborhoodId: string }) {
             {STATUSES.map((s) => <option key={s} value={s}>{ovitrapStatusLabel(s)}</option>)}
           </select>
         </label>
-        <ListBody list={list}>
+        <VectorListBody list={list}>
           {(items) => <DataTable<Ovitrap> label="Ovitrampas do bairro" cols={cols} rows={items} rowKey={(o) => o.id} empty={NEIGHBORHOOD_OVITRAPS_EMPTY} />}
-        </ListBody>
+        </VectorListBody>
       </div>
     </Panel>
   );
