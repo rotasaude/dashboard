@@ -8,7 +8,8 @@
 // Duas abas ("Abertas" | "Conciliadas"), cada uma com o seu cursor (`next_before`), mais novas primeiro. "Conciliar" com nota 10–500 →
 // POST /stock_shortfalls/:id/reconcile { note } (ReconcileShortfall; a nota nunca volta do api). A conciliação NÃO mexe no saldo.
 // Tela velha (409 already_reconciled, 404) e rede/5xx (não se sabe se gravou): a frase e UMA releitura, nenhum reenvio.
-// Sem pessoa: só o dia da visita, o produto, a quantidade, a causa e o local; nem quem conciliou (`reconciled_by`) aparece. Sem trilha:
+// Sem cidadão nem paciente: só o dia da visita, o produto, a quantidade, a causa e o local. Na aba Conciliadas, quem conciliou (Q40(2): o
+// profissional que agiu, como no 32b): "conciliada por <nome>", ou "conciliada pelo sistema" com `reconciled_by: null` (estorno W-6). Sem trilha:
 // STATIC_QUERY, relida depois de cada ação; nenhum polling; nada em URL além de ids, estado e cursor; nada em storage.
 import { useRef, useState, type FormEvent } from "react";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
@@ -53,6 +54,8 @@ export function VectorStockShortfalls() {
 
 const productText = (s: VectorShortfall) => `${s.product.code} — ${s.product.name}`;
 const quantityText = (s: VectorShortfall) => `${fmtQuantity(s.quantity)} ${s.product.unit}`;
+// Json.shortfalls: `reconciled_by` nulo = o sistema (estorno da visita retirada); `{ name: null }` = pessoa sem perfil profissional ("—", como o 32b).
+const reconcilerText = (s: VectorShortfall) => (s.reconciled_by ? `conciliada por ${s.reconciled_by.name ?? "—"}` : "conciliada pelo sistema");
 
 // `scope`: o local vector_control do almoxarife; null = a coordenação lendo todas.
 function Shortfalls({ scope }: { scope: string | null }) {
@@ -94,7 +97,9 @@ function Shortfalls({ scope }: { scope: string | null }) {
               { label: "Causa", w: "1.5fr", render: (s) => shortfallCauseLabel(s.cause) },
               { label: "Local", w: "1.5fr", render: (s) => s.stock_location?.name ?? "sem local" },
               ...(state === "reconciled" ? [ {
-                label: "Conciliada em", w: "1.3fr", render: (s: VectorShortfall) => <span className="mono">{fmtDateTime(s.reconciled_at)}</span>
+                label: "Conciliada", w: "2fr", render: (s: VectorShortfall) => (
+                  <span><span className="mono">{fmtDateTime(s.reconciled_at)}</span>{` · ${reconcilerText(s)}`}</span>
+                )
               } ] : [ {
                 label: "", w: "auto", card: "actions" as const, render: (s: VectorShortfall) => (
                   <button type="button" style={secondaryButtonStyle} aria-label={`Conciliar falta de ${productText(s)}`} disabled={target !== null}

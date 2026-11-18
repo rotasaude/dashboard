@@ -214,6 +214,30 @@ describe("PharmacyTransfers", () => {
       expect(mocked(api.listPositions)).toHaveBeenCalledWith({ locationId: "loc-vc", before: null });
     });
 
+    it("Q40(1): a base B listada com roles [] é oferecida como destino, nunca como origem", async () => {
+      const B = { ...VC2, roles: [] };
+      mocked(api.fetchCurrentSession).mockResolvedValue(phUser([ "stock_keeper" ], { features: VC_FEATURES }));
+      mocked(api.listMyPharmacyLocations).mockResolvedValue([ B, VC_LOCATION ]);
+      mocked(api.listPositions).mockResolvedValue(vcPositions());
+      mocked(api.sendTransfer).mockResolvedValue(transfer({ from: VC_REF, to: { id: "loc-vc2", name: "Base de campo Norte", kind: "vector_control" } }));
+      renderWithProviders(<PharmacyTransfers today={TODAY27} />);
+      await screen.findByLabelText("Destino");
+      // Origem: só o local em que a pessoa é almoxarife (sem seletor de local; B não é escolhível).
+      expect(screen.queryByLabelText("Local")).toBeNull();
+      expect(screen.getByText("Enviar de UVZ — insumos")).not.toBeNull();
+      expect(within(screen.getByLabelText("Destino")).getAllByRole("option").map((o) => o.textContent))
+        .toEqual([ "Escolha o local de destino", "Base de campo Norte — Controle vetorial (vigilância ambiental)" ]);
+      text("Destino", "loc-vc2");
+      fireEvent.click(await screen.findByRole("button", { name: "Acrescentar Pyriproxyfen 0,5% G" }));
+      text("Quantidade", "50");
+      fireEvent.click(screen.getByRole("button", { name: "Enviar transferência" }));
+      await waitFor(() => expect(mocked(api.sendTransfer)).toHaveBeenCalledTimes(1));
+      expect(mocked(api.sendTransfer)).toHaveBeenCalledWith({ to_location_id: "loc-vc2", from_location_id: "loc-vc", items: [ { lot_id: "lot-vc", quantity: "50" } ] });
+      // Ler o estoque de B exigiria vínculo (403): a tela só lê a posição da origem (antes e na releitura depois do envio).
+      expect(mocked(api.listPositions).mock.calls.map((c) => c[0].locationId)).toEqual([ "loc-vc", "loc-vc" ]);
+      expect(mocked(api.listTransfers).mock.calls.every((c) => c[0].locationId === "loc-vc")).toBe(true);
+    });
+
     it("sem outro local vector_control: só a escolha vazia, e nada é enviado", async () => {
       mocked(api.fetchCurrentSession).mockResolvedValue(phUser([ "stock_keeper" ], { features: VC_FEATURES }));
       mocked(api.listMyPharmacyLocations).mockResolvedValue([ VC_LOCATION ]);

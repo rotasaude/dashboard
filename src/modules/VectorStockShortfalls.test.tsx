@@ -186,18 +186,35 @@ describe("VectorStockShortfalls", () => {
     expect(mocked(api.reconcileVectorShortfall)).toHaveBeenCalledTimes(2);
   });
 
-  it("aba Conciliadas: lê state=reconciled; mostra a data da conciliação e nenhuma pessoa (nem quem conciliou); sem botão", async () => {
+  it("aba Conciliadas (Q40(2)): lê state=reconciled; data e quem conciliou — o nome, ou o sistema no estorno; nenhum dado de cidadão; sem botão", async () => {
     mocked(api.fetchCurrentSession).mockResolvedValue(coordinator());
-    mocked(api.listVectorShortfalls).mockImplementation(async (q: { state: string }) => page(q.state === "open" ? [ OPEN ] : [ DONE ]));
+    const SYSTEM = shortfall({ id: "sf4", reconciled_at: "2026-11-16T16:00:00Z", reconciled_by: null, cause: "insufficient_balance",
+      product: { id: "pr2", code: "MAL", name: "Malationa 44% EW", unit: "ml" } });
+    // Um campo de cidadão que viesse a mais na resposta não aparece: a tela só mostra as colunas dela.
+    const leaky = { ...DONE, household: { resident_name: "Maria Cidadã" }, patient: { name: "João Paciente" } } as typeof DONE;
+    mocked(api.listVectorShortfalls).mockImplementation(async (q: { state: string }) => page(q.state === "open" ? [ OPEN ] : [ leaky, SYSTEM ]));
     renderWithProviders(<VectorStockShortfalls />);
     await screen.findByRole("row", { name: /Pyriproxyfen/ });
     fireEvent.click(screen.getByRole("tab", { name: "Conciliadas" }));
     await waitFor(() => expect(mocked(api.listVectorShortfalls)).toHaveBeenCalledTimes(2));
     expect(mocked(api.listVectorShortfalls).mock.calls[1][0]).toEqual({ state: "reconciled", locationId: null, before: null });
-    const row = await screen.findByRole("row", { name: /sem lote do produto/ });
-    expect(row.textContent).toContain("16/11/2026");
-    expect(document.body.textContent).not.toContain("Paulo Almoxarife");
+    const byName = await screen.findByRole("row", { name: /sem lote do produto/ });
+    expect(byName.textContent).toContain("16/11/2026");
+    expect(byName.textContent).toContain("conciliada por Paulo Almoxarife");
+    const bySystem = screen.getByRole("row", { name: /Malationa/ });
+    expect(bySystem.textContent).toContain("conciliada pelo sistema");
+    expect(bySystem.textContent).not.toContain("conciliada por ");
+    expect(document.body.textContent).not.toContain("Maria Cidadã");
+    expect(document.body.textContent).not.toContain("João Paciente");
     expect(screen.queryByRole("button", { name: /Conciliar falta de/ })).toBeNull();
+  });
+
+  it("aba Abertas não mostra quem conciliou", async () => {
+    mocked(api.fetchCurrentSession).mockResolvedValue(coordinator());
+    renderWithProviders(<VectorStockShortfalls />);
+    await screen.findByRole("row", { name: /Pyriproxyfen/ });
+    expect(document.body.textContent).not.toContain("conciliada por");
+    expect(document.body.textContent).not.toContain("conciliada pelo sistema");
   });
 
   it("Carregar mais segue o cursor da aba", async () => {
