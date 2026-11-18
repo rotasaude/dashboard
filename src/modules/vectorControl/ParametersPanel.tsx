@@ -14,8 +14,8 @@ import { STATIC_QUERY, VC_DOMAINS_KEY, VC_PARAMS_KEY, vectorError, vectorRefusal
 import { VECTOR_ERRORS } from "../../lib/vectorErrors";
 import { Panel } from "../../components/Panel";
 import { SensitiveAction } from "../../components/SensitiveAction";
-import { buttonStyle, inputStyle } from "../../components/formStyles";
-import { alert, fieldLabel, fieldset, legend, muted, okText, stack } from "../exams/styles";
+import { buttonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
+import { alert, fieldLabel, fieldset, legend, muted, okText, row, stack } from "../exams/styles";
 
 type ParamKey = keyof VectorParameters;
 export type ParamDraft = { [K in ParamKey]: K extends "iip_bands" ? [ string, string ] : string };
@@ -57,12 +57,14 @@ const BELOW: [ ParamKey, ParamKey, string ][] = [
 
 const NUM = new Intl.NumberFormat("pt-BR");
 const decimal = (n: number) => String(n).replace(".", ",");
+// As faixas do IIP como o api as grava (Float: 1.0, 4.0) e como o contrato as escreve (1,0 / 4,0); casas a mais ficam como estão.
+const BAND = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 20, useGrouping: false });
 export function draftOf(v: VectorParameters): ParamDraft {
   const out = {} as Record<ParamKey, unknown>;
   for (const f of PARAM_FIELDS) {
     const value = v[f.key];
     out[f.key] = f.kind === "diseases" ? (value as string[]).join(", ")
-      : f.kind === "bands" ? (value as number[]).map(decimal)
+      : f.kind === "bands" ? (value as number[]).map((n) => BAND.format(n))
       : f.kind === "fraction" ? decimal(value as number) : String(value);
   }
   return out as ParamDraft;
@@ -139,20 +141,28 @@ export function ParametersPanel({ onGoToSecurity }: { onGoToSecurity?: () => voi
   const [ notice, setNotice ] = useState<Notice>(null);
 
   async function saved(loaded: number, result: VectorParameterVersion) {
-    setNotice({ ok: true, text: result.version === loaded + 1 ? PARAMS_SAVED(result.version) : PARAMS_RACED(result.version) });
-    // Uma releitura (a versão vigente) e os domínios, que levam parte dos parâmetros ao boletim.
+    // A corrida é aviso (outra gravação foi sobrescrita), não sucesso.
+    setNotice(result.version === loaded + 1 ? { ok: true, text: PARAMS_SAVED(result.version) } : { ok: false, text: PARAMS_RACED(result.version) });
+    // A versão gravada fica na tela mesmo que a releitura falhe; depois, UMA releitura (a vigente) e os domínios, que levam parte
+    // dos parâmetros ao boletim.
+    queryClient.setQueryData([ VC_PARAMS_KEY ], result);
     await Promise.all([ queryClient.invalidateQueries({ queryKey: [ VC_PARAMS_KEY ] }), queryClient.invalidateQueries({ queryKey: [ VC_DOMAINS_KEY ] }) ]);
   }
 
   return (
     <Panel title="Parâmetros técnicos" sub="cada gravação cria uma versão nova">
       <div style={stack}>
-        {params.isError ? <p role="alert" style={alert}>{vectorError(params.error)}</p>
-          : !params.data ? <p role="status" style={muted}>Carregando…</p>
+        {params.isError && (
+          <div style={row}>
+            <p role="alert" style={alert}>{vectorError(params.error)}</p>
+            <button type="button" style={secondaryButtonStyle} disabled={params.isFetching} onClick={() => void params.refetch()}>Tentar de novo</button>
+          </div>
+        )}
+        {!params.data ? (!params.isError && <p role="status" style={muted}>Carregando…</p>)
           : (
             <>
               <p style={muted}>{parametersVersionLabel(params.data)}</p>
-              {notice && <p role="status" style={notice.ok ? okText : alert}>{notice.text}</p>}
+              {notice && <p role={notice.ok ? "status" : "alert"} style={notice.ok ? okText : alert}>{notice.text}</p>}
               <ParamsForm key={params.data.version} loaded={params.data} onEdit={() => setNotice(null)}
                 onSaved={(r) => saved(params.data!.version, r)} onGoToSecurity={onGoToSecurity} />
             </>
@@ -211,7 +221,7 @@ function ParamsForm({ loaded, onEdit, onSaved, onGoToSecurity }: {
               </label>
             ))}
           </div>
-          <p style={muted}>abaixo da faixa média é baixo; da alta em diante, alto (uma casa decimal)</p>
+          <p style={muted}>abaixo da faixa média é baixo; da alta em diante, alto; o índice é calculado com uma casa</p>
           {err(f.key)}
         </div>
       );

@@ -16,8 +16,8 @@ import { VC_NO_ROLE } from "../lib/vectorControl";
 import { VECTOR_ERRORS } from "../lib/vectorErrors";
 import { renderWithProviders, sessionWith } from "../test/campaignFixtures";
 import { ADULTICIDE, INACTIVE_PRODUCT, LARVICIDE, PARAMS, VC_DOMAINS, VC_FEATURES, parameterVersion, vcUser } from "../test/vectorControlFixtures";
-import { productProblems } from "./vectorControl/ProductsPanel";
-import { PARAM_FIELDS, PARAMS_RACED, draftOf, parameterProblems, parametersVersionLabel, type ParamDraft } from "./vectorControl/ParametersPanel";
+import { NOTHING_CHANGED, productProblems } from "./vectorControl/ProductsPanel";
+import { PARAM_FIELDS, PARAMS_RACED, PARAMS_SAVED, draftOf, parameterProblems, parametersVersionLabel, type ParamDraft } from "./vectorControl/ParametersPanel";
 import { LOCATION_GONE, NO_LOCATION, VectorSettings } from "./VectorSettings";
 
 const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
@@ -154,6 +154,25 @@ describe("produtos de campo", () => {
     expect(describedText(field("Código"))).toBe(productProblems({ code: "", name: "x", unit: "g", charge: "1", uses: [ "focal" ] }, [])[0].text);
   });
 
+  it("sem /domains, os usos aparecem crus; editar sem mudar nada não chama o api", async () => {
+    mocked(api.getVectorDomains).mockRejectedValue(new ApiError(503, { error: "unavailable" }, "x"));
+    mount();
+    await productsTable();
+    await waitFor(() => expect(api.getVectorDomains).toHaveBeenCalledTimes(1));
+    expect(rowOf("PYR").getByText("focal")).not.toBeNull();
+    expect(rowOf("MAL").getByText("perifocal, spatial")).not.toBeNull();
+    fireEvent.click(rowOf("PYR").getByRole("button", { name: "Editar PYR" }));
+    for (const raw of [ "focal", "perifocal", "spatial" ]) expect(screen.getByLabelText(raw)).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Salvar produto" }));
+    expect(await screen.findByText(NOTHING_CHANGED)).not.toBeNull();
+    // Carga "2" igual a "2.00": também nada mudou.
+    type("Tamanho da carga", "2");
+    fireEvent.click(await screen.findByRole("button", { name: "Salvar produto" }));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.getByText(NOTHING_CHANGED)).not.toBeNull();
+    expect(api.updateVectorProduct).not.toHaveBeenCalled();
+  });
+
   it("limites do api dos dois lados: código 1–10, nome 1–80, carga > 0 com até 8 inteiros e 2 casas, ao menos um uso", () => {
     const ok = { code: "B", name: "N", unit: "g", charge: "0,01", uses: [ "focal" ] };
     const paths = (d: Partial<typeof ok>) => productProblems({ ...ok, ...d }, []).map((p) => p.path);
@@ -185,7 +204,8 @@ describe("parâmetros técnicos", () => {
     expect(field("Alerta de ovos").value).toBe("100");
     expect(field("Doenças que abrem bloqueio (códigos separados por vírgula)").value).toBe("dengue, chikungunya, zika");
     expect(field("Fração de imóveis do quarteirão — padrão").value).toBe("0,2");
-    expect(field("IIP — início da faixa média").value).toBe("1");
+    expect(field("IIP — início da faixa média").value).toBe("1,0");
+    expect(field("IIP — início da faixa alta").value).toBe("4,0");
     type("Alerta de ovos", "120");
     fireEvent.click(screen.getByRole("button", { name: "Salvar parâmetros" }));
     expect(await screen.findByText("Cria a versão 1. O levantamento já sorteado continua com a versão do sorteio.")).not.toBeNull();
@@ -218,12 +238,46 @@ describe("parâmetros técnicos", () => {
     // Outra coordenação gravou a versão 4 entre a leitura e o envio: esta saiu como a 5.
     mocked(api.getVectorParameters).mockResolvedValue(parameterVersion({ version: 5, values: sent, created_at: "2026-11-16T13:05:00.000000Z" }));
     resolve(parameterVersion({ version: 5, values: sent, created_at: "2026-11-16T13:05:00.000000Z" }));
-    expect(await screen.findByText(PARAMS_RACED(5))).not.toBeNull();
+    // Aviso, não sucesso: outra gravação foi sobrescrita.
+    expect((await screen.findByText(PARAMS_RACED(5))).getAttribute("role")).toBe("alert");
     expect(await screen.findByText("versão 5, de 16/11/2026")).not.toBeNull();
     await waitFor(() => expect(api.getVectorParameters).toHaveBeenCalledTimes(2));
     await new Promise((r) => setTimeout(r, 20));
     expect(api.getVectorParameters).toHaveBeenCalledTimes(2);
     expect(api.putVectorParameters).toHaveBeenCalledTimes(1);
+  });
+
+  it("releitura que falha depois de gravar: a versão salva e o aviso ficam, com o erro e Tentar de novo", async () => {
+    const saved = parameterVersion({ version: 1, values: { ...PARAMS, ovitrap_alert_eggs: 120 }, created_at: "2026-11-16T13:00:00.000000Z" });
+    mocked(api.putVectorParameters).mockResolvedValue(saved);
+    mount();
+    await screen.findByText("padrão de fábrica (versão 0)");
+    mocked(api.getVectorParameters).mockRejectedValue(new ApiError(503, { error: "unavailable" }, "x"));
+    type("Alerta de ovos", "120");
+    fireEvent.click(screen.getByRole("button", { name: "Salvar parâmetros" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Confirmar" }));
+    await waitFor(() => expect(api.getVectorParameters).toHaveBeenCalledTimes(2));
+    expect(await screen.findByRole("button", { name: "Tentar de novo" })).not.toBeNull();
+    expect(screen.getByText("versão 1, de 16/11/2026")).not.toBeNull();
+    expect(screen.getByText(PARAMS_SAVED(1))).not.toBeNull();
+    expect(field("Alerta de ovos").value).toBe("120");
+    mocked(api.getVectorParameters).mockResolvedValue(saved);
+    fireEvent.click(screen.getByRole("button", { name: "Tentar de novo" }));
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Tentar de novo" })).toBeNull());
+    expect(api.getVectorParameters).toHaveBeenCalledTimes(3);
+    expect(api.putVectorParameters).toHaveBeenCalledTimes(1);
+  });
+
+  it("sem autenticador cadastrado: pede o cadastro e leva à segurança, sem gravar", async () => {
+    mocked(api.fetchCurrentSession).mockResolvedValue(sessionWith([ "endemic_coordinator" ], { features: VC_FEATURES, mfa_enrolled: false, mfa_verified_at: null }));
+    const onGoToSecurity = vi.fn();
+    mount(onGoToSecurity);
+    await screen.findByText("padrão de fábrica (versão 0)");
+    fireEvent.click(screen.getByRole("button", { name: "Salvar parâmetros" }));
+    fireEvent.click(await screen.findByRole("button", { name: "cadastre seu autenticador" }));
+    expect(onGoToSecurity).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: "Confirmar" })).toBeNull();
+    expect(api.putVectorParameters).not.toHaveBeenCalled();
   });
 
   it("recusa na tela antes do step-up: faixa e desigualdade, sem chamada", async () => {
@@ -245,20 +299,36 @@ describe("parâmetros técnicos", () => {
 
   it("faixas do api dos dois lados de cada limite (RANGES), depois NOT_ABOVE e BELOW", () => {
     const paths = (o: Record<string, unknown>) => parameterProblems({ ...draftOf(PARAMS), ...o } as ParamDraft).map((p) => p.path);
+    const problems = (o: Record<string, unknown>) => parameterProblems({ ...draftOf(PARAMS), ...o } as ParamDraft);
+    // As 16 chaves inteiras de parameters.rb RANGES (tabela à parte de PARAM_FIELDS).
     const INT: [keyof VectorParameters, number, number][] = [
       [ "default_days", 7, 365 ], [ "strategic_point_days", 7, 365 ], [ "block_radius_rings", 0, 5 ], [ "block_grouping_days", 1, 30 ],
-      [ "ubv_cycles_max", 1, 5 ], [ "ubv_cycle_interval_days", 0, 30 ], [ "ovitrap_alert_eggs", 1, 9999 ], [ "ovitrap_radius_rings", 0, 5 ],
-      [ "liraa_base_sample", 1, 10000 ]
+      [ "ubv_cycles_max", 1, 5 ], [ "ubv_cycle_days_min", 1, 15 ], [ "ubv_cycle_days_max", 1, 15 ], [ "ubv_cycle_interval_days", 0, 30 ],
+      [ "ovitrap_collection_days_min", 1, 30 ], [ "ovitrap_collection_days_max", 1, 30 ], [ "ovitrap_alert_eggs", 1, 9999 ],
+      [ "ovitrap_radius_rings", 0, 5 ], [ "liraa_standard_min", 1, 100000 ], [ "liraa_standard_max", 1, 100000 ],
+      [ "liraa_half_min", 1, 100000 ], [ "liraa_base_sample", 1, 10000 ]
     ];
     expect(paths({})).toEqual([]);
     for (const [ key, min, max ] of INT) {
-      expect(paths({ [key]: String(min) })).toEqual([]);
-      expect(paths({ [key]: String(max) })).toEqual([]);
+      // A frase da faixa desta chave; no limite de dentro ela não aparece (um par pode recusar, como o api, mas não pela faixa).
+      const rangeText = problems({ [key]: "" })[0].text;
+      const rangeRefused = (v: string) => problems({ [key]: v }).some((p) => p.path === key && p.text === rangeText);
+      expect(rangeRefused(String(min))).toBe(false);
+      expect(rangeRefused(String(max))).toBe(false);
       expect(paths({ [key]: String(max + 1) })).toEqual([ key ]);
       if (min > 0) expect(paths({ [key]: String(min - 1) })).toEqual([ key ]);
       expect(paths({ [key]: "1,5" })).toEqual([ key ]);
       expect(paths({ [key]: "" })).toEqual([ key ]);
     }
+    // No limite de dentro com o par coerente, nada é recusado.
+    expect(paths({ ubv_cycle_days_min: "15", ubv_cycle_days_max: "15" })).toEqual([]);
+    expect(paths({ ubv_cycle_days_min: "1", ubv_cycle_days_max: "1" })).toEqual([]);
+    expect(paths({ ovitrap_collection_days_min: "30", ovitrap_collection_days_max: "30" })).toEqual([]);
+    expect(paths({ ovitrap_collection_days_min: "1", ovitrap_collection_days_max: "1" })).toEqual([]);
+    expect(paths({ liraa_half_min: "99998", liraa_standard_min: "99999", liraa_standard_max: "100000" })).toEqual([]);
+    expect(paths({ liraa_half_min: "1", liraa_standard_min: "2", liraa_standard_max: "3" })).toEqual([]);
+    // Onde o par não cabe (standard_min = 1 pediria half_min < 1), a recusa é a do par, no campo de baixo.
+    expect(paths({ liraa_standard_min: "1" })).toEqual([ "liraa_half_min" ]);
     // Pares NOT_ABOVE (≤): faixa 1–15 / 1–30, igual passa, de baixo maior recusa no de baixo.
     expect(paths({ ubv_cycle_days_min: "1", ubv_cycle_days_max: "1" })).toEqual([]);
     expect(paths({ ubv_cycle_days_min: "15", ubv_cycle_days_max: "15" })).toEqual([]);

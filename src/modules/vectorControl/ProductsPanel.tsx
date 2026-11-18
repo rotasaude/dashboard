@@ -53,6 +53,7 @@ export function productProblems(d: ProductDraft, others: string[]): ProductProbl
   if (d.uses.length === 0 || !d.uses.every((u) => (USES as string[]).includes(u))) out.push({ path: "uses", text: TEXT.uses });
   return out;
 }
+export const NOTHING_CHANGED = "nada mudou neste produto";
 const FIELD_PATHS: string[] = [ "code", "name", "unit", "charge_size", "uses" ];
 
 const cell = { display: "flex", flexDirection: "column", gap: 4, alignSelf: "flex-start" } as const;
@@ -163,7 +164,7 @@ function ProductForm({ editing, products, useLabel, onCancel, onSaved, onStale }
     setProblems(found);
     if (found.length > 0) return;
     const sent = body();
-    if (product && Object.keys(sent).length === 0) { msg.fail("nada mudou neste produto"); return; }
+    if (product && Object.keys(sent).length === 0) { msg.fail(NOTHING_CHANGED); return; }
     try {
       const saved = product ? await updateVectorProduct(product.id, sent) : await createVectorProduct(sent as VectorProductInput);
       await onSaved(saved);
