@@ -6,8 +6,9 @@
 // do cache, que é relido depois de cada escrita (saldo mudou: a tela mostra o saldo novo). Nada em URL, log ou storage.
 // Módulo 29: a rede de frio envia às salas de vacina — quem chama passa os `destinations` (a lista de locais da pessoa NÃO é lida) e
 // o corpo leva `from_location_id` (fora do central de medicamentos). O item é identificado por `itemKey` (vacina não tem catalog_item_id).
-// Módulo 35a (A-12; SendTransfer::DESTINATIONS): o local `vector_control` envia só a OUTRO local `vector_control` ativo da lista da pessoa
-// (o GET /pharmacy/locations só traz os locais em que ela tem papel), com `from_location_id`.
+// Módulo 35a (A-12; SendTransfer::DESTINATIONS): o local `vector_control` envia só a OUTRO local `vector_control` ativo da lista da pessoa,
+// com `from_location_id`. Desde a Q40 o GET /pharmacy/locations também traz as outras bases vector_control com
+// `roles: []`: elas entram como destino e nunca como origem (o LocationPick exige `keeper`).
 import { useState, type CSSProperties } from "react";
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { listMyPharmacyLocations, listPositions, sendTransfer, type PharmacyLocation, type StockPosition, type StockTransfer } from "../../lib/api";

@@ -122,9 +122,25 @@ describe("Boletim na nova visita", () => {
     expect(screen.getByText(/O boletim acrescenta: 34 .*35 .*36 .*37/)).not.toBeNull();
     // Q43: a moradora com os motivos derivados vira visita da família.
     expect(screen.getByText(FAMILY_NOTICE)).not.toBeNull();
+    // Os 4 derivados já passam do teto 3: as caixas param antes do envio (a linha do teto), e o envio recusa também.
+    expect(screen.getAllByText(REASONS_MAX_TEXT(3))).toHaveLength(1);
     fireEvent.click(screen.getByRole("button", { name: "Registrar visita" }));
-    expect(await screen.findByText(REASONS_MAX_TEXT(3))).not.toBeNull();
+    await waitFor(() => expect(screen.getAllByText(REASONS_MAX_TEXT(3))).toHaveLength(2));
     expect(api.recordHomeVisit).not.toHaveBeenCalled();
+  });
+
+  it("com boletim: as caixas param no teto contando os derivados (34–37 ocupam 4 dos 5)", async () => {
+    await mountWithHousehold({ domains: { ...VISIT_DOMAINS, reasons_max: 5 } });
+    fireEvent.click(screen.getByLabelText("Maria Lima"));
+    fillCompleteInspection();
+    expect(screen.getByText(/O boletim acrescenta: 34 .*35 .*36 .*37/)).not.toBeNull();
+    expect(screen.queryByText(REASONS_MAX_TEXT(5))).toBeNull();
+    const boxes = () => within(screen.getByRole("group", { name: "Motivos da visita" })).getAllByRole("checkbox") as HTMLInputElement[];
+    const enabled = boxes().filter((b) => !b.disabled && !b.checked);
+    expect(enabled.length).toBeGreaterThan(1);
+    fireEvent.click(enabled[0]);
+    expect(await screen.findByText(REASONS_MAX_TEXT(5))).not.toBeNull();
+    for (const b of boxes().filter((x) => !x.checked)) expect(b.disabled).toBe(true);
   });
 
   it("fechado depois de trabalhado: poda e diz o quê; desfecho vira ausente", async () => {

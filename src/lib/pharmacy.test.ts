@@ -216,6 +216,8 @@ describe("entrada, recebimento e ajuste", () => {
     const base: ReceiptLine = { ...newReceiptLine("k1"), item: AMOXI, byPackage: false };
     const text = (l: ReceiptLine) => receiptProblems([ l ], TODAY27, opening)[0]?.text;
     expect(text({ ...base, item: null })).toBe("escolha o item do catálogo");
+    // 35a: no local vector_control o item é o produto de campo.
+    expect(receiptProblems([ { ...base, item: null } ], TODAY27, opening, true)[0]?.text).toBe("escolha o produto de controle vetorial");
     expect(text({ ...base })).toBe("Amoxicilina 500 mg cápsula: informe o número do lote");
     expect(text({ ...base, lotNumber: "L".repeat(41) })).toBe("Amoxicilina 500 mg cápsula: o número do lote tem até 40 caracteres");
     expect(text({ ...base, lotNumber: "L1" })).toBe("Amoxicilina 500 mg cápsula: informe a validade");

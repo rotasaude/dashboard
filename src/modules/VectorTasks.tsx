@@ -32,8 +32,8 @@ import { FrozenTextNotice } from "../components/FrozenTextNotice";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../components/formStyles";
 import { alert, box, fieldLabel, form, muted, okText, row, stack } from "./exams/styles";
 
-export const TASK_DONE = "Tarefa concluída.";
-export const TASK_DISMISSED = "Tarefa dispensada.";
+export const TASK_DONE = "tarefa concluída";
+export const TASK_DISMISSED = "tarefa dispensada";
 export const OPEN_EMPTY = "nenhuma tarefa aberta";
 export const CLOSED_EMPTY = "nenhuma tarefa encerrada";
 export const TASK_GONE = "esta tarefa não existe mais — a lista foi relida";

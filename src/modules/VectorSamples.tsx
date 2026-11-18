@@ -16,7 +16,7 @@
 // Q36: a correção leva `expected_version` (a version da amostra que a tela mostra; o primeiro resultado nunca). 409 sample_changed
 // (outra pessoa corrigiu no meio): a frase no formulário, a fila relida UMA vez e o digitado fica; o formulário recebe a amostra
 // relida, e o envio seguinte leva a version nova. A correção recusada em examined_larvae (os mesmos números) vai ao campo.
-// Frases de sucesso (Q36(1)): "Resultado lançado." / "Resultado corrigido."; a frase do LIRAa sai, porque a amostra da fila não
+// Frases de sucesso (Q36(1)): "resultado lançado" / "resultado corrigido"; a frase do LIRAa sai, porque a amostra da fila não
 // diz se veio de levantamento do LIRAa (Json.samples não tem origem nem levantamento).
 // A nota nunca sai do campo. Nada em URL ou storage; nenhum polling.
 import { useRef, useState, type FormEvent, type ReactNode } from "react";
@@ -43,8 +43,9 @@ import { FrozenTextNotice } from "../components/FrozenTextNotice";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../components/formStyles";
 import { alert, fieldLabel, form, muted, okText, row, stack } from "./exams/styles";
 
-export const RESULT_SAVED = "Resultado lançado.";
-export const RESULT_CORRECTED = "Resultado corrigido.";
+// Q36(1), na convenção das frases do 35a (minúscula, sem ponto final; revisão final M1).
+export const RESULT_SAVED = "resultado lançado";
+export const RESULT_CORRECTED = "resultado corrigido";
 export const PENDING_EMPTY = "nenhuma amostra sem resultado";
 export const DONE_EMPTY = "nenhuma amostra com resultado";
 export const SAMPLE_STALE_REREAD = "a fila foi relida";
@@ -184,7 +185,10 @@ function SamplesList({ state, domains, onSaved }: { state: State; domains: Vecto
 const invalidAt = (err: unknown, path: string): boolean =>
   errorCode(err) === "invalid_request" && ((err as ApiError).body as { path?: string } | null)?.path === path;
 // O primeiro resultado recusado em result_note: a tela nunca manda nota nele, então outra pessoa lançou antes (virou correção).
-const raced = (err: unknown, corrected: boolean): boolean => !corrected && invalidAt(err, "result_note");
+// Desde a Q36 o api confere a versão antes da nota e responde 422 expected_version_required (record_sample_result.rb:70-72); o 422
+// result_note antigo fica de reserva (a tela nunca manda nota nem versão no primeiro resultado).
+const raced = (err: unknown, corrected: boolean): boolean =>
+  !corrected && (errorCode(err) === "expected_version_required" || invalidAt(err, "result_note"));
 
 function SampleResultForm({ sample, corrected, group, onDone, onStale, onReread, onCancel }: {
   sample: VectorSample; corrected: boolean; group: string; onDone(s: VectorSample): void; onStale(text: string): void; onReread(): void;

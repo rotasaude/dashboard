@@ -59,7 +59,7 @@ export function ReceiptForm({ location, mode, today, delayMs, onStart, onDone }:
     if (busy) return;
     onStart?.();
     const doc = { kind: opening ? ("opening" as const) : kind, number, supplier };
-    const local = receiptProblems(lines, today, doc);
+    const local = receiptProblems(lines, today, doc, vector);
     if (local.length > 0) { setShown(local.map((p) => ({ key: p.path, text: p.text }))); return; }
     setShown([]); setBusy(true);
     const sent = lines;

@@ -20,14 +20,14 @@ import {
   type LiraaSurvey, type VectorReport
 } from "../lib/api";
 import { cityIsoDate, fmtDateTime, fmtNumber } from "../lib/format";
-import { fmtCount } from "../lib/smallCount";
-import type { SmallCount } from "../lib/types";
 import { useActionMessage } from "../lib/useActionMessage";
 import {
   STATIC_QUERY, VC_ITEMS_KEY, VC_PARAMS_KEY, VC_REPORT_KEY, VC_SURVEYS_KEY, isVectorStale, itemStatusLabel, surveyStatusLabel, vectorError,
   vectorRefusals
 } from "../lib/vectorControl";
 import { VectorGate } from "./vectorControl/VectorGate";
+// A mesma célula dos relatórios (revisão final M2): o índice só tira a coluna `provisional`, que vira a frase acima da tabela.
+import { reportCell } from "./vectorControl/ReportTable";
 import { VectorListBody } from "./vectorControl/VectorListBody";
 import { StrataEditor } from "./vectorControl/StrataEditor";
 import { usePaged } from "./homeVisits/usePaged";
@@ -358,13 +358,6 @@ function DrawnBody({ survey, msg, onChanged, onStale, onGoToSecurity }: BodyProp
   );
 }
 
-const cellText = (kind: VectorReport["columns"][number]["kind"], v: SmallCount | string | null | undefined): string => {
-  if (v === null || v === undefined) return "—";
-  if (kind === "count") return fmtCount(v as SmallCount);
-  if (kind === "percent" || kind === "decimal") return String(v).replace(".", ",");
-  return String(v);
-};
-
 function IndexPanel({ surveyId }: { surveyId: string }) {
   const report = useQuery({ queryKey: reportKey(surveyId), queryFn: () => getVectorReport("liraa", { survey_id: surveyId }), ...STATIC_QUERY });
   const cols = (report.data?.columns ?? []).filter((c) => c.key !== "provisional");
@@ -382,7 +375,7 @@ function IndexPanel({ surveyId }: { surveyId: string }) {
             {report.data.provisional && <p role="status" style={{ ...muted, color: "var(--warn)" }}>{PROVISIONAL}</p>}
             <DataTable label="Índices do LIRAa" rows={report.data.rows} rowKey={(_, i) => String(i)} cols={cols.map((c, i) => ({
               label: c.label, align: c.kind === "text" ? "left" as const : "right" as const, card: i === 0 ? "title" as const : undefined,
-              render: (r: VectorReport["rows"][number]) => cellText(c.kind, r[c.key])
+              render: (r: VectorReport["rows"][number]) => reportCell(r[c.key], c.kind)
             }))} />
             {/* O aviso de provisório já está no topo (a nota do api diz o mesmo). */}
             {(report.data.notes ?? []).filter((n) => !(report.data.provisional && /^provisório/i.test(n))).map((n) => <p key={n} style={muted}>{n}</p>)}

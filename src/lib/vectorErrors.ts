@@ -52,7 +52,7 @@ export const VECTOR_ERRORS: Record<VectorErrorCode, string> = {
   already_reconciled: "esta falta já foi conciliada",
   stratum_overlap: "este quarteirão já está em outro estrato deste levantamento",
   stratum_out_of_range: "o número de imóveis do estrato está fora da faixa do tipo escolhido",
-  survey_not_draft: "o levantamento já foi sorteado — os estratos não mudam mais",
+  survey_not_draft: "o levantamento já foi sorteado — o rascunho não muda mais",
   cycle_invalid: "ciclo inválido — confira as datas, a duração e o intervalo desde o ciclo anterior",
   cycle_overlap: "este período se sobrepõe a outro ciclo",
   invalid_parameter: "valor fora da faixa aceita para este parâmetro",

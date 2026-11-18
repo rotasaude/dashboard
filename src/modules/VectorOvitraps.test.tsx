@@ -232,9 +232,10 @@ describe("VectorOvitraps", () => {
     expect(screen.queryByText(/reading_not_countable/)).toBeNull();
   });
 
-  it("tela velha: 404, contagem que outra pessoa já fez (422 count_note na primeira) e rede — uma releitura, nenhum reenvio", async () => {
+  it("tela velha: 404, contagem que outra pessoa já fez (422 expected_version_required na primeira; o 422 count_note antigo de reserva) e rede — uma releitura, nenhum reenvio", async () => {
     const cases: [ unknown, string ][] = [
       [ new ApiError(404, { error: "not_found" }, "x"), COUNT_STALE_REREAD ],
+      [ new ApiError(422, { error: "expected_version_required", path: "expected_version" }, "x"), COUNT_RACED ],
       [ new ApiError(422, { error: "invalid_request", path: "count_note" }, "x"), COUNT_RACED ],
       [ new TypeError("Failed to fetch"), COUNT_UNCERTAIN ],
       [ new ApiError(503, {}, "x"), COUNT_UNCERTAIN ]
@@ -251,6 +252,7 @@ describe("VectorOvitraps", () => {
       await settledReads(2);
       expect(api.countOvitrapReading).toHaveBeenCalledTimes(1);
       expect(screen.queryByLabelText("Ovos")).toBeNull();
+      expect(screen.queryByText(VECTOR_ERRORS.expected_version_required)).toBeNull();
       cleanup();
     }
   });

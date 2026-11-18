@@ -31,9 +31,11 @@ const OWN = [ "egg_count", "count_note" ];
 // "1 ovo", "0 ovos", "1.234 ovos".
 export const eggsText = (n: number): string => `${fmtNumber(n)} ${n === 1 ? "ovo" : "ovos"}`;
 
-// A primeira contagem recusada em count_note: a tela nunca manda nota nela, então a palheta já foi contada do outro lado.
-const raced = (err: unknown, corrected: boolean): boolean =>
-  !corrected && errorCode(err) === "invalid_request" && ((err as ApiError).body as { path?: string } | null)?.path === "count_note";
+// A primeira contagem recusada porque a palheta já foi contada do outro lado (virou correção no api): desde a Q36 o api confere a
+// versão antes da nota e responde 422 expected_version_required (count_reading.rb:58-60); o 422 count_note antigo fica de reserva
+// (a tela nunca manda nota nem versão na primeira).
+const raced = (err: unknown, corrected: boolean): boolean => !corrected && (errorCode(err) === "expected_version_required"
+  || (errorCode(err) === "invalid_request" && ((err as ApiError).body as { path?: string } | null)?.path === "count_note"));
 
 export function CountForm({ reading, corrected, onDone, onStale, onReread, onCancel }: {
   reading: OvitrapReading; corrected: boolean; onDone(r: OvitrapReading): void; onStale(text: string): void; onReread(): void; onCancel(): void;

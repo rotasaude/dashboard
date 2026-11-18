@@ -337,8 +337,8 @@ export function lineQuantity(l: ReceiptLine): string | null {
   return total * 100 > MAX_CENTS ? null : String(total);
 }
 
-function receiptLineProblem(l: ReceiptLine, today: string): string | null {
-  if (!l.item) return "escolha o item do catálogo";
+function receiptLineProblem(l: ReceiptLine, today: string, vector: boolean): string | null {
+  if (!l.item) return vector ? "escolha o produto de controle vetorial" : "escolha o item do catálogo";
   const lot = l.lotNumber.trim();
   let text: string | null = null;
   if (lot === "") text = "informe o número do lote";
@@ -354,8 +354,9 @@ function receiptLineProblem(l: ReceiptLine, today: string): string | null {
 }
 
 // Documento só fora da abertura; por linha, a primeira recusa; todas de uma vez.
+// `vector` (35a): a entrada do local vector_control, onde o item é o produto de campo, não o do catálogo.
 export function receiptProblems(
-  lines: ReceiptLine[], today: string, doc: { kind: "invoice" | "donation" | "opening"; number: string; supplier: string }
+  lines: ReceiptLine[], today: string, doc: { kind: "invoice" | "donation" | "opening"; number: string; supplier: string }, vector = false
 ): Problem[] {
   const out: Problem[] = [];
   if (doc.kind !== "opening") {
@@ -367,7 +368,7 @@ export function receiptProblems(
   }
   if (lines.length === 0) out.push({ path: "items", text: "acrescente ao menos um item" });
   for (const l of lines) {
-    const text = receiptLineProblem(l, today);
+    const text = receiptLineProblem(l, today, vector);
     if (text) out.push({ path: l.key, text });
   }
   return out;

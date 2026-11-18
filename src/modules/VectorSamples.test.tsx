@@ -139,7 +139,7 @@ describe("VectorSamples", () => {
     resolve(sample({ ...SA1, result: { examined_larvae: 8, aegypti_larvae: 5, albopictus_larvae: 0, result_at: "2026-11-16T13:00:00Z", corrected: false } }));
     expect(await screen.findByText(RESULT_SAVED)).not.toBeNull();
     // Q36(1): a amostra da fila não diz se veio do LIRAa (Json.samples sem origem nem levantamento): a frase do LIRAa não sai.
-    expect(RESULT_SAVED).toBe("Resultado lançado.");
+    expect(RESULT_SAVED).toBe("resultado lançado");
     expect(document.body.textContent).not.toContain("LIRAa");
     // A fila é relida uma vez; a aba "Com resultado" nunca foi aberta e não lê.
     await settledReads(2);
@@ -189,7 +189,7 @@ describe("VectorSamples", () => {
       examined_larvae: 6, aegypti_larvae: 3, albopictus_larvae: 2, result_note: "Revisão na lupa do laboratório", expected_version: 4
     });
     expect(await screen.findByText(RESULT_CORRECTED)).not.toBeNull();
-    expect(RESULT_CORRECTED).toBe("Resultado corrigido.");
+    expect(RESULT_CORRECTED).toBe("resultado corrigido");
     expect(document.body.textContent).not.toContain("LIRAa");
     // Sem resultado (ao abrir), Com resultado (ao trocar) e uma releitura de Com resultado.
     await settledReads(3);
@@ -288,6 +288,8 @@ describe("VectorSamples", () => {
   it("tela velha: 404, resultado que outra pessoa já lançou, correção que outra pessoa já fez, rede e 5xx — uma releitura, nenhum reenvio", async () => {
     const cases: [ unknown, string, "pending" | "done" ][] = [
       [ new ApiError(404, { error: "not_found" }, "x"), SAMPLE_STALE_REREAD, "pending" ],
+      // Q36: a amostra já tem resultado do outro lado → o api confere a versão antes da nota (o 422 result_note antigo, de reserva).
+      [ new ApiError(422, { error: "expected_version_required", path: "expected_version" }, "x"), SAMPLE_RACED, "pending" ],
       [ new ApiError(422, { error: "invalid_request", path: "result_note" }, "x"), SAMPLE_RACED, "pending" ],
       [ new TypeError("Failed to fetch"), SAMPLE_UNCERTAIN, "pending" ],
       [ new TypeError("Failed to fetch"), SAMPLE_CORRECTION_UNCERTAIN, "done" ],
@@ -314,7 +316,8 @@ describe("VectorSamples", () => {
       await settledReads(state === "done" ? 3 : 2);
       expect(api.recordSampleResult).toHaveBeenCalledTimes(1);
       expect(screen.queryByLabelText("Larvas examinadas")).toBeNull();
-      expect(screen.queryByText(/not_found|invalid_request|404|503/)).toBeNull();
+      expect(screen.queryByText(/not_found|invalid_request|expected_version|404|503/)).toBeNull();
+      expect(screen.queryByText(VECTOR_ERRORS.expected_version_required)).toBeNull();
       cleanup();
     }
   });

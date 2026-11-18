@@ -4,6 +4,7 @@
 // desmarcá-lo (ex.: o sexo da pessoa só chegou depois da escolha); ao chegar em `reasons_max` (Q36) as
 // caixas não marcadas param. Recusa do api em `reasons[i]` marca a caixa do i-ésimo motivo escolhido; em `reasons`, o grupo todo.
 // `hidden` (35a): motivos que não se oferecem (os 34–37 que o boletim deriva); um já marcado continua visível, para desmarcar.
+// `taken` (35a): quantos lugares do `reasons_max` os derivados já ocupam (o teto conta escolhidos + derivados; padrão 0).
 import type { ReactNode } from "react";
 import { REASONS_MAX_TEXT, type OfferedReason } from "../../lib/homeVisits";
 import { checkLabel, fieldset, legend, muted } from "../exams/styles";
@@ -13,11 +14,11 @@ type Aria = { "aria-invalid"?: true; "aria-describedby"?: string };
 export const visibleReasons = (offered: OfferedReason[], chosen: number[], hidden?: readonly number[]): OfferedReason[] =>
   hidden ? offered.filter((r) => !hidden.includes(r.code) || chosen.includes(r.code)) : offered;
 
-export function ReasonsField({ offered, chosen, max, disabled, onToggle, aria, errNode, hidden }: {
+export function ReasonsField({ offered, chosen, max, disabled, onToggle, aria, errNode, hidden, taken = 0 }: {
   offered: OfferedReason[]; chosen: number[]; max: number; disabled: boolean; onToggle(code: number): void;
-  aria(path: string): Aria; errNode(path: string): ReactNode; hidden?: readonly number[];
+  aria(path: string): Aria; errNode(path: string): ReactNode; hidden?: readonly number[]; taken?: number;
 }) {
-  const full = chosen.length >= max;
+  const full = chosen.length + taken >= max;
   const groups = visibleReasons(offered, chosen, hidden).reduce<{ key: string; label: string; rows: OfferedReason[] }[]>((acc, r) => {
     const g = acc.find((x) => x.key === r.group);
     if (g) g.rows.push(r); else acc.push({ key: r.group, label: r.group_label, rows: [ r ] });

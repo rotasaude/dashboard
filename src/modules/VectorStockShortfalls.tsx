@@ -31,7 +31,7 @@ import { VectorGate } from "./vectorControl/VectorGate";
 
 export const VC_NO_STOCK_LOCATION = "você não é almoxarife de nenhum local de estoque do controle vetorial — peça ao administrador da cidade";
 export const RECONCILE_HINT = "a conciliação só registra a conferência — o ajuste de saldo é feito em Inventário e ajustes";
-export const SHORTFALL_RECONCILED = "Falta conciliada.";
+export const SHORTFALL_RECONCILED = "falta conciliada";
 export const SHORTFALL_GONE = "esta falta não existe mais — a lista foi relida";
 export const SHORTFALL_UNCERTAIN = "não foi possível confirmar a conciliação — a lista foi relida; confira a falta antes de tentar de novo";
 export const SHORTFALLS_OPEN_EMPTY = "nenhuma falta aberta";

@@ -189,7 +189,8 @@ export function VisitForm({ team, context, start, now, onSaved, onClose, onHeld,
   function toggleReason(code: number) {
     const adding = !draft.reasons.includes(code);
     // A caixa já vem desabilitada; isto só impede o clique que escapa dela (Q36 e motivo indisponível).
-    if (adding && (draft.reasons.length >= domains.reasons_max || !offered.some((r) => r.code === code && !r.disabled))) return;
+    // O teto conta os derivados que o boletim vai acrescentar (35a; `extra` é vazio sem boletim).
+    if (adding && (draft.reasons.length + extra.length >= domains.reasons_max || !offered.some((r) => r.code === code && !r.disabled))) return;
     s.clear("reasons", ...draft.reasons.map((_, i) => `reasons[${i}]`));
     update({ ...draft, reasons: draft.reasons.includes(code) ? draft.reasons.filter((c) => c !== code) : [ ...draft.reasons, code ] });
   }
@@ -454,7 +455,7 @@ export function VisitForm({ team, context, start, now, onSaved, onClose, onHeld,
 
       {showReasons && (
         <ReasonsField offered={offered} chosen={draft.reasons} max={domains.reasons_max} disabled={frozen} onToggle={toggleReason} aria={s.aria} errNode={s.errNode}
-          hidden={hidden} />
+          hidden={hidden} taken={extra.length} />
       )}
       {vectorOn && derived.length > 0 && (
         <p style={{ margin: 0, fontSize: 12.5, color: "var(--ink2)" }}>
