@@ -31,7 +31,7 @@ import { MAP_MANIFEST } from "../test/territoryMapFixtures";
 import { VC_DISEASES, VC_FEATURES, cityBlock, parameterVersion, transmissionBlock, vcUser } from "../test/vectorControlFixtures";
 import { VectorTransmission } from "./VectorTransmission";
 import {
-  BLOCK_CLOSED, BLOCK_CONFIRMED, CASES_REREAD, CASE_MOVED, CENTER_INACTIVE, CYCLE_SAVED, NEED_AREA, NEED_CENTER, NO_CASE, NO_CASE_ACK, PROPOSAL_DISMISSED
+  BLOCK_CLOSED, BLOCK_CONFIRMED, CASES_REREAD, CASE_MOVED, CENTER_INACTIVE, CYCLE_SAVED, NEED_CENTER, NO_CASE, NO_CASE_ACK, PROPOSAL_DISMISSED
 } from "./vectorControl/BlockDetail";
 import { ADDRESS_DESCRIPTION } from "./vectorControl/CaseAddressDialog";
 
@@ -143,6 +143,29 @@ describe("portão e lista", () => {
 });
 
 describe("detalhe", () => {
+  it("diálogo do endereço pelo teclado: Escape fecha e apaga; o foco volta ao botão depois do Escape e do Fechar", async () => {
+    mocked(api.getTransmissionCaseAddress).mockResolvedValue({ patient_address: "Rua Secreta, 99", household_address: "Travessa Oculta, 7" });
+    const { client, container } = await mountDetail(transmissionBlock({ cases: [ { id: "c1", number: 1, disease: "dengue", case_on: "2026-11-12", has_place: false } ] }));
+    await confirmStepUp("Ver endereço do caso");
+    const dialog = await screen.findByRole("dialog", { name: "Endereço do caso 1" });
+    // O foco entra no diálogo (o Fechar).
+    expect(document.activeElement).toBe(within(dialog).getByRole("button", { name: "Fechar" }));
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(container.textContent).not.toMatch(/Rua Secreta|Travessa Oculta/);
+    expect(cacheText(client)).not.toMatch(/Rua Secreta|Travessa Oculta/);
+    expect(storageText()).not.toMatch(/Rua Secreta|Travessa Oculta/);
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Ver endereço do caso" }));
+    // De novo (nova leitura, nova trilha), agora pelo Fechar.
+    await confirmStepUp("Ver endereço do caso");
+    await screen.findByRole("dialog", { name: "Endereço do caso 1" });
+    fireEvent.click(screen.getByRole("button", { name: "Fechar" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(container.textContent).not.toMatch(/Rua Secreta/);
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Ver endereço do caso" }));
+    expect(api.getTransmissionCaseAddress).toHaveBeenCalledTimes(2);
+  });
+
   it("endereço do caso: step-up, só no diálogo, nada no cache; lista sem paciente", async () => {
     vi.mocked(api.getTransmissionCaseAddress).mockResolvedValue({ patient_address: "Rua Secreta, 99", household_address: null });
     const { client, container } = await mountDetail(transmissionBlock({ cases: [ { id: "c1", number: 1, disease: "dengue", case_on: "2026-11-12", has_place: false } ] }));
@@ -263,12 +286,14 @@ describe("detalhe", () => {
     fireEvent.change(center, { target: { value: "" } });
     expect(blocked("Confirmar bloqueio")).toBe(true);
     expect(screen.getByText(NEED_CENTER)).not.toBeNull();
+    // Sem centro, nenhuma caixa travada.
+    expect(checkbox(/^quarteirão 12/).disabled).toBe(false);
     fireEvent.change(center, { target: { value: "cb1" } });
-    fireEvent.click(checkbox(/^quarteirão 12/));
+    // O do caso fica marcado e travado: tirar a marca não tira o quarteirão da área.
+    expect([ checkbox(/^quarteirão 12/).checked, checkbox(/^quarteirão 12/).disabled ]).toEqual([ true, true ]);
+    expect(checkbox(/^quarteirão 13/).disabled).toBe(false);
     fireEvent.click(checkbox(/^quarteirão 13/));
-    expect(blocked("Confirmar bloqueio")).toBe(true);
-    expect(screen.getByText(NEED_AREA)).not.toBeNull();
-    fireEvent.click(checkbox(/^quarteirão 12/));
+    expect(blocked("Confirmar bloqueio")).toBe(false);
     fireEvent.click(checkbox(/^quarteirão 13/));
     expect(blocked("Confirmar bloqueio")).toBe(false);
     await confirmStepUp("Confirmar bloqueio");
@@ -285,6 +310,27 @@ describe("detalhe", () => {
     // A resposta vai à tela; o detalhe não é relido; a aba montada (propostos) é relida UMA vez.
     expect(api.getTransmissionBlock).toHaveBeenCalledTimes(1);
     expect(api.listTransmissionBlocks).toHaveBeenCalledTimes(2);
+  });
+
+  it("proposta sem área sugerida: só o quarteirão do caso basta; o resumo e o corpo o contam", async () => {
+    mocked(api.confirmTransmissionBlock).mockResolvedValue(transmissionBlock({ status: "active" }));
+    await mountDetail(transmissionBlock({ center_block: null, area: [] }));
+    expect(screen.getByText(NEED_CENTER)).not.toBeNull();
+    await screen.findByRole("option", { name: "Centro" });
+    fireEvent.change(screen.getByLabelText("Bairro"), { target: { value: "nb1" } });
+    await screen.findByLabelText(/^quarteirão 40/);
+    fireEvent.change(screen.getByLabelText("Quarteirão do caso"), { target: { value: "cb7" } });
+    const own = checkbox(/^quarteirão 40/);
+    expect([ own.checked, own.disabled ]).toEqual([ true, true ]);
+    expect(document.getElementById(own.getAttribute("aria-describedby") ?? "")?.textContent).toBe("o quarteirão do caso entra sempre na área");
+    expect(checkbox(/^quarteirão 41/).checked).toBe(false);
+    expect(blocked("Confirmar bloqueio")).toBe(false);
+    fireEvent.click(button("Confirmar bloqueio"));
+    expect(await screen.findByText("Confirma o bloqueio com o caso mostrado e 1 quarteirão na área. Se entrou caso novo, a tela relê a proposta.")).not.toBeNull();
+    fireEvent.click(button("Confirmar"));
+    await waitFor(() => expect(api.confirmTransmissionBlock).toHaveBeenCalledTimes(1));
+    // Blocks::Confirm recusa block_ids vazio: o centro vai nos ids (o api também o junta, sem repetir).
+    expect(api.confirmTransmissionBlock).toHaveBeenCalledWith("tb1", { center_block_id: "cb7", block_ids: [ "cb7" ], seen_case_ids: [ "tc1" ] });
   });
 
   it("centro inativo (fora da área sugerida): não vem escolhido, aparece marcado e o bairro abre", async () => {
@@ -335,8 +381,9 @@ describe("detalhe", () => {
     expect(screen.queryByLabelText(/^quarteirão 42/)).toBeNull();
     expect(api.listCityBlocks).toHaveBeenCalledWith("nb1");
     fireEvent.change(screen.getByLabelText("Quarteirão do caso"), { target: { value: "cb7" } });
-    expect(blocked("Confirmar bloqueio")).toBe(true);
-    fireEvent.click(checkbox(/^quarteirão 40/));
+    // O quarteirão do caso já conta na área: nenhuma outra marca é exigida.
+    expect(blocked("Confirmar bloqueio")).toBe(false);
+    expect([ checkbox(/^quarteirão 40/).checked, checkbox(/^quarteirão 40/).disabled ]).toEqual([ true, true ]);
     fireEvent.click(checkbox(/^quarteirão 41/));
     await confirmStepUp("Confirmar bloqueio", "654321");
     await waitFor(() => expect(api.confirmTransmissionBlock).toHaveBeenCalledTimes(1));

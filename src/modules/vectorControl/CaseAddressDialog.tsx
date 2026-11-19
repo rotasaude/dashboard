@@ -2,9 +2,11 @@
 // Endereço do caso do bloqueio sem quarteirão (módulo 35a, F-35.7; contrato §8, §17; W-3; Q26(3)). A única leitura do 35a com
 // endereço de pessoa: só por clique, com step-up (SensitiveAction), e o api grava a trilha (clinical_record.viewed, access
 // transmission_block_case). `getTransmissionCaseAddress` é chamado DIRETO (sem useQuery, sem setQueryData): o endereço fica só no
-// estado deste componente, nunca no queryClient, em storage, em console ou na URL, e some ao fechar ou ao desmontar. Só em bloqueio
+// estado deste componente, nunca no queryClient, em storage, em console ou na URL, e some ao fechar (Fechar ou Escape, pelo
+// useDialog, que devolve o foco ao botão "Ver endereço do caso") ou ao desmontar. Só em bloqueio
 // proposed/active (quem monta confere); 409 invalid_transition (fechou no meio) → onStale, que diz a frase e relê UMA vez.
 import { useEffect, useRef, useState } from "react";
+import { useDialog } from "../../lib/useDialog";
 import { getTransmissionCaseAddress, type CaseAddress } from "../../lib/api";
 import { isVectorStale, vectorError } from "../../lib/vectorControl";
 import { SensitiveAction } from "../../components/SensitiveAction";
@@ -24,6 +26,9 @@ export function CaseAddressDialog({ blockId, caseId, caseNumber, onClose, onStal
   const alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; got.current = null; }; }, []);
   const name = caseNumber === undefined ? "Endereço do caso" : `Endereço do caso ${caseNumber}`;
+  // O botão fica montado enquanto o diálogo está aberto: o useDialog (Escape fecha, Tab preso, foco no Fechar) devolve o foco a ele.
+  const trigger = useRef<HTMLButtonElement | null>(null);
+  const dialogRef = useDialog<HTMLElement>(!!address, () => close(), trigger.current);
 
   function close() {
     setAddress(null);
@@ -31,9 +36,16 @@ export function CaseAddressDialog({ blockId, caseId, caseNumber, onClose, onStal
     onClose?.();
   }
 
+  const busy = asking || !!address;
+  const button = (
+    <button ref={trigger} type="button" style={secondaryButtonStyle} aria-expanded={busy} aria-disabled={busy || undefined}
+      onClick={() => { if (!busy) setAsking(true); }}>Ver endereço do caso</button>
+  );
   if (address) {
     return (
-      <section role="dialog" aria-label={name} style={box}>
+      <>
+      {button}
+      <section ref={dialogRef} role="dialog" aria-label={name} style={box}>
         <strong>{name}</strong>
         <p style={muted}>Endereço do paciente</p>
         <strong>{address.patient_address ?? NO_PATIENT_ADDRESS}</strong>
@@ -46,12 +58,13 @@ export function CaseAddressDialog({ blockId, caseId, caseNumber, onClose, onStal
         <p style={muted}>{ADDRESS_DESCRIPTION}</p>
         <div style={row}><button type="button" style={secondaryButtonStyle} onClick={close}>Fechar</button></div>
       </section>
+      </>
     );
   }
-  if (!asking) {
-    return <button type="button" style={secondaryButtonStyle} onClick={() => setAsking(true)}>Ver endereço do caso</button>;
-  }
+  if (!asking) return button;
   return (
+    <>
+    {button}
     <SensitiveAction
       title={name}
       description={ADDRESS_DESCRIPTION}
@@ -73,5 +86,6 @@ export function CaseAddressDialog({ blockId, caseId, caseNumber, onClose, onStal
         return vectorError(e);
       }}
     />
+    </>
   );
 }

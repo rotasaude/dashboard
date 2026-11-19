@@ -47,7 +47,6 @@ export const BLOCK_CLOSED = "bloqueio fechado";
 export const CYCLE_SAVED = (n: number) => `ciclo ${n} de UBV gravado`;
 export const CASE_MOVED = (n: number) => `caso ${n} juntado ao outro bloqueio`;
 export const NEED_CENTER = "escolha o quarteirão do caso";
-export const NEED_AREA = "marque ao menos um quarteirão da área";
 // Blocks::Confirm::AREA_MAX e CASES_MAX.
 export const AREA_MAX = 500;
 export const CASES_MAX = 500;
@@ -185,6 +184,7 @@ function ProposalSection({ ctx, onGoToSecurity }: { ctx: Ctx; onGoToSecurity?: (
   const [ neighborhoodId, setNeighborhoodId ] = useState("");
   const [ confirming, setConfirming ] = useState(false);
   const confirmed = useRef<TransmissionBlock | null>(null);
+  const centerNoteId = `tb-center-note-${block.id}`;
   const neighborhoods = useQuery({ queryKey: PANEL_NEIGHBORHOODS_KEY, queryFn: listPanelNeighborhoods, enabled: picking, ...STATIC_QUERY });
   const cityBlocks = useQuery({ queryKey: [ VC_BLOCKS_KEY, neighborhoodId ], queryFn: () => listCityBlocks(neighborhoodId), enabled: !!neighborhoodId, ...STATIC_QUERY });
 
@@ -202,8 +202,11 @@ function ProposalSection({ ctx, onGoToSecurity }: { ctx: Ctx; onGoToSecurity?: (
     keep(id);
     setChecked((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   };
-  const blockIds = rows.filter((r) => checked.has(r.id)).map((r) => r.id);
-  const reason = !center || (centerInactive && center === block.center_block?.id) ? NEED_CENTER : blockIds.length === 0 ? NEED_AREA : blockIds.length > AREA_MAX ? AREA_TOO_BIG
+  // O quarteirão do caso conta sempre na área (Blocks::Confirm junta o centro a block_ids) e vai nos ids: block_ids não pode ir
+  // vazio (422 block_ids), e com o centro escolhido nunca vai.
+  const inArea = (id: string) => id === center || checked.has(id);
+  const blockIds = rows.filter((r) => inArea(r.id)).map((r) => r.id);
+  const reason = !center || (centerInactive && center === block.center_block?.id) ? NEED_CENTER : blockIds.length > AREA_MAX ? AREA_TOO_BIG
     : block.cases.length > CASES_MAX ? TOO_MANY_CASES : block.cases.length === 0 && !noCaseAck ? NO_CASE : null;
 
   async function done() {
@@ -230,10 +233,12 @@ function ProposalSection({ ctx, onGoToSecurity }: { ctx: Ctx; onGoToSecurity?: (
           </select>
         </label>
         {centerInactive && block.center_block && <p role="status" style={alert}>{CENTER_INACTIVE(block.center_block.number)}</p>}
-        <p style={muted}>{CENTER_IN_AREA}</p>
+        <p id={centerNoteId} style={muted}>{CENTER_IN_AREA}</p>
         {rows.length === 0 ? <p style={muted}>sem quarteirão sugerido — escolha um bairro</p> : rows.map((r) => (
           <label key={r.id} style={checkLabel}>
-            <input type="checkbox" checked={checked.has(r.id)} onChange={() => toggle(r.id)} />
+            {/* O do caso: marcado e travado, com a frase acima. */}
+            <input type="checkbox" checked={inArea(r.id)} disabled={r.id === center} aria-describedby={r.id === center ? centerNoteId : undefined}
+              onChange={() => toggle(r.id)} />
             {r.label}
           </label>
         ))}
@@ -266,7 +271,7 @@ function ProposalSection({ ctx, onGoToSecurity }: { ctx: Ctx; onGoToSecurity?: (
       ) : (
         <SensitiveAction
           title="Confirmar o bloqueio"
-          description={CONFIRM_DESCRIPTION(block.cases.length, new Set([ ...blockIds, center ]).size)}
+          description={CONFIRM_DESCRIPTION(block.cases.length, blockIds.length)}
           requiresStepUp
           run={async () => {
             confirmed.current = await confirmTransmissionBlock(block.id, {
