@@ -28,6 +28,19 @@ describe("frases do 35b", () => {
       "already_extended", "invalid_form", "forwarding_already_pending", "too_many_requests", "cbo_not_allowed", "out_of_scope"
     ]) expect(ZOONOSES_ERROR_CODES as readonly string[]).toContain(code);
   });
+  it("cobre os códigos de rejeição dos itens do field-sync (animal, vacina, leish_collection, coleira)", () => {
+    for (const code of [
+      "tutor_not_found", "product_not_allowed", "feature_disabled", "cbo_not_allowed", "out_of_scope", "not_found", "client_uuid_conflict",
+      "invalid_request", "animal_not_active", "animal_not_dog", "microchip_taken", "registry_number_taken", "date_out_of_range",
+      "already_vaccinated_in_campaign", "campaign_not_open", "survey_not_open", "elisa_without_reactive_dpp", "household_not_in_survey",
+      "expected_version_required", "invalid_transition", "missing_role", "animal_changed", "test_changed"
+    ]) expect(ZOONOSES_ERROR_CODES as readonly string[]).toContain(code);
+    expect(ZOONOSES_ERRORS.tutor_not_found).toBe("o tutor deste animal não foi encontrado — confira o cadastro do tutor");
+    expect(ZOONOSES_ERRORS.product_not_allowed).toBe("este produto não vale para esta finalidade");
+  });
+  it("veterinarian_required exige papel, CRMV e vínculo na unidade de vigilância ambiental", () => {
+    for (const part of [ "papel", "CRMV", "vínculo", "vigilância ambiental" ]) expect(ZOONOSES_ERRORS.veterinarian_required).toContain(part);
+  });
   it("não inventa o que o api não manda (tutor_required, euthanasia_required)", () => {
     expect(ZOONOSES_ERROR_CODES as readonly string[]).not.toContain("tutor_required");
     expect(ZOONOSES_ERROR_CODES as readonly string[]).not.toContain("euthanasia_required");

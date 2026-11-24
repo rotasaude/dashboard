@@ -17,7 +17,8 @@ export const ZOONOSES_ERROR_CODES = [
   "observation_changed", "test_changed", "stay_changed", "stay_already_open", "already_euthanized", "parameters_changed",
   "reserved_subject", "expected_version_required", "date_out_of_range", "microchip_taken", "registry_number_taken",
   "already_vaccinated_in_campaign", "campaign_not_open", "survey_not_open", "animal_not_dog", "observation_not_finished",
-  "elisa_without_reactive_dpp", "household_not_in_survey", "invalid_parameter", "invalid_form"
+  "elisa_without_reactive_dpp", "household_not_in_survey", "invalid_parameter", "invalid_form", "tutor_not_found", "product_not_allowed",
+  "client_uuid_conflict"
 ] as const;
 export type ZoonosesErrorCode = (typeof ZOONOSES_ERROR_CODES)[number];
 
@@ -26,7 +27,7 @@ const CHANGED = "enquanto a tela estava aberta — os dados foram relidos";
 export const ZOONOSES_ERRORS: Record<ZoonosesErrorCode, string> = {
   feature_disabled: ZOONOSES_DISABLED,
   missing_role: "seu papel não permite esta ação",
-  veterinarian_required: "só o médico veterinário (CBO 223305, com CRMV) registra esta ação",
+  veterinarian_required: "só o médico veterinário (papel da equipe de zoonoses, CBO 223305, com CRMV e vínculo na unidade de vigilância ambiental) registra esta ação",
   mfa_required: "confirme sua identidade com o segundo fator e tente de novo",
   not_found: "não encontrado — recarregue a lista",
   invalid_request: "pedido inválido — recarregue a tela e tente de novo",
@@ -69,5 +70,9 @@ export const ZOONOSES_ERRORS: Record<ZoonosesErrorCode, string> = {
   elisa_without_reactive_dpp: "o ELISA só é lançado depois de um TR-DPP reagente",
   household_not_in_survey: "o domicílio não está nos quarteirões deste inquérito",
   invalid_parameter: "valor fora da faixa permitida para este parâmetro",
-  invalid_form: "confira os campos da ficha de notificação"
+  invalid_form: "confira os campos da ficha de notificação",
+  // Itens do app de campo (field-sync): animal (path tutor_client_uuid), vacina e coleira (path vector_product_id).
+  tutor_not_found: "o tutor deste animal não foi encontrado — confira o cadastro do tutor",
+  product_not_allowed: "este produto não vale para esta finalidade",
+  client_uuid_conflict: "este envio já foi usado por outro registro — a tela gerou um novo identificador; confira os dados e grave de novo"
 };
