@@ -153,11 +153,11 @@ describe("vacinação", () => {
     expect(vaccinationProblems(base, c, TODAY35B)).toEqual([]);
     expect(vaccinationProblems({ ...base, modality: "routine", householdId: null }, { campaign: null, fieldUsable: false }, TODAY35B)).toEqual([]);
   });
-  it("sem campanha aberta: casa e posto recusam em campaign_id; rotina com campanha aberta recusa; casa sem animal recusa", () => {
+  it("sem campanha aberta: casa e posto recusam em campaign_id; rotina com campanha aberta vale; casa sem animal recusa", () => {
     const noCampaign: { campaign: RabiesCampaign | null; fieldUsable: boolean } = { campaign: null, fieldUsable: true };
     expect(vaccinationProblems(base, noCampaign, TODAY35B)[0]).toMatchObject({ code: "campaign_not_open", path: "campaign_id" });
     expect(paths(vaccinationProblems({ ...base, modality: "fixed_post", species: "dog", animalId: null }, noCampaign, TODAY35B))).toEqual([ "campaign_id" ]);
-    expect(paths(vaccinationProblems({ ...base, modality: "routine", householdId: null }, c, TODAY35B))).toEqual([ "modality" ]);
+    expect(vaccinationProblems({ ...base, modality: "routine", householdId: null }, c, TODAY35B)).toEqual([]);
     expect(paths(vaccinationProblems({ ...base, animalId: null }, c, TODAY35B))).toEqual([ "animal_id" ]);
     expect(paths(vaccinationProblems({ ...base, modality: "routine", animalId: null, householdId: null }, noCampaign, TODAY35B))).toEqual([ "animal_id" ]);
   });

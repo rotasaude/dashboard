@@ -19,7 +19,7 @@ const MODES: { key: Mode; label: string }[] = [
 ];
 export const NO_ANIMAL = "nenhum animal com este dado";
 
-export function AnimalSearch({ onOpen }: { onOpen(id: string): void }) {
+export function AnimalSearch({ onOpen }: { onOpen(id: string, animal: Animal): void }) {
   const domains = useZooDomains().data;
   const [ mode, setMode ] = useState<Mode>("microchip");
   const [ text, setText ] = useState("");
@@ -95,7 +95,7 @@ export function AnimalSearch({ onOpen }: { onOpen(id: string): void }) {
           {items.map((a) => (
             <li key={a.id} style={row}>
               <span>{a.name ?? "sem nome"} · {zooLabel(domains?.species, a.species)} · {zooLabel(domains?.animal_statuses, a.status)}</span>
-              <ActionButton variant="secondary" onClick={() => onOpen(a.id)}>Abrir</ActionButton>
+              <ActionButton variant="secondary" onClick={() => onOpen(a.id, a)}>Abrir</ActionButton>
             </li>
           ))}
         </ul>

@@ -54,6 +54,7 @@ function Campaigns({ roles, today }: { roles: ZoonosesRoles; today: string }) {
   const campaigns = list.data ?? [];
   const open = campaigns.find((c) => c.stage === "open") ?? null;
   const selected = campaigns.find((c) => c.id === picked) ?? open ?? campaigns[0] ?? null;
+  const routineOnly = !selected && roles.team && list.isSuccess;
   const reread = () => client.invalidateQueries({ queryKey: [ ZOO_CAMPAIGNS_KEY ] });
   const rereadDoses = () => client.invalidateQueries({ queryKey: [ ZOO_VACCINATIONS_KEY ] });
   const stale = (text: string) => { setNotice(text); setEditor(null); void reread(); };
@@ -127,16 +128,14 @@ function Campaigns({ roles, today }: { roles: ZoonosesRoles; today: string }) {
         </section>
       )}
 
-      {selected && (
+      {(selected || routineOnly) && (
         <section style={panel} aria-label="Campanha selecionada">
-          <strong style={title}>{source === "routine" && roles.team ? "Doses de rotina" : "Doses e resultado semanal"}</strong>
-          {roles.team && (
+          <strong style={title}>{(source === "routine" || !selected) && roles.team ? "Doses de rotina" : "Doses e resultado semanal"}</strong>
+          {roles.team && selected && (
             <SegmentedControl<Source> options={[ { key: "campaign", label: "Da campanha" }, { key: "routine", label: "Rotina" } ]} value={source} onChange={setSource} />
           )}
-          {roles.team && (
-            <Doses source={source} campaign={selected} roles={roles} units={units.data ?? []} />
-          )}
-          {source === "campaign" && <WeeklyResult key={selected.id} campaign={selected} today={today} />}
+          {roles.team && <Doses source={selected ? source : "routine"} campaign={selected} roles={roles} units={units.data ?? []} />}
+          {selected && source === "campaign" && <WeeklyResult key={selected.id} campaign={selected} today={today} />}
         </section>
       )}
     </div>
@@ -144,13 +143,13 @@ function Campaigns({ roles, today }: { roles: ZoonosesRoles; today: string }) {
 }
 
 // ─── Doses ───────────────────────────────────────────────────────────────────
-function Doses({ source, campaign, roles, units }: { source: Source; campaign: RabiesCampaign; roles: ZoonosesRoles; units: HealthUnit[] }) {
+function Doses({ source, campaign, roles, units }: { source: Source; campaign: RabiesCampaign | null; roles: ZoonosesRoles; units: HealthUnit[] }) {
   const { user } = useAuth();
   const domains = useZooDomains().data;
-  const key = source === "routine" ? "routine" : campaign.id;
+  const key = source === "routine" || !campaign ? "routine" : campaign.id;
   const q = useInfiniteQuery({
     queryKey: [ ZOO_VACCINATIONS_KEY, key ], initialPageParam: null as string | null, ...STATIC_QUERY,
-    queryFn: ({ pageParam }) => listVaccinations(source === "routine" ? { modality: "routine", before: pageParam } : { campaignId: campaign.id, before: pageParam }),
+    queryFn: ({ pageParam }) => listVaccinations(source === "routine" || !campaign ? { modality: "routine", before: pageParam } : { campaignId: campaign.id, before: pageParam }),
     getNextPageParam: (last) => last.next_before
   });
   const rows = q.data?.pages.flatMap((p) => p.items) ?? [];

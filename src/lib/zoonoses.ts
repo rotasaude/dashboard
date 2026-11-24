@@ -147,7 +147,7 @@ export function nextAnimalStatuses(status: AnimalStatus | string): AnimalStatus[
 }
 
 // Vacinação: casa a casa exige campanha aberta, animal, domicílio e a visita domiciliar utilizável (`fieldUsable`); posto fixo,
-// campanha aberta e, sem animal, a espécie; rotina, animal e nenhuma campanha aberta. Data: do início da campanha (rotina: 30
+// campanha aberta e, sem animal, a espécie; rotina, sempre e com animal (nunca leva campanha). Data: do início da campanha (rotina: 30
 // dias antes de hoje) até hoje. Nota do evento adverso 10–500, só com `adverse`.
 export type VaccinationDraft = {
   modality: "house" | "fixed_post" | "routine"; animalId: string | null; species: "dog" | "cat" | null; vaccinatedOn: string;
@@ -159,7 +159,6 @@ export function vaccinationProblems(
   const out: ZooProblem[] = [];
   const routine = d.modality === "routine";
   if (routine) {
-    if (c.campaign) out.push(local("modality", "há campanha aberta — a rotina só vale fora dela"));
     if (!d.animalId) out.push(local("animal_id", "escolha o animal"));
   } else {
     if (!c.campaign) out.push(coded("campaign_not_open", "campaign_id"));

@@ -100,6 +100,17 @@ describe("dose", () => {
     const body = mocked(api.recordVaccination).mock.calls[0][0];
     expect(body).toEqual({ modality: "routine", animal_id: "an1", vaccinated_on: TODAY35B, health_unit_id: "u1", vector_product_id: "pz1", adverse_event: false });
     expect("campaign_id" in body).toBe(false);
+    expect(api.getAnimal).not.toHaveBeenCalled();
+  });
+
+  it("sem nenhuma campanha: a rotina continua registrável e listável", async () => {
+    mocked(api.listRabiesCampaigns).mockResolvedValue([]);
+    mocked(api.listVaccinations).mockResolvedValue({ items: [ vaccination({ modality: "routine", campaign_id: null }) ], next_before: null });
+    view();
+    await form("Registrar dose");
+    expect(await screen.findByText("Doses de rotina")).not.toBeNull();
+    expect(api.listVaccinations).toHaveBeenCalledWith({ modality: "routine", before: null });
+    expect(await screen.findByText("com cadastro")).not.toBeNull();
   });
 
   it("casa a casa: sem a visita domiciliar ligada a modalidade nem é oferecida", async () => {

@@ -1,15 +1,14 @@
 // src/modules/zoonoses/VaccinationForm.tsx
 // Registrar dose antirrábica (módulo 35b, F-35.12; api-shapes §2.4). Posto fixo e casa a casa levam a campanha aberta; a rotina vale
 // sempre e nunca leva a chave `campaign_id` (o api recusa até o null). Posto fixo aceita animal cadastrado ou só a espécie (sem
-// nome nem tutor, Q4); rotina e casa a casa exigem o animal; casa a casa só com a visita domiciliar e animal com domicílio, e sem
+// nome nem tutor, Q4; o animal escolhido vem do resultado da busca, sem leitura nominal); rotina e casa a casa exigem o animal; casa a casa só com a visita domiciliar e animal com domicílio, e sem
 // `household_id` nem unidade no corpo. A segunda dose na campanha só o api barra (422 already_vaccinated_in_campaign): a frase fica
 // no animal e o formulário também. Falta de saldo não recusa: o pai mostra a frase da conciliação.
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { getAnimal, recordVaccination, type HealthUnit, type RabiesCampaign, type RabiesVaccination, type VaccinationInput } from "../../lib/api";
+import { recordVaccination, type Animal, type HealthUnit, type RabiesCampaign, type RabiesVaccination, type VaccinationInput } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import { canUseHomeVisits } from "../../lib/homeVisits";
-import { NOMINAL_QUERY, ZOO_ANIMAL_KEY, isZoonosesStale, vaccinationProblems, zooLabel, zoonosesRefusals } from "../../lib/zoonoses";
+import { isZoonosesStale, vaccinationProblems, zooLabel, zoonosesRefusals } from "../../lib/zoonoses";
 import { ActionButton } from "../../components/ActionButton";
 import { buttonStyle, disabledButtonStyle, inputStyle } from "../../components/formStyles";
 import { box, checkLabel, fieldLabel, form, muted, row } from "../exams/styles";
@@ -33,7 +32,8 @@ export function VaccinationForm({ campaign, today, units, onRecorded, onStale }:
     isStale: (err) => isZoonosesStale(err)
   });
   const [ chosen, setChosen ] = useState<Modality | null>(null);
-  const [ animalId, setAnimalId ] = useState<string | null>(null);
+  const [ picked, setPicked ] = useState<Animal | null>(null);
+  const animalId = picked?.id ?? null;
   const [ search, setSearch ] = useState(false);
   const [ species, setSpecies ] = useState("");
   const [ unit, setUnit ] = useState("");
@@ -47,7 +47,6 @@ export function VaccinationForm({ campaign, today, units, onRecorded, onStale }:
   const mod: Modality = wanted === "routine" || !campaign ? "routine" : wanted === "house" && !fieldUsable ? "fixed_post" : wanted;
   const products = (domains?.products ?? []).filter((p) => p.use === "rabies_vaccine");
   const productId = product || (products.length === 1 ? products[0].id : "");
-  const animal = useQuery({ queryKey: [ ZOO_ANIMAL_KEY, animalId ], queryFn: () => getAnimal(animalId!), ...NOMINAL_QUERY, enabled: !!animalId });
   const needsAnimal = mod !== "fixed_post";
   const picking = !animalId && (needsAnimal || search);
 
@@ -61,9 +60,9 @@ export function VaccinationForm({ campaign, today, units, onRecorded, onStale }:
     return vaccinationProblems(
       {
         modality: mod, animalId, species: animalId ? null : species === "dog" || species === "cat" ? species : null, vaccinatedOn: on, adverse,
-        adverseNote: note, householdId: animal.data?.household_id ?? null
+        adverseNote: note, householdId: picked?.household_id ?? null
       },
-      { campaign: mod === "routine" ? null : campaign, fieldUsable }, today
+      { campaign, fieldUsable }, today
     ).concat(productId ? [] : [ { code: null, path: "vector_product_id", text: "escolha o produto" } ]);
   }
 
@@ -88,7 +87,7 @@ export function VaccinationForm({ campaign, today, units, onRecorded, onStale }:
     <div style={form}>
       {picking && (
         <div style={box}>
-          <AnimalSearch onOpen={(id) => { setAnimalId(id); setSearch(false); f.clear("animal_id", "species"); }} />
+          <AnimalSearch onOpen={(_id, a) => { setPicked(a); setSearch(false); f.clear("animal_id", "species"); }} />
         </div>
       )}
       <form ref={f.formRef} noValidate style={form} aria-label="Registrar dose" onSubmit={submit}>
@@ -103,8 +102,8 @@ export function VaccinationForm({ campaign, today, units, onRecorded, onStale }:
 
         {animalId ? (
           <div style={row}>
-            <span>Animal: {animal.data ? `${animal.data.name ?? "sem nome"} · ${zooLabel(domains?.species, animal.data.species)}` : "carregando…"}</span>
-            <ActionButton variant="secondary" onClick={() => setAnimalId(null)}>Trocar animal</ActionButton>
+            <span>Animal: {`${picked?.name ?? "sem nome"} · ${zooLabel(domains?.species, picked?.species ?? "")}`}</span>
+            <ActionButton variant="secondary" onClick={() => setPicked(null)}>Trocar animal</ActionButton>
           </div>
         ) : mod === "fixed_post" ? (
           <>
