@@ -91,6 +91,9 @@ export const observationOutcomeLabel = pick({
   healthy: "sadio", died: "morreu", missing: "desapareceu", rabies_signs: "sinais de raiva", sent_to_exam: "enviado a exame", euthanized: "eutanasiado"
 });
 
+// Condição do animal agressor (os rótulos da ficha do Sinan); código desconhecido aparece cru.
+export const observationConditionLabel = pick({ healthy: "Sadio", suspect: "Suspeito", rabid: "Raivoso", dead_or_missing: "Morto ou desaparecido" });
+
 // ─── Regras de tela ─────────────────────────────────────────────────────────
 // `code`: o código do api quando ele tem um; null quando o api responderia `invalid_request` no `path`. `tutor_required` e
 // `euthanasia_required` são só códigos internos da tela (o api manda invalid_request).
@@ -196,6 +199,14 @@ export function closeObservationProblems(
 }
 // Dias corridos até o fim: 0 no último dia, negativo depois.
 export const observationDaysLeft = (endsOn: string, today: string): number => daysBetween(today, endsOn);
+// "faltam N dias" / "falta 1 dia" / "último dia" / "terminou há N dias" (aberta, mas já passou do fim).
+export function observationDaysText(endsOn: string, today: string): string {
+  const n = observationDaysLeft(endsOn, today);
+  if (n === 0) return "último dia";
+  if (n === 1) return "falta 1 dia";
+  if (n > 1) return `faltam ${n} dias`;
+  return n === -1 ? "terminou há 1 dia" : `terminou há ${-n} dias`;
+}
 
 // LV: o ELISA só depois de um TR-DPP reagente; cão reagente = os dois reagentes.
 export const elisaAllowed = (t: Pick<LeishTest, "dpp_result">): boolean => t.dpp_result === "reactive";
