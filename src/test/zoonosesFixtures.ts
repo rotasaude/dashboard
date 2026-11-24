@@ -27,6 +27,8 @@ const domainProduct = ({ id, code, name, use }: { id: string; code: string; name
 
 export const ZOO_DOMAINS: ZoonosesDomains = {
   units: [ { id: "uvz1", name: "UVZ Central" }, { id: "u1", name: "UVZ Norte" } ],
+  // Q43: todas as unidades ativas (qualquer tipo) para a dose; o canil continua com `units`.
+  vaccination_units: [ { id: "ubs7", name: "UBS Jardim Botânico" }, { id: "uvz1", name: "UVZ Central" }, { id: "u1", name: "UVZ Norte" } ],
   species: [ { code: "dog", label: "Cão" }, { code: "cat", label: "Gato" }, { code: "other", label: "Outro" } ],
   sexes: [ { code: "male", label: "Macho" }, { code: "female", label: "Fêmea" }, { code: "unknown", label: "Não informado" } ],
   sizes: [ { code: "small", label: "Pequeno" }, { code: "medium", label: "Médio" }, { code: "large", label: "Grande" } ],

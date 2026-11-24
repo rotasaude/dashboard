@@ -112,6 +112,28 @@ describe("dose", () => {
     expect(await screen.findByText("com cadastro")).not.toBeNull();
   });
 
+  it("Q43: o formulário de dose oferece as unidades de vacinação dos domínios, UBS inclusive", async () => {
+    await fixedPostForm();
+    const names = within(screen.getByLabelText("Unidade")).getAllByRole("option").map((o) => o.textContent);
+    expect(names).toContain("UBS Jardim Botânico");
+    set("Modalidade", "fixed_post");
+    set("Espécie", "dog");
+    set("Unidade", "ubs7");
+    expect((screen.getByLabelText("Unidade") as HTMLSelectElement).value).toBe("ubs7");
+  });
+
+  it("Q43: a lista de doses mostra o nome da unidade de vacinação; id fora da lista é \"outra unidade\", nunca o id cru", async () => {
+    mocked(api.listVaccinations).mockResolvedValue({ items: [
+      vaccination({ id: "v1", modality: "fixed_post", health_unit_id: "ubs7" }),
+      vaccination({ id: "v2", modality: "fixed_post", health_unit_id: "unidade-desconhecida-9" })
+    ], next_before: null });
+    view();
+    const table = await screen.findByRole("table", { name: "Doses" });
+    await within(table).findByText("UBS Jardim Botânico");
+    expect(within(table).getByText("outra unidade")).not.toBeNull();
+    expect(table.textContent).not.toMatch(/unidade-desconhecida-9/);
+  });
+
   it("casa a casa: sem a visita domiciliar ligada a modalidade nem é oferecida", async () => {
     await fixedPostForm();
     const options = within(screen.getByLabelText("Modalidade")).getAllByRole("option").map((o) => (o as HTMLOptionElement).value);

@@ -60,6 +60,9 @@ export const vetIdentity = (me: MyProfessional): string =>
 export const animalDisplayName = (name: string | null, species: string): string =>
   name ?? `${species === "dog" ? "Cão" : species === "cat" ? "Gato" : "Animal"} sem nome`;
 
+// Unidade cujo id não está nos domínios (Q43): a lista diz isto, nunca o id cru.
+export const OTHER_UNIT = "outra unidade";
+
 // ─── Chaves de cache ────────────────────────────────────────────────────────
 export const ZOO_DOMAINS_KEY = "zooDomains";
 export const ZOO_ANIMAL_KEY = "zooAnimal";

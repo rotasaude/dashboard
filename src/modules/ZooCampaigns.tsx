@@ -12,7 +12,7 @@ import { useAuth } from "../lib/auth";
 import { cityIsoDate } from "../lib/format";
 import { fmtDay, textProblem } from "../lib/homeVisits";
 import {
-  STATIC_QUERY, ZOO_CAMPAIGNS_KEY, ZOO_DOMAINS_KEY, ZOO_VACCINATIONS_KEY, isZoonosesStale, zooLabel, zoonosesError, type ZoonosesRoles
+  OTHER_UNIT, STATIC_QUERY, ZOO_CAMPAIGNS_KEY, ZOO_DOMAINS_KEY, ZOO_VACCINATIONS_KEY, isZoonosesStale, zooLabel, zoonosesError, type ZoonosesRoles
 } from "../lib/zoonoses";
 import { ActionButton } from "../components/ActionButton";
 import { ConfirmButton } from "../components/ConfirmButton";
@@ -43,8 +43,9 @@ export function ZooCampaigns({ today }: { today?: string } = {}) {
 function Campaigns({ roles, today }: { roles: ZoonosesRoles; today: string }) {
   const client = useQueryClient();
   const list = useQuery({ queryKey: [ ZOO_CAMPAIGNS_KEY ], queryFn: listRabiesCampaigns, ...STATIC_QUERY });
-  // Q41: as unidades vêm dos domínios (`/attendance/units` é fechado à equipe de zoonoses).
-  const units = { data: useZooDomains().data?.units };
+  // Q43: a dose e a lista de doses usam as unidades de vacinação dos domínios (todas as ativas; `/attendance/units` é fechado à
+  // equipe de zoonoses). O canil segue com `units` (Q41).
+  const units = { data: useZooDomains().data?.vaccination_units };
   const [ editor, setEditor ] = useState<Editor>(null);
   const [ notice, setNotice ] = useState<string | null>(null);
   const [ picked, setPicked ] = useState<string | null>(null);
@@ -154,7 +155,8 @@ function Doses({ source, campaign, roles, units }: { source: Source; campaign: R
     getNextPageParam: (last) => last.next_before
   });
   const rows = q.data?.pages.flatMap((p) => p.items) ?? [];
-  const unitName = (id: string | null) => (id ? units.find((u) => u.id === id)?.name ?? id : "—");
+  // Id fora das unidades de vacinação: "outra unidade", nunca o id cru (Q43).
+  const unitName = (id: string | null) => (id ? units.find((u) => u.id === id)?.name ?? OTHER_UNIT : "—");
   const can = (v: RabiesVaccination) => !v.cancelled && (roles.coordinator || (roles.team && v.recorded_by_user_id === user?.id));
 
   const cols: Column<RabiesVaccination>[] = [

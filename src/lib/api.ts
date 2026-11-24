@@ -8477,7 +8477,10 @@ export type Coded = { code: string; label: string }[];
 // unidade no canil e na campanha (`/attendance/units` é fechado à equipe de zoonoses). Não há `observation_days` (vem de `/zoonoses/parameters`); listas extras que o api acrescentar
 // são toleradas (`[extra]`) e o código desconhecido aparece cru na tela.
 export type ZoonosesDomains = {
+  // Q41: as unidades `environmental_surveillance` ativas (canil e gatil).
   units: ZooRef[];
+  // Q43: todas as unidades ativas, de qualquer tipo, para a dose (posto fixo e rotina) e a lista de doses.
+  vaccination_units: ZooRef[];
   species: Coded; sexes: Coded; sizes: Coded; animal_statuses: Coded; subtypes: Coded; dpp_results: Coded; elisa_results: Coded;
   leish_decisions: Coded; leish_survey_kinds: Coded; product_uses: Coded; entry_kinds: Coded; exit_kinds: Coded; euthanasia_reasons: Coded;
   legal_bases: Coded; removal_reasons: Coded; modalities: Coded; demand_states: Coded; demand_outcomes: Coded; deadline_colors: Coded; observation_outcomes: Coded;
