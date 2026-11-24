@@ -148,6 +148,26 @@ describe("gravação", () => {
     await waitFor(() => expect(api.getZooParameters).toHaveBeenCalledTimes(2));
   });
 
+  it("duplo clique em Confirmar com o PUT pendente: um step-up e um PUT", async () => {
+    let resolve!: (v: ZoonosesParameterVersion) => void;
+    mocked(api.putZooParameters).mockImplementation(() => new Promise((r) => { resolve = r; }));
+    mount();
+    await screen.findByText("padrão de fábrica (versão 0)");
+    click("Salvar parâmetros");
+    type("Código do autenticador", "123456");
+    const confirm = await screen.findByRole("button", { name: "Confirmar" });
+    fireEvent.click(confirm);
+    fireEvent.click(confirm);
+    await waitFor(() => expect(api.putZooParameters).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole("button", { name: /Confirmar/ }));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(api.putZooParameters).toHaveBeenCalledTimes(1);
+    expect(api.stepUpMfa).toHaveBeenCalledTimes(1);
+    resolve(version({ version: 1 }));
+    expect(await screen.findByText("parâmetros salvos — versão 1")).not.toBeNull();
+    expect(api.putZooParameters).toHaveBeenCalledTimes(1);
+  });
+
   it("invalid_parameter com path values.<chave>: a frase no campo", async () => {
     mocked(api.putZooParameters).mockRejectedValue(new ApiError(422, { error: "invalid_parameter", path: "values.dogs_per_block" }, "x"));
     mount();
