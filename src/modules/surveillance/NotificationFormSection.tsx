@@ -11,7 +11,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { errorCode, updateNotificationForm, type SurveillanceNotification } from "../../lib/api";
 import { NOTIFICATION_KEY, isStale, surveillanceError } from "../../lib/surveillance";
-import { FORM_EDITABLE, SINAN_FORM_FIELDS, RABIES_ANIMAL_FIELDS, formBody, formProblem, formValues, type FormFieldSpec } from "../../lib/surveillanceForm";
+import { FORM_EDITABLE, RABIES_ANIMAL_FIELDS, formBody, formFieldsFor, formProblem, formValues, type FormFieldSpec } from "../../lib/surveillanceForm";
 import { UFS } from "../../lib/professionals";
 import { errorPath } from "../../lib/territoryRegistry";
 import { KeyValue } from "../../components/KeyValue";
@@ -26,7 +26,8 @@ const fieldsGrid = { display: "grid", gridTemplateColumns: "repeat(auto-fill, mi
 
 interface Props {
   notification: SurveillanceNotification;
-  // Os campos da ficha: o Sinan e, em acidente_animal_raiva, o bloco do animal (uma seção, um PATCH).
+  // Os campos da ficha: o Sinan e, em acidente_animal_raiva, o bloco do animal (uma seção, um PATCH). Sem `fields`, os da
+  // doença da notificação (`formFieldsFor`), para um chamador novo não apagar o bloco do animal no PATCH.
   fields?: FormFieldSpec[];
   onSaved(n: SurveillanceNotification): void;
 }
@@ -36,7 +37,7 @@ type Control = HTMLInputElement | HTMLSelectElement;
 const shown = (f: FormFieldSpec, value: string): string =>
   value === "" ? "—" : f.kind === "bool" ? (value === "true" ? "sim" : "não") : f.kind === "code" ? (f.options?.find((o) => o.code === value)?.label ?? value) : value;
 
-export function NotificationFormSection({ notification, fields = SINAN_FORM_FIELDS, onSaved }: Props) {
+export function NotificationFormSection({ notification, fields = formFieldsFor(notification.disease.code), onSaved }: Props) {
   const FIELDS = fields;
   const client = useQueryClient();
   const [ values, setValues ] = useState(() => formValues(notification.form, FIELDS));

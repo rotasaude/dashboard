@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
-vi.mock("../../lib/api", async (importOriginal) => ({ ...(await importOriginal<typeof import("../../lib/api")>()), updateNotificationForm: vi.fn() }));
+vi.mock("../../lib/api", async (importOriginal) => ({ ...(await importOriginal<typeof import("../../lib/api")>()), fetchCurrentSession: vi.fn(),
+  updateNotificationForm: vi.fn() }));
 import * as api from "../../lib/api";
 import { ApiError, type SurveillanceNotification } from "../../lib/api";
 import { NotificationFormSection } from "./NotificationFormSection";
@@ -28,6 +29,17 @@ const save = () => fireEvent.click(screen.getByRole("button", { name: "Salvar fi
 
 describe("NotificationFormSection", () => {
   beforeEach(() => { update().mockReset(); });
+
+  it("sem `fields`, os campos seguem a doença: acidente_animal_raiva traz o bloco do animal; outra doença, só o Sinan", () => {
+    render(tree(notification({ status: "investigating", version: 4, form: {},
+      disease: { code: "acidente_animal_raiva", name: "Atendimento antirrábico humano", deadline: "weekly" } })));
+    expect(screen.getByLabelText("Espécie do animal")).not.toBeNull();
+    expect(screen.getByLabelText("Raça/Cor")).not.toBeNull();
+    cleanup();
+    mount("investigating", {});
+    expect(screen.queryByLabelText("Espécie do animal")).toBeNull();
+    expect(screen.getByLabelText("Raça/Cor")).not.toBeNull();
+  });
 
   it("um campo por linha da ficha, com o valor da notificação; o código mostra o rótulo", () => {
     mount("investigating", { race_color: "4", residence_zip: "01310100", residence_uf: "PR" });
