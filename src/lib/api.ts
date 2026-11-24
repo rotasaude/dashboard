@@ -8425,7 +8425,7 @@ export interface DueCollar {
 export type ShelterEntryKind = "collection" | "voluntary_surrender" | "observation" | "other";
 export type ShelterExitKind = "returned" | "adopted" | "death" | "euthanasia" | "transferred";
 export interface ShelterStay {
-  id: string; version: number; animal_id: string; species: AnimalSpecies | (string & {}); health_unit_id: string; entry_kind: ShelterEntryKind | (string & {});
+  id: string; version: number; animal_id: string; animal: { id: string; name: string | null; species: AnimalSpecies | (string & {}) }; species: AnimalSpecies | (string & {}); health_unit_id: string; entry_kind: ShelterEntryKind | (string & {});
   entered_on: string; bite_observation_id: string | null; exit_kind: ShelterExitKind | (string & {}) | null; exited_on: string | null; created_at: string;
 }
 // 201 da entrada: a estada + a linha do animal.
@@ -8470,10 +8470,11 @@ export interface ZoonosesParameters {
 }
 export interface ZoonosesParameterVersion { version: number; values: ZoonosesParameters; created_at: string | null }
 export type Coded = { code: string; label: string }[];
-// Domínios do api (`GET /zoonoses/domains`). Não há `units`, `shelter_units` nem `observation_days`
-// (as unidades vêm da rota de unidades, os parâmetros de `/zoonoses/parameters`); listas extras que o api acrescentar
+// Domínios do api (`GET /zoonoses/domains`). `units` (Q41) são as unidades `environmental_surveillance` ativas, por nome: a fonte da
+// unidade no canil e na campanha (`/attendance/units` é fechado à equipe de zoonoses). Não há `observation_days` (vem de `/zoonoses/parameters`); listas extras que o api acrescentar
 // são toleradas (`[extra]`) e o código desconhecido aparece cru na tela.
 export type ZoonosesDomains = {
+  units: ZooRef[];
   species: Coded; sexes: Coded; sizes: Coded; animal_statuses: Coded; subtypes: Coded; dpp_results: Coded; elisa_results: Coded;
   leish_decisions: Coded; leish_survey_kinds: Coded; product_uses: Coded; entry_kinds: Coded; exit_kinds: Coded; euthanasia_reasons: Coded;
   legal_bases: Coded; removal_reasons: Coded; modalities: Coded; demand_states: Coded; demand_outcomes: Coded; deadline_colors: Coded; observation_outcomes: Coded;

@@ -26,6 +26,7 @@ export const COLLAR: VectorProduct & { use: "collar" } = {
 const domainProduct = ({ id, code, name, use }: { id: string; code: string; name: string; use: "rabies_vaccine" | "collar" }) => ({ id, code, name, use });
 
 export const ZOO_DOMAINS: ZoonosesDomains = {
+  units: [ { id: "uvz1", name: "UVZ Central" }, { id: "u1", name: "UBS Centro" } ],
   species: [ { code: "dog", label: "Cão" }, { code: "cat", label: "Gato" }, { code: "other", label: "Outro" } ],
   sexes: [ { code: "male", label: "Macho" }, { code: "female", label: "Fêmea" }, { code: "unknown", label: "Não informado" } ],
   sizes: [ { code: "small", label: "Pequeno" }, { code: "medium", label: "Médio" }, { code: "large", label: "Grande" } ],
@@ -148,7 +149,7 @@ export const dueCollar = (o: Partial<DueCollar> = {}): DueCollar => ({
   animal: { id: "an1", name: "Thor", species: "dog" }, ...o
 });
 export const stay = (o: Partial<ShelterStay> = {}): ShelterStay => ({
-  id: "st1", version: 1, animal_id: "an1", species: "dog", health_unit_id: "uvz1", entry_kind: "collection", entered_on: "2026-11-20",
+  id: "st1", version: 1, animal_id: "an1", animal: { id: "an1", name: "Thor", species: "dog" }, species: "dog", health_unit_id: "uvz1", entry_kind: "collection", entered_on: "2026-11-20",
   bite_observation_id: null, exit_kind: null, exited_on: null, created_at: "2026-11-20T11:00:00-03:00", ...o
 });
 export const euthanasia = (o: Partial<Euthanasia> = {}): Euthanasia => ({

@@ -5,8 +5,8 @@
 import { useState } from "react";
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  cancelVaccination, closeRabiesCampaign, listActiveUnits, listRabiesCampaigns, listVaccinations, openRabiesCampaign,
-  type HealthUnit, type RabiesCampaign, type RabiesVaccination
+  cancelVaccination, closeRabiesCampaign, listRabiesCampaigns, listVaccinations, openRabiesCampaign,
+  type ZooRef, type RabiesCampaign, type RabiesVaccination
 } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { cityIsoDate } from "../lib/format";
@@ -43,7 +43,8 @@ export function ZooCampaigns({ today }: { today?: string } = {}) {
 function Campaigns({ roles, today }: { roles: ZoonosesRoles; today: string }) {
   const client = useQueryClient();
   const list = useQuery({ queryKey: [ ZOO_CAMPAIGNS_KEY ], queryFn: listRabiesCampaigns, ...STATIC_QUERY });
-  const units = useQuery({ queryKey: [ "zooUnits" ], queryFn: listActiveUnits, ...STATIC_QUERY, enabled: roles.team });
+  // Q41: as unidades vêm dos domínios (`/attendance/units` é fechado à equipe de zoonoses).
+  const units = { data: useZooDomains().data?.units };
   const [ editor, setEditor ] = useState<Editor>(null);
   const [ notice, setNotice ] = useState<string | null>(null);
   const [ picked, setPicked ] = useState<string | null>(null);
@@ -143,7 +144,7 @@ function Campaigns({ roles, today }: { roles: ZoonosesRoles; today: string }) {
 }
 
 // ─── Doses ───────────────────────────────────────────────────────────────────
-function Doses({ source, campaign, roles, units }: { source: Source; campaign: RabiesCampaign | null; roles: ZoonosesRoles; units: HealthUnit[] }) {
+function Doses({ source, campaign, roles, units }: { source: Source; campaign: RabiesCampaign | null; roles: ZoonosesRoles; units: ZooRef[] }) {
   const { user } = useAuth();
   const domains = useZooDomains().data;
   const key = source === "routine" || !campaign ? "routine" : campaign.id;

@@ -5,7 +5,7 @@
 // nem contato para a lista; a ficha do animal (NOMINAL_QUERY) só é lida ao abrir e depois de uma ação.
 import { useState } from "react";
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
-import { errorCode, getAnimal, getMyProfessional, listActiveUnits, listShelterStays, recordNeutering, type AnimalHistory, type ShelterStay } from "../lib/api";
+import { errorCode, getAnimal, getMyProfessional, listShelterStays, recordNeutering, type AnimalHistory, type ShelterStay } from "../lib/api";
 import { cityIsoDate } from "../lib/format";
 import { fmtDay } from "../lib/homeVisits";
 import {
@@ -30,7 +30,6 @@ import { ZoonosesGate } from "./zoonoses/ZoonosesGate";
 import { useZooDomains } from "./zoonoses/useZooDomains";
 
 export const NO_SHELTER_UNIT = "nenhuma unidade de vigilância ambiental ativa";
-const SHELTER_UNIT_KIND = "environmental_surveillance";
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 type Tab = "open" | "exits";
@@ -46,8 +45,8 @@ export function ZooShelter({ today, onGoToSecurity }: { today?: string; onGoToSe
 
 function Shelter({ roles, today, onGoToSecurity }: { roles: ZoonosesRoles; today: string; onGoToSecurity?(): void }) {
   const client = useQueryClient();
-  const domains = useZooDomains().data;
-  const units = useQuery({ queryKey: [ "zooUnits" ], queryFn: listActiveUnits, ...STATIC_QUERY });
+  const domainsQuery = useZooDomains();
+  const domains = domainsQuery.data;
   const me = useQuery({ queryKey: [ ZOO_ME_KEY ], queryFn: getMyProfessional, ...STATIC_QUERY });
   const [ tab, setTab ] = useState<Tab>("open");
   const [ unitId, setUnitId ] = useState("");
@@ -55,8 +54,8 @@ function Shelter({ roles, today, onGoToSecurity }: { roles: ZoonosesRoles; today
   const [ entering, setEntering ] = useState(false);
   const [ notice, setNotice ] = useState<string | null>(null);
 
-  // Não há `shelter_units` nos domínios: a unidade é a ativa do tipo "Vigilância ambiental e zoonoses".
-  const shelters = (units.data ?? []).filter((u) => u.kind === SHELTER_UNIT_KIND);
+  // Q41: as unidades de vigilância ambiental ativas vêm dos domínios (`/attendance/units` é fechado à equipe de zoonoses).
+  const shelters = domains?.units ?? [];
   const unit = shelters.find((u) => u.id === unitId) ?? shelters[0] ?? null;
   const q = useInfiniteQuery({
     queryKey: [ ZOO_STAYS_KEY, tab, unit?.id ?? "" ], ...STATIC_QUERY, enabled: !!unit, initialPageParam: null as string | null,
@@ -73,7 +72,7 @@ function Shelter({ roles, today, onGoToSecurity }: { roles: ZoonosesRoles; today
   const rereadStays = () => client.invalidateQueries({ queryKey: [ ZOO_STAYS_KEY ] });
   const stale = (text: string) => { setNotice(text); setEntering(false); setPicked(null); void rereadStays(); };
   const kind = (code: string) => zooLabel(domains?.entry_kinds, code);
-  const animalName = (s: ShelterStay) => `${zooLabel(domains?.species, s.species)} #${s.animal_id.slice(0, 8)}`;
+  const animalName = (s: ShelterStay) => s.animal.name ?? `${zooLabel(domains?.species, s.animal.species)} sem nome`;
 
   const openCols: Column<ShelterStay>[] = [
     { label: "Animal", w: "1fr", card: "title", render: animalName },
@@ -88,8 +87,8 @@ function Shelter({ roles, today, onGoToSecurity }: { roles: ZoonosesRoles; today
     { label: "Saída", w: "1.2fr", render: (s) => `${zooLabel(domains?.exit_kinds, s.exit_kind ?? "")} em ${fmtDay(s.exited_on ?? "")}` }
   ];
 
-  if (units.isLoading) return <p style={muted}>carregando…</p>;
-  if (units.isError) return <EmptyState title={zoonosesError(units.error)} />;
+  if (domainsQuery.isLoading) return <p style={muted}>carregando…</p>;
+  if (domainsQuery.isError) return <EmptyState title={zoonosesError(domainsQuery.error)} />;
   if (!unit) return <EmptyState title={NO_SHELTER_UNIT} />;
 
   return (
@@ -183,12 +182,20 @@ function StayDetail({ stay, today, vet, meLoaded, me, onGoToSecurity, onStale, o
       {mode === "neuter" && (
         <NeuteringForm animalId={a.id} stayId={stay.id} today={today} onCancel={() => setMode(null)}
           onStale={(text) => { setMode(null); onNotice(text); void reread(); }}
-          onDone={() => { setMode(null); onNotice("Castração registrada."); void reread(); }} />
+          onDone={() => {
+            // O 201 já vale: grava no histórico lido antes da releitura, para a tela não oferecer a castração de novo.
+            client.setQueryData<AnimalHistory>([ ZOO_ANIMAL_KEY, a.id ], { ...a, neutered: true });
+            setMode(null); onNotice("Castração registrada."); void reread();
+          }} />
       )}
       {mode === "euthanasia" && vet && me && !e && (
         <EuthanasiaForm animal={a} me={me} today={today} stayId={stay.id} observationId={openObservation?.id ?? null}
           onGoToSecurity={onGoToSecurity} onCancel={() => setMode(null)} onRefused={(text) => { setMode(null); onNotice(text); void reread(); }}
-          onDone={() => { setMode(null); onNotice("Eutanásia registrada. Feche a estada com a saída por eutanásia."); void reread(); }} />
+          onDone={(done) => {
+            // O 201 já vale: o histórico lido passa a ter a eutanásia (só leitura) antes da releitura.
+            client.setQueryData<AnimalHistory>([ ZOO_ANIMAL_KEY, a.id ], { ...a, status: "deceased", status_on: done.performed_on, euthanasia: done });
+            setMode(null); onNotice("Eutanásia registrada. Feche a estada com a saída por eutanásia."); void reread();
+          }} />
       )}
       {mode === "exit" && (
         <ExitForm stay={stay} animal={a} today={today} onCancel={() => setMode(null)} onExited={onExited}

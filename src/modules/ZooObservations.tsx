@@ -18,15 +18,15 @@ import { useZooDomains } from "./zoonoses/useZooDomains";
 
 type Tab = "open" | "closed";
 
-export function ZooObservations({ today }: { today?: string } = {}) {
+export function ZooObservations({ today, onGoToShelter }: { today?: string; onGoToShelter?(): void } = {}) {
   return (
     <ZoonosesGate title="Observação do agressor" sub="zoonoses · observação" allow={(r) => r.team}>
-      {() => <Observations today={today ?? cityIsoDate()} />}
+      {() => <Observations today={today ?? cityIsoDate()} onGoToShelter={onGoToShelter} />}
     </ZoonosesGate>
   );
 }
 
-function Observations({ today }: { today: string }) {
+function Observations({ today, onGoToShelter }: { today: string; onGoToShelter?(): void }) {
   const client = useQueryClient();
   const domains = useZooDomains().data;
   const [ tab, setTab ] = useState<Tab>("open");
@@ -56,7 +56,7 @@ function Observations({ today }: { today: string }) {
       {q.isError && <EmptyState title={zoonosesError(q.error)} />}
       {q.data && <DataTable<BiteObservation> label="Observações" cols={cols} rows={rows} rowKey={(o) => o.id} empty="nenhuma observação" />}
       {q.hasNextPage && <div style={row}><ActionButton variant="secondary" busy={q.isFetchingNextPage} onClick={() => void q.fetchNextPage()}>Carregar mais</ActionButton></div>}
-      {picked && <ObservationDetail key={picked} id={picked} today={today} onChanged={() => void reread()} />}
+      {picked && <ObservationDetail key={picked} id={picked} today={today} onChanged={() => void reread()} onGoToShelter={onGoToShelter} />}
     </div>
   );
 }

@@ -22,6 +22,7 @@ import { DataTable, type Column } from "../../components/DataTable";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { alert, box, fieldLabel, form, muted, row, stack } from "../exams/styles";
 import { useFormProblems } from "../psychosocial/useFormProblems";
+import { hasOpenStay } from "./AnimalHistory";
 import { AnimalSearch } from "./AnimalSearch";
 import { useZooDomains } from "./useZooDomains";
 
@@ -394,8 +395,14 @@ function OutcomeForm({ test, today, onGoToShelter, onSaved, onStale, onCancel }:
       {euth && euthanasia && <p style={muted}>eutanásia de {fmtDay(euthanasia.performed_on)}</p>}
       {euth && hist.isSuccess && !euthanasia && (
         <div style={row}>
-          <span style={muted}>sem eutanásia gravada para este animal: a veterinária registra em Canil e gatil</span>
-          {onGoToShelter && <ActionButton variant="secondary" onClick={onGoToShelter}>Ir para Canil e gatil</ActionButton>}
+          <span style={muted}>
+            {hasOpenStay(hist.data)
+              ? "sem eutanásia gravada para este animal: ele está no canil, e a veterinária registra a eutanásia em Canil e gatil"
+              : "sem eutanásia gravada para este animal: a eutanásia sai de uma estada no canil, então dê entrada antes"}
+          </span>
+          {onGoToShelter && (
+            <ActionButton variant="secondary" onClick={onGoToShelter}>{hasOpenStay(hist.data) ? "Ir para Canil e gatil" : "Dar entrada no canil"}</ActionButton>
+          )}
         </div>
       )}
       {f.errNode("euthanasia_id")}

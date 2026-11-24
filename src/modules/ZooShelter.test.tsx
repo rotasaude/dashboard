@@ -15,7 +15,7 @@ vi.mock("../lib/api", async (importOriginal) => {
 });
 
 import * as api from "../lib/api";
-import { ApiError, type HealthUnit, type ShelterStayPage } from "../lib/api";
+import { ApiError, type ShelterStayPage } from "../lib/api";
 import { ZOO_NOT_VET } from "../lib/zoonoses";
 import { ZOONOSES_ERRORS } from "../lib/zoonosesErrors";
 import { renderWithProviders } from "../test/campaignFixtures";
@@ -27,9 +27,6 @@ const MOCKS = [
   api.fetchCurrentSession, api.getZoonosesDomains, api.listActiveUnits, api.getMyProfessional, api.listShelterStays, api.enterShelter,
   api.exitShelter, api.recordNeutering, api.recordEuthanasia, api.getAnimal, api.searchAnimals, api.lookupZooPerson, api.listObservations
 ];
-const UNITS: HealthUnit[] = [
-  { id: "uvz1", name: "UVZ Central", kind: "environmental_surveillance" }, { id: "ubs1", name: "UBS Centro", kind: "primary_care" }
-];
 const page = (items = [ stay() ], open = items.length): ShelterStayPage => ({ items, next_before: null, occupancy: [ { health_unit_id: "uvz1", open_stays: open } ] });
 const apiError = (status: number, error: string, path?: string) => new ApiError(status, { error, ...(path ? { path } : {}) }, error);
 const MICROCHIP = "985112003456789";
@@ -39,7 +36,6 @@ beforeEach(() => {
   for (const fn of MOCKS) mocked(fn).mockReset();
   mocked(api.fetchCurrentSession).mockResolvedValue(zooUser());
   mocked(api.getZoonosesDomains).mockResolvedValue(ZOO_DOMAINS);
-  mocked(api.listActiveUnits).mockResolvedValue(UNITS);
   mocked(api.getMyProfessional).mockResolvedValue(vetProfessional());
   mocked(api.listShelterStays).mockResolvedValue(page());
   mocked(api.getAnimal).mockResolvedValue(history());
@@ -63,25 +59,28 @@ describe("estadas abertas", () => {
   it("lista a unidade de vigilância ambiental com a contagem e sem tutor, nome nem microchip", async () => {
     view();
     expect(await screen.findByText("UVZ Central")).not.toBeNull();
+    // A unidade vem dos domínios; /attendance/units é fechado à equipe de zoonoses.
+    expect(api.listActiveUnits).not.toHaveBeenCalled();
     expect(await screen.findByText("1 animal no canil")).not.toBeNull();
-    expect(screen.getByText("Cão #an1")).not.toBeNull();
+    expect(screen.getByText("Thor")).not.toBeNull();
+    expect(screen.queryByText(/#an1/)).toBeNull();
     expect(mocked(api.listShelterStays).mock.calls[0][0]).toEqual({ open: true, healthUnitId: "uvz1", before: null });
-    expect(screen.queryByText("UBS Centro")).toBeNull();
   });
 
   it("a aba Saídas lê as estadas da unidade e mostra só as fechadas", async () => {
     mocked(api.listShelterStays).mockResolvedValue(page([
-      stay({ id: "st1" }), stay({ id: "st2", animal_id: "bb222222-x", exit_kind: "adopted", exited_on: "2026-11-22" })
+      stay({ id: "st1" }), stay({ id: "st2", animal_id: "bb222222-x", animal: { id: "bb222222-x", name: null, species: "dog" }, exit_kind: "adopted", exited_on: "2026-11-22" })
     ], 1));
     view();
     fireEvent.click(await screen.findByRole("tab", { name: "Saídas" }));
     expect(await screen.findByText("Adoção em 22/11/2026")).not.toBeNull();
-    expect(screen.queryByText("Cão #an1")).toBeNull();
+    expect(screen.getByText("Cão sem nome")).not.toBeNull();
+    expect(screen.queryByText("Thor")).toBeNull();
     await waitFor(() => expect(mocked(api.listShelterStays).mock.calls.some(([q]) => q.open === false)).toBe(true));
   });
 
   it("sem unidade de vigilância ambiental ativa: a frase", async () => {
-    mocked(api.listActiveUnits).mockResolvedValue([ UNITS[1] ]);
+    mocked(api.getZoonosesDomains).mockResolvedValue({ ...ZOO_DOMAINS, units: [] });
     view();
     expect(await screen.findByText("nenhuma unidade de vigilância ambiental ativa")).not.toBeNull();
   });
@@ -109,7 +108,8 @@ describe("eutanásia", () => {
     expect(await screen.findByText("A eutanásia não se edita nem se apaga. O animal passa a morto na data informada.")).not.toBeNull();
     expect(api.recordEuthanasia).not.toHaveBeenCalled();
 
-    mocked(api.getAnimal).mockResolvedValue(history({ status: "deceased", status_on: TODAY35B, euthanasia: euthanasia() }));
+    // A releitura nunca chega: o 201 sozinho já deixa a tela só para leitura.
+    mocked(api.getAnimal).mockReturnValue(new Promise(() => undefined));
     const confirm = screen.getByRole("button", { name: "Registrar eutanásia" });
     fireEvent.click(confirm);
     fireEvent.click(confirm);
@@ -119,8 +119,10 @@ describe("eutanásia", () => {
       legal_basis: [ "cfmv_1000_2012" ], shelter_stay_id: "st1"
     });
     finish(euthanasia());
-    // Depois do 201: o resumo só para leitura e nenhum botão de registrar.
+    // Depois do 201: o resumo só para leitura e nenhum botão de registrar (sem esperar a releitura).
     const summary = await screen.findByLabelText("Eutanásia registrada");
+    expect(screen.queryByRole("button", { name: /Registrar eutanásia/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Registrar castração" })).toBeNull();
     expect(within(summary).getByText(/Dra\. Ana Lima \(CRMV-PR 12345\)/)).not.toBeNull();
     expect(screen.queryByRole("button", { name: /Registrar eutanásia/ })).toBeNull();
     expect(screen.queryByRole("button", { name: "Revisar eutanásia" })).toBeNull();
@@ -194,11 +196,12 @@ describe("castração", () => {
     });
     await open();
     click("Registrar castração");
-    mocked(api.getAnimal).mockResolvedValue(history({ neutered: true }));
+    mocked(api.getAnimal).mockReturnValue(new Promise(() => undefined));
     fireEvent.click(screen.getByRole("button", { name: "Confirmar castração" }));
     await waitFor(() => expect(api.recordNeutering).toHaveBeenCalledTimes(1));
     expect(api.recordNeutering).toHaveBeenCalledWith({ animal_id: "an1", performed_on: TODAY35B, shelter_stay_id: "st1" });
     expect(await screen.findByText("Castração registrada.")).not.toBeNull();
+    // Sem esperar a releitura: castrado e sem o botão.
     expect(await screen.findByText("castrado")).not.toBeNull();
     expect(screen.queryByRole("button", { name: "Registrar castração" })).toBeNull();
     expect(screen.queryByRole("button", { name: /desfazer|reverter|anular/i })).toBeNull();

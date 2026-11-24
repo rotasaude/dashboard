@@ -5,10 +5,10 @@
 // releitura, nenhum reenvio. O api decide o que `euthanized` exige (a eutanásia ligada a esta observação); a tela só avisa.
 import { useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { closeObservation, linkObservationAnimal, getObservation, type Animal, type ObservationOutcome } from "../../lib/api";
+import { closeObservation, getAnimal, linkObservationAnimal, getObservation, type Animal, type ObservationOutcome } from "../../lib/api";
 import { fmtDay } from "../../lib/homeVisits";
 import {
-  NOMINAL_QUERY, ZOO_OBSERVATION_KEY, closeObservationProblems, isZoonosesStale, observationConditionLabel, observationDaysText, zooLabel, zoonosesRefusals
+  NOMINAL_QUERY, ZOO_ANIMAL_KEY, ZOO_OBSERVATION_KEY, closeObservationProblems, isZoonosesStale, observationConditionLabel, observationDaysText, zooLabel, zoonosesRefusals
 } from "../../lib/zoonoses";
 import { ActionButton } from "../../components/ActionButton";
 import { EmptyState } from "../../components/EmptyState";
@@ -16,6 +16,7 @@ import { Tag } from "../../components/Tag";
 import { inputStyle } from "../../components/formStyles";
 import { alert, box, fieldLabel, muted, okText, panel, row, title } from "../exams/styles";
 import { AnimalForm } from "./AnimalForm";
+import { hasOpenStay } from "./AnimalHistory";
 import { AnimalSearch } from "./AnimalSearch";
 import { ContactDialog } from "./ContactDialog";
 import { useZooDomains } from "./useZooDomains";
@@ -23,7 +24,7 @@ import { useZooDomains } from "./useZooDomains";
 export const EUTHANASIA_HINT = "Eutanasiado só vale com a eutanásia desta observação gravada: registre antes a eutanásia em Canil e gatil.";
 type Mode = null | "close" | "link";
 
-export function ObservationDetail({ id, today, onChanged }: { id: string; today: string; onChanged(): void }) {
+export function ObservationDetail({ id, today, onChanged, onGoToShelter }: { id: string; today: string; onChanged(): void; onGoToShelter?(): void }) {
   const client = useQueryClient();
   const domains = useZooDomains().data;
   const q = useQuery({ queryKey: [ ZOO_OBSERVATION_KEY, id ], queryFn: () => getObservation(id), ...NOMINAL_QUERY });
@@ -38,6 +39,11 @@ export function ObservationDetail({ id, today, onChanged }: { id: string; today:
   const [ busy, setBusy ] = useState(false);
   const sending = useRef(false);
   const o = q.data;
+  // Só quando "eutanasiado" é escolhido e o animal está ligado: o histórico diz se há estada aberta (a eutanásia sai de uma estada, Q42).
+  const hist = useQuery({
+    queryKey: [ ZOO_ANIMAL_KEY, o?.animal_id ?? "" ], queryFn: () => getAnimal(o!.animal_id!), ...NOMINAL_QUERY,
+    enabled: mode === "close" && outcome === "euthanized" && !!o?.animal_id
+  });
 
   const reread = () => { void client.invalidateQueries({ queryKey: [ ZOO_OBSERVATION_KEY, id ] }); onChanged(); };
   const reset = (m: Mode) => { setMode(m); setProblems([]); setNotice(null); setOutcome(""); setOutcomeOn(""); setNote(""); setPicked(null); setRegistering(false); };
@@ -114,6 +120,11 @@ export function ObservationDetail({ id, today, onChanged }: { id: string; today:
             </select>
           </label>
           {outcome === "euthanized" && <p style={muted}>{EUTHANASIA_HINT}</p>}
+          {outcome === "euthanized" && onGoToShelter && hist.data && !hist.data.euthanasia && (
+            <div style={row}>
+              <ActionButton variant="secondary" onClick={onGoToShelter}>{hasOpenStay(hist.data) ? "Ir para Canil e gatil" : "Dar entrada no canil"}</ActionButton>
+            </div>
+          )}
           <label style={fieldLabel}>
             Data do desfecho
             <input type="date" value={outcomeOn} disabled={busy} style={inputStyle} onChange={(e) => setOutcomeOn(e.target.value)} />

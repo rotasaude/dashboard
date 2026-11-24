@@ -359,6 +359,20 @@ describe("desfecho pendente", () => {
     expect(await screen.findByText("Desfecho registrado.")).not.toBeNull();
   });
 
+  it("eutanásia com estada aberta: leva ao Canil e gatil, sem oferecer nova entrada", async () => {
+    const go = vi.fn();
+    mocked(api.listLeishTests).mockResolvedValue({ items: [ reactive ], next_before: null });
+    mocked(api.getAnimal).mockResolvedValue(history({ stays: [ { id: "st1", health_unit_id: "uvz1", entry_kind: "collection", entered_on: "2026-11-20", exit_kind: null, exited_on: null, bite_observation_id: null } ] }));
+    view({ onGoToShelter: go });
+    await tab("Desfecho pendente");
+    fireEvent.click(await screen.findByRole("button", { name: "Registrar desfecho" }));
+    await screen.findByRole("option", { name: "Eutanásia" });
+    set("Decisão", "euthanasia");
+    fireEvent.click(await screen.findByRole("button", { name: "Ir para Canil e gatil" }));
+    expect(go).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: "Dar entrada no canil" })).toBeNull();
+  });
+
   it("eutanásia sem eutanásia gravada: recusa antes e leva a Canil e gatil", async () => {
     const go = vi.fn();
     mocked(api.listLeishTests).mockResolvedValue({ items: [ reactive ], next_before: null });
@@ -368,7 +382,7 @@ describe("desfecho pendente", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Registrar desfecho" }));
     await screen.findByRole("option", { name: "Eutanásia" });
     set("Decisão", "euthanasia");
-    fireEvent.click(await screen.findByRole("button", { name: "Ir para Canil e gatil" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Dar entrada no canil" }));
     expect(go).toHaveBeenCalledTimes(1);
     click("Salvar desfecho");
     expect(await screen.findByText("registre antes a eutanásia do animal")).not.toBeNull();

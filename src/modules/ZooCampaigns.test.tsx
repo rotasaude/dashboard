@@ -31,7 +31,6 @@ const MOCKS = [
   api.cancelVaccination, api.getZoonosesReport, api.fetchZoonosesReportFile, api.searchAnimals, api.getAnimal, api.listActiveUnits,
   api.lookupZooPerson
 ];
-const UNITS = [ { id: "u1", name: "UBS Centro", kind: "ubs" } ];
 const PARAMS = { version: 2, values: ZOO_PARAMS, created_at: null };
 
 afterEach(cleanup);
@@ -42,7 +41,6 @@ beforeEach(() => {
   mocked(api.getZooParameters).mockResolvedValue(PARAMS);
   mocked(api.listRabiesCampaigns).mockResolvedValue([ campaign() ]);
   mocked(api.listVaccinations).mockResolvedValue({ items: [], next_before: null });
-  mocked(api.listActiveUnits).mockResolvedValue(UNITS);
   vi.mocked(saveFile).mockReset();
 });
 
@@ -56,6 +54,7 @@ async function fixedPostForm() {
   view();
   await form("Registrar dose");
   await screen.findByRole("option", { name: "UBS Centro" });
+  expect(api.listActiveUnits).not.toHaveBeenCalled();
   await screen.findByRole("option", { name: "Posto fixo" });
 }
 async function pickAnimal() {

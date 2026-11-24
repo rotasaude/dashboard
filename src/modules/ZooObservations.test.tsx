@@ -16,7 +16,7 @@ import * as api from "../lib/api";
 import { ApiError } from "../lib/api";
 import { ZOONOSES_ERRORS } from "../lib/zoonosesErrors";
 import { renderWithProviders } from "../test/campaignFixtures";
-import { CONTACT, TODAY35B, ZOO_DOMAINS, ZOO_FEATURES, animal, observation, zooUser } from "../test/zoonosesFixtures";
+import { CONTACT, TODAY35B, ZOO_DOMAINS, ZOO_FEATURES, animal, history, observation, zooUser } from "../test/zoonosesFixtures";
 import { ZooObservations } from "./ZooObservations";
 
 const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
@@ -39,11 +39,11 @@ beforeEach(() => {
   mocked(api.getObservation).mockResolvedValue(detail());
 });
 
-const view = (today = TODAY35B) => renderWithProviders(<ZooObservations today={today} />);
+const view = (today = TODAY35B, onGoToShelter?: () => void) => renderWithProviders(<ZooObservations today={today} onGoToShelter={onGoToShelter} />);
 const click = (name: string | RegExp) => fireEvent.click(screen.getByRole("button", { name }));
 const set = (label: string | RegExp, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
-async function openDetail(today = TODAY35B) {
-  const r = view(today);
+async function openDetail(today = TODAY35B, onGoToShelter?: () => void) {
+  const r = view(today, onGoToShelter);
   fireEvent.click(await screen.findByRole("button", { name: "Ver observação" }));
   await screen.findByRole("region", { name: "Observação" });
   return r;
@@ -119,6 +119,26 @@ describe("ZooObservations", () => {
     click("Enviar");
     await waitFor(() => expect(screen.getAllByRole("alert").length).toBeGreaterThan(0));
     expect(api.closeObservation).not.toHaveBeenCalled();
+  });
+
+  it("eutanasiado: animal sem estada aberta oferece Dar entrada no canil; com estada, Ir para Canil e gatil", async () => {
+    const go = vi.fn();
+    mocked(api.getAnimal).mockResolvedValue(history());
+    await openDetail(TODAY35B, go);
+    click("Registrar desfecho");
+    set("Desfecho", "euthanized");
+    fireEvent.click(await screen.findByRole("button", { name: "Dar entrada no canil" }));
+    expect(go).toHaveBeenCalledTimes(1);
+    expect(api.getAnimal).toHaveBeenCalledTimes(1);
+  });
+
+  it("eutanasiado com estada aberta: Ir para Canil e gatil", async () => {
+    mocked(api.getAnimal).mockResolvedValue(history({ stays: [ { id: "st1", health_unit_id: "uvz1", entry_kind: "collection", entered_on: "2026-11-20", exit_kind: null, exited_on: null, bite_observation_id: null } ] }));
+    await openDetail(TODAY35B, vi.fn());
+    click("Registrar desfecho");
+    set("Desfecho", "euthanized");
+    expect(await screen.findByRole("button", { name: "Ir para Canil e gatil" })).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Dar entrada no canil" })).toBeNull();
   });
 
   it("eutanasiado: a dica de registrar antes a eutanásia; a recusa do api aparece", async () => {

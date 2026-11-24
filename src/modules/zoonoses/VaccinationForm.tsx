@@ -5,7 +5,7 @@
 // `household_id` nem unidade no corpo. A segunda dose na campanha só o api barra (422 already_vaccinated_in_campaign): a frase fica
 // no animal e o formulário também. Falta de saldo não recusa: o pai mostra a frase da conciliação.
 import { useState } from "react";
-import { recordVaccination, type Animal, type HealthUnit, type RabiesCampaign, type RabiesVaccination, type VaccinationInput } from "../../lib/api";
+import { recordVaccination, type Animal, type ZooRef, type RabiesCampaign, type RabiesVaccination, type VaccinationInput } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import { canUseHomeVisits } from "../../lib/homeVisits";
 import { isZoonosesStale, vaccinationProblems, zooLabel, zoonosesRefusals } from "../../lib/zoonoses";
@@ -22,7 +22,7 @@ type Modality = "house" | "fixed_post" | "routine";
 const OWN = [ "modality", "species", "animal_id", "health_unit_id", "vector_product_id", "vaccinated_on", "adverse_note" ];
 
 export function VaccinationForm({ campaign, today, units, onRecorded, onStale }: {
-  campaign: RabiesCampaign | null; today: string; units: HealthUnit[]; onRecorded(v: RabiesVaccination): void; onStale(text: string): void;
+  campaign: RabiesCampaign | null; today: string; units: ZooRef[]; onRecorded(v: RabiesVaccination): void; onStale(text: string): void;
 }) {
   const { user } = useAuth();
   const domains = useZooDomains().data;

@@ -436,7 +436,7 @@ export function renderModule(active: ModuleId, setActive: (id: ModuleId) => void
     case "zoo-animals": return <ZooAnimals />;
     case "zoo-campaigns": return <ZooCampaigns />;
     case "zoo-demands": return <ZooDemands />;
-    case "zoo-observations": return <ZooObservations />;
+    case "zoo-observations": return <ZooObservations onGoToShelter={() => setActive("zoo-shelter")} />;
     case "zoo-leish": return <ZooLeish onGoToShelter={() => setActive("zoo-shelter")} />;
     case "zoo-shelter": return <ZooShelter onGoToSecurity={() => setActive("security")} />;
     case "zoo-reports": return <ZooReports />;
