@@ -5,21 +5,22 @@
 // "desligada nesta cidade".
 import type { ReactNode } from "react";
 import { useAuth } from "../../lib/auth";
-import { VC_NO_ROLE, canUseVectorControl, vectorRoles, type VectorRoles } from "../../lib/vectorControl";
+import { VC_NO_ROLE, canUseVectorControl, canUseVectorSupplies, vectorRoles, type VectorRoles } from "../../lib/vectorControl";
 import { VECTOR_CONTROL_DISABLED } from "../../lib/vectorErrors";
 import { PageHeader } from "../../components/PageHeader";
 import { EmptyState } from "../../components/EmptyState";
 import { stack } from "../exams/styles";
 
-export function VectorGate({ title, sub, allow, children }: {
-  title: string; sub: string; allow(roles: VectorRoles): boolean; children(roles: VectorRoles): ReactNode;
+// Módulo 35b: `supplies` = tela de insumo do 35a (produtos, local, quarteirões, faltas); abre também só com `zoonoses`.
+export function VectorGate({ title, sub, allow, supplies, children }: {
+  title: string; sub: string; allow(roles: VectorRoles): boolean; supplies?: boolean; children(roles: VectorRoles): ReactNode;
 }) {
   const { user } = useAuth();
   if (!user) return null;
   const roles = vectorRoles(user);
   let body: ReactNode;
   if (user.operator) body = <EmptyState title={VC_NO_ROLE} />;
-  else if (!canUseVectorControl(user)) body = <EmptyState title={VECTOR_CONTROL_DISABLED} />;
+  else if (!(supplies ? canUseVectorSupplies(user) : canUseVectorControl(user))) body = <EmptyState title={VECTOR_CONTROL_DISABLED} />;
   else if (!allow(roles)) body = <EmptyState title={VC_NO_ROLE} />;
   else body = children(roles);
   return (

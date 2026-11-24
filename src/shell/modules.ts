@@ -17,7 +17,7 @@ import { canUseTfd } from "../lib/tfd";
 import { canUsePsychosocial, psychosocialRoles } from "../lib/psychosocial";
 import { canUseOmbudsman, ombudsmanRoles } from "../lib/ombudsman";
 import { canUseUrgency, canUseWaitingRoom } from "../lib/urgency";
-import { canReadAnyVectorReport, canUseVectorControl, vectorRoles } from "../lib/vectorControl";
+import { canReadAnyVectorReport, canUseVectorControl, canUseVectorSupplies, vectorRoles } from "../lib/vectorControl";
 import { canUseZooDemands, canUseZoonoses, zoonosesRoles } from "../lib/zoonoses";
 export type ModuleId =
   | "overview" | "ingestion" | "conversations" | "consent"
@@ -428,6 +428,7 @@ export function navGroupsFor(
   // almoxarife as dos seus locais vector_control (o vínculo por local é conferido no api). O grupo Farmácia não tem regra
   // de rótulo: some só quando fica vazio, então com pharmacy desligado ele aparece só com este item.
   const vcOn = canUseVectorControl(user);
+  const suppliesOn = canUseVectorSupplies(user);
   const vc = vectorRoles(user);
   // Módulo 35b (ADR 0054): `zoonoses` com o cadastro territorial utilizável e um papel de leitura. Campanhas e relatórios: quem
   // lê (equipe, coordenação e municipal_admin); parâmetros: coordenação; o resto: equipe. "Demandas" exige também a ouvidoria (Q35).
@@ -519,7 +520,9 @@ export function navGroupsFor(
       if (item.id === "vector-ovitraps" || item.id === "vector-samples") return vcOn && (vc.coordinator || vc.lab);
       if (item.id === "vector-reports") return vcOn && canReadAnyVectorReport(vc);
       if (item.id === "field-ovitraps") return vcOn && isProfessional;
-      if (item.id === "vector-stock-shortfalls") return vcOn && (vc.coordinator || vc.stockKeeper);
+      // Módulo 35b: produtos, quarteirões e faltas são insumo do 35a e abrem também só com `zoonoses` (Q3, Q8, Q11).
+      if (item.id === "vector-stock-shortfalls") return suppliesOn && (vc.coordinator || vc.stockKeeper);
+      if (item.id === "vector-settings" || item.id === "vector-blocks") return suppliesOn && vc.coordinator;
       if (item.id.startsWith("vector-")) return vcOn && vc.coordinator;
       if (item.id === "pharmacy-dispensing" || item.id === "pharmacy-external") return phOn && (isPharmacist || isPharmacyAssistant);
       if (item.id === "pharmacy-transfers" || item.id === "pharmacy-stock") return stockOn && (isPharmacist || isPharmacyAssistant || isStockKeeper);

@@ -42,7 +42,7 @@ const TABS: { key: State; label: string }[] = [ { key: "open", label: "Abertas" 
 
 export function VectorStockShortfalls() {
   return (
-    <VectorGate title="Faltas de insumo de campo" sub="endemias · insumo aplicado sem saldo no local" allow={(r) => r.coordinator || r.stockKeeper}>
+    <VectorGate title="Faltas de insumo de campo" sub="endemias · insumo aplicado sem saldo no local" allow={(r) => r.coordinator || r.stockKeeper} supplies>
       {(roles) => roles.coordinator ? <Shortfalls scope={null} /> : (
         <LocationPick allow={(r) => r.keeper} where={isVectorLocation} empty={VC_NO_STOCK_LOCATION}>
           {(loc) => <Shortfalls scope={loc.id} />}
@@ -52,6 +52,9 @@ export function VectorStockShortfalls() {
   );
 }
 
+// Módulo 35b (Q17): de onde veio a falta; sem `source` (api antigo) é o boletim. Código novo aparece cru.
+const SOURCE_LABEL: Record<string, string> = { inspection: "boletim", vaccination: "vacinação antirrábica", collar: "coleira" };
+const sourceText = (s: VectorShortfall) => { const k = s.source ?? "inspection"; return SOURCE_LABEL[k] ?? k; };
 const productText = (s: VectorShortfall) => `${s.product.code} — ${s.product.name}`;
 const quantityText = (s: VectorShortfall) => `${fmtQuantity(s.quantity)} ${s.product.unit}`;
 // Json.shortfalls: `reconciled_by` nulo = o sistema (estorno da visita retirada); `{ name: null }` = pessoa sem perfil profissional ("—", como o 32b).
@@ -80,7 +83,7 @@ function Shortfalls({ scope }: { scope: string | null }) {
   if (list.isError && !list.data && errorCode(list.error) === "missing_role") return <EmptyState title={VC_NO_STOCK_LOCATION} />;
 
   return (
-    <Panel title="Faltas de insumo de campo" sub="só o produto, a quantidade, a causa, o local e o dia da visita">
+    <Panel title="Faltas de insumo de campo" sub="só o produto, a quantidade, a causa, o local, a origem e o dia">
       <div style={{ ...stack, padding: 16 }}>
         <p style={muted}>{RECONCILE_HINT}</p>
         <div><SegmentedControl options={TABS} value={state} onChange={(s) => { setState(s); setTarget(null); clear(); }} /></div>
@@ -91,7 +94,8 @@ function Shortfalls({ scope }: { scope: string | null }) {
         {list.data && (
           <DataTable<VectorShortfall>
             cols={[
-              { label: "Data da visita", w: "1fr", render: (s) => <span className="mono">{fmtDay(s.visit_on)}</span> },
+              { label: "Data", w: "1fr", render: (s) => <span className="mono">{fmtDay(s.occurred_on ?? s.visit_on)}</span> },
+              { label: "Origem", w: "1fr", render: (s) => sourceText(s) },
               { label: "Produto", w: "2fr", card: "title", render: (s) => productText(s) },
               { label: "Quantidade", w: "1fr", render: (s) => quantityText(s) },
               { label: "Causa", w: "1.5fr", render: (s) => shortfallCauseLabel(s.cause) },

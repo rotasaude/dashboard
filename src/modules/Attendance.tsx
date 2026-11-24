@@ -39,7 +39,7 @@ import { hasFeature } from "../lib/features";
 import { canUseDental } from "../lib/dental";
 import { canUseTransport } from "../lib/transport";
 import { canUsePsychosocial } from "../lib/psychosocial";
-import { canUseVectorControl } from "../lib/vectorControl";
+import { canUseVectorSupplies } from "../lib/vectorControl";
 import { canUseBilling, showUnitProcedures } from "../lib/billing";
 import { UnitProcedures } from "./billing/UnitProcedures";
 import { canUseUrgency, canUseWaitingRoom, isUpa } from "../lib/urgency";
@@ -160,7 +160,7 @@ export function Attendance({ onNavigate }: { onNavigate(id: ModuleId): void }) {
       {canVerify && <ErasureRequest />}
       {isAdmin && <History />}
       {isAdmin && <ErasureRequests onGoToSecurity={goToSecurity} />}
-      {isAdmin && <Units labOn={hasFeature(user, "municipal_lab")} surveillanceOn={hasFeature(user, "surveillance")} dentalOn={canUseDental(user)} tfdOn={canUseTransport(user)} capsOn={canUsePsychosocial(user)} waitingRoomOn={canUseWaitingRoom(user)} vectorOn={canUseVectorControl(user)} />}
+      {isAdmin && <Units labOn={hasFeature(user, "municipal_lab")} surveillanceOn={hasFeature(user, "surveillance")} dentalOn={canUseDental(user)} tfdOn={canUseTransport(user)} capsOn={canUsePsychosocial(user)} waitingRoomOn={canUseWaitingRoom(user)} vectorOn={canUseVectorSupplies(user)} />}
     </div>
   );
 }

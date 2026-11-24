@@ -7,7 +7,10 @@
 import { useId, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createVectorProduct, getVectorDomains, listVectorProducts, updateVectorProduct, type VectorProduct, type VectorProductInput } from "../../lib/api";
-import { STATIC_QUERY, VC_DOMAINS_KEY, VC_PRODUCTS_KEY, domainLabel, isVectorStale, vectorError, vectorRefusals } from "../../lib/vectorControl";
+import { useAuth } from "../../lib/auth";
+import {
+  STATIC_QUERY, VC_DOMAINS_KEY, VC_PRODUCTS_KEY, VECTOR_USES, ZOONOSES_USES, domainLabel, isVectorStale, vectorError, vectorProductUses, vectorRefusals
+} from "../../lib/vectorControl";
 import { VECTOR_ERRORS } from "../../lib/vectorErrors";
 import { useActionMessage } from "../../lib/useActionMessage";
 import { Panel } from "../../components/Panel";
@@ -20,7 +23,12 @@ import { inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { alert, box, checkLabel, fieldLabel, fieldset, legend, muted, row, stack } from "../exams/styles";
 
 type Use = VectorProductInput["uses"][number];
-const USES: Use[] = [ "focal", "perifocal", "spatial" ];
+const USES: Use[] = [ ...VECTOR_USES, ...ZOONOSES_USES ];
+// Módulo 35b (Q11): a vacina e a coleira são uma finalidade só, em "un" e carga 1,00, e nunca se misturam com os usos vetoriais.
+const isZooUse = (u: string) => (ZOONOSES_USES as readonly string[]).includes(u);
+const ZOO_LABEL: Record<string, string> = { rabies_vaccine: "vacina antirrábica animal", collar: "coleira" };
+const ZOO_UNIT = "un";
+const ZOO_CHARGE = "1,00";
 const UNITS: { code: VectorProductInput["unit"]; label: string }[] = [
   { code: "g", label: "g (gramas)" }, { code: "ml", label: "ml (mililitros)" }, { code: "un", label: "un (unidades)" }
 ];
@@ -33,7 +41,10 @@ const TEXT = {
   name: "nome: de 1 a 80 caracteres",
   unit: "escolha a unidade: g, ml ou un",
   charge_size: "tamanho da carga: maior que zero, até 8 dígitos inteiros e 2 casas (use vírgula)",
-  uses: "marque ao menos um uso"
+  uses: "marque ao menos um uso",
+  mixed: "vacina antirrábica e coleira são finalidades à parte: marque uma só, sem os usos de controle vetorial",
+  zoo_unit: "vacina e coleira são em unidades (un)",
+  zoo_charge: "vacina e coleira têm carga 1,00"
 } as const;
 // Catalog::PRODUCT_CODE / PRODUCT_NAME contam caracteres (code points) depois do strip; SaveProduct::CHARGE_SIZE com vírgula ou ponto.
 const length = (s: string) => [ ...s.trim() ].length;
@@ -48,9 +59,13 @@ export function productProblems(d: ProductDraft, others: string[]): ProductProbl
   const code = d.code.trim().toLowerCase();
   if (length(d.code) < 1 || length(d.code) > 10 || others.some((o) => o.toLowerCase() === code)) out.push({ path: "code", text: TEXT.code });
   if (length(d.name) < 1 || length(d.name) > 80) out.push({ path: "name", text: TEXT.name });
+  const zoo = d.uses.some(isZooUse);
   if (!UNITS.some((u) => u.code === d.unit)) out.push({ path: "unit", text: TEXT.unit });
+  else if (zoo && d.unit !== ZOO_UNIT) out.push({ path: "unit", text: TEXT.zoo_unit });
   if (!chargeOk(d.charge)) out.push({ path: "charge_size", text: TEXT.charge_size });
+  else if (zoo && Number(chargeText(d.charge)) !== 1) out.push({ path: "charge_size", text: TEXT.zoo_charge });
   if (d.uses.length === 0 || !d.uses.every((u) => (USES as string[]).includes(u))) out.push({ path: "uses", text: TEXT.uses });
+  else if (zoo && (d.uses.length > 1)) out.push({ path: "uses", text: TEXT.mixed });
   return out;
 }
 export const NOTHING_CHANGED = "nada mudou neste produto";
@@ -62,13 +77,15 @@ type Editing = { kind: "new" } | { kind: "edit"; product: VectorProduct };
 
 export function ProductsPanel() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const offered = vectorProductUses(user);
   const products = useQuery({ queryKey: [ VC_PRODUCTS_KEY ], queryFn: listVectorProducts, ...STATIC_QUERY });
   // Só os rótulos dos usos; sem os domínios (falha), o código aparece cru.
   const domains = useQuery({ queryKey: [ VC_DOMAINS_KEY ], queryFn: getVectorDomains, ...STATIC_QUERY });
   const [ editing, setEditing ] = useState<Editing | null>(null);
   const msg = useActionMessage();
   const methods = domains.data?.measure_methods ?? [];
-  const useLabel = (u: string) => domainLabel(methods, u);
+  const useLabel = (u: string) => ZOO_LABEL[u] ?? domainLabel(methods, u);
 
   const list = products.data ?? [];
   return (
@@ -98,7 +115,7 @@ export function ProductsPanel() {
           )}
         <ActionMessage message={msg.message} />
         {editing ? (
-          <ProductForm key={editing.kind === "edit" ? editing.product.id : "new"} editing={editing} products={list} useLabel={useLabel}
+          <ProductForm key={editing.kind === "edit" ? editing.product.id : "new"} editing={editing} products={list} useLabel={useLabel} offered={offered}
             onCancel={() => setEditing(null)}
             onSaved={async (p) => {
               setEditing(null);
@@ -119,8 +136,8 @@ export function ProductsPanel() {
   );
 }
 
-function ProductForm({ editing, products, useLabel, onCancel, onSaved, onStale }: {
-  editing: Editing; products: VectorProduct[]; useLabel(u: string): string;
+function ProductForm({ editing, products, useLabel, offered, onCancel, onSaved, onStale }: {
+  editing: Editing; products: VectorProduct[]; useLabel(u: string): string; offered: Use[];
   onCancel(): void; onSaved(p: VectorProduct): Promise<void>; onStale(err: unknown): Promise<void>;
 }) {
   const product = editing.kind === "edit" ? editing.product : null;
@@ -140,7 +157,21 @@ function ProductForm({ editing, products, useLabel, onCancel, onSaved, onStale }
     setD((prev) => ({ ...prev, ...patch }));
     setProblems((list) => list.filter((p) => !(Object.keys(patch) as string[]).some((k) => (k === "charge" ? "charge_size" : k) === p.path)));
   };
-  const toggleUse = (u: Use) => set({ uses: d.uses.includes(u) ? d.uses.filter((x) => x !== u) : USES.filter((x) => x === u || d.uses.includes(x)) });
+  const toggleUse = (u: Use) => {
+    if (d.uses.includes(u)) { set(isZooUse(u) && !product ? { uses: [], unit: "", charge: "" } : { uses: d.uses.filter((x) => x !== u) }); return; }
+    set(isZooUse(u) ? { uses: [ u ], unit: ZOO_UNIT, charge: ZOO_CHARGE } : { uses: USES.filter((x) => x === u || d.uses.includes(x)) });
+  };
+  // Q11: a família do produto nunca muda (vetor ↔ zoonoses). Uso fora do portão aparece marcado e desabilitado, nunca some.
+  const zooProduct = !!product && product.uses.some(isZooUse);
+  const zooPicked = d.uses.some(isZooUse);
+  const vectorPicked = d.uses.some((u) => !isZooUse(u));
+  const useDisabled = (u: Use): boolean => {
+    if (!offered.includes(u)) return true;
+    if (product) return zooProduct || isZooUse(u);
+    return isZooUse(u) ? vectorPicked || (zooPicked && !d.uses.includes(u)) : zooPicked;
+  };
+  const shownUses = [ ...USES.filter((u) => offered.includes(u)), ...(product?.uses ?? []).filter((u) => !offered.includes(u)) ];
+  const fixedZoo = zooPicked;
 
   // O corpo: tudo no novo; só o que mudou na edição (unidade e carga nunca, com o produto em uso).
   function body(): Partial<VectorProductInput> {
@@ -200,7 +231,7 @@ function ProductForm({ editing, products, useLabel, onCancel, onSaved, onStale }
         <div style={cell}>
           <label style={fieldLabel}>
             Unidade
-            <select value={d.unit} style={inputStyle} disabled={locked} onChange={(e) => set({ unit: e.target.value })} {...aria("unit")}>
+            <select value={d.unit} style={inputStyle} disabled={locked || fixedZoo} onChange={(e) => set({ unit: e.target.value })} {...aria("unit")}>
               <option value="">escolha</option>
               {UNITS.map((u) => <option key={u.code} value={u.code}>{u.label}</option>)}
             </select>
@@ -210,7 +241,7 @@ function ProductForm({ editing, products, useLabel, onCancel, onSaved, onStale }
         <div style={cell}>
           <label style={fieldLabel}>
             Tamanho da carga
-            <input value={d.charge} inputMode="decimal" style={inputStyle} disabled={locked} onChange={(e) => set({ charge: e.target.value })} {...aria("charge_size")} />
+            <input value={d.charge} inputMode="decimal" style={inputStyle} disabled={locked || fixedZoo} onChange={(e) => set({ charge: e.target.value })} {...aria("charge_size")} />
           </label>
           {err("charge_size")}
         </div>
@@ -219,9 +250,9 @@ function ProductForm({ editing, products, useLabel, onCancel, onSaved, onStale }
       <fieldset style={fieldset} {...aria("uses")}>
         <legend style={legend}>Usos</legend>
         <div style={row}>
-          {USES.map((u) => (
+          {shownUses.map((u) => (
             <label key={u} style={checkLabel}>
-              <input type="checkbox" checked={d.uses.includes(u)} onChange={() => toggleUse(u)} />
+              <input type="checkbox" checked={d.uses.includes(u)} disabled={useDisabled(u)} onChange={() => toggleUse(u)} />
               {useLabel(u)}
             </label>
           ))}

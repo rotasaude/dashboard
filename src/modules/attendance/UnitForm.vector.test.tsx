@@ -96,3 +96,11 @@ describe("Units — vigilância ambiental (módulo 35a)", () => {
     expect(screen.queryByRole("option", { name: LABEL })).toBeNull();
   });
 });
+
+describe("Attendance — unidade de vigilância ambiental só com zoonoses (35b)", () => {
+  it("canUseVectorSupplies abre o tipo com zoonoses e sem vector_control", async () => {
+    const { canUseVectorSupplies } = await import("../../lib/vectorControl");
+    const { zooUser } = await import("../../test/zoonosesFixtures");
+    expect(canUseVectorSupplies(zooUser([ "municipal_admin" ]))).toBe(true);
+  });
+});

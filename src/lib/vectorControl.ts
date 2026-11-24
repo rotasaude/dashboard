@@ -3,7 +3,7 @@
 // contrato 2026-11-16 §1–§12, §17, §20). Puro: nenhuma leitura de rede. As regras do boletim moram em vectorInspection.ts e as
 // frases em vectorErrors.ts. O api (apps/api, ab32775c) decide; aqui só se recusa antes o que ele recusaria, com o mesmo
 // `path`, e a lista começa pelo erro que o api daria. Código desconhecido aparece cru.
-import { ApiError, errorCode, type HomeVisitTeam, type SampleResult, type StratumMode, type VectorParameters, type VectorReportName } from "./api";
+import { ApiError, errorCode, type HomeVisitTeam, type SampleResult, type StratumMode, type VectorParameters, type VectorProductUse, type VectorReportName } from "./api";
 import { hasFeature } from "./features";
 import {
   HOME_VISIT_ERRORS, NOMINAL_QUERY, STATIC_QUERY, canUseHomeVisits, homeVisitRefusals, textProblem, type HomeVisitRefusal
@@ -12,6 +12,7 @@ import type { Problem } from "./pharmacy";
 import { epiWeekOf } from "./surveillance";
 import { VECTOR_ERRORS } from "./vectorErrors";
 import { ENDEMIC_AGENT_CBO } from "./vectorInspection";
+import { canUseZoonoses } from "./zoonoses";
 
 export { NOMINAL_QUERY, STATIC_QUERY };
 
@@ -26,6 +27,16 @@ type SessionLike = Parameters<typeof canUseHomeVisits>[0];
 export function canUseVectorControl(user: SessionLike): boolean {
   return !!user && !user.operator && hasFeature(user, "vector_control") && canUseHomeVisits(user);
 }
+
+// Módulo 35b (§1, Q3, Q8, Q11; VectorControl::Gate.supplies_usable?): o insumo do 35a (produtos, local, quarteirões, faltas, estoque e a unidade
+// de vigilância ambiental) abre também só com `zoonoses`. O resto do /vector_control segue só com `vector_control`.
+export const canUseVectorSupplies = (user: SessionLike): boolean => canUseVectorControl(user) || canUseZoonoses(user);
+export const ZOONOSES_USES: readonly VectorProductUse[] = [ "rabies_vaccine", "collar" ];
+export const VECTOR_USES: readonly VectorProductUse[] = [ "focal", "perifocal", "spatial" ];
+// Os usos que o portão do usuário oferece num produto.
+export const vectorProductUses = (user: SessionLike): VectorProductUse[] => [
+  ...(canUseVectorControl(user) ? VECTOR_USES : []), ...(canUseZoonoses(user) ? ZOONOSES_USES : [])
+];
 
 // VectorControl::Access: papéis ativos da cidade. `reader` = Access.reader? (coordenação, laboratório ou municipal_admin),
 // que o api só usa nos domínios; as outras leituras têm o próprio conjunto (canReadVectorReport, vectorMapLayers, e o

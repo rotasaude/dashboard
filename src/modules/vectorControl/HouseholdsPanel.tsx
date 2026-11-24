@@ -38,7 +38,9 @@ export const OTHER_NEIGHBORHOOD_TAG = "quarteirão de outro bairro";
 export const NO_NEIGHBORHOOD_TAG = "imóvel sem bairro no cadastro";
 const HOUSEHOLD_PATH = /^household_ids\[(\d+)\]$/;
 
-export function HouseholdsPanel({ neighborhoodId, domains }: { neighborhoodId: string; domains: VectorControlDomains | null }) {
+// `blockOnly` (módulo 35b, Q39): cidade só com `zoonoses`; o vínculo do imóvel ao quarteirão sem risco, última visita nem avaliação
+// (o PATCH com `risk_class` volta 403 feature_disabled vector_control).
+export function HouseholdsPanel({ neighborhoodId, domains, blockOnly = false }: { neighborhoodId: string; domains: VectorControlDomains | null; blockOnly?: boolean }) {
   const queryClient = useQueryClient();
   const blocks = useBlocks(neighborhoodId);
   const [ filter, setFilter ] = useState(WITHOUT);
@@ -148,12 +150,14 @@ export function HouseholdsPanel({ neighborhoodId, domains }: { neighborhoodId: s
                       { label: "Tipo", render: (h) => dictLabel("tipo_de_imovel", h.property_type) },
                       { label: "Microárea", render: (h) => h.micro_area.code },
                       { label: "Quarteirão", render: blockOf },
-                      { label: "Risco", render: (h) => h.risk_class
-                        ? <Tag tone={riskTone(h.risk_class)} mono={false}>{domainLabel(risks, h.risk_class)}</Tag> : <span style={muted}>sem classificação</span> },
-                      { label: "Última visita trabalhada", render: (h) => (h.last_worked_on ? fmtDay(h.last_worked_on) : "nunca trabalhado") },
+                      ...(blockOnly ? [] : [
+                        { label: "Risco", render: (h: VectorHousehold) => h.risk_class
+                          ? <Tag tone={riskTone(h.risk_class)} mono={false}>{domainLabel(risks, h.risk_class)}</Tag> : <span style={muted}>sem classificação</span> },
+                        { label: "Última visita trabalhada", render: (h: VectorHousehold) => (h.last_worked_on ? fmtDay(h.last_worked_on) : "nunca trabalhado") }
+                      ]),
                       { label: "Ações", card: "actions", render: (h) => (
                         <button type="button" style={secondaryButtonStyle} aria-expanded={editing === h.id}
-                          onClick={() => setEditing(editing === h.id ? null : h.id)}>Editar perfil</button>
+                          onClick={() => setEditing(editing === h.id ? null : h.id)}>{blockOnly ? "Editar quarteirão" : "Editar perfil"}</button>
                       ) }
                     ]} />
                   </div>
@@ -174,15 +178,15 @@ export function HouseholdsPanel({ neighborhoodId, domains }: { neighborhoodId: s
         </div>
       </Panel>
       {editingRow && (
-        <ProfileEditor key={editingRow.id} household={editingRow} neighborhoodId={neighborhoodId} blocks={active} risks={risks}
+        <ProfileEditor key={editingRow.id} household={editingRow} neighborhoodId={neighborhoodId} blocks={active} risks={risks} blockOnly={blockOnly}
           onSaved={replaceRow} onClose={() => setEditing(null)} />
       )}
     </div>
   );
 }
 
-function ProfileEditor({ household, neighborhoodId, blocks, risks, onSaved, onClose }: {
-  household: VectorHousehold; neighborhoodId: string; blocks: CityBlock[]; risks: { code: string; label: string }[];
+function ProfileEditor({ household, neighborhoodId, blocks, risks, blockOnly, onSaved, onClose }: {
+  household: VectorHousehold; neighborhoodId: string; blocks: CityBlock[]; risks: { code: string; label: string }[]; blockOnly: boolean;
   onSaved(h: VectorHousehold): void; onClose(): void;
 }) {
   const queryClient = useQueryClient();
@@ -195,7 +199,7 @@ function ProfileEditor({ household, neighborhoodId, blocks, risks, onSaved, onCl
   const current = household.block && !options.some((b) => b.id === household.block!.id) ? household.block : null;
   const body: { city_block_id?: string | null; risk_class?: RiskClass | null } = {};
   if (blockId !== (household.block?.id ?? "")) body.city_block_id = blockId || null;
-  if (risk !== (household.risk_class ?? "")) body.risk_class = (risk || null) as RiskClass | null;
+  if (!blockOnly && risk !== (household.risk_class ?? "")) body.risk_class = (risk || null) as RiskClass | null;
   const unchanged = Object.keys(body).length === 0;
 
   async function save() {
@@ -217,7 +221,7 @@ function ProfileEditor({ household, neighborhoodId, blocks, risks, onSaved, onCl
   }
 
   return (
-    <Panel title={`Perfil do imóvel — ${household.address_short}`}>
+    <Panel title={`${blockOnly ? "Quarteirão do imóvel" : "Perfil do imóvel"} — ${household.address_short}`}>
       <div style={stack}>
         <div style={row}>
           <label style={fieldLabel}>
@@ -229,13 +233,15 @@ function ProfileEditor({ household, neighborhoodId, blocks, risks, onSaved, onCl
               {options.map((b) => <option key={b.id} value={b.id}>{b.number}</option>)}
             </select>
           </label>
-          <label style={fieldLabel}>
-            Risco
-            <select value={risk} style={inputStyle} onChange={(e) => setRisk(e.target.value)}>
-              <option value="">sem classificação</option>
-              {risks.map((r) => <option key={r.code} value={r.code}>{r.label}</option>)}
-            </select>
-          </label>
+          {!blockOnly && (
+            <label style={fieldLabel}>
+              Risco
+              <select value={risk} style={inputStyle} onChange={(e) => setRisk(e.target.value)}>
+                <option value="">sem classificação</option>
+                {risks.map((r) => <option key={r.code} value={r.code}>{r.label}</option>)}
+              </select>
+            </label>
+          )}
         </div>
         {household.neighborhood_id === null && <p style={muted}>{VECTOR_ERRORS.household_without_neighborhood}</p>}
         {problem && <p role="alert" style={alert}>{problem}</p>}

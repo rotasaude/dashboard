@@ -18,6 +18,7 @@ import { VECTOR_CONTROL_DISABLED, VECTOR_ERRORS } from "../lib/vectorErrors";
 import { renderWithProviders } from "../test/campaignFixtures";
 import { CENTRAL } from "../test/pharmacyFixtures";
 import { VC_FEATURES, VC_LOCATION, shortfall, vcUser } from "../test/vectorControlFixtures";
+import { zooUser } from "../test/zoonosesFixtures";
 import {
   RECONCILE_HINT, SHORTFALLS_OPEN_EMPTY, SHORTFALL_GONE, SHORTFALL_RECONCILED, SHORTFALL_UNCERTAIN, VC_NO_STOCK_LOCATION, VectorStockShortfalls
 } from "./VectorStockShortfalls";
@@ -225,5 +226,22 @@ describe("VectorStockShortfalls", () => {
     expect(await screen.findByRole("row", { name: /Malationa/ })).not.toBeNull();
     expect(mocked(api.listVectorShortfalls)).toHaveBeenCalledTimes(2);
     expect(mocked(api.listVectorShortfalls).mock.calls[1][0]).toEqual({ state: "open", locationId: null, before: "cur-1" });
+  });
+});
+
+describe("VectorStockShortfalls — origem (módulo 35b, Q17)", () => {
+  it("falta de vacinação mostra a origem e a data de occurred_on; a de boletim antiga (sem source) mostra boletim; só com zoonoses abre", async () => {
+    mocked(api.fetchCurrentSession).mockResolvedValue(zooUser([ "endemic_coordinator" ]));
+    const vacc = shortfall({ id: "sf8", source: "vaccination", occurred_on: "2026-11-20", visit_on: null, product: { id: "pz1", code: "VAR", name: "Vacina antirrábica animal", unit: "un" } });
+    const collar = shortfall({ id: "sf9", source: "collar", occurred_on: "2026-11-21", visit_on: null, product: { id: "pz2", code: "COL", name: "Coleira", unit: "un" } });
+    const old = shortfall({ id: "sf7" });
+    mocked(api.listVectorShortfalls).mockResolvedValue(page([ vacc, collar, old ]));
+    renderWithProviders(<VectorStockShortfalls />);
+    const row = await screen.findByRole("row", { name: /Vacina antirrábica animal/ });
+    expect(row.textContent).toContain("vacinação antirrábica");
+    expect(row.textContent).toContain("20/11/2026");
+    expect(screen.getByRole("row", { name: /COL/ }).textContent).toContain("coleira");
+    const oldRow = screen.getByRole("row", { name: /Pyriproxyfen/ });
+    expect(oldRow.textContent).toContain("boletim");
   });
 });

@@ -12,7 +12,7 @@ import { featureDisabledKey, featureLabel, hasFeature } from "./features";
 import { fmtDay } from "./exams";
 import { DOT_IN_NUMBER, hasDot } from "./lab";
 import { DUPLICATE_SUSPECTED_TEXT } from "./territoryRegistry";
-import { canUseVectorControl } from "./vectorControl";
+import { canUseVectorSupplies } from "./vectorControl";
 
 export { NOMINAL_QUERY, STATIC_QUERY };
 
@@ -58,7 +58,7 @@ export function canUsePharmacy(user: SessionLike): boolean {
 // (admin, equipe e "meus locais") valem com `vector_control` mesmo sem `pharmacy`, para o local vector_control. Só as telas de
 // estoque usam isto; dispensação, receita externa, alertas e faltas da UPA seguem `canUsePharmacy`.
 export function canUseStockScreens(user: SessionLike): boolean {
-  return canUsePharmacy(user) || canUseVectorControl(user);
+  return canUsePharmacy(user) || canUseVectorSupplies(user);
 }
 
 export function pharmacyRoles(user: SessionLike): { pharmacist: boolean; assistant: boolean; keeper: boolean; admin: boolean } {
@@ -92,7 +92,10 @@ const MOVEMENT_LABEL: Record<string, string> = {
   transfer_in: "entrada por transferência", dispensing: "dispensação", loss: "perda", expiry: "vencimento", adjustment: "ajuste", return: "devolução",
   administration: "administração na UPA",
   // Módulo 35a (Q10): a baixa do boletim (ApplyStock) e o estorno quando a visita é retirada.
-  vector_application: "aplicação no campo (boletim)", vector_application_reversal: "estorno de aplicação (visita retirada)"
+  vector_application: "aplicação no campo (boletim)", vector_application_reversal: "estorno de aplicação (visita retirada)",
+  // Módulo 35b: a dose antirrábica animal, o estorno (vacinação anulada) e a coleira colocada.
+  animal_vaccination: "vacinação antirrábica animal", animal_vaccination_reversal: "estorno de vacinação antirrábica (anulada)",
+  collar_placement: "coleira colocada"
 };
 export const movementLabel = (code: string): string => MOVEMENT_LABEL[code] ?? code;
 
@@ -102,7 +105,9 @@ const DOCUMENT_LABEL: Record<string, string> = {
   dispensation: "dispensação", transfer: "transferência", invoice: "nota fiscal", receipt: "nota fiscal", donation: "doação",
   adjustment: "ajuste", opening: "abertura", return: "devolução", entry: "entrada", urgency_administration: "administração na UPA",
   // Módulo 35a: a medida do boletim que baixou (ou estornou) o insumo; nunca o imóvel nem o agente.
-  vector_inspection_measure: "boletim de campo"
+  vector_inspection_measure: "boletim de campo",
+  // Módulo 35b: a dose e a coleira que baixaram o insumo; nunca o animal nem o tutor.
+  rabies_vaccination: "vacinação antirrábica", collar: "coleira"
 };
 export function movementDocument(doc: StockMovement["document"] | undefined): string {
   if (!doc) return "—";

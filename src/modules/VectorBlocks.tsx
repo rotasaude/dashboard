@@ -8,7 +8,8 @@ import { useQuery } from "@tanstack/react-query";
 import { getVectorDomains, listPanelNeighborhoods } from "../lib/api";
 import { PANEL_NEIGHBORHOODS_KEY } from "../lib/neighborhoodFilter";
 import { sortByName } from "../lib/territory";
-import { STATIC_QUERY, VC_DOMAINS_KEY, vectorMapLayers, type VectorRoles } from "../lib/vectorControl";
+import { useAuth } from "../lib/auth";
+import { STATIC_QUERY, VC_DOMAINS_KEY, canUseVectorControl, vectorMapLayers, type VectorRoles } from "../lib/vectorControl";
 import { VectorGate } from "./vectorControl/VectorGate";
 import { BlocksPanel } from "./vectorControl/BlocksPanel";
 import { HouseholdsPanel } from "./vectorControl/HouseholdsPanel";
@@ -23,20 +24,23 @@ type Tab = "blocks" | "households" | "map";
 
 export function VectorBlocks() {
   return (
-    <VectorGate title="Quarteirões e imóveis" sub="endemias · quarteirões e perfil vetorial" allow={(r) => r.coordinator}>
+    <VectorGate title="Quarteirões e imóveis" sub="endemias · quarteirões e perfil vetorial" allow={(r) => r.coordinator} supplies>
       {(roles) => <BlocksScreen roles={roles} />}
     </VectorGate>
   );
 }
 
 function BlocksScreen({ roles }: { roles: VectorRoles }) {
+  const { user } = useAuth();
+  // Módulo 35b (Q39): só com `zoonoses`, o perfil vetorial (risco, última visita) e o mapa são do 35a; ficam o quarteirão e o vínculo do imóvel.
+  const vcOn = canUseVectorControl(user);
   const [ neighborhoodId, setNeighborhoodId ] = useState("");
   const [ tab, setTab ] = useState<Tab>("blocks");
   const neighborhoods = useQuery({ queryKey: PANEL_NEIGHBORHOODS_KEY, queryFn: listPanelNeighborhoods, ...STATIC_QUERY });
   // Só com a aba Imóveis aberta (o mapa lê os seus); sem os domínios (falha), o risco aparece cru.
-  const domains = useQuery({ queryKey: [ VC_DOMAINS_KEY ], queryFn: getVectorDomains, enabled: !!neighborhoodId && tab === "households", ...STATIC_QUERY });
+  const domains = useQuery({ queryKey: [ VC_DOMAINS_KEY ], queryFn: getVectorDomains, enabled: vcOn && !!neighborhoodId && tab === "households", ...STATIC_QUERY });
   const options: { key: Tab; label: string }[] = [ { key: "blocks", label: "Quarteirões" }, { key: "households", label: "Imóveis" } ];
-  if (vectorMapLayers(roles).includes("risk")) options.push({ key: "map", label: "Mapa" });
+  if (vcOn && vectorMapLayers(roles).includes("risk")) options.push({ key: "map", label: "Mapa" });
   return (
     <div style={stack}>
       <label style={{ ...fieldLabel, maxWidth: 320 }}>
@@ -51,7 +55,7 @@ function BlocksScreen({ roles }: { roles: VectorRoles }) {
         <>
           <div><SegmentedControl options={options} value={tab} onChange={setTab} /></div>
           {tab === "blocks" && <BlocksPanel key={neighborhoodId} neighborhoodId={neighborhoodId} />}
-          {tab === "households" && <HouseholdsPanel key={neighborhoodId} neighborhoodId={neighborhoodId} domains={domains.data ?? null} />}
+          {tab === "households" && <HouseholdsPanel key={neighborhoodId} neighborhoodId={neighborhoodId} domains={domains.data ?? null} blockOnly={!vcOn} />}
           {tab === "map" && <VectorMapPanel query={{ layer: "risk", neighborhoodId }} title="Imóveis por risco" />}
         </>
       )}

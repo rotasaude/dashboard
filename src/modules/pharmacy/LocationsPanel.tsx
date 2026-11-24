@@ -13,7 +13,7 @@ import type { AdminLocation, AdminLocationInput, HealthUnitRow, StockLocationKin
 import { useAuth } from "../../lib/auth";
 import { ENVIRONMENTAL_SURVEILLANCE_UNIT_KIND } from "../../lib/attendance";
 import { canUsePharmacy, locationKindLabel, pharmacyError } from "../../lib/pharmacy";
-import { canUseVectorControl } from "../../lib/vectorControl";
+import { canUseVectorSupplies } from "../../lib/vectorControl";
 import { Panel } from "../../components/Panel";
 import { DataTable } from "../../components/DataTable";
 import { Tag } from "../../components/Tag";
@@ -42,7 +42,7 @@ export function LocationsPanel({ locations, units, selectedId, onSelectStaff, on
   onSelectStaff(id: string): void; onSaved(): void; onGoToSecurity?(): void;
 }) {
   const { user } = useAuth();
-  const kinds = [ ...(canUsePharmacy(user) ? PHARMACY_KINDS : []), ...(canUseVectorControl(user) ? [ VECTOR_KIND ] : []) ];
+  const kinds = [ ...(canUsePharmacy(user) ? PHARMACY_KINDS : []), ...(canUseVectorSupplies(user) ? [ VECTOR_KIND ] : []) ];
   const [ editor, setEditor ] = useState<Editor>(null);
   const [ notice, setNotice ] = useState<string | null>(null);
   const open = (next: Editor) => { setNotice(null); setEditor(next); };

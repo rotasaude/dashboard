@@ -7,8 +7,9 @@ import {
   blockNumberProblem, blockStatusLabel, canReadAnyVectorReport, canReadVectorReport, canUseVectorControl, caseLabel, collectionProblems, conditionLabel, countProblems,
   cycleProblems, domainLabel, dueReasonLabel, installProblems, isEndemicAgentTeam, isVectorStale, itemStatusLabel, noteProblem, optionalNote, ovitrapStatusLabel,
   riskTone, sampleResultProblems, shortfallCauseLabel, stratumModeLabel, stratumRangeProblem, surveyStatusLabel, taskKindLabel, taskStateLabel,
-  ubvCycleProblems, vectorError, vectorMapLayers, vectorRefusals, vectorRoles
+  ubvCycleProblems, vectorError, vectorMapLayers, vectorRefusals, vectorRoles, canUseVectorSupplies, vectorProductUses
 } from "./vectorControl";
+import { zooUser } from "../test/zoonosesFixtures";
 import { NOMINAL_QUERY as HV_NOMINAL, STATIC_QUERY as HV_STATIC } from "./homeVisits";
 import { VECTOR_CONTROL_DISABLED, VECTOR_ERRORS } from "./vectorErrors";
 import { acsTeam } from "../test/homeVisitFixtures";
@@ -317,3 +318,18 @@ describe("recusas do api", () => {
   });
 });
 
+
+describe("insumos do 35a com zoonoses (35b)", () => {
+  it("canUseVectorSupplies: vector_control ou zoonoses utilizável", () => {
+    expect(canUseVectorSupplies(zooUser([ "endemic_coordinator" ]))).toBe(true);
+    expect(canUseVectorSupplies(vcUser())).toBe(true);
+    expect(canUseVectorSupplies(vcUser(undefined, [ "clinical_record" ]))).toBe(false);
+    expect(canUseVectorSupplies(null)).toBe(false);
+  });
+  it("vectorProductUses: os usos oferecidos por portão", () => {
+    expect(vectorProductUses(zooUser([ "endemic_coordinator" ]))).toEqual([ "rabies_vaccine", "collar" ]);
+    expect(vectorProductUses(vcUser([ "endemic_coordinator" ]))).toEqual([ "focal", "perifocal", "spatial" ]);
+    expect(vectorProductUses(vcUser([ "endemic_coordinator" ], [ "clinical_record", "territory_registry", "home_visits", "vector_control", "zoonoses" ])))
+      .toEqual([ "focal", "perifocal", "spatial", "rabies_vaccine", "collar" ]);
+  });
+});

@@ -26,3 +26,17 @@ describe("menu Zoonoses", () => {
     expect(CATALOG.groups.Zoonoses.description).toBe("Animais com tutor, vacinação antirrábica, demandas, observação do agressor, leishmaniose canina e canil");
   });
 });
+
+describe("menu Endemias e Farmácia só com zoonoses (insumos do 35a)", () => {
+  const group = (u: Parameters<typeof navGroupsFor>[0], label: string) => navGroupsFor(u).find((g) => g.label === label)?.items.map((i) => i.id) ?? [];
+  it("a coordenação vê quarteirões, produtos e faltas; a equipe nenhum", () => {
+    const coord = zooUser([ "endemic_coordinator" ]);
+    expect(group(coord, "Endemias")).toEqual([ "vector-blocks", "vector-settings" ]);
+    expect(group(coord, "Farmácia")).toEqual([ "vector-stock-shortfalls" ]);
+    expect(group(zooUser([ "zoonoses_team" ]), "Endemias")).toEqual([]);
+    expect(group(zooUser([ "zoonoses_team" ]), "Farmácia")).toEqual([]);
+  });
+  it("sem zoonoses nem vector_control, nada", () => {
+    expect(group(zooUser([ "endemic_coordinator" ], [ "clinical_record" ]), "Endemias")).toEqual([]);
+  });
+});

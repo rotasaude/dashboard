@@ -4,8 +4,9 @@
 // os parâmetros técnicos versionados e o local de estoque de onde o boletim baixa. Nada aqui é dado de pessoa.
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useAuth } from "../lib/auth";
 import { getVectorSettings, putVectorSettings, type VectorSettings as Settings } from "../lib/api";
-import { STATIC_QUERY, VC_SETTINGS_KEY, vectorError, vectorRefusals } from "../lib/vectorControl";
+import { STATIC_QUERY, VC_SETTINGS_KEY, canUseVectorControl, vectorError, vectorRefusals } from "../lib/vectorControl";
 import { useActionMessage } from "../lib/useActionMessage";
 import { VectorGate } from "./vectorControl/VectorGate";
 import { ProductsPanel } from "./vectorControl/ProductsPanel";
@@ -21,12 +22,15 @@ export const LOCATION_GONE = "este local não está mais ativo ou não é do con
 export const LOCATION_SAVED = "local de estoque salvo";
 
 export function VectorSettings({ onGoToSecurity }: { onGoToSecurity?: () => void } = {}) {
+  const { user } = useAuth();
+  // Módulo 35b: só com `zoonoses` ficam os produtos e o local; os parâmetros técnicos são do 35a (`vector_control`).
+  const parametersOn = canUseVectorControl(user);
   return (
-    <VectorGate title="Produtos e parâmetros" sub="endemias · produtos, parâmetros e ajustes" allow={(r) => r.coordinator}>
+    <VectorGate title="Produtos e parâmetros" sub="endemias · produtos, parâmetros e ajustes" allow={(r) => r.coordinator} supplies>
       {() => (
         <div style={stack}>
           <ProductsPanel />
-          <ParametersPanel onGoToSecurity={onGoToSecurity} />
+          {parametersOn && <ParametersPanel onGoToSecurity={onGoToSecurity} />}
           <StockLocationPanel />
         </div>
       )}

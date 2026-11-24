@@ -566,3 +566,13 @@ describe("35a: domínio vector_control no estoque (F-35.3, Q10)", () => {
     expect(pharmacyError(new ApiError(422, { error: "item_not_allowed_here", path: "items[0]" }, "x"))).toBe("este item não entra neste local");
   });
 });
+
+describe("módulo 35b: rótulos do estoque", () => {
+  it("movimentos e documentos da vacina antirrábica e da coleira", () => {
+    expect(movementLabel("animal_vaccination")).toBe("vacinação antirrábica animal");
+    expect(movementLabel("animal_vaccination_reversal")).toBe("estorno de vacinação antirrábica (anulada)");
+    expect(movementLabel("collar_placement")).toBe("coleira colocada");
+    expect(movementDocument({ type: "collar", id: "c1", number: null })).toBe("coleira");
+    expect(movementDocument({ type: "rabies_vaccination", id: "v1", number: null })).toBe("vacinação antirrábica");
+  });
+});
