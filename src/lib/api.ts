@@ -8416,7 +8416,11 @@ export interface Collar {
   id: string; animal_id: string; vector_product_id: string; placed_on: string; due_on: string; removed_on: string | null;
   removal_reason: "replaced" | CollarRemovalReason | (string & {}) | null;
 }
-export interface DueCollar { id: string; animal_id: string; household_id: string | null; vector_product_id: string; placed_on: string; due_on: string }
+// Desvio 2 da Task 10 (api 42349541): cada item traz o animal (nome pode ser nulo); sem tutor nem microchip, e a lista não grava trilha.
+export interface DueCollar {
+  id: string; animal_id: string; household_id: string | null; vector_product_id: string; placed_on: string; due_on: string;
+  animal: { id: string; name: string | null; species: AnimalSpecies | (string & {}) };
+}
 
 export type ShelterEntryKind = "collection" | "voluntary_surrender" | "observation" | "other";
 export type ShelterExitKind = "returned" | "adopted" | "death" | "euthanasia" | "transferred";

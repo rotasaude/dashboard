@@ -165,6 +165,41 @@ describe("inquéritos", () => {
     expect(api.listLeishSurveys).toHaveBeenCalledTimes(2);
     expect(api.openLeishSurvey).toHaveBeenCalledTimes(1);
   });
+
+  it("editar o rascunho manda só o que mudou com expected_version; 409 survey_changed relê uma vez e não reenvia", async () => {
+    coordinator();
+    mocked(api.listLeishSurveys).mockResolvedValue([ survey({ version: 2 }) ]);
+    mocked(api.updateLeishSurvey).mockRejectedValue(conflict("survey_changed"));
+    view();
+    fireEvent.click(await screen.findByRole("button", { name: "Editar" }));
+    await screen.findByRole("form", { name: "Editar inquérito" });
+    expect((await screen.findByLabelText("Quarteirão 1") as HTMLInputElement).checked).toBe(true);
+    click("Salvar rascunho");
+    expect(await screen.findByText("nada mudou")).not.toBeNull();
+    expect(api.updateLeishSurvey).not.toHaveBeenCalled();
+    set("Nome", "Inquérito Centro 2");
+    click("Salvar rascunho");
+    expect(await screen.findByText(ZOONOSES_ERRORS.survey_changed)).not.toBeNull();
+    expect(api.updateLeishSurvey).toHaveBeenCalledWith("sv1", { name: "Inquérito Centro 2", expected_version: 2 });
+    expect(screen.queryByRole("form", { name: "Editar inquérito" })).toBeNull();
+    await waitFor(() => expect(api.listLeishSurveys).toHaveBeenCalledTimes(2));
+    await settle();
+    expect(api.listLeishSurveys).toHaveBeenCalledTimes(2);
+    expect(api.updateLeishSurvey).toHaveBeenCalledTimes(1);
+  });
+
+  it("encerrar o inquérito aberto manda expected_version e relê a lista", async () => {
+    coordinator();
+    mocked(api.listLeishSurveys).mockResolvedValue([ survey({ stage: "open", version: 5 }) ]);
+    mocked(api.closeLeishSurvey).mockResolvedValue(detail({ stage: "closed", version: 6 }));
+    view();
+    fireEvent.click(await screen.findByRole("button", { name: "Encerrar inquérito" }));
+    click("Confirmar");
+    expect(await screen.findByText("Inquérito encerrado.")).not.toBeNull();
+    expect(api.closeLeishSurvey).toHaveBeenCalledTimes(1);
+    expect(api.closeLeishSurvey).toHaveBeenCalledWith("sv1", 5);
+    await waitFor(() => expect(api.listLeishSurveys).toHaveBeenCalledTimes(2));
+  });
 });
 
 describe("exames", () => {
@@ -180,6 +215,39 @@ describe("exames", () => {
     await waitFor(() => expect(api.collectLeishTest).toHaveBeenCalledTimes(1));
     expect(api.collectLeishTest).toHaveBeenCalledWith({ animal_id: "an1", collected_on: TODAY35B, leish_survey_id: "sv1" });
     expect(await screen.findByText("Etiqueta: LV-2026-0A1B2C-0042")).not.toBeNull();
+  });
+
+  it("duplo clique em Registrar coleta: um envio só", async () => {
+    let resolve: (t: ReturnType<typeof leishTest>) => void = () => undefined;
+    mocked(api.collectLeishTest).mockReturnValue(new Promise((r) => { resolve = r; }));
+    view();
+    await tab("Exames");
+    fireEvent.click(await screen.findByRole("button", { name: "Nova coleta" }));
+    await pickAnimal();
+    click("Registrar coleta");
+    click("Registrar coleta");
+    await settle();
+    expect(api.collectLeishTest).toHaveBeenCalledTimes(1);
+    resolve(leishTest({ label: "LV-2026-AVUL-0007", leish_survey_id: null }));
+    expect(await screen.findByText("Etiqueta: LV-2026-AVUL-0007")).not.toBeNull();
+    expect(api.collectLeishTest).toHaveBeenCalledTimes(1);
+  });
+
+  it("DPP corrigido para não reagente com ELISA gravado: o 422 elisa_without_reactive_dpp do api aparece no topo", async () => {
+    mocked(api.listLeishTests).mockResolvedValue({ items: [ leishTest({ version: 2, elisa_result: "reactive", elisa_on: TODAY35B }) ], next_before: null });
+    mocked(api.updateLeishTest).mockRejectedValue(conflict("elisa_without_reactive_dpp", 422, "elisa_result"));
+    view();
+    await tab("Exames");
+    fireEvent.click(await screen.findByRole("button", { name: "Lançar resultado" }));
+    set("Resultado do TR-DPP", "non_reactive");
+    expect(screen.queryByLabelText("Resultado do ELISA")).toBeNull();
+    click("Salvar resultado");
+    await waitFor(() => expect(api.updateLeishTest).toHaveBeenCalledTimes(1));
+    expect(api.updateLeishTest).toHaveBeenCalledWith("lt1", { dpp_result: "non_reactive", expected_version: 2 });
+    await waitFor(() => {
+      const alerts = screen.queryAllByRole("alert").map((n) => n.textContent);
+      expect(alerts).toContain(ZOONOSES_ERRORS.elisa_without_reactive_dpp);
+    });
   });
 
   it("coleta em gato: recusa no animal antes de enviar; 409 animal_not_active cai no animal sem reler", async () => {
@@ -338,6 +406,26 @@ describe("desfecho pendente", () => {
 });
 
 describe("coleiras a trocar", () => {
+  it("mostra o nome do animal (ou Cão sem nome) e o vencimento sem ler animal; o nome abre o histórico", async () => {
+    mocked(api.listDueCollars).mockResolvedValue([
+      dueCollar(), dueCollar({ id: "co9", animal_id: "an9", animal: { id: "an9", name: null, species: "dog" }, due_on: "2026-12-01" })
+    ]);
+    mocked(api.getAnimal).mockResolvedValue(history());
+    view();
+    await tab("Coleiras a trocar");
+    expect(await screen.findByRole("button", { name: "Thor" })).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Cão sem nome" })).not.toBeNull();
+    expect(screen.getByText("01/12/2026")).not.toBeNull();
+    expect(screen.queryByText(/cão #/)).toBeNull();
+    await settle();
+    expect(api.getAnimal).not.toHaveBeenCalled();
+    click("Thor");
+    expect(await screen.findByRole("article", { name: "Animal Thor" })).not.toBeNull();
+    expect(api.getAnimal).toHaveBeenCalledTimes(1);
+    expect(api.getAnimal).toHaveBeenCalledWith("an1");
+    expect(screen.queryByRole("button", { name: "Editar" })).toBeNull();
+  });
+
   it("lista as que vencem; trocar avisa que a coleira ativa sai como trocada e manda o produto de coleira", async () => {
     mocked(api.listDueCollars).mockResolvedValue([ dueCollar() ]);
     mocked(api.placeCollar).mockResolvedValue(collar({ id: "co2", placed_on: TODAY35B, due_on: "2027-05-23" }));

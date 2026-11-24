@@ -144,7 +144,8 @@ export const collar = (o: Partial<Collar> = {}): Collar => ({
   id: "co1", animal_id: "an1", vector_product_id: "pz2", placed_on: "2026-05-20", due_on: "2026-11-20", removed_on: null, removal_reason: null, ...o
 });
 export const dueCollar = (o: Partial<DueCollar> = {}): DueCollar => ({
-  id: "co1", animal_id: "an1", household_id: "h1", vector_product_id: "pz2", placed_on: "2026-05-20", due_on: "2026-11-20", ...o
+  id: "co1", animal_id: "an1", household_id: "h1", vector_product_id: "pz2", placed_on: "2026-05-20", due_on: "2026-11-20",
+  animal: { id: "an1", name: "Thor", species: "dog" }, ...o
 });
 export const stay = (o: Partial<ShelterStay> = {}): ShelterStay => ({
   id: "st1", version: 1, animal_id: "an1", species: "dog", health_unit_id: "uvz1", entry_kind: "collection", entered_on: "2026-11-20",

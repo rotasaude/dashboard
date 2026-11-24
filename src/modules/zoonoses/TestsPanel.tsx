@@ -290,7 +290,8 @@ function ResultForm({ test, today, onSaved, onStale, onCancel }: {
           {f.errNode("elisa_request")}
         </>
       ) : <p style={muted}>{ZOONOSES_ERRORS.elisa_without_reactive_dpp}</p>}
-      {f.top((p) => [ "dpp_result", "dpp_on", "elisa_result", "elisa_on", "elisa_request" ].includes(p))}
+      {/* Sem os campos do ELISA na tela, a recusa do api neles (ELISA gravado e DPP corrigido) sobe ao topo em vez de sumir. */}
+      {f.top((p) => [ "dpp_result", "dpp_on", ...(showElisa ? [ "elisa_result", "elisa_on", "elisa_request" ] : []) ].includes(p))}
       <div style={row}>
         <button type="submit" aria-disabled={busy || undefined} style={busy ? disabledButtonStyle : buttonStyle}>Salvar resultado</button>
         <button type="button" aria-disabled={busy || undefined} style={busy ? disabledButtonStyle : secondaryButtonStyle}
