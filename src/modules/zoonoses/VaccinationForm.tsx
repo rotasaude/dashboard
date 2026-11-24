@@ -8,7 +8,7 @@ import { useState } from "react";
 import { recordVaccination, type Animal, type ZooRef, type RabiesCampaign, type RabiesVaccination, type VaccinationInput } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import { canUseHomeVisits } from "../../lib/homeVisits";
-import { isZoonosesStale, vaccinationProblems, zooLabel, zoonosesRefusals } from "../../lib/zoonoses";
+import { animalDisplayName, isZoonosesStale, vaccinationProblems, zooLabel, zoonosesRefusals } from "../../lib/zoonoses";
 import { ActionButton } from "../../components/ActionButton";
 import { buttonStyle, disabledButtonStyle, inputStyle } from "../../components/formStyles";
 import { box, checkLabel, fieldLabel, form, muted, row } from "../exams/styles";
@@ -100,9 +100,9 @@ export function VaccinationForm({ campaign, today, units, onRecorded, onStale }:
         </label>
         {f.errNode("modality")}
 
-        {animalId ? (
+        {picked ? (
           <div style={row}>
-            <span>Animal: {`${picked?.name ?? "sem nome"} · ${zooLabel(domains?.species, picked?.species ?? "")}`}</span>
+            <span>Animal: {`${animalDisplayName(picked.name, picked.species)} · ${zooLabel(domains?.species, picked.species)}`}</span>
             <ActionButton variant="secondary" onClick={() => setPicked(null)}>Trocar animal</ActionButton>
           </div>
         ) : mod === "fixed_post" ? (

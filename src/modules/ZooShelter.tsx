@@ -148,9 +148,9 @@ function StayDetail({ stay, today, vet, meLoaded, me, onGoToSecurity, onStale, o
   const e = a.euthanasia;
 
   return (
-    <article aria-label={`Animal ${a.name ?? "sem nome"}`} style={panel}>
+    <article aria-label={`Animal ${animalDisplayName(a.name, a.species)}`} style={panel}>
       <div style={row}>
-        <strong>{a.name ?? "sem nome"}</strong>
+        <strong>{animalDisplayName(a.name, a.species)}</strong>
         <Tag tone={a.status === "active" ? "ok" : "neutral"}>{zooLabel(domains?.animal_statuses, a.status)}</Tag>
         {a.neutered && <Tag tone="neutral">castrado</Tag>}
       </div>

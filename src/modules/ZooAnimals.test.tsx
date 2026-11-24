@@ -64,6 +64,19 @@ describe("busca", () => {
     expect(await screen.findByText("com microchip")).not.toBeNull();
     expect(JSON.stringify(client.getQueryCache().getAll().map((q) => q.queryKey))).not.toContain(CHIP);
   });
+  it("animal sem nome: \"Gato sem nome\" no resultado e no histórico, nunca \"sem nome\" cru", async () => {
+    mocked(api.searchAnimals).mockResolvedValue({ items: [ animal({ name: null, species: "cat" }) ], next_before: null });
+    mocked(api.getAnimal).mockResolvedValue(history({ name: null, species: "cat" }));
+    view();
+    fireEvent.change(await screen.findByLabelText("Número do microchip"), { target: { value: CHIP } });
+    click("Buscar");
+    expect(await screen.findByText(/^Gato sem nome · /)).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Abrir" }));
+    const article = await screen.findByRole("article", { name: "Animal Gato sem nome" });
+    expect(within(article).getByText("Gato sem nome")).not.toBeNull();
+    expect(screen.queryByText(/^sem nome/)).toBeNull();
+  });
+
   it("microchip com menos de 15 dígitos não vai ao api", async () => {
     view();
     fireEvent.change(await screen.findByLabelText("Número do microchip"), { target: { value: "123" } });

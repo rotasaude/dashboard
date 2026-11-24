@@ -5,7 +5,7 @@
 // individual dela (Q25).
 import { useState } from "react";
 import { searchAnimals, type Animal, type AnimalSearch as SearchBody, type ZooPerson } from "../../lib/api";
-import { zooLabel, zoonosesError } from "../../lib/zoonoses";
+import { animalDisplayName, zooLabel, zoonosesError } from "../../lib/zoonoses";
 import { SegmentedControl } from "../../shell/SegmentedControl";
 import { ActionButton } from "../../components/ActionButton";
 import { inputStyle } from "../../components/formStyles";
@@ -94,7 +94,7 @@ export function AnimalSearch({ onOpen }: { onOpen(id: string, animal: Animal): v
         <ul style={{ ...list, paddingLeft: 0, listStyle: "none" }} aria-label="Animais encontrados">
           {items.map((a) => (
             <li key={a.id} style={row}>
-              <span>{a.name ?? "sem nome"} · {zooLabel(domains?.species, a.species)} · {zooLabel(domains?.animal_statuses, a.status)}</span>
+              <span>{animalDisplayName(a.name, a.species)} · {zooLabel(domains?.species, a.species)} · {zooLabel(domains?.animal_statuses, a.status)}</span>
               <ActionButton variant="secondary" onClick={() => onOpen(a.id, a)}>Abrir</ActionButton>
             </li>
           ))}

@@ -94,6 +94,14 @@ describe("estadas abertas", () => {
     expect(screen.queryByText("em observação")).toBeNull();
   });
 
+  it("ficha do animal sem nome: \"Cão sem nome\", nunca \"sem nome\" cru", async () => {
+    mocked(api.getAnimal).mockResolvedValue(history({ name: null }));
+    view();
+    fireEvent.click(await screen.findByRole("button", { name: "Abrir animal" }));
+    const article = await screen.findByRole("article", { name: "Animal Cão sem nome" });
+    expect(within(article).getByText("Cão sem nome")).not.toBeNull();
+  });
+
   it("sem unidade de vigilância ambiental ativa: a frase", async () => {
     mocked(api.getZoonosesDomains).mockResolvedValue({ ...ZOO_DOMAINS, units: [] });
     view();

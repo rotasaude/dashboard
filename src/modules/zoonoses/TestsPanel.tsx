@@ -11,7 +11,7 @@ import {
 } from "../../lib/api";
 import { fmtDay, textProblem } from "../../lib/homeVisits";
 import {
-  NOMINAL_QUERY, STATIC_QUERY, ZOO_ANIMAL_KEY, ZOO_TESTS_KEY, elisaAllowed, isReactiveDog, isZoonosesStale, leishOutcomeProblems, zooLabel,
+  NOMINAL_QUERY, STATIC_QUERY, ZOO_ANIMAL_KEY, ZOO_TESTS_KEY, animalDisplayName, elisaAllowed, isReactiveDog, isZoonosesStale, leishOutcomeProblems, zooLabel,
   zoonosesError, zoonosesRefusals
 } from "../../lib/zoonoses";
 import { ZOONOSES_ERRORS } from "../../lib/zoonosesErrors";
@@ -173,7 +173,7 @@ function CollectForm({ today, surveys, onCollected, onStale, onCancel }: {
         {f.errNode("leish_survey_id")}
         {dog ? (
           <div style={row}>
-            <span>{dog.name ?? "sem nome"} · {zooLabel(domains?.species, dog.species)}</span>
+            <span>{animalDisplayName(dog.name, dog.species)} · {zooLabel(domains?.species, dog.species)}</span>
             <ActionButton variant="secondary" onClick={() => { if (!busy) { setDog(null); f.clear("animal_id"); } }}>Trocar animal</ActionButton>
           </div>
         ) : <p style={muted}>busque o cão acima</p>}

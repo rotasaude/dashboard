@@ -8,7 +8,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { closeObservation, getAnimal, linkObservationAnimal, getObservation, type Animal, type ObservationOutcome } from "../../lib/api";
 import { fmtDay } from "../../lib/homeVisits";
 import {
-  NOMINAL_QUERY, ZOO_ANIMAL_KEY, ZOO_OBSERVATION_KEY, closeObservationProblems, isZoonosesStale, observationConditionLabel, observationDaysText, zooLabel, zoonosesRefusals
+  NOMINAL_QUERY, ZOO_ANIMAL_KEY, ZOO_OBSERVATION_KEY, animalDisplayName, closeObservationProblems, isZoonosesStale, observationConditionLabel, observationDaysText, zooLabel, zoonosesRefusals
 } from "../../lib/zoonoses";
 import { ActionButton } from "../../components/ActionButton";
 import { EmptyState } from "../../components/EmptyState";
@@ -155,7 +155,7 @@ export function ObservationDetail({ id, today, onChanged, onGoToShelter }: { id:
           {picked && (
             <>
               <p style={{ margin: 0, fontSize: 13 }}>
-                {picked.name ?? "sem nome"} · {zooLabel(domains?.species, picked.species)}. A ligação vale uma vez só.
+                {animalDisplayName(picked.name, picked.species)} · {zooLabel(domains?.species, picked.species)}. A ligação vale uma vez só.
               </p>
               {problems.map((p) => <p key={p} role="alert" style={alert}>{p}</p>)}
               <div style={row}>

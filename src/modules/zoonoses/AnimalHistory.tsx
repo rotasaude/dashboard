@@ -6,7 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { getAnimal, type AnimalHistory as History } from "../../lib/api";
 import { fmtDay } from "../../lib/homeVisits";
-import { NOMINAL_QUERY, ZOO_ANIMAL_KEY, nextAnimalStatuses, observationOutcomeLabel, observationStateLabel, zooLabel, zoonosesError } from "../../lib/zoonoses";
+import { NOMINAL_QUERY, ZOO_ANIMAL_KEY, animalDisplayName, nextAnimalStatuses, observationOutcomeLabel, observationStateLabel, zooLabel, zoonosesError } from "../../lib/zoonoses";
 import { ActionButton } from "../../components/ActionButton";
 import { EmptyState } from "../../components/EmptyState";
 import { KeyValue } from "../../components/KeyValue";
@@ -39,9 +39,9 @@ export function AnimalHistory({ id, onEdit, editor }: { id: string; onEdit(h: Hi
   const editing = final ? null : editor?.(a) ?? null;
 
   return (
-    <article aria-label={`Animal ${a.name ?? "sem nome"}`} style={panel}>
+    <article aria-label={`Animal ${animalDisplayName(a.name, a.species)}`} style={panel}>
       <div style={row}>
-        <strong>{a.name ?? "sem nome"}</strong>
+        <strong>{animalDisplayName(a.name, a.species)}</strong>
         <Tag tone={a.status === "active" ? "ok" : "neutral"}>{zooLabel(domains?.animal_statuses, a.status)}</Tag>
         {a.neutered && <Tag tone="neutral">castrado</Tag>}
       </div>

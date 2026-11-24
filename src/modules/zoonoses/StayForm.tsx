@@ -12,7 +12,7 @@ import {
 import { fmtDay } from "../../lib/homeVisits";
 import type { Problem } from "../../lib/pharmacy";
 import type { PsyRefusal } from "../../lib/psychosocial";
-import { STATIC_QUERY, ZOO_OBSERVATIONS_KEY, animalProblems, isZoonosesStale, stayExitProblems, zooLabel, zoonosesRefusals } from "../../lib/zoonoses";
+import { STATIC_QUERY, ZOO_OBSERVATIONS_KEY, animalDisplayName, animalProblems, isZoonosesStale, stayExitProblems, zooLabel, zoonosesRefusals } from "../../lib/zoonoses";
 import { ZOONOSES_ERRORS } from "../../lib/zoonosesErrors";
 import { SegmentedControl } from "../../shell/SegmentedControl";
 import { ActionButton } from "../../components/ActionButton";
@@ -111,7 +111,7 @@ export function StayForm({ unit, today, onEntered, onStale, onCancel }: {
           <>
             {found ? (
               <div style={row}>
-                <span>{found.name ?? "sem nome"} · {zooLabel(domains?.species, found.species)}</span>
+                <span>{animalDisplayName(found.name, found.species)} · {zooLabel(domains?.species, found.species)}</span>
                 <ActionButton variant="secondary" onClick={() => { if (!busy) { setFound(null); setObservationId(""); } }}>Trocar animal</ActionButton>
               </div>
             ) : <p style={muted}>busque o animal acima</p>}

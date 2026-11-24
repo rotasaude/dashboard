@@ -8,7 +8,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { listDueCollars, placeCollar, removeCollar, type Animal, type Collar, type CollarRemovalReason, type DueCollar } from "../../lib/api";
 import { fmtDay } from "../../lib/homeVisits";
-import { STATIC_QUERY, ZOO_COLLARS_KEY, isZoonosesStale, zooLabel, zoonosesError, zoonosesRefusals } from "../../lib/zoonoses";
+import { STATIC_QUERY, ZOO_COLLARS_KEY, animalDisplayName, isZoonosesStale, zooLabel, zoonosesError, zoonosesRefusals } from "../../lib/zoonoses";
 import { ZOONOSES_ERRORS } from "../../lib/zoonosesErrors";
 import type { Problem } from "../../lib/pharmacy";
 import { ActionButton } from "../../components/ActionButton";
@@ -31,8 +31,8 @@ const refusals = (err: unknown) => zoonosesRefusals(err).map((r) => ({ ...r, par
 
 type DueAnimal = { id: string; name: string | null };
 type Placing = { animal: DueAnimal | null } | null;
-export const NO_NAME_DOG = "Cão sem nome";
-const dogName = (a: DueAnimal): string => a.name ?? NO_NAME_DOG;
+// A fila de coleiras é só de cães: sem nome, "Cão sem nome".
+const dogName = (a: DueAnimal): string => animalDisplayName(a.name, "dog");
 
 export function CollarsPanel({ today }: { today: string }) {
   const client = useQueryClient();
@@ -131,7 +131,7 @@ function PlaceForm({ fixed, today, onPlaced, onStale, onCancel }: {
         {fixed && <p style={muted}>{dogName(fixed)}</p>}
         {!fixed && (dog ? (
           <div style={row}>
-            <span>{dog.name ?? "sem nome"} · {zooLabel(domains?.species, dog.species)}</span>
+            <span>{animalDisplayName(dog.name, dog.species)} · {zooLabel(domains?.species, dog.species)}</span>
             <ActionButton variant="secondary" onClick={() => { if (!busy) { setDog(null); f.clear("animal_id"); } }}>Trocar animal</ActionButton>
           </div>
         ) : <p style={muted}>busque o cão acima</p>)}
