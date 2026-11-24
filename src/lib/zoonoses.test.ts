@@ -66,6 +66,7 @@ describe("portões e papéis", () => {
   });
   it("frases de papel e veterinário", () => {
     expect(ZOO_NO_ROLE).toBe("seu papel não permite usar o centro de zoonoses");
+    expect(ZOO_NOT_VET).toBe(ZOONOSES_ERRORS.veterinarian_required);
     expect(ZOO_NOT_VET).toContain("223305");
   });
 });
@@ -103,6 +104,11 @@ describe("chaves, consultas e rótulos", () => {
     expect(AFTER_PLANNED_END).toBe("após o fim previsto da campanha");
     expect(focusBelowMinText(100)).toBe("O foco tem menos de 100 cães cadastrados: amplie a área ou confira o cadastro.");
     expect(sampleCensusText(500)).toBe("Abaixo de 500 cães, o manual não traz amostra: todos os cães entram no inquérito.");
+  });
+  it("os números das frases saem dos parâmetros de fábrica (100 e 500)", () => {
+    expect(focusBelowMinText(ZOO_PARAMS.leish_focus_min_dogs)).toBe("O foco tem menos de 100 cães cadastrados: amplie a área ou confira o cadastro.");
+    expect(sampleCensusText(ZOO_PARAMS.leish_sample_table[0].min_population ?? 0))
+      .toBe("Abaixo de 500 cães, o manual não traz amostra: todos os cães entram no inquérito.");
   });
 });
 

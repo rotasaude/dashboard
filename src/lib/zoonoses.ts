@@ -14,7 +14,8 @@ export { NOMINAL_QUERY, STATIC_QUERY };
 
 // ─── Frases ─────────────────────────────────────────────────────────────────
 export const ZOO_NO_ROLE = "seu papel não permite usar o centro de zoonoses";
-export const ZOO_NOT_VET = "só o médico veterinário (CBO 223305, com CRMV e vínculo na unidade de vigilância ambiental) registra castração e eutanásia";
+// A mesma exigência da tabela (a que o campo copia): papel, CBO, CRMV e vínculo.
+export const ZOO_NOT_VET = ZOONOSES_ERRORS.veterinarian_required;
 // Linha do relatório semanal depois do fim previsto da campanha (`after_planned_end`).
 export const AFTER_PLANNED_END = "após o fim previsto da campanha";
 // Foco com menos cães que `leish_focus_min_dogs` (`below_focus_min`) e amostra abaixo do `min_population` da 1ª linha da tabela (Q32).
