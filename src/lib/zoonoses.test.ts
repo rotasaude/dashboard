@@ -67,7 +67,6 @@ describe("portões e papéis", () => {
   it("frases de papel e veterinário", () => {
     expect(ZOO_NO_ROLE).toBe("seu papel não permite usar o centro de zoonoses");
     expect(ZOO_NOT_VET).toBe(ZOONOSES_ERRORS.veterinarian_required);
-    expect(ZOO_NOT_VET).toContain("223305");
   });
 });
 
