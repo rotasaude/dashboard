@@ -108,6 +108,8 @@ export const OMBUDSMAN_ERRORS: Record<string, string> = {
   link_expired: "o endereço do anexo venceu — abra de novo",
   // Módulo 35b: o assunto reservado do centro de zoonoses não se desativa com o centro ligado (corrida com a sessão).
   reserved_subject: ZOONOSES_ERRORS.reserved_subject,
+  // Q34: segundo encaminhamento ao mesmo destino com outro pendente (409, path `destination`).
+  forwarding_already_pending: ZOONOSES_ERRORS.forwarding_already_pending,
   manifestation_changed: MANIFESTATION_CHANGED,
   forwarding_changed: "o encaminhamento mudou enquanto a tela estava aberta — os dados foram relidos",
   already_decided: "este pedido de reabertura já foi decidido",

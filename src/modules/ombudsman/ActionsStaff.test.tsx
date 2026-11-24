@@ -134,6 +134,18 @@ describe("ações do técnico", () => {
     expect((screen.getByLabelText("Extrato para o destino") as HTMLTextAreaElement).value).toMatch(/losartana/);
   });
 
+  it("409 forwarding_already_pending (Q34): a frase no destino, sem releitura, e o extrato mantido", async () => {
+    vi.mocked(api.runOmbudsmanAction).mockRejectedValue(new ApiError(409, {
+      error: "forwarding_already_pending", path: "destination", problems: [ { error: "forwarding_already_pending", path: "destination" } ]
+    }, "x"));
+    mount(manifestation());
+    await forward("department:dep1", "Usuária relata falta de losartana na farmácia da UBS Centro.");
+    expect(await screen.findByText("Já existe um encaminhamento pendente para este destino.")).not.toBeNull();
+    expect((screen.getByLabelText("Destino")).getAttribute("aria-invalid")).toBe("true");
+    expect((screen.getByLabelText("Extrato para o destino") as HTMLTextAreaElement).value).toMatch(/losartana/);
+    expect(vi.mocked(api.getOmbudsmanManifestation)).toHaveBeenCalledTimes(1);
+  });
+
   it("409 manifestation_changed: frase, uma releitura, texto mantido se a ação ainda cabe", async () => {
     vi.mocked(api.getOmbudsmanManifestation).mockResolvedValueOnce(manifestation()).mockResolvedValueOnce(manifestation({ state: "forwarded" }));
     vi.mocked(api.runOmbudsmanAction).mockRejectedValue(new ApiError(409, { error: "manifestation_changed" }, "x"));
