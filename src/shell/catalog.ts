@@ -16,7 +16,7 @@ import {
   IconBus, IconCalendarRepeat, IconUserX, IconCar, IconSteeringWheel,
   IconBrain, IconAmbulance, IconDeviceTv, IconDoorEnter, IconCalendarEvent, IconBed, IconBedFlat, IconPillOff, IconShare, IconFileReport, IconUserHeart,
   IconMessageReport, IconMailForward, IconSitemap, IconVaccine, IconNeedle, IconCloudUpload, IconVaccineBottle, IconTemperatureSnow, IconCalendarMonth, IconReportMedical, IconFridge, IconWalk, IconDeviceMobile, IconDeviceMobileCog,
-  IconBug, IconLayoutGrid, IconEgg, IconDice, IconShieldHalf, IconMapPinCheck, IconPackageOff
+  IconPaw, IconDog, IconEye, IconHome, IconBug, IconLayoutGrid, IconEgg, IconDice, IconShieldHalf, IconMapPinCheck, IconPackageOff
 } from "@tabler/icons-react";
 import type { Catalog } from "./types";
 
@@ -33,6 +33,7 @@ export const CATALOG: Catalog = {
     "Cadastro territorial": { icon: IconHomeHeart, description: "Microáreas, domicílios, famílias e cadastro individual" },
     "Visita e atividade coletiva": { icon: IconWalk, description: "Folha do dia, quem visitar, visitas da equipe, atividade coletiva e aparelhos de campo" },
     "Vigilância": { icon: IconVirus, description: "Notificação compulsória, prazos, negativa semanal e painel" },
+    "Zoonoses": { icon: IconPaw, description: "Animais com tutor, vacinação antirrábica, demandas, observação do agressor, leishmaniose canina e canil" },
     "Endemias": { icon: IconBug, description: "Quarteirões, ciclos, ovitrampas, LIRAa, bloqueio, amostras e relatórios do controle vetorial" },
     "Regulação": { icon: IconArrowsSplit2, description: "Encaminhamentos a especialista e procedimento, fila, cotas e prazos" },
     "Saúde bucal": { icon: IconDental, description: "Prontuário odontológico, CEO e prótese" },
@@ -128,6 +129,14 @@ export const CATALOG: Catalog = {
     "vector-tasks": { icon: IconListCheck, description: "Tarefas abertas da coordenação e conclusão" },
     "vector-reports": { icon: IconReportAnalytics, description: "Sete relatórios do controle vetorial em tela e CSV; o LIRAa também em PDF" },
     "vector-settings": { icon: IconAdjustments, description: "Inseticidas e larvicidas, parâmetros e local de estoque" },
+    "zoo-animals": { icon: IconDog, description: "Cadastro de cães e gatos com tutor, busca por microchip e histórico" },
+    "zoo-campaigns": { icon: IconVaccine, description: "Campanhas de vacinação antirrábica, doses e resultado semanal" },
+    "zoo-demands": { icon: IconMessageReport, description: "Demandas de zoonoses vindas da ouvidoria e do balcão" },
+    "zoo-observations": { icon: IconEye, description: "Observação de dez dias do animal agressor e desfecho" },
+    "zoo-leish": { icon: IconMicroscope, description: "Inquéritos de leishmaniose canina, exames e coleiras" },
+    "zoo-shelter": { icon: IconHome, description: "Estadas no canil e gatil, destino e eutanásia" },
+    "zoo-reports": { icon: IconReportAnalytics, description: "Relatórios de zoonoses em tela e CSV" },
+    "zoo-settings": { icon: IconAdjustments, description: "Parâmetros de zoonoses da cidade" },
     "field-ovitraps": { icon: IconMapPinCheck, description: "Instalar ovitrampas e coletar palhetas nas suas microáreas" },
     "regulation-queue": { icon: IconListNumbers, description: "Pedidos por cor e espera, vencidos primeiro" },
     "regulation-returned": { icon: IconArrowBackUp, description: "Pedidos da unidade devolvidos para complementar" },

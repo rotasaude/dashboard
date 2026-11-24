@@ -21,7 +21,7 @@ describe("grupo Regulação (módulo 26a)", () => {
   });
   it("vem depois da Vigilância e de Endemias (35a), com ícone e descrição", () => {
     const labels = NAV_GROUPS.map((g) => g.label);
-    expect(labels.indexOf("Regulação")).toBe(labels.indexOf("Endemias") + 1);
+    expect(labels.indexOf("Regulação")).toBe(labels.indexOf("Zoonoses") + 1);
     expect(labels.indexOf("Endemias")).toBe(labels.indexOf("Vigilância") + 1);
     expect(CATALOG.groups["Regulação"].description).toBe("Encaminhamentos a especialista e procedimento, fila, cotas e prazos");
     expect(CATALOG.screens["regulation-queue"].description).toBe("Pedidos por cor e espera, vencidos primeiro");

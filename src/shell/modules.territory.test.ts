@@ -29,7 +29,7 @@ describe("grupo Cadastro territorial (módulo 24a)", () => {
     // Farmácia depois dela — é a Farmácia que antecede Exames.
     expect(labels.indexOf("Vigilância")).toBe(labels.indexOf("Visita e atividade coletiva") + 1);
     expect(labels.indexOf("Endemias")).toBe(labels.indexOf("Vigilância") + 1);
-    expect(labels.indexOf("Regulação")).toBe(labels.indexOf("Endemias") + 1);
+    expect(labels.indexOf("Regulação")).toBe(labels.indexOf("Zoonoses") + 1);
     expect(labels.indexOf("Farmácia")).toBe(labels.indexOf("Regulação") + 1);
     // O 29 pôs a Vacinação logo depois da Farmácia; o 28 pôs a Saúde bucal depois dela; o 30 pôs Transporte e TFD depois
     // dela; o 31 pôs o CAPS depois do TFD, e é o CAPS que antecede Exames.

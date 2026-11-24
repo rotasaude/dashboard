@@ -18,6 +18,7 @@ import { canUsePsychosocial, psychosocialRoles } from "../lib/psychosocial";
 import { canUseOmbudsman, ombudsmanRoles } from "../lib/ombudsman";
 import { canUseUrgency, canUseWaitingRoom } from "../lib/urgency";
 import { canReadAnyVectorReport, canUseVectorControl, vectorRoles } from "../lib/vectorControl";
+import { canUseZooDemands, canUseZoonoses, zoonosesRoles } from "../lib/zoonoses";
 export type ModuleId =
   | "overview" | "ingestion" | "conversations" | "consent"
   | "triages" | "classification" | "reports" | "protocols" | "events"
@@ -47,7 +48,8 @@ export type ModuleId =
   | "ombudsman-manifestations" | "ombudsman-new" | "ombudsman-replies" | "ombudsman-panel" | "ombudsman-annual-report" | "ombudsman-settings" | "departments"
   | "urgency-panel" | "waiting-room-settings" | "urgency-beds"
   | "vector-blocks" | "vector-cycles" | "vector-ovitraps" | "vector-samples" | "vector-liraa" | "vector-transmission" | "vector-tasks"
-  | "vector-reports" | "vector-settings" | "field-ovitraps" | "vector-stock-shortfalls";
+  | "vector-reports" | "vector-settings" | "field-ovitraps" | "vector-stock-shortfalls"
+  | "zoo-animals" | "zoo-campaigns" | "zoo-demands" | "zoo-observations" | "zoo-leish" | "zoo-shelter" | "zoo-reports" | "zoo-settings";
 
 export interface NavItem { id: ModuleId; label: string; icon: string; }
 export interface NavGroupDef { label: string; items: NavItem[]; }
@@ -123,6 +125,16 @@ export const NAV_GROUPS: NavGroupDef[] = [
     { id: "vector-tasks", label: "Tarefas de endemias", icon: "☑" },
     { id: "vector-reports", label: "Relatórios de endemias", icon: "▤" },
     { id: "vector-settings", label: "Produtos e parâmetros", icon: "⚙" }
+  ]},
+  { label: "Zoonoses", items: [
+    { id: "zoo-animals", label: "Animais", icon: "◉" },
+    { id: "zoo-campaigns", label: "Campanhas e vacinação", icon: "✚" },
+    { id: "zoo-demands", label: "Demandas", icon: "⚑" },
+    { id: "zoo-observations", label: "Observação do agressor", icon: "◎" },
+    { id: "zoo-leish", label: "Leishmaniose", icon: "⚗" },
+    { id: "zoo-shelter", label: "Canil e gatil", icon: "⌂" },
+    { id: "zoo-reports", label: "Relatórios de zoonoses", icon: "▤" },
+    { id: "zoo-settings", label: "Parâmetros de zoonoses", icon: "⚙" }
   ]},
   { label: "Regulação", items: [
     { id: "regulation-queue", label: "Fila regulada", icon: "⇉" },
@@ -417,6 +429,11 @@ export function navGroupsFor(
   // de rótulo: some só quando fica vazio, então com pharmacy desligado ele aparece só com este item.
   const vcOn = canUseVectorControl(user);
   const vc = vectorRoles(user);
+  // Módulo 35b (ADR 0054): `zoonoses` com o cadastro territorial utilizável e um papel de leitura. Campanhas e relatórios: quem
+  // lê (equipe, coordenação e municipal_admin); parâmetros: coordenação; o resto: equipe. "Demandas" exige também a ouvidoria (Q35).
+  const zooOn = canUseZoonoses(user);
+  const zoo = zoonosesRoles(user);
+  const zooDemandsOn = canUseZooDemands(user);
   return NAV_GROUPS.filter((group) => {
     if (group.label === "Conta") return !user?.operator;
     if (group.label === "Equipe") return isAdmin;
@@ -495,6 +512,10 @@ export function navGroupsFor(
       if (item.id === "regulation-returned") return regOn && isProfessional && hasFeature(user, "clinical_record");
       if (item.id === "regulation-offers") return regOn && (isAdmin || isCareRegulator);
       if (item.id === "regulation-settings") return regOn && isAdmin;
+      if (item.id === "zoo-campaigns" || item.id === "zoo-reports") return zooOn && zoo.reader;
+      if (item.id === "zoo-settings") return zooOn && zoo.coordinator;
+      if (item.id === "zoo-demands") return zooDemandsOn && zoo.team;
+      if (item.id.startsWith("zoo-")) return zooOn && zoo.team;
       if (item.id === "vector-ovitraps" || item.id === "vector-samples") return vcOn && (vc.coordinator || vc.lab);
       if (item.id === "vector-reports") return vcOn && canReadAnyVectorReport(vc);
       if (item.id === "field-ovitraps") return vcOn && isProfessional;
