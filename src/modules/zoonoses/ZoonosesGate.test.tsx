@@ -36,6 +36,14 @@ describe("ZoonosesGate", () => {
     expect(await screen.findByText(ZOO_NO_ROLE)).not.toBeNull();
     expect(children).not.toHaveBeenCalled();
   });
+  it("interruptor ligado e nenhum papel do centro: frase do papel, não a do desligado", async () => {
+    mocked(api.fetchCurrentSession).mockResolvedValue(zooUser([ "receptionist" ]));
+    const children = vi.fn(() => <p>corpo</p>);
+    renderWithProviders(gate(() => true, children));
+    expect(await screen.findByText(ZOO_NO_ROLE)).not.toBeNull();
+    expect(screen.queryByText(ZOONOSES_DISABLED)).toBeNull();
+    expect(children).not.toHaveBeenCalled();
+  });
   it("equipe: children com os papéis", async () => {
     mocked(api.fetchCurrentSession).mockResolvedValue(zooUser());
     const children = vi.fn((r: ZoonosesRoles) => <p>{r.team ? "corpo da equipe" : "x"}</p>);

@@ -3,7 +3,7 @@
 // utilizável) e papel antes de qualquer leitura. O api confere de novo (403 feature_disabled / missing_role).
 import type { ReactNode } from "react";
 import { useAuth } from "../../lib/auth";
-import { ZOO_NO_ROLE, canUseZoonoses, zoonosesRoles, type ZoonosesRoles } from "../../lib/zoonoses";
+import { ZOO_NO_ROLE, zoonosesRoles, zoonosesUsable, type ZoonosesRoles } from "../../lib/zoonoses";
 import { ZOONOSES_DISABLED } from "../../lib/zoonosesErrors";
 import { PageHeader } from "../../components/PageHeader";
 import { EmptyState } from "../../components/EmptyState";
@@ -17,8 +17,9 @@ export function ZoonosesGate({ title, sub, allow, children }: {
   const roles = zoonosesRoles(user);
   let body: ReactNode;
   if (user.operator) body = <EmptyState title={ZOO_NO_ROLE} />;
-  else if (!canUseZoonoses(user)) body = <EmptyState title={ZOONOSES_DISABLED} />;
-  else if (!allow(roles)) body = <EmptyState title={ZOO_NO_ROLE} />;
+  // Desligado = interruptor ou cadastro territorial; com o centro ligado, a falta de papel diz a frase do papel.
+  else if (!zoonosesUsable(user)) body = <EmptyState title={ZOONOSES_DISABLED} />;
+  else if (!roles.reader || !allow(roles)) body = <EmptyState title={ZOO_NO_ROLE} />;
   else body = children(roles);
   return (
     <div style={stack}>
