@@ -238,6 +238,63 @@ describe("edição", () => {
     expect(api.updateAnimal).toHaveBeenCalledWith("an1", { name: "Rex", expected_version: 3 });
     await waitFor(() => expect(api.getAnimal).toHaveBeenCalledTimes(2));
   });
+  it("apagar campos preenchidos manda null só neles; vazios que continuam vazios não vão", async () => {
+    await openHistory(history({ version: 3, name: "Thor", coat: "caramelo", breed: "SRD", size: "medium", birth_estimate_on: "2023-05-01" }));
+    click("Editar");
+    await screen.findByRole("form", { name: "Editar animal" });
+    set("Nome", "");
+    set("Pelagem", "");
+    set("Raça", "");
+    set("Porte", "");
+    set("Mês de nascimento (estimado)", "");
+    mocked(api.updateAnimal).mockResolvedValue(animal());
+    click("Salvar alterações");
+    await waitFor(() => expect(api.updateAnimal).toHaveBeenCalledTimes(1));
+    expect(api.updateAnimal).toHaveBeenCalledWith("an1", { name: null, coat: null, breed: null, size: null, birth_estimate_on: null, expected_version: 3 });
+  });
+  it("campos que já eram vazios e seguem vazios não vão", async () => {
+    await openHistory(history({ version: 3, coat: null, breed: null, size: null, birth_estimate_on: null }));
+    click("Editar");
+    await screen.findByRole("form", { name: "Editar animal" });
+    set("Nome", "Rex");
+    mocked(api.updateAnimal).mockResolvedValue(animal());
+    click("Salvar alterações");
+    await waitFor(() => expect(api.updateAnimal).toHaveBeenCalledTimes(1));
+    expect(api.updateAnimal).toHaveBeenCalledWith("an1", { name: "Rex", expected_version: 3 });
+  });
+  it("duplo envio manda uma vez só", async () => {
+    await openHistory(history({ version: 3 }));
+    click("Editar");
+    await screen.findByRole("form", { name: "Editar animal" });
+    set("Nome", "Rex");
+    let release: (a: api.Animal) => void = () => {};
+    mocked(api.updateAnimal).mockReturnValue(new Promise((r) => { release = r; }));
+    click("Salvar alterações");
+    click("Salvar alterações");
+    release(animal());
+    await waitFor(() => expect(api.getAnimal).toHaveBeenCalledTimes(2));
+    expect(api.updateAnimal).toHaveBeenCalledTimes(1);
+  });
+  it("edição: de tutor para comunitário (tutor null) e de comunitário para tutor", async () => {
+    await openHistory(history({ version: 3 }));
+    click("Editar");
+    await screen.findByRole("form", { name: "Editar animal" });
+    fireEvent.click(screen.getByLabelText("Comunitário (ninguém responde pelo animal)"));
+    mocked(api.updateAnimal).mockResolvedValue(animal({ community: true, has_tutor: false }));
+    click("Salvar alterações");
+    await waitFor(() => expect(api.updateAnimal).toHaveBeenCalledTimes(1));
+    expect(api.updateAnimal).toHaveBeenLastCalledWith("an1", { tutor_patient_id: null, community: true, expected_version: 3 });
+    cleanup();
+    mocked(api.updateAnimal).mockClear();
+    await openHistory(history({ version: 4, tutor: null, has_tutor: false, community: true }));
+    click("Editar");
+    await screen.findByRole("form", { name: "Editar animal" });
+    await lookupTutor();
+    mocked(api.updateAnimal).mockResolvedValue(animal());
+    click("Salvar alterações");
+    await waitFor(() => expect(api.updateAnimal).toHaveBeenCalledTimes(1));
+    expect(api.updateAnimal).toHaveBeenLastCalledWith("an1", { tutor_patient_id: "pt1", community: false, expected_version: 4 });
+  });
   it("sem mudança: não envia", async () => {
     await openHistory();
     click("Editar");

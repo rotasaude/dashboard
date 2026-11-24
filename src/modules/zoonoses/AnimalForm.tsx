@@ -28,7 +28,6 @@ type HouseholdChoice = "keep" | "none" | "tutor" | "other";
 const NOTHING_CHANGED = "nada mudou";
 
 const asPerson = (a: AnimalHistory | undefined): ZooPerson | null => (a?.tutor ? { patient: { id: a.tutor.id, display_name: a.tutor.display_name }, household: null } : null);
-const isAnimalStale = (err: unknown) => isZoonosesStale(err);
 
 export function AnimalForm({ animal, onSaved, onStale, onCancel }: {
   animal?: AnimalHistory; onSaved(a: Animal): void; onStale?(text: string): void; onCancel?(): void;
@@ -37,7 +36,7 @@ export function AnimalForm({ animal, onSaved, onStale, onCancel }: {
   const edit = !!animal;
   const f = useFormProblems({
     refusals: (err) => zoonosesRefusals(err).map((r) => ({ ...r, participantIndex: null })),
-    isStale: isAnimalStale
+    isStale: (err) => isZoonosesStale(err)
   });
   const [ species, setSpecies ] = useState<string>(animal?.species ?? "");
   const [ name, setName ] = useState(animal?.name ?? "");
@@ -88,16 +87,22 @@ export function AnimalForm({ animal, onSaved, onStale, onCancel }: {
     };
   }
 
-  // Só o que mudou. Campo de texto apagado não se envia (o api não limpa texto).
+  // Só o que mudou; campo que tinha valor e ficou vazio vai como `null` (o api limpa).
   function patchBody(a: AnimalHistory): AnimalPatch {
     const t = (v: string) => v.trim();
     const p: AnimalPatch = { expected_version: a.version };
-    if (t(name) && t(name) !== (a.name ?? "")) p.name = t(name);
+    const text = (key: "name" | "coat" | "breed", v: string) => {
+      const was = a[key] ?? "";
+      if (t(v) === was) return;
+      if (t(v)) p[key] = t(v);
+      else if (was) p[key] = null;
+    };
+    text("name", name);
+    text("coat", coat);
+    text("breed", breed);
     if (sex !== a.sex) p.sex = sex as AnimalSex;
-    if (size && size !== (a.size ?? "")) p.size = size as AnimalSize;
-    if (t(coat) && t(coat) !== (a.coat ?? "")) p.coat = t(coat);
-    if (t(breed) && t(breed) !== (a.breed ?? "")) p.breed = t(breed);
-    if (birthDate && birthDate !== a.birth_estimate_on) p.birth_estimate_on = birthDate;
+    if (size !== (a.size ?? "")) p.size = size ? (size as AnimalSize) : null;
+    if (birthDate !== (a.birth_estimate_on ?? "")) p.birth_estimate_on = birthDate || null;
     const was = a.tutor?.id ?? null;
     const now = tutor?.patient.id ?? null;
     if (now !== was) p.tutor_patient_id = now;

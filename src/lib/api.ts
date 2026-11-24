@@ -8327,7 +8327,9 @@ export interface AnimalInput {
   microchip?: string; registry_number?: string; household_id?: string | null; tutor_patient_id?: string | null; community: boolean;
 }
 // Q20/Q25: o microchip e o registro só na criação; a espécie não muda.
-export type AnimalPatch = Partial<Omit<AnimalInput, "microchip" | "species">> & { status?: AnimalStatus; status_on?: string; expected_version: number };
+// `null` limpa o campo (nome, pelagem, raça, porte, nascimento).
+export type AnimalPatch = Partial<Omit<AnimalInput, "microchip" | "species" | "name" | "coat" | "breed" | "size" | "birth_estimate_on">> & {
+  name?: string | null; coat?: string | null; breed?: string | null; size?: AnimalSize | null; birth_estimate_on?: string | null; status?: AnimalStatus; status_on?: string; expected_version: number };
 // Exatamente uma chave; `before` só com tutor ou domicílio (o cursor vai no corpo).
 export type AnimalSearch =
   | { microchip: string } | { registry_number: string } | { tutor_patient_id: string; before?: string } | { household_id: string; before?: string };
