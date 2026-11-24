@@ -132,6 +132,17 @@ describe("ZooObservations", () => {
     expect(api.getAnimal).toHaveBeenCalledTimes(1);
   });
 
+  it("eutanasiado sem animal ligado: Dar entrada no canil (a entrada por observação liga o animal), sem ler animal", async () => {
+    const go = vi.fn();
+    mocked(api.getObservation).mockResolvedValue(detail({ animal_id: null }));
+    await openDetail(TODAY35B, go);
+    click("Registrar desfecho");
+    set("Desfecho", "euthanized");
+    fireEvent.click(await screen.findByRole("button", { name: "Dar entrada no canil" }));
+    expect(go).toHaveBeenCalledTimes(1);
+    expect(api.getAnimal).not.toHaveBeenCalled();
+  });
+
   it("eutanasiado com estada aberta: Ir para Canil e gatil", async () => {
     mocked(api.getAnimal).mockResolvedValue(history({ stays: [ { id: "st1", health_unit_id: "uvz1", entry_kind: "collection", entered_on: "2026-11-20", exit_kind: null, exited_on: null, bite_observation_id: null } ] }));
     await openDetail(TODAY35B, vi.fn());

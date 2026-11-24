@@ -120,7 +120,11 @@ export function ObservationDetail({ id, today, onChanged, onGoToShelter }: { id:
             </select>
           </label>
           {outcome === "euthanized" && <p style={muted}>{EUTHANASIA_HINT}</p>}
-          {outcome === "euthanized" && onGoToShelter && hist.data && !hist.data.euthanasia && (
+          {outcome === "euthanized" && onGoToShelter && !o.animal_id && (
+            // Sem animal ligado: a entrada por observação no canil liga o animal (Q42).
+            <div style={row}><ActionButton variant="secondary" onClick={onGoToShelter}>Dar entrada no canil</ActionButton></div>
+          )}
+          {outcome === "euthanized" && onGoToShelter && o.animal_id && hist.data && !hist.data.euthanasia && (
             <div style={row}>
               <ActionButton variant="secondary" onClick={onGoToShelter}>{hasOpenStay(hist.data) ? "Ir para Canil e gatil" : "Dar entrada no canil"}</ActionButton>
             </div>
