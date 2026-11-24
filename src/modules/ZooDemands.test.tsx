@@ -167,4 +167,62 @@ describe("ZooDemands", () => {
     view();
     await screen.findByText(ZOONOSES_OMBUDSMAN_DISABLED);
   });
+  it("Abertas lê open, scheduled e inspected; Carregar mais avança o cursor de cada estado e mantém a ordem global", async () => {
+    mocked(api.listDemands).mockImplementation(async ({ state, before }: { state?: string; before?: string | null }) => {
+      if (state === "open") return before ? { items: [ demand({ id: "o2", due_on: "2026-12-05" }) ], next_before: null } : { items: [ demand({ id: "o1", due_on: "2026-12-01" }) ], next_before: "co" };
+      if (state === "scheduled") return before ? { items: [ demand({ id: "s2", state: "scheduled", due_on: "2026-11-27" }) ], next_before: null } : { items: [ demand({ id: "s1", state: "scheduled", due_on: "2026-12-03" }) ], next_before: "cs" };
+      return { items: [], next_before: null };
+    });
+    const { container } = view();
+    await screen.findByRole("button", { name: "Carregar mais" });
+    expect(mocked(api.listDemands).mock.calls.map((c) => c[0].state).sort()).toEqual([ "inspected", "open", "scheduled" ]);
+    fireEvent.click(screen.getByRole("button", { name: "Carregar mais" }));
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Carregar mais" })).toBeNull());
+    const calls = mocked(api.listDemands).mock.calls.map((c) => c[0]);
+    expect(calls).toContainEqual({ state: "open", before: "co" });
+    expect(calls).toContainEqual({ state: "scheduled", before: "cs" });
+    expect(calls.filter((c) => c.state === "inspected")).toHaveLength(1);
+    const dues = [ ...container.querySelectorAll("[role=row], tr") ].map((r) => /(\d{2}\/\d{2})/.exec(r.textContent ?? "")?.[1]).filter(Boolean);
+    expect(dues).toEqual([ "27/11", "01/12", "03/12", "05/12" ]);
+  });
+
+  it("409 demand_changed: frase e uma releitura, sem reenviar", async () => {
+    mocked(api.declineDemand).mockRejectedValue(err(409, { error: "demand_changed" }));
+    await openDetail();
+    const before = mocked(api.getDemand).mock.calls.length;
+    click("Não é do centro");
+    set("Texto da resposta", "x".repeat(10));
+    await send();
+    await screen.findByText(/demanda mudou/);
+    await waitFor(() => expect(mocked(api.getDemand).mock.calls.length).toBe(before + 1));
+    expect(api.declineDemand).toHaveBeenCalledTimes(1);
+  });
+
+  it("duplo clique em Enviar envia uma vez", async () => {
+    let release: (v: unknown) => void = () => {};
+    mocked(api.closeDemand).mockReturnValue(new Promise((r) => { release = r; }));
+    await openDetail();
+    click("Encerrar");
+    set("Desfecho", "resolved");
+    set("Texto da resposta", TEXT20);
+    const b = await screen.findByRole("button", { name: "Enviar" });
+    fireEvent.click(b);
+    fireEvent.click(b);
+    release(demandDetail({ state: "closed" }));
+    await waitFor(() => expect(api.closeDemand).toHaveBeenCalledTimes(1));
+  });
+
+  it("desfecho de código desconhecido aparece cru; ações ficam visíveis e desabilitadas enquanto relê", async () => {
+    mocked(api.getDemand).mockResolvedValue(demandDetail({ state: "closed", forwarding_state: "replied", outcome: "novo_codigo" as never }));
+    await openDetail();
+    expect(screen.getByText(/novo_codigo/)).not.toBeNull();
+  });
+
+  it("depois de sair do detalhe nada dele fica no cache", async () => {
+    const { client } = await openDetail();
+    fireEvent.click(screen.getByRole("tab", { name: "Encerradas" }));
+    await waitFor(() => expect(screen.queryByText("Rua das Palmeiras, 45")).toBeNull());
+    expect(client.getQueryCache().getAll().some((q) => q.queryKey[0] === "zooDemand")).toBe(false);
+  });
+
 });

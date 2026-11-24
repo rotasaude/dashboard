@@ -47,11 +47,12 @@ function Demands({ today }: { today: string }) {
       const pages = await Promise.all(wanted.map(async (s) => ({ s, page: await listDemands({ state: s, before: pageParam[s] ?? null }) })));
       const next: Cursors = {};
       for (const { s, page } of pages) if (page.next_before) next[s] = page.next_before;
-      return { items: pages.flatMap((p) => p.page.items).sort((a, b) => a.due_on.localeCompare(b.due_on)), next };
+      return { items: pages.flatMap((p) => p.page.items), next };
     },
     getNextPageParam: (last) => (Object.keys(last.next).length > 0 ? onlyNext(last.next, tab) : undefined)
   });
-  const rows = q.data?.pages.flatMap((p) => p.items) ?? [];
+  // Ordem global por prazo sobre todas as páginas já lidas (cada leitura vem ordenada só dentro do próprio estado).
+  const rows = (q.data?.pages.flatMap((p) => p.items) ?? []).slice().sort((a, b) => a.due_on.localeCompare(b.due_on));
   const reread = () => client.invalidateQueries({ queryKey: [ ZOO_DEMANDS_KEY ] });
 
   const cols: Column<ZoonosesDemand>[] = [

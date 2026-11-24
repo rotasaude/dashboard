@@ -26,7 +26,7 @@ export const CLOSE_NOTE = "este texto vai à ouvidoria como a resposta do encami
 export function DemandDetail({ id, today, onChanged }: { id: string; today: string; onChanged(): void }) {
   const client = useQueryClient();
   const domains = useZooDomains().data;
-  const q = useQuery({ queryKey: [ ZOO_DEMAND_KEY, id ], queryFn: () => getDemand(id), ...NOMINAL_QUERY });
+  const q = useQuery({ queryKey: [ ZOO_DEMAND_KEY, id ], queryFn: () => getDemand(id), ...NOMINAL_QUERY, gcTime: 0 });
   const [ action, setAction ] = useState<DemandAction | null>(null);
   const [ date, setDate ] = useState("");
   const [ note, setNote ] = useState("");
@@ -70,7 +70,8 @@ export function DemandDetail({ id, today, onChanged }: { id: string; today: stri
 
   if (q.isLoading) return <p style={muted}>carregando…</p>;
   if (q.isError || !d) return <EmptyState title={q.error ? zoonosesRefusals(q.error)[0].text : "demanda não encontrada"} />;
-  const actions = q.isFetching ? [] : demandActions(d);
+  const actions = demandActions(d);
+  const waiting = q.isFetching ? "atualizando…" : null;
   const needsDate = action === "schedule" || action === "inspect";
   return (
     <section style={panel} aria-label="Demanda">
@@ -87,7 +88,7 @@ export function DemandDetail({ id, today, onChanged }: { id: string; today: stri
       {d.outcome && <p style={muted}>Desfecho: {zooLabel(domains?.demand_outcomes, d.outcome)}</p>}
       {notice && <p role="status" style={okText}>{notice}</p>}
       {!action && actions.length > 0 && (
-        <div style={row}>{actions.map((a) => <ActionButton key={a} variant="secondary" onClick={() => open(a)}>{LABEL[a]}</ActionButton>)}</div>
+        <div style={row}>{actions.map((a) => <ActionButton key={a} variant="secondary" disabledReason={waiting} onClick={() => open(a)}>{LABEL[a]}</ActionButton>)}</div>
       )}
       {action && (
         <form style={box} aria-label={LABEL[action]} onSubmit={(e) => e.preventDefault()}>
@@ -129,7 +130,7 @@ export function DemandDetail({ id, today, onChanged }: { id: string; today: stri
           )}
           {problems.map((p) => <p key={p} role="alert" style={alert}>{p}</p>)}
           <div style={row}>
-            <ActionButton busy={busy} onClick={send}>Enviar</ActionButton>
+            <ActionButton busy={busy} disabledReason={waiting} onClick={send}>Enviar</ActionButton>
             <ActionButton variant="secondary" onClick={() => { if (!busy) setAction(null); }}>Voltar</ActionButton>
           </div>
         </form>
