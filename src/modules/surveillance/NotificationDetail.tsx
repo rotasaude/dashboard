@@ -109,10 +109,16 @@ export function NotificationDetail({ id, onClose, onChanged, formSlot = defaultF
           {n.animal_observation && (
             <div>
               <h4 style={title}>Condição final do animal após a observação</h4>
-              <p style={muted}>{`Observação ${observationStateLabel(n.animal_observation.state)} · fim em ${fmtDay(n.animal_observation.ends_on)}`}</p>
-              <p>{n.animal_observation.outcome
-                ? `${observationOutcomeLabel(n.animal_observation.outcome)}${n.animal_observation.outcome_on ? ` · ${fmtDay(n.animal_observation.outcome_on)}` : ""}`
-                : `observação em curso até ${fmtDay(n.animal_observation.ends_on)}`}</p>
+              {n.animal_observation.state === "open" ? (
+                <p>{`observação em curso até ${fmtDay(n.animal_observation.ends_on)}`}</p>
+              ) : (
+                <>
+                  <p style={muted}>{`Observação ${observationStateLabel(n.animal_observation.state)} · fim em ${fmtDay(n.animal_observation.ends_on)}`}</p>
+                  <p>{n.animal_observation.outcome
+                    ? `${observationOutcomeLabel(n.animal_observation.outcome)}${n.animal_observation.outcome_on ? ` · ${fmtDay(n.animal_observation.outcome_on)}` : ""}`
+                    : "desfecho ainda não informado"}</p>
+                </>
+              )}
             </div>
           )}
           {formSlot(n, formSaved)}

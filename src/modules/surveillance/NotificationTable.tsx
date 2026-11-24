@@ -49,7 +49,9 @@ export function NotificationTable({ rows, onOpen }: { rows: SurveillanceNotifica
     { label: "Situação", w: "1.2fr", render: (n) => (
         <span style={tagRow}>
           <Tag tone={statusTone(n.status)}>{statusLabel(n.status)}</Tag>
-          {n.animal_outcome_pending && <Tag tone="warn">Desfecho pendente</Tag>}
+          {n.animal_outcome_pending && (
+            <span title="Confira o desfecho e encerre a notificação"><Tag tone="warn">Observação do animal concluída</Tag></span>
+          )}
         </span>
       ) },
     {

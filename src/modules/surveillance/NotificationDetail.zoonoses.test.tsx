@@ -78,6 +78,24 @@ describe("notificação do 25 com o animal (35b)", () => {
   it("fila: animal_outcome_pending vira o sinal da linha", () => {
     renderWithProviders(<NotificationTable onOpen={vi.fn()} rows={[
       notification({ id: "a", animal_outcome_pending: true }), notification({ id: "b", animal_outcome_pending: false }) ]} />);
-    expect(screen.getAllByText("Desfecho pendente")).toHaveLength(1);
+    expect(screen.getAllByText("Observação do animal concluída")).toHaveLength(1);
+    expect(screen.getByTitle("Confira o desfecho e encerre a notificação")).not.toBeNull();
+    // "Desfecho pendente" é a lista de cães reagentes da leishmaniose, não o sinal da fila do 25.
+    expect(screen.queryByText("Desfecho pendente")).toBeNull();
+  });
+
+  it("observação encerrada sem desfecho não diz em curso; a data do fim aparece uma vez", async () => {
+    mocked(api.getNotification).mockResolvedValue(notification({ disease: RABIES,
+      animal_observation: { state: "closed", ends_on: "2026-11-25", outcome: null, outcome_on: null } }));
+    const first = open();
+    expect(await screen.findByText("Condição final do animal após a observação")).not.toBeNull();
+    expect(screen.queryByText(/em curso/)).toBeNull();
+    expect(screen.getAllByText(/25\/11\/2026/)).toHaveLength(1);
+    first.unmount();
+    mocked(api.getNotification).mockResolvedValue(notification({ disease: RABIES,
+      animal_observation: { state: "open", ends_on: "2026-11-25", outcome: null, outcome_on: null } }));
+    open();
+    await screen.findByText("observação em curso até 25/11/2026");
+    expect(screen.getAllByText(/25\/11\/2026/)).toHaveLength(1);
   });
 });

@@ -6,6 +6,7 @@
 // corta: o digitado vai como está e o api normaliza (espaço colapsado, pontuação
 // de dígitos fora). A ficha é dado de saúde: as mensagens nunca repetem o valor.
 import type { NotificationForm } from "./api";
+import { todayInCity } from "./campaigns";
 import { UFS } from "./professionals";
 
 export type FormFieldKind = "code" | "text" | "digits" | "uf" | "cbo" | "date" | "bool";
@@ -99,11 +100,6 @@ const CONTROL = /[\u0000-\u001f\u007f-\u009f]/;
 
 export interface FormProblem { path: string; message: string }
 
-function localToday(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
 function fieldProblem(f: FormFieldSpec, raw: string): string | null {
   const text = squish(raw);
   if (text === "") return null;
@@ -121,7 +117,7 @@ function fieldProblem(f: FormFieldSpec, raw: string): string | null {
     case "date": {
       const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
       const real = m !== null && new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])).toISOString().slice(0, 10) === text;
-      return real && text <= localToday() ? null : `${f.label}: data que exista, até hoje`;
+      return real && text <= todayInCity() ? null : `${f.label}: data que exista, até hoje`;
     }
     case "digits": {
       const number = text.replace(PUNCTUATION, "");
