@@ -132,6 +132,8 @@ describe("inquéritos", () => {
     expect(await screen.findByText("escolha o quarteirão central")).not.toBeNull();
     expect(api.suggestLeishSurvey).not.toHaveBeenCalled();
     set("Quarteirão central", "cb2");
+    expect(screen.getByLabelText("Anéis em volta do central (o sistema amplia os anéis até o mínimo de cães)")).not.toBeNull();
+    expect(screen.getByRole("form", { name: /inquérito/i }).textContent).not.toMatch(/\bapi\b/);
     click("Sugerir quarteirões");
     await waitFor(() => expect(api.suggestLeishSurvey).toHaveBeenCalledWith({ kind: "focus", neighborhood_id: "nb1", center_city_block_id: "cb2", rings: 1 }));
     expect(await screen.findByText(focusBelowMinText(100))).not.toBeNull();

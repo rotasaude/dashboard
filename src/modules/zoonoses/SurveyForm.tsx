@@ -175,7 +175,7 @@ export function SurveyForm({ survey, onSaved, onStale, onCancel }: {
             </select>
           </label>
           {f.errNode("center_city_block_id")}
-          {field("rings", "Anéis em volta do central (o api amplia até o mínimo de cães)", rings, setRings)}
+          {field("rings", "Anéis em volta do central (o sistema amplia os anéis até o mínimo de cães)", rings, setRings)}
         </>
       )}
       <div style={row}>
