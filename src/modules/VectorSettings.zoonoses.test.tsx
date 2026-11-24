@@ -38,8 +38,11 @@ describe("VectorSettings só com zoonoses", () => {
     mount();
     expect(await screen.findByText("Produtos de campo")).not.toBeNull();
     expect(await screen.findByText("Local de estoque")).not.toBeNull();
-    expect(screen.queryByText(/parâmetros técnicos/i)).toBeNull();
+    // O painel do 35a tem os próprios controles (parâmetros versionados); nenhum aparece.
+    expect(screen.queryByText("Parâmetros técnicos")).toBeNull();
+    expect(screen.queryByRole("region", { name: /Parâmetros técnicos/ })).toBeNull();
     expect(api.getVectorParameters).not.toHaveBeenCalled();
+    expect(api.getVectorDiseases).not.toHaveBeenCalled();
   });
 
   it("produto novo com a vacina: un e 1,00 fixos, corpo exato; collar desabilita os outros usos", async () => {
@@ -121,6 +124,12 @@ describe("VectorSettings só com zoonoses", () => {
     fireEvent.click(screen.getByRole("button", { name: "Salvar produto" }));
     await waitFor(() => expect(api.updateVectorProduct).toHaveBeenCalledTimes(1));
     expect(mocked(api.updateVectorProduct)).toHaveBeenCalledTimes(1);
+    expect((await screen.findByRole("alert")).textContent).toContain("marque ao menos um uso");
+  });
+
+  it("sub do painel de produtos: só zoonoses; os dois; só 35a", async () => {
+    mount();
+    expect(await screen.findByText("vacina antirrábica animal e coleira")).not.toBeNull();
   });
 });
 

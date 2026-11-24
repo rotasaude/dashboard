@@ -98,9 +98,13 @@ describe("Units — vigilância ambiental (módulo 35a)", () => {
 });
 
 describe("Attendance — unidade de vigilância ambiental só com zoonoses (35b)", () => {
-  it("canUseVectorSupplies abre o tipo com zoonoses e sem vector_control", async () => {
+  it("com o vectorOn de quem só tem zoonoses, a unidade nova oferece o tipo", async () => {
     const { canUseVectorSupplies } = await import("../../lib/vectorControl");
     const { zooUser } = await import("../../test/zoonosesFixtures");
-    expect(canUseVectorSupplies(zooUser([ "municipal_admin" ]))).toBe(true);
+    mocked(api.listAllUnits).mockResolvedValue([ UBS ]);
+    mocked(api.listNeighborhoods).mockResolvedValue([]);
+    renderUnits(canUseVectorSupplies(zooUser([ "municipal_admin" ])));
+    fireEvent.click(await screen.findByRole("button", { name: "Nova unidade" }));
+    expect(screen.getByRole("option", { name: LABEL })).not.toBeNull();
   });
 });

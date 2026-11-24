@@ -18,6 +18,8 @@ import { fmtDay } from "../lib/exams";
 import { fmtDateTime } from "../lib/format";
 import { isNetworkOrServer } from "../lib/homeVisits";
 import { errorPath, fmtQuantity, isVectorLocation } from "../lib/pharmacy";
+import { useAuth } from "../lib/auth";
+import { canUseZoonoses } from "../lib/zoonoses";
 import { STATIC_QUERY, VC_SHORTFALLS_KEY, noteProblem, shortfallCauseLabel, vectorError } from "../lib/vectorControl";
 import { VECTOR_ERRORS } from "../lib/vectorErrors";
 import { SegmentedControl } from "../shell/SegmentedControl";
@@ -62,6 +64,9 @@ const reconcilerText = (s: VectorShortfall) => (s.reconciled_by ? `conciliada po
 
 // `scope`: o local vector_control do almoxarife; null = a coordenação lendo todas.
 function Shortfalls({ scope }: { scope: string | null }) {
+  const { user } = useAuth();
+  // 35a inalterado: "Origem" e a data genérica só com `zoonoses` utilizável (35b).
+  const zooOn = canUseZoonoses(user);
   const queryClient = useQueryClient();
   const [ state, setState ] = useState<State>("open");
   const [ target, setTarget ] = useState<VectorShortfall | null>(null);
@@ -83,7 +88,7 @@ function Shortfalls({ scope }: { scope: string | null }) {
   if (list.isError && !list.data && errorCode(list.error) === "missing_role") return <EmptyState title={VC_NO_STOCK_LOCATION} />;
 
   return (
-    <Panel title="Faltas de insumo de campo" sub="só o produto, a quantidade, a causa, o local, a origem e o dia">
+    <Panel title="Faltas de insumo de campo" sub={zooOn ? "só o produto, a quantidade, a causa, o local, a origem e o dia" : "só o produto, a quantidade, a causa, o local e o dia da visita"}>
       <div style={{ ...stack, padding: 16 }}>
         <p style={muted}>{RECONCILE_HINT}</p>
         <div><SegmentedControl options={TABS} value={state} onChange={(s) => { setState(s); setTarget(null); clear(); }} /></div>
@@ -94,8 +99,12 @@ function Shortfalls({ scope }: { scope: string | null }) {
         {list.data && (
           <DataTable<VectorShortfall>
             cols={[
-              { label: "Data", w: "1fr", render: (s) => <span className="mono">{fmtDay(s.occurred_on ?? s.visit_on)}</span> },
-              { label: "Origem", w: "1fr", render: (s) => sourceText(s) },
+              ...(zooOn ? [
+                { label: "Data", w: "1fr", render: (s: VectorShortfall) => <span className="mono">{fmtDay(s.occurred_on ?? s.visit_on)}</span> },
+                { label: "Origem", w: "1fr", render: (s: VectorShortfall) => sourceText(s) }
+              ] : [
+                { label: "Data da visita", w: "1fr", render: (s: VectorShortfall) => <span className="mono">{fmtDay(s.visit_on)}</span> }
+              ]),
               { label: "Produto", w: "2fr", card: "title", render: (s) => productText(s) },
               { label: "Quantidade", w: "1fr", render: (s) => quantityText(s) },
               { label: "Causa", w: "1.5fr", render: (s) => shortfallCauseLabel(s.cause) },

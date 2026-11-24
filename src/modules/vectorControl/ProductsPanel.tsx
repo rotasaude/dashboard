@@ -84,12 +84,15 @@ export function ProductsPanel() {
   const domains = useQuery({ queryKey: [ VC_DOMAINS_KEY ], queryFn: getVectorDomains, ...STATIC_QUERY });
   const [ editing, setEditing ] = useState<Editing | null>(null);
   const msg = useActionMessage();
+  const vcUses = offered.some((u) => !isZooUse(u));
+  const zooUses = offered.some(isZooUse);
+  const sub = !zooUses ? "inseticidas e larvicidas do boletim" : vcUses ? "inseticidas e larvicidas do boletim, vacina antirrábica animal e coleira" : "vacina antirrábica animal e coleira";
   const methods = domains.data?.measure_methods ?? [];
   const useLabel = (u: string) => ZOO_LABEL[u] ?? domainLabel(methods, u);
 
   const list = products.data ?? [];
   return (
-    <Panel title="Produtos de campo" sub="inseticidas e larvicidas do boletim">
+    <Panel title="Produtos de campo" sub={sub}>
       <div style={stack}>
         {products.isError ? <p role="alert" style={alert}>{vectorError(products.error)}</p>
           : !products.data ? <p role="status" style={muted}>Carregando…</p>
