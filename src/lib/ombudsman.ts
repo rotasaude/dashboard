@@ -15,6 +15,7 @@ import { featureDisabledKey, featureLabel, hasFeature } from "./features";
 import { fmtNumber, fmtPercent } from "./format";
 import type { Problem, Refusal } from "./pharmacy";
 import { isSuppressed } from "./smallCount";
+import { ZOONOSES_ERRORS } from "./zoonosesErrors";
 import type { SmallCount } from "./types";
 
 export { NOMINAL_QUERY, STATIC_QUERY };
@@ -105,6 +106,8 @@ export const OMBUDSMAN_ERRORS: Record<string, string> = {
   missing_role: OMBUDSMAN_NO_ROLE,
   not_found: "não encontrado — a lista foi atualizada",
   link_expired: "o endereço do anexo venceu — abra de novo",
+  // Módulo 35b: o assunto reservado do centro de zoonoses não se desativa com o centro ligado (corrida com a sessão).
+  reserved_subject: ZOONOSES_ERRORS.reserved_subject,
   manifestation_changed: MANIFESTATION_CHANGED,
   forwarding_changed: "o encaminhamento mudou enquanto a tela estava aberta — os dados foram relidos",
   already_decided: "este pedido de reabertura já foi decidido",

@@ -4,6 +4,9 @@
 // `ombudsmanRefusals`. Nada em storage.
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { IconLock } from "@tabler/icons-react";
+import { useAuth } from "../../lib/auth";
+import { hasFeature } from "../../lib/features";
 import { createOmbudsmanSubject, listOmbudsmanSubjects, updateOmbudsmanSubject } from "../../lib/api";
 import { OMB_OPTIONS_KEY, OMB_SUBJECTS_KEY, STATIC_QUERY, nameProblem, ombudsmanError, ombudsmanRefusals } from "../../lib/ombudsman";
 import { useActionMessage } from "../../lib/useActionMessage";
@@ -16,7 +19,9 @@ import { alert, fieldLabel, form, muted, row, stack } from "../exams/styles";
 import { useFormProblems } from "../psychosocial/useFormProblems";
 import { RenameInline } from "./RenameInline";
 
-type Item = { id: string; name: string; active: boolean };
+// `code` (módulo 35b, Q14): assunto reservado do centro de zoonoses; nulo no assunto da cidade.
+type Item = { id: string; name: string; active: boolean; code?: string | null };
+const RESERVED_LABEL = "assunto reservado do centro de zoonoses";
 
 function NewSubject({ roots, onCreated }: { roots: Item[]; onCreated(): void }) {
   const f = useFormProblems({ refusals: (err) => ombudsmanRefusals(err).map((r) => ({ ...r, participantIndex: null })) });
@@ -56,6 +61,10 @@ function SubjectRow({ s, child, onChanged, msg }: {
   s: Item; child: boolean; onChanged(): void; msg: ReturnType<typeof useActionMessage>;
 }) {
   const [ renaming, setRenaming ] = useState(false);
+  const { user } = useAuth();
+  const reserved = !!s.code;
+  // Com o centro ligado, o reservado só renomeia (o api também recusa com 409 `reserved_subject`); reativar continua.
+  const lockedOn = reserved && s.active && hasFeature(user, "zoonoses");
   // Só a chave que muda: o nome ou a situação lidos antes não vão junto (desfariam a mudança de outra pessoa).
   const save = async (change: { name: string } | { active: boolean }) => { await updateOmbudsmanSubject(s.id, change); onChanged(); };
   const toggle = async () => {
@@ -73,12 +82,13 @@ function SubjectRow({ s, child, onChanged, msg }: {
         <>
           <span style={row}>
             <strong style={{ fontWeight: child ? 400 : 600 }}>{s.name}</strong>
+            {reserved && <IconLock size={14} role="img" aria-label={RESERVED_LABEL} />}
             {!s.active && <Tag tone="info">desativado</Tag>}
           </span>
           <span style={row}>
             <button type="button" style={secondaryButtonStyle} aria-label={`Renomear ${s.name}`} onClick={() => { msg.start(); setRenaming(true); }}>Renomear</button>
-            <ConfirmButton label={s.active ? `Desativar ${s.name}` : `Reativar ${s.name}`}
-              question={s.active ? `Desativar o assunto ${s.name}?` : `Reativar o assunto ${s.name}?`} onConfirm={toggle} />
+            {!lockedOn && <ConfirmButton label={s.active ? `Desativar ${s.name}` : `Reativar ${s.name}`}
+              question={s.active ? `Desativar o assunto ${s.name}?` : `Reativar o assunto ${s.name}?`} onConfirm={toggle} />}
           </span>
         </>
       )}

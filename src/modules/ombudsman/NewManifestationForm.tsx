@@ -8,14 +8,17 @@
 import { useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
-  createOmbudsmanManifestation, getOmbudsmanOptions, type IdentificationMode, type NewManifestationInput, type OmbudsmanKind,
+  createOmbudsmanManifestation, getOmbudsmanOptions, type DemandSubtype, type IdentificationMode, type NewManifestationInput, type OmbudsmanKind,
   type OmbudsmanStaffChannel
 } from "../../lib/api";
 import { onlyDigits } from "../../lib/attendance";
+import { useAuth } from "../../lib/auth";
 import {
   OMB_OPTIONS_KEY, STATIC_QUERY, channelLabel, kindLabel, modeLabel, newManifestationProblems, ombudsmanError, type NewDraft
 } from "../../lib/ombudsman";
 import type { Problem } from "../../lib/pharmacy";
+import { ZOONOSES_SUBTYPES, zoonosesUsable } from "../../lib/zoonoses";
+import { textProblem } from "../../lib/homeVisits";
 import { buttonStyle, disabledButtonStyle, inputStyle } from "../../components/formStyles";
 import { checkLabel, fieldLabel, fieldset, form, legend, muted, row } from "../exams/styles";
 import { useActionForm } from "./useManifestationAction";
@@ -33,8 +36,10 @@ const ANONYMOUS_LABEL = "Anônima (só denúncia)";
 // Paths que têm lugar no formulário; o resto vai ao topo.
 const OWN = [
   "kind", "identification_mode", "channel", "ouvidorsus_number", "person", "citizen_id", "manifestant_name", "manifestant_contact",
-  "manifestant_cpf", "health_unit_id", "body", "attachments"
+  "manifestant_cpf", "health_unit_id", "body", "attachments", "zoonoses_subtype", "place_address"
 ];
+const SUBTYPE_REQUIRED = "escolha o tipo do problema";
+const ZOO_QUESTION = "É sobre animais, insetos ou bichos?";
 
 const filled = (v: string): string | null => (v.trim() === "" ? null : v.trim());
 
@@ -48,11 +53,18 @@ export function NewManifestationForm({ onCreated }: { onCreated(c: CreatedManife
   const [ person, setPerson ] = useState<PersonValue>(EMPTY_PERSON);
   const [ unitId, setUnitId ] = useState("");
   const [ body, setBody ] = useState("");
+  // Demanda de zoonoses (Q14): só em Solicitação e Denúncia, com o centro ligado e a ouvidoria; o endereço só vai no corpo.
+  const { user } = useAuth();
+  const [ zoo, setZoo ] = useState(false);
+  const [ subtype, setSubtype ] = useState("");
+  const [ place, setPlace ] = useState("");
   const [ files, setFiles ] = useState<File[]>([]);
   // Anexos já subidos nesta tela (reaproveitados se o registro falhar e a pessoa tentar de novo).
   const uploaded = useRef(new Map<File, string>());
   const { aria, errNode, busy } = f;
   const anonymous = mode === "anonymous";
+  const zooOffered = zoonosesUsable(user) && (kind === "request" || kind === "report");
+  const zooOn = zooOffered && zoo;
 
   const check = (): Problem[] => {
     const list: Problem[] = [];
@@ -70,6 +82,11 @@ export function NewManifestationForm({ onCreated }: { onCreated(c: CreatedManife
       healthUnitId: unitId || null,
       files
     };
+    if (zooOn) {
+      if (subtype === "") list.push({ path: "zoonoses_subtype", text: SUBTYPE_REQUIRED });
+      const p = textProblem(place, { min: 10, max: 300, path: "place_address" });
+      if (p) list.push(p);
+    }
     list.push(...newManifestationProblems(draft).map((p) => (p.path === "body" ? { ...p, text: BODY_TEXT } : p)));
     return list;
   };
@@ -89,6 +106,10 @@ export function NewManifestationForm({ onCreated }: { onCreated(c: CreatedManife
         if (cpf) out.manifestant_cpf = cpf;
       }
     }
+    if (zooOn) {
+      out.zoonoses_subtype = subtype as DemandSubtype;
+      out.place_address = place.trim();
+    }
     if (unitId) out.health_unit_id = unitId;
     if (attachmentIds.length > 0) out.attachment_ids = attachmentIds;
     return out;
@@ -97,6 +118,8 @@ export function NewManifestationForm({ onCreated }: { onCreated(c: CreatedManife
   const chooseKind = (v: OmbudsmanKind | "") => {
     f.clear("kind");
     setKind(v);
+    // Fora de Solicitação e Denúncia a pergunta some e o que foi marcado sai do estado.
+    if (v !== "request" && v !== "report") { f.clear("zoonoses_subtype", "place_address"); setZoo(false); setSubtype(""); setPlace(""); }
     if (v !== "report" && mode === "anonymous") setMode("identified");
   };
   const chooseMode = (v: IdentificationMode) => {
@@ -176,6 +199,40 @@ export function NewManifestationForm({ onCreated }: { onCreated(c: CreatedManife
               onChange={(ev) => { f.clear("ouvidorsus_number"); setNumber(ev.target.value); }} />
           </label>
           {errNode("ouvidorsus_number")}
+        </>
+      )}
+
+      {zooOffered && (
+        <>
+          <fieldset style={fieldset}>
+            <legend style={legend}>{ZOO_QUESTION}</legend>
+            {[ { v: true, l: "Sim" }, { v: false, l: "Não" } ].map((o) => (
+              <label key={o.l} style={checkLabel}>
+                <input type="radio" name="zoonoses_demand" checked={zoo === o.v} disabled={busy}
+                  onChange={() => { f.clear("zoonoses_subtype", "place_address"); setZoo(o.v); if (!o.v) { setSubtype(""); setPlace(""); } }} />
+                {o.l}
+              </label>
+            ))}
+          </fieldset>
+          {zoo && (
+            <>
+              <label style={fieldLabel}>
+                Qual o problema?
+                <select value={subtype} style={inputStyle} disabled={busy} {...aria("zoonoses_subtype")}
+                  onChange={(ev) => { f.clear("zoonoses_subtype"); setSubtype(ev.target.value); }}>
+                  <option value="">Escolha</option>
+                  {ZOONOSES_SUBTYPES.map((t) => <option key={t.code} value={t.code}>{t.label}</option>)}
+                </select>
+              </label>
+              {errNode("zoonoses_subtype")}
+              <label style={fieldLabel}>
+                Onde fica o problema? (endereço do local)
+                <input value={place} style={inputStyle} autoComplete="off" disabled={busy} {...aria("place_address")}
+                  onChange={(ev) => { f.clear("place_address"); setPlace(ev.target.value); }} />
+              </label>
+              {errNode("place_address")}
+            </>
+          )}
         </>
       )}
 
