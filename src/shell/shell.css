@@ -17,7 +17,17 @@
 .shell-emag-group { display: flex; flex-wrap: wrap; gap: 4px 16px; }
 
 .shell-topbar { display: flex; align-items: center; gap: 16px; padding: 8px 16px; border-bottom: 1px solid var(--rule); min-height: 56px; }
-.shell-topbar-end { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+.shell-topbar-search { flex: 0 1 320px; min-width: 0; }
+.shell-topbar > * { min-width: 0; }
+.shell-topbar-end { margin-left: auto; display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+/* Telefone: a barra nunca passa da largura da tela. Marca só com o ícone e
+   folgas menores; a busca encolhe até caber. */
+@media (max-width: 639px) {
+  .shell-topbar { gap: 8px; padding: 8px; }
+  .shell-brand-text { display: none !important; }
+  .shell-topbar-end { gap: 4px; }
+  .shell-topbar-search { flex: 1 1 0; }
+}
 .shell-menu-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 12px;
   border: 1px solid var(--rule2) !important; border-radius: 8px; }
 

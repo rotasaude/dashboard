@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { StrictMode } from "react";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { IconUsers } from "@tabler/icons-react";
@@ -80,5 +82,29 @@ describe("gaveta e largura da janela (A-10)", () => {
     expect(screen.getByRole("dialog", { name: "Menu" })).toBeTruthy();
     act(() => listener?.({ matches: true }));
     expect(screen.queryByRole("dialog", { name: "Menu" })).toBeNull();
+  });
+});
+
+describe("Shell — barra de topo em telefone (375px)", () => {
+  const css = readFileSync(resolve(__dirname, "shell.css"), "utf8");
+
+  it("a busca pode encolher: classe com min-width 0 e sem largura mínima fixa", () => {
+    const { container } = renderShell({ kind: "home" });
+    const box = container.querySelector(".shell-topbar-search") as HTMLElement;
+    expect(box).toBeTruthy();
+    expect(box.style.minWidth).toBe("");
+    expect(box.querySelector("input")).toBeTruthy();
+    expect(css).toMatch(/\.shell-topbar-search\s*\{[^}]*min-width:\s*0/);
+    const topbarRules = css.split("\n").filter((l) => /^\.shell-topbar|^\.shell-menu-btn/.test(l)).join("\n");
+    expect(topbarRules).not.toMatch(/min-width:\s*[1-9]\d*px/);
+  });
+
+  it("abaixo de 640px a marca perde o texto e a busca ocupa o espaço que sobra", () => {
+    const { container } = renderShell({ kind: "home" });
+    expect(container.querySelector(".shell-brand-text")).toBeTruthy();
+    const phone = css.match(/@media \(max-width: 639px\)\s*\{([\s\S]*?)\n\}/)?.[1] ?? "";
+    expect(phone).toMatch(/\.shell-brand-text\s*\{\s*display:\s*none/);
+    expect(phone).toMatch(/\.shell-topbar-search\s*\{\s*flex:\s*1 1 0/);
+    expect(phone).toMatch(/\.shell-topbar\s*\{[^}]*gap:\s*8px/);
   });
 });

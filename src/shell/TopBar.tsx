@@ -19,7 +19,7 @@ export function TopBar({ product, groups, catalog, go, notifications, account, o
         <IconMenu2 size={20} aria-hidden="true" /> Menu
       </button>
       <Brand product={product} />
-      <div style={{ flex: "0 1 320px", minWidth: 160 }}>
+      <div className="shell-topbar-search">
         <ScreenSearch groups={groups} catalog={catalog} go={go} />
       </div>
       <div className="shell-topbar-end">

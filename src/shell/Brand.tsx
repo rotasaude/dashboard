@@ -17,7 +17,7 @@ export function Brand({ product }: { product: string }) {
         display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
         <BrandMark size={19} />
       </span>
-      <span style={{ lineHeight: 1.12 }}>
+      <span className="shell-brand-text" style={{ lineHeight: 1.12 }}>
         <span style={{ display: "block", fontSize: 14, fontWeight: 700 }}>Rota Saúde</span>
         <span className="mono" style={{ display: "block", marginTop: 1, fontSize: 10.5, color: "var(--ink3)",
           textTransform: "uppercase", letterSpacing: 0.8 }}>{product}</span>
