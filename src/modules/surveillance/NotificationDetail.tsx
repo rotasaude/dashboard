@@ -18,6 +18,8 @@ import { Tag } from "../../components/Tag";
 import { secondaryButtonStyle } from "../../components/formStyles";
 import { alert, grid, list, muted, panel, row, title } from "../exams/styles";
 import { saveFile } from "../lab/saveFile";
+import { observationOutcomeLabel, observationStateLabel } from "../../lib/zoonoses";
+import { formFieldsFor } from "../../lib/surveillanceForm";
 import { NotificationFormSection } from "./NotificationFormSection";
 import { TransitionForm } from "./TransitionForm";
 
@@ -31,7 +33,7 @@ interface Props {
 
 const residenceText = (n: SurveillanceNotification): string =>
   n.resident_elsewhere ? `residente em outro município${n.residence_ibge ? ` (IBGE ${n.residence_ibge})` : ""}` : "no município";
-const defaultFormSlot: NonNullable<Props["formSlot"]> = (n, onSaved) => <NotificationFormSection notification={n} onSaved={onSaved} />;
+const defaultFormSlot: NonNullable<Props["formSlot"]> = (n, onSaved) => <NotificationFormSection notification={n} fields={formFieldsFor(n.disease.code)} onSaved={onSaved} />;
 const unitText = (n: SurveillanceNotification): string => (n.unit.cnes ? `${n.unit.name} · CNES ${n.unit.cnes}` : n.unit.name);
 
 export function NotificationDetail({ id, onClose, onChanged, formSlot = defaultFormSlot }: Props) {
@@ -104,6 +106,15 @@ export function NotificationDetail({ id, onClose, onChanged, formSlot = defaultF
               ))}
             </ul>
           </div>
+          {n.animal_observation && (
+            <div>
+              <h4 style={title}>Condição final do animal após a observação</h4>
+              <p style={muted}>{`Observação ${observationStateLabel(n.animal_observation.state)} · fim em ${fmtDay(n.animal_observation.ends_on)}`}</p>
+              <p>{n.animal_observation.outcome
+                ? `${observationOutcomeLabel(n.animal_observation.outcome)}${n.animal_observation.outcome_on ? ` · ${fmtDay(n.animal_observation.outcome_on)}` : ""}`
+                : `observação em curso até ${fmtDay(n.animal_observation.ends_on)}`}</p>
+            </div>
+          )}
           {formSlot(n, formSaved)}
           <TransitionForm notification={n} onDone={(saved) => onChanged?.(saved)} onReload={() => void detail.refetch()} />
         </>

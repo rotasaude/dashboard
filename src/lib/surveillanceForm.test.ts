@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { UFS } from "./professionals";
-import { FORM_EDITABLE, SINAN_FORM_FIELDS, formBody, formProblem, formValues, type FormFieldSpec } from "./surveillanceForm";
+import { FORM_EDITABLE, RABIES_ANIMAL_FIELDS, RABIES_DISEASE_CODE, SINAN_FORM_FIELDS, formBody, formFieldsFor, formProblem, formValues, type FormFieldSpec } from "./surveillanceForm";
 
 // A tabela do §14 (apps/api config/surveillance/sinan-form.yml): chaves, ordem, tipos e limites.
 const KEYS = [ "pregnancy", "race_color", "schooling", "residence_uf", "residence_district", "residence_neighborhood", "residence_street",
@@ -114,5 +114,55 @@ describe("conferência antes de enviar", () => {
 
   it("a mensagem nunca repete o valor digitado", () => {
     expect(JSON.stringify(problem({ phone: "41 3333 444A" }))).not.toContain("444A");
+  });
+});
+
+describe("bloco do animal (módulo 35b)", () => {
+  const ANIMAL_KEYS = [ "animal_species", "animal_condition", "animal_observable", "exposure_on", "animal_tutor_name", "animal_tutor_phone", "animal_address" ];
+  const all = formFieldsFor(RABIES_DISEASE_CODE);
+  const base = (over: Record<string, string>) => ({ ...Object.fromEntries(all.map((f) => [ f.key, "" ])), ...over });
+  const p = (over: Record<string, string>) => formProblem(base(over), all);
+  const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+  it("formFieldsFor: o Sinan puro, e o animal só em acidente_animal_raiva", () => {
+    expect(RABIES_DISEASE_CODE).toBe("acidente_animal_raiva");
+    expect(formFieldsFor("dengue")).toEqual(SINAN_FORM_FIELDS);
+    expect(all.slice(0, SINAN_FORM_FIELDS.length)).toEqual(SINAN_FORM_FIELDS);
+    expect(all.slice(SINAN_FORM_FIELDS.length).map((f) => f.key)).toEqual(ANIMAL_KEYS);
+    expect(RABIES_ANIMAL_FIELDS.map((f) => f.key)).toEqual(ANIMAL_KEYS);
+  });
+
+  it("rótulos do api", () => {
+    const labels = (k: string) => RABIES_ANIMAL_FIELDS.find((f) => f.key === k)!.options!.map((o) => o.label);
+    expect(labels("animal_species")).toEqual([ "Canina (cão)", "Felina (gato)", "Quiróptera (morcego)", "Primata (macaco)", "Raposa", "Herbívoro doméstico", "Outra" ]);
+    expect(labels("animal_condition")).toEqual([ "Sadio", "Suspeito", "Raivoso", "Morto ou desaparecido" ]);
+  });
+
+  it("exposure_on: dia que existe e não no futuro", () => {
+    expect(p({ exposure_on: "2026-02-30" })?.path).toBe("form.exposure_on");
+    const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
+    expect(p({ exposure_on: ymd(tomorrow) })?.path).toBe("form.exposure_on");
+    expect(p({ exposure_on: ymd(new Date()) })).toBeNull();
+    expect(p({ exposure_on: "2026-11-15" })).toBeNull();
+  });
+
+  it("animal_observable: só true/false; true exige cão ou gato (sem espécie recusa)", () => {
+    expect(p({ animal_observable: "talvez" })?.path).toBe("form.animal_observable");
+    expect(p({ animal_observable: "true", animal_species: "bat" })?.path).toBe("form.animal_observable");
+    expect(p({ animal_observable: "true" })?.path).toBe("form.animal_observable");
+    expect(p({ animal_observable: "true", animal_species: "dog" })).toBeNull();
+    expect(p({ animal_observable: "false" })).toBeNull();
+    expect(p({ animal_observable: "false", animal_species: "bat" })).toBeNull();
+  });
+
+  it("texto: endereço de 10 a 300, tutor até 120, telefone 10 a 11 dígitos", () => {
+    expect(p({ animal_address: "123456789" })?.path).toBe("form.animal_address");
+    expect(p({ animal_address: "1234567890" })).toBeNull();
+    expect(p({ animal_tutor_name: "x".repeat(121) })?.path).toBe("form.animal_tutor_name");
+    expect(p({ animal_tutor_phone: "419999" })?.path).toBe("form.animal_tutor_phone");
+  });
+
+  it("a mensagem não repete o valor do tutor", () => {
+    expect(JSON.stringify(p({ animal_tutor_phone: "41999A" }))).not.toContain("41999A");
   });
 });

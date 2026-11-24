@@ -11,29 +11,33 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { errorCode, updateNotificationForm, type SurveillanceNotification } from "../../lib/api";
 import { NOTIFICATION_KEY, isStale, surveillanceError } from "../../lib/surveillance";
-import { FORM_EDITABLE, SINAN_FORM_FIELDS, formBody, formProblem, formValues, type FormFieldSpec } from "../../lib/surveillanceForm";
+import { FORM_EDITABLE, SINAN_FORM_FIELDS, RABIES_ANIMAL_FIELDS, formBody, formProblem, formValues, type FormFieldSpec } from "../../lib/surveillanceForm";
 import { UFS } from "../../lib/professionals";
 import { errorPath } from "../../lib/territoryRegistry";
 import { KeyValue } from "../../components/KeyValue";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { alert, fieldLabel, okText, row, title } from "../exams/styles";
 
-const FIELDS = SINAN_FORM_FIELDS;
 const LOCKED_TEXT = "ficha travada — recarregue";
 const SAVED_TEXT = "Ficha salva.";
+const ANIMAL: ReadonlySet<string> = new Set(RABIES_ANIMAL_FIELDS.map((f) => f.key));
+const animalSet = { border: "1px solid var(--rule2)", borderRadius: 6, padding: 10, margin: 0 } as const;
 const fieldsGrid = { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 10 } as const;
 
 interface Props {
   notification: SurveillanceNotification;
+  // Os campos da ficha: o Sinan e, em acidente_animal_raiva, o bloco do animal (uma seção, um PATCH).
+  fields?: FormFieldSpec[];
   onSaved(n: SurveillanceNotification): void;
 }
 
 type Control = HTMLInputElement | HTMLSelectElement;
 
 const shown = (f: FormFieldSpec, value: string): string =>
-  value === "" ? "—" : f.kind === "code" ? (f.options?.find((o) => o.code === value)?.label ?? value) : value;
+  value === "" ? "—" : f.kind === "bool" ? (value === "true" ? "sim" : "não") : f.kind === "code" ? (f.options?.find((o) => o.code === value)?.label ?? value) : value;
 
-export function NotificationFormSection({ notification, onSaved }: Props) {
+export function NotificationFormSection({ notification, fields = SINAN_FORM_FIELDS, onSaved }: Props) {
+  const FIELDS = fields;
   const client = useQueryClient();
   const [ values, setValues ] = useState(() => formValues(notification.form, FIELDS));
   const [ error, setError ] = useState<string | null>(null);
@@ -89,15 +93,56 @@ export function NotificationFormSection({ notification, onSaved }: Props) {
 
   const reload = () => void client.refetchQueries({ queryKey: [ NOTIFICATION_KEY, notification.id ] });
 
+  function renderField(f: FormFieldSpec) {
+    const common = {
+      value: values[f.key], style: inputStyle, "aria-invalid": invalidKey === f.key || undefined,
+      ref: (el: Control | null) => { controls.current[f.key] = el; },
+      onChange: (e: { target: { value: string } }) => change(f.key, e.target.value)
+    };
+    if (f.kind === "bool") {
+      return (
+        <label key={f.key} style={{ ...fieldLabel, flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <input type="checkbox" checked={values[f.key] === "true"} aria-invalid={invalidKey === f.key || undefined}
+            ref={(el) => { controls.current[f.key] = el; }} onChange={(e) => change(f.key, e.target.checked ? "true" : "false")} />
+          {f.label}
+        </label>
+      );
+    }
+    return (
+      <label key={f.key} style={fieldLabel}>
+        {f.label}
+        {f.kind === "code" || f.kind === "uf" ? (
+          <select {...common}>
+            <option value="">—</option>
+            {f.kind === "uf"
+              ? UFS.map((uf) => <option key={uf} value={uf}>{uf}</option>)
+              : f.options?.map((o) => <option key={o.code} value={o.code}>{o.label}</option>)}
+          </select>
+        ) : (
+          <input {...common} type={f.kind === "date" ? "date" : "text"} autoComplete="off" inputMode={f.kind === "digits" || f.kind === "cbo" ? "numeric" : undefined} />
+        )}
+      </label>
+    );
+  }
+
   if (!FORM_EDITABLE.has(notification.status)) {
     return (
       <section aria-label="Ficha complementar" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         <h4 style={title}>Ficha complementar</h4>
         <div style={fieldsGrid}>
-          {FIELDS.map((f) => (
+          {FIELDS.filter((f) => !ANIMAL.has(f.key)).map((f) => (
             <KeyValue key={f.key} k={f.label} v={shown(f, formValues(notification.form, FIELDS)[f.key])} mono={f.kind !== "code" && f.kind !== "text"} />
           ))}
         </div>
+        {FIELDS.some((f) => ANIMAL.has(f.key)) && (
+          <fieldset style={animalSet}><legend style={title}>Animal agressor</legend>
+            <div style={fieldsGrid}>
+              {FIELDS.filter((f) => ANIMAL.has(f.key)).map((f) => (
+                <KeyValue key={f.key} k={f.label} v={shown(f, formValues(notification.form, FIELDS)[f.key])} mono={false} />
+              ))}
+            </div>
+          </fieldset>
+        )}
       </section>
     );
   }
@@ -105,30 +150,13 @@ export function NotificationFormSection({ notification, onSaved }: Props) {
   return (
     <form aria-label="Ficha complementar" onSubmit={(e) => void submit(e)} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
       <h4 style={title}>Ficha complementar</h4>
-      <div style={fieldsGrid}>
-        {FIELDS.map((f) => {
-          const common = {
-            value: values[f.key], style: inputStyle, "aria-invalid": invalidKey === f.key || undefined,
-            ref: (el: Control | null) => { controls.current[f.key] = el; },
-            onChange: (e: { target: { value: string } }) => change(f.key, e.target.value)
-          };
-          return (
-            <label key={f.key} style={fieldLabel}>
-              {f.label}
-              {f.kind === "code" || f.kind === "uf" ? (
-                <select {...common}>
-                  <option value="">—</option>
-                  {f.kind === "uf"
-                    ? UFS.map((uf) => <option key={uf} value={uf}>{uf}</option>)
-                    : f.options?.map((o) => <option key={o.code} value={o.code}>{o.label}</option>)}
-                </select>
-              ) : (
-                <input {...common} autoComplete="off" inputMode={f.kind === "digits" || f.kind === "cbo" ? "numeric" : undefined} />
-              )}
-            </label>
-          );
-        })}
-      </div>
+      <div style={fieldsGrid}>{FIELDS.filter((f) => !ANIMAL.has(f.key)).map(renderField)}</div>
+      {FIELDS.some((f) => ANIMAL.has(f.key)) && (
+        <fieldset style={animalSet}>
+          <legend style={title}>Animal agressor</legend>
+          <div style={fieldsGrid}>{FIELDS.filter((f) => ANIMAL.has(f.key)).map(renderField)}</div>
+        </fieldset>
+      )}
       <div style={row}>
         <button type="submit" disabled={busy} style={busy ? disabledButtonStyle : buttonStyle}>Salvar ficha</button>
         {error && <p role="alert" style={alert}>{error}</p>}

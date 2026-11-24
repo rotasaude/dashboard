@@ -8,7 +8,7 @@
 import type { NotificationForm } from "./api";
 import { UFS } from "./professionals";
 
-export type FormFieldKind = "code" | "text" | "digits" | "uf" | "cbo";
+export type FormFieldKind = "code" | "text" | "digits" | "uf" | "cbo" | "date" | "bool";
 export interface FormFieldSpec {
   key: string; label: string; kind: FormFieldKind;
   // text: tamanho máximo; digits: de min a max, ou `length` exato.
@@ -53,6 +53,25 @@ export const SINAN_FORM_FIELDS: FormFieldSpec[] = [
   { key: "occupation_cbo", label: "Ocupação (CBO)", kind: "cbo" }
 ];
 
+// Bloco do animal agressor (módulo 35b, contrato §5): só em acidente_animal_raiva; rótulos do yml do api.
+// Valores sempre em texto: data "AAAA-MM-DD" e booleano "true"/"false" (o api recusa JSON boolean).
+export const RABIES_DISEASE_CODE = "acidente_animal_raiva";
+export const RABIES_ANIMAL_FIELDS: FormFieldSpec[] = [
+  { key: "animal_species", label: "Espécie do animal", kind: "code", options: options([
+    [ "dog", "Canina (cão)" ], [ "cat", "Felina (gato)" ], [ "bat", "Quiróptera (morcego)" ], [ "primate", "Primata (macaco)" ],
+    [ "fox", "Raposa" ], [ "livestock", "Herbívoro doméstico" ], [ "other", "Outra" ] ]) },
+  { key: "animal_condition", label: "Condição do animal", kind: "code", options: options([
+    [ "healthy", "Sadio" ], [ "suspect", "Suspeito" ], [ "rabid", "Raivoso" ], [ "dead_or_missing", "Morto ou desaparecido" ] ]) },
+  { key: "animal_observable", label: "Animal passível de observação", kind: "bool" },
+  { key: "exposure_on", label: "Data da exposição", kind: "date" },
+  { key: "animal_tutor_name", label: "Nome do tutor do animal", kind: "text", min: 1, max: 120 },
+  { key: "animal_tutor_phone", label: "Telefone do tutor", kind: "digits", min: 10, max: 11 },
+  { key: "animal_address", label: "Endereço do animal", kind: "text", min: 10, max: 300 }
+];
+
+export const formFieldsFor = (diseaseCode: string): FormFieldSpec[] =>
+  diseaseCode === RABIES_DISEASE_CODE ? [ ...SINAN_FORM_FIELDS, ...RABIES_ANIMAL_FIELDS ] : SINAN_FORM_FIELDS;
+
 // Os valores da tela: sempre string (ausente, null ou outro tipo = vazio). Zero à esquerda fica.
 export function formValues(form: NotificationForm | undefined | null, fields: FormFieldSpec[]): Record<string, string> {
   const out: Record<string, string> = {};
@@ -80,6 +99,11 @@ const CONTROL = /[\u0000-\u001f\u007f-\u009f]/;
 
 export interface FormProblem { path: string; message: string }
 
+function localToday(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 function fieldProblem(f: FormFieldSpec, raw: string): string | null {
   const text = squish(raw);
   if (text === "") return null;
@@ -88,7 +112,17 @@ function fieldProblem(f: FormFieldSpec, raw: string): string | null {
     case "code": return f.options?.some((o) => o.code === text) ? null : `${f.label}: escolha um valor da lista`;
     case "uf": return UFS.includes(text.toUpperCase()) ? null : `${f.label}: escolha um valor da lista`;
     case "cbo": return /^\d{6}$/.test(text) ? null : `${f.label}: 6 dígitos`;
-    case "text": return [ ...text ].length <= (f.max ?? 0) ? null : `${f.label}: no máximo ${f.max} caracteres`;
+    case "text": {
+      const size = [ ...text ].length;
+      if (f.min !== undefined && size < f.min) return `${f.label}: no mínimo ${f.min} caracteres`;
+      return size <= (f.max ?? 0) ? null : `${f.label}: no máximo ${f.max} caracteres`;
+    }
+    case "bool": return text === "true" || text === "false" ? null : `${f.label}: escolha sim ou não`;
+    case "date": {
+      const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
+      const real = m !== null && new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])).toISOString().slice(0, 10) === text;
+      return real && text <= localToday() ? null : `${f.label}: data que exista, até hoje`;
+    }
     case "digits": {
       const number = text.replace(PUNCTUATION, "");
       if (!/^\d+$/.test(number)) return `${f.label}: só dígitos`;
@@ -104,6 +138,11 @@ export function formProblem(values: Record<string, string>, fields: FormFieldSpe
   for (const f of fields) {
     const message = fieldProblem(f, values[f.key] ?? "");
     if (message) return { path: `form.${f.key}`, message };
+  }
+  // O api só aceita "observável" com cão ou gato (sem espécie também recusa).
+  if (fields.some((f) => f.key === "animal_observable") && squish(values.animal_observable ?? "") === "true"
+    && ![ "dog", "cat" ].includes(squish(values.animal_species ?? ""))) {
+    return { path: "form.animal_observable", message: "Animal passível de observação: só cão ou gato" };
   }
   return null;
 }

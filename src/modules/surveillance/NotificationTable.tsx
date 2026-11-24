@@ -46,7 +46,12 @@ export function NotificationTable({ rows, onOpen }: { rows: SurveillanceNotifica
     { label: "Doença", w: "1.2fr", render: (n) => n.disease.name || n.disease.code },
     { label: "Unidade", w: "1.2fr", render: (n) => n.unit.name },
     { label: "Bairro", w: "1fr", render: (n) => n.neighborhood?.name || NO_NEIGHBORHOOD },
-    { label: "Situação", w: "1.2fr", render: (n) => <Tag tone={statusTone(n.status)}>{statusLabel(n.status)}</Tag> },
+    { label: "Situação", w: "1.2fr", render: (n) => (
+        <span style={tagRow}>
+          <Tag tone={statusTone(n.status)}>{statusLabel(n.status)}</Tag>
+          {n.animal_outcome_pending && <Tag tone="warn">Desfecho pendente</Tag>}
+        </span>
+      ) },
     {
       label: "Ação", w: "90px", card: "actions", render: (n) => (
         // Nome distinto por linha (sem o nome da pessoa): doença e data da suspeita.
