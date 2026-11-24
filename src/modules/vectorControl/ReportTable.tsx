@@ -26,8 +26,11 @@ export function reportCell(v: ReportRow[string] | undefined, kind: Kind): string
   return kind === "decimal" ? v.replace(".", ",") : v;
 }
 
+// O 35b reaproveita a tabela: o nome do relatório dele não é um `VectorReportName`.
+export type TableReport = Omit<VectorReport, "name"> & { name: string };
+
 export function ReportTable({ report, label = "Relatório", empty = "sem linhas para estes filtros" }: {
-  report: VectorReport; label?: string; empty?: string;
+  report: TableReport; label?: string; empty?: string;
 }) {
   const cols: Column<ReportRow>[] = report.columns.map((c, i) => ({
     label: c.label, w: c.kind === "text" ? "1.4fr" : "0.8fr", align: c.kind === "text" ? "left" : "right",
