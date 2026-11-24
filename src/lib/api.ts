@@ -4432,6 +4432,10 @@ export interface SurveillanceNotification {
   consultation_id: string | null; closed_at: string | null; entered_at: string | null; dismissed_at: string | null; version: number;
   // Só no detalhe (a lista não traz).
   form?: NotificationForm; events?: NotificationEvent[];
+  // Módulo 35b (Q16; api-shapes §2.15): `animal_observation` só no detalhe; `animal_outcome_pending` = a observação fechou e a
+  // notificação ainda está aberta (o desfecho do animal saiu), não "observação em curso".
+  animal_observation?: { state: string; ends_on: string; outcome: string | null; outcome_on: string | null } | null;
+  animal_outcome_pending?: boolean;
 }
 export interface NotificationQuery {
   status?: NotificationStatus | null; disease?: string | null; overdue?: boolean; unitId?: string | null;
@@ -4826,7 +4830,9 @@ export type StockMovementKind =
   // Módulo 29 (V4): abertura de frasco, dose de unidose e a devolução por cancelamento.
   | "vial_opening" | "immunization" | "immunization_reversal"
   // Módulo 35a (Q10): a baixa do boletim e o estorno na retirada da visita.
-  | "vector_application" | "vector_application_reversal";
+  | "vector_application" | "vector_application_reversal"
+  // Módulo 35b: a dose antirrábica animal, o estorno dela e a coleira colocada.
+  | "animal_vaccination" | "animal_vaccination_reversal" | "collar_placement";
 export type TransferStatus = "sent" | "received" | "received_with_difference";
 export type AdjustmentStatus = "applied" | "pending" | "approved" | "rejected";
 export type AdjustmentKind = "adjustment" | "loss" | "expiry";
@@ -7197,7 +7203,7 @@ export interface OmbudsmanFullIdentity {
 }
 // `GET /ombudsman/options` (Q7): só ativos; profissionais com as unidades do vínculo (a tela filtra pela unidade, D8).
 export interface OmbudsmanOptions {
-  subjects: { id: string; name: string; children: OmbudsmanRef[] }[];
+  subjects: { id: string; name: string; code?: string | null; children: (OmbudsmanRef & { code?: string | null })[] }[];
   departments: (OmbudsmanRef & { has_active_responder: boolean })[];
   health_units: (OmbudsmanRef & { kind: string; has_active_responder: boolean })[];
   professionals: (OmbudsmanRef & { health_unit_ids: string[] })[];
@@ -7207,7 +7213,9 @@ export interface OmbudsmanSubject {
   id: string;
   name: string;
   active: boolean;
-  children?: { id: string; name: string; active: boolean }[];
+  // Módulo 35b (Q14): "zoonoses" no pai e "zoonoses.<subtipo>" nos filhos; nulo no assunto da cidade.
+  code?: string | null;
+  children?: { id: string; name: string; active: boolean; code?: string | null }[];
 }
 // Só par verificado (Q58); sem ele, `null`.
 export interface OmbudsmanPerson { citizen_id: string; name: string; cpf_masked: string }
@@ -7226,6 +7234,9 @@ export interface NewManifestationInput {
   body: string;
   health_unit_id?: string | null;
   attachment_ids?: string[];
+  // Módulo 35b (Q14): demanda de zoonoses no balcão; as duas chaves só com o gate (senão 422) e `place_address` só com o subtipo.
+  zoonoses_subtype?: DemandSubtype;
+  place_address?: string;
 }
 export interface OmbudsmanCreated { id: string; protocol: string; due_on: string }
 export interface OmbudsmanReceipt { protocol: string; kind: OmbudsmanKind; received_at: string; due_on: string; channel: OmbudsmanChannel }
@@ -7309,7 +7320,8 @@ export function getOmbudsmanManifestation(id: string): Promise<OmbudsmanManifest
 }
 export function createOmbudsmanManifestation(i: NewManifestationInput): Promise<OmbudsmanCreated> {
   return jsonFetch<OmbudsmanCreated>(ombPath("manifestations"), ombWrite("POST", ombCompact(i, [
-    "ouvidorsus_number", "citizen_id", "manifestant_name", "manifestant_contact", "manifestant_cpf", "health_unit_id", "attachment_ids"
+    "ouvidorsus_number", "citizen_id", "manifestant_name", "manifestant_contact", "manifestant_cpf", "health_unit_id", "attachment_ids",
+    "zoonoses_subtype", "place_address"
   ])));
 }
 export function getOmbudsmanReceipt(id: string): Promise<OmbudsmanReceipt> {
@@ -7841,6 +7853,8 @@ export type VectorWorkType = "routine" | "pending";
 export type VectorSituation = "worked" | "closed" | "refused" | "vacant";
 export type DepositGroup = "A1" | "A2" | "B" | "C" | "D1" | "D2" | "E";
 export type MeasureMethod = "mechanical" | "focal" | "perifocal" | "spatial";
+// Módulo 35b: o produto de campo também serve à vacina antirrábica animal e à coleira (sozinha; unidade "un").
+export type VectorProductUse = Exclude<MeasureMethod, "mechanical"> | "rabies_vaccine" | "collar";
 export type RiskClass = "green" | "yellow" | "red" | "gray" | "purple";
 
 // ── Boletim (§3) ──
@@ -7926,8 +7940,8 @@ export interface VectorParameterVersion { version: number; values: VectorParamet
 
 // ── Produtos e local da baixa (§4) ──
 // `in_use` = há lote ou medida do produto (unit e charge_size não mudam: 409 product_in_use).
-export interface VectorProduct extends VectorProductRef { charge_size: string; uses: Exclude<MeasureMethod, "mechanical">[]; active: boolean; in_use: boolean }
-export interface VectorProductInput { code: string; name: string; unit: "g" | "ml" | "un"; charge_size: string; uses: Exclude<MeasureMethod, "mechanical">[]; active: boolean }
+export interface VectorProduct extends VectorProductRef { charge_size: string; uses: VectorProductUse[]; active: boolean; in_use: boolean }
+export interface VectorProductInput { code: string; name: string; unit: "g" | "ml" | "un"; charge_size: string; uses: VectorProductUse[]; active: boolean }
 export interface VectorSettings { stock_location: { id: string; name: string } | null; options: { id: string; name: string }[] }
 
 // ── Ovitrampas (§6) ──
@@ -8007,7 +8021,9 @@ export interface SampleResultInput { examined_larvae: number; aegypti_larvae: nu
 export type VectorShortfallCause = "no_location" | "insufficient_balance" | "no_lot" | (string & {});
 export interface VectorShortfall {
   id: string; created_at: string; stock_location: { id: string; name: string } | null; product: VectorProductRef; quantity: string;
-  cause: VectorShortfallCause; visit_on: string; reconciled_at: string | null; reconciled_by: { name: string | null } | null;
+  // Módulo 35b (Q17): `visit_on` só na falta da visita (`inspection`); o api sempre manda `source` e `occurred_on`.
+  visit_on: string | null; source?: "inspection" | "vaccination" | "collar" | (string & {}); occurred_on?: string;
+  cause: VectorShortfallCause; reconciled_at: string | null; reconciled_by: { name: string | null } | null;
 }
 
 // ── Relatórios (§10; D-13) ──
@@ -8279,4 +8295,390 @@ export async function listVectorMapPoints(q: VectorMapQuery): Promise<VectorMapR
     : hvQuery({ layer: q.layer, transmission_block_id: q.transmissionBlockId });
   const b = await jsonFetch<Partial<VectorMapResponse>>(withQuery(vcPath("map_points"), params));
   return { map: b.map ?? null, points: b.points ?? [] };
+}
+
+// ─── Centro de zoonoses (módulo 35b; ADR 0054; contrato 2026-11-23 §1–§10) ───
+// Formas do api JÁ pronto (api-shapes.md, Q25), não as do plano: onde os dois divergem, vale o api. Na URL só ids, datas, estados,
+// `due=1` e o cursor; microchip, CPF/CNS, endereço do lugar, notas e motivos só no corpo (toda escrita leva corpo JSON; query
+// numa escrita → 422). Nenhuma resposta traz o número do microchip (§16, Q9).
+
+const ZOONOSES_BASE = import.meta.env.VITE_ZOONOSES_BASE || "/zoonoses";
+const zooPath = (...parts: string[]) => hvPath(ZOONOSES_BASE, ...parts);
+const zooWrite = (method: "POST" | "PATCH" | "PUT", body: unknown = {}): RequestInit => ({ method, body: JSON.stringify(body) });
+const zooItems = async <T>(url: string): Promise<T[]> => (await jsonFetch<{ items?: T[] }>(url)).items ?? [];
+
+export type AnimalSpecies = "dog" | "cat" | "other";
+export type AnimalSex = "male" | "female" | "unknown";
+export type AnimalSize = "small" | "medium" | "large";
+export type AnimalStatus = "active" | "deceased" | "missing" | "transferred";
+export interface ZooRef { id: string; name: string }
+export interface TutorRef { id: string; display_name: string | null }
+export interface HouseholdRef { id: string; address_short: string }
+
+// A linha do animal (criação, edição, busca, entrada no canil). O domicílio é só o id; o tutor, só `has_tutor`.
+export interface Animal {
+  id: string; version: number; species: AnimalSpecies | (string & {}); name: string | null; sex: AnimalSex | (string & {});
+  size: AnimalSize | null; coat: string | null; breed: string | null; birth_estimate_on: string | null;
+  has_microchip: boolean; registry_number: string | null; household_id: string | null; has_tutor: boolean; community: boolean;
+  status: AnimalStatus | (string & {}); status_on: string | null; neutered: boolean; created_at: string;
+}
+export interface AnimalInput {
+  species: AnimalSpecies; name?: string; sex: AnimalSex; size?: AnimalSize | null; coat?: string; breed?: string; birth_estimate_on?: string;
+  microchip?: string; registry_number?: string; household_id?: string | null; tutor_patient_id?: string | null; community: boolean;
+}
+// Q20/Q25: o microchip e o registro só na criação; a espécie não muda.
+export type AnimalPatch = Partial<Omit<AnimalInput, "microchip" | "species">> & { status?: AnimalStatus; status_on?: string; expected_version: number };
+// Exatamente uma chave; `before` só com tutor ou domicílio (o cursor vai no corpo).
+export type AnimalSearch =
+  | { microchip: string } | { registry_number: string } | { tutor_patient_id: string; before?: string } | { household_id: string; before?: string };
+
+export type CampaignStage = "planned" | "open" | "closed";
+export interface RabiesCampaign {
+  id: string; version: number; name: string; year: number; starts_on: string; ends_on: string; goal_dogs: number; goal_cats: number;
+  stage: CampaignStage | (string & {}); created_at: string;
+}
+// Sem as metas o api usa a sugestão (estimativa × cobertura); sem estimativa → 422 path goal_dogs/goal_cats. `year` é o de `starts_on`.
+export interface CampaignInput { name: string; starts_on: string; ends_on: string; year?: number; goal_dogs?: number; goal_cats?: number }
+
+export type VaccinationModality = "house" | "fixed_post" | "routine";
+export interface RabiesVaccination {
+  id: string; modality: VaccinationModality | (string & {}); campaign_id: string | null; animal_id: string | null; species: "dog" | "cat";
+  vaccinated_on: string; health_unit_id: string | null; household_id: string | null; vector_product_id: string;
+  // Nulo = a dose ficou sem lote (falta de saldo): a frase da conciliação.
+  stock_lot_id: string | null; adverse_event: boolean; cancelled: boolean; cancelled_at: string | null; recorded_by_user_id: string;
+  created_at: string;
+  // Só no 201 com evento adverso (o texto do EATAV vem do api).
+  reminder?: string;
+}
+// `household_id` não existe (o domicílio é o do animal); na rotina a chave `campaign_id` nem pode ir (omitir, nunca null).
+export interface VaccinationInput {
+  modality: VaccinationModality; animal_id?: string; species?: "dog" | "cat"; campaign_id?: string; vaccinated_on: string;
+  health_unit_id?: string; vector_product_id: string; adverse_event: boolean; adverse_note?: string;
+}
+
+export type DemandSubtype = "scorpion" | "bat" | "rodent" | "tick" | "aggressive_animal" | "neurological_animal" | "sporotrichosis" | "other";
+export type DemandState = "open" | "scheduled" | "inspected" | "closed";
+export type DemandOutcome = "resolved" | "guidance" | "not_found" | "referred";
+// A linha da fila (plana); o api não traz data de criação, nem prorrogação, nem desfecho aqui.
+export interface ZoonosesDemand {
+  id: string; version: number; subtype: DemandSubtype | (string & {}); state: DemandState | (string & {}); due_on: string;
+  color: DeadlineColor | null; forwarding_state: "pending" | "replied" | "declined" | "cancelled" | (string & {});
+}
+export interface ZoonosesDemandRecord extends ZoonosesDemand { scheduled_on: string | null; inspected_on: string | null; outcome: DemandOutcome | null }
+// Só o texto do cidadão (`extract`) e o endereço do lugar no detalhe.
+export interface ZoonosesDemandDetail extends ZoonosesDemandRecord { extract: string; place_address: string | null; inspection_note: string | null; created_at: string }
+
+export type ObservationState = "open" | "closed";
+export type ObservationOutcome = "healthy" | "died" | "missing" | "rabies_signs" | "sent_to_exam" | "euthanized";
+export interface BiteObservation {
+  id: string; version: number; species: "dog" | "cat"; condition: "healthy" | "suspect" | "rabid" | "dead_or_missing" | null;
+  exposure_on: string; ends_on: string; days_left: number | null; state: ObservationState | (string & {}); place: "home" | "shelter";
+  animal_id: string | null;
+}
+export interface BiteObservationDetail extends BiteObservation {
+  outcome: ObservationOutcome | null; outcome_on: string | null; outcome_note: string | null; closed_by_user_id: string | null; created_at: string;
+}
+export interface ObservationContact { animal_tutor_name: string | null; animal_tutor_phone: string | null; animal_address: string | null }
+
+export type SurveyKind = "sample" | "census" | "focus";
+export type SurveyStage = "draft" | "open" | "closed";
+export interface LeishSurvey {
+  id: string; version: number; name: string; kind: SurveyKind | (string & {}); neighborhood_id: string; neighborhood: ZooRef;
+  city_block_ids: string[]; dog_population: number; target_dogs: number; below_focus_min: boolean; starts_on: string; ends_on: string;
+  stage: SurveyStage | (string & {}); parameters_version: number; created_at: string;
+}
+export interface LeishSurveyDetail extends LeishSurvey {
+  household_ids: string[]; dog_population_suggested: number; prevalence: { examined: number; reactive: number; prevalence: number | null };
+}
+// Os quarteirões vão em `city_block_ids` OU (só no foco) em `center_city_block_id` + `rings` (0 a 5); nunca `target_dogs`.
+export interface LeishSurveyInput {
+  name: string; kind: SurveyKind; neighborhood_id: string; dog_population: number; starts_on: string; ends_on: string;
+  city_block_ids?: string[]; center_city_block_id?: string; rings?: number;
+}
+export interface LeishSuggestionInput { kind: SurveyKind; neighborhood_id: string; center_city_block_id?: string; rings?: number }
+export interface LeishSuggestion { city_block_ids: string[]; dog_population_suggested: number; target_dogs: number; below_focus_min: boolean }
+export type DppResult = "reactive" | "non_reactive" | "invalid";
+export type ElisaResult = "reactive" | "non_reactive" | "inconclusive";
+export type LeishDecision = "tutor_treatment" | "euthanasia" | "refused";
+export interface LeishTest {
+  id: string; version: number; leish_survey_id: string | null; animal: { id: string; has_tutor: boolean }; label: string; collected_on: string;
+  dpp_result: DppResult | null; dpp_on: string | null; elisa_result: ElisaResult | null; elisa_on: string | null; elisa_request: string | null;
+  result_by_user_id: string | null; outcome: { id: string; decision: LeishDecision | (string & {}); decided_on: string } | null; created_at: string;
+}
+export interface LeishOutcome {
+  id: string; leish_test_id: string; animal_id: string; decision: LeishDecision | (string & {}); decided_on: string; euthanasia_id: string | null; created_at: string;
+}
+export type CollarRemovalReason = "lost" | "death" | "other";
+// Sem `version` (a coleira não tem controle de versão) e sem a flag de falta (só em "Faltas de insumo de campo").
+export interface Collar {
+  id: string; animal_id: string; vector_product_id: string; placed_on: string; due_on: string; removed_on: string | null;
+  removal_reason: "replaced" | CollarRemovalReason | (string & {}) | null;
+}
+export interface DueCollar { id: string; animal_id: string; household_id: string | null; vector_product_id: string; placed_on: string; due_on: string }
+
+export type ShelterEntryKind = "collection" | "voluntary_surrender" | "observation" | "other";
+export type ShelterExitKind = "returned" | "adopted" | "death" | "euthanasia" | "transferred";
+export interface ShelterStay {
+  id: string; version: number; animal_id: string; species: AnimalSpecies | (string & {}); health_unit_id: string; entry_kind: ShelterEntryKind | (string & {});
+  entered_on: string; bite_observation_id: string | null; exit_kind: ShelterExitKind | (string & {}) | null; exited_on: string | null; created_at: string;
+}
+// 201 da entrada: a estada + a linha do animal.
+export interface ShelterEntry extends ShelterStay { animal: Animal }
+export interface ShelterStayPage { items: ShelterStay[]; next_before: string | null; occupancy: { health_unit_id: string; open_stays: number }[] }
+// `new_animal` é o corpo do animal sem tutor e sem domicílio.
+export interface ShelterEntryInput {
+  animal_id?: string; new_animal?: Pick<AnimalInput, "species" | "sex" | "size" | "coat" | "breed" | "name" | "community">; health_unit_id: string;
+  entry_kind: ShelterEntryKind; entered_on?: string; bite_observation_id?: string;
+}
+// `exited_on` é opcional (hoje); `adopter_patient_id` só e sempre com `adopted`.
+export interface ShelterExitInput { exit_kind: ShelterExitKind; exited_on?: string; adopter_patient_id?: string; expected_version: number }
+export interface ZooVeterinarian { name: string; crmv: string }
+export interface Neutering { id: string; animal_id: string; performed_on: string; shelter_stay_id: string | null; veterinarian: ZooVeterinarian; created_at: string }
+export interface Euthanasia {
+  id: string; animal_id: string; performed_on: string; reason: string; legal_basis: string[]; shelter_stay_id: string | null;
+  bite_observation_id: string | null; veterinarian: ZooVeterinarian; created_at: string;
+}
+export interface EuthanasiaInput {
+  animal_id: string; performed_on: string; reason: string; reason_note: string; legal_basis: string[];
+  shelter_stay_id?: string; bite_observation_id?: string;
+}
+// O histórico tem formas próprias e menores (sem nome do animal, produto ou unidade: os rótulos saem de `domains`).
+export interface AnimalHistory extends Animal {
+  tutor: TutorRef | null;
+  vaccinations: { id: string; vaccinated_on: string; modality: string; campaign_id: string | null; vector_product_id: string; adverse_event: boolean; cancelled: boolean }[];
+  observations: { id: string; exposure_on: string; ends_on: string; place: "home" | "shelter"; state: ObservationState | (string & {}); outcome: string | null; outcome_on: string | null }[];
+  tests: { id: string; leish_survey_id: string | null; collected_on: string; label: string; dpp_result: DppResult | null; dpp_on: string | null;
+    elisa_result: ElisaResult | null; elisa_on: string | null; outcome: { id: string; decision: string; decided_on: string } | null }[];
+  collars: { id: string; vector_product_id: string; placed_on: string; due_on: string; removed_on: string | null; removal_reason: string | null }[];
+  stays: { id: string; health_unit_id: string; entry_kind: string; entered_on: string; exit_kind: string | null; exited_on: string | null; bite_observation_id: string | null }[];
+  neuterings: { id: string; performed_on: string; shelter_stay_id: string | null; veterinarian: ZooVeterinarian }[];
+  euthanasia: { id: string; performed_on: string; reason: string; legal_basis: string[]; shelter_stay_id: string | null;
+    bite_observation_id: string | null; veterinarian: ZooVeterinarian } | null;
+}
+export interface ZoonosesParameters {
+  observation_days: number; collar_months: number;
+  // `min_population` só na 1ª linha; `a_conferir` em qualquer uma. O PUT devolve as duas chaves como leu.
+  leish_sample_table: { population: number; sample: number; min_population?: number; a_conferir?: boolean }[];
+  leish_focus_min_dogs: number; dogs_per_block: number; rabies_coverage_target: number;
+  dog_population_estimate: number | null; cat_population_estimate: number | null;
+}
+export interface ZoonosesParameterVersion { version: number; values: ZoonosesParameters; created_at: string | null }
+export type Coded = { code: string; label: string }[];
+// Domínios do api (`GET /zoonoses/domains`). Não há `units`, `shelter_units`, `demand_outcomes` nem `observation_days`
+// (as unidades vêm da rota de unidades, os parâmetros de `/zoonoses/parameters`); listas extras que o api acrescentar
+// são toleradas (`[extra]`) e o código desconhecido aparece cru na tela.
+export type ZoonosesDomains = {
+  species: Coded; sexes: Coded; sizes: Coded; animal_statuses: Coded; subtypes: Coded; dpp_results: Coded; elisa_results: Coded;
+  leish_decisions: Coded; leish_survey_kinds: Coded; product_uses: Coded; entry_kinds: Coded; exit_kinds: Coded; euthanasia_reasons: Coded;
+  legal_bases: Coded; removal_reasons: Coded; modalities: Coded; demand_states: Coded; deadline_colors: Coded; observation_outcomes: Coded;
+  products: { id: string; code: string; name: string; use: "rabies_vaccine" | "collar" }[];
+  open_campaign: { id: string; name: string; starts_on: string; ends_on: string } | null;
+  parameters: { collar_months: number };
+  limits: { name_max: number; coat_max: number; breed_max: number; microchip_digits: number; registry_number_max: number; adverse_note_min: number; adverse_note_max: number };
+} & { [extra: string]: unknown };
+
+export type ZoonosesReportName = "rabies_weekly" | "rabies_modalities" | "demands" | "observations" | "leish" | "shelter";
+// Todo relatório exige o período (até 366 dias); o semanal usa `from` = início da campanha e `to` = hoje.
+export type ZoonosesReportFilters = { from: string; to: string; campaign_id?: string; survey_id?: string };
+export interface ZoonosesReport {
+  name: ZoonosesReportName; columns: { key: string; label: string; kind: "text" | "count" | "percent" }[];
+  // Rótulos já traduzidos nas colunas de texto; percentual em texto ("80.0"); contagem de 1 a 4 suprimida; `after_planned_end` não é coluna.
+  rows: Record<string, SmallCount | string | boolean | null>[]; notes?: string[];
+}
+// O domicílio é o do cadastro individual ativo da pessoa; não há lista de domicílios.
+export interface ZooPerson { patient: { id: string; display_name: string | null }; household: HouseholdRef | null }
+
+// ── Domínios, parâmetros e pessoa ──
+export function getZoonosesDomains(): Promise<ZoonosesDomains> {
+  return jsonFetch<ZoonosesDomains>(zooPath("domains"));
+}
+// Documento no corpo, nunca na URL. Só o `404 person_not_found` vira null; o resto (409 citizen_not_verified, 422, 429) lança.
+export async function lookupZooPerson(i: { cpf: string } | { cns: string }): Promise<ZooPerson | null> {
+  try {
+    return await jsonFetch<ZooPerson>(zooPath("person_lookup"), zooWrite("POST", i));
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 404 && errorCode(e) === "person_not_found") return null;
+    throw e;
+  }
+}
+export function getZooParameters(): Promise<ZoonosesParameterVersion> {
+  return jsonFetch<ZoonosesParameterVersion>(zooPath("parameters"));
+}
+// Step-up; as 8 chaves exatas de `values`; `expected_version` é a versão lida (≥ 0).
+export function putZooParameters(values: ZoonosesParameters, expectedVersion: number): Promise<ZoonosesParameterVersion> {
+  return jsonFetch<ZoonosesParameterVersion>(zooPath("parameters"), zooWrite("PUT", { values, expected_version: expectedVersion }));
+}
+
+// ── Animais ──
+// Microchip e registro → `{ items: [≤1] }`; tutor e domicílio → com cursor. Tudo no corpo.
+export async function searchAnimals(i: AnimalSearch): Promise<{ items: Animal[]; next_before: string | null }> {
+  const b = await jsonFetch<{ items?: Animal[]; next_before?: string | null }>(zooPath("animals", "search"), zooWrite("POST", i));
+  return { items: b.items ?? [], next_before: b.next_before ?? null };
+}
+export function createAnimal(i: AnimalInput): Promise<Animal> {
+  return jsonFetch<Animal>(zooPath("animals"), zooWrite("POST", i));
+}
+export function getAnimal(id: string): Promise<AnimalHistory> {
+  return jsonFetch<AnimalHistory>(zooPath("animals", id));
+}
+export function updateAnimal(id: string, i: AnimalPatch): Promise<Animal> {
+  return jsonFetch<Animal>(zooPath("animals", id), zooWrite("PATCH", i));
+}
+
+// ── Campanha antirrábica ──
+// Mais recente primeiro, sem cursor.
+export function listRabiesCampaigns(): Promise<RabiesCampaign[]> {
+  return zooItems<RabiesCampaign>(zooPath("campaigns"));
+}
+export function createRabiesCampaign(i: CampaignInput): Promise<RabiesCampaign> {
+  return jsonFetch<RabiesCampaign>(zooPath("campaigns"), zooWrite("POST", i));
+}
+export function updateRabiesCampaign(id: string, i: Partial<CampaignInput> & { expected_version: number }): Promise<RabiesCampaign> {
+  return jsonFetch<RabiesCampaign>(zooPath("campaigns", id), zooWrite("PATCH", i));
+}
+// O api recusa qualquer corpo na abertura e no fechamento da campanha (inclusive `expected_version`).
+export function openRabiesCampaign(id: string): Promise<RabiesCampaign> {
+  return jsonFetch<RabiesCampaign>(zooPath("campaigns", id, "open"), zooWrite("POST", {}));
+}
+export function closeRabiesCampaign(id: string): Promise<RabiesCampaign> {
+  return jsonFetch<RabiesCampaign>(zooPath("campaigns", id, "close"), zooWrite("POST", {}));
+}
+
+// ── Vacinação ──
+export function recordVaccination(i: VaccinationInput): Promise<RabiesVaccination> {
+  return jsonFetch<RabiesVaccination>(zooPath("vaccinations"), zooWrite("POST", i));
+}
+export function cancelVaccination(id: string, reason: string): Promise<RabiesVaccination> {
+  return jsonFetch<RabiesVaccination>(zooPath("vaccinations", id, "cancel"), zooWrite("POST", { reason }));
+}
+export function listVaccinations(q: { campaignId?: string; from?: string; to?: string; modality?: VaccinationModality; before?: string | null }): VcPage<RabiesVaccination> {
+  return hvPage<RabiesVaccination>(withQuery(zooPath("vaccinations"), hvQuery({
+    campaign_id: q.campaignId, from: q.from, to: q.to, modality: q.modality, before: q.before })));
+}
+
+// ── Demandas (ouvidoria) ──
+// `state` é escalar (um valor só; array → 422): a aba "Abertas" lê sem `state` e filtra no cliente, ou faz uma leitura por estado.
+export function listDemands(q: { state?: DemandState; before?: string | null }): VcPage<ZoonosesDemand> {
+  return hvPage<ZoonosesDemand>(withQuery(zooPath("demands"), hvQuery({ state: q.state, before: q.before })));
+}
+export function getDemand(id: string): Promise<ZoonosesDemandDetail> {
+  return jsonFetch<ZoonosesDemandDetail>(zooPath("demands", id));
+}
+export function scheduleDemand(id: string, i: { scheduled_on: string; expected_version: number }): Promise<ZoonosesDemandRecord> {
+  return jsonFetch<ZoonosesDemandRecord>(zooPath("demands", id, "schedule"), zooWrite("POST", i));
+}
+export function inspectDemand(id: string, i: { inspected_on: string; inspection_note: string; expected_version: number }): Promise<ZoonosesDemandRecord> {
+  return jsonFetch<ZoonosesDemandRecord>(zooPath("demands", id, "inspect"), zooWrite("POST", i));
+}
+export function closeDemand(id: string, i: { outcome: DemandOutcome; text: string; expected_version: number }): Promise<ZoonosesDemandRecord> {
+  return jsonFetch<ZoonosesDemandRecord>(zooPath("demands", id, "close"), zooWrite("POST", i));
+}
+export function declineDemand(id: string, i: { text: string; expected_version: number }): Promise<ZoonosesDemandRecord> {
+  return jsonFetch<ZoonosesDemandRecord>(zooPath("demands", id, "decline"), zooWrite("POST", i));
+}
+export function extendDemand(id: string, i: { reason: string; expected_version: number }): Promise<ZoonosesDemandRecord> {
+  return jsonFetch<ZoonosesDemandRecord>(zooPath("demands", id, "extend"), zooWrite("POST", i));
+}
+
+// ── Observação do animal agressor ──
+export function listObservations(q: { state?: ObservationState; before?: string | null }): VcPage<BiteObservation> {
+  return hvPage<BiteObservation>(withQuery(zooPath("observations"), hvQuery({ state: q.state, before: q.before })));
+}
+export function getObservation(id: string): Promise<BiteObservationDetail> {
+  return jsonFetch<BiteObservationDetail>(zooPath("observations", id));
+}
+// Grava a trilha; nunca no cache do navegador.
+export function getObservationContact(id: string): Promise<ObservationContact> {
+  return jsonFetch<ObservationContact>(zooPath("observations", id, "contact"), { cache: "no-store" });
+}
+export function closeObservation(id: string, i: { outcome: ObservationOutcome; outcome_on: string; outcome_note?: string; expected_version: number }): Promise<BiteObservationDetail> {
+  return jsonFetch<BiteObservationDetail>(zooPath("observations", id, "close"), zooWrite("POST", i));
+}
+export function linkObservationAnimal(id: string, i: { animal_id: string; expected_version: number }): Promise<BiteObservationDetail> {
+  return jsonFetch<BiteObservationDetail>(zooPath("observations", id, "link_animal"), zooWrite("POST", i));
+}
+
+// ── Leishmaniose visceral canina ──
+export function listLeishSurveys(): Promise<LeishSurvey[]> {
+  return zooItems<LeishSurvey>(zooPath("leish_surveys"));
+}
+export function getLeishSurvey(id: string): Promise<LeishSurveyDetail> {
+  return jsonFetch<LeishSurveyDetail>(zooPath("leish_surveys", id));
+}
+// Não grava: sugere quarteirões, população e amostra.
+export function suggestLeishSurvey(i: LeishSuggestionInput): Promise<LeishSuggestion> {
+  return jsonFetch<LeishSuggestion>(zooPath("leish_surveys", "suggest"), zooWrite("POST", i));
+}
+export function createLeishSurvey(i: LeishSurveyInput): Promise<LeishSurveyDetail> {
+  return jsonFetch<LeishSurveyDetail>(zooPath("leish_surveys"), zooWrite("POST", i));
+}
+export function updateLeishSurvey(id: string, i: Partial<LeishSurveyInput> & { expected_version: number }): Promise<LeishSurveyDetail> {
+  return jsonFetch<LeishSurveyDetail>(zooPath("leish_surveys", id), zooWrite("PATCH", i));
+}
+// Ao contrário da campanha, o inquérito exige `expected_version` ao abrir e ao fechar.
+export function openLeishSurvey(id: string, expectedVersion: number): Promise<LeishSurveyDetail> {
+  return jsonFetch<LeishSurveyDetail>(zooPath("leish_surveys", id, "open"), zooWrite("POST", { expected_version: expectedVersion }));
+}
+export function closeLeishSurvey(id: string, expectedVersion: number): Promise<LeishSurveyDetail> {
+  return jsonFetch<LeishSurveyDetail>(zooPath("leish_surveys", id, "close"), zooWrite("POST", { expected_version: expectedVersion }));
+}
+export function listLeishTests(q: { surveyId?: string; pending?: "elisa" | "outcome"; before?: string | null }): VcPage<LeishTest> {
+  return hvPage<LeishTest>(withQuery(zooPath("leish_tests"), hvQuery({ survey_id: q.surveyId, pending: q.pending, before: q.before })));
+}
+export function collectLeishTest(i: {
+  leish_survey_id?: string; animal_id: string; collected_on: string; dpp_result?: DppResult; dpp_on?: string;
+  elisa_result?: ElisaResult; elisa_on?: string; elisa_request?: string
+}): Promise<LeishTest> {
+  return jsonFetch<LeishTest>(zooPath("leish_tests"), zooWrite("POST", i));
+}
+// `null` apaga o campo.
+export function updateLeishTest(id: string, i: Partial<Pick<LeishTest, "dpp_result" | "dpp_on" | "elisa_result" | "elisa_on" | "elisa_request">> & { expected_version: number }): Promise<LeishTest> {
+  return jsonFetch<LeishTest>(zooPath("leish_tests", id), zooWrite("PATCH", i));
+}
+// `euthanasia_id` obrigatório com `euthanasia` (senão 422 path euthanasia_id).
+export function recordLeishOutcome(i: { leish_test_id: string; decision: LeishDecision; decided_on: string; note?: string; euthanasia_id?: string; animal_id?: string }): Promise<LeishOutcome> {
+  return jsonFetch<LeishOutcome>(zooPath("leish_outcomes"), zooWrite("POST", i));
+}
+
+// ── Coleira ──
+export function placeCollar(i: { animal_id: string; vector_product_id: string; placed_on?: string }): Promise<Collar> {
+  return jsonFetch<Collar>(zooPath("collars"), zooWrite("POST", i));
+}
+// A chave é `reason` (lost | death | other; `replaced` é do api) e não há `expected_version`.
+export function removeCollar(id: string, i: { reason: CollarRemovalReason; removed_on?: string }): Promise<Collar> {
+  return jsonFetch<Collar>(zooPath("collars", id, "remove"), zooWrite("POST", i));
+}
+// As coleiras a trocar (`due=1`, obrigatório): mais atrasadas primeiro, sem cursor.
+export function listDueCollars(): Promise<DueCollar[]> {
+  return zooItems<DueCollar>(withQuery(zooPath("collars"), hvQuery({ due: "1" })));
+}
+
+// ── Canil e gatil ──
+// Sem `open` o api devolve todas as estadas (abertas e fechadas); não há filtro "só fechadas".
+export async function listShelterStays(q: { open?: boolean; healthUnitId?: string; before?: string | null }): Promise<ShelterStayPage> {
+  const b = await jsonFetch<Partial<ShelterStayPage>>(withQuery(zooPath("shelter_stays"), hvQuery({
+    open: q.open ? "1" : undefined, health_unit_id: q.healthUnitId, before: q.before })));
+  return { items: b.items ?? [], next_before: b.next_before ?? null, occupancy: b.occupancy ?? [] };
+}
+export function enterShelter(i: ShelterEntryInput): Promise<ShelterEntry> {
+  return jsonFetch<ShelterEntry>(zooPath("shelter_stays"), zooWrite("POST", i));
+}
+export function exitShelter(id: string, i: ShelterExitInput): Promise<ShelterStay> {
+  return jsonFetch<ShelterStay>(zooPath("shelter_stays", id, "exit"), zooWrite("POST", i));
+}
+// Veterinária (403 veterinarian_required); a eutanásia ainda pede step-up (401 mfa_required).
+export function recordNeutering(i: { animal_id: string; performed_on?: string; shelter_stay_id?: string }): Promise<Neutering> {
+  return jsonFetch<Neutering>(zooPath("neuterings"), zooWrite("POST", i));
+}
+export function recordEuthanasia(i: EuthanasiaInput): Promise<Euthanasia> {
+  return jsonFetch<Euthanasia>(zooPath("euthanasias"), zooWrite("POST", i));
+}
+
+// ── Relatórios ──
+const zooReportQuery = (f: ZoonosesReportFilters) => hvQuery({ from: f.from, to: f.to, campaign_id: f.campaign_id, survey_id: f.survey_id });
+export function getZoonosesReport(name: ZoonosesReportName, f: ZoonosesReportFilters): Promise<ZoonosesReport> {
+  return jsonFetch<ZoonosesReport>(withQuery(zooPath("reports", name), zooReportQuery(f)));
+}
+export function fetchZoonosesReportFile(name: ZoonosesReportName, f: ZoonosesReportFilters): Promise<SignatureFile> {
+  return binaryFetch(withQuery(zooPath("reports", `${name}.csv`), zooReportQuery(f)), "text/csv");
 }

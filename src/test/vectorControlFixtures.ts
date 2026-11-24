@@ -35,7 +35,9 @@ export const INACTIVE_PRODUCT: VectorProduct = {
   id: "pr3", code: "TEM", name: "Temefós 1% G", unit: "g", charge_size: "1.00", uses: [ "focal" ], active: false, in_use: true
 };
 // O produto como sai nos domínios (só os ativos, sem active/in_use).
-export const domainProduct = ({ id, code, name, unit, charge_size, uses }: VectorProduct) => ({ id, code, name, unit, charge_size, uses });
+// `uses` só as vetoriais: o `products` dos domínios do 35a nunca traz a vacina nem a coleira (35b).
+export const domainProduct = ({ id, code, name, unit, charge_size, uses }: VectorProduct) =>
+  ({ id, code, name, unit, charge_size, uses: uses as Exclude<VectorProduct["uses"][number], "rabies_vaccine" | "collar">[] });
 
 export const VC_DOMAINS: VectorControlDomains = {
   activities: [

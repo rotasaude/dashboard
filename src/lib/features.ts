@@ -13,7 +13,7 @@ export type FeatureKey =
   | "pharmacy" | "dental_care" | "vaccination" | "rnds_immunization" | "rnds_mock"
   | "sanitary_transport" | "tfd" | "psychosocial_care" | "urgency_care" | "waiting_room_display"
   | "urgency_stock_deduction" | "ombudsman" | "ombudsman_anonymous_web" | "home_visits" | "collective_activities"
-  | "vector_control";
+  | "vector_control" | "zoonoses";
 
 export const FEATURE_DISABLED_MESSAGE = "esta funcionalidade está desligada para a cidade";
 
@@ -69,7 +69,9 @@ const FEATURE_LABEL: Record<string, string> = {
   home_visits: "Visita domiciliar e territorial",
   collective_activities: "Atividade coletiva",
   // Módulo 35a (ADR 0054): exige home_visits utilizável; o rótulo curto do contrato §1 (Q12: só a descrição do maintenance muda)
-  vector_control: "Vigilância ambiental (endemias)"
+  vector_control: "Vigilância ambiental (endemias)",
+  // Módulo 35b (ADR 0054): o centro de zoonoses; exige territory_registry e clinical_record utilizáveis
+  zoonoses: "Centro de zoonoses"
 };
 
 export function sessionFeatures(user: { features?: unknown } | null | undefined): string[] {

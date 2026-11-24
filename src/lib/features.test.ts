@@ -163,6 +163,12 @@ describe("módulo 24b", () => {
 });
 
 describe("módulo 35a", () => {
+  it("zoonoses tem o rótulo do centro de zoonoses e vem da sessão", () => {
+    expect(featureLabel("zoonoses")).toBe("Centro de zoonoses");
+    expect(hasFeature({ features: [ "zoonoses" ] }, "zoonoses")).toBe(true);
+    expect(hasFeature({ features: [ "vector_control" ] }, "zoonoses")).toBe(false);
+  });
+
   it("vector_control tem o rótulo curto do contrato §1 e vem da sessão", () => {
     expect(featureLabel("vector_control")).toBe("Vigilância ambiental (endemias)");
     expect(hasFeature({ features: [ "vector_control" ] }, "vector_control")).toBe(true);

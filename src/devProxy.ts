@@ -12,3 +12,8 @@ export const MODULE_24B_PROXY_KEYS = [
 export const MODULE_35A_PROXY_KEYS = [
   "^/vector_control(/|\\?|$)"
 ];
+
+// Módulo 35b: centro de zoonoses (inclui /zoonoses/reports/<nome>.csv). Mesma regra: não casa /zoonosesX nem /dashboard/zoonoses.
+export const MODULE_35B_PROXY_KEYS = [
+  "^/zoonoses(/|\\?|$)"
+];

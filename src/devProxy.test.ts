@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MODULE_24B_PROXY_KEYS, MODULE_35A_PROXY_KEYS } from "./devProxy";
+import { MODULE_24B_PROXY_KEYS, MODULE_35A_PROXY_KEYS, MODULE_35B_PROXY_KEYS } from "./devProxy";
 
 // O Vite casa as chaves de regex do proxy contra a URL com a query string.
 describe("proxy de dev do módulo 24b", () => {
@@ -32,5 +32,21 @@ describe("proxy de dev do módulo 35a", () => {
     expect(matchesAny("/vector_controlX")).toBe(false);
     expect(matchesAny("/dashboard/vector_control")).toBe(false);
     expect(MODULE_35A_PROXY_KEYS).toEqual([ "^/vector_control(/|\\?|$)" ]);
+  });
+});
+
+describe("proxy de dev do módulo 35b", () => {
+  const matchesAny = (url: string) => MODULE_35B_PROXY_KEYS.some((key) => new RegExp(key).test(url));
+
+  it("casa /zoonoses, a query e as sub-rotas (inclusive o CSV)", () => {
+    for (const url of [ "/zoonoses", "/zoonoses?x=1", "/zoonoses/reports/leish.csv", "/zoonoses/collars?due=1" ]) {
+      expect(matchesAny(url), url).toBe(true);
+    }
+  });
+
+  it("não casa outro prefixo nem a rota do próprio dashboard", () => {
+    expect(matchesAny("/zoonosesX")).toBe(false);
+    expect(matchesAny("/dashboard/zoonoses")).toBe(false);
+    expect(MODULE_35B_PROXY_KEYS).toEqual([ "^/zoonoses(/|\\?|$)" ]);
   });
 });
