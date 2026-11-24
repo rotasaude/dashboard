@@ -6,7 +6,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { IconLock } from "@tabler/icons-react";
 import { useAuth } from "../../lib/auth";
-import { hasFeature } from "../../lib/features";
+import { zoonosesUsable } from "../../lib/zoonoses";
 import { createOmbudsmanSubject, listOmbudsmanSubjects, updateOmbudsmanSubject } from "../../lib/api";
 import { OMB_OPTIONS_KEY, OMB_SUBJECTS_KEY, STATIC_QUERY, nameProblem, ombudsmanError, ombudsmanRefusals } from "../../lib/ombudsman";
 import { useActionMessage } from "../../lib/useActionMessage";
@@ -64,7 +64,7 @@ function SubjectRow({ s, child, onChanged, msg }: {
   const { user } = useAuth();
   const reserved = !!s.code;
   // Com o centro ligado, o reservado só renomeia (o api também recusa com 409 `reserved_subject`); reativar continua.
-  const lockedOn = reserved && s.active && hasFeature(user, "zoonoses");
+  const lockedOn = reserved && s.active && zoonosesUsable(user);
   // Só a chave que muda: o nome ou a situação lidos antes não vão junto (desfariam a mudança de outra pessoa).
   const save = async (change: { name: string } | { active: boolean }) => { await updateOmbudsmanSubject(s.id, change); onChanged(); };
   const toggle = async () => {

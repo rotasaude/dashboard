@@ -54,6 +54,13 @@ describe("assuntos reservados do centro de zoonoses", () => {
     expect(screen.getByRole("button", { name: "Desativar Transporte" })).not.toBeNull();
   });
 
+  it("zoonoses ligado sem o cadastro territorial: o Desativar fica (o api só recusa com o portão inteiro)", async () => {
+    mountSettings(ombudsmanUser([ "ombudsman" ], [ "ombudsman", "zoonoses" ]));
+    expect(await screen.findByText("Escorpião")).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Desativar Zoonoses" })).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Desativar Escorpião" })).not.toBeNull();
+  });
+
   it("409 reserved_subject (corrida): a frase do centro de zoonoses", async () => {
     // Sessão ainda sem o interruptor, o api já com ele: a corrida da configuração.
     vi.mocked(api.updateOmbudsmanSubject).mockRejectedValue(new ApiError(409, { error: "reserved_subject" }, "x"));
@@ -135,6 +142,19 @@ describe("balcão: demanda de zoonoses (Q14)", () => {
     await waitFor(() => expect(api.createOmbudsmanManifestation).toHaveBeenCalledTimes(1));
     expect(Object.keys(sent())).not.toContain("zoonoses_subtype");
     expect(Object.keys(sent())).not.toContain("place_address");
+  });
+
+  it("duplo clique em Registrar com Sim e o endereço: um envio só", async () => {
+    mountNew();
+    await fill("request");
+    fireEvent.change(screen.getByLabelText("Nome informado"), { target: { value: "José Alves" } });
+    fireEvent.click(within(await screen.findByRole("group", { name: QUESTION })).getByLabelText("Sim"));
+    fireEvent.change(screen.getByLabelText("Qual o problema?"), { target: { value: "scorpion" } });
+    fireEvent.change(screen.getByLabelText("Onde fica o problema? (endereço do local)"), { target: { value: ADDRESS } });
+    submit();
+    submit();
+    await waitFor(() => expect(api.createOmbudsmanManifestation).toHaveBeenCalledTimes(1));
+    expect(sent()).toMatchObject({ zoonoses_subtype: "scorpion", place_address: ADDRESS });
   });
 
   it("sem o interruptor zoonoses a pergunta não aparece", async () => {
