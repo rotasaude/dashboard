@@ -1,13 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  ApiError, cancelVaccination, closeRabiesCampaign, closeLeishSurvey, closeObservation, collectLeishTest, createAnimal, createOmbudsmanManifestation,
+  ApiError, cancelVaccination, closeRabiesCampaign, closeLeishSurvey, closeDemand, closeObservation, collectLeishTest, createRabiesCampaign, updateLeishTest, updateRabiesCampaign, createAnimal, createOmbudsmanManifestation,
   declineDemand, enterShelter, exitShelter, fetchZoonosesReportFile, getAnimal, getDemand, getObservationContact, getZooParameters,
   getZoonosesDomains, getZoonosesReport, linkObservationAnimal, listRabiesCampaigns, listDemands, listDueCollars, listLeishTests, listObservations,
   listShelterStays, listVaccinations, lookupZooPerson, openRabiesCampaign, openLeishSurvey, placeCollar, putZooParameters, recordEuthanasia,
   recordLeishOutcome, recordNeutering, recordVaccination, removeCollar, searchAnimals, suggestLeishSurvey, updateAnimal
 } from "./api";
 import {
-  CONTACT, PERSON, ZOO_DOMAINS, ZOO_PARAMS, animal, campaign, collar, demandDetail, dueCollar, euthanasia, history, leishTest, observation,
+  CONTACT, PERSON, survey, ZOO_DOMAINS, ZOO_PARAMS, animal, campaign, collar, demandDetail, dueCollar, euthanasia, history, leishTest, observation,
   stay, vaccination, zooReport
 } from "../test/zoonosesFixtures";
 
@@ -32,11 +32,11 @@ const PERIOD = { from: "2026-10-05", to: "2026-11-23" };
 
 describe("cliente do centro de zoonoses (módulo 35b)", () => {
   it("domínios e parâmetros: GET sem query; listas extras do api são toleradas", async () => {
-    stub({ ...ZOO_DOMAINS, demand_outcomes: [ { code: "resolved", label: "Resolvido" } ] });
+    stub(ZOO_DOMAINS);
     const d = await getZoonosesDomains();
     expect([ last().url, methodOf() ]).toEqual([ "/zoonoses/domains", "GET" ]);
     expect(d.subtypes[0].code).toBe("scorpion");
-    expect((d.demand_outcomes as { code: string }[])[0].code).toBe("resolved");
+    expect(d.demand_outcomes[0].label).toBe("Resolvida");
     stub({ version: 2, values: ZOO_PARAMS, created_at: null });
     expect((await getZooParameters()).values.observation_days).toBe(10);
     expect(last().url).toBe("/zoonoses/parameters");
@@ -124,9 +124,9 @@ describe("cliente do centro de zoonoses (módulo 35b)", () => {
     stub(campaign({ stage: "closed" })); await closeRabiesCampaign("cp1");
     expect([ last().url, bodyOf() ]).toEqual([ "/zoonoses/campaigns/cp1/close", {} ]);
     stub({ items: [ campaign() ] }); expect(await listRabiesCampaigns()).toEqual([ campaign() ]);
-    stub(survey0()); await openLeishSurvey("sv1", 3);
+    stub(survey({ stage: "open" })); await openLeishSurvey("sv1", 3);
     expect([ last().url, bodyOf() ]).toEqual([ "/zoonoses/leish_surveys/sv1/open", { expected_version: 3 } ]);
-    stub(survey0()); await closeLeishSurvey("sv1", 4);
+    stub(survey({ stage: "open" })); await closeLeishSurvey("sv1", 4);
     expect(bodyOf()).toEqual({ expected_version: 4 });
   });
 
@@ -136,6 +136,26 @@ describe("cliente do centro de zoonoses (módulo 35b)", () => {
     expect([ last().url, methodOf() ]).toEqual([ "/zoonoses/vaccinations", "POST" ]);
     expect("campaign_id" in bodyOf()).toBe(false);
     expect("household_id" in bodyOf()).toBe(false);
+  });
+
+  it("demanda: encerra com desfecho e texto no corpo", async () => {
+    stub(demandDetail({ state: "closed", outcome: "resolved" }));
+    await closeDemand("dm1", { outcome: "resolved", text: "escorpião retirado", expected_version: 2 });
+    expect([ last().url, methodOf(), bodyOf() ]).toEqual([ "/zoonoses/demands/dm1/close", "POST", { outcome: "resolved", text: "escorpião retirado", expected_version: 2 } ]);
+  });
+
+  it("exame de LV: PATCH com a versão; null apaga o campo", async () => {
+    stub(leishTest()); await updateLeishTest("lt1", { elisa_result: "reactive", elisa_on: "2026-11-24", expected_version: 1 });
+    expect([ last().url, methodOf(), bodyOf() ]).toEqual([ "/zoonoses/leish_tests/lt1", "PATCH", { elisa_result: "reactive", elisa_on: "2026-11-24", expected_version: 1 } ]);
+    stub(leishTest()); await updateLeishTest("lt1", { elisa_request: null, elisa_result: null, elisa_on: null, expected_version: 2 });
+    expect(bodyOf()).toEqual({ elisa_request: null, elisa_result: null, elisa_on: null, expected_version: 2 });
+  });
+
+  it("campanha: criação sem versão; edição leva expected_version no corpo", async () => {
+    stub(campaign(), 201); await createRabiesCampaign({ name: "Campanha 2026", starts_on: "2026-10-05", ends_on: "2026-11-30" });
+    expect([ last().url, methodOf(), bodyOf() ]).toEqual([ "/zoonoses/campaigns", "POST", { name: "Campanha 2026", starts_on: "2026-10-05", ends_on: "2026-11-30" } ]);
+    stub(campaign({ version: 4 })); await updateRabiesCampaign("cp1", { goal_dogs: 900, expected_version: 3 });
+    expect([ last().url, methodOf(), bodyOf() ]).toEqual([ "/zoonoses/campaigns/cp1", "PATCH", { goal_dogs: 900, expected_version: 3 } ]);
   });
 
   it("observação: encerra com a versão; liga o animal uma vez", async () => {
@@ -196,5 +216,3 @@ describe("cliente do centro de zoonoses (módulo 35b)", () => {
     expect("place_address" in bodyOf()).toBe(false);
   });
 });
-
-function survey0() { return { id: "sv1", stage: "open" }; }

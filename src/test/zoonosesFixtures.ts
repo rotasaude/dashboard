@@ -67,6 +67,10 @@ export const ZOO_DOMAINS: ZoonosesDomains = {
   demand_states: [
     { code: "open", label: "Aberta" }, { code: "scheduled", label: "Agendada" }, { code: "inspected", label: "Vistoriada" }, { code: "closed", label: "Encerrada" }
   ],
+  demand_outcomes: [
+    { code: "resolved", label: "Resolvida" }, { code: "guidance", label: "Orientação ao cidadão" },
+    { code: "not_found", label: "Problema não encontrado no local" }, { code: "referred", label: "Encaminhada a outro órgão" }
+  ],
   deadline_colors: [
     { code: "green", label: "No prazo" }, { code: "yellow", label: "Perto do prazo" }, { code: "red", label: "Vencida" }, { code: "none", label: "Sem prazo" }
   ],

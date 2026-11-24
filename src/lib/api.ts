@@ -8464,13 +8464,13 @@ export interface ZoonosesParameters {
 }
 export interface ZoonosesParameterVersion { version: number; values: ZoonosesParameters; created_at: string | null }
 export type Coded = { code: string; label: string }[];
-// Domínios do api (`GET /zoonoses/domains`). Não há `units`, `shelter_units`, `demand_outcomes` nem `observation_days`
+// Domínios do api (`GET /zoonoses/domains`). Não há `units`, `shelter_units` nem `observation_days`
 // (as unidades vêm da rota de unidades, os parâmetros de `/zoonoses/parameters`); listas extras que o api acrescentar
 // são toleradas (`[extra]`) e o código desconhecido aparece cru na tela.
 export type ZoonosesDomains = {
   species: Coded; sexes: Coded; sizes: Coded; animal_statuses: Coded; subtypes: Coded; dpp_results: Coded; elisa_results: Coded;
   leish_decisions: Coded; leish_survey_kinds: Coded; product_uses: Coded; entry_kinds: Coded; exit_kinds: Coded; euthanasia_reasons: Coded;
-  legal_bases: Coded; removal_reasons: Coded; modalities: Coded; demand_states: Coded; deadline_colors: Coded; observation_outcomes: Coded;
+  legal_bases: Coded; removal_reasons: Coded; modalities: Coded; demand_states: Coded; demand_outcomes: Coded; deadline_colors: Coded; observation_outcomes: Coded;
   products: { id: string; code: string; name: string; use: "rabies_vaccine" | "collar" }[];
   open_campaign: { id: string; name: string; starts_on: string; ends_on: string } | null;
   parameters: { collar_months: number };
