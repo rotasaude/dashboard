@@ -87,6 +87,13 @@ describe("estadas abertas", () => {
     expect(screen.queryByText("Outro sem nome")).toBeNull();
   });
 
+  it("entrada por observação: a marca diz a entrada, não o estado da observação (que pode já estar fechada)", async () => {
+    mocked(api.listShelterStays).mockResolvedValue(page([ stay({ entry_kind: "observation", bite_observation_id: "ob1" }) ]));
+    view();
+    expect(await screen.findByText("entrada por observação")).not.toBeNull();
+    expect(screen.queryByText("em observação")).toBeNull();
+  });
+
   it("sem unidade de vigilância ambiental ativa: a frase", async () => {
     mocked(api.getZoonosesDomains).mockResolvedValue({ ...ZOO_DOMAINS, units: [] });
     view();
@@ -321,12 +328,26 @@ describe("saída", () => {
     expect(api.exitShelter).not.toHaveBeenCalled();
   });
 
-  it("409 stay_changed → a frase e uma releitura, nenhum reenvio", async () => {
+  it("animal com a eutanásia gravada: a saída só oferece \"Eutanásia\"", async () => {
+    mocked(api.getAnimal).mockResolvedValue(history({ status: "deceased", euthanasia: euthanasia() }));
+    mocked(api.exitShelter).mockResolvedValue(stay({ exit_kind: "euthanasia", exited_on: TODAY35B, version: 2 }));
+    await open();
+    click("Registrar saída");
+    const kinds = within(screen.getByLabelText("Tipo de saída")).getAllByRole("option").map((o) => (o as HTMLOptionElement).value);
+    expect(kinds.filter(Boolean)).toEqual([ "euthanasia" ]);
+    set("Tipo de saída", "euthanasia");
+    click("Registrar saída");
+    await waitFor(() => expect(api.exitShelter).toHaveBeenCalledTimes(1));
+    expect(api.exitShelter).toHaveBeenCalledWith("st1", { exit_kind: "euthanasia", exited_on: TODAY35B, expected_version: 1 });
+  });
+
+  it("409 stay_changed → a frase e uma releitura das estadas, nenhum reenvio nem releitura do animal", async () => {
     mocked(api.exitShelter).mockRejectedValue(apiError(409, "stay_changed"));
     await open();
     click("Registrar saída");
     set("Tipo de saída", "returned");
     const before = staysCalls();
+    const animalsBefore = animalCalls();
     click("Registrar saída");
     expect(await screen.findByText(ZOONOSES_ERRORS.stay_changed)).not.toBeNull();
     await waitFor(() => expect(staysCalls()).toBe(before + 1));
@@ -334,5 +355,7 @@ describe("saída", () => {
     expect(api.exitShelter).toHaveBeenCalledTimes(1);
     expect(api.exitShelter).toHaveBeenCalledWith("st1", { exit_kind: "returned", exited_on: TODAY35B, expected_version: 1 });
     expect(staysCalls()).toBe(before + 1);
+    // A ficha some com a estada: relê-la gravaria animal.viewed numa leitura descartada.
+    expect(animalCalls()).toBe(animalsBefore);
   });
 });

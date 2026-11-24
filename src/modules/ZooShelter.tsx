@@ -78,7 +78,7 @@ function Shelter({ roles, today, onGoToSecurity }: { roles: ZoonosesRoles; today
     { label: "Animal", w: "1fr", card: "title", render: animalName },
     { label: "Entrada", w: "1fr", render: (s) => kind(s.entry_kind) },
     { label: "Desde", w: "0.8fr", render: (s) => fmtDay(s.entered_on) },
-    { label: "Observação", w: "0.8fr", render: (s) => (s.bite_observation_id ? <Tag tone="warn">em observação</Tag> : "—") },
+    { label: "Observação", w: "0.8fr", render: (s) => (s.bite_observation_id ? <Tag tone="neutral">entrada por observação</Tag> : "—") },
     { label: "Ações", w: "1fr", card: "actions", render: (s) => <ActionButton variant="secondary" onClick={() => { setNotice(null); setEntering(false); setPicked(s.id); }}>Abrir animal</ActionButton> }
   ];
   const exitCols: Column<ShelterStay>[] = [
@@ -199,7 +199,7 @@ function StayDetail({ stay, today, vet, meLoaded, me, onGoToSecurity, onStale, o
       )}
       {mode === "exit" && (
         <ExitForm stay={stay} animal={a} today={today} onCancel={() => setMode(null)} onExited={onExited}
-          onStale={(text) => { setMode(null); onStale(text); void reread(); }} />
+          onStale={(text) => { setMode(null); onStale(text); }} />
       )}
     </article>
   );

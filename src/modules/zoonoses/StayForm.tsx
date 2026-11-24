@@ -171,6 +171,7 @@ export function StayForm({ unit, today, onEntered, onStale, onCancel }: {
 }
 
 // Saída: tipo e data (entre a entrada e hoje); "Adotado" pede o adotante, que vira o tutor. `expected_version` da estada lida.
+// Com a eutanásia gravada, só a saída por eutanásia (o api recusa as outras com 409 animal_not_active).
 export function ExitForm({ stay, animal, today, onExited, onStale, onCancel }: {
   stay: ShelterStay; animal: AnimalHistory; today: string; onExited(s: ShelterStay): void; onStale(text: string): void; onCancel(): void;
 }) {
@@ -181,6 +182,7 @@ export function ExitForm({ stay, animal, today, onExited, onStale, onCancel }: {
   const [ adopter, setAdopter ] = useState<ZooPerson | null>(null);
   const busy = f.busy;
   const adopted = kind === "adopted";
+  const exitKinds = (domains?.exit_kinds ?? []).filter((o) => animal.euthanasia === null || o.code === "euthanasia");
 
   function check(): Problem[] {
     const out = fixed(stayExitProblems({ exitKind: kind || null, adopterId: adopter?.patient.id ?? null }, { tutor: animal.has_tutor, euthanized: animal.euthanasia !== null }));
@@ -202,7 +204,7 @@ export function ExitForm({ stay, animal, today, onExited, onStale, onCancel }: {
         <select value={kind} disabled={busy} style={inputStyle} {...f.aria("exit_kind")}
           onChange={(e) => { setKind(e.target.value); if (e.target.value !== "adopted") setAdopter(null); f.clear("exit_kind", "adopter_patient_id"); }}>
           <option value="">escolha</option>
-          {(domains?.exit_kinds ?? []).map((o) => <option key={o.code} value={o.code}>{o.label}</option>)}
+          {exitKinds.map((o) => <option key={o.code} value={o.code}>{o.label}</option>)}
         </select>
       </label>
       {f.errNode("exit_kind")}
