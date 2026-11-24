@@ -76,6 +76,25 @@ describe("ZooObservations", () => {
     expect(container.textContent).not.toContain("João Silva");
   });
 
+  it("contato disponível sem animal ligado (observação recém-criada)", async () => {
+    mocked(api.getObservation).mockResolvedValue(detail({ animal_id: null }));
+    mocked(api.getObservationContact).mockResolvedValue(CONTACT);
+    await openDetail();
+    click("Ver contato do tutor");
+    await screen.findByText(CONTACT.animal_tutor_phone!);
+    expect(api.getObservationContact).toHaveBeenCalledTimes(1);
+  });
+
+  it("dica da eutanásia só com eutanasiado escolhido; animal já ligado mostra a linha de uma vez só", async () => {
+    await openDetail();
+    expect(screen.getByText("A ligação do animal vale uma vez só e já foi feita.")).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Ligar animal" })).toBeNull();
+    click("Registrar desfecho");
+    expect(screen.queryByText(/registre antes a eutanásia/)).toBeNull();
+    set("Desfecho", "euthanized");
+    expect(screen.getByText(/registre antes a eutanásia em Canil e gatil/)).not.toBeNull();
+  });
+
   it("sadio antes do último dia: observation_not_finished antes de enviar; no último dia envia", async () => {
     mocked(api.getObservation).mockResolvedValue(detail({ ends_on: "2026-11-25" }));
     mocked(api.closeObservation).mockResolvedValue(detail({ state: "closed", outcome: "healthy" }));
@@ -106,8 +125,8 @@ describe("ZooObservations", () => {
     mocked(api.closeObservation).mockRejectedValue(err(422, { error: "invalid_request", path: "outcome" }));
     await openDetail();
     click("Registrar desfecho");
-    expect(screen.getByText(/registre antes a eutanásia em Canil e gatil/)).not.toBeNull();
     set("Desfecho", "euthanized");
+    expect(screen.getByText(/registre antes a eutanásia em Canil e gatil/)).not.toBeNull();
     set("Data do desfecho", "2026-11-22");
     click("Enviar");
     await screen.findByText(ZOONOSES_ERRORS.invalid_request);

@@ -97,8 +97,10 @@ export function ObservationDetail({ id, today, onChanged }: { id: string; today:
       {notice && <p role="status" style={okText}>{notice}</p>}
       {mode === null && idle && (
         <div style={row}>
-          {o.animal_id && <ContactDialog observationId={id} onStale={() => reread()} />}
-          {!o.animal_id && <ActionButton variant="secondary" onClick={() => reset("link")}>Ligar animal</ActionButton>}
+          <ContactDialog observationId={id} onStale={() => reread()} />
+          {o.animal_id
+            ? <span style={muted}>A ligação do animal vale uma vez só e já foi feita.</span>
+            : <ActionButton variant="secondary" onClick={() => reset("link")}>Ligar animal</ActionButton>}
           {o.state === "open" && <ActionButton variant="secondary" onClick={() => reset("close")}>Registrar desfecho</ActionButton>}
         </div>
       )}
@@ -111,7 +113,7 @@ export function ObservationDetail({ id, today, onChanged }: { id: string; today:
               {outcomes.map((x) => <option key={x.code} value={x.code}>{x.label}</option>)}
             </select>
           </label>
-          <p style={muted}>{EUTHANASIA_HINT}</p>
+          {outcome === "euthanized" && <p style={muted}>{EUTHANASIA_HINT}</p>}
           <label style={fieldLabel}>
             Data do desfecho
             <input type="date" value={outcomeOn} disabled={busy} style={inputStyle} onChange={(e) => setOutcomeOn(e.target.value)} />

@@ -19,14 +19,14 @@ export function ContactDialog({ observationId, onClose, onStale }: { observation
   const [ problem, setProblem ] = useState<string | null>(null);
   const alive = useRef(true);
   const sending = useRef(false);
-  const trigger = useRef<HTMLButtonElement | null>(null);
+  const [ trigger, setTrigger ] = useState<HTMLButtonElement | null>(null);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
 
   function close() {
     setContact(null);
     onClose?.();
   }
-  const dialogRef = useDialog<HTMLElement>(!!contact, close, trigger.current);
+  const dialogRef = useDialog<HTMLElement>(!!contact, close, trigger);
 
   async function read() {
     if (sending.current || contact) return;
@@ -48,7 +48,7 @@ export function ContactDialog({ observationId, onClose, onStale }: { observation
 
   return (
     <>
-      <button ref={trigger} type="button" style={secondaryButtonStyle} aria-expanded={!!contact} aria-disabled={busy || !!contact || undefined}
+      <button ref={setTrigger} type="button" style={secondaryButtonStyle} aria-expanded={!!contact} aria-disabled={busy || !!contact || undefined}
         onClick={() => void read()}>Ver contato do tutor</button>
       {problem && <p role="alert" style={alert}>{problem}</p>}
       {contact && (
