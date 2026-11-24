@@ -40,6 +40,17 @@ describe("respostas à ouvidoria", () => {
     expect(screen.getByText(/Não entre em contato com quem fez a manifestação/)).not.toBeNull();
   });
 
+  it("Q33: a caixa do respondente nunca mostra nem guarda o endereço do local, mesmo que o api mande", async () => {
+    vi.mocked(api.listOmbudsmanInbox).mockResolvedValue(page([
+      { ...inboxItem(), place_address: "Rua das Acácias, 120, fundos — Jardim Botânico" } as never
+    ]));
+    const { client, container } = mount();
+    expect(await screen.findByText(/falta de losartana/)).not.toBeNull();
+    expect(screen.queryByText(/Endereço do local|Acácias/)).toBeNull();
+    expect(container.textContent).not.toMatch(/Acácias/);
+    expect(JSON.stringify(client.getQueryCache().getAll().map((q) => [ q.queryKey, q.state.data ]))).not.toMatch(/Acácias|place_address/);
+  });
+
   it("pendentes primeiro, com a ordem do api dentro de cada grupo; Carregar mais manda before", async () => {
     vi.mocked(api.listOmbudsmanInbox)
       .mockResolvedValueOnce(page([ inboxItem({ id: "r1", state: "replied", color: null, extract: "Extrato respondido" }),

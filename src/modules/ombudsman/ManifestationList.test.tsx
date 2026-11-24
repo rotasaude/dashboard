@@ -55,6 +55,17 @@ describe("caixa da ouvidoria", () => {
     expect(screen.queryByText(/Maria Lima|três vezes/)).toBeNull();
   });
 
+  it("Q33: a lista nunca mostra nem guarda o endereço do local, mesmo que o api mande", async () => {
+    vi.mocked(api.listOmbudsmanManifestations).mockResolvedValue(page({ items: [
+      { ...listItem(), place_address: "Rua das Acácias, 120, fundos — Jardim Botânico" } as never
+    ] }));
+    const { client, container } = mount();
+    await screen.findByText("2026-000123");
+    expect(screen.queryByText(/Endereço do local|Acácias/)).toBeNull();
+    expect(container.textContent).not.toMatch(/Acácias/);
+    expect(JSON.stringify(client.getQueryCache().getAll().map((q) => [ q.queryKey, q.state.data ]))).not.toMatch(/Acácias|place_address/);
+  });
+
   it("filtros viram a consulta; protocolo só no campo q; trocar filtro recomeça do início", async () => {
     vi.mocked(api.listOmbudsmanManifestations).mockResolvedValue(page({ next_before: "c2" }));
     mount();

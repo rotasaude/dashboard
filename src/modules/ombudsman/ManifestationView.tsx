@@ -70,6 +70,7 @@ function Data({ m }: { m: OmbudsmanManifestation }) {
             </span>
           )} />
           <KeyValue k="Assunto" v={subjectText(m)} mono={false} />
+          {m.place_address && <KeyValue k="Endereço do local" v={m.place_address} mono={false} />}
           <KeyValue k="Unidade" v={m.health_unit?.name ?? "—"} mono={false} />
           <KeyValue k="Profissional" v={m.referred_professional?.name ?? "—"} mono={false} />
           <KeyValue k="Ciclo" v={String(m.cycle)} />

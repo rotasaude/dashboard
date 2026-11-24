@@ -62,6 +62,20 @@ describe("detalhe da manifestação", () => {
     expect(screen.queryByRole("button", { name: "Ver identidade" })).toBeNull();
   });
 
+  it("Q33: o endereço do local da demanda de zoonoses aparece no detalhe da equipe só quando vem preenchido", async () => {
+    mount(manifestation({ place_address: "Rua das Acácias, 120, fundos — Jardim Botânico" }));
+    await screen.findByRole("heading", { name: "Manifestação 2026-000123" });
+    expect(screen.getByText("Endereço do local")).not.toBeNull();
+    expect(screen.getByText("Rua das Acácias, 120, fundos — Jardim Botânico")).not.toBeNull();
+    cleanup();
+    for (const place_address of [ null, undefined, "" ]) {
+      mount(manifestation({ place_address }));
+      await screen.findByRole("heading", { name: "Manifestação 2026-000123" });
+      expect(screen.queryByText("Endereço do local")).toBeNull();
+      cleanup();
+    }
+  });
+
   it("identificada: lê campo a campo — CPF e telefone inteiros nunca aparecem; contato digitado aparece sem máscara", async () => {
     mount({ ...manifestation({ identity: { name: "Maria Lima", cpf_masked: null, phone_masked: "(**) *****-1234",
       contact: "(41) 3333-4444", cpf: "529.982.247-25", phone: "(41) 99876-1234", full_name: "Joana Prado Lima" } as never }),

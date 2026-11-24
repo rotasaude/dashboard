@@ -7168,6 +7168,9 @@ export interface OmbudsmanCan {
 }
 export interface OmbudsmanManifestation extends OmbudsmanListItem {
   body: string;
+  // Módulo 35b (Q33, json.rb:41): o lugar da ocorrência da demanda de zoonoses, só no detalhe da equipe — nunca na lista, na
+  // caixa do respondente nem ao cidadão.
+  place_address?: string | null;
   ouvidorsus_number: string | null;
   referred_professional: OmbudsmanRef | null;
   cycle: number;
