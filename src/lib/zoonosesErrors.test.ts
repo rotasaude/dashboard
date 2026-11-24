@@ -38,8 +38,8 @@ describe("frases do 35b", () => {
     expect(ZOONOSES_ERRORS.tutor_not_found).toBe("o tutor deste animal não foi encontrado — confira o cadastro do tutor");
     expect(ZOONOSES_ERRORS.product_not_allowed).toBe("este produto não vale para esta finalidade");
   });
-  it("veterinarian_required exige papel, CRMV e vínculo na unidade de vigilância ambiental", () => {
-    for (const part of [ "papel", "CRMV", "vínculo", "vigilância ambiental" ]) expect(ZOONOSES_ERRORS.veterinarian_required).toContain(part);
+  it("veterinarian_required: a frase exata (o campo copia)", () => {
+    expect(ZOONOSES_ERRORS.veterinarian_required).toBe("Só o médico veterinário com CRMV e vínculo na unidade de vigilância ambiental pode registrar esta ação.");
   });
   it("não inventa o que o api não manda (tutor_required, euthanasia_required)", () => {
     expect(ZOONOSES_ERROR_CODES as readonly string[]).not.toContain("tutor_required");

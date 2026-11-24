@@ -27,7 +27,7 @@ const CHANGED = "enquanto a tela estava aberta — os dados foram relidos";
 export const ZOONOSES_ERRORS: Record<ZoonosesErrorCode, string> = {
   feature_disabled: ZOONOSES_DISABLED,
   missing_role: "seu papel não permite esta ação",
-  veterinarian_required: "só o médico veterinário (papel da equipe de zoonoses, CBO 223305, com CRMV e vínculo na unidade de vigilância ambiental) registra esta ação",
+  veterinarian_required: "Só o médico veterinário com CRMV e vínculo na unidade de vigilância ambiental pode registrar esta ação.",
   mfa_required: "confirme sua identidade com o segundo fator e tente de novo",
   not_found: "não encontrado — recarregue a lista",
   invalid_request: "pedido inválido — recarregue a tela e tente de novo",
