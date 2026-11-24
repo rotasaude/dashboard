@@ -56,7 +56,7 @@ const staysCalls = () => mocked(api.listShelterStays).mock.calls.length;
 const animalCalls = () => mocked(api.getAnimal).mock.calls.length;
 
 describe("estadas abertas", () => {
-  it("lista a unidade de vigilância ambiental com a contagem e sem tutor, nome nem microchip", async () => {
+  it("lista a unidade de vigilância ambiental com a contagem, o nome do animal e sem tutor nem microchip", async () => {
     view();
     expect(await screen.findByText("UVZ Central")).not.toBeNull();
     // A unidade vem dos domínios; /attendance/units é fechado à equipe de zoonoses.
@@ -77,6 +77,14 @@ describe("estadas abertas", () => {
     expect(screen.getByText("Cão sem nome")).not.toBeNull();
     expect(screen.queryByText("Thor")).toBeNull();
     await waitFor(() => expect(mocked(api.listShelterStays).mock.calls.some(([q]) => q.open === false)).toBe(true));
+  });
+
+  it("animal sem nome: Cão, Gato e Animal sem nome (espécie fora de cão e gato)", async () => {
+    const mk = (id: string, species: string) => stay({ id, animal_id: `a-${id}`, animal: { id: `a-${id}`, name: null, species } });
+    mocked(api.listShelterStays).mockResolvedValue(page([ mk("s1", "dog"), mk("s2", "cat"), mk("s3", "other") ], 3));
+    view();
+    for (const t of [ "Cão sem nome", "Gato sem nome", "Animal sem nome" ]) expect(await screen.findByText(t)).not.toBeNull();
+    expect(screen.queryByText("Outro sem nome")).toBeNull();
   });
 
   it("sem unidade de vigilância ambiental ativa: a frase", async () => {

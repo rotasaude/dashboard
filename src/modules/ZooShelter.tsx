@@ -9,7 +9,7 @@ import { errorCode, getAnimal, getMyProfessional, listShelterStays, recordNeuter
 import { cityIsoDate } from "../lib/format";
 import { fmtDay } from "../lib/homeVisits";
 import {
-  NOMINAL_QUERY, STATIC_QUERY, ZOO_ANIMAL_KEY, ZOO_ME_KEY, ZOO_NOT_VET, ZOO_STAYS_KEY, isVeterinarian, isZoonosesStale, zooLabel, zoonosesError,
+  NOMINAL_QUERY, STATIC_QUERY, animalDisplayName, ZOO_ANIMAL_KEY, ZOO_ME_KEY, ZOO_NOT_VET, ZOO_STAYS_KEY, isVeterinarian, isZoonosesStale, zooLabel, zoonosesError,
   zoonosesRefusals, type ZoonosesRoles
 } from "../lib/zoonoses";
 import { ZOONOSES_ERRORS } from "../lib/zoonosesErrors";
@@ -72,7 +72,7 @@ function Shelter({ roles, today, onGoToSecurity }: { roles: ZoonosesRoles; today
   const rereadStays = () => client.invalidateQueries({ queryKey: [ ZOO_STAYS_KEY ] });
   const stale = (text: string) => { setNotice(text); setEntering(false); setPicked(null); void rereadStays(); };
   const kind = (code: string) => zooLabel(domains?.entry_kinds, code);
-  const animalName = (s: ShelterStay) => s.animal.name ?? `${zooLabel(domains?.species, s.animal.species)} sem nome`;
+  const animalName = (s: ShelterStay) => animalDisplayName(s.animal.name, s.animal.species);
 
   const openCols: Column<ShelterStay>[] = [
     { label: "Animal", w: "1fr", card: "title", render: animalName },

@@ -56,6 +56,10 @@ export function isVeterinarian(me: MyProfessional | null | undefined, roles: Zoo
 export const vetIdentity = (me: MyProfessional): string =>
   `${me.professional.professional_name} · CRMV-${me.professional.council_state ?? ""} ${me.professional.registration_number ?? ""}`.trimEnd();
 
+// Nome do animal; sem nome: "Cão sem nome", "Gato sem nome" ou "Animal sem nome" (qualquer outra espécie).
+export const animalDisplayName = (name: string | null, species: string): string =>
+  name ?? `${species === "dog" ? "Cão" : species === "cat" ? "Gato" : "Animal"} sem nome`;
+
 // ─── Chaves de cache ────────────────────────────────────────────────────────
 export const ZOO_DOMAINS_KEY = "zooDomains";
 export const ZOO_ANIMAL_KEY = "zooAnimal";

@@ -26,7 +26,7 @@ export const COLLAR: VectorProduct & { use: "collar" } = {
 const domainProduct = ({ id, code, name, use }: { id: string; code: string; name: string; use: "rabies_vaccine" | "collar" }) => ({ id, code, name, use });
 
 export const ZOO_DOMAINS: ZoonosesDomains = {
-  units: [ { id: "uvz1", name: "UVZ Central" }, { id: "u1", name: "UBS Centro" } ],
+  units: [ { id: "uvz1", name: "UVZ Central" }, { id: "u1", name: "UVZ Norte" } ],
   species: [ { code: "dog", label: "Cão" }, { code: "cat", label: "Gato" }, { code: "other", label: "Outro" } ],
   sexes: [ { code: "male", label: "Macho" }, { code: "female", label: "Fêmea" }, { code: "unknown", label: "Não informado" } ],
   sizes: [ { code: "small", label: "Pequeno" }, { code: "medium", label: "Médio" }, { code: "large", label: "Grande" } ],

@@ -53,7 +53,7 @@ const form = (name: string) => screen.findByRole("form", { name });
 async function fixedPostForm() {
   view();
   await form("Registrar dose");
-  await screen.findByRole("option", { name: "UBS Centro" });
+  await screen.findByRole("option", { name: "UVZ Norte" });
   expect(api.listActiveUnits).not.toHaveBeenCalled();
   await screen.findByRole("option", { name: "Posto fixo" });
 }
