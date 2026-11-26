@@ -3,8 +3,10 @@
 // pelo step-up e a tabela é relida depois. Durante a confirmação o formulário fica à vista, parado: a recusa do api (unit_taken,
 // location_has_stock…) aparece junto dele.
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
-import { createVaccineRoom, updateVaccineRoom } from "../../lib/api";
-import type { HealthUnitRow, VaccineRoom } from "../../lib/api";
+import { ApiError, createVaccineRoom, errorCode, setColdChainCentralCnes, updateVaccineRoom } from "../../lib/api";
+import type { AdminLocation, HealthUnitRow, VaccineRoom } from "../../lib/api";
+import { BNAFAR_ERRORS } from "../../lib/bnafarErrors";
+import { cnesProblem, docOf } from "../../lib/bnafar";
 import { vaccinationError } from "../../lib/vaccination";
 import { Panel } from "../../components/Panel";
 import { DataTable } from "../../components/DataTable";
@@ -149,5 +151,63 @@ function RoomForm({ room, units, rooms, onSaved, onCancel, onGoToSecurity }: {
         />
       )}
     </section>
+  );
+}
+
+// Módulo 27b (F-21; Q13): o CNES da rede de frio. O PATCH exige a chave `cnes` (vazio → null apaga); o CNES de uma unidade de saúde
+// volta 409 `cnes_in_use` (a frase do api, pergunta da cidade-piloto). A escrita passa pelo step-up e o quadro é relido depois.
+const CNES_HELP = "obrigatório para o envio à BNAFAR; precisa ser um CNES desta cidade";
+
+export function ColdChainCnes({ central, onSaved, onGoToSecurity }: { central: AdminLocation; onSaved(): void; onGoToSecurity?(): void }) {
+  const [ value, setValue ] = useState(central.cnes ?? "");
+  const [ problem, setProblem ] = useState<string | null>(null);
+  const [ confirming, setConfirming ] = useState(false);
+  const ids = useId();
+  const next = value.trim() === "" ? null : docOf(value);
+
+  function review(e?: FormEvent) {
+    e?.preventDefault();
+    const found = value.trim() === "" ? null : cnesProblem(value);
+    setProblem(found);
+    if (!found) setConfirming(true);
+  }
+  const translate = (err: unknown): string => {
+    if (err instanceof ApiError && errorCode(err) === "cnes_in_use") return BNAFAR_ERRORS.cnes_in_use;
+    if (err instanceof ApiError && errorCode(err) === "invalid_request" && (err.body as { path?: string } | undefined)?.path === "cnes") {
+      const text = "o CNES tem 7 dígitos";
+      setProblem(text);
+      return text;
+    }
+    return vaccinationError(err);
+  };
+
+  return (
+    <form onSubmit={review} noValidate style={form}>
+      <div style={fieldBox}>
+        <label style={fieldLabel}>
+          CNES da rede de frio
+          <input value={value} inputMode="numeric" disabled={confirming} style={inputStyle} aria-invalid={problem ? true : undefined}
+            aria-describedby={`${ids}-hint${problem ? ` ${ids}-err` : ""}`}
+            onChange={(e) => { setProblem(null); setValue(e.target.value); }} />
+        </label>
+        <span style={hintStyle}>{central.cnes ?? "sem CNES"}</span>
+        <span id={`${ids}-hint`} style={hintStyle}>{CNES_HELP}</span>
+        {problem && <span id={`${ids}-err`} style={alert}>{problem}</span>}
+      </div>
+      {!confirming && <div style={row}><button type="submit" style={secondaryButtonStyle}>Salvar CNES</button></div>}
+      {confirming && (
+        <SensitiveAction
+          title="Salvar o CNES da rede de frio"
+          description={next ? `O CNES ${next} identifica a rede de frio no envio à BNAFAR.` : "Sem CNES, a rede de frio fica fora do envio à BNAFAR."}
+          requiresStepUp
+          confirmLabel="Confirmar CNES"
+          run={async () => { await setColdChainCentralCnes(next); }}
+          onDone={() => { setConfirming(false); onSaved(); }}
+          onCancel={() => setConfirming(false)}
+          onGoToSecurity={onGoToSecurity}
+          translateError={translate}
+        />
+      )}
+    </form>
   );
 }

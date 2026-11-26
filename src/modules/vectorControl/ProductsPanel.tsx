@@ -11,6 +11,7 @@ import { useAuth } from "../../lib/auth";
 import {
   STATIC_QUERY, VC_DOMAINS_KEY, VC_PRODUCTS_KEY, VECTOR_USES, ZOONOSES_USES, domainLabel, isVectorStale, vectorError, vectorProductUses, vectorRefusals
 } from "../../lib/vectorControl";
+import { catmatProblem } from "../../lib/bnafar";
 import { VECTOR_ERRORS } from "../../lib/vectorErrors";
 import { useActionMessage } from "../../lib/useActionMessage";
 import { Panel } from "../../components/Panel";
@@ -33,8 +34,8 @@ const UNITS: { code: VectorProductInput["unit"]; label: string }[] = [
   { code: "g", label: "g (gramas)" }, { code: "ml", label: "ml (mililitros)" }, { code: "un", label: "un (unidades)" }
 ];
 
-export type ProductDraft = { code: string; name: string; unit: string; charge: string; uses: string[] };
-export type ProductProblem = { path: "code" | "name" | "unit" | "charge_size" | "uses"; text: string };
+export type ProductDraft = { code: string; name: string; unit: string; charge: string; uses: string[]; catmat?: string };
+export type ProductProblem = { path: "code" | "name" | "unit" | "charge_size" | "uses" | "catmat_code"; text: string };
 
 const TEXT = {
   code: "código: de 1 a 10 caracteres, sem repetir o de outro produto (maiúsculas e minúsculas contam igual)",
@@ -44,7 +45,8 @@ const TEXT = {
   uses: "marque ao menos um uso",
   mixed: "vacina antirrábica e coleira são finalidades à parte: marque uma só, sem os usos de controle vetorial",
   zoo_unit: "vacina e coleira são em unidades (un)",
-  zoo_charge: "vacina e coleira têm carga 1,00"
+  zoo_charge: "vacina e coleira têm carga 1,00",
+  catmat_code: "o CATMAT é um número inteiro positivo de até 9 dígitos"
 } as const;
 // Catalog::PRODUCT_CODE / PRODUCT_NAME contam caracteres (code points) depois do strip; SaveProduct::CHARGE_SIZE com vírgula ou ponto.
 const length = (s: string) => [ ...s.trim() ].length;
@@ -66,10 +68,11 @@ export function productProblems(d: ProductDraft, others: string[]): ProductProbl
   else if (zoo && Number(chargeText(d.charge)) !== 1) out.push({ path: "charge_size", text: TEXT.zoo_charge });
   if (d.uses.length === 0 || !d.uses.every((u) => (USES as string[]).includes(u))) out.push({ path: "uses", text: TEXT.uses });
   else if (zoo && (d.uses.length > 1)) out.push({ path: "uses", text: TEXT.mixed });
+  if ((d.catmat ?? "").trim() !== "" && catmatProblem(d.catmat ?? "")) out.push({ path: "catmat_code", text: catmatProblem(d.catmat ?? "") as string });
   return out;
 }
 export const NOTHING_CHANGED = "nada mudou neste produto";
-const FIELD_PATHS: string[] = [ "code", "name", "unit", "charge_size", "uses" ];
+const FIELD_PATHS: string[] = [ "code", "name", "unit", "charge_size", "uses", "catmat_code" ];
 
 const cell = { display: "flex", flexDirection: "column", gap: 4, alignSelf: "flex-start" } as const;
 
@@ -103,6 +106,7 @@ export function ProductsPanel() {
               { label: "Nome", w: "2fr", render: (p) => p.name },
               { label: "Unidade", render: (p) => p.unit },
               { label: "Carga", align: "right", render: (p) => fmtCharge(p.charge_size) },
+              { label: "CATMAT", render: (p) => (p.catmat_code ? String(p.catmat_code) : "—") },
               { label: "Usos", w: "2fr", render: (p) => p.uses.map(useLabel).join(", ") },
               { label: "Ativo", render: (p) => (
                 <span style={row}>
@@ -146,8 +150,8 @@ function ProductForm({ editing, products, useLabel, offered, onCancel, onSaved, 
   const product = editing.kind === "edit" ? editing.product : null;
   const locked = !!product?.in_use;
   const [ d, setD ] = useState<ProductDraft>(() => product
-    ? { code: product.code, name: product.name, unit: product.unit, charge: fmtCharge(product.charge_size), uses: [ ...product.uses ] }
-    : { code: "", name: "", unit: "", charge: "", uses: [] });
+    ? { code: product.code, name: product.name, unit: product.unit, charge: fmtCharge(product.charge_size), uses: [ ...product.uses ], catmat: product.catmat_code ? String(product.catmat_code) : "" }
+    : { code: "", name: "", unit: "", charge: "", uses: [], catmat: "" });
   const [ active, setActive ] = useState(product ? product.active : true);
   const [ problems, setProblems ] = useState<ProductProblem[]>([]);
   const msg = useActionMessage();
@@ -158,7 +162,7 @@ function ProductForm({ editing, products, useLabel, offered, onCancel, onSaved, 
   const err = (path: string) => (problem(path) ? <span id={errId(path)} role="alert" style={alert}>{problem(path)}</span> : null);
   const set = (patch: Partial<ProductDraft>) => {
     setD((prev) => ({ ...prev, ...patch }));
-    setProblems((list) => list.filter((p) => !(Object.keys(patch) as string[]).some((k) => (k === "charge" ? "charge_size" : k) === p.path)));
+    setProblems((list) => list.filter((p) => !(Object.keys(patch) as string[]).some((k) => (k === "charge" ? "charge_size" : k === "catmat" ? "catmat_code" : k) === p.path)));
   };
   const toggleUse = (u: Use) => {
     if (d.uses.includes(u)) { set(isZooUse(u) && !product ? { uses: [], unit: "", charge: "" } : { uses: d.uses.filter((x) => x !== u) }); return; }
@@ -181,7 +185,9 @@ function ProductForm({ editing, products, useLabel, offered, onCancel, onSaved, 
     const full: VectorProductInput = {
       code: d.code.trim(), name: d.name.trim(), unit: d.unit as VectorProductInput["unit"], charge_size: chargeText(d.charge), uses: d.uses as Use[], active
     };
-    if (!product) return full;
+    // CATMAT (27b): vazio → null só na edição de um produto que tinha; no novo, só quando preenchido.
+    const catmat = (d.catmat ?? "").trim() === "" ? null : Number((d.catmat ?? "").trim());
+    if (!product) return catmat === null ? full : { ...full, catmat_code: catmat };
     const out: Partial<VectorProductInput> = {};
     if (full.code !== product.code) out.code = full.code;
     if (full.name !== product.name) out.name = full.name;
@@ -189,6 +195,7 @@ function ProductForm({ editing, products, useLabel, offered, onCancel, onSaved, 
     if (!locked && Number(full.charge_size) !== Number(product.charge_size)) out.charge_size = full.charge_size;
     if (full.uses.length !== product.uses.length || full.uses.some((u) => !product.uses.includes(u))) out.uses = full.uses;
     if (active !== product.active) out.active = active;
+    if (catmat !== (product.catmat_code ?? null)) out.catmat_code = catmat;
     return out;
   }
 
@@ -262,6 +269,14 @@ function ProductForm({ editing, products, useLabel, offered, onCancel, onSaved, 
         </div>
         {err("uses")}
       </fieldset>
+      <div style={cell}>
+        <label style={fieldLabel}>
+          CATMAT (opcional)
+          <input value={d.catmat} inputMode="numeric" style={inputStyle} onChange={(e) => set({ catmat: e.target.value })} {...aria("catmat_code")} />
+        </label>
+        <span style={muted}>código do produto no CATMAT; sem ele o produto fica fora do envio à BNAFAR</span>
+        {err("catmat_code")}
+      </div>
       <label style={checkLabel}>
         <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />
         Ativo

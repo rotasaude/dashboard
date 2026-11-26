@@ -7,12 +7,13 @@
 // Módulo 35a (Q21, A-12; StockGate#stock_feature_for!, SaveLocation#unit_fits?): o tipo oferecido segue o interruptor do domínio — central e
 // farmácia com `pharmacy`, "Controle vetorial" com `vector_control` (sem `pharmacy`, só ele). O local vector_control fica numa unidade
 // `environmental_surveillance` ativa (o seletor só lista essas; sem nenhuma, a frase pede para cadastrar antes), uma por unidade.
-import { useState } from "react";
-import { createAdminLocation, updateAdminLocation } from "../../lib/api";
+import { useId, useState } from "react";
+import { createAdminLocation, errorCode, updateAdminLocation } from "../../lib/api";
 import type { AdminLocation, AdminLocationInput, HealthUnitRow, StockLocationKind } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import { ENVIRONMENTAL_SURVEILLANCE_UNIT_KIND } from "../../lib/attendance";
-import { canUsePharmacy, locationKindLabel, pharmacyError } from "../../lib/pharmacy";
+import { canUsePharmacy, errorPath, locationKindLabel, pharmacyError } from "../../lib/pharmacy";
+import { cnesProblem, docOf } from "../../lib/bnafar";
 import { canUseVectorSupplies } from "../../lib/vectorControl";
 import { Panel } from "../../components/Panel";
 import { DataTable } from "../../components/DataTable";
@@ -28,6 +29,8 @@ const KIND_NOTE = "O tipo não muda depois de criado.";
 const EDIT_NOTE = "O tipo e a unidade não mudam depois de criado.";
 const NAME_TEXT = "o nome do local tem de 3 a 120 caracteres";
 const UNIT_TEXT = "escolha a unidade de saúde da farmácia";
+const CNES_LABEL = "CNES do almoxarifado (opcional, 7 dígitos)";
+const CNES_HELP = "obrigatório para o envio à BNAFAR; precisa ser um CNES desta cidade";
 const VECTOR_UNIT_TEXT = "escolha a unidade de vigilância ambiental do local";
 export const VECTOR_UNIT_MISSING = `cadastre antes uma unidade do tipo ${ENVIRONMENTAL_SURVEILLANCE_UNIT_KIND.label}`;
 
@@ -57,6 +60,12 @@ export function LocationsPanel({ locations, units, selectedId, onSelectStaff, on
             { label: "Local", w: "1.8fr", card: "title", render: (l) => l.name },
             { label: "Tipo", w: "1.3fr", render: (l) => locationKindLabel(l.kind) },
             { label: "Unidade", w: "1.4fr", render: (l) => l.health_unit?.name ?? "—" },
+            {
+              // F-21: o CNES EFETIVO de todos os locais, só leitura; só o central se edita (a farmácia da unidade herda o da unidade).
+              label: "CNES", w: "1fr", render: (l) => l.kind === "central"
+                ? (l.cnes ?? "sem CNES")
+                : l.cnes ? <span>{l.cnes} <Tag tone="neutral" mono={false}>da unidade</Tag></span> : "—"
+            },
             { label: "Situação", w: "90px", render: (l) => <Tag tone={l.active ? "ok" : "neutral"}>{l.active ? "ativo" : "inativo"}</Tag> },
             {
               label: "Equipe", w: "1fr", render: (l) => (
@@ -85,13 +94,18 @@ export function LocationsPanel({ locations, units, selectedId, onSelectStaff, on
 function LocationForm({ location, units, kinds, onSaved, onCancel, onGoToSecurity }: {
   location: AdminLocation | null; units: HealthUnitRow[]; kinds: StockLocationKind[]; onSaved(message: string): void; onCancel(): void; onGoToSecurity?(): void;
 }) {
+  const cnesId = useId();
   const [ kind, setKind ] = useState<string>(location?.kind ?? "");
   const [ name, setName ] = useState(location?.name ?? "");
   const [ unitId, setUnitId ] = useState(location?.health_unit?.id ?? "");
   const [ active, setActive ] = useState(location?.active ?? true);
+  const [ cnes, setCnes ] = useState(location?.cnes ?? "");
+  const [ cnesError, setCnesError ] = useState<string | null>(null);
   const [ error, setError ] = useState<string | null>(null);
   const [ confirming, setConfirming ] = useState(false);
-  const touch = <T,>(set: (v: T) => void) => (v: T) => { setError(null); set(v); };
+  const touch = <T,>(set: (v: T) => void) => (v: T) => { setError(null); setCnesError(null); set(v); };
+  // F-21: o api só aceita o CNES na EDIÇÃO do central (o POST o ignora; outro tipo → 422).
+  const cnesField = location !== null && location.kind === "central";
 
   const isVector = kind === VECTOR_KIND;
   const isUnit = kind === "unit" || isVector;
@@ -104,8 +118,12 @@ function LocationForm({ location, units, kinds, onSaved, onCancel, onGoToSecurit
   const kindOptions = location && !kinds.includes(location.kind as StockLocationKind) ? [ ...kinds, location.kind as StockLocationKind ] : kinds;
 
   function body(): AdminLocationInput {
-    const base = { kind: kind as StockLocationKind, name: name.trim(), active };
-    return isUnit ? { kind: base.kind, health_unit_id: unitId, name: base.name, active } : base;
+    const base: AdminLocationInput = { kind: kind as StockLocationKind, name: name.trim(), active };
+    if (isUnit) return { kind: base.kind, health_unit_id: unitId, name: base.name, active };
+    // Vazio → null (apaga); só vai quando mudou.
+    const next = cnes.trim() === "" ? null : docOf(cnes);
+    if (cnesField && next !== (location?.cnes ?? null)) base.cnes = next;
+    return base;
   }
 
   function review() {
@@ -114,6 +132,8 @@ function LocationForm({ location, units, kinds, onSaved, onCancel, onGoToSecurit
       ?? (length < 3 || length > 120 ? NAME_TEXT : null)
       ?? (noVectorUnit ? VECTOR_UNIT_MISSING : null)
       ?? (isUnit && unitId === "" ? (isVector ? VECTOR_UNIT_TEXT : UNIT_TEXT) : null);
+    const cnesText = cnesField && cnes.trim() !== "" ? cnesProblem(cnes) : null;
+    if (cnesText) { setCnesError(cnesText); return; }
     if (problem) { setError(problem); return; }
     setConfirming(true);
   }
@@ -155,6 +175,17 @@ function LocationForm({ location, units, kinds, onSaved, onCancel, onGoToSecurit
                 : "Uma unidade tem uma só farmácia; a unidade passa a dispensar."}</span>
             </div>
           )}
+          {cnesField && (
+            <div style={fieldBox}>
+              <label style={fieldLabel}>
+                {CNES_LABEL}
+                <input value={cnes} inputMode="numeric" style={inputStyle} aria-invalid={cnesError ? true : undefined}
+                  aria-describedby={`${cnesId}-hint${cnesError ? ` ${cnesId}-err` : ""}`} onChange={(e) => touch(setCnes)(e.target.value)} />
+              </label>
+              <span id={`${cnesId}-hint`} style={hintStyle}>{CNES_HELP}</span>
+              {cnesError && <span id={`${cnesId}-err`} role="alert" style={alert}>{cnesError}</span>}
+            </div>
+          )}
           <label style={checkLabel}>
             <input type="checkbox" checked={active} onChange={(e) => touch(setActive)(e.target.checked)} />
             Ativo
@@ -180,7 +211,12 @@ function LocationForm({ location, units, kinds, onSaved, onCancel, onGoToSecurit
           onDone={() => onSaved(`Local ${label} salvo.`)}
           onCancel={() => setConfirming(false)}
           onGoToSecurity={onGoToSecurity}
-          translateError={(err) => pharmacyError(err)}
+          translateError={(err) => {
+            const text = pharmacyError(err);
+            // F-21: o 422 de path `cnes` marca o campo; o 409 cnes_in_use fica só na frase da confirmação.
+            if (cnesField && errorCode(err) === "invalid_request" && errorPath(err) === "cnes") setCnesError(text);
+            return text;
+          }}
         />
       )}
     </section>

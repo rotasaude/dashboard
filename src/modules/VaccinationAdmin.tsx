@@ -10,7 +10,7 @@ import { SensitiveAction } from "../components/SensitiveAction";
 import { buttonStyle } from "../components/formStyles";
 import { alert, muted, stack } from "./exams/styles";
 import { VaccinationGate } from "./vaccination/VaccinationGate";
-import { RoomsPanel } from "./vaccination/RoomsPanel";
+import { ColdChainCnes, RoomsPanel } from "./vaccination/RoomsPanel";
 import { RoomStaffPanel } from "./vaccination/RoomStaffPanel";
 import { GoLivePanel } from "./vaccination/GoLivePanel";
 import { StaffPanel } from "./pharmacy/StaffPanel";
@@ -73,7 +73,10 @@ function Body({ onGoToSecurity }: { onGoToSecurity?(): void }) {
             </div>
           )}
           {central !== null && (
-            <StaffPanel location={central} memberships={memberships.data ?? []} onChanged={reload} onGoToSecurity={onGoToSecurity} roles={[ "stock_keeper" ]} />
+            <div style={stack}>
+              <ColdChainCnes key={central.cnes ?? ""} central={central} onSaved={reload} onGoToSecurity={onGoToSecurity} />
+              <StaffPanel location={central} memberships={memberships.data ?? []} onChanged={reload} onGoToSecurity={onGoToSecurity} roles={[ "stock_keeper" ]} />
+            </div>
           )}
         </Panel>
       )}
