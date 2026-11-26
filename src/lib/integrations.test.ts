@@ -109,3 +109,21 @@ describe("integrações — recusa da RNDS fala em certificado", () => {
     expect(rndsPasswordProblem("x".repeat(201))).not.toBeNull();
   });
 });
+
+describe("integrações — BNAFAR (27b)", () => {
+  it("rótulo com o ambiente e pendências", () => {
+    expect(credentialLabel("bnafar")).toBe("BNAFAR (SI-BNAFAR)");
+    expect(credentialLabel("bnafar", "production")).toBe("BNAFAR (SI-BNAFAR)");
+    expect(credentialLabel("bnafar", "homologation")).toBe("BNAFAR (SI-BNAFAR) — homologação");
+    expect(credentialLabel("ledi", "homologation")).toBe("e-SUS PEC (envio LEDI)");
+    expect(missingPhrase("bnafar_disabled")).toBe("ligue antes: Envio à BNAFAR");
+    expect(missingPhrase("vector_supplies_disabled")).toBe("ligue antes: Vigilância ambiental (endemias) ou Centro de zoonoses");
+    expect(missingPhrase("credential_missing:bnafar")).toBe("cadastre a credencial do BNAFAR (SI-BNAFAR), no quadro Credenciais");
+    expect(missingPhrase("credential_unauthorized:bnafar")).toMatch(/BNAFAR \(SI-BNAFAR\) foi recusada/);
+  });
+
+  it("frases de ambiente", () => {
+    expect(integrationsError(apiError(422, { error: "invalid_environment" }))).toBe("ambiente desconhecido — recarregue a página");
+    expect(integrationsError(apiError(422, { error: "environment_not_allowed" }))).toBe("este ambiente não está disponível nesta instalação");
+  });
+});

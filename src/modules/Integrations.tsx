@@ -8,7 +8,7 @@
 import { useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  checkIntegrationCredential, getIntegrations, setIntegrationCredential,
+  checkBnafarCredential, checkIntegrationCredential, getIntegrations, setIntegrationCredential,
   type CityFeatureState, type IntegrationCredential
 } from "../lib/api";
 import { useAuth } from "../lib/auth";
@@ -24,6 +24,7 @@ import { Tag } from "../components/Tag";
 import { KeyValue } from "../components/KeyValue";
 import { EmptyState } from "../components/EmptyState";
 import { RndsCredentialForm } from "./integrations/RndsCredentialForm";
+import { BnafarCredentialForm } from "./integrations/BnafarCredentialForm";
 import { SensitiveAction } from "../components/SensitiveAction";
 import { buttonStyle, disabledButtonStyle, secondaryButtonStyle } from "../components/formStyles";
 
@@ -44,7 +45,7 @@ export function Integrations({ onGoToSecurity }: { onGoToSecurity?(): void }) {
   if (!isAdmin) {
     return (
       <div style={column}>
-        <PageHeader title="Integrações" sub="e-SUS PEC · CADSUS · RNDS" />
+        <PageHeader title="Integrações" sub="e-SUS PEC · CADSUS · RNDS · BNAFAR" />
         <EmptyState title="seu papel não permite ver as integrações" />
       </div>
     );
@@ -56,8 +57,9 @@ export function Integrations({ onGoToSecurity }: { onGoToSecurity?(): void }) {
     if (checking) return;
     setChecking(c.kind); setNotice(null); setError(null);
     try {
-      const updated = await checkIntegrationCredential(c.kind);
-      setNotice(`Teste de conexão — ${credentialLabel(c.kind)}: ${checkLabel(updated.last_check_status, c.kind)}`);
+      // A BNAFAR testa o ambiente em uso e ignora o corpo (F-22).
+      const updated = c.kind === "bnafar" ? await checkBnafarCredential() : await checkIntegrationCredential(c.kind);
+      setNotice(`Teste de conexão — ${credentialLabel(c.kind, c.environment)}: ${checkLabel(updated.last_check_status, c.kind)}`);
       reload();
     } catch (err) {
       setError(integrationsError(err));
@@ -70,7 +72,7 @@ export function Integrations({ onGoToSecurity }: { onGoToSecurity?(): void }) {
 
   return (
     <div style={column}>
-      <PageHeader title="Integrações" sub="e-SUS PEC · CADSUS · RNDS" />
+      <PageHeader title="Integrações" sub="e-SUS PEC · CADSUS · RNDS · BNAFAR" />
       {query.isError && <p role="alert" style={alertStyle}>{integrationsError(query.error)}</p>}
       {error && <p role="alert" style={alertStyle}>{error}</p>}
       {notice && <p role="status" style={statusStyle}>{notice}</p>}
@@ -86,7 +88,17 @@ export function Integrations({ onGoToSecurity }: { onGoToSecurity?(): void }) {
         />
       )}
 
-      {editing && editing.kind !== "rnds" && (
+      {editing?.kind === "bnafar" && (
+        <BnafarCredentialForm
+          key="bnafar"
+          credential={editing}
+          onDone={(message) => { setEditing(null); setError(null); setNotice(message); reload(); }}
+          onCancel={() => setEditing(null)}
+          onGoToSecurity={onGoToSecurity}
+        />
+      )}
+
+      {editing && editing.kind !== "rnds" && editing.kind !== "bnafar" && (
         <SensitiveAction
           key={editing.kind}
           title={`${editing.set ? "Trocar" : "Cadastrar"} credencial — ${credentialLabel(editing.kind)}`}
@@ -125,17 +137,17 @@ export function Integrations({ onGoToSecurity }: { onGoToSecurity?(): void }) {
           <Panel title="Credenciais" sub="da cidade · a senha nunca aparece de novo">
             <DataTable<IntegrationCredential>
               cols={[
-                { label: "Integração", w: "1.4fr", render: (c) => credentialLabel(c.kind) },
+                { label: "Integração", w: "1.4fr", render: (c) => credentialLabel(c.kind, c.environment) },
                 { label: "Cadastro", w: "2fr", render: (c) => setSummary(c) },
                 { label: "Último teste", w: "2fr", render: (c) => <CheckCell credential={c} /> },
                 { label: "", w: "auto", align: "right", render: (c) => (
                   <span style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-                    <button type="button" aria-label={`${c.set ? "Trocar" : "Cadastrar"} — ${credentialLabel(c.kind)}`}
+                    <button type="button" aria-label={`${c.set ? "Trocar" : "Cadastrar"} — ${credentialLabel(c.kind, c.environment)}`}
                       style={buttonStyle}
                       onClick={() => { setNotice(null); setError(null); setEditing(c); }}>
                       {c.set ? "Trocar" : "Cadastrar"}
                     </button>
-                    <button type="button" aria-label={`Testar conexão — ${credentialLabel(c.kind)}`}
+                    <button type="button" aria-label={`Testar conexão — ${credentialLabel(c.kind, c.environment)}`}
                       disabled={!c.set || checking !== null}
                       style={!c.set || checking !== null ? disabledButtonStyle : secondaryButtonStyle}
                       onClick={() => void check(c)}>

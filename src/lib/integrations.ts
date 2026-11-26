@@ -14,7 +14,9 @@ const RECORD_MODE_LABEL: Record<string, string> = {
   record: "prontuário — o Rota Saúde é o prontuário da cidade"
 };
 
-const CREDENTIAL_LABEL: Record<string, string> = { ledi: "e-SUS PEC (envio LEDI)", cadsus: "CADSUS", rnds: "RNDS — vacinação (certificado A1)" };
+const CREDENTIAL_LABEL: Record<string, string> = {
+  ledi: "e-SUS PEC (envio LEDI)", cadsus: "CADSUS", rnds: "RNDS — vacinação (certificado A1)", bnafar: "BNAFAR (SI-BNAFAR)"
+};
 
 const CHECK_LABEL: Record<CredentialCheckStatus, string> = {
   ok: "conexão ok",
@@ -30,7 +32,10 @@ const MESSAGES: Record<string, string> = {
   // Módulo 29 (ADR 0047): certificado A1 da RNDS. Nada do segredo aparece na frase.
   invalid_certificate: "o certificado não abriu com essa senha — confira o arquivo .pfx e a senha",
   certificate_expired: "o certificado está vencido — use um certificado A1 válido",
-  invalid_requester_cnes: "o CNES solicitante tem 7 dígitos"
+  invalid_requester_cnes: "o CNES solicitante tem 7 dígitos",
+  // Módulo 27b (Q9): a homologação só existe fora de produção; o ambiente é o da linha, sem escolha na tela.
+  invalid_environment: "ambiente desconhecido — recarregue a página",
+  environment_not_allowed: "este ambiente não está disponível nesta instalação"
 };
 
 // invalid_credential da RNDS (forma, tamanho, senha fora de 1–200): nunca a frase de usuário e senha.
@@ -60,8 +65,9 @@ export function recordModeLabel(mode: string): string {
   return RECORD_MODE_LABEL[mode] ?? mode;
 }
 
-export function credentialLabel(kind: string): string {
-  return CREDENTIAL_LABEL[kind] ?? kind;
+export function credentialLabel(kind: string, environment?: string | null): string {
+  const label = CREDENTIAL_LABEL[kind] ?? kind;
+  return kind === "bnafar" && environment === "homologation" ? `${label} — homologação` : label;
 }
 
 export function checkLabel(status: CredentialCheckStatus | null, kind?: string): string {
@@ -102,6 +108,8 @@ export function missingPhrase(code: string): string {
     case "credential_unauthorized":
       if (kind === "rnds") return "a RNDS recusou o certificado — troque o certificado A1 e teste de novo";
       return `a credencial do ${credentialLabel(kind)} foi recusada — troque o usuário e a senha e teste de novo`;
+    case "vector_supplies_disabled":
+      return "ligue antes: Vigilância ambiental (endemias) ou Centro de zoonoses";
     default:
       if (head.endsWith("_disabled")) return `ligue antes: ${featureLabel(head.slice(0, -"_disabled".length))}`;
       return `pendência não reconhecida: ${code}`;
