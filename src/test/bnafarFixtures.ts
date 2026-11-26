@@ -84,12 +84,12 @@ export const rejectedSubmission = (o: Partial<BnafarSubmissionDetail> = {}): Bna
 
 const PENDENCY_BASE: BnafarPendency = {
   code: "lot_incomplete", stock_location_id: UBS_REF.id, location_name: UBS_REF.name, item_key: "medication:ci1", item_label: AMOXI.name,
-  stock_lot_id: "lt1", lot_id: "lt1", lot_number: "AMX2611", lot_version: 0, fields: FIVE_MISSING
+  stock_lot_id: "lt1", lot_id: "lt1", lot_number: "AMX2611", lot_version: 0, vmp_code: "VMP0001", fields: FIVE_MISSING
 };
 export const pendencies = (codes: string[], o: Partial<BnafarPendencies> = {}): BnafarPendencies => ({
   items: codes.map((code, i): BnafarPendency => ({
     ...PENDENCY_BASE, code, stock_location_id: `l${i + 2}`, location_name: `Local ${i + 2}`,
-    ...(code === "lot_incomplete" ? {} : { stock_lot_id: null, lot_id: null, lot_number: null, lot_version: null, fields: [] })
+    ...(code === "lot_incomplete" ? {} : { stock_lot_id: null, lot_id: null, lot_number: null, lot_version: null, vmp_code: null, fields: [] })
   })),
   next_before: null,
   totals: { by_code: Object.fromEntries(codes.map((c) => [ c, 1 ])), by_location: Object.fromEntries(codes.map((_, i) => [ `l${i + 2}`, 1 ])) },

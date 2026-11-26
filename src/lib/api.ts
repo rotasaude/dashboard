@@ -8789,6 +8789,8 @@ export interface BnafarPendency {
   code: BnafarPendencyCode | (string & {}); stock_location_id: string; location_name: string; item_key: string; item_label: string;
   stock_lot_id: string | null; fields: string[];
   lot_id?: string | null; lot_number?: string | null; lot_version?: number | null;
+  // Q46: VMP do catálogo (medicamento) ou `obm_vmp` do YAML (vacina; nulo até o gate); nulo no vetorial.
+  vmp_code?: string | null;
 }
 export interface BnafarPendencies { items: BnafarPendency[]; next_before: string | null; totals: { by_code: Record<string, number>; by_location: Record<string, number> } }
 export interface BnafarPendencyQuery { locationId?: string | null; code?: BnafarPendencyCode | (string & {}) | null; before?: string | null }
