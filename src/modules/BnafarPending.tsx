@@ -2,15 +2,15 @@
 // envio de amanhã, por código, com o complemento do lote DENTRO desta tela e os atalhos para quem resolve o resto. Abre sem o `bnafar`
 // (só o estoque). O api não manda o tipo do local: no `location_without_cnes` o admin vê os dois atalhos (central e rede de frio) e todos
 // veem a frase da unidade. Tudo sem pessoa: leitura ao abrir, depois de salvar o lote e no "Atualizar"; nenhum polling.
-import { useState } from "react";
-import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
-import { errorCode, listBnafarPendencies, type BnafarPendency, type LotBnafarState } from "../lib/api";
-import { BNAFAR_FIELD_LABEL, BNAFAR_NO_ROLE, BNAFAR_PENDENCIES_KEY, STATIC_QUERY, bnafarError, pendencyLabel } from "../lib/bnafar";
+import { useEffect, useRef, useState } from "react";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { errorCode, listAdminLocations, listBnafarPendencies, listVaccineRooms, type BnafarPendency, type LotBnafarState } from "../lib/api";
+import { LOT_BNAFAR_SAVED, BNAFAR_FIELD_LABEL, BNAFAR_NO_ROLE, BNAFAR_PENDENCIES_KEY, STATIC_QUERY, bnafarError, pendencyLabel } from "../lib/bnafar";
 import { DataTable } from "../components/DataTable";
 import { EmptyState } from "../components/EmptyState";
 import { Panel } from "../components/Panel";
 import { Tag } from "../components/Tag";
-import { buttonStyle, secondaryButtonStyle } from "../components/formStyles";
+import { buttonStyle, inputStyle, secondaryButtonStyle } from "../components/formStyles";
 import { SegmentedControl } from "../shell/SegmentedControl";
 import { alert, muted, row, stack } from "./exams/styles";
 import { BnafarGate } from "./bnafar/BnafarGate";
@@ -33,25 +33,47 @@ export function BnafarPending(props: Nav & { onGoToSecurity?: () => void }) {
 
 // Código desconhecido aparece cru, nunca some.
 const codeTitle = (c: string) => KNOWN.includes(c) ? pendencyLabel(c) : c;
+type CnesKind = "central" | "cold" | "other" | null;
 const lotLabel = (p: BnafarPendency) => p.lot_number ?? p.item_label;
 const fieldsText = (p: BnafarPendency) => p.fields.map((f) => BNAFAR_FIELD_LABEL[f] ?? f).join(", ");
 
 function PendingBody({ admin, onGoToLocations, onGoToColdChain, onGoToVectorProducts, onGoToAdjustments }: Nav & { admin: boolean }) {
-  const qc = useQueryClient();
   const [ code, setCode ] = useState<string>("");
+  const [ locationId, setLocationId ] = useState<string>("");
   const [ editing, setEditing ] = useState<BnafarPendency | null>(null);
+  const [ notice, setNotice ] = useState<string | null>(null);
+  const names = useRef<Record<string, string>>({});
+  const panelRef = useRef<HTMLDivElement | null>(null);
   const list = useInfiniteQuery({
-    queryKey: [ BNAFAR_PENDENCIES_KEY, code ],
-    queryFn: ({ pageParam }) => listBnafarPendencies({ code: code || null, before: pageParam }),
+    queryKey: [ BNAFAR_PENDENCIES_KEY, code, locationId ],
+    queryFn: ({ pageParam }) => listBnafarPendencies({ locationId: locationId || null, code: code || null, before: pageParam }),
     initialPageParam: null as string | null,
     getNextPageParam: (last) => last.next_before ?? undefined,
     ...STATIC_QUERY
   });
 
+  const hasCnes = admin && (list.data?.pages ?? []).some((pg) => pg.items.some((i) => i.code === "location_without_cnes"));
+  // O api não manda o tipo do local: o admin cruza o id com os locais (central) e com a rede de frio (vacinas).
+  const locs = useQuery({ queryKey: [ BNAFAR_PENDENCIES_KEY, "admin-locations" ], queryFn: listAdminLocations, enabled: hasCnes, ...STATIC_QUERY });
+  const rooms = useQuery({ queryKey: [ BNAFAR_PENDENCIES_KEY, "vaccine-rooms" ], queryFn: listVaccineRooms, enabled: hasCnes, ...STATIC_QUERY });
+  const cnesKind = (id: string): CnesKind => {
+    if (!locs.data || !rooms.data) return null;
+    const k = locs.data.find((l) => l.id === id)?.kind;
+    if (k === "central") return "central";
+    if (k === "cold_chain_central" || rooms.data.cold_chain_central?.id === id) return "cold";
+    return "other";
+  };
+  const cnesPending = hasCnes && (locs.isPending || rooms.isPending);
+  const cnesFailed = locs.isError || rooms.isError;
+
+  useEffect(() => { if (editing) panelRef.current?.scrollIntoView?.({ block: "start" }); }, [ editing?.lot_id ]);
+
   if (errorCode(list.error) === "missing_role") return <EmptyState title={BNAFAR_NO_ROLE} />;
 
   const items = (list.data?.pages ?? []).flatMap((p) => p.items);
   const totals = list.data?.pages[0]?.totals.by_code ?? {};
+  const byLocation = list.data?.pages[0]?.totals.by_location ?? {};
+  for (const i of items) names.current[i.stock_location_id] = i.location_name;
   const present = [ ...KNOWN, ...[ ...new Set(items.map((i) => i.code)) ].filter((c) => !KNOWN.includes(c)) ].filter((c) => items.some((i) => i.code === c));
 
   // Relê a lista e devolve o estado atual do lote (versão e o que falta) para o formulário seguir sem perder o digitado.
@@ -59,6 +81,14 @@ function PendingBody({ admin, onGoToLocations, onGoToColdChain, onGoToVectorProd
     const fresh = await list.refetch();
     const again = (fresh.data?.pages ?? []).flatMap((pg) => pg.items).find((i) => i.code === "lot_incomplete" && i.lot_id === p.lot_id);
     return again ? { version: again.lot_version ?? 0, missing: again.fields } : null;
+  }
+
+  // Depois de salvar: relê; se o lote saiu da lista, fecha o painel e diz que foi salvo; se ainda falta algo, segue com o estado novo.
+  async function afterSave(p: BnafarPendency) {
+    const fresh = await list.refetch();
+    const again = (fresh.data?.pages ?? []).flatMap((pg) => pg.items).find((i) => i.code === "lot_incomplete" && i.lot_id === p.lot_id);
+    if (again) setEditing(again);
+    else { setEditing(null); setNotice(`${LOT_BNAFAR_SAVED} (${lotLabel(p)})`); }
   }
 
   function action(p: BnafarPendency) {
@@ -72,8 +102,13 @@ function PendingBody({ admin, onGoToLocations, onGoToColdChain, onGoToVectorProd
         return (
           <div style={{ ...row, alignItems: "flex-start" }}>
             <span style={muted}>{CNES_UNIT}</span>
-            {admin && btn("Abrir Locais e configurações", onGoToLocations)}
-            {admin && btn("Abrir Salas e rede de frio", onGoToColdChain)}
+            {admin && !cnesPending && (() => {
+              const k = cnesFailed ? null : cnesKind(p.stock_location_id);
+              return <>
+                {(k === null || k === "central") && btn("Abrir Locais e configurações", onGoToLocations)}
+                {(k === null || k === "cold") && btn("Abrir Salas e rede de frio", onGoToColdChain)}
+              </>;
+            })()}
           </div>
         );
       case "product_without_code": {
@@ -91,9 +126,31 @@ function PendingBody({ admin, onGoToLocations, onGoToColdChain, onGoToVectorProd
   return (
     <div style={stack}>
       <div style={{ ...row, justifyContent: "space-between" }}>
-        <SegmentedControl options={options} value={code} onChange={(c) => { setCode(c); setEditing(null); }} />
+        <SegmentedControl options={options} value={code} onChange={(c) => { setCode(c); setEditing(null); setNotice(null); }} />
         <button type="button" style={secondaryButtonStyle} onClick={() => void list.refetch()}>Atualizar</button>
       </div>
+      <label style={{ ...row, fontSize: 12 }}>
+        Local
+        <select aria-label="Local" value={locationId} style={inputStyle} onChange={(e) => { setLocationId(e.target.value); setEditing(null); setNotice(null); }}>
+          <option value="">todos</option>
+          {Object.entries(byLocation).map(([ id, n ]) => <option key={id} value={id}>{`${names.current[id] ?? id} (${n})`}</option>)}
+        </select>
+      </label>
+      {notice && <p role="status" style={muted}>{notice}</p>}
+      {editing && editing.lot_id && (
+        <div ref={panelRef}>
+          <Panel title="Completar dados do lote" sub={`${editing.location_name} · ${editing.item_label}`}>
+            <div style={{ padding: 16 }}>
+              <LotBnafarForm key={editing.lot_id} lotId={editing.lot_id} lotNumber={lotLabel(editing)} locationId={editing.stock_location_id}
+                state={{ version: editing.lot_version ?? 0, missing: editing.fields }}
+                hasVmp={editing.vmp_code != null} vmpCode={editing.vmp_code ?? null} vaccine={editing.item_key.startsWith("immunobiological")}
+                onSaved={() => { void afterSave(editing); }}
+                onCancel={() => setEditing(null)}
+                reload={async () => (await reloadLot(editing)) ?? { version: editing.lot_version ?? 0, missing: [] }} />
+            </div>
+          </Panel>
+        </div>
+      )}
       {list.isPending && <p className="mono" style={muted}>carregando…</p>}
       {list.isError && <p role="alert" style={alert}>{bnafarError(list.error)}</p>}
       {list.data && present.length === 0 && <EmptyState title="nenhuma pendência" sub="tudo o que está no estoque entra no envio" />}
@@ -124,18 +181,6 @@ function PendingBody({ admin, onGoToLocations, onGoToColdChain, onGoToVectorProd
         </div>
       )}
 
-      {editing && editing.lot_id && (
-        <Panel title="Completar dados do lote" sub={`${editing.location_name} · ${editing.item_label}`}>
-          <div style={{ padding: 16 }}>
-            <LotBnafarForm key={editing.lot_id} lotId={editing.lot_id} lotNumber={lotLabel(editing)} locationId={editing.stock_location_id}
-              state={{ version: editing.lot_version ?? 0, missing: editing.fields }}
-              hasVmp={editing.vmp_code != null} vmpCode={editing.vmp_code ?? null} vaccine={editing.item_key.startsWith("immunobiological")}
-              onSaved={() => { void qc.invalidateQueries({ queryKey: [ BNAFAR_PENDENCIES_KEY ] }); }}
-              onCancel={() => setEditing(null)}
-              reload={async () => (await reloadLot(editing)) ?? { version: editing.lot_version ?? 0, missing: [] }} />
-          </div>
-        </Panel>
-      )}
     </div>
   );
 }

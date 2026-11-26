@@ -10,18 +10,21 @@ import { BNAFAR_DISABLED, BNAFAR_NO_ROLE, bnafarErrorText } from "../lib/bnafar"
 import { BnafarPending } from "./BnafarPending";
 
 vi.mock("../lib/api", async (orig) => ({ ...(await orig<typeof api>()), fetchCurrentSession: vi.fn(), listBnafarPendencies: vi.fn(),
-  updateLotBnafar: vi.fn(), getBnafarDomains: vi.fn(), listObmPresentations: vi.fn() }));
+  updateLotBnafar: vi.fn(), listAdminLocations: vi.fn(), listVaccineRooms: vi.fn(), getBnafarDomains: vi.fn(), listObmPresentations: vi.fn() }));
 
 const CODES = [ "lot_incomplete", "lot_number_too_long", "location_without_cnes", "product_without_code", "fractional_balance", "exit_type_missing", "domain_off" ];
 const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
 const KEEPER = () => bnafarUser([ "stock_keeper" ]);
 const ADMIN = () => bnafarUser([ "municipal_admin" ]);
+const CNES_PHRASE = "o CNES deste local vem da unidade de saúde — confira o cadastro da unidade";
 const nav = () => ({ onGoToLocations: vi.fn(), onGoToColdChain: vi.fn(), onGoToVectorProducts: vi.fn(), onGoToAdjustments: vi.fn() });
 
 beforeEach(() => {
   mocked(api.fetchCurrentSession).mockResolvedValue(KEEPER());
   mocked(api.listBnafarPendencies).mockResolvedValue(pendencies(CODES));
   mocked(api.getBnafarDomains).mockResolvedValue(BNAFAR_DOMAINS);
+  mocked(api.listAdminLocations).mockResolvedValue([ { id: "l2", name: "Central", kind: "central" }, { id: "l5", name: "Rede de frio", kind: "cold_chain_central" }, { id: "l6", name: "UBS", kind: "unit" } ] as never);
+  mocked(api.listVaccineRooms).mockResolvedValue({ rooms: [], cold_chain_central: null });
   mocked(api.listObmPresentations).mockResolvedValue(PRESENTATIONS);
   mocked(api.updateLotBnafar).mockResolvedValue({ id: "lt1", bnafar: lotBnafar({ version: 1 }) });
 });
@@ -52,9 +55,9 @@ describe("Pendências do envio à BNAFAR (27b)", () => {
     renderWithProviders(<BnafarPending {...nav()} />);
     await screen.findByRole("region", { name: bnafarErrorText("domain_off") });
     fireEvent.click(screen.getByRole("button", { name: "Carregar mais" }));
-    await waitFor(() => expect(mocked(api.listBnafarPendencies)).toHaveBeenLastCalledWith({ code: null, before: "c1" }));
+    await waitFor(() => expect(mocked(api.listBnafarPendencies)).toHaveBeenLastCalledWith({ locationId: null, code: null, before: "c1" }));
     fireEvent.click(screen.getByRole("tab", { name: bnafarErrorText("fractional_balance") }));
-    await waitFor(() => expect(mocked(api.listBnafarPendencies)).toHaveBeenLastCalledWith({ code: "fractional_balance", before: null }));
+    await waitFor(() => expect(mocked(api.listBnafarPendencies)).toHaveBeenLastCalledWith({ locationId: null, code: "fractional_balance", before: null }));
   });
 
   it("Completar dados do lote abre o formulário com a versão e o VMP, manda expected_version 0 e relê a lista", async () => {
@@ -95,21 +98,67 @@ describe("Pendências do envio à BNAFAR (27b)", () => {
     expect(within(form).getByText(/catálogo de imunobiológicos/)).not.toBeNull();
   });
 
-  it("atalhos: o admin abre Locais e a rede de frio; o almoxarife não vê os botões", async () => {
+  const cnesPage = (id: string) => page([ item({ code: "location_without_cnes", fields: [ "cnes" ], stock_location_id: id }) ]);
+  it("CNES: o central abre Locais; a rede de frio abre Salas; outro local só a frase; o almoxarife nenhum botão", async () => {
     mocked(api.fetchCurrentSession).mockResolvedValue(ADMIN());
-    mocked(api.listBnafarPendencies).mockResolvedValue(page([ item({ code: "location_without_cnes", fields: [ "cnes" ] }) ]));
     const n = nav();
+    mocked(api.listBnafarPendencies).mockResolvedValue(cnesPage("l2"));
     renderWithProviders(<BnafarPending {...n} />);
     fireEvent.click(await screen.findByRole("button", { name: "Abrir Locais e configurações" }));
     expect(n.onGoToLocations).toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Abrir Salas e rede de frio" }));
+    expect(screen.queryByRole("button", { name: "Abrir Salas e rede de frio" })).toBeNull();
+    cleanup();
+    mocked(api.listBnafarPendencies).mockResolvedValue(cnesPage("l5"));
+    renderWithProviders(<BnafarPending {...n} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Abrir Salas e rede de frio" }));
     expect(n.onGoToColdChain).toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "Abrir Locais e configurações" })).toBeNull();
+    cleanup();
+    mocked(api.listBnafarPendencies).mockResolvedValue(cnesPage("l6"));
+    renderWithProviders(<BnafarPending {...n} />);
+    await screen.findByText(CNES_PHRASE);
+    await waitFor(() => expect(mocked(api.listAdminLocations)).toHaveBeenCalled());
+    expect(screen.queryByRole("button", { name: /Abrir (Locais|Salas)/ })).toBeNull();
     cleanup();
     mocked(api.fetchCurrentSession).mockResolvedValue(KEEPER());
     renderWithProviders(<BnafarPending {...nav()} />);
-    await screen.findByRole("region", { name: bnafarErrorText("location_without_cnes") });
-    expect(screen.queryByRole("button", { name: "Abrir Locais e configurações" })).toBeNull();
-    expect(screen.getByText("o CNES deste local vem da unidade de saúde — confira o cadastro da unidade")).not.toBeNull();
+    await screen.findByText(CNES_PHRASE);
+    expect(screen.queryByRole("button", { name: /Abrir (Locais|Salas)/ })).toBeNull();
+  });
+
+  it("CNES: se a leitura dos locais falha, o admin vê os dois atalhos", async () => {
+    mocked(api.fetchCurrentSession).mockResolvedValue(ADMIN());
+    mocked(api.listAdminLocations).mockRejectedValue(new ApiError(500, {}, "x"));
+    mocked(api.listBnafarPendencies).mockResolvedValue(cnesPage("l6"));
+    renderWithProviders(<BnafarPending {...nav()} />);
+    expect(await screen.findByRole("button", { name: "Abrir Locais e configurações" })).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Abrir Salas e rede de frio" })).not.toBeNull();
+  });
+
+  it("depois de salvar, o painel fecha quando o lote sai da lista", async () => {
+    mocked(api.listBnafarPendencies).mockResolvedValueOnce(pendencies([ "lot_incomplete" ])).mockResolvedValue(page([]));
+    renderWithProviders(<BnafarPending {...nav()} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Completar dados do lote — AMX2611" }));
+    const form = await screen.findByRole("form", { name: "Dados do lote AMX2611" });
+    await within(form).findByRole("option", { name: /AF —/ });
+    fireEvent.change(within(form).getByLabelText("Apresentação (AMPP)"), { target: { value: "AMPP0001" } });
+    fireEvent.change(within(form).getByLabelText("Valor unitário (R$)"), { target: { value: "12,50" } });
+    fireEvent.change(within(form).getByLabelText("Programa de saúde"), { target: { value: "AF" } });
+    fireEvent.click(within(form).getByRole("button", { name: "Salvar dados do lote" }));
+    await waitFor(() => expect(screen.queryByRole("form", { name: "Dados do lote AMX2611" })).toBeNull());
+    expect(screen.getByRole("status").textContent).toContain("AMX2611");
+  });
+
+  it("filtro por local: select com as contagens de totals.by_location; manda location_id e fecha o painel", async () => {
+    mocked(api.listBnafarPendencies).mockResolvedValue(page(pendencies([ "lot_incomplete", "domain_off" ]).items,
+      { totals: { by_code: { lot_incomplete: 1, domain_off: 1 }, by_location: { l2: 1, l3: 1 } } }));
+    renderWithProviders(<BnafarPending {...nav()} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Completar dados do lote — AMX2611" }));
+    await screen.findByRole("form", { name: "Dados do lote AMX2611" });
+    expect(screen.getByRole("option", { name: "Local 3 (1)" })).not.toBeNull();
+    fireEvent.change(screen.getByLabelText("Local", { selector: "select" }), { target: { value: "l3" } });
+    await waitFor(() => expect(mocked(api.listBnafarPendencies)).toHaveBeenLastCalledWith({ locationId: "l3", code: null, before: null }));
+    expect(screen.queryByRole("form", { name: "Dados do lote AMX2611" })).toBeNull();
   });
 
   it("produto sem código: vetorial abre Produtos; medicamento e vacina só a frase; saldo com fração abre Ajustes", async () => {
