@@ -576,3 +576,55 @@ describe("módulo 35b: rótulos do estoque", () => {
     expect(movementDocument({ type: "rabies_vaccination", id: "v1", number: null })).toBe("vacinação antirrábica");
   });
 });
+
+describe("27b: rótulos, recusas do lote e do envio à BNAFAR", () => {
+  const refused = (body: Record<string, unknown>, status = 422) => new ApiError(status, body, "x");
+  it("rótulos do movimento e do documento da saída externa e do saldo inicial desfeito", () => {
+    expect(movementLabel("external_exit")).toBe("saída para fora da rede");
+    expect(movementLabel("opening_reversal")).toBe("abertura desfeita");
+    expect(movementDocument({ type: "stock_external_exit", id: "ex1", number: null })).toBe("saída externa");
+    expect(movementLabel("dispensing")).toBe("dispensação");
+  });
+  it("required cita o campo, com o path do api (items[i].campo, Q17)", () => {
+    expect(pharmacyError(refused({ error: "required", path: "items[0].unit_price_cents" }))).toBe("informe o valor unitário — obrigatório para o envio à BNAFAR");
+    expect(pharmacyError(refused({ error: "required", path: "anvisa_registration" }))).toBe("informe o registro ANVISA — obrigatório para o envio à BNAFAR");
+    expect(pharmacyError(refused({ error: "required", path: "items[2].manufacturer" }))).toBe("informe o nome do fabricante internacional — obrigatório para o envio à BNAFAR");
+    expect(pharmacyError(refused({ error: "required", path: "items[1].campo_novo" }))).toBe("informe campo_novo — obrigatório para o envio à BNAFAR");
+    expect(pharmacyError(refused({ error: "required" }))).toBe("informe o campo — obrigatório para o envio à BNAFAR");
+  });
+  it("invalid_request de cada campo do envio tem a frase do campo", () => {
+    const text = (path: string) => pharmacyError(refused({ error: "invalid_request", path }));
+    expect(text("items[0].unit_price_cents")).toBe("valor unitário inválido — use reais com vírgula, maior que zero");
+    expect(text("manufacturer_cnpj")).toBe("o CNPJ do fabricante tem 14 caracteres");
+    expect(text("items[1].manufacturer")).toBe("o nome do fabricante internacional tem de 1 a 120 caracteres");
+    expect(text("anvisa_registration")).toBe("o registro ANVISA tem 11 ou 13 dígitos");
+    expect(text("health_program")).toBe("escolha o programa de saúde");
+    expect(text("items[0].ampp_code")).toBe("escolha a apresentação (AMPP) do produto");
+    expect(text("destination_code")).toBe("o destino é um CNES de 7 dígitos ou um CNPJ de 14 caracteres");
+    expect(text("cnes")).toBe("o CNES tem 7 dígitos");
+    expect(text("items[0].quantity")).toBe("quantidade inválida — use até 2 casas depois da vírgula");
+    expect(text("items[0].lot_id")).toBe("confira o item destacado");
+  });
+  it("códigos do lote e da correção vêm da tabela do envio", () => {
+    expect(pharmacyError(refused({ error: "ampp_not_in_vmp", path: "ampp_code" }))).toBe("esta apresentação (AMPP) é de outro medicamento");
+    expect(pharmacyError(refused({ error: "anvisa_mismatch", path: "anvisa_registration" }))).toBe("o registro ANVISA não é o da apresentação (AMPP) escolhida");
+    expect(pharmacyError(refused({ error: "invalid_cnpj", path: "destination_code" }))).toBe("CNPJ inválido — confira os 14 caracteres");
+    expect(pharmacyError(refused({ error: "lot_bnafar_changed" }, 409))).toContain("salvos por outra pessoa");
+    expect(pharmacyError(refused({ error: "lot_mismatch", path: "unit_price_cents" }))).toContain("outros dados");
+    expect(pharmacyError(refused({ error: "expected_version_required", path: "expected_version" }))).toContain("recarregue");
+  });
+  it("invalid_items de saída externa (path do lote) difere do da transferência", () => {
+    expect(pharmacyError(refused({ error: "invalid_items" }))).toBe("informe todos os lotes da transferência");
+    expect(pharmacyError(refused({ error: "invalid_items", path: "items[0].lot_id" }))).toContain("lote inexistente");
+  });
+  it("problems com o path do api: as frases saem por item e o índice vem do corpo", () => {
+    const err = refused({ error: "invalid_request", problems: [
+      { path: "items[3].ampp_code", error: "ampp_unknown" }, { path: "items[0].unit_price_cents", error: "required" }
+    ] });
+    expect(pharmacyProblems(err)).toEqual([
+      { path: "items[3].ampp_code", text: "esta apresentação (AMPP) não está no catálogo OBM" },
+      { path: "items[0].unit_price_cents", text: "informe o valor unitário — obrigatório para o envio à BNAFAR" }
+    ]);
+    expect(problemItemIndex("items[3].ampp_code")).toBe(3);
+  });
+});

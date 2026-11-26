@@ -8,6 +8,7 @@ import {
   type StockLot, type StockMovement, type StockPosition, type StockTransfer
 } from "./api";
 import { NOMINAL_QUERY, STATIC_QUERY } from "./careLines";
+import { BNAFAR_ERRORS } from "./bnafarErrors";
 import { featureDisabledKey, featureLabel, hasFeature } from "./features";
 import { fmtDay } from "./exams";
 import { DOT_IN_NUMBER, hasDot } from "./lab";
@@ -95,7 +96,9 @@ const MOVEMENT_LABEL: Record<string, string> = {
   vector_application: "aplicação no campo (boletim)", vector_application_reversal: "estorno de aplicação (visita retirada)",
   // Módulo 35b: a dose antirrábica animal, o estorno (vacinação anulada) e a coleira colocada.
   animal_vaccination: "vacinação antirrábica animal", animal_vaccination_reversal: "estorno de vacinação antirrábica (anulada)",
-  collar_placement: "coleira colocada"
+  collar_placement: "coleira colocada",
+  // Módulo 27b (Q10): a saída para fora da rede (S-DF, S-TR, S-D, S-E) e o estorno do saldo inicial.
+  external_exit: "saída para fora da rede", opening_reversal: "abertura desfeita"
 };
 export const movementLabel = (code: string): string => MOVEMENT_LABEL[code] ?? code;
 
@@ -107,7 +110,9 @@ const DOCUMENT_LABEL: Record<string, string> = {
   // Módulo 35a: a medida do boletim que baixou (ou estornou) o insumo; nunca o imóvel nem o agente.
   vector_inspection_measure: "boletim de campo",
   // Módulo 35b: a dose e a coleira que baixaram o insumo; nunca o animal nem o tutor.
-  rabies_vaccination: "vacinação antirrábica", collar: "coleira"
+  rabies_vaccination: "vacinação antirrábica", collar: "coleira",
+  // Módulo 27b: a saída para fora da rede; nunca o destino nem o motivo.
+  stock_external_exit: "saída externa"
 };
 export function movementDocument(doc: StockMovement["document"] | undefined): string {
   if (!doc) return "—";
@@ -576,7 +581,11 @@ export const RETURN_EXCEEDS = "a devolução passa do que ainda resta devolver d
 // `lot_expired` na devolução: o ERRORS manda "escolher outro lote", que aqui não existe (a devolução volta ao lote da retirada).
 export const RETURN_LOT_EXPIRED = "o lote desta retirada já venceu — a devolução não é aceita; registre o vencimento no ajuste de estoque";
 const QUANTITY_TEXT = "quantidade inválida — use até 2 casas depois da vírgula";
+// Módulo 27b: a tabela do envio entra primeiro, e as frases do 27a valem onde o código é o mesmo (só `lot_mismatch` ganha a frase nova,
+// que cobre também os dados do envio).
 const ERRORS: Record<string, string> = {
+  ...BNAFAR_ERRORS,
+  lot_mismatch: BNAFAR_ERRORS.lot_mismatch,
   insufficient_balance: BALANCE_CHANGED,
   controlled_requires_pharmacist: CONTROLLED_PHARMACIST_ONLY,
   prescription_cancelled: PRESCRIPTION_CHANGED,
@@ -602,7 +611,6 @@ const ERRORS: Record<string, string> = {
   location_inactive: "este local está inativo",
   no_difference: "a contagem é igual ao saldo — não há o que ajustar",
   lot_not_expired: "vencimento só de lote já vencido — use perda",
-  lot_mismatch: "este lote já existe com outra validade ou fabricante — confira",
   item_completed: ITEM_COMPLETED,
   notification_required: NOTIFICATION_REQUIRED,
   prescription_not_found: "receita não encontrada nesta cidade — confira o código",
@@ -629,7 +637,17 @@ const ERRORS: Record<string, string> = {
   item_not_allowed_here: "este item não entra neste local"
 };
 
+// Módulo 27b: o path do api é `items[i].campo` (entrada e abertura) ou o campo solto (complemento, correção, locais).
+const FIELD = (name: string) => new RegExp(`(^|\\.)${name}$`);
 const PATH_RULES: [ RegExp, string ][] = [
+  [ FIELD("unit_price_cents"), "valor unitário inválido — use reais com vírgula, maior que zero" ],
+  [ FIELD("manufacturer_cnpj"), "o CNPJ do fabricante tem 14 caracteres" ],
+  [ FIELD("manufacturer(_international)?"), "o nome do fabricante internacional tem de 1 a 120 caracteres" ],
+  [ FIELD("anvisa_registration"), "o registro ANVISA tem 11 ou 13 dígitos" ],
+  [ FIELD("health_program"), "escolha o programa de saúde" ],
+  [ FIELD("ampp_code"), "escolha a apresentação (AMPP) do produto" ],
+  [ FIELD("destination_code"), "o destino é um CNES de 7 dígitos ou um CNPJ de 14 caracteres" ],
+  [ /^cnes$/, "o CNES tem 7 dígitos" ],
   [ /^prescriber(\.|$)/, "confira os dados do profissional da receita: nome, conselho, UF e número" ],
   [ /^issued_on/, "data da receita inválida — confira" ],
   [ /notification_number/, "número da notificação inválido — confira" ],
@@ -643,6 +661,16 @@ const PATH_RULES: [ RegExp, string ][] = [
   [ /^new_patient(\.|$)/, "confira os dados do paciente novo" ],
   [ /^items(\[|\.|$)/, "confira o item destacado" ]
 ];
+// `required` (27b): o campo do envio que o domínio ligado exige.
+const REQUIRED_FIELD: Record<string, string> = {
+  unit_price_cents: "o valor unitário", manufacturer_cnpj: "o CNPJ do fabricante", manufacturer: "o nome do fabricante internacional",
+  anvisa_registration: "o registro ANVISA", health_program: "o programa de saúde", ampp_code: "a apresentação (AMPP)"
+};
+export function requiredText(path: string | null): string {
+  const field = path ? path.replace(/^.*\./, "") : "";
+  const name = !field ? "o campo" : Object.prototype.hasOwnProperty.call(REQUIRED_FIELD, field) ? REQUIRED_FIELD[field] : field;
+  return `informe ${name} — obrigatório para o envio à BNAFAR`;
+}
 const INVALID_REQUEST_TEXT = "pedido inválido — recarregue a tela e tente de novo";
 
 function invalidRequestText(path: string | null): string {
@@ -665,6 +693,9 @@ function tooEarlyText(next: string | null): string {
 function codeText(code: string | undefined, path: string | null, next: string | null, status: number): string {
   if (code === "invalid_request") return invalidRequestText(path);
   if (code === "too_early") return tooEarlyText(next);
+  if (code === "required") return requiredText(path);
+  // A saída externa recusa o lote (inexistente, repetido) por `items[i].lot_id`; a transferência usa o `invalid_items` sem path.
+  if (code === "invalid_items" && path && /^items\[\d+\]\.lot_id$/.test(path)) return BNAFAR_ERRORS.invalid_items;
   if (code && Object.prototype.hasOwnProperty.call(ERRORS, code)) return ERRORS[code];
   if (status === 404 && !code) return ERRORS.not_found;
   return `não foi possível concluir (${code ?? status}) — tente de novo`;
