@@ -38,6 +38,7 @@ export type ModuleId =
   | "regulation-queue" | "regulation-returned" | "regulation-offers" | "regulation-settings"
   | "pharmacy-dispensing" | "pharmacy-external" | "pharmacy-transfers" | "pharmacy-entries" | "pharmacy-stock" | "pharmacy-adjustments"
   | "pharmacy-alerts" | "pharmacy-urgency-shortfalls" | "pharmacy-admin"
+  | "bnafar-status" | "bnafar-pending" | "external-exits" | "opening-import"
   | "vaccination-room" | "vaccination-pending" | "vaccination-stock" | "vaccination-cold-chain" | "vaccination-summary" | "vaccination-panel"
   | "vaccination-admin"
   | "dental-prosthesis" | "dental-ceo-goals" | "dental-indicators" | "dental-admin"
@@ -149,9 +150,13 @@ export const NAV_GROUPS: NavGroupDef[] = [
     { id: "pharmacy-entries", label: "Entradas e abertura", icon: "⇲" },
     { id: "pharmacy-stock", label: "Posição e extrato", icon: "▦" },
     { id: "pharmacy-adjustments", label: "Inventário e ajustes", icon: "±" },
+    { id: "external-exits", label: "Saída externa", icon: "⇱" },
+    { id: "opening-import", label: "Saldo inicial", icon: "⇲" },
     { id: "pharmacy-alerts", label: "Alertas da farmácia", icon: "⚠" },
     { id: "pharmacy-urgency-shortfalls", label: "Faltas da UPA", icon: "⚠" },
     { id: "vector-stock-shortfalls", label: "Faltas de insumo de campo", icon: "⚠" },
+    { id: "bnafar-status", label: "Envio à BNAFAR", icon: "⇪" },
+    { id: "bnafar-pending", label: "Pendências do envio à BNAFAR", icon: "⚑" },
     { id: "pharmacy-admin", label: "Locais e configurações", icon: "⚙" }
   ]},
   { label: "Vacinação", items: [
@@ -399,6 +404,7 @@ export function navGroupsFor(
   // Módulo 29 (ADR 0047): vaccination, sem exigir pharmacy. Sala e pendências: profissional (o papel na sala vem de
   // /vaccination/my_locations); estoque, frio e resumo: profissional ou almoxarife; painel: admin e analyst; administração: admin.
   const vacOn = canUseVaccination(user);
+  const bnafarReader = isAdmin || isStockKeeper || isPharmacist || (vacOn && isProfessional);
   // Módulo 28 (ADR 0046): dental_care E clinical_record (canUseDental). Próteses do profissional (o api confere o CBO 2232);
   // metas e B1/B2 do admin e do analyst; cadastro do CEO e lista do TSB/ASB do admin.
   const dentalOn = canUseDental(user);
@@ -533,6 +539,12 @@ export function navGroupsFor(
       if (item.id === "pharmacy-entries") return stockOn && (isStockKeeper || isPharmacist);
       if (item.id === "pharmacy-adjustments") return stockOn && (isPharmacist || isStockKeeper);
       if (item.id === "pharmacy-admin") return stockOn && isAdmin;
+      // Módulo 27b (F-13–F-15): o `bnafar` ligado só vale para o status (Q40); pendências, saída externa e saldo inicial abrem com o
+      // estoque de algum domínio (Q22, Q16, Q19/Q20). Leitores (Q32): admin, almoxarife, farmacêutico e o chefe de sala, que a sessão não traz
+      // (profissional com a vacinação ligada; a tela trata o 403 missing_role). Saída externa e saldo inicial: admin e almoxarife.
+      if (item.id === "bnafar-status") return !user?.operator && hasFeature(user, "bnafar") && bnafarReader;
+      if (item.id === "bnafar-pending") return !user?.operator && (stockOn || vacOn) && bnafarReader;
+      if (item.id === "external-exits" || item.id === "opening-import") return !user?.operator && (stockOn || vacOn) && (isAdmin || isStockKeeper);
       if (item.id === "vaccination-room" || item.id === "vaccination-pending") return vacOn && isProfessional;
       if (item.id === "vaccination-stock" || item.id === "vaccination-cold-chain" || item.id === "vaccination-summary") {
         return vacOn && (isProfessional || isStockKeeper);

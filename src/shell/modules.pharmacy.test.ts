@@ -9,12 +9,14 @@ const itemsOf = (groups: ReturnType<typeof navGroupsFor>) => groups.find((g) => 
 describe("grupo Farmácia (módulo 27a)", () => {
   it("cada papel vê o seu", () => {
     expect(itemsOf(navGroupsFor(user([ "pharmacist" ])))).toEqual([
-      "pharmacy-dispensing", "pharmacy-external", "pharmacy-transfers", "pharmacy-entries", "pharmacy-stock", "pharmacy-adjustments", "pharmacy-alerts", "pharmacy-urgency-shortfalls" ]);
+      "pharmacy-dispensing", "pharmacy-external", "pharmacy-transfers", "pharmacy-entries", "pharmacy-stock", "pharmacy-adjustments", "pharmacy-alerts", "pharmacy-urgency-shortfalls", "bnafar-pending" ]);
     expect(itemsOf(navGroupsFor(user([ "pharmacy_assistant" ])))).toEqual([
       "pharmacy-dispensing", "pharmacy-external", "pharmacy-transfers", "pharmacy-stock", "pharmacy-alerts" ]);
+    // 27b (F-13–F-15): pendências, saída externa e saldo inicial abrem sem o `bnafar`; o farmacêutico lê as pendências (Q32).
     expect(itemsOf(navGroupsFor(user([ "stock_keeper" ])))).toEqual([
-      "pharmacy-transfers", "pharmacy-entries", "pharmacy-stock", "pharmacy-adjustments", "pharmacy-alerts", "pharmacy-urgency-shortfalls" ]);
-    expect(itemsOf(navGroupsFor(user([ "municipal_admin" ])))).toEqual([ "pharmacy-admin" ]);
+      "pharmacy-transfers", "pharmacy-entries", "pharmacy-stock", "pharmacy-adjustments", "external-exits", "opening-import", "pharmacy-alerts",
+      "pharmacy-urgency-shortfalls", "bnafar-pending" ]);
+    expect(itemsOf(navGroupsFor(user([ "municipal_admin" ])))).toEqual([ "external-exits", "opening-import", "bnafar-pending", "pharmacy-admin" ]);
   });
   it("faltas da UPA: farmacêutico e almoxarife, sem exigir urgency_stock_deduction nem urgency_care", () => {
     expect(itemsOf(navGroupsFor(user([ "pharmacist" ], [ "pharmacy" ])))).toContain("pharmacy-urgency-shortfalls");
@@ -26,18 +28,19 @@ describe("grupo Farmácia (módulo 27a)", () => {
   it("35a (Q21): cidade só com vector_control abre os cinco itens de estoque; os só da farmácia continuam escondidos", () => {
     const VC = [ "clinical_record", "territory_registry", "home_visits", "vector_control" ];
     expect(itemsOf(navGroupsFor(user([ "stock_keeper" ], VC)))).toEqual([
-      "pharmacy-transfers", "pharmacy-entries", "pharmacy-stock", "pharmacy-adjustments", "vector-stock-shortfalls" ]);
-    expect(itemsOf(navGroupsFor(user([ "pharmacist" ], VC)))).toEqual([ "pharmacy-transfers", "pharmacy-entries", "pharmacy-stock", "pharmacy-adjustments" ]);
+      "pharmacy-transfers", "pharmacy-entries", "pharmacy-stock", "pharmacy-adjustments", "external-exits", "opening-import", "vector-stock-shortfalls", "bnafar-pending" ]);
+    expect(itemsOf(navGroupsFor(user([ "pharmacist" ], VC)))).toEqual([ "pharmacy-transfers", "pharmacy-entries", "pharmacy-stock", "pharmacy-adjustments", "bnafar-pending" ]);
     expect(itemsOf(navGroupsFor(user([ "pharmacy_assistant" ], VC)))).toEqual([ "pharmacy-transfers", "pharmacy-stock" ]);
-    expect(itemsOf(navGroupsFor(user([ "municipal_admin" ], VC)))).toEqual([ "pharmacy-admin" ]);
+    expect(itemsOf(navGroupsFor(user([ "municipal_admin" ], VC)))).toEqual([ "external-exits", "opening-import", "bnafar-pending", "pharmacy-admin" ]);
     // vector_control sem a visita domiciliar utilizável não abre nada (Q1); o operador nunca.
     expect(itemsOf(navGroupsFor(user([ "stock_keeper", "municipal_admin" ], [ "clinical_record", "vector_control" ])))).toEqual([]);
     expect(itemsOf(navGroupsFor(user([ "stock_keeper", "municipal_admin" ], VC, true)))).toEqual([]);
   });
-  it("cidade só com pharmacy: nada muda", () => {
+  it("cidade só com pharmacy: só entram os itens do 27b que não pedem o bnafar", () => {
     expect(itemsOf(navGroupsFor(user([ "stock_keeper" ])))).toEqual([
-      "pharmacy-transfers", "pharmacy-entries", "pharmacy-stock", "pharmacy-adjustments", "pharmacy-alerts", "pharmacy-urgency-shortfalls" ]);
-    expect(itemsOf(navGroupsFor(user([ "municipal_admin" ])))).toEqual([ "pharmacy-admin" ]);
+      "pharmacy-transfers", "pharmacy-entries", "pharmacy-stock", "pharmacy-adjustments", "external-exits", "opening-import", "pharmacy-alerts",
+      "pharmacy-urgency-shortfalls", "bnafar-pending" ]);
+    expect(itemsOf(navGroupsFor(user([ "municipal_admin" ])))).toEqual([ "external-exits", "opening-import", "bnafar-pending", "pharmacy-admin" ]);
   });
   it("some sem o interruptor, para outros papéis e para o operador", () => {
     expect(itemsOf(navGroupsFor(user([ "pharmacist", "stock_keeper", "municipal_admin" ], [ "clinical_record" ])))).toEqual([]);
