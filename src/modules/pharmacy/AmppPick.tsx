@@ -9,14 +9,15 @@ import { alert, fieldLabel, muted } from "../exams/styles";
 
 export const NO_VMP_TEXT = "este produto ainda não tem VMP no catálogo — a entrada segue, e o lote fica nas pendências do envio";
 
-export function AmppPick({ vmpCode, value, onPick, disabled = false, label = "Apresentação (AMPP)", ariaLabel }: {
+// `notice`: o aviso de sem VMP só vale onde o domínio do item está em `enabled_domains` (quem chama decide).
+export function AmppPick({ vmpCode, value, onPick, disabled = false, label = "Apresentação (AMPP)", ariaLabel, notice = true }: {
   vmpCode: string | null | undefined; value: string; onPick(presentation: ObmPresentation | null, code: string): void;
-  disabled?: boolean; label?: string; ariaLabel?: string;
+  disabled?: boolean; label?: string; ariaLabel?: string; notice?: boolean;
 }) {
   const query = useQuery({
     queryKey: [ BNAFAR_PRESENTATIONS_KEY, vmpCode ], queryFn: () => listObmPresentations(vmpCode ?? ""), enabled: !!vmpCode, ...STATIC_QUERY
   });
-  if (!vmpCode) return <small style={muted}>{NO_VMP_TEXT}</small>;
+  if (!vmpCode) return notice ? <small style={muted}>{NO_VMP_TEXT}</small> : null;
   const items = query.data ?? [];
   const known = items.some((p) => p.ampp_code === value);
   return (

@@ -124,6 +124,10 @@ describe("campos BNAFAR do lote", () => {
     expect(empty[0].text).toMatch(/^informe /);
     expect(lotBnafarProblems({ ...intl, internationalName: "" }, all, { hasVmp: false }).map((p) => p.field)).toEqual([ "manufacturer" ]);
   });
+  it("internacional marcado sem o nome é sempre recusado, mesmo sem exigência do domínio (o api exige o nome)", () => {
+    expect(lotBnafarProblems({ ...EMPTY_LOT_BNAFAR, international: true }, [], { hasVmp: false }).map((p) => p.field)).toEqual([ "manufacturer" ]);
+    expect(lotBnafarProblems({ ...EMPTY_LOT_BNAFAR, international: true, internationalName: "Pharma GmbH" }, [], { hasVmp: false })).toEqual([]);
+  });
   it("campo preenchido e inválido recusa, exigido ou não; sem exigência, vazio passa", () => {
     expect(lotBnafarProblems(EMPTY_LOT_BNAFAR, [], { hasVmp: true })).toEqual([]);
     const bad = { ...EMPTY_LOT_BNAFAR, unitPrice: "12,345", cnpj: "123", anvisa: "12", ampp: "AMPP 1" };

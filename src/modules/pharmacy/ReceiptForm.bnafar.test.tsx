@@ -124,7 +124,7 @@ describe("ReceiptForm: campos do envio à BNAFAR", () => {
     await screen.findByText("Almoxarifado Central");
     doc();
     await add("clon", "Clonazepam 2 mg comprimido", "comprimido");
-    expect(screen.getByText(/ainda não tem VMP no catálogo/)).not.toBeNull();
+    expect(await screen.findByText(/ainda não tem VMP no catálogo/)).not.toBeNull();
     expect(screen.queryByLabelText("Apresentação (AMPP)")).toBeNull();
     text("Lote", "C1"); text("Validade", "2026-12-31"); text("Quantidade (comprimido)", "10");
     text("Valor unitário (R$)", "3,00"); text("Registro ANVISA", "1234567890123"); text("Programa de saúde", "AF");
@@ -165,6 +165,25 @@ describe("ReceiptForm: campos do envio à BNAFAR", () => {
     fireEvent.click(screen.getByRole("button", { name: "Registrar entrada" }));
     expect((await screen.findAllByRole("listitem")).map((li) => li.textContent)).toEqual([ "Amoxicilina 500 mg cápsula: valor unitário inválido — use reais com vírgula, maior que zero" ]);
     expect(mocked(api.recordReceipt)).not.toHaveBeenCalled();
+  });
+
+  it("domínio fora de enabled_domains: o aviso de sem VMP não aparece", async () => {
+    setup({ domains: { ...BNAFAR_DOMAINS, enabled_domains: [] } });
+    await screen.findByText("Almoxarifado Central");
+    doc();
+    await add("clon", "Clonazepam 2 mg comprimido", "comprimido");
+    await waitFor(() => expect(mocked(api.getBnafarDomains)).toHaveBeenCalled());
+    await screen.findByLabelText("Programa de saúde (opcional)");
+    expect(screen.queryByText(/ainda não tem VMP/)).toBeNull();
+  });
+
+  it("falha ao ler os programas: uma linha no lugar da lista vazia", async () => {
+    mocked(api.getBnafarDomains).mockRejectedValue(new ApiError(500, {}, "x"));
+    renderWithProviders(<ReceiptForm location={CENTRAL} mode="receipt" today={TODAY27} onDone={() => undefined} />);
+    await screen.findByText("Almoxarifado Central");
+    await add("amox", "Amoxicilina 500 mg cápsula", "cápsula");
+    expect(await screen.findByText("não foi possível ler os programas de saúde — recarregue a tela")).not.toBeNull();
+    expect(screen.queryByLabelText(/Programa de saúde/)).toBeNull();
   });
 
   it("local vector_control com o domínio utilizável: sem AMPP, quatro exigidos e nunca ampp_code", async () => {

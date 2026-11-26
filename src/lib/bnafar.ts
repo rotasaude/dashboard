@@ -169,7 +169,7 @@ export function lotBnafarProblems(d: LotBnafarDraft, required: BnafarField[], op
     if (filled(d.internationalName)) {
       const text = internationalNameProblem(d.internationalName);
       if (text) out.push({ field: "manufacturer", text });
-    } else if (need("manufacturer_cnpj")) out.push({ field: "manufacturer", text: inform("manufacturer") });
+    } else out.push({ field: "manufacturer", text: inform("manufacturer") }); // o api exige o nome sempre que `manufacturer_international` é true
   } else if (filled(d.cnpj)) {
     const text = cnpjProblem(d.cnpj);
     if (text) out.push({ field: "manufacturer_cnpj", text });
