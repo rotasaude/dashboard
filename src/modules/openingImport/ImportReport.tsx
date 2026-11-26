@@ -8,6 +8,8 @@ import { keepPreviousData, useInfiniteQuery, useQueryClient } from "@tanstack/re
 import {
   ApiError, applyOpeningImport, discardOpeningImport, getOpeningImport, revertOpeningImport, type OpeningImportDetail, type OpeningImportRow
 } from "../../lib/api";
+import { describeActionError } from "../../lib/actionErrors";
+import { useAuth } from "../../lib/auth";
 import { OPENING_IMPORTS_KEY, STATIC_QUERY, isStale } from "../../lib/bnafar";
 import { fmtDateTime } from "../../lib/format";
 import {
@@ -32,6 +34,7 @@ export function ImportReport({ importId, onGoToSecurity, onChanged, onClose }: {
   importId: string; onGoToSecurity?(): void; onChanged(): void; onClose(): void;
 }) {
   const client = useQueryClient();
+  const auth = useAuth();
   const [ errorsOnly, setErrorsOnly ] = useState(false);
   const [ confirming, setConfirming ] = useState<Act | null>(null);
   const [ notice, setNotice ] = useState<string | null>(null);
@@ -57,22 +60,31 @@ export function ImportReport({ importId, onGoToSecurity, onChanged, onClose }: {
   }
   function start() { setNotice(null); setActError(null); }
 
-  // 401 (step-up ou sessão) é do SensitiveAction; o resto fecha a confirmação e fica com a tela.
-  function refused(err: unknown, h: OpeningImportDetail) {
-    if (err instanceof ApiError && err.status === 401) return;
+  // 401 (step-up ou sessão) é do SensitiveAction quando o ato tem um; no descarte (sem SensitiveAction) a tela diz a frase.
+  // O resto fecha a confirmação e fica com a tela.
+  function refused(err: unknown, h: OpeningImportDetail, opts: { sensitive: boolean }) {
+    if (err instanceof ApiError && err.status === 401) {
+      if (opts.sensitive) return;
+      const d = describeActionError(err);
+      setActError(d.kind === "mfa_required" ? importErrorText(err) : d.message);
+      if (d.kind === "session_expired") void auth.reload();
+      return;
+    }
     setConfirming(null);
     if (isStale(err, "opening_import_changed")) { setActError(IMPORT_ERRORS.opening_import_changed); void q.refetch(); return; }
     if (isStale(err, "revert_blocked")) { setActError(revertBlockedText(blockedLocations(err), h.report)); return; }
     setActError(importErrorText(err));
     if (err instanceof ApiError && err.status === 404) onChanged();
-    else if (!(err instanceof ApiError)) void q.refetch();
+    // Rede ou timeout: o fetch falhou (TypeError) ou o proxy respondeu 5xx (o jsonFetch não tem timeout próprio). O ato pode ter entrado:
+    // relê, sem reenviar.
+    else if (!(err instanceof ApiError) || err.status >= 500) void q.refetch();
   }
 
   async function run(act: Act, h: OpeningImportDetail) {
     try {
       result.current = act === "apply" ? await applyOpeningImport(h.id, h.version) : await revertOpeningImport(h.id, h.version);
     } catch (err) {
-      refused(err, h);
+      refused(err, h, { sensitive: true });
       throw err;
     }
   }
@@ -90,7 +102,7 @@ export function ImportReport({ importId, onGoToSecurity, onChanged, onClose }: {
       setNotice(discardedText);
       afterAct();
     } catch (err) {
-      refused(err, h);
+      refused(err, h, { sensitive: false });
     }
   }
 
@@ -237,7 +249,7 @@ function Report({ head }: { head: OpeningImportDetail }) {
         <DataTable
           label="Totais por local"
           cols={[
-            { label: "Local", w: "1.6fr", card: "title", render: (t) => t.location_name },
+            { label: "Local", w: "1.6fr", card: "title", render: (t) => t.location_name || "Local sem nome" },
             { label: "Linhas", w: "0.6fr", align: "right", render: (t) => <span className="mono">{t.rows}</span> },
             { label: "Quantidade", w: "0.8fr", align: "right", render: (t) => <span className="mono">{qty(t.quantity)}</span> },
             { label: "Valor", w: "1fr", align: "right", render: (t) => <span className="mono">{fmtCentsBRL(t.value_cents)}</span> }

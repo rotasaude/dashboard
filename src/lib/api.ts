@@ -8820,7 +8820,7 @@ export interface OpeningImportReport {
   rows_valid: number; rows_error: number; errors_by_code: Record<string, number>; rows_missing_send_fields: number;
   products_without_catalog: { tipo_produto: string; codigo_produto: string }[];
   locations_without_cnes: { id: string; name: string; kind: string }[];
-  totals_by_location: { stock_location_id: string; location_name: string; rows: number; quantity: string; value_cents: number }[];
+  totals_by_location: { stock_location_id: string; location_name: string | null; rows: number; quantity: string; value_cents: number }[];
 }
 export interface OpeningImportSummary {
   id: string; status: OpeningImportStatus | (string & {}); version: number; rows_total: number; rows_valid: number;

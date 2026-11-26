@@ -26,9 +26,10 @@ let version = 1;
 const detail = (o: Partial<OpeningImportDetail> = {}): OpeningImportDetail =>
   ({ ...openingImport({ status: current, version }), rows: importRows(3), next_before: null, ...o });
 
-function setup(opts: { roles?: string[]; ph?: unknown[] } = {}) {
-  mocked(api.fetchCurrentSession).mockResolvedValue(bnafarUser(opts.roles ?? [ "municipal_admin" ], [ "pharmacy" ]));
-  mocked(api.listMyPharmacyLocations).mockResolvedValue(opts.ph ?? [ CENTRAL ]);
+function setup(opts: { roles?: string[]; ph?: unknown[]; phError?: unknown; features?: string[] } = {}) {
+  mocked(api.fetchCurrentSession).mockResolvedValue(bnafarUser(opts.roles ?? [ "municipal_admin" ], opts.features ?? [ "pharmacy" ]));
+  if (opts.phError) mocked(api.listMyPharmacyLocations).mockRejectedValue(opts.phError);
+  else mocked(api.listMyPharmacyLocations).mockResolvedValue(opts.ph ?? [ CENTRAL ]);
   return renderWithProviders(<OpeningImport />);
 }
 const pick = (file: File) => fireEvent.change(screen.getByLabelText("Planilha do saldo inicial"), { target: { files: [ file ] } });
@@ -218,5 +219,66 @@ describe("OpeningImport", () => {
     await waitFor(() => expect(mocked(api.listOpeningImports).mock.calls.length).toBeGreaterThan(lists));
     expect(api.uploadOpeningImport).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole("region", { name: "Importação" })).toBeNull();
+  });
+
+  it("504 do proxy no aplicar: relê uma vez e mostra o que entrou, sem reenviar", async () => {
+    mocked(api.applyOpeningImport).mockImplementation(() => { current = "applied"; version = 2; return Promise.reject(new ApiError(504, "gateway timeout", "504")); });
+    setup();
+    const report = await openFromList();
+    fireEvent.click(await within(report).findByRole("button", { name: "Aplicar 8 linhas" }));
+    const reads = mocked(api.getOpeningImport).mock.calls.length;
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar aplicação" }));
+    await waitFor(() => expect(mocked(api.getOpeningImport).mock.calls.length).toBe(reads + 1));
+    expect(await within(report).findByRole("button", { name: "Desfazer" })).not.toBeNull();
+    expect(within(report).queryByRole("button", { name: "Aplicar 8 linhas" })).toBeNull();
+    expect(within(report).getByRole("alert")).not.toBeNull();
+    await new Promise((r) => setTimeout(r, 30));
+    expect(api.applyOpeningImport).toHaveBeenCalledTimes(1);
+    expect(mocked(api.getOpeningImport).mock.calls.length).toBe(reads + 1);
+  });
+
+  it("farmácia desligada: o almoxarife passa pela leitura dos locais e o api decide", async () => {
+    const off = new ApiError(403, { error: "feature_disabled", feature: "pharmacy" }, "403");
+    setup({ roles: [ "stock_keeper" ], features: [ "vaccination" ], phError: off });
+    expect(await screen.findByRole("table", { name: "Importações" })).not.toBeNull();
+    cleanup();
+    mocked(api.listOpeningImports).mockRejectedValue(new ApiError(403, { error: "missing_role" }, "403"));
+    setup({ roles: [ "stock_keeper" ], features: [ "vaccination" ], phError: off });
+    expect(await screen.findByText(IMPORT_ERRORS.missing_role)).not.toBeNull();
+  });
+
+  it("local sem nome nos totais", async () => {
+    const base = detail();
+    mocked(api.getOpeningImport).mockResolvedValue({ ...base, report: { ...base.report,
+      totals_by_location: [ { stock_location_id: "l7", location_name: null, rows: 2, quantity: "20.00", value_cents: 2500 } ] } });
+    setup();
+    const report = await openFromList();
+    const totals = await within(report).findByRole("table", { name: "Totais por local" });
+    expect(within(totals).getByText("Local sem nome")).not.toBeNull();
+    expect(within(totals).getByText("R$ 25,00")).not.toBeNull();
+  });
+
+  it("descartar com a sessão vencida: a frase aparece (o descarte não tem SensitiveAction)", async () => {
+    mocked(api.discardOpeningImport).mockRejectedValue(new ApiError(401, { error: "unauthorized" }, "401"));
+    setup();
+    const report = await openFromList();
+    fireEvent.click(await within(report).findByRole("button", { name: "Descartar" }));
+    fireEvent.click(within(report).getByRole("button", { name: "Confirmar" }));
+    expect(await within(report).findByText("sessão expirada — entre de novo")).not.toBeNull();
+    expect(api.discardOpeningImport).toHaveBeenCalledTimes(1);
+  });
+
+  it("o campo do arquivo fica desabilitado enquanto o envio corre", async () => {
+    let finish: (d: OpeningImportDetail) => void = () => {};
+    mocked(api.uploadOpeningImport).mockImplementation(() => new Promise((r) => { finish = r; }));
+    setup();
+    await screen.findByRole("table", { name: "Importações" });
+    pick(new File([ `${OPENING_IMPORT_HEADER}\n${ROW}\n` ], "saldo.csv"));
+    fireEvent.click(await screen.findByRole("button", { name: "enviar e conferir" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+    await waitFor(() => expect(screen.getByLabelText("Planilha do saldo inicial")).toHaveProperty("disabled", true));
+    finish(detail());
+    expect(await screen.findByRole("region", { name: "Importação" })).not.toBeNull();
+    expect(screen.getByLabelText("Planilha do saldo inicial")).toHaveProperty("disabled", false);
   });
 });

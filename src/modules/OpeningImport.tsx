@@ -14,6 +14,7 @@ import { fmtDateTime } from "../lib/format";
 import {
   BIG_CITY_ADVICE, IMPORT_ERRORS, OPENING_IMPORT_NOTE, fileProblem, headerProblem, importErrorText, importStatusView, readFirstLine
 } from "../lib/openingImport";
+import { featureDisabledKey } from "../lib/features";
 import { PH_LOCATIONS_KEY } from "../lib/pharmacy";
 import { ActionButton } from "../components/ActionButton";
 import { ConfirmButton } from "../components/ConfirmButton";
@@ -40,10 +41,13 @@ export function OpeningImport({ onGoToSecurity }: { onGoToSecurity?: () => void 
 }
 
 // O api só aceita o almoxarife do central ATIVO: os papéis por local vêm de `listMyPharmacyLocations` (o mesmo cache do LocationPick).
+// Com a farmácia desligada (cidade só de vacina ou endemias) essa leitura dá 403 `feature_disabled`: a tela deixa passar e o api decide
+// (o 403 `missing_role` da lista vira a mesma frase).
 function CentralKeeper({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const locs = useQuery({ queryKey: [ PH_LOCATIONS_KEY, user?.id ?? null ], queryFn: listMyPharmacyLocations, enabled: !!user, ...STATIC_QUERY });
   if (locs.isPending) return <p className="mono" style={muted}>carregando…</p>;
+  if (locs.isError && featureDisabledKey(locs.error) !== null) return <>{children}</>;
   if (locs.isError) return <p role="alert" style={alert}>{importErrorText(locs.error)}</p>;
   const central = locs.data.some((l) => l.kind === "central" && l.active && l.roles.includes("stock_keeper"));
   return central ? <>{children}</> : <EmptyState title={IMPORT_ERRORS.missing_role} />;
@@ -135,6 +139,7 @@ function UploadForm({ onUploaded, onFailed }: { onUploaded(id: string): void; on
   const [ problem, setProblem ] = useState<string | null>(null);
   const [ error, setError ] = useState<string | null>(null);
   const [ inputKey, setInputKey ] = useState(0);
+  const [ sending, setSending ] = useState(false);
   const checking = useRef(0);
 
   async function choose(chosen: File | null) {
@@ -153,6 +158,7 @@ function UploadForm({ onUploaded, onFailed }: { onUploaded(id: string): void; on
   async function send() {
     if (!file) return;
     setError(null);
+    setSending(true);
     try {
       const sent = await uploadOpeningImport(file);
       setFile(null); setProblem(null); setInputKey((k) => k + 1);
@@ -161,6 +167,8 @@ function UploadForm({ onUploaded, onFailed }: { onUploaded(id: string): void; on
       // Nada é reenviado sozinho; a lista é relida (o envio pode ter chegado ao api antes da queda da rede).
       setError(importErrorText(err));
       onFailed();
+    } finally {
+      setSending(false);
     }
   }
 
@@ -169,7 +177,7 @@ function UploadForm({ onUploaded, onFailed }: { onUploaded(id: string): void; on
       <h3 style={title}>Enviar a planilha</h3>
       <label style={fieldLabel}>
         Planilha (.csv separado por ponto e vírgula, até 5 MB)
-        <input key={inputKey} type="file" accept=".csv,text/csv" aria-label="Planilha do saldo inicial"
+        <input key={inputKey} type="file" accept=".csv,text/csv" aria-label="Planilha do saldo inicial" disabled={sending}
           onChange={(e) => void choose(e.target.files?.[0] ?? null)} />
       </label>
       {problem && <p role="alert" style={alert}>{problem}</p>}

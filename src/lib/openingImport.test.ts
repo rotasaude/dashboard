@@ -71,6 +71,8 @@ describe("openingImport", () => {
     expect(revertBlockedText([ "l2" ], i.report)).toBe(`${IMPORT_ERRORS.revert_blocked}: Farmácia UBS Centro.`);
     expect(revertBlockedText([ "l2", "lx" ], i.report)).toBe(`${IMPORT_ERRORS.revert_blocked}: Farmácia UBS Centro, Local sem nome.`);
     expect(revertBlockedText([], i.report)).toBe(`${IMPORT_ERRORS.revert_blocked}.`);
+    const unnamed = { ...i.report, totals_by_location: [ { ...i.report.totals_by_location[0], location_name: null } ] };
+    expect(revertBlockedText([ "l2" ], unnamed)).toBe(`${IMPORT_ERRORS.revert_blocked}: Local sem nome.`);
   });
 
   it("situação, valor e frases de resultado", () => {
