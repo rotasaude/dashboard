@@ -89,6 +89,9 @@ function SummaryBody({ location, today }: { location: VaccineLocation; today?: s
               { label: "Entradas", w: "0.8fr", align: "right", render: cell((r) => r.received) },
               { label: "Transferências recebidas", w: "0.9fr", align: "right", render: cell((r) => r.transferred_in) },
               { label: "Transferências enviadas", w: "0.9fr", align: "right", render: cell((r) => r.transferred_out) },
+              // Q27: doses da saída externa e do estorno do saldo inicial; saem do fechamento da linha.
+              { label: "Saídas para fora da rede", w: "0.9fr", align: "right", render: cell((r) => r.external_out) },
+              { label: "Aberturas desfeitas", w: "0.8fr", align: "right", render: cell((r) => r.opening_reverted) },
               { label: "Frascos abertos", w: "0.8fr", align: "right", render: cell((r) => r.vials_opened) },
               { label: "Doses de frascos abertos", w: "0.9fr", align: "right", render: cell((r) => r.vial_doses) },
               { label: "Doses unidose aplicadas", w: "0.9fr", align: "right", render: cell((r) => r.unit_doses) },
@@ -111,7 +114,7 @@ function SummaryBody({ location, today }: { location: VaccineLocation; today?: s
             ]}
             rows={lines} rowKey={(l, i) => l.kind === "total" ? "total" : `${l.row.lot.id}-${i}`} empty="nenhuma movimentação neste mês"
           />
-          <p style={muted}>Saldo final = saldo inicial + entradas + transferências recebidas − enviadas − doses de frascos abertos − doses unidose + ajuste − perda física.</p>
+          <p style={muted}>Saldo final = saldo inicial + entradas + transferências recebidas − enviadas − saídas para fora da rede − aberturas desfeitas − doses de frascos abertos − doses unidose + ajuste − perda física.</p>
         </section>
       )}
     </div>
