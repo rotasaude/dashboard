@@ -26,13 +26,13 @@ export const vcContext = (o: Partial<HomeVisitContext> = {}): HomeVisitContext =
 
 // ── Produtos (Q15: carga em TEXTO, 2 casas) ──
 export const LARVICIDE: VectorProduct = {
-  id: "pr1", code: "PYR", name: "Pyriproxyfen 0,5% G", unit: "g", charge_size: "2.00", uses: [ "focal" ], active: true, in_use: false
+  id: "pr1", code: "PYR", name: "Pyriproxyfen 0,5% G", unit: "g", charge_size: "2.00", uses: [ "focal" ], active: true, in_use: false, catmat_code: null
 };
 export const ADULTICIDE: VectorProduct = {
-  id: "pr2", code: "MAL", name: "Malationa 44% EW", unit: "ml", charge_size: "12.50", uses: [ "perifocal", "spatial" ], active: true, in_use: false
+  id: "pr2", code: "MAL", name: "Malationa 44% EW", unit: "ml", charge_size: "12.50", uses: [ "perifocal", "spatial" ], active: true, in_use: false, catmat_code: null
 };
 export const INACTIVE_PRODUCT: VectorProduct = {
-  id: "pr3", code: "TEM", name: "Temefós 1% G", unit: "g", charge_size: "1.00", uses: [ "focal" ], active: false, in_use: true
+  id: "pr3", code: "TEM", name: "Temefós 1% G", unit: "g", charge_size: "1.00", uses: [ "focal" ], active: false, in_use: true, catmat_code: null
 };
 // O produto como sai nos domínios (só os ativos, sem active/in_use).
 // `uses` só as vetoriais: o `products` dos domínios do 35a nunca traz a vacina nem a coleira (35b).

@@ -24,7 +24,7 @@ import { LOCATION_GONE, NO_LOCATION, VectorSettings } from "./VectorSettings";
 const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
 const IN_USE = { ...LARVICIDE, in_use: true };
 const SETTINGS: Settings = { stock_location: null, options: [ { id: "loc-uvz", name: "Almoxarifado da UVZ" }, { id: "loc-2", name: "Depósito Norte" } ] };
-const BTI: VectorProduct = { id: "pr9", code: "BTI", name: "Bti WG", unit: "g", charge_size: "0.50", uses: [ "focal" ], active: true, in_use: false };
+const BTI: VectorProduct = { id: "pr9", code: "BTI", name: "Bti WG", unit: "g", charge_size: "0.50", uses: [ "focal" ], active: true, in_use: false, catmat_code: null };
 
 const mount = (onGoToSecurity?: () => void) => renderWithProviders(<VectorSettings onGoToSecurity={onGoToSecurity} />);
 const field = (label: string) => screen.getByLabelText(label) as HTMLInputElement;

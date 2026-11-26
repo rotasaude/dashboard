@@ -18,10 +18,10 @@ export const zooUser = (roles: string[] = [ "zoonoses_team" ], features: string[
 // ── Produtos (o 35a: unidade "un"; no `domains` do 35b o produto não traz `unit`) ──
 export const VACCINE: VectorProduct & { use: "rabies_vaccine" } = {
   id: "pz1", code: "VAR", name: "Vacina antirrábica animal", unit: "un", use: "rabies_vaccine", charge_size: "1.00", uses: [ "rabies_vaccine" ],
-  active: true, in_use: false
+  active: true, in_use: false, catmat_code: null
 };
 export const COLLAR: VectorProduct & { use: "collar" } = {
-  id: "pz2", code: "COL", name: "Coleira deltametrina 4%", unit: "un", use: "collar", charge_size: "1.00", uses: [ "collar" ], active: true, in_use: false
+  id: "pz2", code: "COL", name: "Coleira deltametrina 4%", unit: "un", use: "collar", charge_size: "1.00", uses: [ "collar" ], active: true, in_use: false, catmat_code: null
 };
 const domainProduct = ({ id, code, name, use }: { id: string; code: string; name: string; use: "rabies_vaccine" | "collar" }) => ({ id, code, name, use });
 

@@ -79,7 +79,7 @@ export const coldStatus = (over: Partial<ColdChainStatus> = {}): ColdChainStatus
 export const monthly = (over: Partial<MonthlySummary> = {}): MonthlySummary => ({ month: "2026-10", location: { id: ROOM.id, name: ROOM.name, kind: ROOM.kind },
   rows: [ { immunobiological: { code: "15", name: "BCG" }, lot: { id: "lot15", number: "BCG2610", expires_on: "2027-03-31" },
     opening_balance: 40, received: 20, transferred_in: 0, transferred_out: 0, vials_opened: 3, doses_applied: 24, technical_loss: 6,
-    physical_loss: { broken: 10 }, closing_balance: 20, vial_doses: 30, unit_doses: 0, adjustment: 0 } ], ...over });
+    physical_loss: { broken: 10 }, closing_balance: 20, vial_doses: 30, unit_doses: 0, adjustment: 0, external_out: 0, opening_reverted: 0 } ], ...over });
 export const vacDashboard = (over: Partial<VaccinationDashboard> = {}): VaccinationDashboard => ({ month: "2026-10", suppressed: true,
   doses_by_immunobiological: [ { immunobiological: { code: "42", name: PENTA.name }, room: { id: "r1", name: ROOM.name }, count: 31 } ],
   c2_coverage_by_team: [ { team: { id: "t1", name: "eSF Centro 1" }, eligible: 40, complete: 30 } ],

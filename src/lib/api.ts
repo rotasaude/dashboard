@@ -1248,11 +1248,13 @@ const PRODUCTION_BASE = import.meta.env.VITE_PRODUCTION_BASE || "/production";
 
 export type RecordMode = "off" | "integrated" | "record";
 // Módulo 29 (D1; V1): a credencial rnds é um certificado A1, não usuário e senha.
-export type CredentialKind = "ledi" | "cadsus" | "rnds";
+export type CredentialKind = "ledi" | "cadsus" | "rnds" | "bnafar";
 export type CredentialCheckStatus = "ok" | "unauthorized" | "unreachable" | "error";
 
 export interface IntegrationCredential {
   kind: CredentialKind;
+  // Módulo 27b (Q9): em toda linha; `production` fora da bnafar, e na bnafar o ambiente em uso.
+  environment?: "production" | "homologation" | null;
   set: boolean;
   set_at: string | null;
   set_by: string | null;
@@ -4832,7 +4834,9 @@ export type StockMovementKind =
   // Módulo 35a (Q10): a baixa do boletim e o estorno na retirada da visita.
   | "vector_application" | "vector_application_reversal"
   // Módulo 35b: a dose antirrábica animal, o estorno dela e a coleira colocada.
-  | "animal_vaccination" | "animal_vaccination_reversal" | "collar_placement";
+  | "animal_vaccination" | "animal_vaccination_reversal" | "collar_placement"
+  // Módulo 27b (Q10): a saída externa (documento stock_external_exit) e o estorno do saldo inicial.
+  | "external_exit" | "opening_reversal";
 export type TransferStatus = "sent" | "received" | "received_with_difference";
 export type AdjustmentStatus = "applied" | "pending" | "approved" | "rejected";
 export type AdjustmentKind = "adjustment" | "loss" | "expiry";
@@ -4844,6 +4848,8 @@ export interface StockItem {
   catalog_item_id: string | null; catmat_code: number | null; name: string; unit: string; dispensing_unit: string;
   controlled: boolean; controlled_list: string | null;
   immunobiological_code?: string | null; item_kind?: "medication" | "immunobiological" | "vector_control";
+  // Módulo 27b (Q43): o VMP do medicamento (o api acrescenta em rodada própria); sem ele não há AMPP a escolher.
+  vmp_code?: string | null;
   // Módulo 35a (D-8; Pharmacy::Json.vector_item): produto de campo sem CATMAT, com o código do produto; `unit` e
   // `dispensing_unit` são a unidade do produto (g, ml, un).
   vector_product_id?: string | null; code?: string;
@@ -4853,14 +4859,19 @@ export interface StockItem {
 export interface StockLot {
   id: string; item: StockItem; lot_number: string; expires_on: string; manufacturer: string | null;
   manufacturer_key?: string | null;
+  // Módulo 27b: estado do complemento BNAFAR na posição e no extrato.
+  bnafar?: LotBnafarState | null;
 }
 export interface LocationRef { id: string; name: string; kind: StockLocationKind | string }
 
 // D1: os locais da pessoa com o papel dela em cada um. O almoxarife do central vê todos; os alheios vêm com `roles: []`.
 export interface PharmacyLocation extends LocationRef { health_unit: { id: string; name: string } | null; active: boolean; roles: string[] }
 export interface LocationStaff { user_id: string; name: string | null; role: PharmacyRole | string }
-export interface AdminLocation extends LocationRef { health_unit: { id: string; name: string } | null; active: boolean; staff: LocationStaff[] }
-export interface AdminLocationInput { kind: StockLocationKind; health_unit_id?: string | null; name: string; active: boolean }
+export interface AdminLocation extends LocationRef { health_unit: { id: string; name: string } | null; active: boolean; staff: LocationStaff[];
+  // Módulo 27b (Q13): o CNES efetivo (o próprio no central e na rede de frio; o da unidade nos demais) e o tipo DM01.
+  cnes?: string | null; bnafar_type?: string | null;
+}
+export interface AdminLocationInput { kind: StockLocationKind; health_unit_id?: string | null; name: string; active: boolean; cnes?: string | null }
 export interface PharmacySettings {
   common_validity_days: number; continuous_validity_days: number; continuous_interval_days: number;
   expiry_alert_days: number; adjustment_approval_percent: number;
@@ -4894,7 +4905,7 @@ export interface PackageInput { units_per_package: number; packages: number }
 export type ReceiptItemInput = (
   | { catalog_item_id: string; vector_product_id?: never; package?: PackageInput }
   | { vector_product_id: string; catalog_item_id?: never; package?: never }
-) & { lot_number: string; expires_on: string; manufacturer?: string; quantity: string };
+) & { lot_number: string; expires_on: string; manufacturer?: string; quantity: string } & BnafarLotInput;
 export interface ReceiptInput {
   location_id: string; document: { kind: "invoice" | "donation"; number: string; supplier: string }; items: ReceiptItemInput[];
 }
@@ -5410,6 +5421,8 @@ export interface ImmunobiologicalManufacturer { key: string; code: string | null
 export interface Immunobiological {
   code: string; name: string; multidose: boolean; doses_per_vial: number; default_route: string | null; default_site: string | null;
   manufacturers: ImmunobiologicalManufacturer[];
+  // Módulo 27b (Q43): o VMP do OBM (nulo até o gate do YAML, Q21).
+  obm_vmp?: string | null;
 }
 export interface VaccinationTerminologies {
   dose: CodeName[]; strategy: CodeName[]; route: CodeName[]; site: CodeName[]; care_group: CodeName[]; maternal_condition: CodeName[];
@@ -5474,13 +5487,15 @@ export interface Vial {
   doses_per_vial: number; doses_used: number; doses_left: number; status: VialStatus | string;
 }
 
-// D8 + V25: doses inteiras; closing = opening + received + transferred_in − transferred_out − vial_doses − unit_doses + adjustment − Σ physical_loss.
+// D8 + V25 + Q27: doses inteiras; closing = opening + received + transferred_in − transferred_out − external_out − opening_reverted − vial_doses − unit_doses + adjustment − Σ physical_loss.
 // `physical_loss` por código do SIES (mais `unspecified` e `transfer_difference`); `adjustment` vem com sinal.
 export interface MonthlySummaryRow {
   immunobiological: ImmunobiologicalRef; lot: { id: string; number: string; expires_on: string };
   opening_balance: number; received: number; transferred_in: number; transferred_out: number; vials_opened: number; doses_applied: number;
   technical_loss: number; physical_loss: Record<string, number>; closing_balance: number;
   vial_doses: number; unit_doses: number; adjustment: number;
+  // Módulo 27b (Q27): doses positivas da saída externa e do estorno do saldo inicial.
+  external_out: number; opening_reverted: number;
 }
 export interface MonthlySummary { month: string; location: LocationRef; rows: MonthlySummaryRow[] }
 
@@ -5512,7 +5527,8 @@ export interface VaccineRoomsAdmin { rooms: VaccineRoom[]; cold_chain_central: A
 export interface VaccinationSettings { go_live_on: string | null }
 
 // V19/V4: fabricante pela `key` do catálogo e `package` obrigatório (doses por frasco × frascos); `quantity` em doses, texto.
-export interface VaccineReceiptItemInput {
+// Módulo 27b (Q21): a vacina não leva fabricante nem CNPJ no corpo (vem do catálogo); só os demais campos BNAFAR.
+export interface VaccineReceiptItemInput extends VaccineBnafarLotInput {
   immunobiological_code: string; manufacturer_key: string; lot_number: string; expires_on: string; quantity: string; package: PackageInput;
 }
 export interface VaccineReceiptInput {
@@ -7943,8 +7959,13 @@ export interface VectorParameterVersion { version: number; values: VectorParamet
 
 // ── Produtos e local da baixa (§4) ──
 // `in_use` = há lote ou medida do produto (unit e charge_size não mudam: 409 product_in_use).
-export interface VectorProduct extends VectorProductRef { charge_size: string; uses: VectorProductUse[]; active: boolean; in_use: boolean }
-export interface VectorProductInput { code: string; name: string; unit: "g" | "ml" | "un"; charge_size: string; uses: VectorProductUse[]; active: boolean }
+export interface VectorProduct extends VectorProductRef { charge_size: string; uses: VectorProductUse[]; active: boolean; in_use: boolean;
+  // Módulo 27b: o CATMAT que a BNAFAR pede (1 a 2.147.483.647; nulo = sem código).
+  catmat_code: number | null;
+}
+export interface VectorProductInput {
+  code: string; name: string; unit: "g" | "ml" | "un"; charge_size: string; uses: VectorProductUse[]; active: boolean; catmat_code?: number | null;
+}
 export interface VectorSettings { stock_location: { id: string; name: string } | null; options: { id: string; name: string }[] }
 
 // ── Ovitrampas (§6) ──
@@ -8694,4 +8715,235 @@ export function getZoonosesReport(name: ZoonosesReportName, f: ZoonosesReportFil
 }
 export function fetchZoonosesReportFile(name: ZoonosesReportName, f: ZoonosesReportFilters): Promise<SignatureFile> {
   return binaryFetch(withQuery(zooPath("reports", `${name}.csv`), zooReportQuery(f)), "text/csv");
+}
+
+// ── Envio à BNAFAR, saída externa e saldo inicial (módulo 27b; contrato 2026-11-24 §1–§7, Q6–Q17, Q41–Q45) ──
+// Formas do api real (api-shapes.md, HEAD 9ae6d660), que valem sobre o plano. Listas: `{ items, next_before }` (a de saídas externas usa
+// `external_exits`). Código ou status desconhecido aparece cru (`| (string & {})`). Cursor `before` é opaco: repasse como veio.
+export type BnafarEnvironment = "production" | "homologation";
+export type BnafarSubject = "position" | "exit";
+export type BnafarSubmissionStatus = "building" | "queued" | "sending" | "processing" | "finished" | "failed" | "lost";
+// O perdido NÃO é um status: é `lost: true` sobre um registro recusado.
+export type BnafarRecordStatus = "pending" | "accepted" | "rejected";
+export type BnafarPendencyCode =
+  | "lot_incomplete" | "lot_number_too_long" | "location_without_cnes" | "product_without_code" | "fractional_balance"
+  | "exit_type_missing" | "domain_off";
+export type StockDomain = "medication" | "immunobiological" | "vector_control";
+export type BnafarField = "unit_price_cents" | "manufacturer_cnpj" | "anvisa_registration" | "health_program" | "ampp_code";
+export type ExternalExitType = "S-DF" | "S-TR" | "S-D" | "S-E";
+
+// Na posição e no extrato o lote só traz `{ version, missing }`; lote antigo: version 0.
+export interface LotBnafarState { version: number; missing: string[] }
+// Resposta do PATCH do complemento: o nome do fabricante internacional NÃO volta.
+export interface LotBnafar extends LotBnafarState {
+  unit_price_cents: number | null; manufacturer_cnpj: string | null; manufacturer_international: boolean;
+  anvisa_registration: string | null; health_program: string | null; ium: string[] | null; ampp_code: string | null;
+}
+// O fabricante internacional vai com `manufacturer_international: true` e o NOME em `manufacturer` (1 a 120), sem `manufacturer_cnpj`
+// (os dois juntos → 422). O AMPP nunca vai no vetorial, e a vacina não leva fabricante (Q21).
+export interface BnafarLotInput {
+  unit_price_cents?: number; manufacturer_cnpj?: string; manufacturer_international?: boolean; manufacturer?: string;
+  anvisa_registration?: string; health_program?: string; ium?: string[]; ampp_code?: string;
+}
+export type VaccineBnafarLotInput = Omit<BnafarLotInput, "manufacturer_cnpj" | "manufacturer_international" | "manufacturer">;
+export interface LotBnafarInput extends BnafarLotInput { location_id: string; expected_version: number }
+export interface LotBnafarResult { id: string; bnafar: LotBnafar }
+export interface ObmPresentation {
+  ampp_code: string; vmp_code: string; description: string; anvisa_registration: string | null; manufacturer_cnpj: string | null;
+}
+export interface BnafarProgram { code: string; label: string; product_type: string }
+export interface BnafarDomains {
+  programs: BnafarProgram[]; exit_types: { code: ExternalExitType | (string & {}); label: string }[];
+  location_types: { kind: string; code: string }[]; enabled_domains: StockDomain[];
+}
+export interface BnafarAlert { late: number; rejected: number; lost: number; last_finished_on: string | null }
+export interface BnafarDaySubject {
+  subject: BnafarSubject | (string & {}); status: BnafarSubmissionStatus | (string & {}); accepted: number; rejected: number; pending: number; lost: number;
+}
+export interface BnafarStatus { environment: BnafarEnvironment; alert: BnafarAlert; days: { reference_on: string; subjects: BnafarDaySubject[] }[] }
+export interface BnafarBatch { operation: "post" | "put" | "delete" | (string & {}); status: string; protocol: string | null }
+// `sent_at` é quando a remessa foi ENVIADA, não recebida. `retry_until` vem em toda remessa (Q42). A lista não traz `batches`.
+export interface BnafarSubmission {
+  id: string; reference_on: string; subject: BnafarSubject | (string & {}); environment: BnafarEnvironment;
+  status: BnafarSubmissionStatus | (string & {}); attempts: number; last_error: string | null;
+  sent_at: string | null; finished_at: string | null; retry_until: string;
+  counts: { accepted: number; rejected: number; pending: number; lost: number };
+}
+// O nome do local e o rótulo do item, sem pessoa. Aceito em parte = `accepted` com `rejected_items > 0` (contagem; os códigos ficam em
+// `error_codes`). `retry_until` só no recusado de remessa não perdida; `correct_until` só na saída externa aceita e não excluída.
+// Q44: o registro de saída aponta para a saída (o api acrescenta em rodada própria; ausente até lá).
+export interface BnafarRecord {
+  id: string; subject: BnafarSubject | (string & {}); status: BnafarRecordStatus | (string & {}); lost: boolean; lost_reason: string | null;
+  deleted: boolean; stock_location_id: string; location_name: string; item_key: string; item_label: string;
+  error_codes: string[]; rejected_items: number; bnafar_code: string | null; protocol: string | null;
+  retry_until: string | null; correct_until: string | null;
+  stock_external_exit_id?: string | null; stock_external_exit_version?: number | null;
+}
+export interface BnafarSubmissionDetail extends BnafarSubmission { batches: BnafarBatch[]; records: BnafarRecord[]; next_before: string | null }
+export interface BnafarSubmissionQuery { from?: string; to?: string; subject?: BnafarSubject; status?: BnafarSubmissionStatus; before?: string | null }
+export interface BnafarSubmissionPage { items: BnafarSubmission[]; next_before: string | null }
+export interface BnafarRetryResult { batch: { id: string; operation: string; status: string; protocol: string | null }; retried: number; submission: BnafarSubmission }
+// O domínio vem do prefixo de `item_key` ("<domínio>:<id|código>"). Q45: a pendência de lote traz `lot_id`, `lot_number` e `lot_version`
+// (o api acrescenta em rodada própria; ausentes até lá). `stock_lot_id` é o campo atual.
+export interface BnafarPendency {
+  code: BnafarPendencyCode | (string & {}); stock_location_id: string; location_name: string; item_key: string; item_label: string;
+  stock_lot_id: string | null; fields: string[];
+  lot_id?: string | null; lot_number?: string | null; lot_version?: number | null;
+}
+export interface BnafarPendencies { items: BnafarPendency[]; next_before: string | null; totals: { by_code: Record<string, number>; by_location: Record<string, number> } }
+export interface BnafarPendencyQuery { locationId?: string | null; code?: BnafarPendencyCode | (string & {}) | null; before?: string | null }
+
+export interface ExternalExitInput {
+  location_id: string; exit_type: ExternalExitType; destination_kind: "cnes" | "cnpj"; destination_code: string;
+  reason: string; items: { lot_id: string; quantity: number }[];
+}
+// A lista não traz o motivo; o detalhe e a resposta do POST trazem. Sem `recorded_by`. Quantidade inteira de 1 a 99.999.
+export interface ExternalExit {
+  id: string; version: number; location: LocationRef; exit_type: ExternalExitType | (string & {}); destination_kind: "cnes" | "cnpj";
+  destination_code: string; reason?: string; recorded_at: string; items: { lot: StockLot; quantity: number }[];
+}
+export interface ExternalExitPage { external_exits: ExternalExit[]; next_before: string | null }
+// A correção vale para a saída inteira. `reason` de 10 a 500; o que falta vem da saída atual.
+export interface BnafarCorrectionInput {
+  expected_version: number; exit_type?: ExternalExitType; destination_kind?: "cnes" | "cnpj"; destination_code?: string; reason: string;
+}
+export interface StockOpening {
+  stock_entry_id: string; created_at: string; recorded_by: { name: string }; from_import: boolean; reverted: boolean;
+  lots: { stock_lot_id: string; item_label: string; lot_number: string; expires_on: string; quantity: string; bnafar: { missing: string[] } }[];
+}
+export interface StockOpeningPage { items: StockOpening[]; next_before: string | null }
+
+export type OpeningImportStatus = "uploaded" | "validated" | "applied" | "discarded" | "reverted";
+export interface OpeningImportReport {
+  rows_valid: number; rows_error: number; errors_by_code: Record<string, number>; rows_missing_send_fields: number;
+  products_without_catalog: { tipo_produto: string; codigo_produto: string }[];
+  locations_without_cnes: { id: string; name: string; kind: string }[];
+  totals_by_location: { stock_location_id: string; location_name: string; rows: number; quantity: string; value_cents: number }[];
+}
+export interface OpeningImportSummary {
+  id: string; status: OpeningImportStatus | (string & {}); version: number; rows_total: number; rows_valid: number;
+  created_at: string; applied_at: string | null; reverted_at: string | null; uploaded_by: { name: string };
+}
+// As colunas da planilha vêm como texto ou nulo.
+export interface OpeningImportRow {
+  line: number; status: "valid" | "error" | (string & {}); error_codes: string[]; stock_location_id: string | null; cnes: string | null;
+  tipo_produto: string | null; codigo_produto: string | null; ampp: string | null; lote: string | null; validade: string | null;
+  quantidade: string | null; valor_unitario: string | null; cnpj_fabricante: string | null; registro_anvisa: string | null; programa: string | null;
+}
+export interface OpeningImport extends OpeningImportSummary { report: OpeningImportReport }
+export interface OpeningImportDetail extends OpeningImport { rows: OpeningImportRow[]; next_before: string | null }
+export interface OpeningImportPage { items: OpeningImportSummary[]; next_before: string | null }
+
+// Chaves vazias não vão; `limit` só quando a tela pede (o padrão do api é 50, o máximo 100).
+function bnafarParams(entries: [ string, string | null | undefined ][]): URLSearchParams {
+  const p = new URLSearchParams();
+  for (const [ key, value ] of entries) if (value) p.set(key, value);
+  return p;
+}
+
+export function getBnafarStatus(): Promise<BnafarStatus> {
+  return jsonFetch<BnafarStatus>(phPath("bnafar", "status"));
+}
+
+export async function listBnafarSubmissions(q: BnafarSubmissionQuery = {}): Promise<BnafarSubmissionPage> {
+  const b = await jsonFetch<Partial<BnafarSubmissionPage>>(withQuery(phPath("bnafar", "submissions"),
+    bnafarParams([ [ "from", q.from ], [ "to", q.to ], [ "subject", q.subject ], [ "status", q.status ], [ "before", q.before ] ])));
+  return { items: b.items ?? [], next_before: b.next_before ?? null };
+}
+
+export function getBnafarSubmission(id: string, q: { status?: "pending" | "accepted" | "rejected"; before?: string | null } = {}): Promise<BnafarSubmissionDetail> {
+  return jsonFetch<BnafarSubmissionDetail>(withQuery(phPath("bnafar", "submissions", id), bnafarParams([ [ "status", q.status ], [ "before", q.before ] ])));
+}
+
+// Corpo `{}` e Content-Type JSON: sem eles o api responde 415. Step-up e papel (só o municipal_admin) ficam com o api.
+export function retryBnafarSubmission(id: string): Promise<BnafarRetryResult> {
+  return jsonFetch<BnafarRetryResult>(phPath("bnafar", "submissions", id, "retry"), phWrite("POST", {}));
+}
+
+export async function correctBnafarRecord(id: string, input: BnafarCorrectionInput): Promise<BnafarRecord[]> {
+  return (await jsonFetch<{ records?: BnafarRecord[] }>(phPath("bnafar", "records", id, "correct"), phWrite("POST", input))).records ?? [];
+}
+
+export async function listBnafarPendencies(q: BnafarPendencyQuery = {}): Promise<BnafarPendencies> {
+  const b = await jsonFetch<Partial<BnafarPendencies>>(withQuery(phPath("bnafar", "pendencies"),
+    bnafarParams([ [ "location_id", q.locationId ], [ "code", q.code ], [ "before", q.before ] ])));
+  return { items: b.items ?? [], next_before: b.next_before ?? null, totals: { by_code: b.totals?.by_code ?? {}, by_location: b.totals?.by_location ?? {} } };
+}
+
+export function getBnafarDomains(): Promise<BnafarDomains> {
+  return jsonFetch<BnafarDomains>(phPath("bnafar", "domains"));
+}
+
+export async function listObmPresentations(vmpCode: string): Promise<ObmPresentation[]> {
+  return (await jsonFetch<{ items?: ObmPresentation[] }>(withQuery(phPath("obm_presentations"), new URLSearchParams({ vmp_code: vmpCode })))).items ?? [];
+}
+
+export function updateLotBnafar(lotId: string, input: LotBnafarInput): Promise<LotBnafarResult> {
+  return jsonFetch<LotBnafarResult>(phPath("lots", lotId, "bnafar"), phWrite("PATCH", input));
+}
+
+export function recordExternalExit(input: ExternalExitInput): Promise<ExternalExit> {
+  return jsonFetch<ExternalExit>(phPath("external_exits"), phWrite("POST", input));
+}
+
+// `location_id` é obrigatório no api (sem ele, 422).
+export async function listExternalExits(q: { locationId: string; before?: string | null }): Promise<ExternalExitPage> {
+  const b = await jsonFetch<Partial<ExternalExitPage>>(withQuery(phPath("external_exits"), bnafarParams([ [ "location_id", q.locationId ], [ "before", q.before ] ])));
+  return { external_exits: b.external_exits ?? [], next_before: b.next_before ?? null };
+}
+
+export function getExternalExit(id: string): Promise<ExternalExit> {
+  return jsonFetch<ExternalExit>(phPath("external_exits", id));
+}
+
+export async function listStockOpenings(locationId: string, before?: string | null): Promise<StockOpeningPage> {
+  const b = await jsonFetch<Partial<StockOpeningPage>>(withQuery(phPath("openings"), bnafarParams([ [ "location_id", locationId ], [ "before", before ] ])));
+  return { items: b.items ?? [], next_before: b.next_before ?? null };
+}
+
+// Só o conteúdo: o nome do arquivo não vai.
+export async function uploadOpeningImport(file: Blob): Promise<OpeningImportDetail> {
+  return jsonFetch<OpeningImportDetail>(phPath("opening_imports"), phWrite("POST", { file_base64: await readBase64(file) }));
+}
+
+export async function getOpeningImport(id: string, q: { before?: string | null; status?: "valid" | "error"; limit?: number } = {}): Promise<OpeningImportDetail> {
+  const b = await jsonFetch<OpeningImportDetail>(withQuery(phPath("opening_imports", id),
+    bnafarParams([ [ "before", q.before ], [ "status", q.status ], [ "limit", q.limit ? String(q.limit) : null ] ])));
+  return { ...b, rows: b.rows ?? [], next_before: b.next_before ?? null };
+}
+
+export async function listOpeningImports(before?: string | null): Promise<OpeningImportPage> {
+  const b = await jsonFetch<Partial<OpeningImportPage>>(withQuery(phPath("opening_imports"), bnafarParams([ [ "before", before ] ])));
+  return { items: b.items ?? [], next_before: b.next_before ?? null };
+}
+
+export function applyOpeningImport(id: string, expectedVersion: number): Promise<OpeningImportDetail> {
+  return jsonFetch<OpeningImportDetail>(phPath("opening_imports", id, "apply"), phWrite("POST", { expected_version: expectedVersion }));
+}
+
+export function revertOpeningImport(id: string, expectedVersion: number): Promise<OpeningImportDetail> {
+  return jsonFetch<OpeningImportDetail>(phPath("opening_imports", id, "revert"), phWrite("POST", { expected_version: expectedVersion }));
+}
+
+export function discardOpeningImport(id: string, expectedVersion: number): Promise<OpeningImportDetail> {
+  return jsonFetch<OpeningImportDetail>(phPath("opening_imports", id, "discard"), phWrite("POST", { expected_version: expectedVersion }));
+}
+
+export function fetchOpeningImportTemplate(): Promise<SignatureFile> {
+  return binaryFetch(phPath("opening_imports", "template.csv"), "text/csv");
+}
+
+// Senha e ambiente só no corpo (a senha como digitada, sem trim); nada volta além da linha da credencial.
+export function setBnafarCredential(username: string, password: string, environment: BnafarEnvironment): Promise<IntegrationCredential> {
+  return jsonFetch<IntegrationCredential>(`${INTEGRATIONS_BASE}/credentials/bnafar`, { method: "PUT", body: JSON.stringify({ username, password, environment }) });
+}
+
+// O api testa o ambiente em uso e ignora o corpo (F-22/F-28): vai `{}`.
+export function checkBnafarCredential(): Promise<IntegrationCredential> {
+  return jsonFetch<IntegrationCredential>(`${INTEGRATIONS_BASE}/credentials/bnafar/check`, { method: "POST", body: "{}" });
+}
+
+// A chave `cnes` é obrigatória no corpo (`null` limpa); 404 sem rede de frio, 409 `cnes_in_use`.
+export function setColdChainCentralCnes(cnes: string | null): Promise<AdminLocation> {
+  return jsonFetch<AdminLocation>(vacPath("admin", "cold_chain_central"), vacWrite("PATCH", { cnes }));
 }

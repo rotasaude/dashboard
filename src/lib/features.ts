@@ -13,7 +13,8 @@ export type FeatureKey =
   | "pharmacy" | "dental_care" | "vaccination" | "rnds_immunization" | "rnds_mock"
   | "sanitary_transport" | "tfd" | "psychosocial_care" | "urgency_care" | "waiting_room_display"
   | "urgency_stock_deduction" | "ombudsman" | "ombudsman_anonymous_web" | "home_visits" | "collective_activities"
-  | "vector_control" | "zoonoses";
+  | "vector_control" | "zoonoses"
+  | "bnafar" | "bnafar_medications" | "bnafar_vector_supplies" | "bnafar_vaccines" | "bnafar_mock";
 
 export const FEATURE_DISABLED_MESSAGE = "esta funcionalidade está desligada para a cidade";
 
@@ -71,7 +72,13 @@ const FEATURE_LABEL: Record<string, string> = {
   // Módulo 35a (ADR 0054): exige home_visits utilizável; o rótulo curto do contrato §1 (Q12: só a descrição do maintenance muda)
   vector_control: "Vigilância ambiental (endemias)",
   // Módulo 35b (ADR 0054): o centro de zoonoses; exige territory_registry e clinical_record utilizáveis
-  zoonoses: "Centro de zoonoses"
+  zoonoses: "Centro de zoonoses",
+  // Módulo 27b (ADR 0055; contrato §1, Q6): bnafar exige credencial e IBGE; os de domínio exigem bnafar e o módulo; bnafar_mock só fora de produção.
+  bnafar: "Envio à BNAFAR",
+  bnafar_medications: "BNAFAR: medicamentos",
+  bnafar_vector_supplies: "BNAFAR: endemias e zoonoses",
+  bnafar_vaccines: "BNAFAR: vacinas",
+  bnafar_mock: "BNAFAR simulado"
 };
 
 export function sessionFeatures(user: { features?: unknown } | null | undefined): string[] {

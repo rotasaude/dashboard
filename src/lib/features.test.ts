@@ -178,3 +178,14 @@ describe("módulo 35b", () => {
     expect(hasFeature({ features: [ "vector_control" ] }, "zoonoses")).toBe(false);
   });
 });
+
+describe("interruptores do 27b (contrato §1, Q6)", () => {
+  it("rótulos curtos e o simulado", () => {
+    expect(featureLabel("bnafar")).toBe("Envio à BNAFAR");
+    expect(featureLabel("bnafar_medications")).toBe("BNAFAR: medicamentos");
+    expect(featureLabel("bnafar_vector_supplies")).toBe("BNAFAR: endemias e zoonoses");
+    expect(featureLabel("bnafar_vaccines")).toBe("BNAFAR: vacinas");
+    expect(featureLabel("bnafar_mock")).toBe("BNAFAR simulado");
+    expect(hasFeature({ features: [ "bnafar_mock" ] }, "bnafar_mock")).toBe(true);
+  });
+});
