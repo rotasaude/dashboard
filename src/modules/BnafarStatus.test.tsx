@@ -197,11 +197,12 @@ describe("Envio à BNAFAR (27b)", () => {
     }));
     expect(await screen.findByText(bnafarErrorText("external_exit_changed"))).not.toBeNull();
     await waitFor(() => expect(vi.mocked(api.getBnafarSubmission).mock.calls.length).toBe(reads + 1));
-    // A saída também é relida: o resumo mostra o que a outra pessoa gravou; o digitado fica.
+    // A saída também é relida: o resumo mostra o que a outra pessoa gravou; o campo que o usuário não tocou (tipo) passa ao valor
+    // novo, e o que ele digitou (destino) fica.
     await waitFor(() => expect(api.getExternalExit).toHaveBeenCalledTimes(2));
     expect(await screen.findByText("2384300")).not.toBeNull();
     expect((screen.getByLabelText("Código do destino") as HTMLInputElement).value).toBe("12.abc.345/01de-35");
-    expect((screen.getByLabelText("Tipo da saída") as HTMLSelectElement).value).toBe("S-D");
+    expect((screen.getByLabelText("Tipo da saída") as HTMLSelectElement).value).toBe("S-TR");
     expect(api.correctBnafarRecord).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole("region", { name: "Corrigir a saída externa" })).toBeNull();
 
@@ -211,13 +212,61 @@ describe("Envio à BNAFAR (27b)", () => {
     fireEvent.click(within(await screen.findByRole("region", { name: "Corrigir a saída externa" })).getByRole("button", { name: "Confirmar correção" }));
     expect(await screen.findByText("Correção enviada. A BNAFAR substitui os registros desta saída.")).not.toBeNull();
     expect(api.correctBnafarRecord).toHaveBeenCalledTimes(2);
-    // A diferença é contra a saída relida: o tipo que o usuário manteve (S-D) agora difere do gravado (S-TR) e vai no corpo.
+    // Só o que o usuário mexeu vai: o tipo gravado pela outra pessoa (S-TR) não é desfeito.
     expect(vi.mocked(api.correctBnafarRecord).mock.calls[1][1]).toEqual({
-      expected_version: 2, exit_type: "S-D", destination_kind: "cnpj", destination_code: "12ABC34501DE35", reason: "destino informado errado na saída"
+      expected_version: 2, destination_kind: "cnpj", destination_code: "12ABC34501DE35", reason: "destino informado errado na saída"
     });
     // Ao abrir, depois do 409 e depois da correção: uma leitura de cada.
     await waitFor(() => expect(api.getBnafarStatus).toHaveBeenCalledTimes(3));
     expect(api.listBnafarSubmissions).toHaveBeenCalledTimes(3);
+  });
+
+  it("409 com o tipo editado: o tipo fica e vai; o destino não tocado passa ao relido e não vai", async () => {
+    vi.mocked(api.fetchCurrentSession).mockResolvedValue(ADMIN());
+    vi.mocked(api.listBnafarSubmissions).mockResolvedValue({ items: [ submission({ id: "bs4", subject: "exit" }) ], next_before: null });
+    vi.mocked(api.getBnafarSubmission).mockResolvedValue(rejectedSubmission({ id: "bs4", subject: "exit", records: [ exitRecord({ item_label: "Amoxicilina saída" }) ] }));
+    renderWithProviders(<BnafarStatus />);
+    fireEvent.click(await screen.findByRole("button", { name: VIEW_EXIT }));
+    fireEvent.click(await screen.findByRole("button", { name: "Corrigir — Amoxicilina saída" }));
+    await waitFor(() => expect((screen.getByLabelText("Tipo da saída") as HTMLSelectElement).value).toBe("S-D"));
+    fireEvent.change(screen.getByLabelText("Tipo da saída"), { target: { value: "S-E" } });
+    fireEvent.change(screen.getByLabelText("Por que corrigir"), { target: { value: "era empréstimo, não doação" } });
+    fireEvent.click(screen.getByRole("button", { name: "Corrigir" }));
+
+    vi.mocked(api.getBnafarSubmission).mockResolvedValue(rejectedSubmission({ id: "bs4", subject: "exit",
+      records: [ exitRecord({ item_label: "Amoxicilina saída", stock_external_exit_version: 2 }) ] }));
+    vi.mocked(api.getExternalExit).mockResolvedValue(externalExitDetail({ destination_code: "2384300", version: 2 }));
+    vi.mocked(api.correctBnafarRecord).mockRejectedValueOnce(new api.ApiError(409, { error: "external_exit_changed" }, "409"));
+    fireEvent.click(within(await screen.findByRole("region", { name: "Corrigir a saída externa" })).getByRole("button", { name: "Confirmar correção" }));
+    expect(await screen.findByText(bnafarErrorText("external_exit_changed"))).not.toBeNull();
+    await waitFor(() => expect((screen.getByLabelText("Código do destino") as HTMLInputElement).value).toBe("2384300"));
+    expect((screen.getByLabelText("Tipo da saída") as HTMLSelectElement).value).toBe("S-E");
+
+    vi.mocked(api.correctBnafarRecord).mockResolvedValueOnce([]);
+    fireEvent.click(screen.getByRole("button", { name: "Corrigir" }));
+    fireEvent.click(within(await screen.findByRole("region", { name: "Corrigir a saída externa" })).getByRole("button", { name: "Confirmar correção" }));
+    expect(await screen.findByText("Correção enviada. A BNAFAR substitui os registros desta saída.")).not.toBeNull();
+    expect(vi.mocked(api.correctBnafarRecord).mock.calls[1][1]).toEqual({ expected_version: 2, exit_type: "S-E", reason: "era empréstimo, não doação" });
+  });
+
+  it("releitura da saída falha depois do 409: o formulário e o digitado ficam, com o erro no lugar", async () => {
+    vi.mocked(api.fetchCurrentSession).mockResolvedValue(ADMIN());
+    vi.mocked(api.listBnafarSubmissions).mockResolvedValue({ items: [ submission({ id: "bs4", subject: "exit" }) ], next_before: null });
+    vi.mocked(api.getBnafarSubmission).mockResolvedValue(rejectedSubmission({ id: "bs4", subject: "exit", records: [ exitRecord({ item_label: "Amoxicilina saída" }) ] }));
+    renderWithProviders(<BnafarStatus />);
+    fireEvent.click(await screen.findByRole("button", { name: VIEW_EXIT }));
+    fireEvent.click(await screen.findByRole("button", { name: "Corrigir — Amoxicilina saída" }));
+    await waitFor(() => expect((screen.getByLabelText("Tipo da saída") as HTMLSelectElement).value).toBe("S-D"));
+    fireEvent.change(screen.getByLabelText("Tipo da saída"), { target: { value: "S-E" } });
+    fireEvent.change(screen.getByLabelText("Por que corrigir"), { target: { value: "era empréstimo, não doação" } });
+    fireEvent.click(screen.getByRole("button", { name: "Corrigir" }));
+    vi.mocked(api.getExternalExit).mockRejectedValue(new api.ApiError(500, { error: "internal_error" }, "500"));
+    vi.mocked(api.correctBnafarRecord).mockRejectedValueOnce(new api.ApiError(409, { error: "external_exit_changed" }, "409"));
+    fireEvent.click(within(await screen.findByRole("region", { name: "Corrigir a saída externa" })).getByRole("button", { name: "Confirmar correção" }));
+    expect(await screen.findByText(/^não foi possível reler a saída — /)).not.toBeNull();
+    expect((screen.getByLabelText("Tipo da saída") as HTMLSelectElement).value).toBe("S-E");
+    expect((screen.getByLabelText("Por que corrigir") as HTMLTextAreaElement).value).toBe("era empréstimo, não doação");
+    expect(screen.getByRole("button", { name: "Corrigir" })).not.toBeNull();
   });
 
   it("corrigir sem mudar tipo nem destino: recusa antes de enviar", async () => {

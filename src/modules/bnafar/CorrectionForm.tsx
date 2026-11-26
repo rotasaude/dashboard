@@ -1,11 +1,11 @@
 // Correção de saída externa já aceita pela BNAFAR (módulo 27b; contrato §3 "Recusas e correções"; Q8, Q25, Q44): `POST
 // /pharmacy/bnafar/records/:id/correct`, só o `municipal_admin`, com step-up. Vale para a saída INTEIRA (Q8). Abre com o tipo e o destino
 // atuais da saída (`getExternalExit`); a `expected_version` é a `stock_external_exit_version` do registro (Q44, sempre a da leitura do
-// detalhe). Só o que mudou vai no corpo (o resto vem da saída atual, no api). `409 external_exit_changed` (e as outras recusas 409 do
+// detalhe). Só o campo que o usuário mexeu e que difere da saída lida vai no corpo (o resto vem da saída atual, no api). `409 external_exit_changed` (e as outras recusas 409 do
 // prazo, e o 404 do registro de outro ambiente, Q35) mostram a frase pelo `onStale`, que relê o detalhe uma vez, e a saída é relida
 // também: o resumo e a base da diferença passam aos valores novos; o digitado fica e nada é reenviado sozinho. O rascunho só nasce de
 // uma leitura feita depois de abrir (nunca do cache). O SensitiveAction fica FORA do <form> (sem formulário aninhado).
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError, correctBnafarRecord, errorCode, getExternalExit, type BnafarCorrectionInput, type BnafarDomains, type BnafarRecord, type ExternalExit, type ExternalExitType } from "../../lib/api";
 import { EXTERNAL_EXITS_KEY, STATIC_QUERY, bnafarError, bnafarErrorText, cnesProblem, cnpjProblem, docOf, exitTypeLabel, isStale } from "../../lib/bnafar";
@@ -30,22 +30,33 @@ function staleText(err: unknown): string | null {
 }
 
 type Draft = { exitType: string; destinationKind: "cnes" | "cnpj"; destination: string; reason: string };
+// Só o que o usuário mexeu. O que ele não tocou vale sempre a saída da última leitura: depois de uma releitura (409), o campo não tocado
+// passa ao valor novo e não vai no corpo, para a correção nunca desfazer em silêncio o que outra pessoa gravou (atualização perdida).
+type Edits = { exitType?: string; destinationKind?: "cnes" | "cnpj"; destination?: string };
 
 const length = (s: string): number => Array.from(s).length;
 
-function problemsOf(d: Draft, exit: ExternalExit): Record<string, string> {
+const draftOf = (e: Edits, exit: ExternalExit, reason: string): Draft => ({
+  exitType: e.exitType ?? exit.exit_type, destinationKind: e.destinationKind ?? exit.destination_kind,
+  destination: e.destination ?? exit.destination_code, reason
+});
+const changedType = (e: Edits, exit: ExternalExit): boolean => e.exitType !== undefined && e.exitType !== exit.exit_type;
+// Tipo e código do destino andam juntos: mexer em um põe os dois em jogo.
+function changedDestination(e: Edits, d: Draft, exit: ExternalExit): boolean {
+  if (e.destinationKind === undefined && e.destination === undefined) return false;
+  return d.destinationKind !== exit.destination_kind || (docOf(d.destination) ?? d.destination) !== exit.destination_code;
+}
+
+function problemsOf(e: Edits, d: Draft, exit: ExternalExit): Record<string, string> {
   const out: Record<string, string> = {};
   if (!d.exitType) out.exit_type = "escolha o tipo da saída";
   const dest = d.destinationKind === "cnes" ? cnesProblem(d.destination) : cnpjProblem(d.destination);
   if (dest) out.destination_code = dest;
   const n = length(d.reason.trim());
   if (n < 10 || n > 500) out.reason = REASON_LENGTH;
-  if (!out.exit_type && !out.destination_code && !changedType(d, exit) && !changedDestination(d, exit)) out.general = NOTHING_CHANGED;
+  if (!out.exit_type && !out.destination_code && !changedType(e, exit) && !changedDestination(e, d, exit)) out.general = NOTHING_CHANGED;
   return out;
 }
-const changedType = (d: Draft, exit: ExternalExit): boolean => d.exitType !== exit.exit_type;
-const changedDestination = (d: Draft, exit: ExternalExit): boolean =>
-  d.destinationKind !== exit.destination_kind || (docOf(d.destination) ?? d.destination) !== exit.destination_code;
 
 export function CorrectionForm({ record, domains, onDone, onCancel, onGoToSecurity, onStale }: {
   record: BnafarRecord; domains: BnafarDomains | null | undefined;
@@ -56,36 +67,40 @@ export function CorrectionForm({ record, domains, onDone, onCancel, onGoToSecuri
   const exitId = record.stock_external_exit_id ?? "";
   const client = useQueryClient();
   const exit = useQuery({ queryKey: [ EXTERNAL_EXITS_KEY, "detail", exitId ], queryFn: () => getExternalExit(exitId), enabled: !!exitId, ...STATIC_QUERY });
-  const [ draft, setDraft ] = useState<Draft | null>(null);
+  const [ edits, setEdits ] = useState<Edits>({});
+  const [ reason, setReason ] = useState("");
   const [ errors, setErrors ] = useState<Record<string, string>>({});
   const [ confirming, setConfirming ] = useState(false);
 
-  // Abre com os valores atuais da saída, lidos depois de abrir, uma vez; a releitura depois de um 409 não apaga o digitado.
-  useEffect(() => {
-    if (exit.data && exit.isFetchedAfterMount && !draft) {
-      setDraft({ exitType: exit.data.exit_type, destinationKind: exit.data.destination_kind, destination: exit.data.destination_code, reason: "" });
-    }
-  }, [ exit.data, exit.isFetchedAfterMount, draft ]);
-
-  if (exit.isError) return <p role="alert" style={alert}>{bnafarError(exit.error)}</p>;
-  if (!exit.data || !draft) return <p className="mono" style={muted}>carregando a saída…</p>;
+  // Abre só com uma leitura feita depois de abrir (nunca do cache). Sem dado nenhum, a falha ocupa o lugar do formulário; com dado,
+  // a falha de uma releitura aparece no formulário e o digitado fica.
+  if (!exit.data || !exit.isFetchedAfterMount) {
+    return exit.isError ? <p role="alert" style={alert}>{bnafarError(exit.error)}</p> : <p className="mono" style={muted}>carregando a saída…</p>;
+  }
   const current = exit.data;
-  const set = (patch: Partial<Draft>) => { setDraft({ ...draft, ...patch }); setConfirming(false); };
+  const draft = draftOf(edits, current, reason);
+  const set = (patch: Partial<Draft>) => {
+    const { reason: r, ...fields } = patch;
+    if (r !== undefined) setReason(r);
+    if (Object.keys(fields).length > 0) setEdits((e) => ({ ...e, ...fields }));
+    setConfirming(false);
+  };
   const types = domains?.exit_types.map((t) => t.code) ?? FALLBACK_TYPES;
-  const typeOptions = types.includes(current.exit_type) ? types : [ current.exit_type, ...types ];
+  const typeOptions = types.includes(draft.exitType) ? types : [ draft.exitType, ...types ];
 
   function review() {
-    const found = problemsOf(draft!, current);
+    const found = problemsOf(edits, draft, current);
     setErrors(found);
     setConfirming(Object.keys(found).length === 0);
   }
 
   // O SensitiveAction desabilita o Confirmar enquanto a chamada corre: o duplo clique manda um pedido só.
   async function run() {
-    const d = draft!;
-    const body: BnafarCorrectionInput = { expected_version: record.stock_external_exit_version ?? current.version, reason: d.reason.trim() };
-    if (changedType(d, current)) body.exit_type = d.exitType as ExternalExitType;
-    if (changedDestination(d, current)) { body.destination_kind = d.destinationKind; body.destination_code = docOf(d.destination) ?? d.destination; }
+    const body: BnafarCorrectionInput = { expected_version: record.stock_external_exit_version ?? current.version, reason: draft.reason.trim() };
+    if (changedType(edits, current)) body.exit_type = draft.exitType as ExternalExitType;
+    if (changedDestination(edits, draft, current)) {
+      body.destination_kind = draft.destinationKind; body.destination_code = docOf(draft.destination) ?? draft.destination;
+    }
     try {
       await correctBnafarRecord(record.id, body);
     } catch (err) {
@@ -103,6 +118,7 @@ export function CorrectionForm({ record, domains, onDone, onCancel, onGoToSecuri
           Saída externa de <strong>{current.location.name}</strong>: {exitTypeLabel(domains, current.exit_type)} para{" "}
           {current.destination_kind === "cnes" ? "o CNES" : "o CNPJ"} <span className="mono">{current.destination_code}</span>.
         </p>
+        {exit.isError && <p role="alert" style={alert}>{`não foi possível reler a saída — ${bnafarError(exit.error)}`}</p>}
         <div style={fieldLabel}>
           <label style={fieldLabel}>
             Tipo da saída
