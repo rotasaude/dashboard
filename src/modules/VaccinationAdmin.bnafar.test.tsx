@@ -32,7 +32,9 @@ describe("CNES da rede de frio (27b)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Salvar CNES" }));
     expect(api.setColdChainCentralCnes).not.toHaveBeenCalled();
     fireEvent.click(await screen.findByRole("button", { name: "Confirmar CNES" }));
+    expect(document.querySelectorAll("form form").length).toBe(0);
     await waitFor(() => expect(api.setColdChainCentralCnes).toHaveBeenCalledWith("1234567"));
+    expect(api.setColdChainCentralCnes).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(api.listVaccineRooms).toHaveBeenCalledTimes(2));
   });
 

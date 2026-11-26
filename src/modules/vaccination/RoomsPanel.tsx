@@ -182,7 +182,8 @@ export function ColdChainCnes({ central, onSaved, onGoToSecurity }: { central: A
   };
 
   return (
-    <form onSubmit={review} noValidate style={form}>
+    <div style={form}>
+      <form onSubmit={review} noValidate style={form}>
       <div style={fieldBox}>
         <label style={fieldLabel}>
           CNES da rede de frio
@@ -195,6 +196,7 @@ export function ColdChainCnes({ central, onSaved, onGoToSecurity }: { central: A
         {problem && <span id={`${ids}-err`} style={alert}>{problem}</span>}
       </div>
       {!confirming && <div style={row}><button type="submit" style={secondaryButtonStyle}>Salvar CNES</button></div>}
+      </form>
       {confirming && (
         <SensitiveAction
           title="Salvar o CNES da rede de frio"
@@ -208,6 +210,6 @@ export function ColdChainCnes({ central, onSaved, onGoToSecurity }: { central: A
           translateError={translate}
         />
       )}
-    </form>
+    </div>
   );
 }
