@@ -1,13 +1,14 @@
 // Regras de tela do módulo 29 (sala de vacina; contrato 2026-11-02 §1–§11) sem React. Calendário, atraso, aprazamento, saldo, validade do frasco, envio à RNDS e trilha são do api; a tela só não envia o que já sabe que será recusado.
 import {
   ApiError,
-  type CardCheck, type CardItem, type CodeName, type ColdChainEquipment, type ImmunizationInput, type Immunobiological, type LotBalance,
+  type BnafarField, type CardCheck, type CardItem, type CodeName, type ColdChainEquipment, type ImmunizationInput, type Immunobiological, type LotBalance,
   type ReadingInput, type StockPosition, type TranscriptionInput, type VaccineReceiptItemInput, type VaccinationCard, type VaccinationCatalog, type VaccineLocation, type Vial
 } from "./api";
 import { NOMINAL_QUERY, STATIC_QUERY } from "./careLines";
 import { featureDisabledKey, featureLabel, hasFeature } from "./features";
 import { fmtDay } from "./exams";
 import { cityDateFormat, cityIsoDate, parseCityLocal } from "./format";
+import { EMPTY_LOT_BNAFAR, lotBnafarProblems, vaccineBnafarBody, type LotBnafarDraft } from "./bnafar";
 import { cents, fmtQuantity, pharmacyRefusals, type Problem, type Refusal } from "./pharmacy";
 
 export { NOMINAL_QUERY, STATIC_QUERY };
@@ -378,10 +379,13 @@ export const currentMonth = (today: string): string => today.slice(0, 7);
 // ─── Entrada e inventário inicial de imunobiológico (rotas do 27a; V4, V19) ──
 // Uma linha por lote, em FRASCOS fechados: o api conta as doses por `doses_per_vial` do catálogo (package obrigatório; outro tamanho de
 // frasco → items[i].package invalid_quantity). Fabricante pela `key` da lista daquela vacina (`manufacturer_not_in_catalog`).
-export interface VaccineReceiptLine { key: string; immunobiologicalCode: string; manufacturerKey: string; lotNumber: string; expiresOn: string; vials: string }
+export interface VaccineReceiptLine { key: string; immunobiologicalCode: string; manufacturerKey: string; lotNumber: string; expiresOn: string; vials: string;
+  // Módulo 27b: os campos do envio (sem fabricante nem CNPJ: o api os tira do catálogo, Q21).
+  bnafar: LotBnafarDraft;
+}
 
 export const newVaccineReceiptLine = (key: string): VaccineReceiptLine =>
-  ({ key, immunobiologicalCode: "", manufacturerKey: "", lotNumber: "", expiresOn: "", vials: "" });
+  ({ key, immunobiologicalCode: "", manufacturerKey: "", lotNumber: "", expiresOn: "", vials: "", bnafar: EMPTY_LOT_BNAFAR });
 
 // Catalog::LOT_NUMBER e Catalog::DOCUMENT_NUMBER do api: letras, dígitos, ponto, barra e hífen (sem espaço).
 const LOT_NUMBER = /^[0-9A-Za-z./-]{1,40}$/;
@@ -398,7 +402,7 @@ export function vaccineLineDoses(l: VaccineReceiptLine, catalog: VaccinationCata
   return vials >= 1 && vials <= 10000 ? vials * product.doses_per_vial : null;
 }
 
-function vaccineLineProblem(l: VaccineReceiptLine, catalog: VaccinationCatalog, today: string): string | null {
+function vaccineLineProblem(l: VaccineReceiptLine, catalog: VaccinationCatalog, today: string, required: BnafarField[]): string | null {
   const product = productOf(catalog, l.immunobiologicalCode);
   if (!product) return "escolha a vacina";
   const lot = l.lotNumber.trim();
@@ -412,12 +416,15 @@ function vaccineLineProblem(l: VaccineReceiptLine, catalog: VaccinationCatalog, 
   else if (l.expiresOn < today) text = "lote vencido — não entra no estoque";
   else if (!/^\d+$/.test(vials) || Number(vials) < 1 || Number(vials) > 10000) text = "frascos: número inteiro de 1 a 10000";
   else if (Number(vials) * product.doses_per_vial > MAX_ENTRY_DOSES) text = `frascos × ${product.doses_per_vial} doses passa de ${MAX_ENTRY_DOSES} doses — divida em duas entradas`;
+  // Os campos do envio vêm depois; o AMPP só é exigido quando a vacina tem VMP (`obm_vmp`, Q15).
+  if (text === null) text = lotBnafarProblems(l.bnafar, required, { hasVmp: !!product.obm_vmp })[0]?.text ?? null;
   return text === null ? null : `${product.name}: ${text}`;
 }
 
 // Documento como no 27a (só fora do inventário inicial), com o formato do api; por linha, a primeira recusa; todas de uma vez.
 export function vaccineReceiptProblems(lines: VaccineReceiptLine[], ctx: {
   catalog: VaccinationCatalog; today: string; doc: { kind: "invoice" | "donation" | "opening"; number: string; supplier: string };
+  required?: BnafarField[];
 }): Problem[] {
   const out: Problem[] = [];
   if (ctx.doc.kind !== "opening") {
@@ -430,7 +437,7 @@ export function vaccineReceiptProblems(lines: VaccineReceiptLine[], ctx: {
   }
   if (lines.length === 0) out.push({ path: "items", text: "acrescente ao menos um lote" });
   for (const l of lines) {
-    const text = vaccineLineProblem(l, ctx.catalog, ctx.today);
+    const text = vaccineLineProblem(l, ctx.catalog, ctx.today, ctx.required ?? []);
     if (text) out.push({ path: l.key, text });
   }
   return out;
@@ -443,7 +450,7 @@ export function vaccineReceiptItems(lines: VaccineReceiptLine[], catalog: Vaccin
     const vials = Number(l.vials.trim());
     return {
       immunobiological_code: l.immunobiologicalCode, manufacturer_key: l.manufacturerKey, lot_number: l.lotNumber.trim(), expires_on: l.expiresOn,
-      quantity: String(vials * perVial), package: { units_per_package: perVial, packages: vials }
+      quantity: String(vials * perVial), package: { units_per_package: perVial, packages: vials }, ...vaccineBnafarBody(l.bnafar)
     };
   });
 }

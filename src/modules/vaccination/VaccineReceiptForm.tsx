@@ -9,11 +9,14 @@ import { useQueryClient } from "@tanstack/react-query";
 import { recordVaccineOpening, recordVaccineReceipt, type StockReceipt, type VaccinationCatalog, type VaccineLocation } from "../../lib/api";
 import { todayInCity } from "../../lib/campaigns";
 import { PH_POSITIONS_KEY, problemItemIndex } from "../../lib/pharmacy";
+import { bnafarFieldsFor, bnafarErrorText } from "../../lib/bnafar";
+import { hasBnafarError } from "../../lib/bnafarErrors";
 import {
   newVaccineReceiptLine, receiptRefusalText, vaccinationRefusals, vaccineLineDoses, vaccineReceiptItems, vaccineReceiptProblems,
   type VaccineReceiptLine
 } from "../../lib/vaccination";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
+import { BnafarLotFields, useBnafarDomains } from "../pharmacy/BnafarLotFields";
 import { alert, box, fieldLabel, muted, row } from "../exams/styles";
 
 type Shown = { key: string; text: string };
@@ -33,6 +36,9 @@ export function VaccineReceiptForm({ location, catalog, mode, today, onStart, on
   const opening = mode === "opening";
   const many = lines.length > 1;
   const flagged = new Set(shown.map((s) => s.key));
+  // Módulo 27b (Q41): só o domínio em `enabled_domains` do api exige os campos do envio; a vacina não tem fabricante (Q21).
+  const domains = useBnafarDomains();
+  const required = bnafarFieldsFor(domains.data?.enabled_domains, location.kind);
   const productName = (code: string) => catalog.immunobiologicals.find((i) => i.code === code)?.name ?? null;
 
   const add = () => {
@@ -46,7 +52,9 @@ export function VaccineReceiptForm({ location, catalog, mode, today, onStart, on
     return vaccinationRefusals(err).map((r) => {
       const i = problemItemIndex(r.path);
       const line = i === null ? undefined : sent[i];
-      const text = receiptRefusalText(r);
+      // Um código do envio que a sala de vacina não conhece (`lot_mismatch`, `anvisa_mismatch`...) usa a frase do envio, nunca o genérico.
+      const own = receiptRefusalText(r);
+      const text = r.code && hasBnafarError(r.code) && own.startsWith("recusado pelo servidor") ? bnafarErrorText(r.code) : own;
       return line ? { key: line.key, text: `${productName(line.immunobiologicalCode) ?? "lote"}: ${text}` } : { key: r.path, text };
     });
   }
@@ -55,7 +63,7 @@ export function VaccineReceiptForm({ location, catalog, mode, today, onStart, on
     if (busy) return;
     onStart?.();
     const doc = { kind: opening ? ("opening" as const) : kind, number, supplier };
-    const local = vaccineReceiptProblems(lines, { catalog, today: today ?? todayInCity(), doc });
+    const local = vaccineReceiptProblems(lines, { catalog, today: today ?? todayInCity(), doc, required });
     if (local.length > 0) { setShown(local.map((p) => ({ key: p.path, text: p.text }))); return; }
     setShown([]); setBusy(true);
     const sent = lines;
@@ -151,6 +159,8 @@ export function VaccineReceiptForm({ location, catalog, mode, today, onStart, on
               </label>
               {doses !== null && <small className="mono" style={muted}>{`= ${doses} ${doses === 1 ? "dose" : "doses"}`}</small>}
             </div>
+            <BnafarLotFields value={l.bnafar} required={required} vmpCode={product?.obm_vmp} vaccine disabled={busy} label={named}
+              onChange={(bnafar) => patch(l.key, { bnafar })} />
           </div>
         );
       })}

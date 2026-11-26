@@ -10,12 +10,14 @@ import { useState, type CSSProperties } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { recordOpening, recordReceipt, type PharmacyLocation, type StockItem, type StockReceipt } from "../../lib/api";
 import {
-  PH_POSITIONS_KEY, errorPath, fmtQuantity, isVectorLocation, lineQuantity, newReceiptLine, pharmacyError, pharmacyProblems, problemItemIndex,
+  PH_POSITIONS_KEY, fmtQuantity, isVectorLocation, lineQuantity, newReceiptLine, problemItemIndex,
   receiptItems, receiptProblems, type ReceiptLine
 } from "../../lib/pharmacy";
+import { bnafarFieldsFor, entryProblems } from "../../lib/bnafar";
 import { Tag } from "../../components/Tag";
 import { buttonStyle, disabledButtonStyle, inputStyle, secondaryButtonStyle } from "../../components/formStyles";
 import { ItemSearch } from "./ItemSearch";
+import { BnafarLotFields, useBnafarDomains } from "./BnafarLotFields";
 import { alert, box, checkLabel, fieldLabel, muted, row } from "../exams/styles";
 
 type Shown = { key: string; text: string };
@@ -36,6 +38,9 @@ export function ReceiptForm({ location, mode, today, delayMs, onStart, onDone }:
   const vector = isVectorLocation(location);
   const many = lines.length > 1;
   const flagged = new Set(shown.map((s) => s.key));
+  // Módulo 27b (Q41): só o domínio em `enabled_domains` do api exige os campos do envio; sem a lista ou com falha, nada é exigido.
+  const domains = useBnafarDomains();
+  const required = bnafarFieldsFor(domains.data?.enabled_domains, location.kind);
 
   const add = (item: StockItem) => {
     setLines((cur) => [ ...cur, { ...newReceiptLine(`line-${counter}`), item } ]);
@@ -46,9 +51,7 @@ export function ReceiptForm({ location, mode, today, delayMs, onStart, onDone }:
 
   // Recusa do api → linhas da tela: com `problems`, todas; só com `path`, a do item; sem índice, a frase solta.
   function fromApi(err: unknown, sent: ReceiptLine[]): Shown[] {
-    const list = pharmacyProblems(err);
-    const raw = list.length > 0 ? list : [ { path: errorPath(err) ?? "", text: pharmacyError(err) } ];
-    return raw.map((p) => {
+    return entryProblems(err).map((p) => {
       const i = problemItemIndex(p.path);
       const line = i === null ? undefined : sent[i];
       return line ? { key: line.key, text: `${line.item?.name ?? "item"}: ${p.text}` } : { key: p.path, text: p.text };
@@ -59,7 +62,7 @@ export function ReceiptForm({ location, mode, today, delayMs, onStart, onDone }:
     if (busy) return;
     onStart?.();
     const doc = { kind: opening ? ("opening" as const) : kind, number, supplier };
-    const local = receiptProblems(lines, today, doc, vector);
+    const local = receiptProblems(lines, today, doc, vector, required);
     if (local.length > 0) { setShown(local.map((p) => ({ key: p.path, text: p.text }))); return; }
     setShown([]); setBusy(true);
     const sent = lines;
@@ -136,11 +139,14 @@ export function ReceiptForm({ location, mode, today, delayMs, onStart, onDone }:
                   onChange={(e) => patch(l.key, { expiresOn: e.target.value })} />
               </label>
               <label style={fieldLabel}>
-                Fabricante (opcional)
-                <input value={l.manufacturer} style={inputStyle} aria-label={named("Fabricante (opcional)", l)}
+                {l.bnafar.international ? "Fabricante internacional (nome)" : "Fabricante (opcional)"}
+                <input value={l.manufacturer} style={inputStyle}
+                  aria-label={named(l.bnafar.international ? "Fabricante internacional (nome)" : "Fabricante (opcional)", l)}
                   onChange={(e) => patch(l.key, { manufacturer: e.target.value })} />
               </label>
             </div>
+            <BnafarLotFields value={l.bnafar} required={required} vmpCode={item?.vmp_code} vector={!!item?.vector_product_id} externalName
+              disabled={busy} label={(base) => named(base, l)} onChange={(bnafar) => patch(l.key, { bnafar })} />
             {!item?.vector_product_id && (
               <label style={checkLabel}>
                 <input type="checkbox" checked={l.byPackage} aria-label={named("Por embalagem", l)} onChange={(e) => patch(l.key, { byPackage: e.target.checked })} />

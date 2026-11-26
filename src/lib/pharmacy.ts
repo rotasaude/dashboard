@@ -3,12 +3,13 @@
 // controlado, aprovação acima do limite e retenção são dele. A tela só não envia o que já sabe que será recusado.
 import {
   ApiError, errorCode,
-  type AdjustmentInput, type AdjustmentKind, type Dispensation, type DispensationInput, type DispensedItem, type LocationRef, type ReturnInput, type LotBalance, type PharmacyLocation, type PharmacySettings,
+  type BnafarField, type AdjustmentInput, type AdjustmentKind, type Dispensation, type DispensationInput, type DispensedItem, type LocationRef, type ReturnInput, type LotBalance, type PharmacyLocation, type PharmacySettings,
   type PrescriberInput, type PrescriptionItemView, type PrescriptionView, type ReceiptItemInput, type ReceiveInput, type StockItem,
   type StockLot, type StockMovement, type StockPosition, type StockTransfer
 } from "./api";
 import { NOMINAL_QUERY, STATIC_QUERY } from "./careLines";
 import { BNAFAR_ERRORS } from "./bnafarErrors";
+import { EMPTY_LOT_BNAFAR, lotBnafarBody, lotBnafarProblems, type LotBnafarDraft } from "./bnafar";
 import { featureDisabledKey, featureLabel, hasFeature } from "./features";
 import { fmtDay } from "./exams";
 import { DOT_IN_NUMBER, hasDot } from "./lab";
@@ -329,11 +330,16 @@ export function dispenseBody(d: DispenseDraft, p: PrescriptionView, locationId: 
 export interface ReceiptLine {
   key: string; item: StockItem | null; lotNumber: string; expiresOn: string; manufacturer: string;
   byPackage: boolean; quantity: string; unitsPerPackage: string; packages: string;
+  // Módulo 27b: os campos do envio à BNAFAR (preço, fabricante, ANVISA, programa, AMPP).
+  bnafar: LotBnafarDraft;
 }
 
 export function newReceiptLine(key: string): ReceiptLine {
-  return { key, item: null, lotNumber: "", expiresOn: "", manufacturer: "", byPackage: false, quantity: "", unitsPerPackage: "", packages: "" };
+  return { key, item: null, lotNumber: "", expiresOn: "", manufacturer: "", byPackage: false, quantity: "", unitsPerPackage: "", packages: "", bnafar: EMPTY_LOT_BNAFAR };
 }
+
+// F-10: na entrada o "Fabricante" da linha é o nome do fabricante internacional (sem segundo campo).
+export const lineBnafar = (l: ReceiptLine): LotBnafarDraft => (l.bnafar.international ? { ...l.bnafar, internationalName: l.manufacturer } : l.bnafar);
 
 const MAX_CENTS = 9_999_999;
 const INT = /^\d+$/;
@@ -363,10 +369,17 @@ function receiptLineProblem(l: ReceiptLine, today: string, vector: boolean): str
   return text === null ? null : `${l.item.name}: ${text}`;
 }
 
+// Primeira recusa dos campos do envio, com o nome do item na frente; o AMPP só é exigido quando o item tem VMP (Q15).
+function bnafarLineProblem(l: ReceiptLine, required: BnafarField[]): string | null {
+  const first = lotBnafarProblems(lineBnafar(l), required, { hasVmp: !!l.item?.vmp_code })[0];
+  return first ? `${l.item?.name ?? "item"}: ${first.text}` : null;
+}
+
 // Documento só fora da abertura; por linha, a primeira recusa; todas de uma vez.
 // `vector` (35a): a entrada do local vector_control, onde o item é o produto de campo, não o do catálogo.
 export function receiptProblems(
-  lines: ReceiptLine[], today: string, doc: { kind: "invoice" | "donation" | "opening"; number: string; supplier: string }, vector = false
+  lines: ReceiptLine[], today: string, doc: { kind: "invoice" | "donation" | "opening"; number: string; supplier: string }, vector = false,
+  required: BnafarField[] = []
 ): Problem[] {
   const out: Problem[] = [];
   if (doc.kind !== "opening") {
@@ -378,7 +391,8 @@ export function receiptProblems(
   }
   if (lines.length === 0) out.push({ path: "items", text: "acrescente ao menos um item" });
   for (const l of lines) {
-    const text = receiptLineProblem(l, today, vector);
+    const text = receiptLineProblem(l, today, vector)
+      ?? bnafarLineProblem(l, required);
     if (text) out.push({ path: l.key, text });
   }
   return out;
@@ -390,14 +404,17 @@ export function receiptItems(lines: ReceiptLine[]): ReceiptItemInput[] {
   return lines.map((l) => {
     const manufacturer = l.manufacturer.trim();
     const vectorId = l.item?.vector_product_id;
+    const { ampp_code: ampp, ...bnafarNoAmpp } = lotBnafarBody(lineBnafar(l));
     if (vectorId) {
+      // F-31: o produto de campo nunca manda `ampp_code`.
       const quantity = quantityProblem(l.quantity) === null ? toApiQuantity(l.quantity) : "";
-      return { vector_product_id: vectorId, lot_number: l.lotNumber.trim(), expires_on: l.expiresOn, ...(manufacturer ? { manufacturer } : {}), quantity };
+      return { vector_product_id: vectorId, lot_number: l.lotNumber.trim(), expires_on: l.expiresOn, ...(manufacturer ? { manufacturer } : {}), quantity, ...bnafarNoAmpp };
     }
     return {
       catalog_item_id: l.item?.catalog_item_id ?? "", lot_number: l.lotNumber.trim(), expires_on: l.expiresOn,
       ...(manufacturer ? { manufacturer } : {}), quantity: lineQuantity(l) ?? "",
-      ...(l.byPackage ? { package: { units_per_package: Number(l.unitsPerPackage), packages: Number(l.packages) } } : {})
+      ...(l.byPackage ? { package: { units_per_package: Number(l.unitsPerPackage), packages: Number(l.packages) } } : {}),
+      ...bnafarNoAmpp, ...(ampp ? { ampp_code: ampp } : {})
     };
   });
 }

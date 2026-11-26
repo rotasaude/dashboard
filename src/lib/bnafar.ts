@@ -334,3 +334,11 @@ export function bnafarProblems(err: unknown): Problem[] {
 export function isStale(err: unknown, code: string): boolean {
   return err instanceof ApiError && err.status === 409 && errorCode(err) === code;
 }
+
+// Entrada e abertura: a frase da farmácia vence (`opening_exists` quer dizer "inventário de abertura" ali); o código que a farmácia
+// não conhece (`lot_mismatch`, `anvisa_mismatch`, `required` por campo...) usa a tabela do envio, nunca o genérico.
+export function entryProblems(err: unknown): Problem[] {
+  return pharmacyRefusals(err).map(({ path, code, text }) => ({
+    path, text: code && hasBnafarError(code) && text.startsWith(`não foi possível concluir (${code})`) ? bnafarErrorText(code) : text
+  }));
+}
