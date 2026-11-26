@@ -18,6 +18,9 @@ export { BNAFAR_DISABLED, BNAFAR_ERRORS, bnafarErrorText, bnafarErrorTexts, rowE
 export const BNAFAR_NO_ROLE = "seu papel não permite ver o envio à BNAFAR";
 // Reenvio e correção pedem o `bnafar` utilizável (Q40): ligado, mas sem credencial ou IBGE, o api responde 403 `feature_disabled` `bnafar`.
 export const BNAFAR_NOT_USABLE = "o envio está sem credencial válida — o administrador confere em Integrações";
+// F-32: o complemento mostra a recusa `lot_mismatch` no campo que o api cita.
+export const LOT_MISMATCH_FIELD = "o lote já tem outro valor gravado aqui — confira no extrato do lote";
+export const LOT_BNAFAR_SAVED = "Dados do lote salvos. O lote entra na posição de estoque do próximo envio.";
 // Q21: o CNPJ do fabricante da vacina sai do catálogo de imunobiológicos, nunca da tela.
 export const VACCINE_CNPJ_FROM_CATALOG = "o CNPJ do fabricante vem do catálogo de imunobiológicos — peça à equipe do Rota Saúde";
 
