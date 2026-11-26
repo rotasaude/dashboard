@@ -36,8 +36,14 @@ describe("grupo Farmácia: BNAFAR, saída externa e saldo inicial (módulo 27b)"
   it("só com vaccination e almoxarife, os itens de estoque aparecem", () => {
     expect(mine(user([ "stock_keeper" ], [ "vaccination" ]))).toEqual([ "external-exits", "opening-import", "bnafar-pending" ]);
   });
-  it("sem estoque nenhum, só o status (Q40: o bnafar ligado basta); o operador nunca", () => {
-    expect(mine(user([ "stock_keeper", "municipal_admin" ], [ "bnafar", "clinical_record" ]))).toEqual([ "bnafar-status" ]);
+  it("cidade só com vaccination: o grupo Farmácia aparece com os itens do 27b", () => {
+    const u = user([ "stock_keeper" ], [ "vaccination", "bnafar" ]);
+    expect(navGroupsFor(u).some((g) => g.label === "Farmácia")).toBe(true);
+    expect(mine(u)).toEqual([ "external-exits", "opening-import", "bnafar-status", "bnafar-pending" ]);
+  });
+  it("sem estoque nenhum, o status não aparece nem o grupo Farmácia; o operador nunca", () => {
+    expect(mine(user([ "stock_keeper", "municipal_admin" ], [ "bnafar", "clinical_record" ]))).toEqual([]);
+    expect(navGroupsFor(user([ "stock_keeper", "municipal_admin" ], [ "bnafar", "clinical_record" ])).some((g) => g.label === "Farmácia")).toBe(false);
     expect(mine(user([ "stock_keeper", "municipal_admin" ], [ "clinical_record" ]))).toEqual([]);
     expect(mine(user([ "stock_keeper", "municipal_admin" ], [ "pharmacy", "bnafar" ], true))).toEqual([]);
   });

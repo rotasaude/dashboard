@@ -542,7 +542,7 @@ export function navGroupsFor(
       // Módulo 27b (F-13–F-15): o `bnafar` ligado só vale para o status (Q40); pendências, saída externa e saldo inicial abrem com o
       // estoque de algum domínio (Q22, Q16, Q19/Q20). Leitores (Q32): admin, almoxarife, farmacêutico e o chefe de sala, que a sessão não traz
       // (profissional com a vacinação ligada; a tela trata o 403 missing_role). Saída externa e saldo inicial: admin e almoxarife.
-      if (item.id === "bnafar-status") return !user?.operator && hasFeature(user, "bnafar") && bnafarReader;
+      if (item.id === "bnafar-status") return !user?.operator && hasFeature(user, "bnafar") && (stockOn || vacOn) && bnafarReader;
       if (item.id === "bnafar-pending") return !user?.operator && (stockOn || vacOn) && bnafarReader;
       if (item.id === "external-exits" || item.id === "opening-import") return !user?.operator && (stockOn || vacOn) && (isAdmin || isStockKeeper);
       if (item.id === "vaccination-room" || item.id === "vaccination-pending") return vacOn && isProfessional;
