@@ -2,11 +2,12 @@
 // /pharmacy/bnafar/records/:id/correct`, só o `municipal_admin`, com step-up. Vale para a saída INTEIRA (Q8). Abre com o tipo e o destino
 // atuais da saída (`getExternalExit`); a `expected_version` é a `stock_external_exit_version` do registro (Q44, sempre a da leitura do
 // detalhe). Só o que mudou vai no corpo (o resto vem da saída atual, no api). `409 external_exit_changed` (e as outras recusas 409 do
-// prazo) mostram a frase pelo `onStale`, que relê uma vez; o digitado fica e nada é reenviado sozinho. O SensitiveAction fica FORA do
-// <form> (sem formulário aninhado).
+// prazo, e o 404 do registro de outro ambiente, Q35) mostram a frase pelo `onStale`, que relê o detalhe uma vez, e a saída é relida
+// também: o resumo e a base da diferença passam aos valores novos; o digitado fica e nada é reenviado sozinho. O rascunho só nasce de
+// uma leitura feita depois de abrir (nunca do cache). O SensitiveAction fica FORA do <form> (sem formulário aninhado).
 import { useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { correctBnafarRecord, getExternalExit, type BnafarCorrectionInput, type BnafarDomains, type BnafarRecord, type ExternalExit, type ExternalExitType } from "../../lib/api";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { ApiError, correctBnafarRecord, errorCode, getExternalExit, type BnafarCorrectionInput, type BnafarDomains, type BnafarRecord, type ExternalExit, type ExternalExitType } from "../../lib/api";
 import { EXTERNAL_EXITS_KEY, STATIC_QUERY, bnafarError, bnafarErrorText, cnesProblem, cnpjProblem, docOf, exitTypeLabel, isStale } from "../../lib/bnafar";
 import { SensitiveAction } from "../../components/SensitiveAction";
 import { inputStyle, secondaryButtonStyle, buttonStyle } from "../../components/formStyles";
@@ -20,6 +21,13 @@ const DESCRIPTION = "A correção vale para a saída inteira: a BNAFAR substitui
 const FALLBACK_TYPES: ExternalExitType[] = [ "S-DF", "S-TR", "S-D", "S-E" ];
 // 409 do registro: a frase e uma releitura (o registro pode ter saído da janela ou ter sido corrigido por outra pessoa).
 const STALE_CODES = [ "external_exit_changed", "correction_window_closed", "not_correctable" ];
+// Q35: registro de outro ambiente (o ambiente trocou enquanto a tela estava aberta) volta 404.
+export const RECORD_GONE = "este registro não está mais no ambiente em uso — a remessa foi relida";
+function staleText(err: unknown): string | null {
+  const code = STALE_CODES.find((c) => isStale(err, c));
+  if (code) return bnafarErrorText(code);
+  return err instanceof ApiError && err.status === 404 && errorCode(err) === "not_found" ? RECORD_GONE : null;
+}
 
 type Draft = { exitType: string; destinationKind: "cnes" | "cnpj"; destination: string; reason: string };
 
@@ -46,17 +54,18 @@ export function CorrectionForm({ record, domains, onDone, onCancel, onGoToSecuri
   onStale(text: string): void;
 }) {
   const exitId = record.stock_external_exit_id ?? "";
+  const client = useQueryClient();
   const exit = useQuery({ queryKey: [ EXTERNAL_EXITS_KEY, "detail", exitId ], queryFn: () => getExternalExit(exitId), enabled: !!exitId, ...STATIC_QUERY });
   const [ draft, setDraft ] = useState<Draft | null>(null);
   const [ errors, setErrors ] = useState<Record<string, string>>({});
   const [ confirming, setConfirming ] = useState(false);
 
-  // Abre com os valores atuais da saída, uma vez; a releitura depois de um 409 não apaga o digitado.
+  // Abre com os valores atuais da saída, lidos depois de abrir, uma vez; a releitura depois de um 409 não apaga o digitado.
   useEffect(() => {
-    if (exit.data && !draft) {
+    if (exit.data && exit.isFetchedAfterMount && !draft) {
       setDraft({ exitType: exit.data.exit_type, destinationKind: exit.data.destination_kind, destination: exit.data.destination_code, reason: "" });
     }
-  }, [ exit.data, draft ]);
+  }, [ exit.data, exit.isFetchedAfterMount, draft ]);
 
   if (exit.isError) return <p role="alert" style={alert}>{bnafarError(exit.error)}</p>;
   if (!exit.data || !draft) return <p className="mono" style={muted}>carregando a saída…</p>;
@@ -80,8 +89,8 @@ export function CorrectionForm({ record, domains, onDone, onCancel, onGoToSecuri
     try {
       await correctBnafarRecord(record.id, body);
     } catch (err) {
-      const stale = STALE_CODES.find((code) => isStale(err, code));
-      if (stale) { setConfirming(false); onStale(bnafarErrorText(stale)); }
+      const text = staleText(err);
+      if (text) { setConfirming(false); onStale(text); void exit.refetch(); }
       throw err;
     }
   }
@@ -144,7 +153,7 @@ export function CorrectionForm({ record, domains, onDone, onCancel, onGoToSecuri
           requiresStepUp
           confirmLabel="Confirmar correção"
           run={run}
-          onDone={() => { setConfirming(false); onDone(); }}
+          onDone={() => { setConfirming(false); void client.invalidateQueries({ queryKey: [ EXTERNAL_EXITS_KEY, "detail", exitId ] }); onDone(); }}
           onCancel={() => setConfirming(false)}
           onGoToSecurity={onGoToSecurity}
           translateError={(err) => bnafarError(err, { write: true })}
