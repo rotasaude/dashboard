@@ -4,7 +4,7 @@
 // veem a frase da unidade. Tudo sem pessoa: leitura ao abrir, depois de salvar o lote e no "Atualizar"; nenhum polling.
 import { useEffect, useRef, useState } from "react";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
-import { errorCode, listAdminLocations, listBnafarPendencies, listVaccineRooms, type BnafarPendency, type LotBnafarState } from "../lib/api";
+import { errorCode, listAdminLocations, listBnafarPendencies, listMyPharmacyLocations, listMyVaccineLocations, listVaccineRooms, type BnafarPendency, type LotBnafarState } from "../lib/api";
 import { LOT_BNAFAR_SAVED, BNAFAR_FIELD_LABEL, BNAFAR_NO_ROLE, BNAFAR_PENDENCIES_KEY, STATIC_QUERY, bnafarError, pendencyLabel } from "../lib/bnafar";
 import { DataTable } from "../components/DataTable";
 import { EmptyState } from "../components/EmptyState";
@@ -13,6 +13,9 @@ import { Tag } from "../components/Tag";
 import { buttonStyle, inputStyle, secondaryButtonStyle } from "../components/formStyles";
 import { SegmentedControl } from "../shell/SegmentedControl";
 import { alert, muted, row, stack } from "./exams/styles";
+import { useAuth } from "../lib/auth";
+import { hasFeature } from "../lib/features";
+import { canUseStockScreens } from "../lib/pharmacy";
 import { BnafarGate } from "./bnafar/BnafarGate";
 import { LotBnafarForm } from "./bnafar/LotBnafarForm";
 
@@ -26,7 +29,7 @@ type Nav = { onGoToLocations?: () => void; onGoToColdChain?: () => void; onGoToV
 export function BnafarPending(props: Nav & { onGoToSecurity?: () => void }) {
   return (
     <BnafarGate title="Pendências do envio à BNAFAR" sub="o que fica fora do envio de amanhã e como resolver" needs="stock" allow={(r) => r.reader}>
-      {(roles) => <PendingBody admin={roles.admin} {...props} />}
+      {(roles) => <PendingBody admin={roles.admin} reader={roles.keeper || roles.pharmacist} {...props} />}
     </BnafarGate>
   );
 }
@@ -37,7 +40,8 @@ type CnesKind = "central" | "cold" | "other" | null;
 const lotLabel = (p: BnafarPendency) => p.lot_number ?? p.item_label;
 const fieldsText = (p: BnafarPendency) => p.fields.map((f) => BNAFAR_FIELD_LABEL[f] ?? f).join(", ");
 
-function PendingBody({ admin, onGoToLocations, onGoToColdChain, onGoToVectorProducts, onGoToAdjustments }: Nav & { admin: boolean }) {
+function PendingBody({ admin, onGoToLocations, onGoToColdChain, onGoToVectorProducts, onGoToAdjustments, reader }: Nav & { admin: boolean; reader: boolean }) {
+  const { user } = useAuth();
   const [ code, setCode ] = useState<string>("");
   const [ locationId, setLocationId ] = useState<string>("");
   const [ editing, setEditing ] = useState<BnafarPendency | null>(null);
@@ -52,9 +56,13 @@ function PendingBody({ admin, onGoToLocations, onGoToColdChain, onGoToVectorProd
     ...STATIC_QUERY
   });
 
+  const stockOn = !!user && canUseStockScreens(user), vacOn = !!user && hasFeature(user, "vaccination");
   const hasCnes = admin && (list.data?.pages ?? []).some((pg) => pg.items.some((i) => i.code === "location_without_cnes"));
   // O api não manda o tipo do local: o admin cruza o id com os locais (central) e com a rede de frio (vacinas).
-  const locs = useQuery({ queryKey: [ BNAFAR_PENDENCIES_KEY, "admin-locations" ], queryFn: listAdminLocations, enabled: hasCnes, ...STATIC_QUERY });
+  const locs = useQuery({ queryKey: [ BNAFAR_PENDENCIES_KEY, "admin-locations" ], queryFn: listAdminLocations, enabled: admin && stockOn, ...STATIC_QUERY });
+  // Nomes dos locais do select: só as leituras que o papel pode fazer (sem 403 de ruído).
+  const mine = useQuery({ queryKey: [ BNAFAR_PENDENCIES_KEY, "my-locations" ], queryFn: listMyPharmacyLocations, enabled: !admin && reader && stockOn, ...STATIC_QUERY });
+  const mineVac = useQuery({ queryKey: [ BNAFAR_PENDENCIES_KEY, "my-vaccine-locations" ], queryFn: listMyVaccineLocations, enabled: !admin && vacOn, ...STATIC_QUERY });
   const rooms = useQuery({ queryKey: [ BNAFAR_PENDENCIES_KEY, "vaccine-rooms" ], queryFn: listVaccineRooms, enabled: hasCnes, ...STATIC_QUERY });
   const cnesKind = (id: string): CnesKind => {
     if (!locs.data || !rooms.data) return null;
@@ -74,6 +82,11 @@ function PendingBody({ admin, onGoToLocations, onGoToColdChain, onGoToVectorProd
   const totals = list.data?.pages[0]?.totals.by_code ?? {};
   const byLocation = list.data?.pages[0]?.totals.by_location ?? {};
   for (const i of items) names.current[i.stock_location_id] = i.location_name;
+  const known: Record<string, string> = {};
+  for (const l of [ ...(locs.data ?? []), ...(mine.data ?? []), ...(mineVac.data ?? []) ]) known[l.id] = l.name;
+  const locationName = (id: string) => known[id] ?? names.current[id] ?? "Local sem nome";
+  // O filtro atual sempre é opção (mesmo zerado), para "todos" poder limpá-lo.
+  const locationOptions = { ...(locationId && !(locationId in byLocation) ? { [locationId]: 0 } : {}), ...byLocation };
   const present = [ ...KNOWN, ...[ ...new Set(items.map((i) => i.code)) ].filter((c) => !KNOWN.includes(c)) ].filter((c) => items.some((i) => i.code === c));
 
   // Relê a lista e devolve o estado atual do lote (versão e o que falta) para o formulário seguir sem perder o digitado.
@@ -127,13 +140,13 @@ function PendingBody({ admin, onGoToLocations, onGoToColdChain, onGoToVectorProd
     <div style={stack}>
       <div style={{ ...row, justifyContent: "space-between" }}>
         <SegmentedControl options={options} value={code} onChange={(c) => { setCode(c); setEditing(null); setNotice(null); }} />
-        <button type="button" style={secondaryButtonStyle} onClick={() => void list.refetch()}>Atualizar</button>
+        <button type="button" style={secondaryButtonStyle} onClick={() => { setNotice(null); void list.refetch(); }}>Atualizar</button>
       </div>
       <label style={{ ...row, fontSize: 12 }}>
         Local
         <select aria-label="Local" value={locationId} style={inputStyle} onChange={(e) => { setLocationId(e.target.value); setEditing(null); setNotice(null); }}>
           <option value="">todos</option>
-          {Object.entries(byLocation).map(([ id, n ]) => <option key={id} value={id}>{`${names.current[id] ?? id} (${n})`}</option>)}
+          {Object.entries(locationOptions).map(([ id, n ]) => <option key={id} value={id}>{`${locationName(id)} (${n})`}</option>)}
         </select>
       </label>
       {notice && <p role="status" style={muted}>{notice}</p>}

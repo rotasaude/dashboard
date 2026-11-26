@@ -10,7 +10,7 @@ import { BNAFAR_DISABLED, BNAFAR_NO_ROLE, bnafarErrorText } from "../lib/bnafar"
 import { BnafarPending } from "./BnafarPending";
 
 vi.mock("../lib/api", async (orig) => ({ ...(await orig<typeof api>()), fetchCurrentSession: vi.fn(), listBnafarPendencies: vi.fn(),
-  updateLotBnafar: vi.fn(), listAdminLocations: vi.fn(), listVaccineRooms: vi.fn(), getBnafarDomains: vi.fn(), listObmPresentations: vi.fn() }));
+  updateLotBnafar: vi.fn(), listAdminLocations: vi.fn(), listMyPharmacyLocations: vi.fn(), listMyVaccineLocations: vi.fn(), listVaccineRooms: vi.fn(), getBnafarDomains: vi.fn(), listObmPresentations: vi.fn() }));
 
 const CODES = [ "lot_incomplete", "lot_number_too_long", "location_without_cnes", "product_without_code", "fractional_balance", "exit_type_missing", "domain_off" ];
 const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
@@ -24,6 +24,8 @@ beforeEach(() => {
   mocked(api.listBnafarPendencies).mockResolvedValue(pendencies(CODES));
   mocked(api.getBnafarDomains).mockResolvedValue(BNAFAR_DOMAINS);
   mocked(api.listAdminLocations).mockResolvedValue([ { id: "l2", name: "Central", kind: "central" }, { id: "l5", name: "Rede de frio", kind: "cold_chain_central" }, { id: "l6", name: "UBS", kind: "unit" } ] as never);
+  mocked(api.listMyPharmacyLocations).mockResolvedValue([]);
+  mocked(api.listMyVaccineLocations).mockResolvedValue([]);
   mocked(api.listVaccineRooms).mockResolvedValue({ rooms: [], cold_chain_central: null });
   mocked(api.listObmPresentations).mockResolvedValue(PRESENTATIONS);
   mocked(api.updateLotBnafar).mockResolvedValue({ id: "lt1", bnafar: lotBnafar({ version: 1 }) });
@@ -147,6 +149,57 @@ describe("Pendências do envio à BNAFAR (27b)", () => {
     fireEvent.click(within(form).getByRole("button", { name: "Salvar dados do lote" }));
     await waitFor(() => expect(screen.queryByRole("form", { name: "Dados do lote AMX2611" })).toBeNull());
     expect(screen.getByRole("status").textContent).toContain("AMX2611");
+  });
+
+  it("select de locais: nome vem da leitura de locais (admin e almoxarife), nunca o UUID; o filtro zerado segue como opção e 'todos' limpa", async () => {
+    const byLoc = { by_code: { domain_off: 1 }, by_location: { l2: 1, l7: 4 } };
+    mocked(api.listBnafarPendencies).mockResolvedValue(page([ item({ code: "domain_off" }) ], { totals: byLoc }));
+    mocked(api.listAdminLocations).mockResolvedValue([ { id: "l7", name: "UBS Norte", kind: "unit" } ] as never);
+    mocked(api.fetchCurrentSession).mockResolvedValue(ADMIN());
+    renderWithProviders(<BnafarPending {...nav()} />);
+    expect(await screen.findByRole("option", { name: "UBS Norte (4)" })).not.toBeNull();
+    expect(screen.getByRole("option", { name: "Local 2 (1)" })).not.toBeNull();
+    expect(mocked(api.listMyPharmacyLocations)).not.toHaveBeenCalled();
+    cleanup();
+    mocked(api.fetchCurrentSession).mockResolvedValue(KEEPER());
+    mocked(api.listMyPharmacyLocations).mockResolvedValue([ { id: "l7", name: "UBS Sul", kind: "unit" } ] as never);
+    renderWithProviders(<BnafarPending {...nav()} />);
+    expect(await screen.findByRole("option", { name: "UBS Sul (4)" })).not.toBeNull();
+    expect(mocked(api.listAdminLocations)).toHaveBeenCalledTimes(1);
+    // sem nome conhecido: rótulo neutro, nunca o id
+    mocked(api.listMyPharmacyLocations).mockResolvedValue([]);
+    cleanup();
+    mocked(api.listBnafarPendencies).mockResolvedValue(page([ item({ code: "domain_off" }) ], { totals: { by_code: { domain_off: 1 }, by_location: { l2: 1, "uuid-9": 2 } } }));
+    renderWithProviders(<BnafarPending {...nav()} />);
+    expect(await screen.findByRole("option", { name: "Local sem nome (2)" })).not.toBeNull();
+    cleanup();
+    // filtro zerado: continua como opção com contagem 0 e "todos" limpa
+    mocked(api.listBnafarPendencies).mockResolvedValueOnce(page([ item({ code: "domain_off" }) ], { totals: byLoc }))
+      .mockResolvedValueOnce(page([], { totals: { by_code: {}, by_location: { l2: 1 } } })).mockResolvedValue(page([ item({ code: "domain_off" }) ], { totals: byLoc }));
+    mocked(api.listMyPharmacyLocations).mockResolvedValue([ { id: "l7", name: "UBS Sul", kind: "unit" } ] as never);
+    renderWithProviders(<BnafarPending {...nav()} />);
+    await screen.findByRole("option", { name: "UBS Sul (4)" });
+    const sel = screen.getByLabelText("Local", { selector: "select" }) as HTMLSelectElement;
+    fireEvent.change(sel, { target: { value: "l7" } });
+    expect(await screen.findByRole("option", { name: "UBS Sul (0)" })).not.toBeNull();
+    expect(sel.value).toBe("l7");
+    fireEvent.change(sel, { target: { value: "" } });
+    await waitFor(() => expect(mocked(api.listBnafarPendencies)).toHaveBeenLastCalledWith({ locationId: null, code: null, before: null }));
+  });
+
+  it("'Atualizar' limpa o aviso de lote salvo", async () => {
+    mocked(api.listBnafarPendencies).mockResolvedValueOnce(pendencies([ "lot_incomplete" ])).mockResolvedValue(page([]));
+    renderWithProviders(<BnafarPending {...nav()} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Completar dados do lote — AMX2611" }));
+    const form = await screen.findByRole("form", { name: "Dados do lote AMX2611" });
+    await within(form).findByRole("option", { name: /AF —/ });
+    fireEvent.change(within(form).getByLabelText("Apresentação (AMPP)"), { target: { value: "AMPP0001" } });
+    fireEvent.change(within(form).getByLabelText("Valor unitário (R$)"), { target: { value: "12,50" } });
+    fireEvent.change(within(form).getByLabelText("Programa de saúde"), { target: { value: "AF" } });
+    fireEvent.click(within(form).getByRole("button", { name: "Salvar dados do lote" }));
+    await screen.findByRole("status");
+    fireEvent.click(screen.getByRole("button", { name: "Atualizar" }));
+    expect(screen.queryByRole("status")).toBeNull();
   });
 
   it("filtro por local: select com as contagens de totals.by_location; manda location_id e fecha o painel", async () => {
