@@ -5,6 +5,7 @@ import * as api from "../lib/api";
 import { ApiError } from "../lib/api";
 import { BALANCE_CHANGED, LOT_BLOCKED_TEXT, NO_LOCATION, PHARMACY_DISABLED, PHARMACY_NO_ROLE } from "../lib/pharmacy";
 import { BNAFAR_ERRORS } from "../lib/bnafarErrors";
+import { BNAFAR_DOMAINS_KEY } from "../lib/bnafar";
 import { renderWithProviders } from "../test/campaignFixtures";
 import { BNAFAR_DOMAINS, TODAY27B, bnafarUser, externalExit, externalExitDetail } from "../test/bnafarFixtures";
 import { CENTRAL, CENTRAL_REF, UBS_FARM, adminLocation, lotBalance, position, stockLot } from "../test/pharmacyFixtures";
@@ -140,6 +141,12 @@ describe("ExternalExits", () => {
     field("Tipo de saída", "S-DF"); register();
     expect(await screen.findByRole("button", { name: "Confirmar saída" })).not.toBeNull();
     expect(api.recordExternalExit).not.toHaveBeenCalled();
+  });
+
+  it("os tipos de saída vêm da leitura compartilhada dos domínios (mesma chave das outras telas)", async () => {
+    const { client } = setup();
+    expect(await form()).not.toBeNull();
+    expect(client.getQueryData([ BNAFAR_DOMAINS_KEY ])).toEqual(BNAFAR_DOMAINS);
   });
 
   it("sem bnafar na sessão a tela funciona (Q16): formulário e lista do local", async () => {

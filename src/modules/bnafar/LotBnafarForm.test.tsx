@@ -6,7 +6,8 @@ vi.mock("../../lib/api", async (importOriginal) => ({ ...(await importOriginal<t
 import * as api from "../../lib/api";
 import { ApiError, type LotBnafarState } from "../../lib/api";
 import { LotBnafarForm } from "./LotBnafarForm";
-import { bnafarErrorText } from "../../lib/bnafar";
+import { BNAFAR_DISABLED, bnafarErrorText } from "../../lib/bnafar";
+import { PHARMACY_DISABLED } from "../../lib/pharmacy";
 import { renderWithProviders } from "../../test/campaignFixtures";
 import { BNAFAR_DOMAINS, FIVE_MISSING, PRESENTATIONS, bnafarUser, lotBnafar } from "../../test/bnafarFixtures";
 
@@ -86,6 +87,15 @@ describe("LotBnafarForm", () => {
     save();
     const field = (await screen.findByText(bnafarErrorText("invalid_cnpj")));
     expect(field.closest("label")?.textContent).toContain("CNPJ do fabricante");
+  });
+
+  it("403 feature_disabled do estoque do domínio: a frase da farmácia, não a do envio à BNAFAR", async () => {
+    mocked(api.updateLotBnafar).mockRejectedValueOnce(new ApiError(403, { error: "feature_disabled", feature: "pharmacy" }, "x"));
+    setup();
+    fillAll(); await program();
+    save();
+    expect(await screen.findByText(PHARMACY_DISABLED)).not.toBeNull();
+    expect(screen.queryByText(BNAFAR_DISABLED)).toBeNull();
   });
 
   it("lot_mismatch no campo traz a frase do campo (F-32)", async () => {

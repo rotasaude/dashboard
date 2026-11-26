@@ -7,8 +7,8 @@ import {
   type ExternalExitType, type LotBalance, type LotBnafarState, type StockDomain, type VaccineBnafarLotInput
 } from "./api";
 import { BNAFAR_DISABLED, bnafarErrorText, hasBnafarError } from "./bnafarErrors";
-import { featureDisabledKey, hasFeature, type FeatureKey } from "./features";
-import { STATIC_QUERY, canUseStockScreens, pharmacyError, pharmacyRefusals, type Problem } from "./pharmacy";
+import { featureDisabledKey, hasFeature } from "./features";
+import { STATIC_QUERY, pharmacyError, pharmacyRefusals, type Problem } from "./pharmacy";
 
 export { STATIC_QUERY };
 export type { BnafarField };
@@ -52,22 +52,11 @@ export function bnafarRoles(user: SessionLike): { admin: boolean; keeper: boolea
   return { admin, keeper, pharmacist, reader: admin || keeper || pharmacist };
 }
 
-// Status e remessas: o `bnafar` ligado (Q40) e papel de leitor.
-export const canSeeStatus = (user: SessionLike): boolean => canUseBnafar(user) && bnafarRoles(user).reader;
-
-// Pendências e complemento do lote: só o estoque de algum domínio, nunca o `bnafar` (Q22, Q23).
-export function canSeePendencies(user: SessionLike): boolean {
-  return !!user && !user.operator && bnafarRoles(user).reader && (canUseStockScreens(user) || hasFeature(user, "vaccination"));
-}
-
 // F-23: o botão depende dos recusados da remessa; o prazo é do api (409 `retry_window_closed`), nunca conta de relógio.
 export function canResend(s: Pick<BnafarSubmission, "counts" | "status">, admin: boolean): boolean {
   return admin && s.counts.rejected > 0 && s.status !== "lost";
 }
 
-export const DOMAIN_FEATURE: Record<string, FeatureKey> = {
-  medication: "bnafar_medications", immunobiological: "bnafar_vaccines", vector_control: "bnafar_vector_supplies"
-};
 export const KIND_DOMAIN: Record<string, StockDomain> = {
   central: "medication", unit: "medication", vaccine_room: "immunobiological", cold_chain_central: "immunobiological", vector_control: "vector_control"
 };

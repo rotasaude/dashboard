@@ -15,7 +15,6 @@ export const BNAFAR_ERRORS: Record<string, string> = {
   exit_type_missing: "saída sem tipo BNAFAR correspondente — fica fora do envio",
   domain_off: "tipo de produto ainda não ligado ao envio",
   lot_number_too_long: "número do lote com mais de 30 caracteres — a BNAFAR não aceita este lote",
-  feature_disabled: BNAFAR_DISABLED,
   // Recusas do api (409/422) do complemento, da correção e do reenvio.
   lot_bnafar_changed: "os dados do lote foram salvos por outra pessoa — o lote foi relido; confira antes de salvar",
   external_exit_changed: "a saída foi corrigida por outra pessoa — os dados foram relidos; confira antes de corrigir",

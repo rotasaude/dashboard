@@ -6,7 +6,7 @@ import { useState } from "react";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { useAuth } from "../lib/auth";
 import { hasFeature } from "../lib/features";
-import { getBnafarDomains, getExternalExit, listExternalExits, type BnafarDomains, type ExternalExit } from "../lib/api";
+import { getExternalExit, listExternalExits, type BnafarDomains, type ExternalExit } from "../lib/api";
 import { EXTERNAL_EXITS_KEY, STATIC_QUERY, bnafarError, exitTypeLabel } from "../lib/bnafar";
 import { todayInCity } from "../lib/campaigns";
 import { fmtDateTime } from "../lib/format";
@@ -17,6 +17,7 @@ import { buttonStyle, secondaryButtonStyle } from "../components/formStyles";
 import { alert, muted, row, stack } from "./exams/styles";
 import { BnafarGate } from "./bnafar/BnafarGate";
 import { ExitLocationPick, type ExitLocation } from "./pharmacy/ExitLocationPick";
+import { useBnafarDomains } from "./pharmacy/BnafarLotFields";
 import { ExternalExitForm } from "./pharmacy/ExternalExitForm";
 
 export const EXIT_RECORDED = "Saída registrada. Ela vai à BNAFAR no envio de amanhã, se o envio estiver ligado.";
@@ -38,7 +39,7 @@ export function ExternalExits({ today, onGoToSecurity }: Props) {
 
 function ExitsBody({ today, onGoToSecurity }: { today?: string; onGoToSecurity?: () => void }) {
   // Sem os tipos do api a tela usa os quatro conhecidos; a leitura é do estoque, nunca do `bnafar`.
-  const domains = useQuery({ queryKey: [ EXTERNAL_EXITS_KEY, "domains" ], queryFn: getBnafarDomains, ...STATIC_QUERY });
+  const domains = useBnafarDomains();
   return (
     <ExitLocationPick>
       {(loc) => <LocationExits location={loc} today={today ?? todayInCity()} domains={domains.data ?? null} onGoToSecurity={onGoToSecurity} />}

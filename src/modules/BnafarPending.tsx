@@ -28,7 +28,7 @@ type Nav = { onGoToLocations?: () => void; onGoToColdChain?: () => void; onGoToV
 
 export function BnafarPending(props: Nav & { onGoToSecurity?: () => void }) {
   return (
-    <BnafarGate title="Pendências do envio à BNAFAR" sub="o que fica fora do envio de amanhã e como resolver" needs="stock" allow={(r) => r.reader}>
+    <BnafarGate title="Pendências do envio à BNAFAR" sub="o que fica fora do envio de amanhã e como resolver" needs="stock" allow={() => true}>
       {(roles) => <PendingBody admin={roles.admin} reader={roles.keeper || roles.pharmacist} {...props} />}
     </BnafarGate>
   );
@@ -108,7 +108,8 @@ function PendingBody({ admin, onGoToLocations, onGoToColdChain, onGoToVectorProd
     const btn = (label: string, fn?: () => void) => <button type="button" style={secondaryButtonStyle} onClick={fn}>{label}</button>;
     switch (p.code) {
       case "lot_incomplete":
-        return p.lot_id
+        // O PATCH do complemento só aceita admin, almoxarife e farmacêutico; o chefe de sala lê e não completa.
+        return p.lot_id && (admin || reader)
           ? <button type="button" style={buttonStyle} onClick={() => setEditing(p)}>{`Completar dados do lote — ${lotLabel(p)}`}</button>
           : <span style={muted}>peça ao almoxarife do local para completar os dados do lote</span>;
       case "location_without_cnes":

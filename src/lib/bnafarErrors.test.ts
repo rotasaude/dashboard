@@ -4,7 +4,7 @@ import { BNAFAR_DISABLED, BNAFAR_ERRORS, bnafarErrorText, bnafarErrorTexts, rowE
 
 const TABLE_CODES = [
   "lot_incomplete", "location_without_cnes", "product_without_code", "fractional_balance", "exit_type_missing", "domain_off",
-  "lot_number_too_long", "feature_disabled", "lot_bnafar_changed", "external_exit_changed", "retry_window_closed",
+  "lot_number_too_long", "lot_bnafar_changed", "external_exit_changed", "retry_window_closed",
   "correction_window_closed", "not_correctable", "nothing_to_retry", "ampp_unknown", "ampp_not_in_vmp", "anvisa_mismatch",
   "program_unknown", "invalid_cnpj", "cnes_in_use", "invalid_environment",
   "MSG01", "MSG02", "MSG03", "MSG04", "MSG06", "MSG08", "MSG09", "MSG10", "MSG11", "MSG12", "MSG13", "MSG15", "MSG16", "MSG17", "MSG18",
@@ -41,8 +41,8 @@ describe("BNAFAR_ERRORS", () => {
     }
     for (const g of GROUPS) for (const c of g) expect(BNAFAR_ERRORS[c]).toBe(BNAFAR_ERRORS[g[0]]);
   });
-  it("feature_disabled é a frase do interruptor", () => {
-    expect(BNAFAR_ERRORS.feature_disabled).toBe(BNAFAR_DISABLED);
+  it("feature_disabled não está na tabela (quem diz é featureDisabledKey) e BNAFAR_DISABLED é a frase do interruptor", () => {
+    expect(BNAFAR_ERRORS.feature_disabled).toBeUndefined();
     expect(BNAFAR_DISABLED).toBe("o envio à BNAFAR está desligado nesta cidade");
   });
   it("código ausente volta cru, inclusive os nomes de Object", () => {

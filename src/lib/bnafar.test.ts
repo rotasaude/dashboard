@@ -2,8 +2,8 @@
 import { describe, expect, it } from "vitest";
 import { ApiError, type BnafarDomains, type LotBalance } from "./api";
 import {
-  BNAFAR_NOT_USABLE, BNAFAR_NO_ROLE, DOMAIN_FEATURE, EMPTY_LOT_BNAFAR, KIND_DOMAIN, alertLines, anvisaProblem, bnafarError, bnafarFieldsFor, bnafarProblems,
-  bnafarRoles, canResend, canSeePendencies, canSeeStatus, canUseBnafar, catmatProblem, cnesProblem, cnpjProblem, docOf, environmentLabel,
+  BNAFAR_NOT_USABLE, BNAFAR_NO_ROLE, EMPTY_LOT_BNAFAR, KIND_DOMAIN, alertLines, anvisaProblem, bnafarError, bnafarFieldsFor, bnafarProblems,
+  bnafarRoles, canResend, canUseBnafar, catmatProblem, cnesProblem, cnpjProblem, docOf, environmentLabel,
   exitTypeLabel, externalExitBody, externalExitProblems, fmtCents, internationalNameProblem, isStale, lotBnafarBody, lotBnafarProblems,
   missingFields, parseUnitPrice, recordStatusLabel, recordStatusTone, subjectLabel, submissionStatusLabel, submissionStatusTone, type BnafarField
 } from "./bnafar";
@@ -28,15 +28,6 @@ describe("portões e papéis", () => {
     expect(bnafarRoles(bnafarUser([ "pharmacy_assistant" ])).reader).toBe(false);
     expect(bnafarRoles(null).reader).toBe(false);
   });
-  it("status exige o bnafar ligado; pendências só o estoque (Q22, Q40)", () => {
-    const stockOnly = bnafarUser([ "pharmacist" ], [ "pharmacy" ]);
-    expect(canSeeStatus(bnafarUser([ "stock_keeper" ]))).toBe(true);
-    expect(canSeeStatus(stockOnly)).toBe(false);
-    expect(canSeePendencies(stockOnly)).toBe(true);
-    expect(canSeePendencies(bnafarUser([ "pharmacist" ], [ "bnafar" ]))).toBe(false);
-    expect(canSeePendencies(bnafarUser([ "stock_keeper" ], [ "vaccination" ]))).toBe(true);
-    expect(canSeePendencies(bnafarUser([ "pharmacy_assistant" ]))).toBe(false);
-  });
   it("reenviar: só o admin, com recusados e remessa não perdida (F-23)", () => {
     const rejected = submission({ counts: { accepted: 0, rejected: 2, pending: 0, lost: 0 } });
     expect(canResend(rejected, true)).toBe(true);
@@ -45,7 +36,6 @@ describe("portões e papéis", () => {
     expect(canResend({ ...rejected, status: "lost" }, true)).toBe(false);
   });
   it("mapas de domínio", () => {
-    expect(DOMAIN_FEATURE).toEqual({ medication: "bnafar_medications", immunobiological: "bnafar_vaccines", vector_control: "bnafar_vector_supplies" });
     expect(KIND_DOMAIN.central).toBe("medication");
     expect(KIND_DOMAIN.unit).toBe("medication");
     expect(KIND_DOMAIN.vaccine_room).toBe("immunobiological");

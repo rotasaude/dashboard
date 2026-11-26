@@ -254,4 +254,14 @@ describe("Pendências do envio à BNAFAR (27b)", () => {
     expect(BNAFAR_DISABLED).toBeTruthy();
     expect(FIVE_MISSING.length).toBe(5);
   });
+
+  it("chefe de sala (profissional com vacina) lê a lista e não vê o botão de completar o lote (Q32)", async () => {
+    mocked(api.fetchCurrentSession).mockResolvedValue(bnafarUser([ "health_professional" ], [ "vaccination" ]));
+    mocked(api.listBnafarPendencies).mockResolvedValue(pendencies([ "lot_incomplete" ]));
+    renderWithProviders(<BnafarPending {...nav()} />);
+    expect(await screen.findByRole("region", { name: bnafarErrorText("lot_incomplete") })).not.toBeNull();
+    expect(screen.queryByText(BNAFAR_NO_ROLE)).toBeNull();
+    expect(screen.queryByRole("button", { name: /Completar dados do lote/ })).toBeNull();
+    expect(screen.getByText("peça ao almoxarife do local para completar os dados do lote")).not.toBeNull();
+  });
 });
