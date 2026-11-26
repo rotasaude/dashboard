@@ -14,6 +14,7 @@ import { buttonStyle, disabledButtonStyle, secondaryButtonStyle } from "../../co
 import { alert, list, muted, okText, row } from "../exams/styles";
 import { BnafarLotFields } from "../pharmacy/BnafarLotFields";
 
+const RELOAD_FAILED = "não foi possível reler — recarregue a tela";
 const FIELDS = new Set([ "unit_price_cents", "manufacturer_cnpj", "manufacturer", "anvisa_registration", "health_program", "ampp_code" ]);
 
 export function LotBnafarForm({ lotId, lotNumber, locationId, state, hasVmp, vmpCode = null, vaccine = false, onSaved, onCancel, reload }: {
@@ -32,13 +33,14 @@ export function LotBnafarForm({ lotId, lotNumber, locationId, state, hasVmp, vmp
   const [ busy, setBusy ] = useState(false);
   const inFlight = useRef(false);
 
+  const amppOffered = hasVmp && !!vmpCode;
   const missing = missingFields(current);
   const catalogCnpj = vaccine && (current.missing ?? []).includes("manufacturer_cnpj");
   const required = vaccine ? missing.filter((f) => f !== "manufacturer_cnpj") : missing;
 
   async function submit() {
     if (inFlight.current) return;
-    const problems = lotBnafarProblems(draft, required, { hasVmp });
+    const problems = lotBnafarProblems(draft, required, { hasVmp: amppOffered });
     setSaved(null);
     if (problems.length > 0) {
       setFieldErrors(Object.fromEntries(problems.map((p) => [ p.field, p.text ]))); setGeneral([]);
@@ -56,7 +58,7 @@ export function LotBnafarForm({ lotId, lotNumber, locationId, state, hasVmp, vmp
       if (isStale(err, "lot_bnafar_changed")) {
         setGeneral([ bnafarErrorText("lot_bnafar_changed") ]);
         const fresh = await reload().catch(() => null);
-        if (fresh) setCurrent(fresh);
+        if (fresh) setCurrent(fresh); else setGeneral((g) => [ ...g, RELOAD_FAILED ]);
       } else {
         const byField: Record<string, string> = {}, rest: string[] = [];
         for (const r of pharmacyRefusals(err)) {
@@ -76,7 +78,7 @@ export function LotBnafarForm({ lotId, lotNumber, locationId, state, hasVmp, vmp
       <p style={muted}>Lote <strong>{lotNumber}</strong>: informe os dados que a BNAFAR pede. {missing.length > 0 && `Faltam: ${missing.map(bnafarFieldLabel).join(", ")}.`}</p>
       {catalogCnpj && <p style={muted}>{VACCINE_CNPJ_FROM_CATALOG}</p>}
       <BnafarLotFields value={draft} onChange={setDraft} required={required} vmpCode={vmpCode} disabled={busy} vaccine={vaccine}
-        ampp={hasVmp && !!vmpCode} errors={fieldErrors} />
+        ampp={amppOffered} errors={fieldErrors} />
       {general.length > 0 && (
         <ul role="alert" style={{ ...list, ...alert }}>{general.map((t) => <li key={t}>{t}</li>)}</ul>
       )}

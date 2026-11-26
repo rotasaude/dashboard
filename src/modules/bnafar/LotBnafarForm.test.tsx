@@ -15,11 +15,11 @@ const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
 const text = (label: string, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
 const OLD: LotBnafarState = { version: 0, missing: FIVE_MISSING };
 
-type Over = Partial<{ state: LotBnafarState; hasVmp: boolean; vaccine: boolean; reload: () => Promise<LotBnafarState | null>; onSaved: (l: unknown) => void }>;
+type Over = Partial<{ noVmpCode: boolean; state: LotBnafarState; hasVmp: boolean; vaccine: boolean; reload: () => Promise<LotBnafarState | null>; onSaved: (l: unknown) => void }>;
 function setup(o: Over = {}) {
   const onSaved = o.onSaved ?? vi.fn(), onCancel = vi.fn(), reload = o.reload ?? vi.fn().mockResolvedValue(null);
   renderWithProviders(<LotBnafarForm lotId="lt1" lotNumber="AMX2611" locationId="l1" state={o.state ?? OLD} hasVmp={o.hasVmp ?? false}
-    vmpCode={o.hasVmp ? "VMP0001" : null} vaccine={o.vaccine} onSaved={onSaved as never} onCancel={onCancel} reload={reload} />);
+    vmpCode={o.hasVmp && !o.noVmpCode ? "VMP0001" : null} vaccine={o.vaccine} onSaved={onSaved as never} onCancel={onCancel} reload={reload} />);
   return { onSaved, onCancel, reload };
 }
 const save = () => fireEvent.click(screen.getByRole("button", { name: "Salvar dados do lote" }));
@@ -131,5 +131,22 @@ describe("LotBnafarForm", () => {
     save();
     await waitFor(() => expect(mocked(api.updateLotBnafar)).toHaveBeenCalledTimes(1));
     expect(mocked(api.updateLotBnafar).mock.calls[0][1]).toEqual({ location_id: "l1", expected_version: 0, unit_price_cents: 4590 });
+  });
+
+  it("hasVmp sem vmpCode: o AMPP não é oferecido nem exigido", async () => {
+    setup({ hasVmp: true, noVmpCode: true });
+    fillAll(); await program();
+    expect(screen.queryByLabelText(/Apresentação \(AMPP\)/)).toBeNull();
+    save();
+    await waitFor(() => expect(mocked(api.updateLotBnafar)).toHaveBeenCalledTimes(1));
+    expect("ampp_code" in mocked(api.updateLotBnafar).mock.calls[0][1]).toBe(false);
+  });
+
+  it("409 e a releitura falha ou volta vazia: a frase de recarregar a tela", async () => {
+    mocked(api.updateLotBnafar).mockRejectedValueOnce(new ApiError(409, { error: "lot_bnafar_changed" }, "x"));
+    setup({ reload: vi.fn().mockResolvedValue(null) });
+    fillAll(); await program();
+    save();
+    expect(await screen.findByText("não foi possível reler — recarregue a tela")).not.toBeNull();
   });
 });
