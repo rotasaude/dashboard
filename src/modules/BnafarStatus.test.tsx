@@ -137,6 +137,17 @@ describe("Envio à BNAFAR (27b)", () => {
     expect(screen.queryByRole("button", { name: "Reenviar recusados" })).toBeNull();
   });
 
+  it("reenviar um único recusado: frase no singular", async () => {
+    vi.mocked(api.fetchCurrentSession).mockResolvedValue(ADMIN());
+    vi.mocked(api.listBnafarSubmissions).mockResolvedValue({ items: [ submission({ id: "bs2", counts: { accepted: 1, rejected: 1, pending: 0, lost: 0 } }) ], next_before: null });
+    vi.mocked(api.retryBnafarSubmission).mockResolvedValueOnce({ batch: { id: "bb1", operation: "post", status: "queued", protocol: null }, retried: 1, submission: submission({ id: "bs2" }) });
+    renderWithProviders(<BnafarStatus />);
+    fireEvent.click(await screen.findByRole("button", { name: VIEW_POSITION }));
+    fireEvent.click(await screen.findByRole("button", { name: "Reenviar recusados" }));
+    fireEvent.click(within(await screen.findByRole("region", { name: "Reenviar recusados" })).getByRole("button", { name: "Confirmar reenvio" }));
+    expect(await screen.findByText("1 registro recusado reenviado à BNAFAR.")).not.toBeNull();
+  });
+
   it("reenviar com o bnafar inutilizável: a frase da credencial", async () => {
     vi.mocked(api.fetchCurrentSession).mockResolvedValue(ADMIN());
     vi.mocked(api.listBnafarSubmissions).mockResolvedValue({ items: [ submission({ id: "bs2", counts: { accepted: 1, rejected: 2, pending: 0, lost: 0 } }) ], next_before: null });
