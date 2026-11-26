@@ -36,7 +36,8 @@ export const BNAFAR_ERRORS: Record<string, string> = {
   credential_missing: "a cidade ainda não gravou a credencial da BNAFAR",
   lot_mismatch: "este lote já existe com outros dados — confira validade, fabricante e os dados do envio",
   // Saída externa.
-  lot_blocked: "lote bloqueado — escolha outro lote",
+  // Mesma frase da farmácia (LOT_BLOCKED_TEXT, 27a): o motivo é a temperatura, e a tabela da BNAFAR vem antes na saída externa.
+  lot_blocked: "lote bloqueado por temperatura fora da faixa até a conduta — escolha outro lote",
   lot_expired: "lote vencido — só a devolução ao fornecedor aceita lote vencido",
   invalid_items: "lote inexistente, repetido ou sem cadastro na vacina — escolha outro lote",
   // Último erro da remessa e do registro (sem código do Ministério).

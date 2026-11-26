@@ -8,7 +8,7 @@ import {
   missingFields, parseUnitPrice, recordStatusLabel, recordStatusTone, subjectLabel, submissionStatusLabel, submissionStatusTone, type BnafarField
 } from "./bnafar";
 import { BNAFAR_DISABLED, BNAFAR_ERRORS } from "./bnafarErrors";
-import { PHARMACY_DISABLED, pharmacyError } from "./pharmacy";
+import { LOT_BLOCKED_TEXT, PHARMACY_DISABLED, pharmacyError } from "./pharmacy";
 import { BNAFAR_DOMAINS, FIVE_MISSING, bnafarUser, lostRecord, record, submission } from "../test/bnafarFixtures";
 import { AMOXI } from "../test/pharmacyFixtures";
 
@@ -178,6 +178,22 @@ describe("saída externa", () => {
     expect(paths({ lines: [] })).toEqual([ "items" ]);
     expect(paths({ lines: [ { key: "a", lot: null, quantity: "1" } ] })).toEqual([ "items[0].lot_id" ]);
     expect(paths({ lines: [ { key: "a", lot: lot("lt1", "9"), quantity: "1" }, { key: "b", lot: lot("lt1", "9"), quantity: "1" } ] })).toEqual([ "items[1].lot_id" ]);
+  });
+  it("Q28/Q29: lote bloqueado nunca sai (frase da temperatura); vencido só na devolução ao fornecedor", () => {
+    const withLot = (b: LotBalance, exitType: string) => externalExitProblems({ ...base, exitType, lines: [ { key: "a", lot: b, quantity: "1" } ] }, "2026-11-26");
+    const blocked = { ...lot("lt1", "9"), blocked: true };
+    expect(withLot(blocked, "S-DF")).toEqual([ { path: "items[0].lot_id", text: LOT_BLOCKED_TEXT } ]);
+    const expired = { ...lot("lt1", "9"), lot: { ...lot("lt1", "9").lot, expires_on: "2026-11-25" }, expired: true };
+    expect(withLot(expired, "S-DF")).toEqual([]);
+    expect(withLot(expired, "S-D").map((p) => p.path)).toEqual([ "items[0].lot_id" ]);
+    expect(withLot(expired, "S-D")[0].text).toBe(BNAFAR_ERRORS.lot_expired);
+    expect(externalExitProblems({ ...base, lines: [ { key: "a", lot: expired, quantity: "1" } ] })).toEqual([]);
+  });
+  it("lot_blocked na saída usa a frase da temperatura do 27a, em bnafarError e bnafarProblems", () => {
+    expect(BNAFAR_ERRORS.lot_blocked).toBe(LOT_BLOCKED_TEXT);
+    const err = new ApiError(422, { error: "lot_blocked", problems: [ { path: "items[0].lot_id", error: "lot_blocked" } ] }, "422");
+    expect(bnafarError(err)).toBe(LOT_BLOCKED_TEXT);
+    expect(bnafarProblems(err)).toEqual([ { path: "items[0].lot_id", text: LOT_BLOCKED_TEXT } ]);
   });
   it("corpo: documento sem pontuação, quantidade número, motivo aparado", () => {
     expect(externalExitBody({ ...base, destinationKind: "cnpj", destination: "11.222.333/0001-81", reason: "  doação à unidade vizinha  " }, "l1")).toEqual({

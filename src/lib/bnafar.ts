@@ -228,7 +228,8 @@ const MAX_EXIT_QUANTITY = 99_999;
 // Parte inteira do saldo ("3.50" → 3): a BNAFAR só aceita quantidade inteira.
 const wholeBalance = (balance: string): number => Math.trunc(Number(balance));
 
-export function externalExitProblems(d: ExternalExitDraft): Problem[] {
+// `today` (Q28/Q29): com ele, lote bloqueado nunca sai e lote vencido só sai na devolução ao fornecedor (S-DF); o api recusa de novo.
+export function externalExitProblems(d: ExternalExitDraft, today?: string): Problem[] {
   const out: Problem[] = [];
   if (!d.exitType) out.push({ path: "exit_type", text: "escolha o tipo da saída" });
   const destProblem = d.destinationKind === "cnes" ? cnesProblem(d.destination) : cnpjProblem(d.destination);
@@ -241,6 +242,8 @@ export function externalExitProblems(d: ExternalExitDraft): Problem[] {
     if (!line.lot) { out.push({ path: `items[${i}].lot_id`, text: "escolha o lote" }); return; }
     if (seen.has(line.lot.lot.id)) out.push({ path: `items[${i}].lot_id`, text: "este lote já está na saída — junte as quantidades" });
     seen.add(line.lot.lot.id);
+    if (today && line.lot.blocked) { out.push({ path: `items[${i}].lot_id`, text: bnafarErrorText("lot_blocked") }); return; }
+    if (today && d.exitType !== "S-DF" && line.lot.lot.expires_on < today) { out.push({ path: `items[${i}].lot_id`, text: bnafarErrorText("lot_expired") }); return; }
     const q = line.quantity.trim();
     const whole = wholeBalance(line.lot.balance);
     if (!/^\d+$/.test(q)) out.push({ path: `items[${i}].quantity`, text: "a quantidade é um número inteiro, sem vírgula" });
