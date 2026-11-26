@@ -55,7 +55,7 @@ export const BNAFAR_ERRORS: Record<string, string> = {
   invalid_lot_number: "número do lote inválido",
   invalid_date: "data de validade inválida",
   expired_lot: "o lote da linha já venceu — não entra como saldo inicial",
-  invalid_quantity: "quantidade inválida — use um número inteiro maior que zero",
+  invalid_quantity: "quantidade inválida — use um número inteiro maior que zero (na vacina, múltiplo do frasco)",
   invalid_price: "valor unitário inválido — use reais com vírgula, maior que zero",
   invalid_anvisa: "o registro ANVISA tem 11 ou 13 dígitos",
   manufacturer_not_in_catalog: "o fabricante não está no catálogo de imunobiológicos",
@@ -96,6 +96,11 @@ const has = (code: string): boolean => Object.prototype.hasOwnProperty.call(BNAF
 export function bnafarErrorText(code: string): string {
   return has(code) ? BNAFAR_ERRORS[code] : `recusa da BNAFAR: ${code}`;
 }
+
+// Código de linha da planilha do saldo inicial: sempre pela tabela do envio (a farmácia diz outra coisa em `expired_lot` e `invalid_quantity`).
+export const rowErrorText = bnafarErrorText;
+
+export const hasBnafarError = has;
 
 // Todos os códigos de um registro, na ordem dada, sem repetir a frase (MSG12 e MSG59 dizem o mesmo). A MSG47 mantém a frase própria.
 export function bnafarErrorTexts(codes: string[]): string[] {

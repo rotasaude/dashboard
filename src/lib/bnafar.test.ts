@@ -2,13 +2,13 @@
 import { describe, expect, it } from "vitest";
 import { ApiError, type BnafarDomains, type LotBalance } from "./api";
 import {
-  BNAFAR_NOT_USABLE, BNAFAR_NO_ROLE, DOMAIN_FEATURE, EMPTY_LOT_BNAFAR, KIND_DOMAIN, alertLines, anvisaProblem, bnafarError, bnafarFieldsFor,
+  BNAFAR_NOT_USABLE, BNAFAR_NO_ROLE, DOMAIN_FEATURE, EMPTY_LOT_BNAFAR, KIND_DOMAIN, alertLines, anvisaProblem, bnafarError, bnafarFieldsFor, bnafarProblems,
   bnafarRoles, canResend, canSeePendencies, canSeeStatus, canUseBnafar, catmatProblem, cnesProblem, cnpjProblem, docOf, environmentLabel,
   exitTypeLabel, externalExitBody, externalExitProblems, fmtCents, internationalNameProblem, isStale, lotBnafarBody, lotBnafarProblems,
   missingFields, parseUnitPrice, recordStatusLabel, recordStatusTone, subjectLabel, submissionStatusLabel, submissionStatusTone, type BnafarField
 } from "./bnafar";
 import { BNAFAR_DISABLED, BNAFAR_ERRORS } from "./bnafarErrors";
-import { PHARMACY_DISABLED } from "./pharmacy";
+import { PHARMACY_DISABLED, pharmacyError } from "./pharmacy";
 import { BNAFAR_DOMAINS, FIVE_MISSING, bnafarUser, lostRecord, record, submission } from "../test/bnafarFixtures";
 import { AMOXI } from "../test/pharmacyFixtures";
 
@@ -254,6 +254,18 @@ describe("recusas", () => {
   it("o resto cai nas frases da farmácia; sem conexão tem frase", () => {
     expect(bnafarError(api(422, { error: "invalid_request", path: "ampp_code" }))).toBe("escolha a apresentação (AMPP) do produto");
     expect(bnafarError(new Error("rede"))).toMatch(/sem conexão/);
+  });
+  it("a tabela do envio vem antes da da farmácia onde o sentido difere (saída externa), e a entrada 27a segue como era", () => {
+    const quantity = api(422, { error: "invalid_request", problems: [ { path: "items[0].quantity", error: "invalid_quantity" }, { path: "items[1].lot_id", error: "lot_expired" } ] });
+    expect(bnafarProblems(quantity)).toEqual([
+      { path: "items[0].quantity", text: BNAFAR_ERRORS.invalid_quantity }, { path: "items[1].lot_id", text: BNAFAR_ERRORS.lot_expired }
+    ]);
+    expect(bnafarError(api(422, { error: "invalid_quantity", path: "items[0].quantity" }))).toBe(BNAFAR_ERRORS.invalid_quantity);
+    expect(bnafarError(api(422, { error: "invalid_quantity", path: "items[0].quantity" }))).not.toContain("casas");
+    expect(bnafarError(api(422, { error: "invalid_request", path: "ampp_code" }))).toBe("escolha a apresentação (AMPP) do produto");
+    // Entrada do 27a (pharmacyError): a frase antiga continua valendo.
+    expect(pharmacyError(api(422, { error: "invalid_quantity", path: "items[0].quantity" }))).toContain("2 casas");
+    expect(pharmacyError(api(422, { error: "expired_lot" }))).toBe("lote vencido — escolha outro lote");
   });
   it("isStale: 409 com o código", () => {
     expect(isStale(api(409, { error: "lot_bnafar_changed" }), "lot_bnafar_changed")).toBe(true);

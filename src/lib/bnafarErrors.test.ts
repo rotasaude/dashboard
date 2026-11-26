@@ -1,6 +1,6 @@
 // src/lib/bnafarErrors.test.ts
 import { describe, expect, it } from "vitest";
-import { BNAFAR_DISABLED, BNAFAR_ERRORS, bnafarErrorText, bnafarErrorTexts } from "./bnafarErrors";
+import { BNAFAR_DISABLED, BNAFAR_ERRORS, bnafarErrorText, bnafarErrorTexts, rowErrorText } from "./bnafarErrors";
 
 const TABLE_CODES = [
   "lot_incomplete", "location_without_cnes", "product_without_code", "fractional_balance", "exit_type_missing", "domain_off",
@@ -58,5 +58,12 @@ describe("BNAFAR_ERRORS", () => {
     expect(bnafarErrorTexts([ "MSG12", "MSG59" ])).toEqual([ BNAFAR_ERRORS.MSG12 ]);
     expect(bnafarErrorTexts([ "MSG99" ])).toEqual([ "recusa da BNAFAR: MSG99" ]);
     expect(bnafarErrorTexts([])).toEqual([]);
+  });
+  it("código de linha da planilha: sempre a tabela do envio; desconhecido cru", () => {
+    expect(rowErrorText("expired_lot")).toBe(BNAFAR_ERRORS.expired_lot);
+    expect(rowErrorText("expired_lot")).not.toContain("escolha outro lote");
+    expect(rowErrorText("invalid_quantity")).toBe(BNAFAR_ERRORS.invalid_quantity);
+    expect(rowErrorText("invalid_quantity")).not.toContain("casas");
+    expect(rowErrorText("linha_nova")).toBe("recusa da BNAFAR: linha_nova");
   });
 });

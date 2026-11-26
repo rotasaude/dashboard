@@ -6,13 +6,13 @@ import {
   type BnafarAlert, type BnafarDomains, type BnafarField, type BnafarLotInput, type BnafarRecord, type BnafarSubmission, type ExternalExitInput,
   type ExternalExitType, type LotBalance, type LotBnafarState, type StockDomain, type VaccineBnafarLotInput
 } from "./api";
-import { BNAFAR_DISABLED, bnafarErrorText } from "./bnafarErrors";
+import { BNAFAR_DISABLED, bnafarErrorText, hasBnafarError } from "./bnafarErrors";
 import { featureDisabledKey, hasFeature, type FeatureKey } from "./features";
-import { STATIC_QUERY, canUseStockScreens, pharmacyError, type Problem } from "./pharmacy";
+import { STATIC_QUERY, canUseStockScreens, pharmacyError, pharmacyRefusals, type Problem } from "./pharmacy";
 
 export { STATIC_QUERY };
 export type { BnafarField };
-export { BNAFAR_DISABLED, BNAFAR_ERRORS, bnafarErrorText, bnafarErrorTexts } from "./bnafarErrors";
+export { BNAFAR_DISABLED, BNAFAR_ERRORS, bnafarErrorText, bnafarErrorTexts, rowErrorText } from "./bnafarErrors";
 
 // ─── Frases fixas (proposta) ────────────────────────────────────────────────
 export const BNAFAR_NO_ROLE = "seu papel não permite ver o envio à BNAFAR";
@@ -319,8 +319,15 @@ export function bnafarError(err: unknown, opts: { write?: boolean } = {}): strin
   const feature = featureDisabledKey(err);
   if (feature === "bnafar") return opts.write ? BNAFAR_NOT_USABLE : BNAFAR_DISABLED;
   if (feature === null && errorCode(err) === "missing_role") return BNAFAR_NO_ROLE;
-  // As frases do envio já estão na tabela da farmácia (ERRORS inclui BNAFAR_ERRORS); o resto cai nas dela.
+  // Nas telas do envio a tabela da BNAFAR vem antes da da farmácia: `invalid_quantity`, `lot_expired` etc. querem dizer outra coisa aqui.
+  const code = errorCode(err);
+  if (feature === null && code && hasBnafarError(code)) return bnafarErrorText(code);
   return pharmacyError(err);
+}
+
+// Recusas por item (`problems`) com a mesma prioridade; o path é o do api (`items[i].campo`).
+export function bnafarProblems(err: unknown): Problem[] {
+  return pharmacyRefusals(err).map(({ path, code, text }) => ({ path, text: code && hasBnafarError(code) ? bnafarErrorText(code) : text }));
 }
 
 // 409 com este código: o dado mudou; a tela relê uma vez e mantém o digitado.
