@@ -188,6 +188,8 @@ describe("saída externa", () => {
     expect(withLot(expired, "S-D").map((p) => p.path)).toEqual([ "items[0].lot_id" ]);
     expect(withLot(expired, "S-D")[0].text).toBe(BNAFAR_ERRORS.lot_expired);
     expect(externalExitProblems({ ...base, lines: [ { key: "a", lot: expired, quantity: "1" } ] })).toEqual([]);
+    expect(withLot({ ...expired, blocked: true }, "S-D")[0].text).toBe(BNAFAR_ERRORS.lot_expired);
+    expect(withLot({ ...expired, blocked: true }, "S-DF")[0].text).toBe(LOT_BLOCKED_TEXT);
   });
   it("lot_blocked na saída usa a frase da temperatura do 27a, em bnafarError e bnafarProblems", () => {
     expect(BNAFAR_ERRORS.lot_blocked).toBe(LOT_BLOCKED_TEXT);

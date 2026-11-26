@@ -17,7 +17,8 @@ vi.mock("../lib/api", async (orig) => ({ ...(await orig<typeof api>()), fetchCur
 
 afterEach(cleanup);
 const mocked = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
-const KEEPER_ROOM = { ...ROOM, roles: [ "stock_keeper" ] };
+// O api trata o chefe de sala como almoxarife da sala; a sessão dele é de profissional.
+const KEEPER_ROOM = { ...ROOM, roles: [ "room_lead" ] };
 const LOT_A = lotBalance({ lot: stockLot({ id: "lotA", lot_number: "AMX2702", expires_on: "2027-02-01" }), balance: "30.00", expiring_soon: false });
 const LOT_B = lotBalance({ lot: stockLot({ id: "lotB", lot_number: "AMX2611", expires_on: "2026-11-20" }), balance: "10.00", expired: true });
 const POS = position({ location: CENTRAL_REF, lots: [ LOT_A, LOT_B ], balance: "40.00" });
@@ -157,6 +158,23 @@ describe("ExternalExits", () => {
     fireEvent.change(pick, { target: { value: KEEPER_ROOM.id } });
     await waitFor(() => expect(api.listExternalExits).toHaveBeenCalledWith({ locationId: KEEPER_ROOM.id, before: null }));
     expect(await form()).not.toBeNull();
+  });
+
+  it("chefe de sala (profissional, sem Membership de almoxarife) grava pela sala; o vacinador só lê", async () => {
+    setup({ roles: [ "health_professional" ], features: [ "vaccination" ], vac: [ KEEPER_ROOM, { ...ROOM, id: "l6", name: "Sala B", roles: [ "vaccinator" ] } ] });
+    expect(await form()).not.toBeNull();
+    expect(screen.queryByLabelText("Local")).toBeNull(); // só a sala do chefe é oferecida; a do vacinador não
+    expect(screen.getByText(`Saída externa de ${KEEPER_ROOM.name}`)).not.toBeNull();
+    cleanup();
+    setup({ roles: [ "health_professional" ], features: [ "vaccination" ], vac: [ { ...ROOM, roles: [ "vaccinator" ] } ] });
+    expect(await screen.findByText(NO_LOCATION)).not.toBeNull();
+    expect(screen.queryByRole("form", { name: "Registrar saída externa" })).toBeNull();
+  });
+
+  it("chefe de sala: formulário com a quantidade em doses", async () => {
+    setup({ roles: [ "health_professional" ], features: [ "vaccination" ], vac: [ KEEPER_ROOM ] });
+    expect(await form()).not.toBeNull();
+    expect(screen.getByLabelText("Quantidade (doses, inteira)")).not.toBeNull();
   });
 
   it("só vacina ligada: o almoxarife da sala usa a tela; sem local, a frase de sem local", async () => {

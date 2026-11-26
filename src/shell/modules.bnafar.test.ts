@@ -25,8 +25,9 @@ describe("grupo Farmácia: BNAFAR, saída externa e saldo inicial (módulo 27b)"
   it("Q32: o farmacêutico lê status e pendências, sem saída externa nem saldo inicial", () => {
     expect(mine(user([ "pharmacist" ]))).toEqual([ "bnafar-status", "bnafar-pending" ]);
   });
-  it("Q32: o profissional com a vacinação ligada vê status e pendências (pode ser chefe de sala)", () => {
-    expect(mine(user([ "health_professional" ], [ "vaccination", "bnafar" ]))).toEqual([ "bnafar-status", "bnafar-pending" ]);
+  it("Q32: o profissional com a vacinação ligada vê status, pendências e a saída externa (pode ser chefe de sala; a tela decide pelo local)", () => {
+    expect(mine(user([ "health_professional" ], [ "vaccination", "bnafar" ]))).toEqual([ "external-exits", "bnafar-status", "bnafar-pending" ]);
+    expect(mine(user([ "health_professional" ], [ "vaccination" ]))).toEqual([ "external-exits", "bnafar-pending" ]);
     expect(mine(user([ "health_professional" ], [ "pharmacy", "bnafar" ]))).toEqual([]);
   });
   it("Q22/Q19/Q40: sem bnafar abrem saída externa, saldo inicial e pendências; o status não", () => {

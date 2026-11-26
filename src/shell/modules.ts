@@ -544,7 +544,10 @@ export function navGroupsFor(
       // (profissional com a vacinação ligada; a tela trata o 403 missing_role). Saída externa e saldo inicial: admin e almoxarife.
       if (item.id === "bnafar-status") return !user?.operator && hasFeature(user, "bnafar") && (stockOn || vacOn) && bnafarReader;
       if (item.id === "bnafar-pending") return !user?.operator && (stockOn || vacOn) && bnafarReader;
-      if (item.id === "external-exits" || item.id === "opening-import") return !user?.operator && (stockOn || vacOn) && (isAdmin || isStockKeeper);
+      if (item.id === "opening-import") return !user?.operator && (stockOn || vacOn) && (isAdmin || isStockKeeper);
+      // O chefe de sala grava saída da sala (o api o trata como almoxarife), mas a sessão não traz o papel: o profissional com a vacinação
+      // ligada vê o item e a tela decide pelo local.
+      if (item.id === "external-exits") return !user?.operator && (stockOn || vacOn) && (isAdmin || isStockKeeper || (vacOn && isProfessional));
       if (item.id === "vaccination-room" || item.id === "vaccination-pending") return vacOn && isProfessional;
       if (item.id === "vaccination-stock" || item.id === "vaccination-cold-chain" || item.id === "vaccination-summary") {
         return vacOn && (isProfessional || isStockKeeper);

@@ -4,6 +4,8 @@
 // "Ver motivo" lê o detalhe no clique. Sem pessoa nesta tela; sem polling.
 import { useState } from "react";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { useAuth } from "../lib/auth";
+import { hasFeature } from "../lib/features";
 import { getBnafarDomains, getExternalExit, listExternalExits, type BnafarDomains, type ExternalExit } from "../lib/api";
 import { EXTERNAL_EXITS_KEY, STATIC_QUERY, bnafarError, exitTypeLabel } from "../lib/bnafar";
 import { todayInCity } from "../lib/campaigns";
@@ -22,9 +24,12 @@ export const EXIT_RECORDED = "Saída registrada. Ela vai à BNAFAR no envio de a
 type Props = { today?: string; onGoToSecurity?: () => void; onGoToLocations?: () => void; onGoToColdChain?: () => void; onGoToVectorProducts?: () => void; onGoToAdjustments?: () => void };
 
 export function ExternalExits({ today, onGoToSecurity }: Props) {
+  const { user } = useAuth();
+  // O chefe de sala não tem Membership de almoxarife na sessão: a sala diz se ele grava (ExitLocationPick); sem local, a frase de sem local.
+  const roomStaff = !!user && hasFeature(user, "vaccination") && !!user.memberships?.some((m) => m.role === "health_professional");
   return (
     <BnafarGate title="Saída externa" sub="Devolução, remanejamento, doação e empréstimo para fora da rede" needs="stock" allow={() => true}>
-      {(roles) => (roles.admin || roles.keeper)
+      {(roles) => (roles.admin || roles.keeper || roomStaff)
         ? <ExitsBody today={today} onGoToSecurity={onGoToSecurity} />
         : <EmptyState title={PHARMACY_NO_ROLE} />}
     </BnafarGate>

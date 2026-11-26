@@ -46,6 +46,8 @@ export function ExternalExitForm({ location, today, domains, onDone, onGoToSecur
   const byId = new Map(offered.map((b) => [ b.lot.id, b ]));
   const types = (domains?.exit_types.map((t) => t.code as string) ?? FALLBACK_TYPES);
   const many = lines.length > 1;
+  const vaccine = location.kind === "vaccine_room" || location.kind === "cold_chain_central";
+  const qtyLabel = vaccine ? "Quantidade (doses, inteira)" : "Quantidade (inteira)";
   const flagged = new Set(shown.map((s) => s.key));
 
   const draft = (): ExternalExitDraft => ({
@@ -93,7 +95,7 @@ export function ExternalExitForm({ location, today, domains, onDone, onGoToSecur
 
   function done() {
     setConfirming(false); setShown([]);
-    setExitType(""); setDestination(""); setReason("");
+    setExitType(""); setDestinationKind("cnes"); setDestination(""); setReason("");
     setLines([ { key: `line-${counter}`, lotId: "", quantity: "" } ]); setCounter((n) => n + 1);
     void client.invalidateQueries({ queryKey: [ PH_POSITIONS_KEY, location.id ] });
     void client.invalidateQueries({ queryKey: [ EXTERNAL_EXITS_KEY, "list", location.id ] });
@@ -153,8 +155,8 @@ export function ExternalExitForm({ location, today, domains, onDone, onGoToSecur
                   </select>
                 </label>
                 <label style={fieldLabel}>
-                  {named("Quantidade (inteira)")}
-                  <input value={l.quantity} inputMode="numeric" style={inputStyle} aria-label={named("Quantidade (inteira)")}
+                  {named(qtyLabel)}
+                  <input value={l.quantity} inputMode="numeric" style={inputStyle} aria-label={named(qtyLabel)}
                     onChange={(e) => patch(l.key, { quantity: e.target.value })} />
                 </label>
                 {many && <button type="button" style={secondaryButtonStyle} aria-label={`Remover linha ${i + 1}`} onClick={() => remove(l.key)}>Remover</button>}

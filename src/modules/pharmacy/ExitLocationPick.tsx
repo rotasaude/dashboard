@@ -22,9 +22,10 @@ export function ExitLocationPick({ children }: { children(loc: ExitLocation): Re
   const { user } = useAuth();
   const roles = bnafarRoles(user ?? null);
   const stockOn = !!user && canUseStockScreens(user), vacOn = !!user && hasFeature(user, "vaccination");
+  const professional = !!user?.memberships?.some((m) => m.role === "health_professional");
   const uid = user?.id ?? null;
   const ph = useQuery({ queryKey: [ PH_LOCATIONS_KEY, uid ], queryFn: listMyPharmacyLocations, enabled: stockOn && roles.keeper, ...STATIC_QUERY });
-  const vac = useQuery({ queryKey: [ VAC_LOCATIONS_KEY, uid ], queryFn: listMyVaccineLocations, enabled: vacOn && roles.keeper, ...STATIC_QUERY });
+  const vac = useQuery({ queryKey: [ VAC_LOCATIONS_KEY, uid ], queryFn: listMyVaccineLocations, enabled: vacOn && (roles.keeper || professional), ...STATIC_QUERY });
   const admin = useQuery({ queryKey: [ EXTERNAL_EXITS_KEY, "admin-locations" ], queryFn: listAdminLocations, enabled: stockOn && roles.admin, ...STATIC_QUERY });
   const rooms = useQuery({ queryKey: [ EXTERNAL_EXITS_KEY, "vaccine-rooms" ], queryFn: listVaccineRooms, enabled: vacOn && roles.admin, ...STATIC_QUERY });
   const [ locationId, setLocationId ] = useState("");
@@ -40,7 +41,12 @@ export function ExitLocationPick({ children }: { children(loc: ExitLocation): Re
     found.set(id, { id, name, kind, keeper: keeper || !!before?.keeper });
   };
   for (const l of ph.data ?? []) if (l.active && locationRoles(l).keeper) put(l.id, l.name, l.kind, true);
-  for (const l of vac.data ?? []) if (l.active && locationAbilities(l).keeper) put(l.id, l.name, l.kind, true);
+  // O api aceita o `room_lead` como almoxarife da sala (Pharmacy::Access::ROOM_ROLE_MAP); o `vaccinator` só lê. Fica aqui para não mexer
+  // no locationAbilities das outras telas.
+  for (const l of vac.data ?? []) {
+    const a = locationAbilities(l);
+    if (l.active && (a.keeper || (l.kind === "vaccine_room" && a.lead))) put(l.id, l.name, l.kind, true);
+  }
   for (const l of admin.data ?? []) if (l.active) put(l.id, l.name, l.kind, false);
   for (const r of rooms.data?.rooms ?? []) if (r.active) put(r.stock_location_id, r.name, "vaccine_room", false);
   const cold = rooms.data?.cold_chain_central;
