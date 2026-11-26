@@ -39,10 +39,10 @@ export function readFirstLine(file: Blob): Promise<string> {
 }
 
 // ─── Linhas e recusas ───────────────────────────────────────────────────────
-// Os 21 códigos de linha do api (validator.rb:40-42), com as frases da tabela única do envio (sem duplicar).
+// Os 22 códigos de linha do api (validator.rb:40-42), com as frases da tabela única do envio (sem duplicar).
 export const ROW_CODES = [
   "cnes_unknown", "invalid_product_type", "product_unknown", "item_not_allowed_here", "domain_disabled", "invalid_lot_number", "invalid_date",
-  "expired_lot", "invalid_quantity", "invalid_price", "invalid_cnpj", "invalid_anvisa", "program_unknown", "ampp_unknown", "ampp_not_in_vmp",
+  "expired_lot", "invalid_quantity", "invalid_price", "invalid_cnpj", "invalid_anvisa", "program_unknown", "ampp_missing", "ampp_unknown", "ampp_not_in_vmp",
   "anvisa_mismatch", "manufacturer_not_in_catalog", "lot_mismatch", "duplicate_line", "opening_exists", "too_many_lots"
 ] as const;
 export const ROW_ERRORS: Record<string, string> = Object.fromEntries(ROW_CODES.map((code) => [ code, BNAFAR_ERRORS[code] ]));

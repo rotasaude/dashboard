@@ -23,6 +23,7 @@ export const BNAFAR_ERRORS: Record<string, string> = {
   not_correctable: "só a saída externa aceita pode ser corrigida; a posição de estoque sai corrigida no dia seguinte",
   nothing_to_retry: "esta remessa não tem registros recusados para reenviar",
   expected_version_required: "a versão do registro não foi enviada — recarregue a tela e tente de novo",
+  ampp_missing: "falta o AMPP: este item tem VMP e o AMPP é obrigatório",
   ampp_unknown: "esta apresentação (AMPP) não está no catálogo OBM",
   ampp_not_in_vmp: "esta apresentação (AMPP) é de outro medicamento",
   anvisa_mismatch: "o registro ANVISA não é o da apresentação (AMPP) escolhida",

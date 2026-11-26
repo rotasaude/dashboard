@@ -45,12 +45,14 @@ describe("openingImport", () => {
     expect(await readFirstLine(new File([ "a;b" ], "s.csv"))).toBe("a;b");
   });
 
-  it("os 21 códigos de linha têm frase, sem sublinhado, pela tabela do envio; o desconhecido volta cru", () => {
-    expect(ROW_CODES).toHaveLength(21);
+  it("os 22 códigos de linha têm frase, sem sublinhado, pela tabela do envio; o desconhecido volta cru", () => {
+    expect(ROW_CODES).toHaveLength(22);
     for (const code of ROW_CODES) {
       expect(ROW_ERRORS[code], code).toBe(BNAFAR_ERRORS[code]);
       expect(rowErrorText(code)).not.toContain("_");
     }
+    expect(rowErrorText("ampp_missing")).toBe("falta o AMPP: este item tem VMP e o AMPP é obrigatório");
+    expect(rowErrorText("ampp_unknown")).toBe("esta apresentação (AMPP) não está no catálogo OBM");
     expect(rowErrorText("linha_nova")).toBe("linha_nova");
     expect(rowErrorText("constructor")).toBe("constructor");
   });

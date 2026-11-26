@@ -113,7 +113,7 @@ const DOCUMENT_LABEL: Record<string, string> = {
   // Módulo 35b: a dose e a coleira que baixaram o insumo; nunca o animal nem o tutor.
   rabies_vaccination: "vacinação antirrábica", collar: "coleira",
   // Módulo 27b: a saída para fora da rede; nunca o destino nem o motivo.
-  stock_external_exit: "saída externa"
+  stock_external_exit: "saída externa", external_exit: "saída externa"
 };
 export function movementDocument(doc: StockMovement["document"] | undefined): string {
   if (!doc) return "—";

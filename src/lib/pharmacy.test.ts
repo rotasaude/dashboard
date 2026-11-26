@@ -537,6 +537,8 @@ describe("35a: domínio vector_control no estoque (F-35.3, Q10)", () => {
     expect(locationKindLabel("vector_control")).toBe("Controle vetorial (vigilância ambiental)");
     expect(movementLabel("vector_application")).toBe("aplicação no campo (boletim)");
     expect(movementLabel("vector_application_reversal")).toBe("estorno de aplicação (visita retirada)");
+    expect(movementDocument({ type: "external_exit", id: "x1", number: null })).toBe("saída externa");
+    expect(movementDocument({ type: "external_exit", id: "x1", number: "SE 7" })).toBe("SE 7");
     expect(movementDocument({ type: "vector_inspection_measure", id: "m1", number: null })).toBe("boletim de campo");
     // Sem o domínio novo, os de antes não mudam.
     expect(locationKindLabel("central")).toBe("Almoxarifado central");

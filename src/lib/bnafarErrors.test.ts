@@ -15,10 +15,10 @@ const EXTRA_CODES = [
   "not_sent", "not_processed", "window_closed", "bnafar_unavailable", "internal_error", "rejected", "lot_mismatch",
   "expected_version_required", "environment_not_allowed", "invalid_items", "lot_blocked", "lot_expired", "domain_disabled"
 ];
-// As 21 recusas de linha da planilha (api-shapes, "Códigos de linha").
+// As 22 recusas de linha da planilha (api-shapes, "Códigos de linha").
 const ROW_CODES = [
   "cnes_unknown", "invalid_product_type", "product_unknown", "item_not_allowed_here", "domain_disabled", "invalid_lot_number", "invalid_date",
-  "expired_lot", "invalid_quantity", "invalid_price", "invalid_cnpj", "invalid_anvisa", "program_unknown", "ampp_unknown", "ampp_not_in_vmp",
+  "expired_lot", "invalid_quantity", "invalid_price", "invalid_cnpj", "invalid_anvisa", "program_unknown", "ampp_missing", "ampp_unknown", "ampp_not_in_vmp",
   "anvisa_mismatch", "manufacturer_not_in_catalog", "lot_mismatch", "duplicate_line", "opening_exists", "too_many_lots"
 ];
 const GROUPS = [ [ "MSG12", "MSG59" ], [ "MSG16", "MSG17", "MSG18" ], [ "MSG01", "MSG02", "MSG03", "MSG04", "MSG64" ] ];
