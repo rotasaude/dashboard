@@ -65,9 +65,9 @@ export const BNAFAR_ERRORS: Record<string, string> = {
   too_many_lots: "lotes demais para este item neste local",
   // Saldo inicial, atos e arquivo.
   opening_import_changed: "a importação mudou enquanto você olhava — a tela foi relida; confira antes de seguir",
-  revert_blocked: "há movimento depois da abertura em algum local — o saldo inicial não pode mais ser desfeito",
+  revert_blocked: "não dá para desfazer: um local da importação já teve outro movimento ou envio à BNAFAR",
   invalid_file: "arquivo inválido — baixe o modelo e confira o cabeçalho e as colunas",
-  file_too_large: "arquivo grande demais — até 5 MB e 20.000 linhas",
+  file_too_large: "o arquivo passa de 5 MB ou de 20.000 linhas — divida a planilha por local",
   // Recusas do Ministério (retorno da BNAFAR).
   MSG01: GROUP_CREDENTIAL, MSG02: GROUP_CREDENTIAL, MSG03: GROUP_CREDENTIAL, MSG04: GROUP_CREDENTIAL, MSG64: GROUP_CREDENTIAL,
   MSG06: "a BNAFAR não encontrou este CNES",
@@ -99,7 +99,10 @@ export function bnafarErrorText(code: string): string {
 }
 
 // Código de linha da planilha do saldo inicial: sempre pela tabela do envio (a farmácia diz outra coisa em `expired_lot` e `invalid_quantity`).
-export const rowErrorText = bnafarErrorText;
+// O código desconhecido volta cru (F-18): a linha não é recusa da BNAFAR.
+export function rowErrorText(code: string): string {
+  return has(code) ? BNAFAR_ERRORS[code] : code;
+}
 
 export const hasBnafarError = has;
 

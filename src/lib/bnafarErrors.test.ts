@@ -64,6 +64,6 @@ describe("BNAFAR_ERRORS", () => {
     expect(rowErrorText("expired_lot")).not.toContain("escolha outro lote");
     expect(rowErrorText("invalid_quantity")).toBe(BNAFAR_ERRORS.invalid_quantity);
     expect(rowErrorText("invalid_quantity")).not.toContain("casas");
-    expect(rowErrorText("linha_nova")).toBe("recusa da BNAFAR: linha_nova");
+    expect(rowErrorText("linha_nova")).toBe("linha_nova");
   });
 });

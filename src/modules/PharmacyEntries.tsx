@@ -1,12 +1,15 @@
 // PharmacyEntries — entradas por nota ou doação e inventário de abertura (módulo 27a; F-27.2; contrato §4).
 // Por local: o almoxarife do local registra entrada e abertura; o farmacêutico sem o papel de almoxarife naquele local vê só a
 // abertura (P6 do plano do api). O api recusa de novo. A frase de sucesso fica aqui, fora do formulário que se limpa.
+// Módulo 27b (Q13, F-20): embaixo, as aberturas do local, relidas depois de cada abertura registrada.
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import type { PharmacyLocation, StockReceipt } from "../lib/api";
 import { todayInCity } from "../lib/campaigns";
 import { locationRoles } from "../lib/pharmacy";
 import { checkLabel, fieldset, legend, okText, row } from "./exams/styles";
 import { LocationPick } from "./pharmacy/LocationPick";
+import { OpeningsPanel, openingsKey } from "./pharmacy/OpeningsPanel";
 import { PharmacyGate } from "./pharmacy/PharmacyGate";
 import { ReceiptForm } from "./pharmacy/ReceiptForm";
 
@@ -28,6 +31,7 @@ export function PharmacyEntries({ today = todayInCity() }: { today?: string } = 
 
 function Body({ location, today }: { location: PharmacyLocation; today: string }) {
   const roles = locationRoles(location);
+  const client = useQueryClient();
   const [ chosen, setChosen ] = useState<Mode>("receipt");
   const [ notice, setNotice ] = useState<string | null>(null);
   // Só o almoxarife do local escolhe; o farmacêutico sem esse papel faz a abertura.
@@ -36,6 +40,7 @@ function Body({ location, today }: { location: PharmacyLocation; today: string }
   function done(r: StockReceipt) {
     const n = r.items.length;
     setNotice(`${r.kind === "opening" ? "Abertura registrada" : "Entrada registrada"}: ${lotsText(n)}.`);
+    if (r.kind === "opening") void client.invalidateQueries({ queryKey: openingsKey(location.id) });
   }
 
   return (
@@ -57,6 +62,7 @@ function Body({ location, today }: { location: PharmacyLocation; today: string }
       )}
       {notice && <p role="status" style={okText}>{notice}</p>}
       <ReceiptForm key={mode} location={location} mode={mode} today={today} onStart={() => setNotice(null)} onDone={done} />
+      <OpeningsPanel location={location} />
     </div>
   );
 }

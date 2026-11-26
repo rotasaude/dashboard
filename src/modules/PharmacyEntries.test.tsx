@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 
 vi.mock("../lib/api", async (importOriginal) => ({ ...(await importOriginal<typeof import("../lib/api")>()), fetchCurrentSession: vi.fn(),
-  listMyPharmacyLocations: vi.fn(), searchPharmacyItems: vi.fn(), recordReceipt: vi.fn(), recordOpening: vi.fn() }));
+  listMyPharmacyLocations: vi.fn(), searchPharmacyItems: vi.fn(), recordReceipt: vi.fn(), recordOpening: vi.fn(), listStockOpenings: vi.fn() }));
 import * as api from "../lib/api";
 import { ApiError } from "../lib/api";
 import { PharmacyEntries } from "./PharmacyEntries";
@@ -25,6 +25,7 @@ describe("PharmacyEntries", () => {
     mocked(api.fetchCurrentSession).mockResolvedValue(phUser([ "stock_keeper" ]));
     mocked(api.listMyPharmacyLocations).mockResolvedValue([ CENTRAL ]);
     mocked(api.searchPharmacyItems).mockResolvedValue([ AMOXI ]);
+    mocked(api.listStockOpenings).mockResolvedValue({ items: [], next_before: null });
     mocked(api.recordReceipt).mockResolvedValue({ id: "r1", location: CENTRAL, kind: "invoice", items: [ { lot: stockLot(), quantity: "300" } ], at: "2026-10-29T09:00:00-03:00" });
     mocked(api.recordOpening).mockResolvedValue({ id: "r2", location: CENTRAL, kind: "opening", items: [ { lot: stockLot(), quantity: "40" } ], at: "2026-10-29T09:00:00-03:00" });
   });
